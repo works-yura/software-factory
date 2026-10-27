@@ -87,8 +87,13 @@ export interface ClaudeCodeSessionConfig
    * the session's files.
    */
   configDir?: (session: ClaudeCodeSession) => string | undefined;
-  /** MCP servers for every turn (e.g. the Factory MCP endpoint); the gate server is added to them. */
-  mcpConfig?: string | Record<string, unknown> | Array<string | Record<string, unknown>>;
+  /**
+   * MCP servers for every turn (e.g. the Factory MCP endpoint); the gate server is added to them.
+   * A function is asked before each turn, so per-session servers can carry credentials minted for that turn.
+   */
+  mcpConfig?:
+    | ClaudeMcpConfig
+    | ((session: ClaudeCodeSession) => ClaudeMcpConfig | undefined | Promise<ClaudeMcpConfig | undefined>);
   /** Only the MCP servers given here and the gate; `true` by default. `false` also loads the user's and project's. */
   strictMcpConfig?: boolean;
   /**
@@ -112,12 +117,20 @@ export interface ClaudeCodeSessionConfig
   mode?: ClaudeSessionMode;
   /** Mode after a person approves a plan; `acceptEdits` by default. */
   approvedPermissionMode?: ClaudePermissionMode;
+  /**
+   * Leads every planning turn's prompt; {@link PLANNING_PROMPT} by default. A host
+   * whose instructions name another terminal step (e.g. a skill that ends with a
+   * card move) says here that the plan gate replaces it.
+   */
+  planningPrompt?: string;
   /** Tools denied while planning; {@link PLANNING_DISALLOWED_TOOLS} by default. */
   planningDisallowedTools?: string[];
   turnTimeoutMs?: number;
   /** The environment turns inherit, minus credential keys; `process.env` by default. */
   env?: Record<string, string | undefined>;
 }
+
+export type ClaudeMcpConfig = string | Record<string, unknown> | Array<string | Record<string, unknown>>;
 
 export type ClaudeTranscriptListener = (entry: ClaudeTranscriptEntry, meta: { runId: string; threadId: string }) => void;
 
@@ -362,6 +375,27 @@ export class ClaudeCodeSession implements AgentSession {
     if (accepted.action !== 'persist') await accepted.run.started;
   }
 
+  /**
+   * Answers the plan gate without starting a run: the answer leads the next
+   * turn instead. For hosts where the approval itself starts the next stage,
+   * e.g. a card moved into Building whose kickoff then resumes this session.
+   */
+  async queuePlanAnswer({ resumeData, toolCallId }: { resumeData: PlanDecision; toolCallId?: string }): Promise<void> {
+    const thread = this.#threadState();
+    const gate = thread.pendingGate;
+    if (!gate) throw new Error('This session is not waiting on a person.');
+    if (toolCallId && toolCallId !== gate.toolCallId) {
+      throw new Error(`This session is waiting on ${gate.toolCallId}, not ${toolCallId}.`);
+    }
+    thread.pendingGate = undefined;
+    const approved = resumeData.action === 'approved';
+    thread.mode = approved ? (this.#config.approvedPermissionMode ?? 'acceptEdits') : 'planning';
+    const text = approved ? approvalPrompt(resumeData) : rejectionPrompt(resumeData);
+    // Ahead of anything that queued while the plan waited, so Claude reads the verdict first.
+    thread.pendingInputs.unshift({ kind: 'signal', text });
+    await this.#save();
+  }
+
   // -- internals ------------------------------------------------------------
 
   #threadState(threadId = this.#record.threadId): ClaudeThreadState {
@@ -523,12 +557,12 @@ export class ClaudeCodeSession implements AgentSession {
   }
 
   /** The CLI options for one turn of this thread. */
-  #argsInput(thread: ClaudeThreadState, planning: boolean): ClaudeArgsInput {
+  #argsInput(thread: ClaudeThreadState, planning: boolean, mcpConfig: ClaudeMcpConfig | undefined): ClaudeArgsInput {
     const config = this.#config;
     const mode = thread.mode ?? config.mode;
     // Planning pins the default mode, so a project setting cannot put the turn into the CLI's plan mode.
     const permissionMode: ClaudePermissionMode | undefined = planning ? 'default' : mode === 'planning' ? undefined : mode;
-    const configured = config.mcpConfig === undefined ? [] : Array.isArray(config.mcpConfig) ? config.mcpConfig : [config.mcpConfig];
+    const configured = mcpConfig === undefined ? [] : Array.isArray(mcpConfig) ? mcpConfig : [mcpConfig];
     const settingSources = config.settingSources ?? DEFAULT_SETTING_SOURCES;
     const plansDirectory = config.plansDirectory ?? DEFAULT_PLANS_DIRECTORY;
     const disallowedTools = [
@@ -559,9 +593,12 @@ export class ClaudeCodeSession implements AgentSession {
   ): Promise<TurnOutcome | { kind: 'aborted' }> {
     const thread = this.#threadState(run.threadId);
     const planning = (thread.mode ?? this.#config.mode) === 'planning';
-    const prompt = [...(planning ? [PLANNING_PROMPT] : []), ...inputs.map(input => input.text)].join('\n\n');
+    const lead = planning ? [this.#config.planningPrompt ?? PLANNING_PROMPT] : [];
+    const prompt = [...lead, ...inputs.map(input => input.text)].join('\n\n');
     const credentials = await this.#config.credentials(this);
     const cwd = await this.#cwd();
+    const mcpConfig =
+      typeof this.#config.mcpConfig === 'function' ? await this.#config.mcpConfig(this) : this.#config.mcpConfig;
     if (run.abortRequested) return { kind: 'aborted' };
     const configDir = this.#config.configDir?.(this);
     const env = buildClaudeEnv(this.#config.env ?? process.env, {
@@ -572,7 +609,7 @@ export class ClaudeCodeSession implements AgentSession {
     // A stale resume id (the CLI's session files were lost) gets one fresh session instead of failing forever.
     for (let attempt = 0; ; attempt += 1) {
       const resumeSessionId = thread.claudeSessionId;
-      const args = buildClaudeArgs(this.#argsInput(thread, planning));
+      const args = buildClaudeArgs(this.#argsInput(thread, planning, mcpConfig));
       const translator = new TurnTranslator();
       let processRef: ClaudeRun | undefined;
       let stopForGate = false;
