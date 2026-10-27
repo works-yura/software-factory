@@ -1,0 +1,23 @@
+{
+  "name": "@factory/work-items",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Create work items through the transition service; act on deferred decisions.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@factory/core": "workspace:*",
+    "@factory/feed": "workspace:*",
+    "@factory/runtime": "workspace:*",
+    "@factory/store": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:"
+  }
+}

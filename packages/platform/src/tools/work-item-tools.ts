@@ -19,14 +19,14 @@ import type { AuditRecorder } from '@factory/feed';
 import type { CommentsDomain } from '@factory/feed';
 import { WorkItemRelationError } from '@factory/store';
 import type { UpdateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
-import { createFactoryWorkItem } from '../work-items/create-work-item.ts';
-import type { FactoryAuditEmit } from '../work-items/create-work-item.ts';
+import { createFactoryWorkItem } from '@factory/work-items';
+import type { FactoryAuditEmit } from '@factory/work-items';
 import {
   dismissFactoryDecision,
   resolveFactoryProposal,
   retryFactoryDecision,
-} from '../work-items/decision-actions.ts';
-import type { FactoryDecisionActionResult } from '../work-items/decision-actions.ts';
+} from '@factory/work-items';
+import type { FactoryDecisionActionResult } from '@factory/work-items';
 import {
   MAX_TEXT,
   findWorkItem,

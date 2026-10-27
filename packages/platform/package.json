@@ -28,6 +28,7 @@
     "@factory/sandbox": "workspace:*",
     "@factory/session": "workspace:*",
     "@factory/store": "workspace:*",
+    "@factory/work-items": "workspace:*",
     "@internal/workspace": "workspace:*",
     "@mastra/auth-studio": "1.3.10",
     "@mastra/auth-workos": "1.6.7",

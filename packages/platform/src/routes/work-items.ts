@@ -46,8 +46,8 @@ import {
   WorkItemUpdateConflictError,
 } from '@factory/store';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.ts';
-import { createFactoryWorkItem } from '../work-items/create-work-item.ts';
-import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.ts';
+import { createFactoryWorkItem } from '@factory/work-items';
+import { resolveFactoryProposal, retryFactoryDecision } from '@factory/work-items';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.ts';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
