@@ -431,7 +431,7 @@ describe('workspace skill invocation route', () => {
     expect(sessionResponse.status).toBe(404);
     expect(await sessionResponse.json()).toEqual({
       error: 'session_not_found',
-      message: 'Agent controller session not found.',
+      message: 'Agent session not found.',
     });
     expect(harness.sendA).not.toHaveBeenCalled();
   });
