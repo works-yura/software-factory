@@ -75,17 +75,17 @@ import { PlatformLinearIntegration } from '@factory/integration-linear';
 import { createSessionAsRowOwner, prepareSessionRunContext } from '@factory/integrations';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/harness-mastra';
 import type { FactoryMcpConfig } from '@factory/harness-mastra';
-import { resolveDeploymentModelProviders } from './routes/config.ts';
+import { resolveDeploymentModelProviders } from '@factory/api';
 import {
   createCustomProvidersPrimer,
   primeCustomProvidersForRequestContext,
   registerCustomProvidersSource,
-} from './routes/custom-provider-source.ts';
-import { ProjectRoutes } from './routes/projects.ts';
+} from '@factory/api';
+import { ProjectRoutes } from '@factory/api';
 import { createSessionAccessGuard } from '@factory/session';
-import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.ts';
-import type { FactoryApiRoutesDeps } from './routes/surface.ts';
-import { TelemetryRoutes } from './routes/telemetry.ts';
+import { assembleFactoryApiRoutes, buildIntegrationContext } from '@factory/api';
+import type { FactoryApiRoutesDeps } from '@factory/api';
+import { TelemetryRoutes } from '@factory/api';
 import {
   createTenantCredentialPrimer,
   primeTenantCredentials,

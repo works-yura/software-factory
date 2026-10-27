@@ -184,6 +184,7 @@ def main():
                     open(path, 'w').write(new)
                     if name.endswith('.test.ts'):
                         widen_package_mocks(path, args.name)
+                        merge_package_mocks(path, args.name)
 
     # Package files.
 
@@ -294,6 +295,64 @@ def widen_package_mocks(path, package_name):
     return changed
 
 
+def merge_package_mocks(path, package_name):
+    """Several v3 module mocks can land on one package; vitest keeps only the last.
+
+    Merge them into one mock that applies, over the real package, just the keys
+    each original factory changed.
+    """
+    text = open(path).read()
+    marker = (
+        "// widened from a v3 module mock: real package exports, then the original overrides\n"
+        f"vi.mock('{package_name}', async importOriginal => ({{\n"
+        f"  ...(await importOriginal<typeof import('{package_name}')>()),\n"
+        "  ...(await ("
+    )
+    spans, calls = [], []
+    i = 0
+    while True:
+        j = text.find(marker, i)
+        if j < 0:
+            break
+        start = j + len(marker)
+        depth, k = 1, start
+        while depth:
+            c = text[k]
+            if c in '([{':
+                depth += 1
+            elif c in ')]}':
+                depth -= 1
+            k += 1
+        tail = re.match(r"\((importOriginal)?\)\),\n\}\)\);", text[k:])
+        if not tail:
+            return False
+        calls.append(f"({text[start:k - 1]})({tail.group(1) or ''})")
+        spans.append((j, k + tail.end()))
+        i = k + tail.end()
+    if len(spans) < 2:
+        return False
+    merged = (
+        f"// {len(spans)} v3 module mocks now name one package: apply each one's changes over the real exports\n"
+        f"vi.mock('{package_name}', async importOriginal => {{\n"
+        f"  const real = await importOriginal<typeof import('{package_name}')>();\n"
+        "  const changed = (mocked: Record<string, unknown>) =>\n"
+        "    Object.fromEntries(Object.entries(mocked).filter(([key, value]) => (real as Record<string, unknown>)[key] !== value));\n"
+        "  return {\n"
+        "    ...real,\n"
+        + ''.join(f"    ...changed(await {call}),\n" for call in calls)
+        + "  };\n"
+        "});"
+    )
+    out = text[: spans[0][0]] + merged
+    cursor = spans[0][1]
+    for start, end in spans[1:]:
+        out += text[cursor:start]
+        cursor = end
+    out += text[cursor:]
+    open(path, 'w').write(out)
+    return True
+
+
 def resolve_self_imports(package_name, dest_root, paths):
     """Turn `import { a, b } from '<this package>'` inside the package into imports of the files that export them."""
     exported = {}
@@ -377,6 +436,10 @@ def finish(args, moved, files, target_of, consumers, deps):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 2 and sys.argv[1] == '--merge-mocks':
+        for target in sys.argv[3:]:
+            print(target, merge_package_mocks(target, sys.argv[2]))
+        sys.exit(0)
     if len(sys.argv) > 2 and sys.argv[1] == '--widen-mocks':
         for target in sys.argv[3:]:
             print(target, widen_package_mocks(target, sys.argv[2]))

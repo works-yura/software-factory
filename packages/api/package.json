@@ -1,0 +1,49 @@
+{
+  "name": "@factory/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Factory HTTP API: projects, work items, attention, config, intake, source control, supervisor, surface, telemetry routes; metrics.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "check:tests": "tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@factory/auth": "workspace:*",
+    "@factory/capabilities": "workspace:*",
+    "@factory/contracts": "workspace:*",
+    "@factory/core": "workspace:*",
+    "@factory/credentials": "workspace:*",
+    "@factory/feed": "workspace:*",
+    "@factory/harness-mastra": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@factory/integration-github": "workspace:*",
+    "@factory/integrations": "workspace:*",
+    "@factory/observability": "workspace:*",
+    "@factory/pipelines": "workspace:*",
+    "@factory/runtime": "workspace:*",
+    "@factory/sandbox": "workspace:*",
+    "@factory/session": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@factory/supervisor": "workspace:*",
+    "@factory/work-items": "workspace:*",
+    "@internal/workspace": "workspace:*",
+    "@mastra/code-sdk": "1.15.0",
+    "@mastra/core": "1.79.0",
+    "@mastra/libsql": "1.27.0",
+    "hono": "4.13.13",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@factory/testing": "workspace:*",
+    "@mastra/pg": "1.32.0",
+    "@types/node": "22.20.1",
+    "posthog-node": "5.52.2",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

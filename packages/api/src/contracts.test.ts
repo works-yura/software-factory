@@ -11,7 +11,7 @@ import {
   factorySchemaToJsonSchema,
   generateFactoryApiCliRouteMetadata,
   inferFactoryResponseShape,
-} from '../../scripts/generate-api-cli-route-metadata.ts';
+} from '../scripts/generate-api-cli-route-metadata.ts';
 import { buildAttentionRoutes } from './attention.ts';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import {

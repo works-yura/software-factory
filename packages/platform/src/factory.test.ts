@@ -30,9 +30,9 @@ import type { VersionControl } from '@factory/capabilities';
 import { MastraFactory } from './factory.ts';
 import type { FactoryIntegration, IntegrationContext } from '@factory/integrations';
 import type * as platformGithubModule from '@factory/integration-github';
-import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-source.ts';
-import type * as projectRoutesModule from './routes/projects.ts';
-import type * as surfaceModule from './routes/surface.ts';
+import { invalidateCustomProvidersSnapshots } from '@factory/api';
+import type * as projectRoutesModule from '@factory/api';
+import type * as surfaceModule from '@factory/api';
 import type * as tenantCredentialsModule from '@factory/credentials';
 import { FactoryPhaseStateProcessor } from '@factory/harness-mastra';
 import type * as runtimeModule from '@factory/runtime';
@@ -113,7 +113,14 @@ vi.mock('@mastra/code-sdk', () => ({
 const projectRouteOptions = vi.hoisted(
   () => [] as Array<ConstructorParameters<typeof projectRoutesModule.ProjectRoutes>[0]>,
 );
-vi.mock('./routes/projects', async importOriginal => {
+// 2 v3 module mocks now name one package: apply each one's changes over the real exports
+vi.mock('@factory/api', async importOriginal => {
+  const real = await importOriginal<typeof import('@factory/api')>();
+  const changed = (mocked: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(mocked).filter(([key, value]) => (real as Record<string, unknown>)[key] !== value));
+  return {
+    ...real,
+    ...changed(await (async importOriginal => {
   const actual = await importOriginal<typeof projectRoutesModule>();
   class TrackedProjectRoutes extends actual.ProjectRoutes {
     constructor(options: ConstructorParameters<typeof actual.ProjectRoutes>[0]) {
@@ -122,6 +129,18 @@ vi.mock('./routes/projects', async importOriginal => {
     }
   }
   return { ...actual, ProjectRoutes: TrackedProjectRoutes };
+})(importOriginal)),
+    ...changed(await (async importOriginal => {
+  const actual = await importOriginal<typeof surfaceModule>();
+  return {
+    ...actual,
+    assembleFactoryApiRoutes: (deps: Parameters<typeof actual.assembleFactoryApiRoutes>[0]) => {
+      assembleFactoryApiRoutesSpy(deps);
+      return actual.assembleFactoryApiRoutes(deps);
+    },
+  };
+})(importOriginal)),
+  };
 });
 
 // Track what the factory actually wires as the terminal-stage hook: the
@@ -229,16 +248,7 @@ vi.mock('@factory/credentials', async importOriginal => ({
 // the factory threads into it (e.g. the resolved Factory rules) — there is no
 // service locator to read them back from anymore.
 const assembleFactoryApiRoutesSpy = vi.fn();
-vi.mock('./routes/surface', async importOriginal => {
-  const actual = await importOriginal<typeof surfaceModule>();
-  return {
-    ...actual,
-    assembleFactoryApiRoutes: (deps: Parameters<typeof actual.assembleFactoryApiRoutes>[0]) => {
-      assembleFactoryApiRoutesSpy(deps);
-      return actual.assembleFactoryApiRoutes(deps);
-    },
-  };
-});
+
 
 // Hold the session resource migration open so tests can show boot doesn't wait
 // for it. Unset, the real migration runs.
