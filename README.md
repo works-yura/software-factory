@@ -30,6 +30,7 @@
 | **Агент і нагляд** | | |
 | `@factory/harness` | `packages/harness` | Agent harness contract: the sessions, runs, events and human gates the runtime drives, independent of any agent framework. |
 | `@factory/harness-mastra` | `packages/harness-mastra` | Mastra harness (implements `@factory/harness` over Mastra Code's AgentController): start coordinator, phase-state processor, agent tools, workspace and skills, environment builds. |
+| `@factory/harness-claude-code` | `packages/harness-claude-code` | Claude Code harness: runs Factory sessions on the official `claude` CLI (`-p --output-format stream-json --resume`), plan approval through Claude Code's plan mode, per-turn credentials, rate-limit classification. Not wired into the server yet. |
 | `@factory/supervisor` | `packages/supervisor` | Supervisor: health checks and worker, read and write tools, session messaging, instructions. |
 | **API і сервер** | | |
 | `@factory/mcp` | `packages/mcp` | MCP surface: the Factory's MCP endpoint for Claude, ChatGPT and other MCP clients (OAuth as the signed-in user, the agent tools injected by the host), `factory.activity` events. |
