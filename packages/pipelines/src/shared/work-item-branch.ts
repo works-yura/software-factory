@@ -36,7 +36,13 @@ export function workItemThreadTitle(item: Pick<WorkItemBranchInput, 'source' | '
   return `${kind} #${number}: ${item.title}`;
 }
 
-/** Last 12 alphanumerics of the card id: keeps provider-named branches unique across projects. */
+/**
+ * The last twelve alphanumerics of a work item id: the per-item suffix that keeps
+ * provider numbers from colliding across the repositories of one factory. Issue
+ * #13 exists in every repository, and a factory's sessions are unique per
+ * user and branch across all of its repositories, so a branch named by the
+ * number alone can only be held once per factory.
+ */
 function idSuffix(id: string): string {
   return id
     .toLowerCase()
@@ -53,16 +59,20 @@ function metadataIdentifier(item: WorkItemBranchInput): string | undefined {
  * The git branch an item's runs and sessions share, one grammar for both sides
  * of the wire: the dispatcher names autonomous run branches with it and the
  * board opens card sessions on it, so both converge on one checkout per item.
- * Cards without a provider identity (manual, Slack) and cards whose metadata
- * lost their identifier fall back to the id-derived branch.
+ * Provider numbers are only unique within a repository, so GitHub and GitLab
+ * branches carry the item suffix as well. Cards without a provider identity
+ * (manual, Slack) and cards whose metadata lost their identifier fall back to
+ * the id-derived branch.
  */
 export function workItemBranch(item: WorkItemBranchInput): string {
   const number = workItemNumber(item);
   const identifier = metadataIdentifier(item);
   const suffix = idSuffix(item.id);
 
-  if (number !== undefined && item.source === 'github-issue') return `factory/issue-${number}`;
-  if (number !== undefined && item.source === 'github-pr') return `factory/pr-${number}`;
+  if (number !== undefined && (item.source === 'github-issue' || item.source === 'github-pr')) {
+    const kind = item.source === 'github-issue' ? 'issue' : 'pr';
+    return suffix ? `factory/${kind}-${number}-${suffix}` : `factory/${kind}-${number}`;
+  }
   if (number !== undefined && item.source === 'gitlab-pr' && suffix) return `factory/gitlab-mr-${number}-${suffix}`;
   if (item.source === 'gitlab-issue' && identifier !== undefined && suffix) {
     const slug = identifier.toLowerCase().replace(/[^a-z0-9._-]+/g, '-');
@@ -71,10 +81,21 @@ export function workItemBranch(item: WorkItemBranchInput): string {
   return `factory/item-${item.id}`;
 }
 
-/** The pull request a `factory/pr-<number>` branch was named after, the inverse of {@link workItemBranch}. */
+/** The pre-suffix GitHub branch, for reusing sessions opened before card names were unique. */
+export function legacyGithubWorkItemBranch(branch: string): string | undefined {
+  const match = /^(factory\/(?:issue|pr)-[1-9]\d*)-[a-z0-9]{1,12}$/.exec(branch);
+  return match?.[1];
+}
+
+/**
+ * The pull request a `factory/pr-<number>-<item suffix>` branch was named after, the
+ * inverse of {@link workItemBranch}. Branches from before the suffix (`factory/pr-<number>`)
+ * still parse so existing checkouts can resolve their PR.
+ */
 export function pullRequestNumberFromBranch(branch: string): number | undefined {
-  const match = /^factory\/pr-([1-9]\d*)$/.exec(branch);
-  return match ? Number(match[1]) : undefined;
+  const match = /^factory\/pr-([1-9]\d*)(?:-[a-z0-9]{1,12})?$/.exec(branch);
+  const number = match ? Number(match[1]) : undefined;
+  return number !== undefined && Number.isSafeInteger(number) ? number : undefined;
 }
 
 /** The GitLab MR IID encoded in Factory's collision-resistant review branch. */

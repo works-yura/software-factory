@@ -1390,6 +1390,9 @@ importers:
       '@factory/http':
         specifier: workspace:*
         version: link:../http
+      '@factory/pipelines':
+        specifier: workspace:*
+        version: link:../pipelines
       '@factory/sandbox':
         specifier: workspace:*
         version: link:../sandbox

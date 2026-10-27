@@ -7,10 +7,10 @@ boards/semantics.test.ts	core/src/boards/semantics.test.ts
 boards/transition-policy.test.ts	core/src/boards/transition-policy.test.ts
 rules/resolve.test.ts	core/src/rules/resolve.test.ts	-1	built-in handler case moved to pipelines/src/pipelines.test.ts
 rules/validation.test.ts	core/src/rules/validation.test.ts	+1	regression: every rejection code, approval_required included
-boards/review.test.ts	pipelines/src/review/board.test.ts
+boards/review.test.ts	pipelines/src/review/board.test.ts	+1	session-branch refresh case ported from upstream c3a2784881
 boards/work.test.ts	pipelines/src/work/board.test.ts
 boards/work-transition-policy.test.ts	pipelines/src/work/transition-policy.test.ts
-work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts	-1	Linear/Jira identifier branches dropped with the vocabulary
+work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts	+2	Linear/Jira identifier branches dropped with the vocabulary (-1); per-item GitHub suffix cases ported from upstream c3a2784881 (+3)
 storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts
 storage/domains/work-items/attention-events.test.ts	store/src/work-items/attention-events.test.ts
 storage/domains/audit/base.test.ts	store/src/audit/base.test.ts	+3	forward paging (`after`) ported from upstream f3bc1caddb

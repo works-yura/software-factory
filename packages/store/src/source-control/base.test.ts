@@ -744,7 +744,12 @@ describe('SourceControlStorage', () => {
       );
       await expect(
         github.sessions.create(fixtureSession(sessionInput('00000000-0000-4000-8000-000000000112', second.id))),
-      ).rejects.toBeInstanceOf(UniqueViolationError);
+      ).rejects.toMatchObject({
+        name: 'SessionBranchHeldError',
+        sessionId: session.sessionId,
+        branch: 'feat/x',
+        message: expect.stringContaining(session.sessionId),
+      });
       const forced = await insertLegacySession({
         sessionId: '00000000-0000-4000-8000-000000000113',
         projectRepositoryId: second.id,

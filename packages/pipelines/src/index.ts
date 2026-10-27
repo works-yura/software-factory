@@ -11,6 +11,7 @@ export { isReviewBoardPhase, reviewBoard } from './review/board.ts';
 export { hasRecordedVerdict } from './review/phase-rules.ts';
 export type { ReviewBoardPhase } from './review/board.ts';
 export {
+  legacyGithubWorkItemBranch,
   mergeRequestNumberFromBranch,
   pullRequestNumberFromBranch,
   workItemBranch,

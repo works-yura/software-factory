@@ -11,6 +11,7 @@ import type {
   SourceControlSessionVisibility,
   SourceControlStorageHandle,
 } from '@factory/store';
+import { legacyGithubWorkItemBranch } from '@factory/pipelines';
 import { resolveEnvironmentRepositories } from './environment-repositories.ts';
 import { seedSessionOrg } from './org-seed.ts';
 
@@ -289,13 +290,21 @@ export async function ensureFactorySourceSession(
   if (!resolved.found) throw new FactorySourceSessionResolutionError(resolved.reason);
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
+  // Prefer an existing current branch, then the legacy branch on this exact
+  // repository and owner. Never reuse another repository's same-number card.
+  const legacyBranch = legacyGithubWorkItemBranch(branch);
+  const lookup = { projectRepositoryId: resolved.projectRepositoryId, userId };
+  const existing = legacyBranch
+    ? ((await sourceControl.sessions.getForBranch({ ...lookup, branch })) ??
+      (await sourceControl.sessions.getForBranch({ ...lookup, branch: legacyBranch })))
+    : null;
   const session = await sourceControl.sessions.create({
     sessionId: args.sessionId ?? globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
     factoryProjectId,
     orgId,
     userId,
-    branch,
+    branch: existing?.branch ?? branch,
     baseBranch: resolved.baseBranch,
     visibility: args.visibility ?? 'org',
     ...(args.origin ? { origin: args.origin } : {}),

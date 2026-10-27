@@ -41,6 +41,7 @@ import { effectiveModelScope } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { QueueHealthStorage } from '@factory/store';
 import {
+  SessionBranchHeldError,
   SessionOwnershipMismatchError,
   SourceControlConnectionNotFoundError,
 } from '@factory/store';
@@ -48,7 +49,7 @@ import type { SourceControlStorage, SourceControlStorageHandle } from '@factory/
 import { isAgentActor } from '@factory/store';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '@factory/store';
 import { workItemSource } from '@factory/core';
-import { workItemBranch, workItemThreadTitle } from '@factory/pipelines';
+import { legacyGithubWorkItemBranch, workItemBranch, workItemThreadTitle } from '@factory/pipelines';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
@@ -249,7 +250,11 @@ async function inheritEarlierSession(
   }
   for (const role of candidates) {
     const session = await reuseBoundSession(sourceControl, input, role);
-    if (session && session.branch === branch && session.projectRepositoryId === projectRepositoryId) {
+    if (
+      session &&
+      (session.branch === branch || session.branch === legacyGithubWorkItemBranch(branch)) &&
+      session.projectRepositoryId === projectRepositoryId
+    ) {
       return session;
     }
   }
@@ -369,6 +374,13 @@ export async function prepareFactoryRuleBinding(
           throw new FactoryDispatchError(
             'source_repository_missing',
             `Repository ${repository.slug} is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.`,
+            { cause: error },
+          );
+        }
+        if (error instanceof SessionBranchHeldError) {
+          throw new FactoryDispatchError(
+            'session_unavailable',
+            `${error.message} The run cannot start until branch ${branch} is free for this repository.`,
             { cause: error },
           );
         }

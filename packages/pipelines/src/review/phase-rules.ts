@@ -1,6 +1,6 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '@factory/core';
 
-import { workItemBranch, workItemNumber } from '../shared/work-item-branch.ts';
+import { legacyGithubWorkItemBranch, workItemBranch, workItemNumber } from '../shared/work-item-branch.ts';
 
 function sourceRef(item: FactoryRuleItemContext): string {
   const link = item.url ? ` (${item.url})` : '';
@@ -36,9 +36,11 @@ function checkoutHint(item: FactoryRuleItemContext): string {
       headBranch
     );
   }
-  const refresh = `${deepen} && git fetch --filter=blob:none origin refs/pull/${number}/head && git checkout -B ${sessionBranch} FETCH_HEAD`;
+  const legacyBranch = legacyGithubWorkItemBranch(sessionBranch);
+  const guard = `session_branch=$(git symbolic-ref --short HEAD) && { test "$session_branch" = "${sessionBranch}"${legacyBranch ? ` || test "$session_branch" = "${legacyBranch}"` : ''}; }`;
+  const refresh = `${guard} && ${deepen} && git fetch --filter=blob:none origin refs/pull/${number}/head && git checkout -B "$session_branch" FETCH_HEAD`;
   return (
-    `The PR head is checked out on branch \`${sessionBranch}\` with the repository history: do not run \`gh pr checkout\`. ` +
+    `The PR head is checked out on the session branch with the repository history: do not run \`gh pr checkout\`. ` +
     `Past file contents load on demand, so keep \`git log -S\` and \`-G\` to a path. ` +
     `If \`gh pr view ${number} --json headRefOid --jq .headRefOid\` differs from \`git rev-parse HEAD\`, refresh with \`${refresh}\`. ` +
     `Read the change with \`gh pr diff ${number}\`.${headBranch}`

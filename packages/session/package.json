@@ -18,6 +18,7 @@
     "@factory/core": "workspace:*",
     "@factory/credentials": "workspace:*",
     "@factory/http": "workspace:*",
+    "@factory/pipelines": "workspace:*",
     "@factory/sandbox": "workspace:*",
     "@factory/store": "workspace:*",
     "@mastra/code-sdk": "1.15.0",
