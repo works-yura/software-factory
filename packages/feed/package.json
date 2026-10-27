@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Work-item feed over HTTP: audit and comments domains, wire formats, feed events.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

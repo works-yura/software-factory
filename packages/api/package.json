@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Factory HTTP API: projects, work items, attention, config, intake, source control, supervisor, surface, telemetry routes; metrics.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

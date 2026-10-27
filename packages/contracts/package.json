@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Wire contracts of the Factory HTTP API, shared by server and UI.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit"

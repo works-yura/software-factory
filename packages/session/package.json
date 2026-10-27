@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Factory sessions: hydration, credential policy, threads, capture processors, session access, Supervisor session identity.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

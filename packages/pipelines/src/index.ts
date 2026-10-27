@@ -17,7 +17,7 @@ export {
   workItemNumber,
   workItemThreadTitle,
 } from './shared/work-item-branch.ts';
-export type { WorkItemBranchInput } from './shared/work-item-branch.ts';
+export type { WorkItemBranchInput, WorkItemBranchSource } from './shared/work-item-branch.ts';
 export { isWorkBoardPhase, workBoard } from './work/board.ts';
 export type { WorkBoardPhase } from './work/board.ts';
 export { SELF_REVIEW_ROUND_LIMIT } from './work/phase-rules.ts';

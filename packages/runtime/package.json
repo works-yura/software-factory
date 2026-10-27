@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Moves cards: transition service, decision dispatcher, run audit, terminal cleanup.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

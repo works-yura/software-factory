@@ -1,19 +1,26 @@
 import type { WorkItemSource } from '@factory/core';
 
+/**
+ * Where a card came from, in the vocabulary branch naming reads: the work-item
+ * sources plus `slack-thread`, which the UI shows and which names no provider
+ * branch (it falls back to the id-derived one).
+ */
+export type WorkItemBranchSource = WorkItemSource | 'slack-thread';
+
 export interface WorkItemBranchInput {
   id: string;
-  source: WorkItemSource;
+  source: WorkItemBranchSource;
   metadata?: Record<string, unknown> | null;
 }
 
-const PROVIDER_NUMBER_KEYS: Partial<Record<WorkItemSource, string>> = {
+const PROVIDER_NUMBER_KEYS: Partial<Record<WorkItemBranchSource, string>> = {
   'github-issue': 'githubIssueNumber',
   'github-pr': 'githubPullRequestNumber',
   'gitlab-issue': 'gitlabIssueIid',
   'gitlab-pr': 'gitlabMergeRequestIid',
 };
 
-const IDENTIFIER_PROVIDERS: Partial<Record<WorkItemSource, string>> = {
+const IDENTIFIER_PROVIDERS: Partial<Record<WorkItemBranchSource, string>> = {
   'linear-issue': 'linear',
   'jira-issue': 'jira',
   'incidentio-follow-up': 'incidentio',

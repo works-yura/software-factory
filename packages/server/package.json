@@ -5,7 +5,8 @@
   "type": "module",
   "description": "MastraFactory: assembles runtime, storage, harness, integrations (GitHub, GitLab), API, and Supervisor; holds the cross-layer system tests.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Supervisor: health checks and worker, read and write tools, session messaging, instructions.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

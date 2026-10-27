@@ -1,0 +1,56 @@
+{
+  "name": "@factory/app-server",
+  "version": "0.1.0",
+  "description": "Factory web host: Mastra entry (MastraFactory with GitHub and GitLab), local dev auth, and host scenario tests.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "dev:local": "corepack pnpm sync:skills && rm -rf .mastra/output && mkdir -p $HOME/.mastracode/eclipt-v4 && NODE_ENV=development HOST=127.0.0.1 FACTORY_LOCAL_DEV_AUTH=1 MASTRA_DB_PATH=${MASTRA_DB_PATH:-$HOME/.mastracode/eclipt-v4/mastra.db} MASTRACODE_UI_DIST=$PWD/../ui/dist PORT=${PORT:-5874} MASTRACODE_PUBLIC_URL=${MASTRACODE_PUBLIC_URL:-http://localhost:5874} varlock run -- mastra factory dev --dir src/mastra",
+    "dev:platform": "corepack pnpm sync:skills && rm -rf .mastra/output && MASTRACODE_UI_DIST=$PWD/../ui/dist varlock run -- mastra factory dev --dir src/mastra",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "build": "corepack pnpm sync:skills && mastra build --dir src/mastra && rm -rf .mastra/output/factory && cp -R ../ui/dist .mastra/output/factory && rm -rf src/mastra/public/factory",
+    "start": "varlock run -- mastra start",
+    "test": "vitest run",
+    "sync:skills": "rm -rf src/mastra/public/factory-skills && mkdir -p src/mastra/public && cp -R ../../packages/harness-mastra/factory-skills src/mastra/public/factory-skills"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@clack/prompts": "1.8.1",
+    "@factory/api": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@factory/integration-github": "workspace:*",
+    "@factory/integration-gitlab": "workspace:*",
+    "@factory/pipelines": "workspace:*",
+    "@factory/server": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/auth-workos": "1.6.7",
+    "@mastra/code-sdk": "1.15.0",
+    "@mastra/core": "1.79.0",
+    "@mastra/e2b": "0.15.0",
+    "@mastra/libsql": "1.27.0",
+    "@mastra/pg": "1.32.0",
+    "@mastra/platform-workspace": "1.9.0",
+    "@mastra/redis-streams": "0.6.4"
+  },
+  "devDependencies": {
+    "@ai-sdk/openai": "3.0.130",
+    "@copilotkit/aimock": "1.45.1",
+    "@mastra/client-js": "1.56.0",
+    "@mastra/hono": "1.7.21",
+    "@types/node": "22.20.1",
+    "hono": "4.13.11",
+    "mastra": "1.35.0",
+    "tinyexec": "1.3.1",
+    "typescript": "catalog:",
+    "varlock": "1.23.0",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

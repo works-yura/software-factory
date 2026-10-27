@@ -5,7 +5,8 @@
   "type": "module",
   "description": "GitLab integration: API, webhooks, rules, reconcilers, merge requests, routes, platform-mode adapter.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

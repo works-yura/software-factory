@@ -6,7 +6,8 @@
   "description": "Card, decision, and run-binding storage on Mastra storage domains (libsql, pg).",
   "exports": {
     ".": "./src/index.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

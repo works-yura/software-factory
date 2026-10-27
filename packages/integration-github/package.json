@@ -5,7 +5,8 @@
   "type": "module",
   "description": "GitHub integration: app, PAT, webhooks, rules, reconcilers, routes, platform-mode adapter.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

@@ -6,7 +6,8 @@
   "description": "Work, Review, and Acceptance pipelines for the conveyor.",
   "exports": {
     ".": "./src/index.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

@@ -59,6 +59,21 @@ shared/work-item-branch.ts   назви гілок і номери PR/MR для 
 
 Нова дошка — нова тека й один рядок у `createPipelines`.
 
+## Запуск
+
+```sh
+corepack pnpm install
+corepack pnpm --filter @factory/app-ui build      # UI → apps/ui/dist
+cd apps/server && corepack pnpm dev:local          # http://localhost:5874
+```
+
+`dev:local` — локальний режим без входу (`FACTORY_LOCAL_DEV_AUTH=1`), база `~/.mastracode/eclipt-v4/mastra.db` (окремо від v3), пісочниці на цій машині. Налаштування інтеграцій — у `apps/server/.env` (у git не потрапляє); схема змінних — `apps/server/.env.schema`. Перевіряти лише на тестовому репозиторії.
+
+| Застосунок | Тека | Що це |
+| --- | --- | --- |
+| `@factory/app-server` | `apps/server` | Хост: `MastraFactory` з GitHub і GitLab, локальний вхід, сценарні тести хоста |
+| `@factory/app-ui` | `apps/ui` | Веб-UI (React, Vite); бере з пакетів лише легкі модулі через підшляхи (`@factory/core/rules/types` тощо), щоб серверний код не потрапив у бандл |
+
 ## Збірка
 
 Збірки нема. Пакети експортують `src/index.ts`, імпорти всередині мають розширення `.ts`, синтаксис лише той, що стирається (`erasableSyntaxOnly`). Node ≥ 22.18 запускає код напряму, `tsc` з `rewriteRelativeImportExtensions` перепише імпорти, якщо колись знадобиться emit.
@@ -75,5 +90,4 @@ pnpm test    # vitest
 1. Борг типів у тестах (`scripts/test-type-debt.sh`): закривати по пакетах.
 2. Прибрати словник Linear/Jira/incident.io з `core` і `pipelines`.
 3. Порт харнесу: відв'язати `harness-mastra` від GitHub (PAT у `workspace`) і від Mastra в `runtime` (`FactoryController`, `DispatcherSession`).
-4. Хост (`apps/server`) і UI (`apps/ui`) з v3.
-5. Порти сховища, потім Firestore.
+4. Порти сховища, потім Firestore.

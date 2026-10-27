@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Workspace file commands, repo clone, setup marker (from v3 packages/internal-workspace).",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

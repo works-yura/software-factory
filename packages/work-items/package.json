@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Create work items through the transition service; act on deferred decisions.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit"

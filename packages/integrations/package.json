@@ -6,7 +6,8 @@
   "description": "Integration contract (IntegrationContext, Integration), issue reconcilers, subscription sessions, platform API client and connect routes.",
   "exports": {
     ".": "./src/index.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

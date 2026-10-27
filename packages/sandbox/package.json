@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Session sandboxes: local and callback sandboxes, workdirs, setup gates, materialization, git in the sandbox, retirement.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

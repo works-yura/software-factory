@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Request timing and product telemetry.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

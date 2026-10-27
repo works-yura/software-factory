@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Capability contracts integrations implement: connection, intake, version control.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit"

@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Mastra harness: start coordinator, phase-state processor, agent tools, workspace and skills, MCP, environment builds.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

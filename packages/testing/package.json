@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Test seams for suites copied from v3: Work and Review installed by default, libsql storage.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "check": "tsc --noEmit"

@@ -1,0 +1,169 @@
+/**
+ * Wire contracts for the web/RN settings API surface.
+ *
+ * These are RE-EXPORTED from the server route modules so there is a single
+ * source of truth: the request/response shapes here are exactly what the Hono
+ * routes produce. Re-exporting (rather than re-declaring) means a contract
+ * change on the server is a typecheck failure here and in every consumer.
+ *
+ * `import type` keeps this module type-only — no server runtime code is pulled
+ * into the shared/platform-agnostic bundle.
+ */
+import type { z } from 'zod';
+import type { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts/contracts';
+
+export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema>;
+export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
+export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
+
+import type {
+  CustomProviderInfo,
+  OMConfigInfo,
+  ProviderInfo,
+  ProviderOMDefaultsResponse,
+} from '@factory/api/config';
+import type {
+  ArtifactEntry,
+  ArtifactListing,
+  DirectoryEntry,
+  DirectoryListing,
+  WorkspaceChange,
+  WorkspaceChanges,
+  WorkspaceChangesRepository,
+  WorkspaceChangeStatus,
+  WorkspaceDiff,
+  WorkspaceFile,
+  WorkspaceTreeEntry,
+  WorkspaceTreeListing,
+  WorkspaceRenderedEntry,
+  WorkspaceRenderedListing,
+} from '@factory/api/fs';
+
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
+export type {
+  ArtifactEntry,
+  ArtifactListing,
+  DirectoryEntry,
+  DirectoryListing,
+  WorkspaceChange,
+  WorkspaceChanges,
+  WorkspaceChangesRepository,
+  WorkspaceChangeStatus,
+  WorkspaceDiff,
+  WorkspaceFile,
+  WorkspaceTreeEntry,
+  WorkspaceTreeListing,
+  WorkspaceRenderedEntry,
+  WorkspaceRenderedListing,
+};
+
+// ── GET response envelopes ─────────────────────────────────────────────────
+
+export interface ProvidersResponse {
+  providers: ProviderInfo[];
+  /** Tenant mode: whether the caller may write org-wide keys. Absent locally. */
+  orgKeyAdmin?: boolean;
+}
+
+export interface CustomProvidersResponse {
+  providers: CustomProviderInfo[];
+}
+
+export interface DefaultModelResponse {
+  modelId: string | null;
+}
+
+export interface OMResponse {
+  config: OMConfigInfo;
+}
+
+/** A bundled Factory skill (`GET /web/factory/skills`). */
+export interface FactorySkillInfo {
+  name: string;
+  description: string;
+  /** SKILL.md body with the frontmatter removed. */
+  content: string;
+  /** Set when the SKILL.md fails runtime parsing/validation; the agent will not be able to load the skill. */
+  error?: string;
+}
+
+export interface FactorySkillsResponse {
+  skills: FactorySkillInfo[];
+}
+
+// ── Mutation request bodies ────────────────────────────────────────────────
+
+export interface SaveProviderKeyBody {
+  key: string;
+  envVar?: string;
+  scope?: 'user' | 'org';
+}
+
+export interface OAuthStartBody {
+  mode?: string;
+}
+
+export interface OAuthCompleteBody {
+  sessionId: string;
+  code: string;
+}
+
+export interface OAuthSessionBody {
+  sessionId: string;
+}
+
+export interface SaveCustomProviderBody {
+  name: string;
+  url: string;
+  apiKey?: string;
+  models: string[];
+  /** When editing, the id of the provider being replaced. */
+  previousId?: string;
+}
+
+export interface UpdateOMModelBody {
+  resourceId: string;
+  modelId: string;
+}
+
+export interface UpdateOMThresholdsBody {
+  resourceId: string;
+  observationThreshold?: number;
+  reflectionThreshold?: number;
+}
+
+export interface UpdateOMObserveAttachmentsBody {
+  resourceId: string;
+  value: 'auto' | boolean;
+}
+
+// ── Mutation response envelopes ────────────────────────────────────────────
+
+export interface OkResponse {
+  ok: true;
+}
+
+export interface SaveProviderKeyResponse {
+  ok: true;
+  provider?: ProviderInfo;
+}
+
+export interface OAuthStartResponse {
+  sessionId: string;
+  kind: 'paste-code' | 'device-code';
+  url: string;
+  userCode?: string;
+  instructions: string;
+  expiresAt: number;
+  nextPollMs?: number;
+}
+
+export type OAuthPollResponse =
+  | { status: 'pending'; nextPollMs: number }
+  | { status: 'complete' }
+  | { status: 'failed'; error: string };
+
+export interface UpdateOMResponse {
+  ok: true;
+  config: OMConfigInfo;
+}
