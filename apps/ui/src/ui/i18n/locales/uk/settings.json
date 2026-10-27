@@ -13,5 +13,9 @@
     "factory-memory": "Пам’ять Factory",
     "skills": "Навички",
     "behavior": "Поведінка"
+  },
+  "groups": {
+    "personal": "Ваші налаштування",
+    "factory": "Налаштування Factory"
   }
 }

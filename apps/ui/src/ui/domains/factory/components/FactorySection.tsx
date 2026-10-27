@@ -9,28 +9,30 @@ import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
 import { boardTitle } from '../../../i18n/boardLabels';
+import { useTranslation } from 'react-i18next';
 
 export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const features = useServerFeatures();
   const catalog = useBoardCatalog(factoryId);
+  const { t } = useTranslation('nav');
 
   if (!factoryId) return null;
 
   return (
-    <nav className="flex flex-col gap-2" aria-label="Factory">
+    <nav className="flex flex-col gap-2" aria-label={t('factory')}>
       <Sidebar.NavList>
-        <FactoryLink to={`/factories/${factoryId}/supervisor`} icon={ShieldCheck} label="Supervisor" />
+        <FactoryLink to={`/factories/${factoryId}/supervisor`} icon={ShieldCheck} label={t('supervisor')} />
       </Sidebar.NavList>
-      <section className="flex flex-col gap-1" aria-label="Boards">
-        <Sidebar.NavHeader className="mt-0">Boards</Sidebar.NavHeader>
+      <section className="flex flex-col gap-1" aria-label={t('boards')}>
+        <Sidebar.NavHeader className="mt-0">{t('boards')}</Sidebar.NavHeader>
         <Sidebar.NavList>
           {catalog.isPending ? (
-            <li role="status">Loading boards…</li>
+            <li role="status">{t('loadingBoards')}</li>
           ) : catalog.isError ? (
-            <li role="alert">Unable to load boards.</li>
+            <li role="alert">{t('boardsError')}</li>
           ) : catalog.data.length === 0 ? (
-            <li>No boards installed.</li>
+            <li>{t('noBoards')}</li>
           ) : (
             orderedBoards(catalog.data).map(board => (
               <FactoryLink
@@ -45,7 +47,7 @@ export function FactorySection() {
       </section>
       {features.data?.knowledge ? (
         <Sidebar.NavList>
-          <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
+          <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label={t('knowledge')} />
         </Sidebar.NavList>
       ) : null}
     </nav>

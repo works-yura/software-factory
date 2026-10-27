@@ -18,16 +18,14 @@ import { sessionRowStatus } from './sessionStatus';
 import type { SessionRowStatus } from './sessionStatus';
 import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
+import { lazyLabels } from '../../../i18n/lazy';
 
 export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'idle' | 'done';
 
-export const SESSION_STATUS_LABELS: Record<SessionActivityStatus, string> = {
-  waiting: 'Waiting on you',
-  working: 'Working',
-  initializing: 'Initializing',
-  idle: 'Idle',
-  done: 'Done',
-};
+export const SESSION_STATUS_LABELS: Readonly<Record<SessionActivityStatus, string>> = lazyLabels(
+  ['waiting', 'working', 'initializing', 'idle', 'done'],
+  status => `nav:sessions.statuses.${status}`,
+);
 
 function isSessionActivityStatus(value: string): value is SessionActivityStatus {
   return value in SESSION_STATUS_LABELS;

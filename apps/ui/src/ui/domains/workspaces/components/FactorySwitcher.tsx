@@ -7,6 +7,7 @@ import { Check, ChevronsUpDown, Factory as FactoryIcon, Plus } from 'lucide-reac
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
 import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
+import { useTranslation } from 'react-i18next';
 
 /** Inline factory selection with a single Create Factory action. */
 export function FactorySwitcher() {
@@ -26,12 +27,13 @@ export function FactorySwitcher() {
     setOpenMobile(false);
   };
 
+  const { t } = useTranslation('nav');
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
         id="factory-switcher-trigger"
         type="button"
-        aria-label="Select factory"
+        aria-label={t('switcher.select')}
         className={cn(
           buttonVariants({ variant: 'default' }),
           'mt-1 w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0',
@@ -39,7 +41,7 @@ export function FactorySwitcher() {
       >
         <FactoryIcon size={16} className="text-muted-foreground shrink-0" />
         <Txt tone="ink" as="span" variant="caption" className="min-w-0 flex-1 truncate">
-          {activeFactory?.name ?? 'Select a factory…'}
+          {activeFactory?.name ?? t('switcher.placeholder')}
         </Txt>
         <ChevronsUpDown size={13} className="text-muted-foreground shrink-0" />
       </DropdownMenu.Trigger>
@@ -55,14 +57,14 @@ export function FactorySwitcher() {
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate">{factory.name}</span>
             </span>
-            {factory.id === activeFactory?.id && <Check aria-label="Active factory" />}
+            {factory.id === activeFactory?.id && <Check aria-label={t('switcher.active')} />}
           </DropdownMenu.Item>
         ))}
 
         {factories.length > 0 && <DropdownMenu.Separator />}
         <DropdownMenu.Item disabled={!createFactoryFrom} onSelect={openCreateFactory}>
           <Plus />
-          <span>Create Factory</span>
+          <span>{t('switcher.create')}</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>

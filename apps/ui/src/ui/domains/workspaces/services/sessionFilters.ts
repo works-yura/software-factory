@@ -2,6 +2,7 @@ import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/D
 
 import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS, sessionOwners } from './sessionRows';
 import type { SessionActivityStatus, SessionListRow } from './sessionRows';
+import { lazyOption } from '../../../i18n/lazy';
 
 export type SessionStatusFilter = 'all' | SessionActivityStatus;
 export type SessionUpdatedFilter = 'all' | '24h' | '7d' | '30d';
@@ -11,15 +12,15 @@ export const MY_SESSIONS = 'mine';
 export const SESSION_OWNER_PREFIX = 'owner:';
 
 export const SESSION_STATUS_OPTIONS: readonly DropdownMenuRadioOption<SessionStatusFilter>[] = [
-  { value: 'all', label: 'All statuses' },
-  ...SESSION_ACTIVITY_STATUSES.map(status => ({ value: status, label: SESSION_STATUS_LABELS[status] })),
+  lazyOption('all' as const, 'nav:sessions.statusOptions.all'),
+  ...SESSION_ACTIVITY_STATUSES.map(status => lazyOption(status, `nav:sessions.statuses.${status}`)),
 ];
 
 export const SESSION_UPDATED_OPTIONS: readonly DropdownMenuRadioOption<SessionUpdatedFilter>[] = [
-  { value: 'all', label: 'Any time' },
-  { value: '24h', label: 'Last 24 hours' },
-  { value: '7d', label: 'Last 7 days' },
-  { value: '30d', label: 'Last 30 days' },
+  lazyOption('all' as const, 'nav:sessions.updatedOptions.all'),
+  lazyOption('24h' as const, 'nav:sessions.updatedOptions.24h'),
+  lazyOption('7d' as const, 'nav:sessions.updatedOptions.7d'),
+  lazyOption('30d' as const, 'nav:sessions.updatedOptions.30d'),
 ];
 
 export interface SessionFiltersState {
@@ -91,10 +92,10 @@ export function sessionOwnerOptions(
   rows: readonly SessionListRow[],
   viewerUserId: string | undefined,
 ): DropdownMenuRadioOption<string>[] {
-  const viewerOption = viewerUserId ? [{ value: MY_SESSIONS, label: 'Mine' }] : [];
+  const viewerOption = viewerUserId ? [lazyOption(MY_SESSIONS, 'nav:sessions.owners.mine')] : [];
   const namedOptions = sessionOwners(rows).map(({ userId, name }) => ({
     value: sessionOwnerFilterValue(userId),
     label: name,
   }));
-  return [{ value: ALL_SESSION_OWNERS, label: 'All owners' }, ...viewerOption, ...namedOptions];
+  return [lazyOption(ALL_SESSION_OWNERS, 'nav:sessions.owners.all'), ...viewerOption, ...namedOptions];
 }

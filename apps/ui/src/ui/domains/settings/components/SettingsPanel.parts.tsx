@@ -18,9 +18,11 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 
 import { SettingsSubsection } from './SettingsSubsection';
 import { SoundPicker } from './SettingsFields';
+import { useThemeOptions } from '../../../i18n/useThemeOptions';
 
 export function GeneralSettings() {
   const { t } = useTranslation();
+  const themeOptions = useThemeOptions();
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
   const changeDoneSound = (next: DoneSound) => {
     setDoneSound(next);
@@ -35,7 +37,7 @@ export function GeneralSettings() {
           <LanguageSwitcher />
         </SettingsRow>
         <SettingsRow label={t('theme.label')} description={t('theme.description')}>
-          <ThemeToggle />
+          <ThemeToggle options={themeOptions} aria-label={t('theme.label')} />
         </SettingsRow>
         <SettingsRow label={t('completionSound.label')} description={t('completionSound.description')}>
           <SoundPicker value={doneSound} onChange={changeDoneSound} />

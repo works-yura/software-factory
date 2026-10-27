@@ -4,5 +4,72 @@
   "settingsSections": "Розділи налаштувань",
   "factorySwitcher": "Перемикач Factory",
   "navigation": "Навігація",
-  "footer": "Активність, акаунт і налаштування"
+  "footer": "Активність, акаунт і налаштування",
+  "factory": "Factory",
+  "supervisor": "Наглядач",
+  "boards": "Дошки",
+  "loadingBoards": "Завантаження дошок…",
+  "boardsError": "Не вдалося завантажити дошки.",
+  "noBoards": "Дошки не встановлено.",
+  "knowledge": "Знання",
+  "activity": "Активність",
+  "activityUnread_one": "Активність, {{count}} непрочитане",
+  "activityUnread_few": "Активність, {{count}} непрочитані",
+  "activityUnread_many": "Активність, {{count}} непрочитаних",
+  "activityUnread_other": "Активність, {{count}} непрочитаних",
+  "sessions": {
+    "title": "Сесії",
+    "new": "Нова сесія користувача",
+    "properties": "Властивості сесій",
+    "sort": "Сортування",
+    "owner": "Власник",
+    "status": "Статус",
+    "updated": "Оновлено",
+    "empty": {
+      "allHidden": "Усі групи із сесіями приховано",
+      "noneYet": "Сесій поки нема",
+      "noneOwn": "Ваших сесій нема.",
+      "noneMatch": "Немає сесій за цими фільтрами"
+    },
+    "sortOptions": {
+      "activity": "Активність",
+      "updated": "Нещодавно оновлені",
+      "created": "Нещодавно створені"
+    },
+    "statusOptions": {
+      "all": "Усі статуси"
+    },
+    "statuses": {
+      "waiting": "Чекає на вас",
+      "working": "Працює",
+      "initializing": "Запуск",
+      "idle": "Неактивна",
+      "done": "Завершена"
+    },
+    "updatedOptions": {
+      "all": "За весь час",
+      "24h": "Останні 24 години",
+      "7d": "Останні 7 днів",
+      "30d": "Останні 30 днів"
+    },
+    "owners": {
+      "all": "Усі власники",
+      "mine": "Мої"
+    }
+  },
+  "switcher": {
+    "select": "Вибрати Factory",
+    "placeholder": "Виберіть Factory…",
+    "active": "Поточна Factory",
+    "create": "Створити Factory"
+  },
+  "user": {
+    "checkingSignIn": "Перевірка входу",
+    "fallbackName": "Користувач",
+    "settings": "Налаштування",
+    "userMenu": "Меню користувача",
+    "settingsMenu": "Меню налаштувань",
+    "logOut": "Вийти"
+  },
+  "searchAndNavigate": "Пошук і навігація"
 }

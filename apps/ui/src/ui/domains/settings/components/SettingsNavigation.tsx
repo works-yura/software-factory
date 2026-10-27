@@ -22,6 +22,7 @@ import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
 import type { SettingsSection } from '../settingsSections';
+import { i18n } from '../../../i18n';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -39,36 +40,48 @@ type SettingsNavGroup = {
 
 export const PERSONAL_SETTINGS_GROUP = {
   id: 'personal',
-  label: 'Your settings',
+  get label() {
+    return i18n.t('groups.personal', { ns: 'settings' });
+  },
   items: [
     {
       id: 'account',
-      label: SETTINGS_SECTION_LABELS.account,
+      get label() {
+        return SETTINGS_SECTION_LABELS.account;
+      },
       icon: CircleUserRound,
       searchText: 'my account profile identity email authentication session log out sign out user',
     },
     {
       id: 'preferences',
-      label: SETTINGS_SECTION_LABELS.preferences,
+      get label() {
+        return SETTINGS_SECTION_LABELS.preferences;
+      },
       icon: Palette,
       searchText: 'preferences general theme appearance color scheme completion sound',
     },
     {
       id: 'personal-models',
-      label: SETTINGS_SECTION_LABELS['personal-models'],
+      get label() {
+        return SETTINGS_SECTION_LABELS['personal-models'];
+      },
       icon: Bot,
       searchText: 'your personal models default model api keys providers credentials sign in oauth',
     },
     {
       id: 'memory',
-      label: SETTINGS_SECTION_LABELS.memory,
+      get label() {
+        return SETTINGS_SECTION_LABELS.memory;
+      },
       icon: Brain,
       searchText:
         'your personal memory observational recall observer reflector thresholds attachments summarize context',
     },
     {
       id: 'connections',
-      label: SETTINGS_SECTION_LABELS.connections,
+      get label() {
+        return SETTINGS_SECTION_LABELS.connections;
+      },
       icon: Cable,
       searchText: 'your personal connections connected accounts slack communication integrations',
     },
@@ -79,55 +92,73 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
   PERSONAL_SETTINGS_GROUP,
   {
     id: 'factory',
-    label: 'Factory settings',
+    get label() {
+      return i18n.t('groups.factory', { ns: 'settings' });
+    },
     items: [
       {
         id: 'models',
-        label: SETTINGS_SECTION_LABELS.models,
+        get label() {
+        return SETTINGS_SECTION_LABELS.models;
+      },
         icon: Bot,
         searchText:
           'factory shared models thinking level default api keys providers credentials sign in oauth custom endpoints',
       },
       {
         id: 'factory-memory',
-        label: SETTINGS_SECTION_LABELS['factory-memory'],
+        get label() {
+        return SETTINGS_SECTION_LABELS['factory-memory'];
+      },
         icon: Brain,
         searchText:
           'factory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
         id: 'skills',
-        label: SETTINGS_SECTION_LABELS.skills,
+        get label() {
+        return SETTINGS_SECTION_LABELS.skills;
+      },
         icon: BookOpen,
         searchText: 'skills factory triage plan review agent instructions prompts stages',
       },
       {
         id: 'behavior',
-        label: SETTINGS_SECTION_LABELS.behavior,
+        get label() {
+        return SETTINGS_SECTION_LABELS.behavior;
+      },
         icon: SlidersHorizontal,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
       },
       {
         id: 'repositories',
-        label: SETTINGS_SECTION_LABELS.repositories,
+        get label() {
+        return SETTINGS_SECTION_LABELS.repositories;
+      },
         icon: GitBranch,
         searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
       },
       {
         id: 'environment',
-        label: SETTINGS_SECTION_LABELS.environment,
+        get label() {
+        return SETTINGS_SECTION_LABELS.environment;
+      },
         icon: Box,
         searchText: 'environment sandbox resources cpu memory workdir repositories order setup teardown build triggers',
       },
       {
         id: 'intake',
-        label: SETTINGS_SECTION_LABELS.intake,
+        get label() {
+        return SETTINGS_SECTION_LABELS.intake;
+      },
         icon: Inbox,
         searchText: 'work intake sources tasks issues pull requests github linear feed sync',
       },
       {
         id: 'factory',
-        label: SETTINGS_SECTION_LABELS.factory,
+        get label() {
+        return SETTINGS_SECTION_LABELS.factory;
+      },
         icon: Building2,
         searchText: 'factory project organization manage remove delete danger',
       },

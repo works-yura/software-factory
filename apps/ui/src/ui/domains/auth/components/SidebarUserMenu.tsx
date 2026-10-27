@@ -4,7 +4,6 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
-import { THEME_OPTIONS } from '@mastra/playground-ui/components/ThemeToggle';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogOut, Settings, SunMoon } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
@@ -15,6 +14,8 @@ import { PERSONAL_SETTINGS_GROUP } from '../../settings/components/SettingsNavig
 import { useSettingsOpen } from '../../settings/hooks/useSettingsOpen';
 import { settingsSectionPath } from '../../settings/settingsSections';
 import { clearMastraCodeStorage, logoutUrl } from '../services/auth';
+import { useTranslation } from 'react-i18next';
+import { useThemeOptions } from '../../../i18n/useThemeOptions';
 
 export function SidebarUserMenu() {
   const auth = useFactoryAuth();
@@ -25,11 +26,13 @@ export function SidebarUserMenu() {
   const { state: sidebarState, setOpenMobile } = useSidebar();
   const { theme, setTheme } = useTheme();
 
+  const { t } = useTranslation('nav');
+  const themeOptions = useThemeOptions();
   if (!factoryId) return null;
 
   if (auth.isLoading) {
     return (
-      <li role="status" aria-label="Checking sign-in" className="flex h-9 items-center gap-2 px-3">
+      <li role="status" aria-label={t('user.checkingSignIn')} className="flex h-9 items-center gap-2 px-3">
         <Skeleton className="size-4 rounded-full" />
         <Skeleton className="h-3 w-24" />
       </li>
@@ -38,9 +41,9 @@ export function SidebarUserMenu() {
 
   const account = auth.data;
   const signedIn = account?.authEnabled && account.authenticated;
-  const triggerLabel = signedIn ? account.user?.name?.trim() || account.user?.email || 'User' : 'Settings';
+  const triggerLabel = signedIn ? account.user?.name?.trim() || account.user?.email || t('user.fallbackName') : t('user.settings');
   const email = signedIn ? account.user?.email : undefined;
-  const menuLabel = signedIn ? 'User menu' : 'Settings menu';
+  const menuLabel = signedIn ? t('user.userMenu') : t('user.settingsMenu');
   const personalSettings = PERSONAL_SETTINGS_GROUP.items.filter(item => signedIn || item.id !== 'account');
   const backToAppState = settingsOpen ? location.state : { from: location };
 
@@ -101,12 +104,12 @@ export function SidebarUserMenu() {
           onClick={() => setOpenMobile(false)}
         >
           <Settings aria-hidden="true" />
-          Settings
+          {t('user.settings')}
         </DropdownMenu.Item>
         <DropdownMenu.RadioSub
-          label="Theme"
+          label={t('theme.label', { ns: 'common' })}
           icon={<SunMoon aria-hidden="true" />}
-          options={THEME_OPTIONS}
+          options={themeOptions}
           value={theme}
           onValueChange={setTheme}
         />
@@ -115,7 +118,7 @@ export function SidebarUserMenu() {
             <DropdownMenu.Separator />
             <DropdownMenu.Item render={<a href={logoutUrl(baseUrl)} />} onClick={clearMastraCodeStorage}>
               <LogOut aria-hidden="true" />
-              Log out
+              {t('user.logOut')}
             </DropdownMenu.Item>
           </>
         )}

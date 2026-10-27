@@ -10,10 +10,7 @@ import { useOverlays } from '../../../lib/overlays';
 import { attentionCounts, INTERRUPTING_KINDS, latestUnreadOrNewestIn, NEEDS_YOU_KINDS } from '../services/attention';
 import type { FactoryAttentionKindSummaries } from '../services/attention';
 import { playAttentionSoundOnce } from '../services/attentionSound';
-
-function linkLabel(unread: number): string {
-  return unread > 0 ? `Activity, ${unread} unread` : 'Activity';
-}
+import { useTranslation } from 'react-i18next';
 
 /** Chimes once per newly arrived unread failure, finding, waiting agent or mention; approvals stay silent. */
 function useAttentionChime(factoryId: string | undefined, kinds: FactoryAttentionKindSummaries | undefined) {
@@ -47,6 +44,8 @@ export function SidebarActivityLink() {
   const unread = kinds ? attentionCounts(kinds, INTERRUPTING_KINDS).unread : 0;
   const open = kinds ? attentionCounts(kinds, NEEDS_YOU_KINDS).open : 0;
   useAttentionChime(factoryId, kinds);
+  const { t } = useTranslation('nav');
+  const linkLabel = unread > 0 ? t('activityUnread', { count: unread }) : t('activity');
 
   if (!factoryId) return null;
 
@@ -54,10 +53,10 @@ export function SidebarActivityLink() {
 
   return (
     <Sidebar.NavLink
-      link={{ name: 'Activity', url: to }}
+      link={{ name: t('activity'), url: to }}
       isActive={pathname === to}
       render={
-        <NavLink to={to} aria-label={linkLabel(unread)} onClick={() => overlays.close('sidebar')}>
+        <NavLink to={to} aria-label={linkLabel} onClick={() => overlays.close('sidebar')}>
           <span className="relative grid size-4 shrink-0 place-items-center" aria-hidden>
             <Timeline size={16} />
             {open > 0 ? (
@@ -65,7 +64,7 @@ export function SidebarActivityLink() {
             ) : null}
           </span>
           <Sidebar.NavLabel className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate">Activity</span>
+            <span className="min-w-0 flex-1 truncate">{t('activity')}</span>
             {unread > 0 ? (
               <Badge variant="orange" size="sm">
                 {unread}

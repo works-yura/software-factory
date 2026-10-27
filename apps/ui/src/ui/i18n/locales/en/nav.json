@@ -4,5 +4,70 @@
   "settingsSections": "Settings sections",
   "factorySwitcher": "Factory switcher",
   "navigation": "Navigation",
-  "footer": "Activity, account, and settings"
+  "footer": "Activity, account, and settings",
+  "factory": "Factory",
+  "supervisor": "Supervisor",
+  "boards": "Boards",
+  "loadingBoards": "Loading boards…",
+  "boardsError": "Unable to load boards.",
+  "noBoards": "No boards installed.",
+  "knowledge": "Knowledge",
+  "activity": "Activity",
+  "activityUnread_one": "Activity, {{count}} unread",
+  "activityUnread_other": "Activity, {{count}} unread",
+  "sessions": {
+    "title": "Sessions",
+    "new": "New user session",
+    "properties": "Sessions properties",
+    "sort": "Sort",
+    "owner": "Owner",
+    "status": "Status",
+    "updated": "Updated",
+    "empty": {
+      "allHidden": "All groups with sessions are hidden",
+      "noneYet": "No sessions yet",
+      "noneOwn": "No sessions of your own.",
+      "noneMatch": "No sessions match these filters"
+    },
+    "sortOptions": {
+      "activity": "Activity",
+      "updated": "Last updated",
+      "created": "Last created"
+    },
+    "statusOptions": {
+      "all": "All statuses"
+    },
+    "statuses": {
+      "waiting": "Waiting on you",
+      "working": "Working",
+      "initializing": "Initializing",
+      "idle": "Idle",
+      "done": "Done"
+    },
+    "updatedOptions": {
+      "all": "Any time",
+      "24h": "Last 24 hours",
+      "7d": "Last 7 days",
+      "30d": "Last 30 days"
+    },
+    "owners": {
+      "all": "All owners",
+      "mine": "Mine"
+    }
+  },
+  "switcher": {
+    "select": "Select factory",
+    "placeholder": "Select a factory…",
+    "active": "Active factory",
+    "create": "Create Factory"
+  },
+  "user": {
+    "checkingSignIn": "Checking sign-in",
+    "fallbackName": "User",
+    "settings": "Settings",
+    "userMenu": "User menu",
+    "settingsMenu": "Settings menu",
+    "logOut": "Log out"
+  },
+  "searchAndNavigate": "Search and navigate"
 }

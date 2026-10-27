@@ -33,8 +33,11 @@ import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
+import { useTranslation } from 'react-i18next';
+import { i18n } from '../../../i18n';
 
 export function SessionsSection() {
+  const { t } = useTranslation('nav');
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
   const navigate = useNavigate();
@@ -79,7 +82,7 @@ export function SessionsSection() {
   if (!factoryId || nothingToList) return null;
 
   return (
-    <section className="flex flex-col gap-2" aria-label="Sessions">
+    <section className="flex flex-col gap-2" aria-label={t('sessions.title')}>
       <Sidebar.NavHeader
         className="mt-0"
         action={
@@ -88,7 +91,7 @@ export function SessionsSection() {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="New user session"
+                aria-label={t('sessions.new')}
                 onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
                 disabled={deletion.deleting}
               >
@@ -96,7 +99,7 @@ export function SessionsSection() {
               </Button>
             )}
             <PropertiesMenu
-              label="Sessions properties"
+              label={t('sessions.properties')}
               changedCount={changedSettingCount + activeFilterCount}
               onReset={() => {
                 resetView();
@@ -104,28 +107,28 @@ export function SessionsSection() {
               }}
             >
               <DropdownMenu.RadioSub
-                label="Sort"
+                label={t('sessions.sort')}
                 icon={<ArrowUpDown aria-hidden />}
                 options={SESSION_SORT_OPTIONS}
                 value={view.sort}
                 onValueChange={sort => updateView({ sort })}
               />
               <DropdownMenu.RadioSub
-                label="Owner"
+                label={t('sessions.owner')}
                 icon={<UserRound aria-hidden />}
                 options={sessionOwnerOptions(rows, viewerUserId)}
                 value={filters.owner}
                 onValueChange={owner => changeFilters({ owner })}
               />
               <DropdownMenu.RadioSub
-                label="Status"
+                label={t('sessions.status')}
                 icon={<CircleDashed aria-hidden />}
                 options={SESSION_STATUS_OPTIONS}
                 value={filters.status}
                 onValueChange={status => changeFilters({ status })}
               />
               <DropdownMenu.RadioSub
-                label="Updated"
+                label={t('sessions.updated')}
                 icon={<Clock aria-hidden />}
                 options={SESSION_UPDATED_OPTIONS}
                 value={filters.updated}
@@ -143,7 +146,7 @@ export function SessionsSection() {
           </div>
         }
       >
-        Sessions
+        {t('sessions.title')}
       </Sidebar.NavHeader>
 
       <div className="flex flex-col gap-4">
@@ -206,8 +209,8 @@ function emptyListMessage({
   activeFilterCount: number;
   viewerKnown: boolean;
 }): string | undefined {
-  if (filteredCount > 0) return groupCount === 0 ? 'All groups with sessions are hidden' : undefined;
-  if (rowCount === 0) return 'No sessions yet';
-  if (activeFilterCount === 0 && viewerKnown) return 'No sessions of your own.';
-  return 'No sessions match these filters';
+  if (filteredCount > 0) return groupCount === 0 ? i18n.t('sessions.empty.allHidden', { ns: 'nav' }) : undefined;
+  if (rowCount === 0) return i18n.t('sessions.empty.noneYet', { ns: 'nav' });
+  if (activeFilterCount === 0 && viewerKnown) return i18n.t('sessions.empty.noneOwn', { ns: 'nav' });
+  return i18n.t('sessions.empty.noneMatch', { ns: 'nav' });
 }

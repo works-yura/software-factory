@@ -8,7 +8,12 @@
   "storedInBrowser": "Зберігається в цьому браузері.",
   "theme": {
     "label": "Тема",
-    "description": "Колірна схема інтерфейсу"
+    "description": "Колірна схема інтерфейсу",
+    "options": {
+      "light": "Світла",
+      "dark": "Темна",
+      "system": "Системна"
+    }
   },
   "completionSound": {
     "label": "Звук завершення",

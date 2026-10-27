@@ -13,5 +13,9 @@
     "factory-memory": "Factory memory",
     "skills": "Skills",
     "behavior": "Behavior"
+  },
+  "groups": {
+    "personal": "Your settings",
+    "factory": "Factory settings"
   }
 }
