@@ -1,16 +1,16 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useTranslation } from 'react-i18next';
 
 import { SidebarUserMenu } from './domains/auth/components/SidebarUserMenu';
 import { FactorySection } from './domains/factory/components/FactorySection';
 import { SidebarActivityLink } from './domains/factory/components/SidebarActivityLink';
-import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useSettingsOpen } from './domains/settings/hooks/useSettingsOpen';
 import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
 import { SessionsSection } from './domains/workspaces/components/SessionsSection';
+import { SidebarNewSessionButton } from './domains/workspaces/components/SidebarNewSessionButton';
 
 function BetaBadge() {
   const { t } = useTranslation();
@@ -51,7 +51,6 @@ function BetaBadge() {
  */
 export function AppSidebar() {
   const settingsOpen = useSettingsOpen();
-  const { desktopState } = useSidebar();
   const { t } = useTranslation('nav');
 
   return (
@@ -61,9 +60,7 @@ export function AppSidebar() {
           logo={<LogoWithoutText aria-label="Mastra" role="img" className="text-foreground h-4 w-auto" />}
           title={<BetaBadge />}
         />
-        <SidebarGlobalSearchButton />
-        {/* Collapsed, the sidebar is hidden and the page header carries the toggle (useSidebarHeaderSlots) */}
-        {desktopState !== 'collapsed' && <Sidebar.Trigger />}
+        <SidebarNewSessionButton />
       </Sidebar.CommandHeader>
       <Sidebar.Nav aria-label={settingsOpen ? t('settingsSections') : t('main')}>
         {settingsOpen ? (

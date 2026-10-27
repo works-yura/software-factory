@@ -30,6 +30,7 @@ import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
 import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 import { useRefreshWorkspaceFilesOnToolCalls } from '../domains/workspace-viewer/useRefreshWorkspaceFilesOnToolCalls';
+import { newUserSessionPath } from '../domains/workspaces/services/factoryPaths';
 
 import '../domains/chat/components/chat-enter.css';
 
@@ -102,10 +103,7 @@ function SessionUnavailableMain({
           actionSlot={
             notFound ? (
               factoryId && (
-                <Button
-                  variant="primary"
-                  onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-                >
+                <Button variant="primary" onClick={() => void navigate(newUserSessionPath(factoryId))}>
                   {t('threadPage.startNewSession')}
                 </Button>
               )

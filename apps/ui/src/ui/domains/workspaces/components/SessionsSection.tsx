@@ -13,6 +13,7 @@ import { useSessionDeletion } from '../hooks/useSessionDeletion';
 import { useSessionFilters } from '../hooks/useSessionFilters';
 import { useSessionListRows } from '../hooks/useSessionListRows';
 import { useSessionListView } from '../hooks/useSessionListView';
+import { newUserSessionPath } from '../services/factoryPaths';
 import {
   SESSION_STATUS_OPTIONS,
   SESSION_UPDATED_OPTIONS,
@@ -90,7 +91,7 @@ export function SessionsSection() {
                 variant="ghost"
                 size="icon-sm"
                 aria-label={t('sessions.new')}
-                onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
+                onClick={() => void navigate(newUserSessionPath(factoryId))}
                 disabled={deletion.deleting}
               >
                 <Plus size={15} />
