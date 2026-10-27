@@ -44,11 +44,6 @@ function externalWorkItemLabel(item: WorkItem): string {
   if (item.source === 'gitlab-pr') return number ? `MR !${number}` : tk('relatedSessions.mergeRequest');
   if (item.source === 'github-issue')
     return number ? tk('relatedSessions.issueNumber', { number }) : tk('relatedSessions.issue');
-  if (item.source === 'linear-issue') {
-    return typeof item.metadata.identifier === 'string'
-      ? item.metadata.identifier
-      : (number ?? tk('relatedSessions.linearIssue'));
-  }
   return tk('relatedSessions.workItem');
 }
 

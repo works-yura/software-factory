@@ -6,7 +6,6 @@ import { boardForWorkItem } from '@factory/core';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { hydrateFactorySession, resolveFactorySessionModel } from '@factory/session';
 import { resolveWorkItemRepository } from '@factory/session';
-import type { IntakeStorage } from '@factory/store';
 import type { ModelDefaultsStorage } from '@factory/store';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession, SourceControlStorageHandle } from '@factory/store';
@@ -144,7 +143,6 @@ export class FactoryStartCoordinator {
     | ((
         request: FactoryStartRequest,
       ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>);
-  readonly #intake?: IntakeStorage;
   readonly #projects?: FactoryProjectsStorage;
   readonly #modelDefaults?: ModelDefaultsStorage;
 
@@ -157,14 +155,12 @@ export class FactoryStartCoordinator {
       | ((
           request: FactoryStartRequest,
         ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>),
-    intake?: IntakeStorage,
     sessionModel?: { projects: FactoryProjectsStorage; modelDefaults: ModelDefaultsStorage },
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
-    this.#intake = intake;
     this.#projects = sessionModel?.projects;
     this.#modelDefaults = sessionModel?.modelDefaults;
   }
@@ -189,13 +185,11 @@ export class FactoryStartCoordinator {
     const storedItem = request.workItem.id
       ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
       : null;
-    const intakeConfig = await this.#intake?.getConfig({ orgId: request.orgId, integrationIds: ['linear'] });
     let repository = await resolveWorkItemRepository({
       sourceControl,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       item: storedItem ?? { metadata: request.workItem.input.metadata ?? null },
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
     });
     if (repository.status === 'ambiguous') {
       // A retry of this role's existing session keeps its already-chosen

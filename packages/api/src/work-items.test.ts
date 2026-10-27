@@ -290,7 +290,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     expect(workItem.stageHistory[0].exitedAt).toBeUndefined();
   });
 
-  it('imports incident.io incidents and follow-ups onto an installed custom board at its initial phase', async () => {
+  it('imports GitLab issues onto an installed custom board at its initial phase', async () => {
     const releaseBoard = defineBoard({
       id: 'release',
       title: 'Release',
@@ -305,19 +305,19 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     const importedItems = [
       {
         externalSource: {
-          integrationId: 'incidentio',
+          integrationId: 'gitlab',
           type: 'issue',
-          externalId: 'incidentio:incident:incident-1',
-          url: 'https://app.incident.io/acme/incidents/incident-1',
+          externalId: 'gitlab-issue:acme/app#42',
+          url: 'https://gitlab.test/acme/app/-/issues/42',
         },
-        title: 'INC-42: API unavailable',
+        title: 'API unavailable',
       },
       {
         externalSource: {
-          integrationId: 'incidentio',
+          integrationId: 'gitlab',
           type: 'issue',
-          externalId: 'incidentio:follow-up:follow-up-1',
-          url: 'https://app.incident.io/acme/incidents/incident-1',
+          externalId: 'gitlab-issue:acme/app#43',
+          url: 'https://gitlab.test/acme/app/-/issues/43',
         },
         title: 'Add database failover alert',
       },
@@ -383,7 +383,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     const bad = await json(
       'POST',
       `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ externalSource: { integrationId: 'jira' } }),
+      createBody({ externalSource: { integrationId: 'gitlab' } }),
     );
     expect(bad.status).toBe(400);
   });

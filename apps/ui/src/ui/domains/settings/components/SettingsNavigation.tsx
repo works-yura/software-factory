@@ -153,7 +153,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         return SETTINGS_SECTION_LABELS.intake;
       },
         icon: Inbox,
-        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
+        searchText: 'work intake sources tasks issues pull requests github feed sync',
       },
       {
         id: 'factory',

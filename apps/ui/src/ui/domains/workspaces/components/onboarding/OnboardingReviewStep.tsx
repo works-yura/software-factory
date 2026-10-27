@@ -9,7 +9,6 @@ import { completeOnboardingSchema } from '../../services/onboardingFlow';
 import type { OnboardingDraft, OnboardingModelScope, OnboardingStep } from '../../services/onboardingFlow';
 
 import { OnboardingReviewRow } from './OnboardingReviewRow';
-import { OnboardingWorkReviewRow } from './OnboardingWorkReviewRow';
 import { translator } from '../../../../i18n/t';
 
 const tk = translator('workspaces');
@@ -51,7 +50,6 @@ export function OnboardingReviewStep({
           disabled={pending}
           onEdit={() => onEdit('vcs')}
         />
-        <OnboardingWorkReviewRow disabled={pending} onEdit={() => onEdit('project-management')} />
         {!local && (
           <OnboardingReviewRow
             icon={<Building2 />}

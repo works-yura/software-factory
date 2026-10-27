@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { issueCandidate, linearCandidate } from './boardCandidates';
+import { issueCandidate } from './boardCandidates';
 import { boardLabels, candidateMatchesLabels, workItemMatchesLabels } from './boardLabels';
 import type { WorkItem } from './services/workItems';
 
@@ -53,29 +53,7 @@ describe('board labels', () => {
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
 
-    const linear = linearCandidate({
-      id: 'linear-2',
-      identifier: 'ENG-13',
-      title: 'Linear labels',
-      url: 'https://linear.app/acme/issue/ENG-13',
-      state: 'Todo',
-      stateType: 'unstarted',
-      priorityLabel: 'High',
-      assignee: null,
-      creator: null,
-      team: 'Engineering',
-      labels: ['frontend'],
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-01T09:00:00.000Z',
-    });
-
-    expect(boardLabels({ items: [labelled], candidates: [candidate, linear] })).toEqual([
-      'bug',
-      'frontend',
-      'p1',
-      'ux',
-    ]);
-    expect(candidateMatchesLabels(linear, new Set(['frontend']))).toBe(true);
+    expect(boardLabels({ items: [labelled], candidates: [candidate] })).toEqual(['bug', 'p1', 'ux']);
     expect(workItemMatchesLabels(labelled, new Set())).toBe(true);
     expect(workItemMatchesLabels(labelled, new Set(['bug', 'p1']))).toBe(true);
     expect(workItemMatchesLabels(labelled, new Set(['bug', 'missing']))).toBe(false);

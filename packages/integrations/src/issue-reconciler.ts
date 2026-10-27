@@ -19,7 +19,7 @@ export interface IssueReconcileSummary {
  * Scope passed in by the caller. Providers that reconcile per-repository (like
  * GitHub, sharing target discovery with the PR reconciler) pass a target set
  * and a `matches(item, scope)` predicate. Providers with no repository concept
- * (Linear) pass no scope and every issue item is considered.
+ * pass no scope and every issue item is considered.
  */
 export interface IssueReconcileScope<TScope> {
   scopes: TScope[];
@@ -185,7 +185,7 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
 
           const hadMissingMarker = typeof missingAt === 'string';
           const baseMetadata = withoutMissingMarker(item.metadata);
-          // Close detection for Linear: replay through rules ingress if closed
+          // Close detection: replay through rules ingress if closed
           const isClosed = issue.stateType === 'completed' || issue.stateType === 'canceled';
           if (isClosed && !options.isTerminal(item) && options.onClosed) {
             const closedMetadata = withoutUndefined((await options.onClosed(item, issue, project, resolved)) ?? {});

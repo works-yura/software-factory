@@ -56,7 +56,7 @@ function direct(fetchImpl: typeof fetch): GitLabIntegration {
 const platformConnections = [
   { id: 'a1b_mastra', integrationId: 'gitlab', status: 'active', accountLabel: 'mastra' },
   { id: 'a1b_acme', integrationId: 'gitlab', status: 'active', accountLabel: 'acme' },
-  { id: 'a1b_jira', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
+  { id: 'a1b_github', integrationId: 'github', status: 'active', accountLabel: 'acme-github' },
 ] as const;
 
 function platform(connectionId = 'a1b_mastra'): PlatformGitLabIntegration {

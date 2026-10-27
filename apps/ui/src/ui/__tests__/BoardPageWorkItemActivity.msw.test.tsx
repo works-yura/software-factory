@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import {
@@ -67,21 +67,6 @@ const relevanceWorkItems = [
     url: `https://github.com/acme/app/issues/${30 + index}`,
   },
 }));
-
-const linearWorkItem = {
-  ...workItem,
-  id: 'linear-work-item',
-  createdBy: 'factory-rule-dispatcher',
-  title: 'Linear planning item',
-  stages: ['planning'],
-  metadata: { identifier: 'ENG-42', creator: 'Linear Ada', assignee: 'Linear Grace' },
-  externalSource: {
-    integrationId: 'linear',
-    type: 'issue',
-    externalId: 'linear:ENG-42',
-    url: 'https://linear.app/acme/issue/ENG-42',
-  },
-};
 
 const reviewItem = {
   ...workItem,
@@ -271,12 +256,8 @@ function stubBoardEndpoints() {
       HttpResponse.json({
         config: {
           github: { enabled: true, sourceIds: ['acme/app'] },
-          linear: { enabled: false, sourceIds: null },
         },
       }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
@@ -399,69 +380,6 @@ describe('Board work-item activity', () => {
     expect(await screen.findByText('Assigned issue')).toBeInTheDocument();
     expect(screen.queryByText('Authored issue')).not.toBeInTheDocument();
     expect(screen.queryByText('Unrelated issue')).not.toBeInTheDocument();
-  });
-
-  it('loads and matches Linear teammates while GitHub intake is active', async () => {
-    stubBoardEndpoints();
-    const linearIssuesRequested = vi.fn();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-        HttpResponse.json({
-          config: {
-            github: { enabled: true, sourceIds: ['acme/app'] },
-            linear: { enabled: true, sourceIds: ['linear-project'] },
-          },
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
-        HttpResponse.json({
-          bindings: [
-            { integrationId: 'linear', sourceId: 'linear-project', factoryProjectId: FACTORY_ID, board: 'work' },
-          ],
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => {
-        linearIssuesRequested();
-        return HttpResponse.json({
-          issues: [
-            {
-              id: 'linear-42',
-              identifier: 'ENG-42',
-              title: 'Linear planning item',
-              url: 'https://linear.app/acme/issue/ENG-42',
-              state: 'Todo',
-              stateType: 'unstarted',
-              priorityLabel: 'High',
-              assignee: 'Linear Grace',
-              creator: 'Linear Ada',
-              team: 'Engineering',
-              sourceId: 'linear-project',
-              labels: [],
-              createdAt: '2026-08-01T09:00:00.000Z',
-              updatedAt: '2026-08-01T09:00:00.000Z',
-            },
-          ],
-          nextCursor: null,
-        });
-      }),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({
-          workItems: [{ ...linearWorkItem, metadata: { identifier: 'ENG-42' } }],
-        }),
-      ),
-    );
-    const user = userEvent.setup();
-    const { client } = renderBoard('work');
-    await waitForMutationsIdle(client);
-
-    await screen.findByText('Linear planning item');
-    await waitFor(() => expect(linearIssuesRequested).toHaveBeenCalled());
-    await togglePropertyOption(user, 'Board properties', 'Author', /Linear Ada/i);
-
-    expect(screen.getByText('Linear planning item')).toBeInTheDocument();
   });
 
   it('shows a filter-specific work empty state without a zero task ring', async () => {

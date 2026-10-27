@@ -68,12 +68,8 @@ function stubBoardEndpoints(issuesResponse: (request: Request) => Response) {
       HttpResponse.json({
         config: {
           github: { enabled: true, sourceIds: ['acme/app'] },
-          linear: { enabled: false, sourceIds: null },
         },
       }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => issuesResponse(request)),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),

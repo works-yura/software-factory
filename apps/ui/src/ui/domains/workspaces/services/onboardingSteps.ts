@@ -14,7 +14,6 @@ export function onboardingSteps(scope?: OnboardingModelScope, local = false): On
   return [
     'initial',
     'vcs',
-    'project-management',
     ...(local ? [] : (['model-setup'] as const)),
     ...(scope === 'user' ? [] : (['model-provider'] as const)),
     ...(scope === 'user' || scope === 'hybrid' ? (['personal-provider'] as const) : []),
@@ -49,7 +48,6 @@ interface StepMeta {
 const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   'initial',
   'vcs',
-  'project-management',
   'model-setup',
   'model-provider',
   'personal-provider',

@@ -1,7 +1,7 @@
 /**
  * Session-scoped markers for the `/onboarding` wizard (`EmptyFactoryState`).
  * The draft and step survive full-page OAuth redirects
- * (GitHub/Linear) so the flow can resume where it left off. The
+ * (GitHub) so the flow can resume where it left off. The
  * create-Factory wizard uses separate keys (`useCreateFactoryFlow`) so
  * the two flows never collide.
  *
@@ -29,7 +29,6 @@ export const ONBOARDING_RESUME_WINDOW_MS = 30 * 60 * 1000;
 export const ONBOARDING_STEPS = [
   'initial',
   'vcs',
-  'project-management',
   'model-setup',
   'model-provider',
   'personal-provider',
@@ -197,7 +196,7 @@ export function clearOnboardingFlow(): void {
  * Whether an onboarding flow is mid-way with its factory already created —
  * the only case where `/onboarding` may stay open (and `/` must route back
  * into it) even though a factory exists. A failed final confirmation can leave
- * a Factory to finish configuring. GitHub/Linear OAuth callbacks land on `/`, so
+ * a Factory to finish configuring. GitHub OAuth callbacks land on `/`, so
  * without this check the wizard would be abandoned at the factory home.
  *
  * Three gates, all required:

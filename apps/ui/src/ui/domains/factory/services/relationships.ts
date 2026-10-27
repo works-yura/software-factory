@@ -106,14 +106,8 @@ export function relationshipLabel(item: WorkItem): string {
     : tk('relationship.workItem', { reference });
 }
 
-function linearIdentifier(item: IdentifiableItem): string | undefined {
-  return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : undefined;
-}
-
-/** What a person types to find the item: `#20456` on GitHub, the team key `ENG-123` on Linear. */
+/** What a person types to find the item: `#20456` on GitHub. */
 export function workItemIdentifier(item: IdentifiableItem): string | undefined {
-  // Linear source key already reads `linear:ENG-123` — hashing it would invent `#ENG-123`.
-  if (item.source === 'linear-issue') return linearIdentifier(item) ?? workItemNumber(item);
   if (item.source === 'gitlab-pr') return gitlabIdentifierForItem(item);
   if (item.source === 'github-pr' || item.source === 'github-issue') {
     const number = workItemNumber(item);

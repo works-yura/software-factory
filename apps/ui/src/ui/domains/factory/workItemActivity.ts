@@ -27,7 +27,7 @@ function metadataString(source: Record<string, unknown>, key: string): string | 
 
 /**
  * Best-effort creator attribution for external items. GitHub exposes a stable
- * public avatar URL; GitLab and Linear names fall through to initials.
+ * public avatar URL; GitLab names fall through to initials.
  */
 function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
   if (item.source === 'github-issue' || item.source === 'github-pr') {
@@ -43,25 +43,11 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
     const author = metadataString(item.metadata, 'author');
     return author ? { id: `gitlab:${author}`, name: author } : undefined;
   }
-  if (item.source === 'linear-issue') {
-    const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'linearCreator');
-    return creator ? { id: `linear:${creator}`, name: creator } : undefined;
-  }
-  if (item.source === 'jira-issue') {
-    const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'author');
-    if (!creator) return undefined;
-    return { id: `jira:${creator}`, name: creator };
-  }
-  if (item.source === 'incidentio-follow-up') {
-    const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'author');
-    if (!creator) return undefined;
-    return { id: `incidentio:${creator}`, name: creator };
-  }
   return undefined;
 }
 
 /**
- * Best-effort current-assignee attribution for GitLab and Linear issues. The
+ * Best-effort current-assignee attribution for GitLab issues. The
  * assignee is the current owner and is also represented in the activity rail.
  */
 function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined {
@@ -73,21 +59,6 @@ function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined 
         ? assignees.find(value => typeof value === 'string' && value.trim())?.trim()
         : undefined);
     return assignee ? { id: `gitlab:${assignee}`, name: assignee } : undefined;
-  }
-  if (item.source === 'linear-issue') {
-    const assignee = metadataString(item.metadata, 'assignee') ?? metadataString(item.metadata, 'linearAssignee');
-    if (!assignee) return undefined;
-    return { id: `linear:${assignee}`, name: assignee };
-  }
-  if (item.source === 'jira-issue') {
-    const assignee = metadataString(item.metadata, 'assignee');
-    if (!assignee) return undefined;
-    return { id: `jira:${assignee}`, name: assignee };
-  }
-  if (item.source === 'incidentio-follow-up') {
-    const assignee = metadataString(item.metadata, 'assignee') ?? metadataString(item.metadata, 'incidentioAssignee');
-    if (!assignee) return undefined;
-    return { id: `incidentio:${assignee}`, name: assignee };
   }
   return undefined;
 }
@@ -118,7 +89,7 @@ function syntheticCreatedEvent(item: WorkItem, hasRealCreateEvent: boolean): Aud
 
 /**
  * Synthesize an "assigned" event when the assignee is known and differs from
- * the reporter/creator. Currently only Linear issues expose a stable
+ * the reporter/creator. Currently only GitLab issues expose a stable
  * assignee, and we anchor the event at `updatedAt` so it sorts after the
  * creation entry in a newest-first timeline.
  */

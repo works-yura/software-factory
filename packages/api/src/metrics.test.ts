@@ -304,12 +304,12 @@ describe('computeFactoryMetrics', () => {
       }),
       makeItem({
         id: '00000000-0000-4000-8000-000000000004',
-        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-1' },
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:1' },
         createdAt: new Date(NOW.getTime() - 40 * DAY),
       }),
       makeItem({
         id: '00000000-0000-4000-8000-000000000005',
-        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-2' },
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:2' },
         createdAt: new Date(NOW.getTime() - DAY),
       }),
     ];

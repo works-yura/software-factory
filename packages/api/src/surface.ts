@@ -269,7 +269,6 @@ export async function prepareFactoryRuleBinding(
   projects: FactoryProjectsStorage,
   boards: BoardRegistry,
   input: FactoryBindingPreparationInput,
-  intake?: Pick<IntakeStorage, 'getConfig'>,
 ): Promise<void> {
   try {
     const sourceControl =
@@ -314,13 +313,11 @@ export async function prepareFactoryRuleBinding(
     // A retry may already own a role session. Check it before treating a
     // repository-less card as ambiguous, but never override an explicit signal.
     const boundSession = await reuseBoundSession(sourceControl, input);
-    const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
     let repository = await resolveWorkItemRepository({
       sourceControl,
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
       item: input.item,
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
     });
     if (repository.status === 'ambiguous' && boundSession) {
       const link = await sourceControl.projectRepositories.get({
@@ -505,8 +502,7 @@ export function buildIntegrationContext(
 
 /**
  * Disabled-status stub for the well-known integration ids. The SPA polls
- * `/web/github/status`, `/web/linear/status`, and `/web/jira/status`
- * unconditionally, so when an integration is absent (or not ready) the status
+ * `/web/github/status` unconditionally, so when an integration is absent (or not ready) the status
  * contract must still hold. Unknown custom ids get no stub — the SPA doesn't
  * poll them.
  */
@@ -533,46 +529,6 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
       }),
     ];
   }
-  if (id === 'linear') {
-    return [
-      registerApiRoute('/web/linear/status', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: c =>
-          c.json({
-            enabled: false,
-            connected: false,
-            workspace: null,
-            reason: 'missing_config',
-            diagnostics: {
-              linearAppConfigured: configured,
-              factoryAuthEnabled: deps.auth.enabled(),
-              appDbConfigured: true,
-            },
-          }),
-      }),
-    ];
-  }
-  if (id === 'jira') {
-    return [
-      registerApiRoute('/web/jira/status', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: c =>
-          c.json({
-            enabled: false,
-            configured,
-            site: null,
-            reason: 'missing_config',
-            diagnostics: {
-              jiraConfigured: configured,
-              factoryAuthEnabled: deps.auth.enabled(),
-              appDbConfigured: deps.factoryStorage !== undefined,
-            },
-          }),
-      }),
-    ];
-  }
   return [];
 }
 
@@ -586,7 +542,7 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
  * Mounted only for ABSENT slack — a registered integration owns the path via
  * its connect routes (or, when the state signer is unstable, gets no routes
  * at all and the UI falls back to the generic copy). Static payload, leaks
- * nothing → no auth needed, same posture as the github/linear stubs.
+ * nothing → no auth needed, same posture as the github stub.
  */
 function absentSlackChannelAccountsRoutes(): ApiRoute[] {
   return [
@@ -665,7 +621,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
   // Absent known integrations still get their disabled-status stub.
-  const absentStubs = ['github', 'linear', 'jira']
+  const absentStubs = ['github']
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
     .flatMap(id => disabledIntegrationStatusRoutes(deps, id));
   // Absent slack gets the channel-accounts not-registered stub (registered
@@ -695,7 +651,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
             factoryProjectId: request.factoryProjectId,
             sessionId: request.sessionId,
           }),
-        deps.domains.intake,
         { projects: deps.domains.projects, modelDefaults: deps.domains.modelDefaults },
       )
     : undefined;
@@ -723,7 +678,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
                 deps.domains.projects,
                 deps.boardRegistry,
                 input,
-                deps.domains.intake,
               );
             },
           }

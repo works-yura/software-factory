@@ -41,10 +41,9 @@ function renderBoard(board = 'boards/release', workItems: unknown[] = [], boards
     ),
     http.get('*/web/intake/config', () =>
       HttpResponse.json({
-        config: { github: { enabled: true, sourceIds: ['acme/app'] }, linear: { enabled: false, sourceIds: null } },
+        config: { github: { enabled: true, sourceIds: ['acme/app'] } },
       }),
     ),
-    http.get('*/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false, workspace: null })),
     http.get('*/web/factory/projects/:factoryId/sessions', () => HttpResponse.json({ sessions: [] })),
     http.get('*/web/github/projects/:id/issues', intakeRequest),
     http.get('*/web/github/projects/:id/prs', intakeRequest),

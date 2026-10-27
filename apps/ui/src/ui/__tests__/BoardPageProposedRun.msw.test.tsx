@@ -207,14 +207,10 @@ function stubBoardEndpoints({
       HttpResponse.json({
         config: {
           github: { enabled: true, sourceIds: ['acme/app'] },
-          linear: { enabled: false, sourceIds: null },
         },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({ enabled: false, connected: false, workspace: null }),
-    ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
@@ -242,54 +238,6 @@ function renderWorkBoard() {
 describe('Board card with a proposed run', () => {
   it('highlights and focuses a work item opened from attention', async () => {
     stubBoardEndpoints();
-    const { client } = renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
-
-    const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    await waitForMutationsIdle(client);
-    expect(card).toHaveAttribute('data-highlighted', 'true');
-    await waitFor(() => expect(within(card).getByRole('button', { name: 'Details for Fix login bug' })).toHaveFocus());
-  });
-
-  it('highlights a targeted Linear intake card in the unified feed', async () => {
-    stubBoardEndpoints();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({
-          workItems: [
-            {
-              ...workItem,
-              stages: ['intake'],
-              externalSource: {
-                integrationId: 'linear',
-                type: 'issue',
-                externalId: 'linear-issue:ENG-1',
-                url: 'https://linear.app/acme/issue/ENG-1',
-              },
-              metadata: { identifier: 'ENG-1' },
-            },
-          ],
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-        HttpResponse.json({
-          config: {
-            github: { enabled: true, sourceIds: ['acme/app'] },
-            linear: { enabled: true, sourceIds: ['linear-project'] },
-          },
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
-        HttpResponse.json({
-          bindings: [
-            { integrationId: 'linear', sourceId: 'linear-project', factoryProjectId: FACTORY_ID, board: 'work' },
-          ],
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: true, workspace: { id: 'workspace-1' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
-    );
     const { client } = renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
 
     const card = await screen.findByRole('article', { name: 'Fix login bug' });

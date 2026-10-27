@@ -4,9 +4,6 @@
     "github-pr": "Рев'ю PR",
     "gitlab-issue": "GitLab",
     "gitlab-pr": "Рев'ю MR",
-    "linear-issue": "Linear",
-    "jira-issue": "Jira",
-    "incidentio-follow-up": "incident.io",
     "slack-thread": "Slack",
     "manual": "Вручну"
   },
@@ -19,9 +16,6 @@
   "externalLink": {
     "github": "Відкрити в GitHub",
     "gitlab": "Відкрити в GitLab",
-    "linear": "Відкрити в Linear",
-    "jira": "Відкрити в Jira",
-    "incidentio": "Відкрити в incident.io",
     "slack": "Відкрити в Slack",
     "manual": "Відкрити посилання"
   },
@@ -118,7 +112,6 @@
     "githubPr": "пул-реквест GitHub",
     "gitlabIssue": "задача GitLab",
     "gitlabPr": "мерж-реквест GitLab",
-    "linearIssue": "задача Linear",
     "card": "картка"
   },
   "automation": {
@@ -168,7 +161,6 @@
     "mergeRequest": "Мерж-реквест",
     "issueNumber": "Задача #{{number}}",
     "issue": "Задача",
-    "linearIssue": "Задача Linear",
     "workItem": "Картка",
     "userSessions": "Сесії користувачів",
     "sessions": "Сесії",
@@ -200,7 +192,6 @@
     "isAnyOf": "будь-що з",
     "fields": {
       "source": "Джерело задач",
-      "linearProject": "Проєкт Linear",
       "teammate": "За участю",
       "author": "Автор",
       "assignee": "Виконавець",
@@ -303,7 +294,6 @@
     "invalidAuditEvents": "Некоректна відповідь із подіями аудиту",
     "invalidAuditPortal": "Некоректна відповідь порталу аудиту",
     "feedFailed": "Помилка потоку стрічки ({{status}})",
-    "incidentioStatusFailed": "Не вдалося отримати статус incident.io ({{status}})",
     "gitlabNoInstallation": "Реєстрація проєкту GitLab не повернула встановлення",
     "subscriptionsFailed": "Не вдалося завантажити підписки на пул-реквести ({{status}}).",
     "subscriptionsInvalid": "Підписки на пул-реквести повернули некоректну відповідь.",
@@ -352,8 +342,6 @@
     "loadMore": "Завантажити ще кандидатів",
     "loadingMore": "Завантаження інших кандидатів",
     "loadingMoreShort": "Завантаження",
-    "linearExpired": "Авторизація Linear закінчилася. Підключіться знову, щоб і далі синхронізувати задачі.",
-    "connectLinear": "Підключити Linear",
     "retry": "Повторити"
   },
   "relatedLink": {

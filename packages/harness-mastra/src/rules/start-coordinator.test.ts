@@ -336,7 +336,6 @@ describe('FactoryStartCoordinator', () => {
       storage,
       undefined,
       makeSourceControl() as never,
-      undefined,
       {
         projects: {
           getById: vi.fn(async () => ({
@@ -369,7 +368,6 @@ describe('FactoryStartCoordinator', () => {
       storage,
       undefined,
       makeSourceControl() as never,
-      undefined,
       {
         projects: {
           getById: vi.fn(async () => ({

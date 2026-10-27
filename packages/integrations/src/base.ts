@@ -1,6 +1,6 @@
 /**
  * `FactoryIntegration` — the common contract for pluggable web integrations
- * (GitHub, Linear, third-party).
+ * (GitHub, GitLab, third-party).
  *
  * Each integration is a self-contained class: the deploy entry
  * (`src/mastra/index.ts`) reads that integration's env vars ONCE, constructs
@@ -200,7 +200,7 @@ export interface FactoryChannelsConfig extends Omit<AgentControllerChannelsConfi
  * (validated at construction), their API surface, and their HTTP routes.
  */
 export interface FactoryIntegration {
-  /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
+  /** Stable identifier: `'github'`, `'gitlab'`, custom ids for third parties. */
   readonly id: string;
   /** Issue-oriented capability consumed by Intake. */
   readonly intake?: Intake;
@@ -228,7 +228,7 @@ export interface FactoryIntegration {
    */
   routes(ctx: IntegrationContext): ApiRoute[];
   /**
-   * Org-scoped agent tools resolved per request (e.g. Linear's issue tools).
+   * Org-scoped agent tools resolved per request (e.g. an issue tracker's tools).
    * Optional capability; the factory merges results into the SDK's async
    * `extraTools` provider.
    */

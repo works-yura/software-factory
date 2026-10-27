@@ -83,12 +83,7 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
   if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
   if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
-  if (
-    item.source === 'gitlab-issue' ||
-    item.source === 'linear-issue' ||
-    item.source === 'jira-issue' ||
-    item.source === 'incidentio-follow-up'
-  ) {
+  if (item.source === 'gitlab-issue') {
     return [INVESTIGATE, BUILD];
   }
   return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [REVIEW] : [];

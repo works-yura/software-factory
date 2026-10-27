@@ -32,18 +32,6 @@ function useInvalidateProviderState(provider: PlatformConnectProviderId) {
   return async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections(provider) }),
-      ...(provider === 'jira'
-        ? [
-            queryClient.invalidateQueries({ queryKey: queryKeys.jiraStatus() }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.jiraProjects() }),
-          ]
-        : []),
-      ...(provider === 'incident-io'
-        ? [
-            queryClient.invalidateQueries({ queryKey: queryKeys.incidentioStatus() }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.incidentioSources() }),
-          ]
-        : []),
       ...(provider === 'gitlab'
         ? [
             queryClient.invalidateQueries({ queryKey: ['gitlab', 'status'] }),

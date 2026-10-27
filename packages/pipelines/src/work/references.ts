@@ -17,18 +17,6 @@ export function sourceRef(item: FactoryRuleItemContext): string {
     const number = workItemNumber(item);
     return number === undefined ? `GitLab merge request${link}` : `GitLab merge request !${number}${link}`;
   }
-  if (item.source === 'linear-issue') {
-    const identifier = sourceIdentifier(item);
-    return identifier ? `Linear issue ${identifier}${link}` : `Linear issue ${item.title}${link}`;
-  }
-  if (item.source === 'jira-issue') {
-    const identifier = sourceIdentifier(item);
-    return identifier ? `Jira issue ${identifier}${link}` : `Jira issue ${item.title}${link}`;
-  }
-  if (item.source === 'incidentio-follow-up') {
-    const identifier = sourceIdentifier(item);
-    return identifier ? `incident.io follow-up ${identifier}${link}` : `incident.io follow-up ${item.title}${link}`;
-  }
   if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
   const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';
   const number = workItemNumber(item);

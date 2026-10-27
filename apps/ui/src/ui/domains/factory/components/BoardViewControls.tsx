@@ -48,14 +48,13 @@ export function BoardViewControls({
 }) {
   const { t } = useTranslation('board');
   const { savedViews } = view;
-  const { connectedSources, linearProjects } = useBoardFilterSources();
+  const { connectedSources } = useBoardFilterSources();
   const fields = boardFilterFields({
     kind,
     filters: view.filters,
     participants,
     availableLabels,
     connectedSources,
-    linearProjects,
     currentUserId,
   });
 

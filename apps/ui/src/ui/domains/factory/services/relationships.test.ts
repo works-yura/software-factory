@@ -139,18 +139,11 @@ describe('Factory work item relationships', () => {
       source: 'github-issue',
       metadata: { githubIssueNumber: 24, number: 99 },
     });
-    const linear = workItem({
-      id: 'linear-24',
-      source: 'linear-issue',
-      metadata: { identifier: 'ENG-24' },
-    });
 
     expect(relationshipLabel(review)).toBe('Review: PR #202');
     expect(relationshipLabel(issue)).toBe('Work item: Issue #24');
     expect(workItemReferenceLabel(review)).toBe('PR #202');
     expect(workItemReferenceLabel(issue)).toBe('Issue #24');
-    expect(relationshipLabel(linear)).toBe('Work item: ENG-24');
-    expect(workItemReferenceLabel(linear)).toBe('ENG-24');
   });
 });
 

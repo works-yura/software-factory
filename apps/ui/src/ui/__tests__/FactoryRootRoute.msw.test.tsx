@@ -1,5 +1,4 @@
 import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -112,9 +111,6 @@ describe('Factory root route', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
         HttpResponse.json({ connections: [] }),
       ),
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
-      ),
     );
 
     const router = renderFactoryRoute('/onboarding');
@@ -127,49 +123,20 @@ describe('Factory root route', () => {
     }
   });
 
-  it('continues from project management to account setup', async () => {
-    seedOnboarding('project-management', null);
-
-    server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),
-      http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })),
-    );
-
-    const user = userEvent.setup();
-    renderFactoryRoute('/onboarding');
-
-    try {
-      await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
-      await screen.findByRole('heading', { name: 'Choose your setup.' });
-    } finally {
-      clearOnboarding();
-    }
-  });
-
   it('resumes a mid-flow onboarding from the root route after an OAuth round-trip', async () => {
-    seedOnboarding('project-management', null);
+    seedOnboarding('model-setup', null);
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: true, reason: 'ready' }),
-      ),
     );
 
-    const router = renderFactoryRoute('/?linear=connected');
+    const router = renderFactoryRoute('/?github=connected');
 
     try {
-      await screen.findByRole('heading', { name: 'Connect your work.' });
+      await screen.findByRole('heading', { name: 'Choose your setup.' });
       expect(router.state.location.pathname).toBe('/onboarding');
     } finally {
       clearOnboarding();

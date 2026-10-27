@@ -14,7 +14,6 @@ export interface IntakeSelection {
   enabled: boolean;
   /** Provider-owned source ids; `null` means nothing is selected. */
   sourceIds: string[] | null;
-  repositoryByLinearProject?: Record<string, string>;
 }
 
 export type IntakeConfig = Record<string, IntakeSelection>;
@@ -69,7 +68,7 @@ export function mergeIntakeSelections(configs: readonly IntakeConfig[]): IntakeC
  *
  * Intake selections are org-wide, so they cannot say *where* an
  * ingested item should land. GitHub items are naturally scoped by their linked
- * repository; providers without that link (Linear) need this explicit binding
+ * repository; providers without that link need this explicit binding
  * so viewing one project's board cannot materialize another project's items.
  */
 export const INTAKE_SOURCE_BINDINGS_SCHEMA: CollectionSchema = {

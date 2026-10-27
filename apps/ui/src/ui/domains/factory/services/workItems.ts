@@ -18,9 +18,6 @@ export type WorkItemSource =
   | 'github-pr'
   | 'gitlab-issue'
   | 'gitlab-pr'
-  | 'linear-issue'
-  | 'jira-issue'
-  | 'incidentio-follow-up'
   | 'slack-thread'
   | 'manual';
 
@@ -128,9 +125,6 @@ function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkIt
   if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
   if (source.integrationId === 'gitlab' && source.type === 'issue') return 'gitlab-issue';
   if (source.integrationId === 'gitlab' && source.type === 'pull-request') return 'gitlab-pr';
-  if (source.integrationId === 'linear' && source.type === 'issue') return 'linear-issue';
-  if (source.integrationId === 'jira' && source.type === 'issue') return 'jira-issue';
-  if (source.integrationId === 'incidentio' && source.type === 'issue') return 'incidentio-follow-up';
   if (source.integrationId === 'slack' && source.type === 'slack-thread') return 'slack-thread';
   return 'manual';
 }
@@ -147,12 +141,6 @@ function externalSourceTarget(
       return { integrationId: 'gitlab', type: 'issue' };
     case 'gitlab-pr':
       return { integrationId: 'gitlab', type: 'pull-request' };
-    case 'linear-issue':
-      return { integrationId: 'linear', type: 'issue' };
-    case 'jira-issue':
-      return { integrationId: 'jira', type: 'issue' };
-    case 'incidentio-follow-up':
-      return { integrationId: 'incidentio', type: 'issue' };
     case 'slack-thread':
       return { integrationId: 'slack', type: 'slack-thread' };
   }

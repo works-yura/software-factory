@@ -7,7 +7,6 @@
     "continue": "Continue",
     "back": "Back",
     "refresh": "Refresh",
-    "skipForNow": "Skip for now",
     "skip": "Skip"
   },
   "setup": {
@@ -24,9 +23,6 @@
     "work": "Bring in your work",
     "model": "Choose your model",
     "create": "Create my first factory"
-  },
-  "projectManagement": {
-    "label": "Project management connections"
   },
   "providers": {
     "setupLabel": "Model provider setup",
@@ -72,10 +68,6 @@
         "title": "Choose your codebase",
         "placeholder": "Search repositories…"
       },
-      "projectManagement": {
-        "title": "Connect the work behind the code",
-        "placeholder": "Search options…"
-      },
       "modelProvider": {
         "title": "Choose your Factory model",
         "placeholder": "Search models and providers…"
@@ -97,29 +89,6 @@
       "repositories": "Repositories",
       "gitlabRepositories": "GitLab repositories",
       "public": "Public"
-    },
-    "linear": {
-      "skipHint": "This Factory takes its work from GitHub only",
-      "loading": "Loading Linear projects",
-      "reconnect": "Reconnect Linear",
-      "connectHint": "Import issues and priorities into the Factory board",
-      "notConfigured": "Linear is not configured for this deployment.",
-      "expired": "Its authorization expired, so its projects cannot be read",
-      "projectsIn": "Projects in {{workspace}}",
-      "projectHint": "Its issues feed this Factory board",
-      "noMatch": "No Linear project matches this search.",
-      "noProjects": "This workspace has no projects yet."
-    },
-    "jira": {
-      "reconnect": "Reconnect Jira",
-      "loading": "Loading Jira projects",
-      "connecting": "Connecting Jira…",
-      "connectHint": "Import Jira issues into the Factory Work board",
-      "unavailable": "Jira is not available for this organization.",
-      "projects": "Jira projects",
-      "projectHint": "Its issues feed this Factory Work board",
-      "noMatch": "No Jira project matches this search.",
-      "noProjects": "No Jira projects are available yet."
     },
     "models": {
       "heading": "{{provider}} models",
@@ -232,10 +201,6 @@
         "label": "Codebase",
         "title": "Choose your codebase."
       },
-      "project-management": {
-        "label": "Work",
-        "title": "Connect your work."
-      },
       "model-setup": {
         "label": "Setup",
         "title": "Choose your setup.",
@@ -279,36 +244,6 @@
     "repository": "Your repository",
     "branch": "Selected branch"
   },
-  "intakePreview": {
-    "label": "Work intake preview",
-    "example": "Example",
-    "bringIn": "Bring into your board",
-    "chooseLater": "Choose what to bring in after setup.",
-    "exampleWorkflow": "Example workflow",
-    "columns": {
-      "todo": "To do",
-      "build": "Build",
-      "review": "Review"
-    },
-    "kinds": {
-      "issue": "Issue",
-      "followUp": "Follow-up"
-    },
-    "sources": {
-      "linear": {
-        "example": "Add repository search",
-        "previousExample": "Fix keyboard focus"
-      },
-      "jira": {
-        "example": "Improve sign-in errors",
-        "previousExample": "Keep sessions alive"
-      },
-      "incident-io": {
-        "example": "Add a health check",
-        "previousExample": "Retry failed requests"
-      }
-    }
-  },
   "accountsPreview": {
     "label": "Account setup preview",
     "workOwnerAccount": "Work owner’s account",
@@ -328,32 +263,11 @@
     "connectedYours": "Connected · your account",
     "connectYours": "Connect your account"
   },
-  "connections": {
-    "loadingLinear": "Loading Linear status",
-    "loadingNamed": "Loading {{name}} connections",
-    "connectedTo": "Connected to {{account}}.",
-    "accountsConnected_one": "{{count}} account connected.",
-    "accountsConnected_other": "{{count}} accounts connected.",
-    "linearOrganizationRequired": "Join an organization to connect Linear.",
-    "linearExpired": "Authorization expired. Reconnect Linear to continue.",
-    "linearLoadError": "Couldn't load Linear connection.",
-    "loadErrorNamed": "Couldn't load {{name}} connections.",
-    "workPurpose": "Issues and priorities for your work board.",
-    "incidentPurpose": "Bring incident follow-ups into your work board.",
-    "reconnectHint": "Reconnect to restore access.",
-    "connect": "Connect",
-    "reconnect": "Reconnect",
-    "reconnectNamed": "Reconnect {{name}}",
-    "retryNamed": "Retry {{name}}"
-  },
   "review": {
     "label": "Review factory setup",
     "edit": "Edit",
     "editLabel": "Edit {{label}}",
     "codebase": "Codebase",
-    "work": "Work",
-    "setUpLater": "Set up later",
-    "workConnected": "Connected · choose issues after setup",
     "setup": "Setup",
     "chooseSetup": "Choose a setup",
     "setupDetail": "Applies to this Factory",

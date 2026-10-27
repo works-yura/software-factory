@@ -105,14 +105,14 @@ describe('custom board operations', () => {
     expect(body).toEqual({ board: 'release', title: item.title });
   });
 
-  it('files a dropped Linear candidate onto the custom board at its initial phase', async () => {
+  it('files a dropped GitLab candidate onto the custom board at its initial phase', async () => {
     let body: unknown;
     const transition = vi.fn(() => HttpResponse.json({}));
     server.use(
       listHandler(),
       http.post('*/web/factory/projects/:id/work-items', async ({ request }) => {
         body = await request.json();
-        return HttpResponse.json({ workItem: { ...wireItem, id: 'release-2', source: 'linear-issue' } });
+        return HttpResponse.json({ workItem: { ...wireItem, id: 'release-2', source: 'gitlab-issue' } });
       }),
       http.post('*/web/factory/projects/:id/work-items/:itemId/transition', transition),
     );
@@ -125,10 +125,10 @@ describe('custom board operations', () => {
         {
           kind: 'candidate',
           candidate: {
-            source: 'linear-issue',
-            sourceKey: 'linear:REL-1',
+            source: 'gitlab-issue',
+            sourceKey: 'gitlab:REL-1',
             title: 'Cut 1.2',
-            url: 'https://linear.app/acme/issue/REL-1',
+            url: 'https://gitlab.com/acme/app/-/issues/1',
             metadata: {},
           },
         },
@@ -139,7 +139,7 @@ describe('custom board operations', () => {
     expect(body).toMatchObject({
       board: 'release',
       stages: ['queued'],
-      externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:REL-1' },
+      externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab:REL-1' },
     });
     expect(transition).not.toHaveBeenCalled();
   });
@@ -153,7 +153,7 @@ describe('custom board operations', () => {
       http.get('*/web/factory/projects/:id/boards', () => new Promise<never>(() => {})),
       http.post('*/web/factory/projects/:id/work-items', async ({ request }) => {
         body = await request.json();
-        return HttpResponse.json({ workItem: { ...wireItem, id: 'release-3', source: 'linear-issue' } });
+        return HttpResponse.json({ workItem: { ...wireItem, id: 'release-3', source: 'gitlab-issue' } });
       }),
       http.post('*/web/factory/projects/:id/work-items/:itemId/transition', transition),
     );
@@ -164,10 +164,10 @@ describe('custom board operations', () => {
         {
           kind: 'candidate',
           candidate: {
-            source: 'linear-issue',
-            sourceKey: 'linear:REL-2',
+            source: 'gitlab-issue',
+            sourceKey: 'gitlab:REL-2',
             title: 'Cut 1.3',
-            url: 'https://linear.app/acme/issue/REL-2',
+            url: 'https://gitlab.com/acme/app/-/issues/2',
             metadata: {},
           },
         },

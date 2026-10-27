@@ -4,9 +4,6 @@
     "github-pr": "PR Review",
     "gitlab-issue": "GitLab",
     "gitlab-pr": "MR Review",
-    "linear-issue": "Linear",
-    "jira-issue": "Jira",
-    "incidentio-follow-up": "incident.io",
     "slack-thread": "Slack",
     "manual": "Manual"
   },
@@ -19,9 +16,6 @@
   "externalLink": {
     "github": "Open in GitHub",
     "gitlab": "Open in GitLab",
-    "linear": "Open in Linear",
-    "jira": "Open in Jira",
-    "incidentio": "Open in incident.io",
     "slack": "Open in Slack",
     "manual": "Open link"
   },
@@ -116,7 +110,6 @@
     "githubPr": "GitHub pull request",
     "gitlabIssue": "GitLab issue",
     "gitlabPr": "GitLab merge request",
-    "linearIssue": "Linear issue",
     "card": "card"
   },
   "automation": {
@@ -166,7 +159,6 @@
     "mergeRequest": "Merge request",
     "issueNumber": "Issue #{{number}}",
     "issue": "Issue",
-    "linearIssue": "Linear issue",
     "workItem": "Work item",
     "userSessions": "User sessions",
     "sessions": "Sessions",
@@ -198,7 +190,6 @@
     "isAnyOf": "is any of",
     "fields": {
       "source": "Intake source",
-      "linearProject": "Linear project",
       "teammate": "Involves",
       "author": "Author",
       "assignee": "Assignee",
@@ -297,7 +288,6 @@
     "invalidAuditEvents": "Invalid audit event response",
     "invalidAuditPortal": "Invalid audit portal response",
     "feedFailed": "Feed stream failed ({{status}})",
-    "incidentioStatusFailed": "incident.io status request failed ({{status}})",
     "gitlabNoInstallation": "GitLab project registration returned no installation",
     "subscriptionsFailed": "Failed to load pull request subscriptions ({{status}}).",
     "subscriptionsInvalid": "Pull request subscriptions returned an invalid response.",
@@ -346,8 +336,6 @@
     "loadMore": "Load more candidates",
     "loadingMore": "Loading more candidates",
     "loadingMoreShort": "Loading more",
-    "linearExpired": "Linear authorization expired. Reconnect to keep syncing issues.",
-    "connectLinear": "Connect Linear",
     "retry": "Retry"
   },
   "relatedLink": {

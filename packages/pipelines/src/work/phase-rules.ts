@@ -48,12 +48,6 @@ const issueFetchHint = (tool: string) =>
   `Start by fetching the issue's full details (description and comments) with the ${tool} tool.`;
 
 export const investigateTriagedGitLabIssue = investigateTriagedSource('gitlab', issueFetchHint('gitlab_get_issue'));
-export const investigateTriagedLinearIssue = investigateTriagedSource('linear', issueFetchHint('linear_get_issue'));
-export const investigateTriagedJiraIssue = investigateTriagedSource('jira', issueFetchHint('jira_get_issue'));
-export const investigateTriagedIncidentioFollowUp = investigateTriagedSource(
-  'incidentio',
-  "Start by fetching the follow-up's full details (description and incident context) with the incidentio_get_issue tool.",
-);
 
 export function planWorkItem(context: FactoryStageRuleContext) {
   return {

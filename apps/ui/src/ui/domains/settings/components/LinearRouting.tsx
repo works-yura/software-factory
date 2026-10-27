@@ -9,8 +9,6 @@ import { useTranslation } from 'react-i18next';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
-import { isLinearTeamSourceId, linearTeamSourceId } from '../../factory/services/linear';
-import type { LinearProject, LinearTeam } from '../../factory/services/linear';
 
 const UNROUTED = '__unrouted__';
 const NO_BOARD = '__no_board__';
@@ -131,38 +129,6 @@ export function IntakeSourceRouting({
         </div>
       </ScrollArea>
     </div>
-  );
-}
-
-export function LinearRouting({
-  sourceIds,
-  projects,
-  teams,
-  factories,
-}: {
-  sourceIds: string[];
-  projects: LinearProject[];
-  teams: LinearTeam[];
-  factories: { id: string; name: string }[];
-}) {
-  const { t } = useTranslation('settings');
-  const teamBySourceId = new Map(teams.map(team => [linearTeamSourceId(team), team]));
-  const labelFor = (sourceId: string): string => {
-    if (isLinearTeamSourceId(sourceId)) {
-      const team = teamBySourceId.get(sourceId);
-      return team ? t('linearRouting.allIssuesIn', { team: team.name }) : sourceId;
-    }
-    return projects.find(project => project.id === sourceId)?.name ?? sourceId;
-  };
-
-  return (
-    <IntakeSourceRouting
-      integrationId="linear"
-      label="Linear"
-      sourceIds={sourceIds}
-      sources={sourceIds.map(sourceId => ({ id: sourceId, name: labelFor(sourceId) }))}
-      factories={factories}
-    />
   );
 }
 

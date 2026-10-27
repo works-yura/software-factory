@@ -31,7 +31,7 @@ export function CandidateCard({
   candidate: BoardCandidate;
   /** Repository id resolving GitHub descriptions in the detail panel. */
   projectRepositoryId: string;
-  /** Factory project id resolving Linear descriptions in the detail panel. */
+  /** Factory project id resolving GitLab descriptions in the detail panel. */
   factoryProjectId: string;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;

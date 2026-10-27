@@ -1,21 +1,12 @@
 import {
   FACTORY_GITHUB_EVENTS,
   FACTORY_GITLAB_EVENTS,
-  FACTORY_INCIDENTIO_EVENTS,
-  FACTORY_JIRA_EVENTS,
-  FACTORY_LINEAR_EVENTS,
 } from '../rules/types.ts';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
-  FactoryIncidentioEventName,
-  FactoryIncidentioRuleContext,
-  FactoryJiraEventName,
-  FactoryJiraRuleContext,
-  FactoryLinearEventName,
-  FactoryLinearRuleContext,
   FactoryRuleHandler,
   FactoryRuleSource,
   FactoryStageRuleContext,
@@ -49,18 +40,12 @@ type BoardEventHandlerMap<EventName extends string, Context> = Readonly<
 export interface BoardEventRules {
   readonly github?: BoardEventHandlerMap<FactoryGithubEventName, FactoryGithubRuleContext>;
   readonly gitlab?: BoardEventHandlerMap<FactoryGitLabEventName, FactoryGitLabRuleContext>;
-  readonly linear?: BoardEventHandlerMap<FactoryLinearEventName, FactoryLinearRuleContext>;
-  readonly jira?: BoardEventHandlerMap<FactoryJiraEventName, FactoryJiraRuleContext>;
-  readonly incidentio?: BoardEventHandlerMap<FactoryIncidentioEventName, FactoryIncidentioRuleContext>;
 }
 export type BoardEventIntegration = keyof BoardEventRules;
 
 const BOARD_EVENT_NAMES: Readonly<Record<BoardEventIntegration, readonly string[]>> = {
   github: FACTORY_GITHUB_EVENTS,
   gitlab: FACTORY_GITLAB_EVENTS,
-  linear: FACTORY_LINEAR_EVENTS,
-  jira: FACTORY_JIRA_EVENTS,
-  incidentio: FACTORY_INCIDENTIO_EVENTS,
 };
 
 type ReadonlyFactoryBoardRules = Readonly<

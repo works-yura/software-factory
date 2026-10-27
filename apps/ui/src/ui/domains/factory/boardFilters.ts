@@ -4,7 +4,7 @@ import { BOARD_PERSON_FIELDS } from './boardPeople';
 import type { BoardKind } from './boardStages';
 
 /** Every board filter, in menu order. Each id is also its query parameter and its saved-view item's `fieldId`. */
-export const BOARD_FILTER_FIELDS = ['source', 'linearProject', ...BOARD_PERSON_FIELDS, 'label'] as const;
+export const BOARD_FILTER_FIELDS = ['source', ...BOARD_PERSON_FIELDS, 'label'] as const;
 export type BoardFilterFieldId = (typeof BOARD_FILTER_FIELDS)[number];
 
 /** The values picked per filter. An empty set narrows nothing; filters combine with AND. */
@@ -19,7 +19,6 @@ function boardFilterState(kind: BoardKind, valuesOf: (fieldId: BoardFilterFieldI
   const offered = new Set(boardFilterFieldIds(kind));
   const state: Record<BoardFilterFieldId, ReadonlySet<string>> = {
     source: new Set(),
-    linearProject: new Set(),
     teammate: new Set(),
     author: new Set(),
     assignee: new Set(),
@@ -69,15 +68,13 @@ export function boardFiltersActive(state: BoardFilterState): boolean {
   return BOARD_FILTER_FIELDS.some(fieldId => state[fieldId].size > 0);
 }
 
-/** `state` with one filter's picks replaced. Linear projects only narrow Linear, so they leave with it. */
+/** `state` with one filter's picks replaced. */
 export function withBoardFilterValues(
   state: BoardFilterState,
   fieldId: BoardFilterFieldId,
   values: readonly string[],
 ): BoardFilterState {
-  const next = { ...state, [fieldId]: new Set(values) };
-  if (fieldId === 'source' && !values.includes('linear')) next.linearProject = new Set();
-  return next;
+  return { ...state, [fieldId]: new Set(values) };
 }
 
 /**

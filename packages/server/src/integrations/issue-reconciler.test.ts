@@ -17,16 +17,16 @@ import { createIssueReconciler, EXTERNAL_SOURCE_MISSING_KEY } from '@factory/int
 
 function issue(overrides: Partial<IntakeIssueDetail> = {}): IntakeIssueDetail {
   return {
-    id: 'linear-uuid',
+    id: 'issue-uuid',
     identifier: 'ENG-42',
     title: 'Issue',
-    url: 'https://linear.app/acme/issue/ENG-42',
-    author: 'Linear Ada',
+    url: 'https://example.test/acme/issue/ENG-42',
+    author: 'Ada',
     state: 'In Progress',
     stateType: 'started',
     priority: 'High',
-    assignee: 'Linear Grace',
-    assignees: ['Linear Grace'],
+    assignee: 'Grace',
+    assignees: ['Grace'],
     source: 'ENG',
     labels: ['triage'],
     commentCount: 0,

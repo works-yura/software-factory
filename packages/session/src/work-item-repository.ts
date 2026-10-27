@@ -92,15 +92,12 @@ export async function resolveWorkItemRepository(args: {
   orgId: string;
   factoryProjectId: string;
   item: Pick<WorkItemRow, 'metadata'>;
-  linearRepositoryMap?: Record<string, string>;
 }): Promise<WorkItemRepositoryResolution> {
-  const { sourceControl, item, linearRepositoryMap } = args;
+  const { sourceControl, item } = args;
   const metadata = item.metadata ?? {};
   const linked = await listLinkedRepositories(args);
   const repositorySignal = typeof metadata.repository === 'string' ? metadata.repository : undefined;
   const externalRepositorySignal = getExternalRepositoryId(sourceControl.integrationId, metadata);
-  const linearProjectId = typeof metadata.linearProjectId === 'string' ? metadata.linearProjectId : undefined;
-  const mappedRepository = linearProjectId ? linearRepositoryMap?.[linearProjectId] : undefined;
 
   // The provider id survives repository renames, so it outranks a possibly stale slug.
   if (externalRepositorySignal !== undefined) {
@@ -120,13 +117,6 @@ export async function resolveWorkItemRepository(args: {
       status: 'unlinked',
       hint: `Source-control repository ${externalRepositorySignal} is not linked to this Factory.`,
     };
-  }
-
-  if (mappedRepository) {
-    const match = findRepositoryBySlug(linked, mappedRepository);
-    return match
-      ? resolvedRepository(match)
-      : { status: 'unlinked', hint: `Mapped repository ${mappedRepository} is not linked to this Factory.` };
   }
 
   const candidates = [...new Set(linked.map(repository => repository.slug))].sort();

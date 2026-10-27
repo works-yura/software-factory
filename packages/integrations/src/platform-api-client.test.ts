@@ -157,14 +157,14 @@ describe('PlatformApiClient', () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValue(
-        new Response(null, { status: 302, headers: { location: 'https://linear.app/oauth/authorize' } }),
+        new Response(null, { status: 302, headers: { location: 'https://gitlab.com/oauth/authorize' } }),
       );
 
-    await expect(client(fetchImpl).requestRedirect('GET', '/v1/server/linear/authorize')).resolves.toBe(
-      'https://linear.app/oauth/authorize',
+    await expect(client(fetchImpl).requestRedirect('GET', '/v1/server/gitlab/authorize')).resolves.toBe(
+      'https://gitlab.com/oauth/authorize',
     );
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://platform.example.com/v1/server/linear/authorize',
+      'https://platform.example.com/v1/server/gitlab/authorize',
       expect.objectContaining({
         method: 'GET',
         redirect: 'manual',

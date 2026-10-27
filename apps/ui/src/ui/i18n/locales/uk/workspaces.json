@@ -7,7 +7,6 @@
     "continue": "Продовжити",
     "back": "Назад",
     "refresh": "Оновити",
-    "skipForNow": "Поки пропустити",
     "skip": "Пропустити"
   },
   "setup": {
@@ -24,9 +23,6 @@
     "work": "Додайте свої задачі",
     "model": "Виберіть модель",
     "create": "Створити мою першу Factory"
-  },
-  "projectManagement": {
-    "label": "Підключення систем керування проєктами"
   },
   "providers": {
     "setupLabel": "Налаштування провайдера моделей",
@@ -72,10 +68,6 @@
         "title": "Виберіть кодову базу",
         "placeholder": "Пошук репозиторіїв…"
       },
-      "projectManagement": {
-        "title": "Підключіть задачі, що стоять за кодом",
-        "placeholder": "Пошук варіантів…"
-      },
       "modelProvider": {
         "title": "Виберіть модель для Factory",
         "placeholder": "Пошук моделей і провайдерів…"
@@ -97,29 +89,6 @@
       "repositories": "Репозиторії",
       "gitlabRepositories": "Репозиторії GitLab",
       "public": "Публічний"
-    },
-    "linear": {
-      "skipHint": "Ця Factory братиме задачі лише з GitHub",
-      "loading": "Завантаження проєктів Linear",
-      "reconnect": "Перепідключити Linear",
-      "connectHint": "Імпортувати задачі й пріоритети на дошку Factory",
-      "notConfigured": "Linear не налаштовано в цьому розгортанні.",
-      "expired": "Термін авторизації минув, тому проєкти неможливо прочитати",
-      "projectsIn": "Проєкти в {{workspace}}",
-      "projectHint": "Його задачі надходять на цю дошку Factory",
-      "noMatch": "Жоден проєкт Linear не відповідає пошуку.",
-      "noProjects": "У цьому робочому просторі ще немає проєктів."
-    },
-    "jira": {
-      "reconnect": "Перепідключити Jira",
-      "loading": "Завантаження проєктів Jira",
-      "connecting": "Підключення Jira…",
-      "connectHint": "Імпортувати задачі Jira на дошку Work у Factory",
-      "unavailable": "Jira недоступна для цієї організації.",
-      "projects": "Проєкти Jira",
-      "projectHint": "Його задачі надходять на дошку Work цієї Factory",
-      "noMatch": "Жоден проєкт Jira не відповідає пошуку.",
-      "noProjects": "Проєктів Jira поки немає."
     },
     "models": {
       "heading": "Моделі {{provider}}",
@@ -232,10 +201,6 @@
         "label": "Кодова база",
         "title": "Виберіть кодову базу."
       },
-      "project-management": {
-        "label": "Задачі",
-        "title": "Підключіть свої задачі."
-      },
       "model-setup": {
         "label": "Налаштування",
         "title": "Виберіть варіант налаштування.",
@@ -279,36 +244,6 @@
     "repository": "Ваш репозиторій",
     "branch": "Вибрана гілка"
   },
-  "intakePreview": {
-    "label": "Попередній перегляд надходження задач",
-    "example": "Приклад",
-    "bringIn": "Перенести на дошку",
-    "chooseLater": "Що саме переносити, виберете після налаштування.",
-    "exampleWorkflow": "Приклад процесу",
-    "columns": {
-      "todo": "До виконання",
-      "build": "Реалізація",
-      "review": "Перевірка"
-    },
-    "kinds": {
-      "issue": "Задача",
-      "followUp": "Подальша дія"
-    },
-    "sources": {
-      "linear": {
-        "example": "Додати пошук репозиторіїв",
-        "previousExample": "Виправити фокус клавіатури"
-      },
-      "jira": {
-        "example": "Покращити помилки входу",
-        "previousExample": "Не обривати сесії"
-      },
-      "incident-io": {
-        "example": "Додати перевірку стану",
-        "previousExample": "Повторювати невдалі запити"
-      }
-    }
-  },
   "accountsPreview": {
     "label": "Попередній перегляд налаштування акаунтів",
     "workOwnerAccount": "Акаунт власника задачі",
@@ -328,34 +263,11 @@
     "connectedYours": "Підключено · ваш акаунт",
     "connectYours": "Підключіть свій акаунт"
   },
-  "connections": {
-    "loadingLinear": "Завантаження статусу Linear",
-    "loadingNamed": "Завантаження підключень {{name}}",
-    "connectedTo": "Підключено до {{account}}.",
-    "accountsConnected_one": "Підключено {{count}} акаунт.",
-    "accountsConnected_few": "Підключено {{count}} акаунти.",
-    "accountsConnected_many": "Підключено {{count}} акаунтів.",
-    "accountsConnected_other": "Підключено {{count}} акаунта.",
-    "linearOrganizationRequired": "Приєднайтеся до організації, щоб підключити Linear.",
-    "linearExpired": "Термін авторизації минув. Перепідключіть Linear, щоб продовжити.",
-    "linearLoadError": "Не вдалося завантажити підключення Linear.",
-    "loadErrorNamed": "Не вдалося завантажити підключення {{name}}.",
-    "workPurpose": "Задачі й пріоритети для вашої робочої дошки.",
-    "incidentPurpose": "Переносьте подальші дії за інцидентами на свою робочу дошку.",
-    "reconnectHint": "Перепідключіть, щоб відновити доступ.",
-    "connect": "Підключити",
-    "reconnect": "Перепідключити",
-    "reconnectNamed": "Перепідключити {{name}}",
-    "retryNamed": "Повторити для {{name}}"
-  },
   "review": {
     "label": "Перевірка налаштування Factory",
     "edit": "Змінити",
     "editLabel": "Змінити: {{label}}",
     "codebase": "Кодова база",
-    "work": "Задачі",
-    "setUpLater": "Налаштувати пізніше",
-    "workConnected": "Підключено · задачі можна вибрати після налаштування",
     "setup": "Налаштування",
     "chooseSetup": "Виберіть варіант налаштування",
     "setupDetail": "Стосується цієї Factory",

@@ -20,12 +20,6 @@ const PROVIDER_NUMBER_KEYS: Partial<Record<WorkItemBranchSource, string>> = {
   'gitlab-pr': 'gitlabMergeRequestIid',
 };
 
-const IDENTIFIER_PROVIDERS: Partial<Record<WorkItemBranchSource, string>> = {
-  'linear-issue': 'linear',
-  'jira-issue': 'jira',
-  'incidentio-follow-up': 'incidentio',
-};
-
 /** The provider number a GitHub or GitLab card carries — the `#12` or `!12` its runs name it by. */
 export function workItemNumber(item: Pick<WorkItemBranchInput, 'source' | 'metadata'>): number | undefined {
   const key = PROVIDER_NUMBER_KEYS[item.source];
@@ -34,7 +28,7 @@ export function workItemNumber(item: Pick<WorkItemBranchInput, 'source' | 'metad
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
-/** How a card names its thread: a Linear title already opens with its identifier, a GitHub card gets its number here. */
+/** How a card names its thread: a GitHub or GitLab card gets its number here, any other keeps its title. */
 export function workItemThreadTitle(item: Pick<WorkItemBranchInput, 'source' | 'metadata'> & { title: string }): string {
   const number = workItemNumber(item);
   if (number === undefined) return item.title;
@@ -66,11 +60,9 @@ export function workItemBranch(item: WorkItemBranchInput): string {
   const number = workItemNumber(item);
   const identifier = metadataIdentifier(item);
   const suffix = idSuffix(item.id);
-  const provider = IDENTIFIER_PROVIDERS[item.source];
 
   if (number !== undefined && item.source === 'github-issue') return `factory/issue-${number}`;
   if (number !== undefined && item.source === 'github-pr') return `factory/pr-${number}`;
-  if (provider !== undefined && identifier !== undefined) return `factory/${provider}-${identifier.toLowerCase()}`;
   if (number !== undefined && item.source === 'gitlab-pr' && suffix) return `factory/gitlab-mr-${number}-${suffix}`;
   if (item.source === 'gitlab-issue' && identifier !== undefined && suffix) {
     const slug = identifier.toLowerCase().replace(/[^a-z0-9._-]+/g, '-');

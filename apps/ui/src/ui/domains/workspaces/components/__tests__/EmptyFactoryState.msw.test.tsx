@@ -75,9 +75,6 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
       HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
     ),
     http.get(`${TEST_BASE_URL}/web/gitlab/projects`, () => HttpResponse.json({ projects: [gitlabProject] })),
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({ enabled: false, connected: false, reason: 'missing_config' }),
-    ),
     http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
       HttpResponse.json({
         orgKeyAdmin: true,
@@ -183,7 +180,6 @@ describe('Draft Factory onboarding', () => {
     expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeChecked();
     await user.click(screen.getByRole('radio', { name: 'octo/other' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
-    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
     await user.click(await screen.findByRole('radio', { name: 'Company account' }));
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
@@ -789,10 +785,9 @@ describe('Account presets', () => {
     const writes = registerSetup();
     server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => new HttpResponse(null, { status: 404 })));
     persistOnboardingDraft({ repository: repo });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'project-management');
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
     expect(screen.queryByRole('button', { name: 'Edit setup' })).not.toBeInTheDocument();

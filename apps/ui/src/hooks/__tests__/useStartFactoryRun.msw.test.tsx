@@ -49,7 +49,7 @@ function stubEndpoints(
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-      HttpResponse.json({ config: { github: { enabled: true, sourceIds: [] }, linear: { enabled: false } } }),
+      HttpResponse.json({ config: { github: { enabled: true, sourceIds: [] } } }),
     ),
     http.patch(`${TEST_BASE_URL}/web/factory/work-items/:id`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
@@ -204,7 +204,7 @@ describe.each(['github-issue', 'github-pr', 'gitlab-issue', 'gitlab-pr'] as cons
   },
 );
 
-describe.each(['linear-issue', 'manual'] as const)('useStartFactoryRun fallback for %s', source => {
+describe.each(['manual'] as const)('useStartFactoryRun fallback for %s', source => {
   it.each(['github', 'gitlab'] as const)('keeps the sole %s repository fallback', async provider => {
     const calls = stubEndpoints([{ id: 'repo-1', provider, externalId: '101', slug: 'acme/one' }]);
     const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });

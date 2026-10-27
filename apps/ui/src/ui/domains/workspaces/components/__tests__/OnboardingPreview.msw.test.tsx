@@ -35,29 +35,6 @@ describe('contextual onboarding previews', () => {
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
 
-  it('shows the selected tracker’s issue becoming a backlog card and uses its connection state', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
-        HttpResponse.json({
-          connections: [{ id: 'incident-1', integrationId: 'incident-io', status: 'active', accountLabel: 'acme' }],
-        }),
-      ),
-    );
-    const { rerender } = renderWithProviders(<OnboardingPreview step="project-management" source="linear" />);
-    expect(screen.getByText('ENG-124 · Issue')).toBeInTheDocument();
-    expect(screen.getByText('Example')).toBeInTheDocument();
-    expect(screen.getByText('Choose what to bring in after setup.')).toBeInTheDocument();
-
-    rerender(<OnboardingPreview step="project-management" source="incident-io" />);
-    expect(await screen.findByText('Connected')).toBeInTheDocument();
-    expect(screen.getByText('INC-124 · Follow-up')).toBeInTheDocument();
-    expect(screen.getAllByText('Add a health check')).toHaveLength(2);
-    expect(screen.queryByText('ENG-124 · Issue')).not.toBeInTheDocument();
-  });
-
   it('keeps the shared model while personal access changes from a proposed connection to a saved credential', async () => {
     let saved = false;
     server.use(

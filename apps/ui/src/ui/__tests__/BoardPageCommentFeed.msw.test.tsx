@@ -88,11 +88,8 @@ function stubBoardEndpoints(board: { commentCount: number; feedActivityAt: strin
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
-        config: { github: { enabled: false, sourceIds: null }, linear: { enabled: false, sourceIds: null } },
+        config: { github: { enabled: false, sourceIds: null } },
       }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),

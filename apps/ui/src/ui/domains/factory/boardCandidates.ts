@@ -4,13 +4,10 @@ import { githubSourceKey, hasLabel } from './boardItems';
 import { itemAppearsInStage } from './boardStages';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { GitLabIssue, GitLabMergeRequest } from './services/gitlab';
-import type { IncidentioIssue } from './services/incidentio';
-import type { JiraIssue } from './services/jira';
-import type { LinearIssue } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 import type { BoardStageId } from './stages';
 
-export type IntakeSource = 'github' | 'github-prs' | 'gitlab-prs' | 'gitlab' | 'linear' | 'jira' | 'incidentio';
+export type IntakeSource = 'github' | 'github-prs' | 'gitlab-prs' | 'gitlab';
 
 /** What a candidate feed exposes to the column rendering it. */
 export interface IntakeFeed {
@@ -25,7 +22,7 @@ export interface IntakeFeed {
   retryFailed?: () => unknown;
 }
 
-/** A live GitHub/Linear issue or PR that has not been materialized as a work item. */
+/** A live GitHub/GitLab issue or PR that has not been materialized as a work item. */
 export interface BoardCandidate {
   sourceKey: string;
   source: WorkItemSource;
@@ -118,79 +115,6 @@ export function gitlabMergeRequestCandidate(pr: GitLabMergeRequest): BoardCandid
       labels: pr.labels ?? [],
       headBranch: pr.headBranch,
       baseBranch: pr.baseBranch,
-    },
-  };
-}
-
-export function linearCandidate(issue: LinearIssue): BoardCandidate {
-  return {
-    sourceKey: `linear:${issue.identifier}`,
-    source: 'linear-issue',
-    title: issue.title,
-    url: issue.url,
-    meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
-    column: 'intake',
-    metadata: {
-      linearIssueId: issue.id,
-      ...(issue.projectId ? { linearProjectId: issue.projectId } : {}),
-      identifier: issue.identifier,
-      state: issue.state,
-      assignee: issue.assignee,
-      creator: issue.creator ?? null,
-      labels: issue.labels,
-    },
-  };
-}
-
-export function jiraCandidate(issue: JiraIssue): BoardCandidate {
-  return {
-    sourceKey: issue.id,
-    source: 'jira-issue',
-    title: issue.title,
-    url: issue.url,
-    meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
-    column: 'intake',
-    metadata: {
-      identifier: issue.identifier,
-      issueRef: issue.id,
-      state: issue.state,
-      stateType: issue.stateType,
-      priority: issue.priorityLabel,
-      project: issue.project,
-      site: issue.site ?? null,
-      assignee: issue.assignee,
-      assignees: issue.assignee ? [issue.assignee] : [],
-      creator: issue.author ?? null,
-      author: issue.author ?? null,
-      labels: issue.labels,
-      createdAt: issue.createdAt,
-      updatedAt: issue.updatedAt,
-    },
-  };
-}
-
-export function incidentioCandidate(issue: IncidentioIssue): BoardCandidate {
-  return {
-    sourceKey: issue.id,
-    source: 'incidentio-follow-up',
-    title: issue.title,
-    url: issue.url,
-    meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
-    column: 'intake',
-    metadata: {
-      identifier: issue.identifier,
-      issueRef: issue.id,
-      state: issue.state,
-      stateType: issue.stateType,
-      priority: issue.priorityLabel,
-      incident: issue.incident,
-      assignee: issue.assignee,
-      assignees: issue.assignee ? [issue.assignee] : [],
-      creator: issue.author ?? null,
-      author: issue.author ?? null,
-      labels: issue.labels,
-      createdAt: issue.createdAt,
-      updatedAt: issue.updatedAt,
     },
   };
 }

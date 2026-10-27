@@ -32,15 +32,6 @@ describe('workItemBranch', () => {
     );
   });
 
-  it('lowercases provider issue identifiers', () => {
-    expect(workItemBranch({ id, source: 'linear-issue', metadata: { identifier: 'ENG-42' } })).toBe(
-      'factory/linear-eng-42',
-    );
-    expect(workItemBranch({ id, source: 'jira-issue', metadata: { identifier: 'OPS-17' } })).toBe(
-      'factory/jira-ops-17',
-    );
-  });
-
   it('sanitizes the GitLab identifier into a bounded branch name', () => {
     expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: 'Acme/App #42' } })).toBe(
       'factory/gitlab-acme-app-42-000000000001',
@@ -62,12 +53,10 @@ describe('workItemBranch', () => {
     );
   });
 
-  it('falls back when the linear identifier is empty or whitespace', () => {
-    expect(workItemBranch({ id, source: 'linear-issue', metadata: { identifier: '' } })).toBe(`factory/item-${id}`);
-    expect(workItemBranch({ id, source: 'linear-issue', metadata: { identifier: '  ' } })).toBe(`factory/item-${id}`);
-    expect(workItemBranch({ id, source: 'linear-issue', metadata: { identifier: ' ENG-42 ' } })).toBe(
-      'factory/linear-eng-42',
-    );
+  it('names a stored card from an unsupported integration by its id', () => {
+    const legacy = workItemSource({ integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' });
+    expect(legacy).toBe('manual');
+    expect(workItemBranch({ id, source: legacy, metadata: { identifier: 'ENG-42' } })).toBe(`factory/item-${id}`);
   });
 
   it('falls back to an id-derived branch when no provider identity applies', () => {
@@ -82,7 +71,7 @@ describe('workItemNumber', () => {
   it('reads provider numbers for GitHub and GitLab cards only', () => {
     expect(workItemNumber({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 6 } })).toBe(6);
     expect(workItemNumber({ source: 'gitlab-issue', metadata: { gitlabIssueIid: 3 } })).toBe(3);
-    expect(workItemNumber({ source: 'linear-issue', metadata: { number: 9 } })).toBeUndefined();
+    expect(workItemNumber({ source: 'manual', metadata: { number: 9 } })).toBeUndefined();
     expect(workItemNumber({ source: 'github-pr', metadata: null })).toBeUndefined();
   });
 });

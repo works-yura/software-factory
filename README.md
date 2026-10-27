@@ -89,6 +89,6 @@ pnpm test    # vitest
 Код перенесено з v3 копією, тести — 1:1 (`pnpm verify` звіряє кількість). Журнал швів — `MIGRATION.md`.
 
 1. Борг типів у тестах (`scripts/test-type-debt.sh`): закривати по пакетах.
-2. Прибрати словник Linear/Jira/incident.io з `core` і `pipelines`.
+2. ~~Прибрати словник Linear/Jira/incident.io з `core` і `pipelines`.~~ Зроблено (`MIGRATION.md`, «Словник Linear/Jira/incident.io»).
 3. Порт харнесу: відв'язати `harness-mastra` від GitHub (PAT у `workspace`) і від Mastra в `runtime` (`FactoryController`, `DispatcherSession`).
 4. Порти сховища, потім Firestore.

@@ -2,10 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   gitlabCandidate,
-  incidentioCandidate,
   issueCandidate,
-  jiraCandidate,
-  linearCandidate,
   pullRequestCandidate,
 } from './boardCandidates';
 import { boardFiltersFromParams } from './boardFilters';
@@ -209,7 +206,7 @@ describe('board person filters', () => {
     expect(workItemMatchesPeople(item, activityPage, work, asIs)).toBe(true);
   });
 
-  it('filters intake candidates by GitHub, GitLab, Linear, Jira, and incident.io provider metadata', () => {
+  it('filters intake candidates by GitHub and GitLab provider metadata', () => {
     const githubIssue = issueCandidate({
       number: 7,
       title: 'Fix login bug',
@@ -252,57 +249,6 @@ describe('board person filters', () => {
       createdAt: '2026-08-01T09:00:00.000Z',
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
-    const linear = linearCandidate({
-      id: 'linear-1',
-      identifier: 'ENG-12',
-      title: 'Filter the board',
-      url: 'https://linear.app/acme/issue/ENG-12',
-      state: 'Todo',
-      stateType: 'unstarted',
-      priorityLabel: 'High',
-      assignee: 'Grace Hopper',
-      creator: 'Ada Lovelace',
-      team: 'Engineering',
-      labels: [],
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-01T09:00:00.000Z',
-    });
-
-    const jira = jiraCandidate({
-      id: 'jira-1',
-      identifier: 'ENG-13',
-      title: 'Filter the board from Jira',
-      url: 'https://acme.atlassian.net/browse/ENG-13',
-      state: 'To Do',
-      stateType: 'unstarted',
-      priorityLabel: 'High',
-      assignee: 'Grace Hopper',
-      author: 'Ada Lovelace',
-      project: 'ENG',
-      site: 'acme.atlassian.net',
-      labels: [],
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-01T09:00:00.000Z',
-      sourceId: '10001',
-    });
-
-    const incidentio = incidentioCandidate({
-      id: 'incidentio:follow-up:01HFOLLOWUP',
-      identifier: 'INC-42',
-      title: 'Add database failover alert',
-      url: 'https://app.incident.io/org/follow-ups/01HFOLLOWUP',
-      state: 'outstanding',
-      stateType: 'unstarted',
-      priorityLabel: 'Urgent',
-      assignee: 'Grace Hopper',
-      author: 'Ada Lovelace',
-      incident: 'incident-1',
-      labels: [],
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-01T09:00:00.000Z',
-      sourceId: 'incidentio:follow-ups',
-    });
-
     const matches = (candidate: Parameters<typeof candidateMatchesPeople>[0], fieldId: string, participantId: string) =>
       candidateMatchesPeople(candidate, picks([[fieldId, participantId]]), asIs);
 
@@ -312,13 +258,7 @@ describe('board person filters', () => {
     expect(matches(githubPr, 'reviewer', 'github:monalisa')).toBe(true);
     expect(matches(gitlab, 'author', 'gitlab:ada lovelace')).toBe(true);
     expect(matches(gitlab, 'assignee', 'gitlab:katherine johnson')).toBe(true);
-    expect(matches(linear, 'author', 'linear:ada lovelace')).toBe(true);
-    expect(matches(linear, 'assignee', 'linear:grace hopper')).toBe(true);
-    expect(matches(jira, 'author', 'jira:ada lovelace')).toBe(true);
-    expect(matches(jira, 'assignee', 'jira:grace hopper')).toBe(true);
-    expect(matches(incidentio, 'author', 'incidentio:ada lovelace')).toBe(true);
-    expect(matches(incidentio, 'assignee', 'incidentio:grace hopper')).toBe(true);
-    expect(matches(linear, 'worked', 'linear:ada lovelace')).toBe(false);
+    expect(matches(gitlab, 'worked', 'gitlab:ada lovelace')).toBe(false);
   });
 
   it('builds a named people list from auth, audit, and provider metadata without raw Factory ids', () => {

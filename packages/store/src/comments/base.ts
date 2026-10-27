@@ -1,6 +1,6 @@
 /**
  * Work-item comments domain — one message list per work item, materialized
- * from every source. Local creates and platform mirrors (Slack, Linear,
+ * from every source. Local creates and platform mirrors (Slack,
  * GitHub) share one idempotency story: `external_source` json + derived
  * `source_key` under a partial unique index, a local retry token being just
  * another source (`local:comment:<uuid>`).

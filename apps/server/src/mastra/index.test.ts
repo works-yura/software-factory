@@ -58,9 +58,6 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'GITLAB_BASE_URL',
       'GITLAB_WEBHOOK_SECRET',
       'MASTRA_GITLAB_CONNECTION_ID',
-      'LINEAR_CLIENT_ID',
-      'LINEAR_CLIENT_SECRET',
-      'INCIDENT_IO_API_KEY',
       'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
       'FACTORY_BROWSER',
@@ -247,12 +244,6 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'GITLAB_BASE_URL',
         'GITLAB_WEBHOOK_SECRET',
         'MASTRA_GITLAB_CONNECTION_ID',
-        'LINEAR_CLIENT_ID',
-        'LINEAR_CLIENT_SECRET',
-        'JIRA_BASE_URL',
-        'JIRA_EMAIL',
-        'JIRA_API_TOKEN',
-        'INCIDENT_IO_API_KEY',
         'SLACK_APP_SIGNING_SECRET',
       ]) {
         vi.stubEnv(name, '');

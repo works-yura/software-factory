@@ -5,9 +5,6 @@ export const WORK_ITEM_SOURCES = [
   'github-pr',
   'gitlab-issue',
   'gitlab-pr',
-  'linear-issue',
-  'jira-issue',
-  'incidentio-follow-up',
   'manual',
 ] as const;
 export type WorkItemSource = (typeof WORK_ITEM_SOURCES)[number];
@@ -19,9 +16,6 @@ const WORK_ITEM_SOURCE_ORIGINS: Readonly<
   'github-pr': { integrationId: 'github', type: 'pull-request' },
   'gitlab-issue': { integrationId: 'gitlab', type: 'issue' },
   'gitlab-pr': { integrationId: 'gitlab', type: 'pull-request' },
-  'linear-issue': { integrationId: 'linear', type: 'issue' },
-  'jira-issue': { integrationId: 'jira', type: 'issue' },
-  'incidentio-follow-up': { integrationId: 'incidentio', type: 'issue' },
   manual: { integrationId: 'factory', type: 'manual' },
 };
 
@@ -55,13 +49,10 @@ export function needsApproval(item: {
 
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
-  if (source.integrationId === 'linear') return 'linear-issue';
   if (source.integrationId === 'gitlab') return source.type === 'pull-request' ? 'gitlab-pr' : 'gitlab-issue';
-  if (source.integrationId === 'jira') return 'jira-issue';
-  if (source.integrationId === 'incidentio') return 'incidentio-follow-up';
-  // Only GitHub, GitLab, Linear, Jira, and incident.io have provider-specific
-  // rules; anything else (a Slack thread, say) is a plain work item, not a
-  // mislabeled GitHub issue.
+  // Only GitHub and GitLab have provider-specific rules; anything else (a Slack
+  // thread, or a stored card from an integration Factory no longer supports) is
+  // a plain work item, not a mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
@@ -150,9 +141,6 @@ export const FACTORY_RULE_SOURCES = [
   'pullRequest',
   'gitlabIssue',
   'gitlabPullRequest',
-  'linearIssue',
-  'jiraIssue',
-  'incidentioFollowUp',
   'manual',
 ] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -187,15 +175,6 @@ export const FACTORY_GITLAB_EVENTS = [
 ] as const;
 export type FactoryGitLabEventName = (typeof FACTORY_GITLAB_EVENTS)[number];
 
-export const FACTORY_LINEAR_EVENTS = ['issueObserved', 'issueClosed'] as const;
-export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
-
-export const FACTORY_JIRA_EVENTS = ['issueObserved', 'issueClosed'] as const;
-export type FactoryJiraEventName = (typeof FACTORY_JIRA_EVENTS)[number];
-
-export const FACTORY_INCIDENTIO_EVENTS = ['followUpObserved', 'followUpClosed'] as const;
-export type FactoryIncidentioEventName = (typeof FACTORY_INCIDENTIO_EVENTS)[number];
-
 export type FactoryRuleJsonValue =
   | null
   | boolean
@@ -225,7 +204,7 @@ export type FactoryRuleActor =
   | { type: 'system'; id: string };
 
 export interface FactoryRuleIngressIdentity {
-  type: 'human' | 'agent' | 'toolResult' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'rule';
+  type: 'human' | 'agent' | 'toolResult' | 'github' | 'gitlab' | 'rule';
   id: string;
 }
 
@@ -438,96 +417,6 @@ export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
   };
 }
 
-export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
-  item?: FactoryRuleItemContext;
-  board?: FactoryRuleBoard;
-  itemRevision?: number;
-  /** Where the card's board sends it when its tracked source closes. */
-  boardClosure?: FactoryRuleBoardClosure;
-  /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
-  phase?: FactoryRulePhaseContext;
-  /** Bound board for the source this issue came from, when one is configured and installed. */
-  intake?: FactoryRuleIntakeTarget;
-  event: FactoryLinearEventName;
-  issue: {
-    id: string;
-    identifier: string;
-    title: string;
-    url: string;
-    state: string;
-    stateType: string;
-    priorityLabel: string;
-    assignee: string | null;
-    creator: string | null;
-    team: string | null;
-    labels: readonly string[];
-    createdAt: string;
-    updatedAt: string;
-    sourceId?: string | null;
-    projectId?: string | null;
-  };
-}
-
-export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
-  item?: FactoryRuleItemContext;
-  board?: FactoryRuleBoard;
-  itemRevision?: number;
-  /** Where the card's board sends it when its tracked source closes. */
-  boardClosure?: FactoryRuleBoardClosure;
-  /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
-  phase?: FactoryRulePhaseContext;
-  /** Bound board for the source this issue came from, when one is configured and installed. */
-  intake?: FactoryRuleIntakeTarget;
-  event: FactoryJiraEventName;
-  issue: {
-    /** Stable issue reference — the direct integration's Jira id or the Platform-encoded issue reference. */
-    id: string;
-    identifier: string;
-    title: string;
-    url: string;
-    state: string;
-    stateType: string;
-    priorityLabel: string;
-    assignee: string | null;
-    author: string | null;
-    project: string | null;
-    site: string | null;
-    labels: readonly string[];
-    createdAt: string;
-    updatedAt: string;
-  };
-}
-
-export interface FactoryIncidentioRuleContext extends FactoryRuleContextBase {
-  item?: FactoryRuleItemContext;
-  board?: FactoryRuleBoard;
-  itemRevision?: number;
-  /** Where the card's board sends it when its tracked source closes. */
-  boardClosure?: FactoryRuleBoardClosure;
-  /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
-  phase?: FactoryRulePhaseContext;
-  /** Bound board for the source this follow-up came from, when one is configured and installed. */
-  intake?: FactoryRuleIntakeTarget;
-  event: FactoryIncidentioEventName;
-  issue: {
-    /** Stable item reference — the prefixed incident.io follow-up id the intake feed serves as `id`. */
-    id: string;
-    identifier: string;
-    title: string;
-    url: string;
-    state: string;
-    stateType: string;
-    priorityLabel: string;
-    assignee: string | null;
-    author: string | null;
-    /** Reference of the incident this follow-up belongs to, when available. */
-    incident: string | null;
-    labels: readonly string[];
-    createdAt: string;
-    updatedAt: string;
-  };
-}
-
 export type FactoryRuleHandler<TContext> = (
   context: Readonly<TContext>,
 ) => FactoryRuleDecision | void | Promise<FactoryRuleDecision | void>;
@@ -587,7 +476,7 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   sourceKey: string;
   /**
    * Org-wide ownership key for the external record, when one Factory at a time
-   * may hold a live card for it (a stable Linear issue id, for instance). The
+   * may hold a live card for it (a stable external issue id, for instance). The
    * store enforces it with a unique index, so a second project's materialization
    * is refused rather than duplicated.
    */
@@ -711,12 +600,6 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'gitlabIssue';
     case 'gitlab-pr':
       return 'gitlabPullRequest';
-    case 'linear-issue':
-      return 'linearIssue';
-    case 'jira-issue':
-      return 'jiraIssue';
-    case 'incidentio-follow-up':
-      return 'incidentioFollowUp';
     case 'manual':
       return 'manual';
   }

@@ -25,7 +25,7 @@ const PERSON_FIELD_ROLES: Record<BoardPersonFieldId, readonly BoardPersonRole[]>
 export type BoardPeopleFilters = Pick<BoardFilterState, BoardPersonFieldId>;
 
 export interface BoardParticipant extends AuditActorProfile {
-  source: 'factory' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio';
+  source: 'factory' | 'github' | 'gitlab';
 }
 
 export function factoryParticipantId(userId: string): string {
@@ -87,9 +87,6 @@ function metadataStrings(metadata: Record<string, unknown>, key: string): string
 function externalId(source: RelatedCard['source'], name: string): string | undefined {
   if (source === 'github-issue' || source === 'github-pr') return `github:${name.toLowerCase()}`;
   if (source === 'gitlab-issue' || source === 'gitlab-pr') return `gitlab:${name.toLowerCase()}`;
-  if (source === 'linear-issue') return `linear:${name.toLowerCase()}`;
-  if (source === 'jira-issue') return `jira:${name.toLowerCase()}`;
-  if (source === 'incidentio-follow-up') return `incidentio:${name.toLowerCase()}`;
   return undefined;
 }
 
@@ -105,9 +102,7 @@ function externalProfile(source: RelatedCard['source'], name: string): BoardPart
     };
   }
   if (source === 'gitlab-issue' || source === 'gitlab-pr') return { id, name, source: 'gitlab' };
-  if (source === 'jira-issue') return { id, name, source: 'jira' };
-  if (source === 'incidentio-follow-up') return { id, name, source: 'incidentio' };
-  return { id, name, source: 'linear' };
+  return undefined;
 }
 
 function externalCreator(card: RelatedCard): string | undefined {
@@ -118,13 +113,6 @@ function externalCreator(card: RelatedCard): string | undefined {
     card.source === 'gitlab-pr'
   ) {
     return metadataString(card.metadata, 'author');
-  }
-  if (card.source === 'linear-issue' || card.source === 'jira-issue' || card.source === 'incidentio-follow-up') {
-    return (
-      metadataString(card.metadata, 'creator') ??
-      metadataString(card.metadata, 'linearCreator') ??
-      metadataString(card.metadata, 'author')
-    );
   }
   return undefined;
 }
@@ -139,10 +127,6 @@ function externalAssignees(card: RelatedCard): string[] {
     const assignees = metadataStrings(card.metadata, 'assignees');
     const assignee = metadataString(card.metadata, 'assignee');
     return [...new Set([...assignees, ...(assignee ? [assignee] : [])])];
-  }
-  if (card.source === 'linear-issue' || card.source === 'jira-issue' || card.source === 'incidentio-follow-up') {
-    const assignee = metadataString(card.metadata, 'assignee') ?? metadataString(card.metadata, 'linearAssignee');
-    return assignee ? [assignee] : [];
   }
   return [];
 }

@@ -50,9 +50,6 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
   return (
     value === 'github-issue' ||
     value === 'github-pr' ||
-    value === 'linear-issue' ||
-    value === 'jira-issue' ||
-    value === 'incidentio-follow-up' ||
     value === 'manual'
   );
 }

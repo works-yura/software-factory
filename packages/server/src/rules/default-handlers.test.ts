@@ -156,7 +156,7 @@ describe('built-in board and integration handlers', () => {
     expect(defaultGithubRules.pullRequestUpdated).toBeTypeOf('function');
     expect(defaultGithubRules.pullRequestReviewRequested).toBeTypeOf('function');
     expect(defaultGithubRules.pullRequestMerged).toBeTypeOf('function');
-    expect(workBoard.rules.triage?.linearIssue?.onEnter).toBeTypeOf('function');
+    expect(workBoard.rules.triage?.gitlabIssue?.onEnter).toBeTypeOf('function');
   });
 
   it('transitions linked GitHub issue cards deterministically on closure', async () => {
@@ -304,55 +304,6 @@ describe('built-in board and integration handlers', () => {
         expect(await run(true, onBoard('work', ['done'], source))).toBeUndefined();
       },
     );
-  });
-
-  it('starts Linear investigation when a human moves an issue into Triage', async () => {
-    const rule = workBoard.rules.triage?.linearIssue?.onEnter;
-    const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
-      item: {
-        ...item,
-        source: 'linear-issue',
-        sourceKey: 'linear:issue:linear:ENG-42',
-        metadata: { identifier: 'ENG-42' },
-        title: 'ENG-42: Fix intake sync',
-        url: 'https://linear.app/acme/issue/ENG-42',
-      },
-      source: 'linearIssue',
-      stage: 'triage',
-      fromStage: 'intake',
-      toStage: 'triage',
-    } as FactoryStageRuleContext;
-
-    expect(await rule?.(context)).toMatchObject({
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'factory-triage',
-      arguments: expect.stringContaining('Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)'),
-    });
-  });
-
-  it('carries the linear fetch hint into a Linear triage entry', async () => {
-    const rule = workBoard.rules.triage?.linearIssue?.onEnter;
-    const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
-      item: {
-        ...item,
-        source: 'linear-issue',
-        sourceKey: 'linear:issue:linear:ENG-42',
-        metadata: { identifier: 'ENG-42' },
-      },
-      source: 'linearIssue',
-      stage: 'triage',
-      fromStage: 'intake',
-      toStage: 'triage',
-    } as FactoryStageRuleContext;
-
-    expect(await rule?.(context)).toMatchObject({
-      arguments: expect.stringContaining(
-        "Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.",
-      ),
-    });
   });
 
   it('treats GitLab issue metadata as data instead of prompt instructions', async () => {
@@ -589,9 +540,7 @@ describe('built-in board and integration handlers', () => {
 
   it.each([
     ['issue', 'github-issue'],
-    ['linearIssue', 'linear-issue'],
-    ['jiraIssue', 'jira-issue'],
-    ['incidentioFollowUp', 'incidentio-follow-up'],
+    ['gitlabIssue', 'gitlab-issue'],
     ['manual', 'manual'],
   ] as const)('starts factory planning when a %s item enters Planning', async (source, itemSource) => {
     const rule = workBoard.rules.planning?.[source]?.onEnter;
@@ -615,9 +564,7 @@ describe('built-in board and integration handlers', () => {
 
   it.each([
     ['issue', 'github-issue'],
-    ['linearIssue', 'linear-issue'],
-    ['jiraIssue', 'jira-issue'],
-    ['incidentioFollowUp', 'incidentio-follow-up'],
+    ['gitlabIssue', 'gitlab-issue'],
     ['manual', 'manual'],
   ] as const)('starts building a %s item from a prompt, with no skill to activate', async (source, itemSource) => {
     // The approved plan is the specification, and opening the pull request is
@@ -667,7 +614,7 @@ describe('built-in board and integration handlers', () => {
   });
 
   function buildPrompt(
-    source: 'issue' | 'linearIssue' | 'jiraIssue' | 'incidentioFollowUp' | 'manual',
+    source: 'issue' | 'gitlabIssue' | 'manual',
     metadata: Record<string, unknown> | null,
   ) {
     const rule = workBoard.rules.execute?.[source]?.onEnter;

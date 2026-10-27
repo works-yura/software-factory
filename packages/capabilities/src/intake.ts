@@ -55,7 +55,7 @@ export interface IntakeIssue {
   assignee: string | null;
   assignees?: string[];
   source: string | null;
-  /** Provider source id the issue was read from (Linear project id); lets callers map issues back to intake bindings. */
+  /** Provider source id the issue was read from; lets callers map issues back to intake bindings. */
   sourceId?: string | null;
   /** Provider project id, independent of the selected source (which may be a team). */
   projectId?: string | null;
@@ -85,7 +85,7 @@ export interface IntakeIssuePage {
 
 export interface ListIntakeIssuesInput {
   connection: IntegrationConnection;
-  /** Provider-defined source ids: repositories for GitHub, projects for Linear. */
+  /** Provider-defined source ids: repositories for GitHub, projects for GitLab. */
   sourceIds: string[];
   /** Full source set used to resolve precedence when only a subset is fetched. */
   attributionSourceIds?: string[];
@@ -140,7 +140,7 @@ export interface ResolvedIntakeDispatch {
   issueId: string;
 }
 
-/** Fixed issue-oriented contract implemented by GitHub, Linear, and future sources. */
+/** Fixed issue-oriented contract implemented by GitHub, GitLab, and future sources. */
 export interface Intake {
   /**
    * Resolve the connection and provider-specific identifiers needed to call

@@ -47,11 +47,10 @@ test.describe('Factory board virtualization', () => {
       http.get('*/web/github/projects/repo-1/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
       http.get('*/web/intake/config', () =>
         HttpResponse.json({
-          config: { github: { enabled: false, sourceIds: null }, linear: { enabled: false, sourceIds: null } },
+          config: { github: { enabled: false, sourceIds: null } },
         }),
       ),
       http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: [] })),
-      http.get('*/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false })),
       http.get('*/api/agent-controller/code/sessions/fp-1/permissions', () => HttpResponse.json({ permissions: [] })),
     );
     await page.route(

@@ -15,7 +15,7 @@ const tk = translator('board');
 
 /**
  * Factory › Board: an org-wide grouped list of the repository's work items. The
- * Intake column merges persisted `intake` cards with live GitHub/Linear
+ * Intake column merges persisted `intake` cards with live GitHub/GitLab
  * candidates (issues and PRs that have no record yet — records are
  * materialized only when someone acts on them). Everything enters through
  * Intake and moves through the system from there. Cards move between columns

@@ -183,7 +183,7 @@ export function BoardContent({
     const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
     if (!workItemMatchesPeople(item, activityPage, filters, personId, liveCandidate)) return false;
     if (!workItemMatchesLabels(item, filters.label, liveCandidate)) return false;
-    if (!cardMatchesSourceFilters(item, filters, liveCandidate)) return false;
+    if (!cardMatchesSourceFilters(item, filters)) return false;
     return cardMatchesSearch(item, view.search);
   };
   const workItemsForStage = (stage: (typeof stages)[number]['id']) => {

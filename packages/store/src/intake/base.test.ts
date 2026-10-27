@@ -30,14 +30,14 @@ describe('IntakeStorage', () => {
     const storage = await makeStorage();
     const config = {
       github: { enabled: true, sourceIds: ['repo-1'] },
-      linear: { enabled: false, sourceIds: null },
+      gitlab: { enabled: false, sourceIds: null },
     };
 
     await storage.saveConfig({ orgId: 'org1', config });
     expect(await storage.getConfig({ orgId: 'org1' })).toEqual(config);
     expect(await storage.getConfig({ orgId: 'org2' })).toEqual(DEFAULT_INTAKE_CONFIG);
 
-    const updated = { ...config, linear: { enabled: true, sourceIds: ['team-1'] } };
+    const updated = { ...config, gitlab: { enabled: true, sourceIds: ['team-1'] } };
     await storage.saveConfig({ orgId: 'org1', config: updated });
     expect(await storage.getConfig({ orgId: 'org1' })).toEqual(updated);
   });
@@ -92,7 +92,7 @@ describe('IntakeStorage', () => {
           userId: 'bob',
           config: {
             github: { enabled: false, sourceIds: ['acme/site'] },
-            linear: { enabled: true, sourceIds: ['proj-1'] },
+            gitlab: { enabled: true, sourceIds: ['proj-1'] },
           },
         },
         { orgId: 'org2', userId: 'alice', config: { github: { enabled: false, sourceIds: null } } },
@@ -102,7 +102,7 @@ describe('IntakeStorage', () => {
 
       expect(await storage.getConfig({ orgId: 'org1' })).toEqual({
         github: { enabled: true, sourceIds: ['acme/app'] },
-        linear: { enabled: true, sourceIds: ['proj-1'] },
+        gitlab: { enabled: true, sourceIds: ['proj-1'] },
       });
       expect(await storage.getConfig({ orgId: 'org2' })).toEqual({ github: { enabled: false, sourceIds: null } });
     });
@@ -127,25 +127,25 @@ describe('IntakeStorage', () => {
       const storage = await makeStorage();
       await storage.setBinding({
         orgId: 'org1',
-        integrationId: 'linear',
+        integrationId: 'gitlab',
         sourceId: 'src-a',
         factoryProjectId: 'proj-1',
         userId: 'user1',
       });
       await storage.setBinding({
         orgId: 'org1',
-        integrationId: 'linear',
+        integrationId: 'gitlab',
         sourceId: 'src-b',
         factoryProjectId: 'proj-2',
       });
       await storage.setBinding({
         orgId: 'org2',
-        integrationId: 'linear',
+        integrationId: 'gitlab',
         sourceId: 'src-c',
         factoryProjectId: 'proj-1',
       });
 
-      const scope = { orgId: 'org1', integrationId: 'linear' };
+      const scope = { orgId: 'org1', integrationId: 'gitlab' };
       expect(await storage.listBoundSourceIds({ ...scope, factoryProjectId: 'proj-1' })).toEqual(['src-a']);
       expect(await storage.listBoundSourceIds({ ...scope, factoryProjectId: 'proj-2' })).toEqual(['src-b']);
       expect(await storage.listBoundSourceIds({ ...scope, factoryProjectId: 'proj-3' })).toEqual([]);
@@ -155,24 +155,24 @@ describe('IntakeStorage', () => {
 
     it('moves a source to another project instead of binding it twice', async () => {
       const storage = await makeStorage();
-      const binding = { orgId: 'org1', integrationId: 'linear', sourceId: 'src-a' };
+      const binding = { orgId: 'org1', integrationId: 'gitlab', sourceId: 'src-a' };
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1' });
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-2' });
 
       expect(await storage.listBindings({ orgId: 'org1' })).toEqual([
-        { integrationId: 'linear', sourceId: 'src-a', factoryProjectId: 'proj-2', board: null },
+        { integrationId: 'gitlab', sourceId: 'src-a', factoryProjectId: 'proj-2', board: null },
       ]);
       expect(await storage.listBoundSourceIds({ ...binding, factoryProjectId: 'proj-1' })).toEqual([]);
     });
 
     it('persists the bound board and resets it when rebound without one', async () => {
       const storage = await makeStorage();
-      const binding = { orgId: 'org1', integrationId: 'linear', sourceId: 'src-a' };
+      const binding = { orgId: 'org1', integrationId: 'gitlab', sourceId: 'src-a' };
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1', board: 'release' });
       expect(await storage.getBinding(binding)).toEqual({
-        integrationId: 'linear',
+        integrationId: 'gitlab',
         sourceId: 'src-a',
         factoryProjectId: 'proj-1',
         board: 'release',
@@ -185,11 +185,11 @@ describe('IntakeStorage', () => {
 
     it('clears a binding and returns its project', async () => {
       const storage = await makeStorage();
-      const binding = { orgId: 'org1', integrationId: 'linear', sourceId: 'src-a' };
+      const binding = { orgId: 'org1', integrationId: 'gitlab', sourceId: 'src-a' };
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1' });
       expect(await storage.clearBinding(binding)).toEqual({
-        integrationId: 'linear',
+        integrationId: 'gitlab',
         sourceId: 'src-a',
         factoryProjectId: 'proj-1',
         board: null,
@@ -201,7 +201,7 @@ describe('IntakeStorage', () => {
 
     it('converges concurrent first bindings onto one row', async () => {
       const storage = await makeStorage();
-      const binding = { orgId: 'org1', integrationId: 'linear', sourceId: 'src-a' };
+      const binding = { orgId: 'org1', integrationId: 'gitlab', sourceId: 'src-a' };
 
       await Promise.all([
         storage.setBinding({ ...binding, factoryProjectId: 'proj-1' }),

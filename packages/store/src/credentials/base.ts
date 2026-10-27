@@ -15,7 +15,7 @@
  * never fall back to the other scope or implicitly borrow server environment keys.
  *
  * Secrets posture: credentials are stored server-side only and never returned
- * to the client (same as `linear_connections.access_token`). Encryption at
+ * to the client. Encryption at
  * rest is out of scope, matching the existing posture.
  *
  * The domain also owns `oauth_login_sessions`: pending web login flows

@@ -22,7 +22,6 @@ import { resolveWorkItemRepository } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
 import type { CustomProvidersStorage } from '@factory/store';
-import type { IntakeStorage } from '@factory/store';
 import type { ModelDefaultsStorage } from '@factory/store';
 import { effectiveModelScope } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
@@ -73,7 +72,6 @@ export interface FactorySessionToolDependencies {
   >;
   boards: BoardRegistry;
   auditRecorder: AuditRecorder;
-  intake?: Pick<IntakeStorage, 'getConfig'>;
   /** The browser Start's coordinator; absent until the Factory runtime is ready. */
   startCoordinator: () => Pick<FactoryStartCoordinator, 'prepare'> | undefined;
 }
@@ -520,13 +518,11 @@ export function createFactorySessionTools(
   }
 
   async function resolveRepository(sourceControl: SourceControlStorageHandle, item: WorkItemRow): Promise<string> {
-    const intakeConfig = await deps.intake?.getConfig({ orgId: scope.orgId, integrationIds: ['linear'] });
     const repository = await resolveWorkItemRepository({
       sourceControl,
       orgId: scope.orgId,
       factoryProjectId: scope.factoryProjectId,
       item,
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
     });
     if (repository.status === 'ambiguous') {
       throw new Error(ambiguousRepository(repository.candidates));

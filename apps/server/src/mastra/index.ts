@@ -143,7 +143,7 @@ if (redisUrl) {
 //      token auth resolve the user's organization so the bootstrapped
 //      personal org works without re-auth. Note MASTRA_PLATFORM_ACCESS_TOKEN /
 //      MASTRA_PLATFORM_SECRET_KEY do NOT defer to the platform here: they are
-//      compute/integration credentials (sandboxes, GitHub/Linear slots), not
+//      compute/integration credentials (sandboxes, GitHub/GitLab slots), not
 //      identity signals — platform compute plus self-managed sign-in is a
 //      supported combination.
 //   4. Nothing configured — leave undefined and MastraFactory installs its
@@ -383,7 +383,7 @@ export const factory = new MastraFactory({
     .split(',')
     .map(o => o.trim())
     .filter(Boolean),
-  // Deployment-stable secret for OAuth `state` signing (GitHub/Linear connect
+  // Deployment-stable secret for OAuth `state` signing (GitHub/GitLab connect
   // flows). See `stateSecret` above.
   stateSecret,
 });

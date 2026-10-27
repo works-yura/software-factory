@@ -12,8 +12,8 @@ export interface ReviewSourceOutput {
    * Browser-facing deep-link back to the Factory session that produced this
    * review — the only field a review body publishes. Everything else on this
    * shape is an input to in-run cross-checks and the session handoff, never a
-   * published field, so the GitHub/GitLab audience never sees the upstream
-   * Linear/Jira slug through the review comment.
+   * published field, so the GitHub/GitLab audience never sees an upstream
+   * source slug through the review comment.
    */
   sessionUrl: string;
   /**

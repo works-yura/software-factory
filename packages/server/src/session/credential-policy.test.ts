@@ -534,7 +534,6 @@ describe('trusted Factory credential policy', () => {
         seed.workItems,
         undefined,
         sourceControl,
-        undefined,
         { projects: seed.projects, modelDefaults: seed.modelDefaults },
       );
 

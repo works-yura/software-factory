@@ -24,7 +24,7 @@ export interface SourcePickerGroup {
 
 /**
  * Searchable checkbox list of the items one source can feed Intake with.
- * Groups (Linear teams) only add a heading — the search spans every group so a
+ * Groups (GitLab accounts) only add a heading — the search spans every group so a
  * project can be found without knowing which team owns it.
  */
 export function SourcePicker({
@@ -54,7 +54,7 @@ export function SourcePicker({
       items: group.items.filter(item => item.label.toLowerCase().includes(normalizedQuery)),
     }))
     .filter(group => group.items.length > 0);
-  // A shared Linear project appears under every team it belongs to, so count ids, not rows.
+  // An item can appear under more than one group, so count ids, not rows.
   const selectedCount = new Set(
     groups
       .flatMap(group => group.items)

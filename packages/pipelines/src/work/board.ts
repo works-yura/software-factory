@@ -5,9 +5,6 @@ import {
   buildWorkItem,
   completeIssue,
   investigateTriagedGitLabIssue,
-  investigateTriagedIncidentioFollowUp,
-  investigateTriagedJiraIssue,
-  investigateTriagedLinearIssue,
   planWorkItem,
   selfReviewWorkItem,
   triageIssueEntry,
@@ -16,7 +13,7 @@ import { advanceApprovedPlan, openApprovedChangeRequest } from './tool-rules.ts'
 import { workTransitionPolicy } from './transition-policy.ts';
 
 /** Rule sources that land on Work; pull requests and merge requests go to Review. */
-const WORK_RULE_SOURCES = ['issue', 'gitlabIssue', 'linearIssue', 'jiraIssue', 'incidentioFollowUp', 'manual'] as const;
+const WORK_RULE_SOURCES = ['issue', 'gitlabIssue', 'manual'] as const;
 
 function onEveryWorkSource(
   handler: FactoryRuleHandler<FactoryStageRuleContext>,
@@ -61,9 +58,6 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       onEnter: {
         issue: triageIssueEntry,
         gitlabIssue: investigateTriagedGitLabIssue,
-        linearIssue: investigateTriagedLinearIssue,
-        jiraIssue: investigateTriagedJiraIssue,
-        incidentioFollowUp: investigateTriagedIncidentioFollowUp,
       },
     },
     planning: {

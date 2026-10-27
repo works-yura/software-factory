@@ -105,7 +105,6 @@ describe('status row', () => {
     expect(sync('github-issue')).toEqual({ kind: 'busy', label: 'Syncing GitHub issue…' });
     expect(sync('gitlab-issue')).toEqual({ kind: 'busy', label: 'Syncing GitLab issue…' });
     expect(sync('gitlab-pr')).toEqual({ kind: 'busy', label: 'Syncing GitLab merge request…' });
-    expect(sync('linear-issue')).toEqual({ kind: 'busy', label: 'Syncing Linear issue…' });
   });
 
   it('still reports an effect that has actually been tried and failed', () => {

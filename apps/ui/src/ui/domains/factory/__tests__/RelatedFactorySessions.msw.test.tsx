@@ -60,20 +60,7 @@ function workItem(url: string | undefined) {
   };
 }
 
-function linearWorkItem(url: string) {
-  return {
-    ...workItem(url),
-    externalSource: {
-      integrationId: 'linear',
-      type: 'issue',
-      externalId: 'linear-issue:ENG-123',
-      url,
-    },
-    metadata: { identifier: 'ENG-123' },
-  };
-}
-
-function stubHeader(item: ReturnType<typeof workItem> | ReturnType<typeof linearWorkItem>) {
+function stubHeader(item: ReturnType<typeof workItem>) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
       HttpResponse.json({ session: workspaceSession }),
@@ -119,21 +106,6 @@ describe('FactorySessionPage', () => {
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', 'noreferrer');
       expect(link.querySelector('[data-source="github-issue"]')).toBeInTheDocument();
-    });
-  });
-
-  describe('when the active work item is backed by a Linear issue', () => {
-    it('renders a pill that opens the Linear issue in a new tab', async () => {
-      const issueUrl = 'https://linear.app/acme/issue/ENG-123/fix-sandbox-setup';
-      stubHeader(linearWorkItem(issueUrl));
-      renderHeader();
-
-      const link = await screen.findByRole('link', { name: 'Open ENG-123' });
-
-      expect(link).toHaveAttribute('href', issueUrl);
-      expect(link).toHaveAttribute('target', '_blank');
-      expect(link).toHaveAttribute('rel', 'noreferrer');
-      expect(link.querySelector('[data-source="linear-issue"]')).toBeInTheDocument();
     });
   });
 

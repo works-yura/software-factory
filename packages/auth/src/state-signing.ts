@@ -1,7 +1,7 @@
 /**
  * Shared OAuth/install `state` signing for web integrations.
  *
- * The GitHub, Linear, and Slack OAuth/OIDC flows each round-trip a signed `state`
+ * The GitHub and GitLab OAuth flows each round-trip a signed `state`
  * value
  * through the third party to bind the callback to the `(orgId, userId)` tenant
  * that initiated it (CSRF protection + tenant routing). The signer is a system

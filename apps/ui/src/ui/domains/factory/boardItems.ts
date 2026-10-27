@@ -16,9 +16,6 @@ const WORK_ITEM_SOURCES = [
   'github-pr',
   'gitlab-issue',
   'gitlab-pr',
-  'linear-issue',
-  'jira-issue',
-  'incidentio-follow-up',
   'slack-thread',
   'manual',
 ] as const satisfies readonly WorkItemSource[];
@@ -72,44 +69,6 @@ export function gitlabIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadat
   return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? `!${iid}` : undefined;
 }
 
-/** The human issue key a Linear card carries (`ENG-123`), when it has one. */
-export function linearIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
-  if (item.source !== 'linear-issue' || typeof item.metadata.identifier !== 'string') return;
-  return item.metadata.identifier;
-}
-/** The opaque Linear issue id a card carries, when it has one. */
-export function linearIssueIdForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
-  if (item.source !== 'linear-issue' || typeof item.metadata.linearIssueId !== 'string') return;
-  return item.metadata.linearIssueId;
-}
-
-export function jiraIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
-  if (item.source !== 'jira-issue' || typeof item.metadata.identifier !== 'string') return;
-  return item.metadata.identifier;
-}
-
-export function jiraIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
-  if (item.source !== 'jira-issue') return;
-  return nonEmptyString(item.metadata.issueRef) ?? nonEmptyString(item.metadata.issueReference);
-}
-
-/** The human reference an incident.io follow-up card carries (`INC-42` or the item id), when it has one. */
-export function incidentioIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
-  if (item.source !== 'incidentio-follow-up' || typeof item.metadata.identifier !== 'string') return;
-  return item.metadata.identifier;
-}
-
-/** The prefixed incident.io item reference a card carries, when it has one. */
-export function incidentioIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
-  if (item.source !== 'incidentio-follow-up') return;
-  return nonEmptyString(item.metadata.issueRef) ?? nonEmptyString(item.metadata.issueReference);
-}
-
-/** Legacy metadata may hold `issueRef: ''` beside a populated `issueReference`; skip empty values. */
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === 'string' && value ? value : undefined;
-}
-
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
 
 export const PULL_REQUEST_STATUS_LABELS: Readonly<Record<PullRequestStatus, string>> = lazyLabels(
@@ -154,9 +113,6 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
 /** Aria label for the icon-only external link next to a card title. */
 export function externalLinkLabel(source: WorkItemSource): string {
   if (source === 'gitlab-issue' || source === 'gitlab-pr') return tk('externalLink.gitlab');
-  if (source === 'linear-issue') return tk('externalLink.linear');
-  if (source === 'jira-issue') return tk('externalLink.jira');
-  if (source === 'incidentio-follow-up') return tk('externalLink.incidentio');
   if (source === 'slack-thread') return tk('externalLink.slack');
   if (source === 'manual') return tk('externalLink.manual');
   return tk('externalLink.github');
@@ -168,16 +124,11 @@ export function sourceCreatedAt(metadata: Record<string, unknown>): string | und
   return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
 }
 
-/** The upstream key a card is known by: `#123` on GitHub, `ENG-42` on Linear. */
+/** The upstream key a card is known by: `#123` on GitHub. */
 export function workItemKey(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}`;
-  return (
-    gitlabIdentifierForItem(item) ??
-    linearIdentifierForItem(item) ??
-    jiraIdentifierForItem(item) ??
-    incidentioIdentifierForItem(item)
-  );
+  return gitlabIdentifierForItem(item);
 }
 
 export function workItemMeta(item: WorkItem): string {

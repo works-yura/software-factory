@@ -131,12 +131,8 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       HttpResponse.json({
         config: {
           github: { enabled: true, sourceIds: ['mastra-ai/mastra'] },
-          linear: { enabled: false, sourceIds: null },
         },
       }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/issues`, ({ params, request }) => {
       state.intakeRequests += 1;

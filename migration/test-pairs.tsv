@@ -10,7 +10,7 @@ rules/validation.test.ts	core/src/rules/validation.test.ts	+1	regression: every 
 boards/review.test.ts	pipelines/src/review/board.test.ts
 boards/work.test.ts	pipelines/src/work/board.test.ts
 boards/work-transition-policy.test.ts	pipelines/src/work/transition-policy.test.ts
-work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts
+work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts	-1	Linear/Jira identifier branches dropped with the vocabulary
 storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts
 storage/domains/work-items/attention-events.test.ts	store/src/work-items/attention-events.test.ts
 storage/domains/audit/base.test.ts	store/src/audit/base.test.ts	+3	forward paging (`after`) ported from upstream f3bc1caddb
@@ -44,7 +44,7 @@ environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule
 environment/build.test.ts	harness-mastra/src/environment/build.test.ts
 environment/heads.test.ts	harness-mastra/src/environment/heads.test.ts
 factory-disable-builtin-tools.test.ts	server/src/factory-disable-builtin-tools.test.ts
-factory.test.ts	server/src/factory.test.ts	+2	upstream a95f079204 (browser) and 7e428dc80e (recreate sandbox), after 4c22623ea3
+factory.test.ts	server/src/factory.test.ts	-1	Platform Jira registration cases dropped with the vocabulary (-3); upstream a95f079204 (browser) and 7e428dc80e (recreate sandbox), after 4c22623ea3 (+2)
 index.test.ts	server/src/index.test.ts
 integrations/github/acceptance-labels.test.ts	integration-github/src/acceptance-labels.test.ts
 integrations/github/app-identity.test.ts	integration-github/src/app-identity.test.ts
@@ -83,7 +83,7 @@ integrations/gitlab/webhook.test.ts	integration-gitlab/src/webhook.test.ts
 integrations/issue-reconcile-worker.test.ts	integrations/src/issue-reconcile-worker.test.ts
 integrations/issue-reconciler.test.ts	server/src/integrations/issue-reconciler.test.ts	-1	Linear reconciler case dropped with the integration
 integrations/platform/api-client.test.ts	integrations/src/platform-api-client.test.ts
-integrations/platform/connect/routes.test.ts	integrations/src/platform-connect-routes.test.ts
+integrations/platform/connect/routes.test.ts	integrations/src/platform-connect-routes.test.ts	-1	Jira/incident.io providers dropped; GitLab connect case merged into the generic one
 integrations/platform/github/event-worker.lifecycle.test.ts	server/src/integrations/platform/github/event-worker.lifecycle.test.ts
 integrations/platform/github/event-worker.test.ts	integration-github/src/platform/event-worker.test.ts
 integrations/platform/github/integration.test.ts	integration-github/src/platform/integration.test.ts
@@ -120,7 +120,7 @@ rules/binding-context.test.ts	session/src/binding-context.test.ts
 rules/bindings.test.ts	runtime/src/bindings.test.ts
 rules/custom-board-lifecycle.test.ts	server/src/rules/custom-board-lifecycle.test.ts
 rules/custom-board-runtime.test.ts	server/src/rules/custom-board-runtime.test.ts
-rules/default-handlers.test.ts	server/src/rules/default-handlers.test.ts	-3	Linear integration cases dropped with the integration (Jira and incident.io were it.each rows)
+rules/default-handlers.test.ts	server/src/rules/default-handlers.test.ts	-5	Linear integration cases dropped with the integration (-3); Linear triage entry cases dropped with the vocabulary (-2)
 rules/processor.test.ts	harness-mastra/src/rules/processor.test.ts
 rules/review-source-tool.test.ts	harness-mastra/src/rules/review-source-tool.test.ts
 rules/start-coordinator.scenario.test.ts	harness-mastra/src/rules/start-coordinator.scenario.test.ts
@@ -254,8 +254,6 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/hooks/__tests__/useGithubGitOps.msw.test.tsx	../apps/ui/src/hooks/__tests__/useGithubGitOps.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useGithubStatus.msw.test.tsx	../apps/ui/src/hooks/__tests__/useGithubStatus.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useIntakeBindings.msw.test.tsx	../apps/ui/src/hooks/__tests__/useIntakeBindings.msw.test.tsx
-../../../apps/ui/src/hooks/__tests__/useJiraData.msw.test.tsx	../apps/ui/src/hooks/__tests__/useJiraData.msw.test.tsx
-../../../apps/ui/src/hooks/__tests__/useLinearData.msw.test.tsx	../apps/ui/src/hooks/__tests__/useLinearData.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useRouteThreadSync.msw.test.tsx	../apps/ui/src/hooks/__tests__/useRouteThreadSync.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useServerFeatures.msw.test.tsx	../apps/ui/src/hooks/__tests__/useServerFeatures.msw.test.tsx	+1	MCP flag case ported from upstream f3bc1caddb
 ../../../apps/ui/src/hooks/__tests__/useStartFactoryRun.msw.test.tsx	../apps/ui/src/hooks/__tests__/useStartFactoryRun.msw.test.tsx
@@ -267,7 +265,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/__tests__/BoardAutomationSettings.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardAutomationSettings.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/BoardCardSessionLiveness.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardCardSessionLiveness.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/BoardListRowActions.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardListRowActions.msw.test.tsx
-../../../apps/ui/src/ui/__tests__/BoardPageCardClickStartsRun.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageCardClickStartsRun.msw.test.tsx
+../../../apps/ui/src/ui/__tests__/BoardPageCardClickStartsRun.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageCardClickStartsRun.msw.test.tsx	-3	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/__tests__/BoardPageCardTitleTooltip.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageCardTitleTooltip.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/BoardPageCommentDeepLink.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageCommentDeepLink.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/BoardPageCommentFeed.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageCommentFeed.msw.test.tsx
@@ -277,18 +275,18 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/__tests__/BoardPageIntakePaging.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageIntakePaging.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/BoardPageLoading.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageLoading.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/BoardPageOrdering.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageOrdering.msw.test.tsx
-../../../apps/ui/src/ui/__tests__/BoardPagePendingStates.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPagePendingStates.msw.test.tsx
-../../../apps/ui/src/ui/__tests__/BoardPageProposedRun.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageProposedRun.msw.test.tsx
+../../../apps/ui/src/ui/__tests__/BoardPagePendingStates.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPagePendingStates.msw.test.tsx	-8	Linear/Jira/incident.io UI cases dropped with the vocabulary
+../../../apps/ui/src/ui/__tests__/BoardPageProposedRun.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageProposedRun.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/__tests__/BoardPageReReviewDonePr.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageReReviewDonePr.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/BoardPageReviewStates.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageReviewStates.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/BoardPageSavedViews.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageSavedViews.msw.test.tsx
-../../../apps/ui/src/ui/__tests__/BoardPageSourceFilters.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageSourceFilters.msw.test.tsx
-../../../apps/ui/src/ui/__tests__/BoardPageWorkItemActivity.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageWorkItemActivity.msw.test.tsx
+../../../apps/ui/src/ui/__tests__/BoardPageSourceFilters.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageSourceFilters.msw.test.tsx	-11	Linear/Jira/incident.io UI cases dropped with the vocabulary
+../../../apps/ui/src/ui/__tests__/BoardPageWorkItemActivity.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageWorkItemActivity.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/__tests__/BoardVirtualization.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardVirtualization.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/ChannelThreadRedirect.msw.test.tsx	../apps/ui/src/ui/__tests__/ChannelThreadRedirect.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/ConnectionsRedirect.msw.test.tsx	../apps/ui/src/ui/__tests__/ConnectionsRedirect.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx	../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx
-../../../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx
+../../../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx
@@ -360,20 +358,19 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts
 ../../../apps/ui/src/ui/domains/factory/activity.test.ts	../apps/ui/src/ui/domains/factory/activity.test.ts
 ../../../apps/ui/src/ui/domains/factory/auditPresentation.test.ts	../apps/ui/src/ui/domains/factory/auditPresentation.test.ts
-../../../apps/ui/src/ui/domains/factory/boardCandidates.test.ts	../apps/ui/src/ui/domains/factory/boardCandidates.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardCardState.test.ts	../apps/ui/src/ui/domains/factory/boardCardState.test.ts
-../../../apps/ui/src/ui/domains/factory/boardItems.test.ts	../apps/ui/src/ui/domains/factory/boardItems.test.ts
+../../../apps/ui/src/ui/domains/factory/boardItems.test.ts	../apps/ui/src/ui/domains/factory/boardItems.test.ts	-2	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/factory/boardLabels.test.ts	../apps/ui/src/ui/domains/factory/boardLabels.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardOrder.test.ts	../apps/ui/src/ui/domains/factory/boardOrder.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardPeople.test.ts	../apps/ui/src/ui/domains/factory/boardPeople.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardRepository.test.ts	../apps/ui/src/ui/domains/factory/boardRepository.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardSort.test.ts	../apps/ui/src/ui/domains/factory/boardSort.test.ts
-../../../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts
+../../../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	-3	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/factory/boardStages.test.ts	../apps/ui/src/ui/domains/factory/boardStages.test.ts
-../../../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts
+../../../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/factory/stageTones.test.ts	../apps/ui/src/ui/domains/factory/stageTones.test.ts
-../../../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	../apps/ui/src/ui/domains/factory/workItemActivity.test.ts
-../../../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx
+../../../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	-7	Linear/Jira/incident.io UI cases dropped with the vocabulary
+../../../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/factory/components/CardStatus.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/CardStatus.msw.test.tsx
 ../../../apps/ui/src/ui/domains/factory/components/FactoryBoardLanding.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/FactoryBoardLanding.msw.test.tsx
 ../../../apps/ui/src/ui/domains/factory/components/WorkItemMenuItems.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/WorkItemMenuItems.msw.test.tsx
@@ -389,12 +386,12 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/domains/factory/components/knowledge/graphModel.test.ts	../apps/ui/src/ui/domains/factory/components/knowledge/graphModel.test.ts
 ../../../apps/ui/src/ui/domains/factory/components/knowledge/useInteractionIdle.test.ts	../apps/ui/src/ui/domains/factory/components/knowledge/useInteractionIdle.test.ts
 ../../../apps/ui/src/ui/domains/factory/context/__tests__/FeedEventsProvider.msw.test.tsx	../apps/ui/src/ui/domains/factory/context/__tests__/FeedEventsProvider.msw.test.tsx
-../../../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx
+../../../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	-10	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/factory/services/attention.test.ts	../apps/ui/src/ui/domains/factory/services/attention.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/boardViews.test.ts	../apps/ui/src/ui/domains/factory/services/boardViews.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/relationships.test.ts	../apps/ui/src/ui/domains/factory/services/relationships.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts	../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts
-../../../apps/ui/src/ui/domains/factory/services/workItems.test.ts	../apps/ui/src/ui/domains/factory/services/workItems.test.ts
+../../../apps/ui/src/ui/domains/factory/services/workItems.test.ts	../apps/ui/src/ui/domains/factory/services/workItems.test.ts	1	added: a stored card from a dropped integration reads as manual
 ../../../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx
@@ -409,8 +406,8 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelsSettings.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelsSettings.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx
+../../../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	-28	Linear/Jira/incident.io UI cases dropped with the vocabulary
+../../../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/ProviderAccessSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/ProviderAccessSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/RepositoriesSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/RepositoriesSection.msw.test.tsx
@@ -432,15 +429,14 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceRepositoryGroups.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceRepositoryGroups.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceViewerPanel.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceViewerPanel.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/__tests__/FactoryLayout.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/__tests__/FactoryLayout.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryFlow.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryFlow.msw.test.tsx
+../../../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryFlow.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryFlow.msw.test.tsx	-8	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryRepositoryRows.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryRepositoryRows.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/EmptyFactoryState.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/EmptyFactoryState.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/FactoryCreateRefresh.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/FactoryCreateRefresh.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/FactorySwitcherNavigation.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/FactorySwitcherNavigation.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/GitHubAppCallbackHandler.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/GitHubAppCallbackHandler.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/ModelProviderFactoryStep.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/ModelProviderFactoryStep.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/OnboardingPreview.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/OnboardingPreview.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/ProjectManagementFactoryStep.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/ProjectManagementFactoryStep.msw.test.tsx
+../../../apps/ui/src/ui/domains/workspaces/components/__tests__/OnboardingPreview.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/OnboardingPreview.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionMethods.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionMethods.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionRecovery.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionRecovery.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionHoverDetails.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionHoverDetails.msw.test.tsx
@@ -489,7 +485,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/pages/__tests__/PrivateSessionNotFound.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/PrivateSessionNotFound.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/SlackConnectionPage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/SlackConnectionPage.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/SupervisorPage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/SupervisorPage.msw.test.tsx
-../../../apps/ui/src/ui/pages/__tests__/ThreadPageDocumentTitle.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageDocumentTitle.msw.test.tsx
+../../../apps/ui/src/ui/pages/__tests__/ThreadPageDocumentTitle.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageDocumentTitle.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageEagerRender.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageEagerRender.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageHeader.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageHeader.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageLoading.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageLoading.msw.test.tsx

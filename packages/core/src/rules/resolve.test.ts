@@ -31,7 +31,7 @@ describe('Factory rule resolution', () => {
     ]);
   });
 
-  it.each(['issue', 'pullRequest', 'linearIssue', 'manual'] as const)('matches the %s source exactly', source => {
+  it.each(['issue', 'pullRequest', 'gitlabIssue', 'manual'] as const)('matches the %s source exactly', source => {
     expect(resolveFactoryStageRules(boards, { ...input, source })).toEqual(
       source === 'issue'
         ? [

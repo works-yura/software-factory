@@ -1,6 +1,6 @@
 /**
  * BDD coverage for the inline `/factories/:factoryId/new-factory` wizard: Name →
- * VCS (GitHub repo) → Project management (Linear) → Model provider (default
+ * VCS (GitHub repo) → Model provider (default
  * model), each step rendered as a searchable command palette. Every pick lives
  * in a sessionStorage draft — so a full-page OAuth redirect resumes the flow,
  * and quitting halfway leaves nothing on the server — until the model step
@@ -12,7 +12,6 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { GithubStatus } from '../../services/github';
@@ -201,9 +200,6 @@ describe('Create Factory wizard', () => {
     const calls: string[] = [];
     seedDraft('vcs');
     server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
-      ),
       http.post(`${TEST_BASE_URL}/web/factory/projects`, () => {
         calls.push('create');
         return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra' } });
@@ -215,26 +211,19 @@ describe('Create Factory wizard', () => {
 
     await user.click(await screen.findByRole('option', { name: /octo\/hello/ }));
 
-    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
     expect(calls).toEqual([]);
-    expect(sessionStorage.getItem(STEP_KEY)).toBe('project-management');
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('model-provider');
     expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject({ fullName: 'octo/hello' });
   });
 
   it('creates the Factory, links the repository and saves the model on the last step', async () => {
     const calls: string[] = [];
-    seedDraft('project-management');
+    seedDraft('model-provider');
     const { patchedBodies, intakeConfigs } = stubModelStepEndpoints(calls);
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
-      ),
-    );
     const user = userEvent.setup();
 
     const { client } = renderFlow();
-
-    await user.click(await screen.findByRole('button', { name: 'Skip' }));
 
     expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
     expect(sessionStorage.getItem(STEP_KEY)).toBe('model-provider');
@@ -252,9 +241,6 @@ describe('Create Factory wizard', () => {
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
         gitlab: { enabled: false, sourceIds: null },
-        linear: { enabled: false, sourceIds: null },
-        jira: { enabled: false, sourceIds: null },
-        incidentio: { enabled: false, sourceIds: null },
       },
     ]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
@@ -436,236 +422,13 @@ describe('Create Factory wizard', () => {
 
     await user.click(await screen.findByRole('option', { name: /acme\/app/ }));
 
-    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
     expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject({
       provider: 'gitlab',
       id: 'gitlab-project:encoded',
       externalId: '10',
       fullName: 'acme/app',
     });
-  });
-
-  it('keeps the Linear step skippable when Linear is not configured on the server', async () => {
-    seedDraft('project-management');
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: false, connected: false, workspace: null, reason: 'missing_config' }),
-      ),
-    );
-    const user = userEvent.setup();
-
-    renderFlow();
-
-    expect(await screen.findByText('Linear is not configured for this deployment.')).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /Connect Linear/ })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('option', { name: /Skip for now/ }));
-    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
-  });
-
-  it('offers to reconnect Linear when its authorization expired', async () => {
-    seedDraft('project-management');
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({
-          enabled: true,
-          connected: true,
-          reason: 'ready',
-          workspace: { name: 'Acme', urlKey: 'acme' },
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/linear/projects`, () =>
-        HttpResponse.json(
-          { error: 'linear_reauth_required', message: 'Linear authorization expired' },
-          { status: 401 },
-        ),
-      ),
-    );
-
-    renderFlow();
-
-    expect(await screen.findByRole('option', { name: /Reconnect Linear/ })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Skip for now/ })).toBeInTheDocument();
-  });
-
-  it('resumes at the stored step after an OAuth round-trip, listing the workspace projects', async () => {
-    seedDraft('project-management');
-    stubConnectedLinear();
-
-    renderFlow();
-
-    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
-    expect(await screen.findByRole('option', { name: /Mobile App/ })).toBeInTheDocument();
-    // Skip leads, and doubles as chrome so a long project list never hides it.
-    expect(screen.getAllByRole('option')[0]).toHaveTextContent('Skip for now');
-    expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();
-  });
-
-  it('routes the picked Linear project into the Factory it creates', async () => {
-    const calls: string[] = [];
-    seedDraft('project-management');
-    stubConnectedLinear();
-    const { intakeConfigs } = stubModelStepEndpoints(calls);
-    const bindings: unknown[] = [];
-    server.use(
-      http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
-        bindings.push(await request.json());
-        return HttpResponse.json({ bindings: [] });
-      }),
-    );
-    const user = userEvent.setup();
-
-    const { client } = renderFlow();
-
-    await user.click(await screen.findByRole('option', { name: /Mobile App/ }));
-    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
-    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
-
-    await waitForMutationsIdle(client);
-    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1', board: 'work' }]);
-    // The link feeds the repository first; the Linear pick lands on top of it.
-    expect(intakeConfigs).toEqual([
-      {
-        github: { enabled: true, sourceIds: ['octo/hello'] },
-        gitlab: { enabled: false, sourceIds: null },
-        linear: { enabled: false, sourceIds: null },
-        jira: { enabled: false, sourceIds: null },
-        incidentio: { enabled: false, sourceIds: null },
-      },
-      {
-        github: { enabled: true, sourceIds: ['octo/hello'] },
-        gitlab: { enabled: false, sourceIds: null },
-        linear: { enabled: true, sourceIds: ['lin-1'] },
-        jira: { enabled: false, sourceIds: null },
-        incidentio: { enabled: false, sourceIds: null },
-      },
-    ]);
-  });
-
-  it('routes the picked Jira project into the Factory it creates', async () => {
-    const calls: string[] = [];
-    seedDraft('project-management');
-    stubConnectedJira();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: false, connected: false, workspace: null, reason: 'missing_config' }),
-      ),
-    );
-    const { intakeConfigs } = stubModelStepEndpoints(calls);
-    const bindings: unknown[] = [];
-    server.use(
-      http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
-        bindings.push(await request.json());
-        return HttpResponse.json({ bindings: [] });
-      }),
-    );
-    const user = userEvent.setup();
-
-    const { client } = renderFlow();
-
-    await user.click(await screen.findByRole('option', { name: /Engineering/ }));
-    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
-    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
-
-    await waitForMutationsIdle(client);
-    expect(bindings).toEqual([
-      { integrationId: 'jira', sourceId: 'jira-source-1', factoryProjectId: 'fp-1', board: 'work' },
-    ]);
-    expect(intakeConfigs).toEqual([
-      {
-        github: { enabled: true, sourceIds: ['octo/hello'] },
-        gitlab: { enabled: false, sourceIds: null },
-        linear: { enabled: false, sourceIds: null },
-        jira: { enabled: false, sourceIds: null },
-        incidentio: { enabled: false, sourceIds: null },
-      },
-      {
-        github: { enabled: true, sourceIds: ['octo/hello'] },
-        gitlab: { enabled: false, sourceIds: null },
-        linear: { enabled: false, sourceIds: null },
-        jira: { enabled: true, sourceIds: ['jira-source-1'] },
-        incidentio: { enabled: false, sourceIds: null },
-      },
-    ]);
-  });
-
-  it.each([
-    { integrationId: 'linear', project: /Mobile App/, sourceId: 'lin-1' },
-    { integrationId: 'jira', project: /Engineering/, sourceId: 'jira-source-1' },
-  ])(
-    'routes the picked $integrationId project without a board when Work is not installed',
-    async ({ integrationId, project, sourceId }) => {
-      const calls: string[] = [];
-      seedDraft('project-management');
-      if (integrationId === 'linear') {
-        stubConnectedLinear();
-      } else {
-        stubConnectedJira();
-        server.use(
-          http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-            HttpResponse.json({ enabled: false, connected: false, workspace: null, reason: 'missing_config' }),
-          ),
-        );
-      }
-      const { intakeConfigs } = stubModelStepEndpoints(calls);
-      const bindings: unknown[] = [];
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/boards`, () =>
-          HttpResponse.json({ boards: [releaseBoard] }),
-        ),
-        http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
-          bindings.push(await request.json());
-          return HttpResponse.json({ bindings: [] });
-        }),
-      );
-      const user = userEvent.setup();
-
-      const { client } = renderFlow();
-
-      await user.click(await screen.findByRole('option', { name: project }));
-      await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
-      await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
-
-      await waitForMutationsIdle(client);
-      expect(bindings).toEqual([{ integrationId, sourceId, factoryProjectId: 'fp-1', board: null }]);
-      expect(intakeConfigs.at(-1)).toMatchObject({ [integrationId]: { enabled: true, sourceIds: [sourceId] } });
-      await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
-    },
-  );
-
-  it('keeps project-management intake disabled when it is skipped', async () => {
-    const calls: string[] = [];
-    seedDraft('project-management');
-    stubConnectedLinear();
-    const { intakeConfigs } = stubModelStepEndpoints(calls);
-    const bindings: unknown[] = [];
-    server.use(
-      http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
-        bindings.push(await request.json());
-        return HttpResponse.json({ bindings: [] });
-      }),
-    );
-    const user = userEvent.setup();
-
-    const { client } = renderFlow();
-
-    await user.click(await screen.findByRole('button', { name: 'Skip' }));
-    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
-    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
-
-    await waitForMutationsIdle(client);
-    expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
-    // No Linear routing without a picked project; only the repository feeds intake.
-    expect(bindings).toEqual([]);
-    expect(intakeConfigs).toEqual([
-      {
-        github: { enabled: true, sourceIds: ['octo/hello'] },
-        gitlab: { enabled: false, sourceIds: null },
-        linear: { enabled: false, sourceIds: null },
-        jira: { enabled: false, sourceIds: null },
-        incidentio: { enabled: false, sourceIds: null },
-      },
-    ]);
   });
 
   it('restarts at the name step when the stored draft has no repository to commit', async () => {
@@ -811,64 +574,6 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
   return { patchedBodies, intakeConfigs };
 }
 
-function stubConnectedLinear() {
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({
-        enabled: true,
-        connected: true,
-        reason: 'ready',
-        workspace: { name: 'Acme', urlKey: 'acme' },
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/linear/projects`, () =>
-      HttpResponse.json({
-        projects: [
-          { id: 'lin-1', name: 'Mobile App', state: 'started', teams: [{ id: 't1', key: 'ENG', name: 'Engineering' }] },
-        ],
-      }),
-    ),
-  );
-}
-
-function stubConnectedJira() {
-  const connection = {
-    id: 'jira-connection-1',
-    integrationId: 'jira',
-    status: 'active',
-    accountLabel: 'acme.atlassian.net',
-  };
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
-      HttpResponse.json({
-        enabled: true,
-        configured: true,
-        mode: 'platform',
-        site: 'acme.atlassian.net',
-        sites: ['acme.atlassian.net'],
-        connections: [connection],
-        reason: 'ready',
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/jira/projects`, () =>
-      HttpResponse.json({
-        projects: [
-          {
-            id: 'jira-source-1',
-            key: 'ENG',
-            name: 'Engineering',
-            connectionId: connection.id,
-            site: connection.accountLabel,
-          },
-        ],
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
-      HttpResponse.json({ connections: [connection] }),
-    ),
-  );
-}
-
 describe('back navigation', () => {
   it('has no back button on the name step', async () => {
     server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
@@ -892,24 +597,6 @@ describe('back navigation', () => {
     expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
     expect(sessionStorage.getItem(STEP_KEY)).toBe('name');
     expect(sessionStorage.getItem(NAME_KEY)).toBe('Mastra');
-  });
-
-  it('steps back from project-management to vcs', async () => {
-    seedDraft('project-management');
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
-      ),
-    );
-    const user = userEvent.setup();
-
-    renderFlow();
-
-    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
-
-    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
-    expect(sessionStorage.getItem(STEP_KEY)).toBe('vcs');
   });
 
   it('drops the back button once a Factory has been created but the final commit failed', async () => {
@@ -948,20 +635,15 @@ describe('back navigation', () => {
   });
 
   it('preserves the repository pick when Back rewinds through name back to vcs', async () => {
-    seedDraft('project-management');
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
-      ),
-    );
+    seedDraft('model-provider');
     const user = userEvent.setup();
 
     renderFlow();
 
-    // Back twice: project-management → vcs → name. The repository the user
+    // Back twice: model-provider → vcs → name. The repository the user
     // already picked must survive the rewind so it is still there when they
     // continue back to vcs.
-    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
     expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
@@ -975,7 +657,7 @@ describe('back navigation', () => {
 });
 
 /** Seed a mid-flow draft: name typed, repository picked, nothing created yet. */
-function seedDraft(step: 'vcs' | 'project-management' | 'model-provider') {
+function seedDraft(step: 'vcs' | 'model-provider') {
   sessionStorage.setItem(STEP_KEY, step);
   sessionStorage.setItem(NAME_KEY, 'Mastra');
   if (step !== 'vcs') sessionStorage.setItem(REPO_KEY, JSON.stringify(repo));

@@ -9,7 +9,7 @@ import {
   listRepositoryPullRequests,
 } from '../ui/domains/factory/services/factory';
 
-/** Board intake candidates come from external APIs (GitHub / Linear via the
+/** Board intake candidates come from external APIs (GitHub / GitLab via the
  * server) — poll on a gentler cadence than the DB-backed work-items list. */
 export const INTAKE_POLL_MS = 30_000;
 

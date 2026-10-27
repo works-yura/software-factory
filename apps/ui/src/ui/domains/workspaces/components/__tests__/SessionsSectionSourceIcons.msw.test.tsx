@@ -109,7 +109,8 @@ describe('Sessions sidebar source icons', () => {
 
     expect(await iconFor('Plan the migration')).toBe('user');
     expect(await iconFor('Fix flaky login')).toBe('github-issue');
-    expect(await iconFor('Add audit log')).toBe('linear-issue');
+    // A work item stored from a retired provider (Linear) falls back to the manual source.
+    expect(await iconFor('Add audit log')).toBe('manual');
     expect(await iconFor('Review PR 12')).toBe('github-pr');
     expect(await iconFor('Answer deploy question')).toBe('slack-thread');
   });

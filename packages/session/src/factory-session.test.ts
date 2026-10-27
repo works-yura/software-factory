@@ -757,7 +757,7 @@ describe('resolvePrimaryEnvironmentRepository', () => {
     const { seeded, project } = await seedLinkedRepository();
 
     const result = await resolvePrimaryEnvironmentRepository({
-      sourceControl: seeded.sourceControl.forIntegration('linear'),
+      sourceControl: seeded.sourceControl.forIntegration('gitlab'),
       orgId: 'org-1',
       factoryProjectId: project.id,
     });

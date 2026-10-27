@@ -55,7 +55,20 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 - WorkOS-інтеграцію у v3 ніхто не імпортував; вхід через WorkOS лишається в `@factory/auth`;
 - Slack у v3 ставив хост (`apps/server`), не пакет.
 
-Словник провайдерів у `core` і `pipelines` (`linear-issue`, `jiraIssue`, події Linear/Jira/incident.io, обробники тріажу Work для них) поки лишився: це окремий крок.
+### Словник Linear/Jira/incident.io
+
+Власник вирішив: Linear, Jira, incident.io не підтримуються. Прибрано решту словника:
+
+- `core`: джерела `linear-issue`/`jira-issue`/`incidentio-follow-up` і `linearIssue`/`jiraIssue`/`incidentioFollowUp`, `FACTORY_{LINEAR,JIRA,INCIDENTIO}_EVENTS`, контексти правил, ключі `BoardEventRules`, типи ingress;
+- `pipelines`: обробники тріажу Work для них, гілки `factory/linear-*`/`jira-*`/`incidentio-*`;
+- `store`/`session`/`api`/`harness-mastra`: мапа «проєкт Linear → репозиторій» (`repositoryByLinearProject`, параметр `intake` у `FactoryStartCoordinator` і `prepareFactoryRuleBinding`), заглушки `/web/linear/status`, `/web/jira/status`, провайдери Jira й incident.io в `PLATFORM_CONNECT_PROVIDERS`;
+- `apps/server`: змінні `LINEAR_*`, `JIRA_*`, `INCIDENT_IO_API_KEY` у `.env.schema`;
+- `apps/ui`: налаштування надходження, фільтр за проєктом Linear, крок онбордингу «Connect your work», дані й іконки Linear/Jira/incident.io;
+- скіли `factory-triage`, `factory-plan`, `configure-factory-rules`: GitLab замість Linear.
+
+Збережені картки з такими джерелами не ламаються: `workItemSource` повертає `manual` для невідомої інтеграції, відкладене рішення зі старим джерелом не проходить перевірку і падає як звичайна помилка рішення. Міграції бази нема.
+
+Тести: пакети −7 (`default-handlers` −2, `factory.test` −3, `work-item-branch` −1, `platform-connect-routes` −1); UI −121 (4 файли видалено: −34, решта −88, +1 тест на стару картку). Тести, що перевіряли спільну логіку через Linear, переведено на GitLab/GitHub. `Slack-thread` лишився: UI показує такі картки.
 
 ## Не перенесено
 

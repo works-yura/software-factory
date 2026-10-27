@@ -25,7 +25,7 @@ describe('IntegrationStorage', () => {
     backend = new LibSQLFactoryStorage({ id: 'integrations-test', url: ':memory:' });
     domain = backend.registerDomain(new IntegrationStorage());
     await backend.init();
-    store = domain.forIntegration('incidentio');
+    store = domain.forIntegration('gitlab');
   });
 
   afterEach(async () => {
@@ -61,7 +61,7 @@ describe('IntegrationStorage', () => {
 
     it('scopes by integration and org', async () => {
       await store.connections.upsert('org-1', { data: { accessToken: 'a', refreshToken: null, expiresAtMs: null } });
-      const other = domain.forIntegration<TestConnection>('linear');
+      const other = domain.forIntegration<TestConnection>('github');
       expect(await other.connections.get('org-1')).toBeNull();
       expect(await store.connections.get('org-2')).toBeNull();
     });
@@ -78,7 +78,7 @@ describe('IntegrationStorage', () => {
 
     it('deletes only the scoped connection', async () => {
       await store.connections.upsert('org-1', { data: { accessToken: 'a', refreshToken: null, expiresAtMs: null } });
-      const other = domain.forIntegration<TestConnection>('linear');
+      const other = domain.forIntegration<TestConnection>('github');
       await other.connections.upsert('org-1', { data: { accessToken: 'b', refreshToken: null, expiresAtMs: null } });
       expect(await store.connections.delete('org-1')).toBe(true);
       expect(await store.connections.delete('org-1')).toBe(false);
@@ -90,42 +90,42 @@ describe('IntegrationStorage', () => {
     it('creates and lists by target key in creation order', async () => {
       const a = await store.subscriptions.create({
         orgId: 'org-1',
-        targetKey: 'incident:1',
+        targetKey: 'issue:1',
         sessionId: 'sess-1',
         threadId: 'thread-1',
         data: { note: 'first' },
       });
-      await store.subscriptions.create({ orgId: 'org-1', targetKey: 'incident:2', sessionId: 'sess-1' });
-      await store.subscriptions.create({ orgId: 'org-2', targetKey: 'incident:1', status: 'paused' });
+      await store.subscriptions.create({ orgId: 'org-1', targetKey: 'issue:2', sessionId: 'sess-1' });
+      await store.subscriptions.create({ orgId: 'org-2', targetKey: 'issue:1', status: 'paused' });
 
       expect(a.status).toBe('active');
-      const byTarget = await store.subscriptions.listByTarget('incident:1');
+      const byTarget = await store.subscriptions.listByTarget('issue:1');
       expect(byTarget.map(s => s.orgId)).toEqual(['org-1', 'org-2']);
-      const activeOnly = await store.subscriptions.listByTarget('incident:1', { status: 'active' });
+      const activeOnly = await store.subscriptions.listByTarget('issue:1', { status: 'active' });
       expect(activeOnly).toHaveLength(1);
       expect(activeOnly[0]!.data).toEqual({ note: 'first' });
 
       const bySession = await store.subscriptions.listBySession('sess-1');
-      expect(bySession.map(s => s.targetKey)).toEqual(['incident:1', 'incident:2']);
+      expect(bySession.map(s => s.targetKey)).toEqual(['issue:1', 'issue:2']);
     });
 
     it('is scoped per integration', async () => {
-      await store.subscriptions.create({ orgId: 'org-1', targetKey: 'incident:1' });
-      const other = domain.forIntegration('linear');
-      expect(await other.subscriptions.listByTarget('incident:1')).toEqual([]);
+      await store.subscriptions.create({ orgId: 'org-1', targetKey: 'issue:1' });
+      const other = domain.forIntegration('github');
+      expect(await other.subscriptions.listByTarget('issue:1')).toEqual([]);
     });
 
     it('updates status and deletes by id and by org-scoped where', async () => {
-      const sub = await store.subscriptions.create({ orgId: 'org-1', targetKey: 'incident:1', sessionId: 'sess-1' });
+      const sub = await store.subscriptions.create({ orgId: 'org-1', targetKey: 'issue:1', sessionId: 'sess-1' });
       await store.subscriptions.updateStatus(sub.id, 'paused');
-      const [row] = await store.subscriptions.listByTarget('incident:1');
+      const [row] = await store.subscriptions.listByTarget('issue:1');
       expect(row!.status).toBe('paused');
 
       expect(await store.subscriptions.delete(sub.id)).toBe(true);
       expect(await store.subscriptions.delete(sub.id)).toBe(false);
 
-      await store.subscriptions.create({ orgId: 'org-1', targetKey: 'incident:2', sessionId: 'sess-2' });
-      await store.subscriptions.create({ orgId: 'org-1', targetKey: 'incident:3', sessionId: 'sess-2' });
+      await store.subscriptions.create({ orgId: 'org-1', targetKey: 'issue:2', sessionId: 'sess-2' });
+      await store.subscriptions.create({ orgId: 'org-1', targetKey: 'issue:3', sessionId: 'sess-2' });
       expect(await store.subscriptions.deleteWhere({ orgId: 'org-1', sessionId: 'sess-2' })).toBe(2);
     });
   });
@@ -144,7 +144,7 @@ describe('IntegrationStorage', () => {
 
     it('is scoped per integration', async () => {
       await store.settings.save('org-1', 'user-1', { projectIds: ['p1'] });
-      expect(await domain.forIntegration('linear').settings.get('org-1', 'user-1')).toBeNull();
+      expect(await domain.forIntegration('github').settings.get('org-1', 'user-1')).toBeNull();
     });
   });
 });

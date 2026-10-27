@@ -6,8 +6,7 @@ const tk = translator('board');
  * Browser-side helpers for the intake source configuration (Settings › Intake).
  *
  * The config is stored per org on the server. GitHub uses
- * `sourceIds` (connected source ids); Linear keeps `sourceIds`
- * (provider-owned source ids). `null` id lists mean
+ * `sourceIds` (connected source ids). `null` id lists mean
  * "nothing selected" — nothing syncs until the user picks entries.
  */
 
@@ -15,15 +14,11 @@ export interface IntakeSelection {
   enabled: boolean;
   /** Source ids to sync; `null` = nothing selected. */
   sourceIds: string[] | null;
-  repositoryByLinearProject?: Record<string, string>;
 }
 
 export interface IntakeConfig {
   github: IntakeSelection;
   gitlab: IntakeSelection;
-  linear: IntakeSelection;
-  jira: IntakeSelection;
-  incidentio: IntakeSelection;
 }
 
 /**
@@ -41,9 +36,6 @@ function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | n
   return {
     github: raw?.github ?? { enabled: false, sourceIds: null },
     gitlab: raw?.gitlab ?? { enabled: false, sourceIds: null },
-    linear: raw?.linear ?? { enabled: false, sourceIds: null },
-    jira: raw?.jira ?? { enabled: false, sourceIds: null },
-    incidentio: raw?.incidentio ?? { enabled: false, sourceIds: null },
   };
 }
 

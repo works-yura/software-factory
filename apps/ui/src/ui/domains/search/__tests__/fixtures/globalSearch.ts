@@ -235,7 +235,6 @@ function toExternalSource(source: WorkItem['source'], sourceKey: string | null, 
   if (source === 'manual' || !sourceKey) return null;
 
   let integrationId = 'github';
-  if (source === 'linear-issue') integrationId = 'linear';
   if (source === 'gitlab-issue' || source === 'gitlab-pr') integrationId = 'gitlab';
 
   let type = 'issue';

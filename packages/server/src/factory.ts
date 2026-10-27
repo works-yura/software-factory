@@ -3,9 +3,8 @@
  *
  * The consumer's deploy entry constructs deployment-specific config instances
  * (auth adapter, pubsub) and passes them here explicitly. The only provider
- * defaults constructed here are Platform GitHub, GitLab, Jira, incident.io, and
- * Linear integrations when Platform credentials exist and the caller did not
- * provide those integrations.
+ * defaults constructed here are Platform GitHub and GitLab integrations when
+ * Platform credentials exist and the caller did not provide those integrations.
  *
  * `prepare()` resolves feature readiness, threads every dependency explicitly,
  * assembles the web routes/middleware, and returns the constructor args for
@@ -1034,7 +1033,6 @@ export class MastraFactory {
             }
           : {}),
       },
-      intake: intakeStorage,
       startCoordinator: () => this.#startCoordinator,
       messaging: factoryMessaging,
     };

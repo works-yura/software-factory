@@ -53,7 +53,7 @@ export { createFactoryRouteAuth } from '@factory/auth';
 export type { RouteAuth } from '@factory/http';
 // The integration seam, so a host can implement `FactoryIntegration` from
 // outside this package — the contract's stated design for third parties.
-// Built-ins (GitHub, Linear, Slack) implement the same interface from inside.
+// Built-ins (GitHub, GitLab) implement the same interface from inside.
 export type {
   FactoryIntegration,
   IntegrationContext,

@@ -1,5 +1,5 @@
 /**
- * BDD coverage for Linear routing: a routed project can name which installed
+ * BDD coverage for intake source routing: a routed source can name which installed
  * board its issues land on, and the choice travels with every binding save.
  */
 import { screen, waitFor, within } from '@testing-library/react';
@@ -11,11 +11,9 @@ import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/boar
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { IntakeSourceBinding } from '../../../factory/services/intake';
-import type { LinearProject, LinearTeam } from '../../../factory/services/linear';
-import { LinearRouting } from '../LinearRouting';
+import { IntakeSourceRouting } from '../LinearRouting';
 
-const projects: LinearProject[] = [{ id: 'proj-1', name: 'Releases', state: 'started', teams: [] }];
-const teams: LinearTeam[] = [{ id: 'team-1', key: 'ENG', name: 'Engineering', sourceId: 'linear-team:opaque-team-1' }];
+const projects = [{ id: 'proj-1', name: 'Releases' }];
 const factories = [
   { id: 'fp-1', name: 'Acme' },
   { id: 'fp-2', name: 'Globex' },
@@ -40,9 +38,17 @@ function stub(initial: IntakeSourceBinding[]) {
 }
 
 const renderRouting = () =>
-  renderWithProviders(<LinearRouting sourceIds={['proj-1']} projects={projects} teams={teams} factories={factories} />);
+  renderWithProviders(
+    <IntakeSourceRouting
+      integrationId="gitlab"
+      label="GitLab"
+      sourceIds={['proj-1']}
+      sources={projects}
+      factories={factories}
+    />,
+  );
 
-describe('LinearRouting board target', () => {
+describe('IntakeSourceRouting board target', () => {
   it('hides the board picker until the project is routed to a Factory', async () => {
     stub([]);
     renderRouting();
@@ -51,7 +57,7 @@ describe('LinearRouting board target', () => {
   });
 
   it('asks for a board when a routed project has none, offers Work plus installed custom boards, never Review, and saves the pick', async () => {
-    const saved = stub([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: null }]);
+    const saved = stub([{ integrationId: 'gitlab', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: null }]);
     const user = userEvent.setup();
     renderRouting();
 
@@ -67,7 +73,7 @@ describe('LinearRouting board target', () => {
 
     await waitFor(() =>
       expect(saved).toEqual([
-        { integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: 'release' },
+        { integrationId: 'gitlab', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: 'release' },
       ]),
     );
     await waitFor(() =>
@@ -76,7 +82,7 @@ describe('LinearRouting board target', () => {
   });
 
   it('keeps the chosen board when the Factory is re-picked', async () => {
-    const saved = stub([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: 'release' }]);
+    const saved = stub([{ integrationId: 'gitlab', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: 'release' }]);
     const user = userEvent.setup();
     renderRouting();
 
@@ -90,7 +96,7 @@ describe('LinearRouting board target', () => {
   });
 
   it('drops the board when the project moves to a different Factory', async () => {
-    const saved = stub([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: 'release' }]);
+    const saved = stub([{ integrationId: 'gitlab', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: 'release' }]);
     const user = userEvent.setup();
     renderRouting();
 
@@ -105,36 +111,19 @@ describe('LinearRouting board target', () => {
     expect(saved[0]).toMatchObject({ factoryProjectId: 'fp-2', board: null });
   });
 
-  it('renders a team source with its friendly team label', async () => {
-    stub([]);
-    renderWithProviders(
-      <LinearRouting
-        sourceIds={['linear-team:opaque-team-1']}
-        projects={projects}
-        teams={teams}
-        factories={factories}
-      />,
-    );
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Factory for All issues in Engineering' })).toBeInTheDocument(),
-    );
-    expect(screen.queryByRole('searchbox', { name: 'Search Linear routing' })).not.toBeInTheDocument();
-  });
-
   describe('with many sources', () => {
-    const manyProjects: LinearProject[] = Array.from({ length: 12 }, (_, index) => ({
+    const manyProjects = Array.from({ length: 12 }, (_, index) => ({
       id: `proj-${index + 1}`,
       name: index === 7 ? 'Release Tools' : `Project ${index + 1}`,
-      state: 'started',
-      teams: [],
     }));
 
     const renderMany = () =>
       renderWithProviders(
-        <LinearRouting
+        <IntakeSourceRouting
+          integrationId="gitlab"
+          label="GitLab"
           sourceIds={manyProjects.map(project => project.id)}
-          projects={manyProjects}
-          teams={[]}
+          sources={manyProjects}
           factories={factories}
         />,
       );
@@ -144,8 +133,8 @@ describe('LinearRouting board target', () => {
       const user = userEvent.setup();
       renderMany();
 
-      const group = await screen.findByRole('group', { name: 'Linear routing' });
-      const search = screen.getByRole('searchbox', { name: 'Search Linear routing' });
+      const group = await screen.findByRole('group', { name: 'GitLab routing' });
+      const search = screen.getByRole('searchbox', { name: 'Search GitLab routing' });
       expect(within(group).getAllByRole('combobox', { name: /^Factory for/ })).toHaveLength(12);
 
       await user.type(search, 'release');
@@ -164,23 +153,24 @@ describe('LinearRouting board target', () => {
       const user = userEvent.setup();
       const { rerender } = renderMany();
 
-      await user.type(screen.getByRole('searchbox', { name: 'Search Linear routing' }), 'release');
+      await user.type(screen.getByRole('searchbox', { name: 'Search GitLab routing' }), 'release');
       await waitFor(() =>
         expect(screen.getByRole('combobox', { name: 'Factory for Release Tools' })).toBeInTheDocument(),
       );
 
       const remainingProjects = manyProjects.slice(0, 5);
       rerender(
-        <LinearRouting
+        <IntakeSourceRouting
+          integrationId="gitlab"
+          label="GitLab"
           sourceIds={remainingProjects.map(project => project.id)}
-          projects={manyProjects}
-          teams={[]}
+          sources={manyProjects}
           factories={factories}
         />,
       );
 
-      expect(screen.queryByRole('searchbox', { name: 'Search Linear routing' })).not.toBeInTheDocument();
-      const group = screen.getByRole('group', { name: 'Linear routing' });
+      expect(screen.queryByRole('searchbox', { name: 'Search GitLab routing' })).not.toBeInTheDocument();
+      const group = screen.getByRole('group', { name: 'GitLab routing' });
       expect(within(group).getAllByRole('combobox', { name: /^Factory for/ })).toHaveLength(5);
       expect(within(group).getByRole('combobox', { name: 'Factory for Project 1' })).toBeInTheDocument();
     });
@@ -190,14 +180,14 @@ describe('LinearRouting board target', () => {
       const user = userEvent.setup();
       renderMany();
 
-      const search = screen.getByRole('searchbox', { name: 'Search Linear routing' });
+      const search = screen.getByRole('searchbox', { name: 'Search GitLab routing' });
       await user.type(search, 'release');
       const factory = await screen.findByRole('combobox', { name: 'Factory for Release Tools' });
       await user.click(factory);
       await user.click(await screen.findByRole('option', { name: 'Acme' }));
 
       await waitFor(() =>
-        expect(saved).toEqual([{ integrationId: 'linear', sourceId: 'proj-8', factoryProjectId: 'fp-1', board: null }]),
+        expect(saved).toEqual([{ integrationId: 'gitlab', sourceId: 'proj-8', factoryProjectId: 'fp-1', board: null }]),
       );
     });
   });

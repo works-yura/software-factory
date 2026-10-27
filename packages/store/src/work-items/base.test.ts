@@ -180,7 +180,7 @@ describe('WorkItemsStorage', () => {
 
   it('refuses a claim held by another project and resolves a renamed record within the project', async () => {
     const storage = await makeStorage();
-    const claimKey = 'linear:issue:1';
+    const claimKey = 'gitlab:issue:1';
     const first = await storage.upsert({
       orgId: 'org1',
       userId: 'user1',
@@ -211,7 +211,7 @@ describe('WorkItemsStorage', () => {
   it('releases the claim when a card finishes so another project can file the record', async () => {
     const storage = await makeStorage();
     storage.useTerminalPhasePredicate(item => item.stages.includes('done'));
-    const claimKey = 'linear:issue:1';
+    const claimKey = 'gitlab:issue:1';
     const first = await storage.upsert({
       orgId: 'org1',
       userId: 'user1',
@@ -239,7 +239,7 @@ describe('WorkItemsStorage', () => {
 
   it('lets an unclaimed card adopt a claim unless another card holds it', async () => {
     const storage = await makeStorage();
-    const claimKey = 'linear:issue:1';
+    const claimKey = 'gitlab:issue:1';
     const legacy = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
     expect(legacy.item.claimKey).toBeNull();
 
@@ -249,13 +249,13 @@ describe('WorkItemsStorage', () => {
 
     const other = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project2', input });
     expect(await storage.claimWorkItem({ orgId: 'org1', id: other.item.id, claimKey })).toBeNull();
-    expect(await storage.claimWorkItem({ orgId: 'org1', id: legacy.item.id, claimKey: 'linear:issue:2' })).toBeNull();
+    expect(await storage.claimWorkItem({ orgId: 'org1', id: legacy.item.id, claimKey: 'gitlab:issue:2' })).toBeNull();
   });
 
   it('does not claim a card that is born finished', async () => {
     const storage = await makeStorage();
     storage.useTerminalPhasePredicate(item => item.stages.includes('done'));
-    const claimKey = 'linear:issue:1';
+    const claimKey = 'gitlab:issue:1';
     const finished = await storage.upsert({
       orgId: 'org1',
       userId: 'user1',
@@ -275,7 +275,7 @@ describe('WorkItemsStorage', () => {
 
   it('adopts a claim on reuse in every mode and refuses one held elsewhere', async () => {
     const storage = await makeStorage();
-    const claimKey = 'linear:issue:1';
+    const claimKey = 'gitlab:issue:1';
     const legacy = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
     expect(legacy.item.claimKey).toBeNull();
 
@@ -302,7 +302,7 @@ describe('WorkItemsStorage', () => {
 
   it('claims through run starts and refuses a start for a record another project holds', async () => {
     const storage = await makeStorage();
-    const claimKey = 'linear:issue:1';
+    const claimKey = 'gitlab:issue:1';
     const start = (factoryProjectId: string, kickoffKey: string, stages: string[] = ['intake']) =>
       storage.prepareRunStart({
         orgId: 'org1',
@@ -339,7 +339,7 @@ describe('WorkItemsStorage', () => {
           ...input,
           board: legacy.item.board ?? undefined,
           externalSource: legacy.item.externalSource,
-          claimKey: 'linear:issue:2',
+          claimKey: 'gitlab:issue:2',
         },
       },
       role: 'work',
@@ -348,7 +348,7 @@ describe('WorkItemsStorage', () => {
       kickoffKey: 'kickoff-3',
       kickoffMessage: null,
     });
-    expect(adopted.item).toMatchObject({ id: legacy.item.id, claimKey: 'linear:issue:2' });
+    expect(adopted.item).toMatchObject({ id: legacy.item.id, claimKey: 'gitlab:issue:2' });
   });
 
   it('mints a fresh binding when re-entered after the prior binding is revoked', async () => {
@@ -443,7 +443,7 @@ describe('WorkItemsStorage', () => {
       storage.commitRuleEvaluation({
         ...scope,
         workItemId: null,
-        ingress: { identity: 'linear:issue:ENG-1:1', triggerType: 'issue.observed' },
+        ingress: { identity: 'gitlab:issue:ENG-1:1', triggerType: 'issue.observed' },
         configVersion: 'v1',
         expectedRevision: null,
         actor: { type: 'system', id: 'rules' },

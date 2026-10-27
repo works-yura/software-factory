@@ -1,5 +1,5 @@
 /**
- * BDD coverage for intake source routing (which Factory project a Linear
+ * BDD coverage for intake source routing (which Factory project a GitLab
  * project's issues land in). Drives the real service + React Query cache with
  * only the network mocked (MSW).
  */
@@ -15,7 +15,7 @@ import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../useInta
 const BINDINGS_URL = `${TEST_BASE_URL}/web/intake/bindings`;
 
 const binding: IntakeSourceBinding = {
-  integrationId: 'linear',
+  integrationId: 'gitlab',
   sourceId: 'proj-1',
   factoryProjectId: 'factory-1',
   board: null,

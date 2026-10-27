@@ -5223,8 +5223,8 @@ describe('FactoryDecisionDispatcher', () => {
       userId: 'user-1',
       factoryProjectId: 'other-project',
       input: {
-        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-1' },
-        claimKey: 'linear:issue:1',
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab:ENG-1' },
+        claimKey: 'gitlab:issue:1',
         title: 'ENG-1: held elsewhere',
         stages: ['intake'],
         sessions: {},
@@ -5239,9 +5239,9 @@ describe('FactoryDecisionDispatcher', () => {
             type: 'upsertLinkedWorkItem',
             idempotencyKey: 'linked-claimed',
             board: 'work',
-            source: 'linear-issue',
-            sourceKey: 'linear:ENG-1',
-            claimKey: 'linear:issue:1',
+            source: 'gitlab-issue',
+            sourceKey: 'gitlab:ENG-1',
+            claimKey: 'gitlab:issue:1',
             title: 'ENG-1: held elsewhere',
             url: null,
             stage: 'intake',
@@ -5272,7 +5272,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const filedHere = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
-      item => item.externalSource?.externalId === 'linear:ENG-1',
+      item => item.externalSource?.externalId === 'gitlab:ENG-1',
     );
     expect(filedHere).toEqual([]);
     expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
@@ -5285,7 +5285,7 @@ describe('FactoryDecisionDispatcher', () => {
       userId: 'user-1',
       factoryProjectId: PROJECT_ID,
       input: {
-        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-1' },
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab:ENG-1' },
         title: 'ENG-1: filed earlier',
         stages: ['intake'],
         sessions: {},
@@ -5301,9 +5301,9 @@ describe('FactoryDecisionDispatcher', () => {
             type: 'upsertLinkedWorkItem',
             idempotencyKey: 'linked-adopt',
             board: 'work',
-            source: 'linear-issue',
-            sourceKey: 'linear:ENG-1',
-            claimKey: 'linear:issue:1',
+            source: 'gitlab-issue',
+            sourceKey: 'gitlab:ENG-1',
+            claimKey: 'gitlab:issue:1',
             title: 'ENG-1: filed earlier',
             url: null,
             stage: 'intake',
@@ -5333,7 +5333,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect(await storage.get({ orgId: 'org-1', id: legacy.item.id })).toMatchObject({ claimKey: 'linear:issue:1' });
+    expect(await storage.get({ orgId: 'org-1', id: legacy.item.id })).toMatchObject({ claimKey: 'gitlab:issue:1' });
     expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toHaveLength(2);
   });
 

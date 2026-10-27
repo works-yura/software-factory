@@ -2,7 +2,6 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import type { FilterBarField, FilterBarOperator, FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import {
   Activity,
-  FolderKanban,
   Inbox,
   Tag,
   UserRoundCheck,
@@ -18,7 +17,6 @@ import { factoryParticipantId } from '../boardPeople';
 import type { BoardParticipant } from '../boardPeople';
 import type { BoardKind } from '../boardStages';
 import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
-import type { LinearProject } from '../services/linear';
 import { translator } from '../../../i18n/t';
 
 const tk = translator('board');
@@ -39,7 +37,6 @@ export type BoardFilterField = FilterBarField & { id: BoardFilterFieldId; sugges
 
 const FIELD_ICONS: Record<BoardFilterFieldId, LucideIcon> = {
   source: Inbox,
-  linearProject: FolderKanban,
   teammate: UsersRound,
   author: UserRoundPen,
   assignee: UserRoundCheck,
@@ -52,8 +49,6 @@ function fieldLabel(fieldId: BoardFilterFieldId): string {
   switch (fieldId) {
     case 'source':
       return tk('filters.fields.source');
-    case 'linearProject':
-      return tk('filters.fields.linearProject');
     case 'teammate':
       return tk('filters.fields.teammate');
     case 'author':
@@ -93,7 +88,6 @@ interface BoardFilterFieldsOptions {
   availableLabels: readonly string[];
   currentUserId?: string;
   connectedSources?: ReadonlySet<string>;
-  linearProjects?: readonly LinearProject[];
 }
 
 export function boardFilterFields({
@@ -103,7 +97,6 @@ export function boardFilterFields({
   availableLabels,
   currentUserId,
   connectedSources,
-  linearProjects = [],
 }: BoardFilterFieldsOptions): BoardFilterField[] {
   const people = peopleOptions(participants, currentUserId);
   const suggestions: Record<BoardFilterFieldId, FilterBarOption[]> = {
@@ -111,7 +104,6 @@ export function boardFilterFields({
     source: BOARD_SOURCE_OPTIONS.filter(
       option => option.value === 'manual' || connectedSources?.has(option.value) || filters.source.has(option.value),
     ),
-    linearProject: linearProjects.map(project => ({ value: project.id, label: project.name })),
     teammate: people,
     author: people,
     assignee: people,
@@ -119,7 +111,6 @@ export function boardFilterFields({
     worked: people,
     label: availableLabels.map(label => ({ value: label })),
   };
-  const linearProjectOffered = filters.source.has('linear') || filters.linearProject.size > 0;
 
   return boardFilterFieldIds(kind).map(fieldId => ({
     id: fieldId,
@@ -127,7 +118,6 @@ export function boardFilterFields({
     icon: FIELD_ICONS[fieldId],
     operators: ['in'],
     strict: true,
-    hidden: fieldId === 'linearProject' && !linearProjectOffered,
     suggestions: suggestions[fieldId],
   }));
 }

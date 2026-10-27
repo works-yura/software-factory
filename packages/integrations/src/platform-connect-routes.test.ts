@@ -8,7 +8,7 @@ import { buildPlatformConnectRoutes } from './platform-connect-routes.ts';
 
 const SESSION = {
   connectionId: 'conn-new',
-  integrationId: 'jira',
+  integrationId: 'gitlab',
   connectUrl: 'https://connect.nango.dev/session',
   sessionToken: 'nango-session-token',
   expiresAt: '2026-09-17T12:30:00.000Z',
@@ -45,15 +45,15 @@ function buildApp(user: TestAuthUser | null, fetchImpl: typeof fetch, options: {
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 describe('platform connect routes', () => {
-  it('lists Jira connections and hides other providers', async () => {
+  it('lists GitLab connections and hides other providers', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
       json({
-        connections: [connection('conn-a', 'github'), connection('conn-b', 'jira', 'needs_reauth')],
+        connections: [connection('conn-a', 'github'), connection('conn-b', 'gitlab', 'needs_reauth')],
       }),
     );
     const app = buildApp(org1(), fetchImpl);
 
-    const response = await app.request('/web/integrations/platform/jira/connections');
+    const response = await app.request('/web/integrations/platform/gitlab/connections');
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       connections: [expect.objectContaining({ id: 'conn-b' })],
@@ -64,11 +64,11 @@ describe('platform connect routes', () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(SESSION, 201));
     const app = buildApp(org1(), fetchImpl);
 
-    const response = await app.request('/web/integrations/platform/incident-io/connect-session', { method: 'POST' });
+    const response = await app.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' });
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(SESSION);
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://integrations.example.com/v2/integrations/incident-io/connect-sessions',
+      'https://integrations.example.com/v2/integrations/gitlab/connect-sessions',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ authorization: 'Bearer platform-secret' }),
@@ -80,14 +80,16 @@ describe('platform connect routes', () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
       const url = String(input);
       if (url.endsWith('/v2/connections')) {
-        return json({ connections: [connection('conn-jira', 'jira', 'needs_reauth')] });
+        return json({
+          connections: [connection('conn-gitlab', 'gitlab', 'needs_reauth'), connection('conn-github', 'github')],
+        });
       }
-      if (url.endsWith('/v2/connections/conn-jira/reconnect-session')) return json(SESSION, 201);
+      if (url.endsWith('/v2/connections/conn-gitlab/reconnect-session')) return json(SESSION, 201);
       throw new Error(`Unexpected fetch: ${url}`);
     });
     const app = buildApp(org1(), fetchImpl);
 
-    const response = await app.request('/web/integrations/platform/jira/connections/conn-jira/reconnect-session', {
+    const response = await app.request('/web/integrations/platform/gitlab/connections/conn-gitlab/reconnect-session', {
       method: 'POST',
     });
     expect(response.status).toBe(201);
@@ -96,25 +98,11 @@ describe('platform connect routes', () => {
     // A registered provider that does not own the connection: the ownership
     // filter itself must reject, not the unknown-provider gate.
     const crossProvider = await app.request(
-      '/web/integrations/platform/incident-io/connections/conn-jira/reconnect-session',
+      '/web/integrations/platform/gitlab/connections/conn-github/reconnect-session',
       { method: 'POST' },
     );
     expect(crossProvider.status).toBe(404);
     await expect(crossProvider.json()).resolves.toEqual({ error: 'connection_not_found' });
-  });
-
-  it('mints a GitLab connect session through the platform registry', async () => {
-    const gitlabSession = { ...SESSION, integrationId: 'gitlab' };
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(gitlabSession, 201));
-    const app = buildApp(org1(), fetchImpl);
-
-    const response = await app.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' });
-    expect(response.status).toBe(201);
-    await expect(response.json()).resolves.toEqual(gitlabSession);
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'https://integrations.example.com/v2/integrations/gitlab/connect-sessions',
-      expect.objectContaining({ method: 'POST' }),
-    );
   });
 
   it('rejects unknown providers, signed-out callers, and personal accounts', async () => {
@@ -126,17 +114,17 @@ describe('platform connect routes', () => {
 
     const signedOut = buildApp(null, fetchImpl);
     expect(
-      (await signedOut.request('/web/integrations/platform/jira/connect-session', { method: 'POST' })).status,
+      (await signedOut.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' })).status,
     ).toBe(401);
 
     const personal = buildApp({ workosId: 'u1' }, fetchImpl);
-    expect((await personal.request('/web/integrations/platform/jira/connect-session', { method: 'POST' })).status).toBe(
+    expect((await personal.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' })).status).toBe(
       403,
     );
 
     const authDisabled = buildApp(org1(), fetchImpl, { authEnabled: false });
     expect(
-      (await authDisabled.request('/web/integrations/platform/jira/connect-session', { method: 'POST' })).status,
+      (await authDisabled.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' })).status,
     ).toBe(403);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
@@ -146,7 +134,7 @@ describe('platform connect routes', () => {
       .fn<typeof fetch>()
       .mockImplementation(async () => json({ detail: 'Reconnect session is already pending' }, 409));
     const conflictApp = buildApp(org1(), conflictFetch);
-    const conflict = await conflictApp.request('/web/integrations/platform/jira/connect-session', { method: 'POST' });
+    const conflict = await conflictApp.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' });
     expect(conflict.status).toBe(409);
     await expect(conflict.json()).resolves.toEqual(expect.objectContaining({ error: 'session_pending' }));
 
@@ -154,7 +142,7 @@ describe('platform connect routes', () => {
       .fn<typeof fetch>()
       .mockImplementation(async () => json({ detail: 'Your role has read-only access to this organization' }, 403));
     const forbiddenApp = buildApp(org1(), forbiddenFetch);
-    const forbidden = await forbiddenApp.request('/web/integrations/platform/jira/connect-session', {
+    const forbidden = await forbiddenApp.request('/web/integrations/platform/gitlab/connect-session', {
       method: 'POST',
     });
     expect(forbidden.status).toBe(403);
@@ -162,7 +150,7 @@ describe('platform connect routes', () => {
 
     const failingFetch = vi.fn<typeof fetch>().mockImplementation(async () => json({ detail: 'boom' }, 500));
     const failingApp = buildApp(org1(), failingFetch);
-    const failed = await failingApp.request('/web/integrations/platform/jira/connect-session', { method: 'POST' });
+    const failed = await failingApp.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' });
     expect(failed.status).toBe(502);
   });
 });

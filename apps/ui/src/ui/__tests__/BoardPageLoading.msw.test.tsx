@@ -75,12 +75,8 @@ function stubBoardEndpoints() {
       HttpResponse.json({
         config: {
           github: { enabled: true, sourceIds: ['acme/app'] },
-          linear: { enabled: false, sourceIds: null },
         },
       }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
     // Serves both the intake feed (no label) and the triage feed (status: auto-triaged label).
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, async () => {

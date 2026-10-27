@@ -3,17 +3,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 import { useGitHubIssueDetail, useGitHubPullRequestDetail } from '../../../../hooks/useFactoryData';
 import { useGitLabIssueDetail, useGitLabMergeRequestDetail } from '../../../../hooks/useGitLabData';
-import { useIncidentioIssueDetail } from '../../../../hooks/useIncidentioData';
-import { useJiraIssueDetail } from '../../../../hooks/useJiraData';
-import { useLinearIssueDetail } from '../../../../hooks/useLinearData';
-import {
-  githubNumberForItem,
-  incidentioIssueRefForItem,
-  jiraIdentifierForItem,
-  jiraIssueRefForItem,
-  linearIdentifierForItem,
-  linearIssueIdForItem,
-} from '../boardItems';
+import { githubNumberForItem } from '../boardItems';
 import type { WorkItem } from '../services/workItems';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { translator } from '../../../i18n/t';
@@ -25,16 +15,13 @@ type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'metadata'>;
 
 function descriptionSource(
   item: SourceItem,
-): 'issue' | 'pull' | 'gitlab' | 'gitlab-pr' | 'linear' | 'jira' | 'incidentio' | undefined {
+): 'issue' | 'pull' | 'gitlab' | 'gitlab-pr' | undefined {
   if (githubNumberForItem(item) !== undefined) {
     if (item.source === 'github-issue') return 'issue';
     if (item.source === 'github-pr') return 'pull';
   }
   if (item.source === 'gitlab-issue' && item.sourceKey) return 'gitlab';
   if (item.source === 'gitlab-pr' && typeof item.metadata.gitlabMergeRequestIid === 'number') return 'gitlab-pr';
-  if (linearIdentifierForItem(item) !== undefined) return 'linear';
-  if (jiraIdentifierForItem(item) !== undefined && jiraIssueRefForItem(item) !== undefined) return 'jira';
-  if (incidentioIssueRefForItem(item) !== undefined) return 'incidentio';
   return undefined;
 }
 
@@ -45,11 +32,6 @@ export function useSourceDescription(
   factoryProjectId: string | undefined,
 ) {
   const number = githubNumberForItem(item);
-  const identifier = linearIdentifierForItem(item);
-  const linearIssueId = linearIssueIdForItem(item);
-  const jiraIdentifier = jiraIdentifierForItem(item);
-  const jiraIssueRef = jiraIssueRefForItem(item);
-  const incidentioIssueRef = incidentioIssueRefForItem(item);
   const gitlabIssueId = item.source === 'gitlab-issue' ? (item.sourceKey ?? undefined) : undefined;
   const source = descriptionSource(item);
   const issue = useGitHubIssueDetail(
@@ -69,23 +51,7 @@ export function useSourceDescription(
     source === 'gitlab-pr' ? projectRepositoryId : undefined,
     source === 'gitlab-pr' ? (item.metadata.gitlabMergeRequestIid as number) : undefined,
   );
-  const linear = useLinearIssueDetail(
-    source === 'linear' ? factoryProjectId : undefined,
-    source === 'linear' ? identifier : undefined,
-    source === 'linear' ? linearIssueId : undefined,
-  );
-  const jira = useJiraIssueDetail(
-    source === 'jira' ? factoryProjectId : undefined,
-    source === 'jira' ? jiraIdentifier : undefined,
-    source === 'jira' ? jiraIssueRef : undefined,
-  );
-  const incidentio = useIncidentioIssueDetail(
-    source === 'incidentio' ? factoryProjectId : undefined,
-    source === 'incidentio' ? incidentioIssueRef : undefined,
-  );
-  return source === undefined
-    ? undefined
-    : { issue, pull, gitlab, 'gitlab-pr': gitlabPull, linear, jira, incidentio }[source];
+  return source === undefined ? undefined : { issue, pull, gitlab, 'gitlab-pr': gitlabPull }[source];
 }
 
 export function CardSourceDescription({

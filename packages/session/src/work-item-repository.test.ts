@@ -90,18 +90,7 @@ describe('resolveWorkItemRepository', () => {
     ).resolves.toEqual({ status: 'unlinked', hint: 'Repository acme/old-name is not linked to this Factory.' });
   });
 
-  it('uses a Linear project mapping and resolves an unattributed single-repository item', async () => {
-    const { sourceControl, project, repositories } = await seedRepositories(['acme/one', 'acme/two']);
-    const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
-
-    await expect(
-      resolveWorkItemRepository({
-        ...args,
-        item: { metadata: { linearProjectId: 'linear-project' } },
-        linearRepositoryMap: { 'linear-project': 'acme/two' },
-      }),
-    ).resolves.toMatchObject({ status: 'resolved', projectRepositoryId: repositories[1]!.projectRepository.id });
-
+  it('resolves an unattributed single-repository item', async () => {
     const single = await seedRepositories(['acme/only']);
     await expect(
       resolveWorkItemRepository({
@@ -207,13 +196,6 @@ describe('resolveWorkItemRepository', () => {
     ).resolves.toEqual(expected);
     await expect(
       resolveWorkItemRepository({ ...args, item: { metadata: { githubRepositoryId: 1 } } }),
-    ).resolves.toEqual(expected);
-    await expect(
-      resolveWorkItemRepository({
-        ...args,
-        item: { metadata: { linearProjectId: 'linear-project' } },
-        linearRepositoryMap: { 'linear-project': 'acme/one' },
-      }),
     ).resolves.toEqual(expected);
   });
 

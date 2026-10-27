@@ -7,13 +7,11 @@ import type { FactoryProject, FactoryProjectPayload, SourceControlRepository } f
 const STEP_KEY = 'mastracode.factory-create.step';
 const NAME_KEY = 'mastracode.factory-create.name';
 const REPO_KEY = 'mastracode.factory-create.repository';
-const LINEAR_PROJECT_KEY = 'mastracode.factory-create.linear-project-id';
-const JIRA_PROJECT_KEY = 'mastracode.factory-create.jira-project-id';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
 const LINKED_KEY = 'mastracode.factory-create.linked-repository-id';
 const HOST_KEY = 'mastracode.factory-create.host-factory-id';
 
-export const CREATE_FACTORY_STEPS = ['name', 'vcs', 'project-management', 'model-provider'] as const;
+export const CREATE_FACTORY_STEPS = ['name', 'vcs', 'model-provider'] as const;
 
 export type CreateFactoryFlowStep = (typeof CREATE_FACTORY_STEPS)[number];
 
@@ -71,10 +69,6 @@ export interface CreateFactoryDraft {
   step: CreateFactoryFlowStep;
   name?: string;
   repository?: SourceControlRepository;
-  /** The Linear project whose issues feed the new board, when the user picked one. */
-  linearProjectId?: string;
-  /** The Jira project whose issues feed the new board, when the user picked one. */
-  jiraProjectId?: string;
   factoryId?: string;
   linkedRepositoryId?: string;
   /** The Factory whose shell hosts the wizard, so an OAuth return comes back to it. */
@@ -85,8 +79,6 @@ function readDraft(): CreateFactoryDraft {
   const picks = {
     name: sessionStorage.getItem(NAME_KEY) ?? undefined,
     repository: readRepository(),
-    linearProjectId: sessionStorage.getItem(LINEAR_PROJECT_KEY) ?? undefined,
-    jiraProjectId: sessionStorage.getItem(JIRA_PROJECT_KEY) ?? undefined,
     factoryId: sessionStorage.getItem(FACTORY_KEY) ?? undefined,
     linkedRepositoryId: sessionStorage.getItem(LINKED_KEY) ?? undefined,
     hostFactoryId: sessionStorage.getItem(HOST_KEY) ?? undefined,
@@ -104,8 +96,6 @@ function writeDraft({
   step,
   name,
   repository,
-  linearProjectId,
-  jiraProjectId,
   factoryId,
   linkedRepositoryId,
   hostFactoryId,
@@ -113,8 +103,6 @@ function writeDraft({
   sessionStorage.setItem(STEP_KEY, step);
   writeEntry(NAME_KEY, name);
   writeEntry(REPO_KEY, repository && JSON.stringify(repository));
-  writeEntry(LINEAR_PROJECT_KEY, linearProjectId);
-  writeEntry(JIRA_PROJECT_KEY, jiraProjectId);
   writeEntry(FACTORY_KEY, factoryId);
   writeEntry(LINKED_KEY, linkedRepositoryId);
   writeEntry(HOST_KEY, hostFactoryId);
@@ -130,8 +118,6 @@ function clearDraft(): void {
     STEP_KEY,
     NAME_KEY,
     REPO_KEY,
-    LINEAR_PROJECT_KEY,
-    JIRA_PROJECT_KEY,
     FACTORY_KEY,
     LINKED_KEY,
     HOST_KEY,
@@ -150,9 +136,9 @@ export function pendingCreateFlowFactoryId(): string | undefined {
 }
 
 /**
- * State machine for the create-Factory wizard (Name → VCS → Project
- * management → Model provider). The draft lives in sessionStorage so a
- * full-page OAuth redirect (GitHub/Linear) resumes where it left off.
+ * State machine for the create-Factory wizard (Name → VCS → Model provider).
+ * The draft lives in sessionStorage so a full-page OAuth redirect (GitHub)
+ * resumes where it left off.
  */
 export function useCreateFactoryFlow() {
   const queryClient = useQueryClient();
@@ -176,13 +162,7 @@ export function useCreateFactoryFlow() {
     draft: draftQuery.data,
     startVcs: (name: string) => patchDraft.mutateAsync({ step: 'vcs', name }),
     chooseRepository: (repository: SourceControlRepository) =>
-      patchDraft.mutateAsync({ step: 'project-management', repository }),
-    chooseLinearProject: (linearProjectId: string) =>
-      patchDraft.mutateAsync({ step: 'model-provider', linearProjectId, jiraProjectId: undefined }),
-    chooseJiraProject: (jiraProjectId: string) =>
-      patchDraft.mutateAsync({ step: 'model-provider', jiraProjectId, linearProjectId: undefined }),
-    skipProjectManagement: () =>
-      patchDraft.mutateAsync({ step: 'model-provider', linearProjectId: undefined, jiraProjectId: undefined }),
+      patchDraft.mutateAsync({ step: 'model-provider', repository }),
     /** Step backwards to the previous wizard step, preserving already-collected picks. */
     back: () => {
       const currentIndex = CREATE_FACTORY_STEPS.indexOf(step);

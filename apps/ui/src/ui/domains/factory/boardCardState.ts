@@ -177,8 +177,6 @@ function linkedSourceName(source: FactoryDecisionSummary['source']): string {
       return tk('linkedSource.gitlabIssue');
     case 'gitlab-pr':
       return tk('linkedSource.gitlabPr');
-    case 'linear-issue':
-      return tk('linkedSource.linearIssue');
     default:
       // Every linked-card decision carries its source; only a manual card would land here.
       return tk('linkedSource.card');

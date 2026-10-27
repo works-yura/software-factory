@@ -53,19 +53,6 @@ const logoutIssue = {
 
 const intakeWorkItem = { ...issueWorkItem, stages: ['intake'] };
 
-const linearWorkItem = {
-  ...issueWorkItem,
-  id: 'linear-item-1',
-  externalSource: {
-    integrationId: 'linear',
-    type: 'issue',
-    externalId: 'linear:linear-issue-1',
-    url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
-  },
-  title: 'ENG-42: Fix intake sync',
-  metadata: { identifier: 'ENG-42', linearIssueId: 'linear-issue-1' },
-};
-
 const gitlabWorkItem = {
   ...issueWorkItem,
   id: 'gitlab-item-1',
@@ -112,8 +99,6 @@ function stubBoardEndpoints({
   issues = [] as object[],
   workItems = [issueWorkItem] as object[],
   multiRepository = false,
-  mappedLinearRepository = false,
-  linearIssues = [] as object[],
 } = {}) {
   const transitions: TransitionRequest[] = [];
   const patches: Array<{ itemId: string; body: Record<string, unknown> }> = [];
@@ -156,28 +141,13 @@ function stubBoardEndpoints({
       HttpResponse.json({
         config: {
           github: { enabled: true, sourceIds: ['acme/app'] },
-          linear: {
-            enabled: multiRepository,
-            sourceIds: multiRepository ? ['linear-project-1'] : null,
-            ...(mappedLinearRepository ? { repositoryByLinearProject: { 'linear-project-1': 'acme/other' } } : {}),
-          },
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
-      HttpResponse.json({
-        bindings: multiRepository
-          ? [{ integrationId: 'linear', sourceId: 'linear-project-1', factoryProjectId: FACTORY_ID, board: 'work' }]
-          : [],
-      }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
     ),
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({ enabled: multiRepository, connected: multiRepository, workspace: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: linearIssues, nextCursor: null })),
     // The label-filtered (status: auto-triaged) feed stays empty; the plain feed
     // serves the candidate under test.
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => {
@@ -201,20 +171,10 @@ function stubBoardEndpoints({
         description: 'The app crashes when logging out.',
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/linear/issues/:identifier`, ({ params, request }) => {
-      expect(new URL(request.url).searchParams.get('issueId')).toBe('linear-issue-1');
-      return HttpResponse.json({
-        identifier: String(params.identifier),
-        title: 'Fix intake sync',
-        url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
-        description: 'The sync runs the wrong way.',
-      });
-    }),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs/:number`, () =>
       HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ enabled: false, configured: false })),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       created.push(body);
@@ -288,14 +248,14 @@ describe('Board card buttons move the card', () => {
     expect(transitions[0]?.body).not.toHaveProperty('reenter');
   });
 
-  it('chooses a repository before investigating an unattributed Linear item in a multi-repository factory', async () => {
+  it('chooses a repository before investigating an unattributed item in a multi-repository factory', async () => {
     const { patches, transitions } = stubBoardEndpoints({
       multiRepository: true,
-      workItems: [{ ...linearWorkItem, stages: ['intake'] }],
+      workItems: [{ ...issueWorkItem, stages: ['intake'] }],
     });
     renderWorkBoard();
 
-    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
+    await moveFromCardDetails('Fix login bug', 'Investigate');
 
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
     const user = userEvent.setup();
@@ -321,22 +281,22 @@ describe('Board card buttons move the card', () => {
 
     await waitFor(() => expect(transitions).toHaveLength(1));
     expect(patches).toEqual([
-      { itemId: 'linear-item-1', body: { metadata: { ...linearWorkItem.metadata, repository: 'acme/other' } } },
+      { itemId: 'item-1', body: { metadata: { ...issueWorkItem.metadata, repository: 'acme/other' } } },
     ]);
     expect(transitions[0]).toMatchObject({
-      itemId: 'linear-item-1',
+      itemId: 'item-1',
       body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
     });
   });
 
-  it('cancels repository selection without changing a Linear item and resets search on reopening', async () => {
+  it('cancels repository selection without changing an item and resets search on reopening', async () => {
     const { patches, transitions } = stubBoardEndpoints({
       multiRepository: true,
-      workItems: [{ ...linearWorkItem, stages: ['intake'] }],
+      workItems: [{ ...issueWorkItem, stages: ['intake'] }],
     });
     renderWorkBoard();
     const user = userEvent.setup();
-    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
+    await moveFromCardDetails('Fix login bug', 'Investigate');
 
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
     await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'not-linked');
@@ -346,73 +306,13 @@ describe('Board card buttons move the card', () => {
     expect(patches).toHaveLength(0);
     expect(transitions).toHaveLength(0);
 
-    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
+    await moveFromCardDetails('Fix login bug', 'Investigate');
     const reopened = await screen.findByRole('dialog', { name: 'Choose a repository' });
     expect(within(reopened).getByRole('searchbox', { name: 'Search repositories' })).toHaveValue('');
     expect(within(reopened).getByRole('button', { name: /acme\/app/ })).toBeVisible();
     expect(within(reopened).getByRole('button', { name: /acme\/other/ })).toBeVisible();
     expect(patches).toHaveLength(0);
     expect(transitions).toHaveLength(0);
-  });
-
-  it('chooses a repository before filing and investigating a Linear candidate', async () => {
-    const { created, transitions } = stubBoardEndpoints({
-      multiRepository: true,
-      workItems: [],
-      linearIssues: [
-        {
-          id: 'linear-issue-1',
-          identifier: 'ENG-42',
-          title: 'Fix intake sync',
-          url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
-          state: 'Todo',
-          stateType: 'unstarted',
-          priorityLabel: 'High',
-          assignee: null,
-          team: 'Engineering',
-          sourceId: 'linear-project-1',
-          projectId: 'linear-project-1',
-          labels: [],
-          createdAt: '2026-07-01T00:00:00Z',
-          updatedAt: '2026-07-02T00:00:00Z',
-        },
-      ],
-    });
-    renderWorkBoard();
-
-    await moveFromCardDetails('Fix intake sync', 'Investigate');
-
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    const user = userEvent.setup();
-    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'OTHER');
-    await waitFor(() => expect(within(dialog).queryByRole('button', { name: /acme\/app/ })).not.toBeInTheDocument());
-    expect(created).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
-    await user.click(within(dialog).getByRole('button', { name: /acme\/other/ }));
-
-    await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(created[0]?.metadata).toMatchObject({ linearProjectId: 'linear-project-1', repository: 'acme/other' });
-  });
-
-  it('uses the configured Linear project repository without prompting', async () => {
-    const { patches, transitions } = stubBoardEndpoints({
-      multiRepository: true,
-      mappedLinearRepository: true,
-      workItems: [
-        {
-          ...linearWorkItem,
-          stages: ['intake'],
-          metadata: { ...linearWorkItem.metadata, linearProjectId: 'linear-project-1' },
-        },
-      ],
-    });
-    renderWorkBoard();
-
-    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
-
-    await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
-    expect(patches).toHaveLength(0);
   });
 
   it("re-enters the lane when the card's own lane button is clicked", async () => {
@@ -523,7 +423,6 @@ describe('Board card buttons move the card', () => {
           config: {
             github: { enabled: false, sourceIds: null },
             gitlab: { enabled: true, sourceIds: ['gitlab-source-1'] },
-            linear: { enabled: false, sourceIds: null },
           },
         }),
       ),
@@ -570,17 +469,6 @@ describe('Board card buttons move the card', () => {
     await user.click(await screen.findByRole('button', { name: 'Details for GitLab candidate issue' }));
     const candidateDialog = await screen.findByRole('dialog', { name: 'GitLab candidate issue' });
     expect(await within(candidateDialog).findByText('Candidate GitLab description.')).toBeInTheDocument();
-  });
-
-  it("shows a Linear card's own description in its details", async () => {
-    stubBoardEndpoints({ workItems: [linearWorkItem] });
-    renderWorkBoard();
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole('button', { name: 'Details for ENG-42: Fix intake sync' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'ENG-42: Fix intake sync' });
-    expect(await within(dialog).findByText('The sync runs the wrong way.')).toBeInTheDocument();
   });
 
   it('links the card source from the panel header', async () => {

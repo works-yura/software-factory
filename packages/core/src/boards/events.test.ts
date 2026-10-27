@@ -34,8 +34,8 @@ describe('defineBoard events', () => {
     [[], 'Board events must be a plain object.'],
     [{ slack: {} }, 'Board events name unknown integration "slack".'],
     [{ github: [] }, 'Board events for "github" must be a plain object.'],
-    [{ linear: { pullRequestMerged: null } }, 'Board events for "linear" name unknown event "pullRequestMerged".'],
-    [{ jira: { issueClosed: 'done' } }, 'Board event handler "jira.issueClosed" must be a function or null.'],
+    [{ gitlab: { pullRequestMerged: null } }, 'Board events for "gitlab" name unknown event "pullRequestMerged".'],
+    [{ gitlab: { issueClosed: 'done' } }, 'Board event handler "gitlab.issueClosed" must be a function or null.'],
   ])('rejects %j', (events, message) => {
     expect(() => board(events)).toThrow(new BoardDefinitionError(message));
   });
@@ -88,7 +88,7 @@ describe('board event lookup', () => {
 
   it('resolves the bound board handlers, never for unbound or uninstalled boards', () => {
     expect(boardEventHandlers(boards, 'release', 'github')?.pullRequestMerged).toBe(merged);
-    expect(boardEventHandlers(boards, 'release', 'linear')).toBeUndefined();
+    expect(boardEventHandlers(boards, 'release', 'gitlab')).toBeUndefined();
     expect(boardEventHandlers(boards, 'ghost', 'github')).toBeUndefined();
     expect(boardEventHandlers(boards, undefined, 'github')).toBeUndefined();
   });

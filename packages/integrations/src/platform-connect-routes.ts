@@ -9,7 +9,7 @@
  * short-lived session token back to the SPA, which drives the provider's
  * OAuth popup headlessly via `@nangohq/frontend`. Gating mirrors the
  * Platform's own rule for these providers: a signed-in organization member
- * (org:write parity with Linear), not an organization admin.
+ * (org:write), not an organization admin.
  */
 
 import type { ApiRoute } from '@mastra/core/server';
@@ -41,8 +41,6 @@ export interface PlatformConnectProvider {
  * their Factory integrations are available.
  */
 export const PLATFORM_CONNECT_PROVIDERS: Record<string, PlatformConnectProvider> = {
-  jira: { integrationId: 'jira', connectionIntegrationIds: ['jira'] },
-  'incident-io': { integrationId: 'incident-io', connectionIntegrationIds: ['incident-io'] },
   gitlab: { integrationId: 'gitlab', connectionIntegrationIds: ['gitlab'] },
 };
 

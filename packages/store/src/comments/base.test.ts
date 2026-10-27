@@ -196,7 +196,7 @@ describe('WorkItemCommentsStorage', () => {
     const second = await seed.comments.attachExternalSource({
       orgId: scope.orgId,
       commentId: created.id,
-      source: { integrationId: 'linear', type: 'comment', externalId: 'L1' },
+      source: { integrationId: 'gitlab', type: 'comment', externalId: 'L1' },
     });
     expect(second?.externalSource).toEqual(slack);
   });

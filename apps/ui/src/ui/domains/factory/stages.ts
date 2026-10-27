@@ -36,7 +36,7 @@ export const BOARD_STAGES: ReadonlyArray<BoardStage> = FACTORY_RULE_STAGES.map(i
  * terminal columns and minus `intake`.
  *
  * Intake is left out because the Board's Intake column merges persisted cards
- * with live GitHub/Linear candidates that have no `work_items` row yet, so any
+ * with live GitHub/GitLab candidates that have no `work_items` row yet, so any
  * aggregation over persisted rows undercounts it. Charting it means merging the
  * live candidates in first, which needs its own age semantics (upstream open
  * date vs. time in stage).

@@ -89,6 +89,14 @@ describe('Factory work item service boundary', () => {
     expect(item).toMatchObject({ source: 'gitlab-pr', sourceKey: externalSource.externalId, url: externalSource.url });
   });
 
+  it('maps a stored work item from an unsupported legacy provider to a manual card', async () => {
+    const externalSource = { integrationId: 'linear', type: 'issue', externalId: 'linear-issue:ENG-1' };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));
+
+    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    expect(item).toMatchObject({ source: 'manual', title: 'Fix Factory board' });
+  });
+
   it('sends provider-neutral external source data when creating a board item', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ workItem: wireItem }));
     vi.stubGlobal('fetch', fetchMock);

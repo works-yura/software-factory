@@ -37,10 +37,10 @@ describe('Factory rule validation', () => {
       idempotencyKey: 'release:claimed',
       board: 'release',
       stage: 'queued',
-      source: 'linear-issue',
-      sourceKey: 'linear:ENG-1',
-      claimKey: 'linear:issue:1',
-      title: 'ENG-1: claimed',
+      source: 'gitlab-issue',
+      sourceKey: 'gitlab:group/project#1',
+      claimKey: 'gitlab:issue:1',
+      title: '#1: claimed',
       url: null,
     };
     expect(validateFactoryRuleDecision(linked)).toEqual(linked);

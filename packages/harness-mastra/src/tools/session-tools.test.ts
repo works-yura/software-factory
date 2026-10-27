@@ -242,7 +242,6 @@ async function setup(
     seeded.seed.workItems,
     { transition },
     seeded.sourceControl,
-    undefined,
     { projects: seeded.seed.projects, modelDefaults: seeded.seed.modelDefaults },
   );
   const realPrepare: Prepare = request => realCoordinator.prepare(request);

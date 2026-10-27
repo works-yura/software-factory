@@ -11,7 +11,6 @@ import { useTranslation } from 'react-i18next';
 
 import { useApiConfig } from '../../../../api/config';
 import { useCompleteFactorySetup } from '../hooks/useCompleteFactorySetup';
-import { connectLinear } from '../../factory/services/linear';
 import type { SourceControlRepository } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import {
@@ -31,11 +30,9 @@ import { OnboardingPreview } from './onboarding/preview/OnboardingPreview';
 import { companyAccountNeedsAdmin, useProviderConnection } from '../hooks/useProviderConnection';
 import type { ProviderConnectionMethod } from '../hooks/useProviderConnection';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import type { WorkSource } from '../hooks/useWorkSourceConnections';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
 import { PersonalProviderFactoryStep } from './PersonalProviderFactoryStep';
-import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { OnboardingReviewStep } from './onboarding/OnboardingReviewStep';
 
@@ -71,7 +68,6 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
     setReviewReturn(value);
   };
   const [githubRedirecting, setGithubRedirecting] = useState(false);
-  const [previewSource, setPreviewSource] = useState<WorkSource>();
   const [preview, setPreview] = useState<StepPreview>({});
   const previewWith = (patch: StepPreview) => setPreview(current => ({ ...current, ...patch }));
 
@@ -162,18 +158,8 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
                   onPreviewRepository={previewed => previewWith({ repository: previewed })}
                   onSelectRepository={repo => {
                     updateDraft({ ...draft, repository: repo });
-                    advance('project-management');
+                    advance(local ? 'model-provider' : 'model-setup');
                   }}
-                />
-              )}
-              {step === 'project-management' && (
-                <ProjectManagementFactoryStep
-                  onPreviewSource={setPreviewSource}
-                  onConnect={() => {
-                    persistOnboardingStep('project-management');
-                    connectLinear(baseUrl);
-                  }}
-                  onContinue={() => advance(local ? 'model-provider' : 'model-setup')}
                 />
               )}
               {step === 'model-setup' &&
@@ -246,7 +232,6 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
           modelScope={previewScope}
           local={local}
           repository={repository}
-          source={previewSource}
           model={model}
           providerId={preview.providerId ?? draft.model?.providerId}
           personalProviderId={preview.personalProviderId ?? draft.personal?.providerId}

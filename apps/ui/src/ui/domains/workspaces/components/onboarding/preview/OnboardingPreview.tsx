@@ -2,10 +2,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProviderConnectionMethod } from '../../../hooks/useProviderConnection';
-import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
 import type { OnboardingModelScope, OnboardingStep } from '../../../services/onboardingFlow';
 import { OnboardingAccountsPreview } from './OnboardingAccountsPreview';
-import { OnboardingIntakePreview } from './OnboardingIntakePreview';
 import { SketchLabel } from './SketchLabel';
 import { OnboardingIllustration } from './OnboardingIllustration';
 import type { AccountsMode, DrawingScene } from './onboarding-drawing';
@@ -20,7 +18,6 @@ export interface OnboardingPreviewProps {
   local?: boolean;
   personalModel?: string;
   repository?: { name: string; fullName: string; defaultBranch: string };
-  source?: WorkSource;
   model?: string;
   providerId?: string;
   personalProviderId?: string;
@@ -37,7 +34,6 @@ const ACCOUNT_MODES: Record<OnboardingModelScope, AccountsMode> = {
 function sceneForStep(step: OnboardingStep): DrawingScene {
   if (step === 'initial') return 'factory';
   if (step === 'vcs') return 'codebase';
-  if (step === 'project-management') return 'intake';
   return 'accounts';
 }
 
@@ -100,7 +96,6 @@ export function OnboardingPreview({
   local = false,
   personalModel,
   repository,
-  source = 'linear',
   model,
   providerId,
   personalProviderId,
@@ -118,9 +113,6 @@ export function OnboardingPreview({
         </OnboardingScene>
         <OnboardingScene active={step === 'vcs'}>
           <OnboardingCodebasePreview repository={repository} />
-        </OnboardingScene>
-        <OnboardingScene active={step === 'project-management'}>
-          <OnboardingIntakePreview source={source} />
         </OnboardingScene>
         <OnboardingScene active={scene === 'accounts'}>
           <OnboardingAccountsPreview

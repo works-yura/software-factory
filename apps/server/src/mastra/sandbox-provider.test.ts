@@ -47,8 +47,6 @@ describe('entry host sandbox (src/mastra/index.ts)', () => {
       'GITHUB_APP_CLIENT_SECRET',
       'GITHUB_APP_SLUG',
       'GITHUB_APP_WEBHOOK_SECRET',
-      'LINEAR_CLIENT_ID',
-      'LINEAR_CLIENT_SECRET',
       'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
       'E2B_API_KEY',

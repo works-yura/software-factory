@@ -2,9 +2,6 @@ export { resolveFactoryStageRules } from '@factory/core';
 export type { ResolvedFactoryStageRule } from '@factory/core';
 export {
   FACTORY_GITHUB_EVENTS,
-  FACTORY_INCIDENTIO_EVENTS,
-  FACTORY_JIRA_EVENTS,
-  FACTORY_LINEAR_EVENTS,
   FACTORY_RULE_BOARDS,
   FACTORY_RULE_SOURCES,
   FACTORY_RULE_STAGES,
@@ -17,12 +14,6 @@ export type {
   FactoryCommitDecision,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
-  FactoryIncidentioEventName,
-  FactoryIncidentioRuleContext,
-  FactoryJiraEventName,
-  FactoryJiraRuleContext,
-  FactoryLinearEventName,
-  FactoryLinearRuleContext,
   FactoryInvokeSkillDecision,
   FactoryNotifyDecision,
   FactoryRuleActor,
