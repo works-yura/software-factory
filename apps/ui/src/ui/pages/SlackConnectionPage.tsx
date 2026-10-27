@@ -24,20 +24,37 @@ import { SettingsSubsection } from '../domains/settings/components/SettingsSubse
 import { connectSlackUrl } from '../domains/settings/services/channelAccounts';
 import type { ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
 import { SettingsPageLayout } from './SettingsPage';
+import { Trans, useTranslation } from 'react-i18next';
 
-const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'long',
-  timeStyle: 'short',
-});
+import { currentLanguage } from '../i18n';
+
+function formatLinkedDate(iso: string): string {
+  return new Intl.DateTimeFormat(currentLanguage(), { dateStyle: 'long', timeStyle: 'short' }).format(new Date(iso));
+}
+
+/** Emphasized Slack user for `<user></user>` in a `Trans` string; renders its own content, ignoring children. */
+function SlackUserIdentity({ account }: { account: ConnectedChannelAccount; children?: unknown }) {
+  const { t } = useTranslation('app');
+  return (
+    <Txt as="strong" variant="label">
+      <IdentityWithTooltip
+        label={account.externalUserName ?? account.externalUserId}
+        idLabel={t('slack.userId')}
+        id={account.externalUserId}
+      />
+    </Txt>
+  );
+}
 
 export function SlackConnectionPage() {
+  const { t } = useTranslation('app');
   const { factoryId } = useParams();
   return (
     <SettingsPageLayout
       breadcrumbs={
-        <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
+        <Breadcrumb label={t('slack.breadcrumb')} className="min-w-0 flex-1 overflow-hidden">
           <Crumb as={Link} to={factoryId ? `/factories/${factoryId}/settings/connections` : '/'}>
-            Connections
+            {t('slack.connections')}
           </Crumb>
           <Crumb as="span" isCurrent>
             Slack
@@ -50,7 +67,7 @@ export function SlackConnectionPage() {
             <SlackIcon />
           </PageHeader.Icon>
           <PageHeader.Title>Slack</PageHeader.Title>
-          <PageHeader.Description>Start and continue Factory sessions from Slack.</PageHeader.Description>
+          <PageHeader.Description>{t('slack.description')}</PageHeader.Description>
         </PageHeader>
       }
     >
@@ -60,6 +77,7 @@ export function SlackConnectionPage() {
 }
 
 export function SlackConnectionSettings() {
+  const { t } = useTranslation('app');
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
   const accountsQuery = useChannelAccountsQuery();
@@ -84,10 +102,10 @@ export function SlackConnectionSettings() {
       },
       {
         onSuccess: deleted => {
-          if (deleted) toast.success('Disconnected Slack account');
-          else toast.error('Account was already disconnected');
+          if (deleted) toast.success(t('slack.toasts.disconnected'));
+          else toast.error(t('slack.toasts.alreadyDisconnected'));
         },
-        onError: error => toast.error(error instanceof Error ? error.message : 'Failed to disconnect account'),
+        onError: error => toast.error(error instanceof Error ? error.message : t('slack.toasts.disconnectFailed')),
       },
     );
   };
@@ -103,9 +121,9 @@ export function SlackConnectionSettings() {
       {
         onSuccess: () => {
           const name = factories.find(factory => factory.id === factoryProjectId)?.name ?? factoryProjectId;
-          toast.success(`Slack sessions will go to ${name}`);
+          toast.success(t('slack.toasts.defaultSet', { name }));
         },
-        onError: error => toast.error(error instanceof Error ? error.message : 'Failed to set default factory'),
+        onError: error => toast.error(error instanceof Error ? error.message : t('slack.toasts.defaultFailed')),
       },
     );
   };
@@ -114,18 +132,18 @@ export function SlackConnectionSettings() {
     <div className="mt-6 flex flex-col gap-8 pb-5">
       {accountsQuery.isPending ? (
         <Txt tone="muted" as="p" variant="caption" role="status">
-          Loading Slack connection…
+          {t('slack.loading')}
         </Txt>
       ) : accountsQuery.error ? (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
-          {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load Slack connection'}
+          {accountsQuery.error instanceof Error ? accountsQuery.error.message : t('slack.loadFailed')}
         </Txt>
       ) : accountsQuery.data?.reason === 'not_registered' || accountsQuery.data?.unavailable ? (
-        <SettingsSubsection scope="personal" title="Connection">
+        <SettingsSubsection scope="personal" title={t('slack.connection')}>
           <SlackNotConfigured />
         </SettingsSubsection>
       ) : accounts.length === 0 ? (
-        <SettingsSubsection scope="personal" title="Connection">
+        <SettingsSubsection scope="personal" title={t('slack.connection')}>
           <SettingsContainer>
             <button
               type="button"
@@ -135,7 +153,7 @@ export function SlackConnectionSettings() {
             >
               <SettingsRow
                 label="Slack"
-                description={canConnect ? 'Not connected' : 'Slack connection is not configured'}
+                description={canConnect ? t('slack.notConnected') : t('slack.notConfigured')}
               >
                 <Txt
                   as="span"
@@ -143,7 +161,7 @@ export function SlackConnectionSettings() {
                   tone="muted"
                   className="group-hover:text-foreground flex items-center gap-2"
                 >
-                  Connect Slack
+                  {t('slack.connect')}
                   <ChevronRight aria-hidden="true" />
                 </Txt>
               </SettingsRow>
@@ -152,7 +170,7 @@ export function SlackConnectionSettings() {
         </SettingsSubsection>
       ) : (
         <div className="flex flex-col gap-8">
-          <SettingsSubsection scope="personal" title={accounts.length === 1 ? 'Connection' : 'Connections'}>
+          <SettingsSubsection scope="personal" title={accounts.length === 1 ? t('slack.connection') : t('slack.connections')}>
             <div className="flex flex-col gap-4">
               {accounts.map(account => (
                 <SettingsContainer key={`${account.externalTeamId}:${account.externalUserId}`}>
@@ -160,21 +178,21 @@ export function SlackConnectionSettings() {
                     label={
                       <span className="flex items-center gap-1.5">
                         <IdentityWithTooltip
-                          label={account.externalTeamName ?? 'Slack workspace'}
-                          idLabel="Workspace ID"
+                          label={account.externalTeamName ?? t('slack.workspace')}
+                          idLabel={t('slack.workspaceId')}
                           id={account.externalTeamId}
                         />
                         <span aria-hidden="true">·</span>
                         <IdentityWithTooltip
                           label={account.externalUserName ?? account.externalUserId}
-                          idLabel="Slack user ID"
+                          idLabel={t('slack.userId')}
                           id={account.externalUserId}
                         />
                       </span>
                     }
                     description={
                       <Txt tone="faint" as="span" variant="meta">
-                        Connected {linkedDateFormatter.format(new Date(account.linkedAt))}
+                        {t('slack.connectedAt', { date: formatLinkedDate(account.linkedAt) })}
                       </Txt>
                     }
                   />
@@ -183,17 +201,17 @@ export function SlackConnectionSettings() {
             </div>
           </SettingsSubsection>
 
-          <SettingsSubsection scope="personal" title="Session behavior">
+          <SettingsSubsection scope="personal" title={t('slack.sessionBehavior')}>
             <SettingsContainer>
               {accounts.map(account => (
                 <SettingsRow
                   key={`${account.externalTeamId}:${account.externalUserId}`}
                   label={
                     accounts.length > 1
-                      ? `Default factory for ${account.externalUserName ?? account.externalUserId}`
-                      : 'Default factory'
+                      ? t('slack.defaultFactoryFor', { user: account.externalUserName ?? account.externalUserId })
+                      : t('slack.defaultFactory')
                   }
-                  description="New Slack sessions are routed to this Factory."
+                  description={t('slack.defaultFactoryDescription')}
                 >
                   <Select
                     value={account.defaultFactoryProjectId ?? ''}
@@ -202,12 +220,12 @@ export function SlackConnectionSettings() {
                   >
                     <SelectTrigger
                       size="sm"
-                      aria-label={`Default factory for ${account.externalUserName ?? account.externalUserId}`}
+                      aria-label={t('slack.defaultFactoryFor', { user: account.externalUserName ?? account.externalUserId })}
                       className="w-auto"
                     >
                       <Txt as="span" variant="caption">
                         {factories.find(factory => factory.id === account.defaultFactoryProjectId)?.name ??
-                          'Set default factory'}
+                          t('slack.setDefaultFactory')}
                       </Txt>
                     </SelectTrigger>
                     <SelectContent>
@@ -223,33 +241,31 @@ export function SlackConnectionSettings() {
             </SettingsContainer>
           </SettingsSubsection>
 
-          <SettingsSubsection scope="personal" title="Danger zone">
+          <SettingsSubsection scope="personal" title={t('slack.dangerZone')}>
             <SettingsContainer>
               {accounts.map(account => (
                 <SettingsRow
                   key={`${account.externalTeamId}:${account.externalUserId}`}
-                  label="Disconnect Slack"
+                  label={t('slack.disconnectTitle')}
                   description={
                     <span>
-                      Slack messages from{' '}
-                      <Txt as="strong" variant="label">
-                        <IdentityWithTooltip
-                          label={account.externalUserName ?? account.externalUserId}
-                          idLabel="Slack user ID"
-                          id={account.externalUserId}
-                        />
-                      </Txt>{' '}
-                      will no longer start or continue Factory sessions.
+                      <Trans
+                        t={t}
+                        i18nKey="slack.disconnectDescription"
+                        components={{
+                          user: <SlackUserIdentity account={account} />,
+                        }}
+                      />
                     </span>
                   }
                 >
                   <Button
                     size="sm"
-                    aria-label={`Disconnect ${account.externalUserName ?? account.externalUserId}`}
+                    aria-label={t('slack.disconnectUser', { user: account.externalUserName ?? account.externalUserId })}
                     disabled={disconnectMutation.isPending}
                     onClick={() => disconnect(account)}
                   >
-                    {disconnectMutation.isPending ? 'Disconnecting…' : 'Disconnect'}
+                    {disconnectMutation.isPending ? t('slack.disconnecting') : t('slack.disconnect')}
                   </Button>
                 </SettingsRow>
               ))}

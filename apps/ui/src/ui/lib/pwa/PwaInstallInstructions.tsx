@@ -12,10 +12,19 @@ import type { ReactNode } from 'react';
 
 import type { IosBrowser } from './platform';
 import { detectIosBrowser } from './platform';
+import { Trans, useTranslation } from 'react-i18next';
 
 interface PwaInstallInstructionsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+const emphasis = { em: <Txt as="span" variant="label" tone="ink" /> };
+
+type StepKey = 'chromeShare' | 'menuShare' | 'safariShare' | 'addToHomeScreen' | 'confirmAdd';
+
+function StepLabel({ i18nKey }: { i18nKey: `pwa.steps.${StepKey}` }) {
+  return <Trans ns="app" i18nKey={i18nKey} components={emphasis} />;
 }
 
 /** Where the share menu lives differs per iOS browser. */
@@ -24,86 +33,50 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
     case 'chrome':
       return {
         icon: <Share className="size-4" aria-hidden="true" />,
-        label: (
-          <>
-            Tap the{' '}
-            <Txt as="span" variant="label" tone="ink">
-              Share
-            </Txt>{' '}
-            button in Chrome&rsquo;s address bar
-          </>
-        ),
+        label: <StepLabel i18nKey="pwa.steps.chromeShare" />,
       };
     case 'firefox':
     case 'edge':
     case 'opera':
       return {
         icon: <Menu className="size-4" aria-hidden="true" />,
-        label: (
-          <>
-            Open the browser menu and tap{' '}
-            <Txt as="span" variant="label" tone="ink">
-              Share
-            </Txt>
-          </>
-        ),
+        label: <StepLabel i18nKey="pwa.steps.menuShare" />,
       };
     case 'safari':
       return {
         icon: <Share className="size-4" aria-hidden="true" />,
-        label: (
-          <>
-            Tap the{' '}
-            <Txt as="span" variant="label" tone="ink">
-              Share
-            </Txt>{' '}
-            button in Safari&rsquo;s toolbar
-          </>
-        ),
+        label: <StepLabel i18nKey="pwa.steps.safariShare" />,
       };
   }
 }
 
+// Labels are components, so they render (and translate) at render time.
 const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
   {
     icon: <SquarePlus className="size-4" aria-hidden="true" />,
-    label: (
-      <>
-        Scroll down and tap{' '}
-        <Txt as="span" variant="label" tone="ink">
-          Add to Home Screen
-        </Txt>
-      </>
-    ),
+    label: <StepLabel i18nKey="pwa.steps.addToHomeScreen" />,
   },
   {
     icon: <Smartphone className="size-4" aria-hidden="true" />,
-    label: (
-      <>
-        Tap{' '}
-        <Txt as="span" variant="label" tone="ink">
-          Add
-        </Txt>{' '}
-        to install the app
-      </>
-    ),
+    label: <StepLabel i18nKey="pwa.steps.confirmAdd" />,
   },
 ];
 
 /** iOS/iPadOS has no install prompt; walk the user through Add to Home Screen. */
 export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstructionsProps) {
+  const { t } = useTranslation('app');
   const steps = [shareStep(detectIosBrowser() ?? 'safari'), ...commonSteps];
   return (
     <Drawer open={open} onOpenChange={onOpenChange} side="bottom">
-      <DrawerContent aria-label="Install this app">
+      <DrawerContent aria-label={t('pwa.instructionsTitle')}>
         <DrawerHeader>
           <div className="flex items-center gap-3">
             <div className="border-border bg-fill text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg border">
               <Smartphone className="size-5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
-              <DrawerTitle>Install this app</DrawerTitle>
-              <DrawerDescription>Add it to your home screen in three steps</DrawerDescription>
+              <DrawerTitle>{t('pwa.instructionsTitle')}</DrawerTitle>
+              <DrawerDescription>{t('pwa.instructionsDescription')}</DrawerDescription>
             </div>
           </div>
         </DrawerHeader>

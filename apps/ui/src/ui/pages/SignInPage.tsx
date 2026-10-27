@@ -21,6 +21,7 @@ import {
 import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
 import { AuthPendingSkeleton } from '../domains/auth/components/RootGuards';
 import '../domains/auth/components/sign-in-page.css';
+import { useTranslation } from 'react-i18next';
 
 // Browsers can normalize backslashes into cross-origin redirects.
 export function safeReturnTo(raw?: string): string {
@@ -35,15 +36,14 @@ export function safeReturnTo(raw?: string): string {
 }
 
 function CustomDomainAuthError({ hostname }: { hostname: string }) {
+  const { t } = useTranslation('auth');
   return (
     <div role="alert" className="border-destructive-edge bg-card rounded-lg border px-4 py-3">
       <Txt as="h2" variant="subheading" className="text-destructive-foreground">
-        Mastra Platform sign-in isn&apos;t available on custom domains
+        {t('customDomain.title')}
       </Txt>
       <Txt as="p" variant="caption" tone="muted" className="mt-2">
-        This Factory is served from {hostname}. Mastra Platform authentication only works on Mastra-hosted domains
-        (*.mastra.cloud). To use a custom domain, configure your own auth provider — for example WorkOS (WORKOS_API_KEY
-        + WORKOS_CLIENT_ID) or Better Auth — and redeploy.
+        {t('customDomain.body', { hostname })}
       </Txt>
       <Txt as="p" variant="caption" tone="muted" className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
         <a
@@ -52,7 +52,7 @@ function CustomDomainAuthError({ hostname }: { hostname: string }) {
           rel="noreferrer"
           className="text-foreground hover:underline"
         >
-          Auth overview
+          {t('customDomain.authOverview')}
         </a>
         <a
           href="https://mastra.ai/integrations/auth/workos"
@@ -60,7 +60,7 @@ function CustomDomainAuthError({ hostname }: { hostname: string }) {
           rel="noreferrer"
           className="text-foreground hover:underline"
         >
-          WorkOS integration
+          {t('customDomain.workosIntegration')}
         </a>
       </Txt>
     </div>
@@ -68,6 +68,7 @@ function CustomDomainAuthError({ hostname }: { hostname: string }) {
 }
 
 function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; signUpDisabled: boolean }) {
+  const { t } = useTranslation('auth');
   const { baseUrl } = useApiConfig();
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [name, setName] = useState('');
@@ -88,7 +89,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
       }
       navigateAfterSignIn(returnTo);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed');
+      setError(err instanceof Error ? err.message : t('errors.authenticationFailed'));
       setPending(false);
     }
   };
@@ -97,7 +98,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
     <Form onSubmit={handleSubmit} className="w-full gap-5">
       {mode === 'sign-up' ? (
         <Field>
-          <FieldLabel>Name</FieldLabel>
+          <FieldLabel>{t('form.name')}</FieldLabel>
           <Input
             type="text"
             size="lg"
@@ -111,7 +112,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
         </Field>
       ) : null}
       <Field>
-        <FieldLabel>Email</FieldLabel>
+        <FieldLabel>{t('form.email')}</FieldLabel>
         <Input
           type="email"
           size="lg"
@@ -124,11 +125,11 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
         <FieldError />
       </Field>
       <Field>
-        <FieldLabel>Password</FieldLabel>
+        <FieldLabel>{t('form.password')}</FieldLabel>
         <Input
           type="password"
           size="lg"
-          placeholder="Enter your password"
+          placeholder={t('form.passwordPlaceholder')}
           autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'}
           required
           value={password}
@@ -142,7 +143,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
         </Txt>
       ) : null}
       <Button type="submit" variant="primary" size="lg" className="w-full" disabled={pending}>
-        {pending ? 'Please wait…' : mode === 'sign-up' ? 'Create account' : 'Sign in'}
+        {pending ? t('form.pending') : mode === 'sign-up' ? t('form.createAccount') : t('form.signIn')}
       </Button>
       {!signUpDisabled ? (
         <Button
@@ -155,11 +156,11 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
             setMode(mode === 'sign-up' ? 'sign-in' : 'sign-up');
           }}
         >
-          {mode === 'sign-up' ? 'Have an account? Sign in' : 'New here? Sign up'}
+          {mode === 'sign-up' ? t('form.haveAccount') : t('form.newHere')}
         </Button>
       ) : (
         <Txt as="p" variant="caption" tone="muted" className="text-center">
-          Account creation is managed by your administrator.
+          {t('form.signUpDisabled')}
         </Txt>
       )}
     </Form>
@@ -167,6 +168,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
 }
 
 export function SignInPage() {
+  const { t } = useTranslation('auth');
   const { baseUrl } = useApiConfig();
   const auth = useFactoryAuth({ monitorSession: true });
   const [searchParams] = useSearchParams();
@@ -182,8 +184,8 @@ export function SignInPage() {
     (auth.data?.customDomainUnsupported === true ||
       authError === CUSTOM_DOMAIN_UNSUPPORTED_ERROR ||
       !isPlatformAuthSupportedHost(window.location.hostname));
-  const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
-  const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
+  const hostedLoginLabel = studioAuth ? t('hosted.mastraPlatform') : t('hosted.github');
+  const hostedLoginPendingLabel = studioAuth ? t('hosted.openingMastraPlatform') : t('hosted.openingGithub');
 
   // A cached signed-in result may predate the redirect here. Check the cookie
   // again before sending the user back into the protected app.
@@ -199,18 +201,17 @@ export function SignInPage() {
       <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
         <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
           <Txt as="h1" variant="hero" className="max-w-xl text-balance">
-            Build with an agent factory
+            {t('hero.title')}
           </Txt>
           <Txt as="p" variant="lead" tone="muted" className="mt-6 max-w-lg">
-            Turn a repository into a working factory. Agents pick up scoped work, collaborate, and ship changes you can
-            review.
+            {t('hero.lead')}
           </Txt>
 
-          <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
+          <section aria-label={t('section')} className="mt-10 w-full max-w-md lg:mt-12">
             {authError && !customDomainBlocked ? (
               <div role="alert" className="border-destructive-edge bg-card mb-6 rounded-lg border px-4 py-3">
                 <Txt as="p" variant="subheading" className="text-destructive-foreground">
-                  {accessDenied ? 'Access denied' : 'Sign-in failed'}
+                  {accessDenied ? t('failure.accessDenied') : t('failure.signInFailed')}
                 </Txt>
                 {authErrorDescription ? (
                   <Txt as="p" variant="caption" tone="muted" className="mt-1">
@@ -219,7 +220,7 @@ export function SignInPage() {
                 ) : null}
                 {accessDenied ? (
                   <Txt as="p" variant="caption" tone="muted" className="mt-1">
-                    Ask an organization admin to add your account, then sign in again.
+                    {t('failure.askAdmin')}
                   </Txt>
                 ) : null}
               </div>
@@ -227,10 +228,10 @@ export function SignInPage() {
             {auth.isError ? (
               <div role="alert" className="space-y-3">
                 <Txt as="p" variant="body" tone="muted">
-                  Unable to check your sign-in status. Check your connection and try again.
+                  {t('failure.statusUnavailable')}
                 </Txt>
                 <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
-                  Try again
+                  {t('failure.tryAgain')}
                 </Button>
               </div>
             ) : customDomainBlocked ? (
@@ -239,10 +240,10 @@ export function SignInPage() {
               <>
                 <div className="mb-6">
                   <Txt font="display" as="h2" variant="title">
-                    Welcome back
+                    {t('welcome.title')}
                   </Txt>
                   <Txt as="p" variant="body" tone="muted" className="mt-2">
-                    Sign in to continue building with your team.
+                    {t('welcome.description')}
                   </Txt>
                 </div>
                 <CredentialSignInForm returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />

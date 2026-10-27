@@ -1,1 +1,59 @@
-{}
+{
+  "button": "Search and navigate",
+  "dialog": {
+    "title": "Global search",
+    "description": "Search navigation, Factories, work sessions, review sessions, and user sessions.",
+    "commandLabel": "Search MastraCode"
+  },
+  "input": {
+    "placeholder": "Search sessions, reviews, #issues, pages, and Factories…"
+  },
+  "results": "Search results",
+  "footer": "Factory search",
+  "empty": "No matching results.",
+  "sessionStartFailed": "The session could not be started.",
+  "categories": "Search categories",
+  "scopes": {
+    "all": "All",
+    "navigation": "Navigation",
+    "work": "Work Sessions",
+    "review": "Review Sessions",
+    "items": "Work Items",
+    "user": "User Sessions",
+    "factories": "Factories"
+  },
+  "navigation": {
+    "work": "Work",
+    "review": "Review",
+    "activity": "Activity",
+    "rules": "Rules",
+    "auditLog": "Audit log",
+    "knowledge": "Knowledge"
+  },
+  "subtitles": {
+    "factory": "Factory navigation",
+    "settings": "Settings",
+    "factorySettings": "Factory settings",
+    "yourSettings": "Your settings"
+  },
+  "factories": {
+    "noRepositories": "No repositories linked",
+    "current": "Current"
+  },
+  "context": {
+    "workSession": "Work session · {{branch}}",
+    "reviewSession": "Review session · {{branch}}",
+    "userSession": "User session",
+    "userSessionOnBranch": "User session · {{branch}}",
+    "notStarted": "{{source}} · {{stage}} · not started",
+    "notFiled": "{{source}} · {{stage}} · not filed"
+  },
+  "status": {
+    "loadingSessions": "Loading sessions",
+    "retry": "Retry",
+    "sessionsFailed": "Sessions could not be loaded.",
+    "intakeFailed": "Intake could not be loaded.",
+    "boardFailed": "Board cards could not be loaded. Sessions still show, titled by branch.",
+    "boardAndIntakeFailed": "Board cards and intake could not be loaded. Sessions still show, titled by branch."
+  }
+}

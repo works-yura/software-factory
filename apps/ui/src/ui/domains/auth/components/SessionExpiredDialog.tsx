@@ -1,22 +1,21 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { useNavigate } from 'react-router';
+import { useTranslation } from 'react-i18next';
 
 export function SessionExpiredDialog({ returnTo }: { returnTo: string }) {
+  const { t } = useTranslation('auth');
   const navigate = useNavigate();
 
   return (
     <AlertDialog open>
       <AlertDialog.Content>
         <AlertDialog.Header>
-          <AlertDialog.Title>Session expired</AlertDialog.Title>
-          <AlertDialog.Description>
-            You’re no longer signed in. Factory has stopped receiving updates. Sign in again to continue where you left
-            off.
-          </AlertDialog.Description>
+          <AlertDialog.Title>{t('sessionExpired.title')}</AlertDialog.Title>
+          <AlertDialog.Description>{t('sessionExpired.description')}</AlertDialog.Description>
         </AlertDialog.Header>
         <AlertDialog.Footer>
           <AlertDialog.Action onClick={() => void navigate(`/signin?returnTo=${encodeURIComponent(returnTo)}`)}>
-            Sign in again
+            {t('sessionExpired.signInAgain')}
           </AlertDialog.Action>
         </AlertDialog.Footer>
       </AlertDialog.Content>

@@ -1,3 +1,6 @@
+import { translator } from '../../../i18n/t';
+
+const tk = translator('auth');
 /**
  * Client-side glue for the optional web auth gate (see src/web/auth.ts).
  *
@@ -82,7 +85,7 @@ async function postBetterAuthCredentials(baseUrl: string, path: string, body: Re
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    let message = 'Authentication failed';
+    let message = tk('errors.authenticationFailed');
     try {
       const data = (await res.json()) as { message?: string };
       if (data?.message) message = data.message;
@@ -128,7 +131,7 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
     return { authEnabled: true, authenticated: false };
   }
   if (!res.ok) {
-    throw new Error(`Auth check failed (${res.status})`);
+    throw new Error(tk('errors.authCheckFailed', { status: res.status }));
   }
   const data = (await res.json()) as {
     authenticated?: boolean;

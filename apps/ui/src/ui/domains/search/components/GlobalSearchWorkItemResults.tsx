@@ -3,6 +3,9 @@ import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPale
 import { Ticket } from 'lucide-react';
 
 import type { WorkItemSearchResult } from '../services/searchResults';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('search');
 
 export function GlobalSearchWorkItemResults({
   results,
@@ -14,7 +17,7 @@ export function GlobalSearchWorkItemResults({
   if (results.length === 0) return null;
 
   return (
-    <CommandGroup heading="Work Items">
+    <CommandGroup heading={tk('scopes.items')}>
       {results.map(result => (
         <CommandPaletteItem
           key={result.id}

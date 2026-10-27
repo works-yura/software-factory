@@ -10,6 +10,9 @@ import { createAgentControllerClient } from '../ui/domains/chat/services/agentCo
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { useSwitchAgentControllerThreadMutation } from './useAgentControllerThreadMutations';
 import { useAgentControllerThreads } from './useAgentControllerThreads';
+import { translator } from '../ui/i18n/t';
+
+const tk = translator('app');
 
 export function useRouteThreadSync() {
   const { sessionId, threadTags, sessionEnabled, resourceReady, baseUrl } = useChatSessionContext();
@@ -75,7 +78,7 @@ export function useRouteThreadSync() {
         return;
       }
 
-      const message = `Failed to switch thread: thread ${targetThreadId} was not found`;
+      const message = tk('errors.threadNotFound', { threadId: targetThreadId });
       pushNotice(message, 'error');
       void navigate(`/factories/${factoryId}/new`, { replace: true, state: { routeErrorNotice: message } });
       return;
@@ -83,7 +86,7 @@ export function useRouteThreadSync() {
 
     void switchThreadMutation.mutateAsync(targetThreadId).catch(err => {
       if (!isLatestRequest()) return;
-      const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
+      const message = tk('errors.switchThreadFailed', { reason: err instanceof Error ? err.message : String(err) });
       pushNotice(message, 'error');
       void navigate(`/factories/${factoryId}/new`, { replace: true, state: { routeErrorNotice: message } });
     });

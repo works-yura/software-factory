@@ -1,1 +1,59 @@
-{}
+{
+  "button": "Пошук і навігація",
+  "dialog": {
+    "title": "Глобальний пошук",
+    "description": "Пошук розділів, Factory, робочих сесій, сесій рев’ю та сесій користувача.",
+    "commandLabel": "Пошук у MastraCode"
+  },
+  "input": {
+    "placeholder": "Шукайте сесії, рев’ю, #задачі, сторінки та Factory…"
+  },
+  "results": "Результати пошуку",
+  "footer": "Пошук у Factory",
+  "empty": "Нічого не знайдено.",
+  "sessionStartFailed": "Не вдалося почати сесію.",
+  "categories": "Категорії пошуку",
+  "scopes": {
+    "all": "Усе",
+    "navigation": "Навігація",
+    "work": "Робочі сесії",
+    "review": "Сесії рев’ю",
+    "items": "Картки",
+    "user": "Сесії користувача",
+    "factories": "Factory"
+  },
+  "navigation": {
+    "work": "Робота",
+    "review": "Рев’ю коду",
+    "activity": "Активність",
+    "rules": "Правила",
+    "auditLog": "Журнал аудиту",
+    "knowledge": "Знання"
+  },
+  "subtitles": {
+    "factory": "Навігація Factory",
+    "settings": "Налаштування",
+    "factorySettings": "Налаштування Factory",
+    "yourSettings": "Ваші налаштування"
+  },
+  "factories": {
+    "noRepositories": "Репозиторії не під’єднано",
+    "current": "Поточна"
+  },
+  "context": {
+    "workSession": "Робоча сесія · {{branch}}",
+    "reviewSession": "Сесія рев’ю · {{branch}}",
+    "userSession": "Сесія користувача",
+    "userSessionOnBranch": "Сесія користувача · {{branch}}",
+    "notStarted": "{{source}} · {{stage}} · не розпочато",
+    "notFiled": "{{source}} · {{stage}} · ще не на дошці"
+  },
+  "status": {
+    "loadingSessions": "Завантаження сесій",
+    "retry": "Повторити",
+    "sessionsFailed": "Не вдалося завантажити сесії.",
+    "intakeFailed": "Не вдалося завантажити вхідні задачі.",
+    "boardFailed": "Не вдалося завантажити картки дошки. Сесії все одно показано, але з назвами гілок.",
+    "boardAndIntakeFailed": "Не вдалося завантажити картки дошки та вхідні задачі. Сесії все одно показано, але з назвами гілок."
+  }
+}

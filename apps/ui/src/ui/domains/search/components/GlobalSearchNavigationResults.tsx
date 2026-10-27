@@ -6,6 +6,17 @@ import { everyEventPath } from '../../factory/activity';
 import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
+import { useTranslation } from 'react-i18next';
+
+import { currentLanguage } from '../../../i18n';
+
+/**
+ * Command-palette match text. Outside English, the shown (translated) title and
+ * subtitle lead, and the English keywords stay so either language finds the page.
+ */
+function searchValue(title: string, subtitle: string, keywords: string): string {
+  return currentLanguage() === 'en' ? keywords : `${title} ${subtitle} ${keywords}`;
+}
 
 export function GlobalSearchNavigationResults({
   factoryId,
@@ -14,118 +25,119 @@ export function GlobalSearchNavigationResults({
   factoryId: string;
   onSelect: GlobalSearchSelectHandler;
 }) {
+  const { t } = useTranslation('search');
   return (
-    <CommandGroup heading="Navigation">
+    <CommandGroup heading={t('scopes.navigation')}>
       <CommandPaletteItem
         icon={<SquareKanban />}
-        title="Work"
-        subtitle="Factory navigation"
-        value={`Work Factory navigation /factories/${factoryId}/work`}
+        title={t('navigation.work')}
+        subtitle={t('subtitles.factory')}
+        value={searchValue(t('navigation.work'), t('subtitles.factory'), `Work Factory navigation /factories/${factoryId}/work`)}
         onSelect={() => onSelect(rememberedBoardPath(factoryId, 'work'), false)}
       />
       <CommandPaletteItem
         icon={<GitPullRequest />}
-        title="Review"
-        subtitle="Factory navigation"
-        value={`Review Factory navigation /factories/${factoryId}/review`}
+        title={t('navigation.review')}
+        subtitle={t('subtitles.factory')}
+        value={searchValue(t('navigation.review'), t('subtitles.factory'), `Review Factory navigation /factories/${factoryId}/review`)}
         onSelect={() => onSelect(rememberedBoardPath(factoryId, 'review'), false)}
       />
       <CommandPaletteItem
         icon={<Timeline />}
-        title="Activity"
-        subtitle="Factory navigation"
-        value={`Activity Factory navigation needs attention overview /factories/${factoryId}/activity`}
+        title={t('navigation.activity')}
+        subtitle={t('subtitles.factory')}
+        value={searchValue(t('navigation.activity'), t('subtitles.factory'), `Activity Factory navigation needs attention overview /factories/${factoryId}/activity`)}
         onSelect={() => onSelect(`/factories/${factoryId}/activity`, false)}
       />
       <CommandPaletteItem
         icon={<ListChecks />}
-        title="Rules"
-        subtitle="Factory navigation"
-        value={`Rules Factory navigation /factories/${factoryId}/rules`}
+        title={t('navigation.rules')}
+        subtitle={t('subtitles.factory')}
+        value={searchValue(t('navigation.rules'), t('subtitles.factory'), `Rules Factory navigation /factories/${factoryId}/rules`)}
         onSelect={() => onSelect(`/factories/${factoryId}/rules`, false)}
       />
       <CommandPaletteItem
         icon={<ScrollText />}
-        title="Audit log"
-        subtitle="Factory navigation"
-        value={`Audit log every event Activity Factory navigation ${everyEventPath(factoryId)}`}
+        title={t('navigation.auditLog')}
+        subtitle={t('subtitles.factory')}
+        value={searchValue(t('navigation.auditLog'), t('subtitles.factory'), `Audit log every event Activity Factory navigation ${everyEventPath(factoryId)}`)}
         onSelect={() => onSelect(everyEventPath(factoryId), false)}
       />
       <CommandPaletteItem
         icon={<Brain />}
-        title="Knowledge"
-        subtitle="Factory navigation"
-        value={`Knowledge Factory navigation /factories/${factoryId}/knowledge`}
+        title={t('navigation.knowledge')}
+        subtitle={t('subtitles.factory')}
+        value={searchValue(t('navigation.knowledge'), t('subtitles.factory'), `Knowledge Factory navigation /factories/${factoryId}/knowledge`)}
         onSelect={() => onSelect(`/factories/${factoryId}/knowledge`, false)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.preferences}
-        subtitle="Settings"
-        value={`Preferences Settings preferences ${settingsSectionPath(factoryId, 'preferences')}`}
+        subtitle={t('subtitles.settings')}
+        value={searchValue(SETTINGS_SECTION_LABELS.preferences, t('subtitles.settings'), `Preferences Settings preferences ${settingsSectionPath(factoryId, 'preferences')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'preferences'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.factory}
-        subtitle="Settings"
-        value={`Factory Settings factory ${settingsSectionPath(factoryId, 'factory')}`}
+        subtitle={t('subtitles.settings')}
+        value={searchValue(SETTINGS_SECTION_LABELS.factory, t('subtitles.settings'), `Factory Settings factory ${settingsSectionPath(factoryId, 'factory')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'factory'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.connections}
-        subtitle="Settings"
-        value={`Connections Settings connections ${settingsSectionPath(factoryId, 'connections')}`}
+        subtitle={t('subtitles.settings')}
+        value={searchValue(SETTINGS_SECTION_LABELS.connections, t('subtitles.settings'), `Connections Settings connections ${settingsSectionPath(factoryId, 'connections')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'connections'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.repositories}
-        subtitle="Settings"
-        value={`Repositories Settings repositories ${settingsSectionPath(factoryId, 'repositories')}`}
+        subtitle={t('subtitles.settings')}
+        value={searchValue(SETTINGS_SECTION_LABELS.repositories, t('subtitles.settings'), `Repositories Settings repositories ${settingsSectionPath(factoryId, 'repositories')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'repositories'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.intake}
-        subtitle="Settings"
-        value={`Work Intake Settings intake ${settingsSectionPath(factoryId, 'intake')}`}
+        subtitle={t('subtitles.settings')}
+        value={searchValue(SETTINGS_SECTION_LABELS.intake, t('subtitles.settings'), `Work Intake Settings intake ${settingsSectionPath(factoryId, 'intake')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'intake'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.models}
-        subtitle="Factory settings"
-        value={`Factory Models Settings models ${settingsSectionPath(factoryId, 'models')}`}
+        subtitle={t('subtitles.factorySettings')}
+        value={searchValue(SETTINGS_SECTION_LABELS.models, t('subtitles.factorySettings'), `Factory Models Settings models ${settingsSectionPath(factoryId, 'models')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'models'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS['personal-models']}
-        subtitle="Your settings"
-        value={`Your personal Models Settings ${settingsSectionPath(factoryId, 'personal-models')}`}
+        subtitle={t('subtitles.yourSettings')}
+        value={searchValue(SETTINGS_SECTION_LABELS['personal-models'], t('subtitles.yourSettings'), `Your personal Models Settings ${settingsSectionPath(factoryId, 'personal-models')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'personal-models'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.memory}
-        subtitle="Your settings"
-        value={`Your personal Memory Settings memory observational ${settingsSectionPath(factoryId, 'memory')}`}
+        subtitle={t('subtitles.yourSettings')}
+        value={searchValue(SETTINGS_SECTION_LABELS.memory, t('subtitles.yourSettings'), `Your personal Memory Settings memory observational ${settingsSectionPath(factoryId, 'memory')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'memory'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS['factory-memory']}
-        subtitle="Factory settings"
-        value={`Factory Memory Settings memory observational ${settingsSectionPath(factoryId, 'factory-memory')}`}
+        subtitle={t('subtitles.factorySettings')}
+        value={searchValue(SETTINGS_SECTION_LABELS['factory-memory'], t('subtitles.factorySettings'), `Factory Memory Settings memory observational ${settingsSectionPath(factoryId, 'factory-memory')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'factory-memory'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.behavior}
-        subtitle="Settings"
-        value={`Behavior Settings behavior ${settingsSectionPath(factoryId, 'behavior')}`}
+        subtitle={t('subtitles.settings')}
+        value={searchValue(SETTINGS_SECTION_LABELS.behavior, t('subtitles.settings'), `Behavior Settings behavior ${settingsSectionPath(factoryId, 'behavior')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'behavior'), true)}
       />
     </CommandGroup>

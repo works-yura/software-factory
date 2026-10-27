@@ -27,11 +27,13 @@ import { chatColumnClass, DOCK_MIN_REM, threadGeometryClass } from '../domains/w
 import '../domains/chat/components/chat-enter.css';
 import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { ShieldCheck } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export function SupervisorPage() {
   const { factoryId } = useParams<{ factoryId: string }>();
+  const { t } = useTranslation('supervisor');
   const factoryQuery = useFactoryQuery(factoryId);
-  useDocumentTitle(factoryQuery.data ? `Supervisor · ${factoryQuery.data.name}` : 'Supervisor');
+  useDocumentTitle(factoryQuery.data ? t('documentTitle', { factory: factoryQuery.data.name }) : t('title'));
   const { sessionThreadId } = useChatSessionContext();
 
   return (
@@ -47,24 +49,31 @@ export function SupervisorPage() {
   );
 }
 
-const supervisorCrumb = (
-  <Crumb as="span" isCurrent icon={<ShieldCheck />}>
-    Supervisor
-  </Crumb>
-);
+function SupervisorCrumb() {
+  const { t } = useTranslation('supervisor');
+  return (
+    <Crumb as="span" isCurrent icon={<ShieldCheck />}>
+      {t('title')}
+    </Crumb>
+  );
+}
+
+const supervisorCrumb = <SupervisorCrumb />;
 
 function ResolvingSupervisorMain() {
+  const { t } = useTranslation('supervisor');
   return (
     <ChatPageLayout crumbs={supervisorCrumb}>
       <SessionFavicon state="initializing" />
       <div className="grid min-h-0 place-items-center">
-        <Spinner aria-label="Loading supervisor" className="text-muted-foreground" />
+        <Spinner aria-label={t('loading')} className="text-muted-foreground" />
       </div>
     </ChatPageLayout>
   );
 }
 
 function SupervisorMain({ factoryProjectId }: { factoryProjectId: string | undefined }) {
+  const { t } = useTranslation('supervisor');
   useGlobalShortcuts();
   useHandoffPrompt();
   useAskParam();
@@ -79,7 +88,7 @@ function SupervisorMain({ factoryProjectId }: { factoryProjectId: string | undef
 
   const healthError = health.isError ? (
     <Txt variant="caption" className="text-destructive-foreground px-3 py-2">
-      Couldn't run the health check: {health.error.message}
+      {t('healthCheckFailed', { reason: health.error.message })}
     </Txt>
   ) : undefined;
   const findingsSurface = (
@@ -111,7 +120,7 @@ function SupervisorMain({ factoryProjectId }: { factoryProjectId: string | undef
         <SessionChatSurface
           secondaryBar={healthError}
           emptyState={<SupervisorEmptyState />}
-          composerLabel="Supervisor composer"
+          composerLabel={t('composer')}
           className={cn(
             chatColumnClass,
             '[--chat-gutter:0.25rem]',
@@ -140,6 +149,7 @@ function useAskParam() {
 }
 
 function SupervisorEmptyState() {
+  const { t } = useTranslation('supervisor');
   const { prefillComposer } = useChatCommands();
   return (
     <section
@@ -148,20 +158,20 @@ function SupervisorEmptyState() {
     >
       <Logo size="md" aria-label="Mastra Code" />
       <Txt as="h1" variant="display" tone="ink" id="supervisor-empty-title" className="mt-7 text-balance">
-        What needs your attention?
+        {t('empty.title')}
       </Txt>
       <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
-        Ask why a card is stuck, what changed overnight, or how to safely repair a Factory issue.
+        {t('empty.description')}
       </Txt>
-      <div className="mt-7 flex w-full max-w-2xl flex-wrap justify-center gap-2" aria-label="Suggested prompts">
-        <Button type="button" size="md" onClick={() => prefillComposer('What needs me right now?')}>
-          What needs me?
+      <div className="mt-7 flex w-full max-w-2xl flex-wrap justify-center gap-2" aria-label={t('empty.suggestions')}>
+        <Button type="button" size="md" onClick={() => prefillComposer(t('empty.prompts.needsMe'))}>
+          {t('empty.actions.needsMe')}
         </Button>
-        <Button type="button" size="md" onClick={() => prefillComposer('What is stalled, and why?')}>
-          Explain stalled work
+        <Button type="button" size="md" onClick={() => prefillComposer(t('empty.prompts.stalled'))}>
+          {t('empty.actions.stalled')}
         </Button>
-        <Button type="button" size="md" onClick={() => prefillComposer('What finished overnight?')}>
-          Overnight digest
+        <Button type="button" size="md" onClick={() => prefillComposer(t('empty.prompts.overnight'))}>
+          {t('empty.actions.overnight')}
         </Button>
       </div>
     </section>

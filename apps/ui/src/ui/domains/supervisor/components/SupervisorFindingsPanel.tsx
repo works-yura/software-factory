@@ -12,6 +12,8 @@ import { Link } from 'react-router';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import type { FactoryHealthFinding } from '../services/supervisor';
 import { findingPrompt } from '../services/supervisor';
+import { lazyLabels } from '../../../i18n/lazy';
+import { useTranslation } from 'react-i18next';
 
 interface SupervisorFindingsPanelProps {
   factoryId: string | undefined;
@@ -24,14 +26,16 @@ interface SupervisorFindingsPanelProps {
 
 const MAX_VISIBLE_FINDINGS_PER_GROUP = 5;
 
-const FINDING_LABELS: Record<FactoryHealthFinding['kind'], string> = {
-  'decision-stuck': 'Stuck decisions',
-  'start-stalled': 'Stalled starts',
-  'seat-orphaned': 'Orphaned seats',
-  'seat-missing': 'Missing seats',
-  'held-waiting': 'Held cards waiting',
-  'label-drift': 'Label drift',
-};
+const FINDING_KINDS: readonly FactoryHealthFinding['kind'][] = [
+  'decision-stuck',
+  'start-stalled',
+  'seat-orphaned',
+  'seat-missing',
+  'held-waiting',
+  'label-drift',
+];
+
+const FINDING_LABELS = lazyLabels(FINDING_KINDS, kind => `supervisor:findings.kinds.${kind}`);
 
 function groupFindings(findings: FactoryHealthFinding[]) {
   const groups = new Map<FactoryHealthFinding['kind'], FactoryHealthFinding[]>();
@@ -48,19 +52,20 @@ function FindingsContent({
   findings,
   onAsk,
 }: Pick<SupervisorFindingsPanelProps, 'factoryId' | 'findings' | 'onAsk'>) {
+  const { t } = useTranslation('supervisor');
   const groups = groupFindings(findings);
 
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
       role="region"
-      aria-label="Supervisor findings"
+      aria-label={t('findings.region')}
       data-testid="supervisor-findings-panel"
     >
       <div className="flex shrink-0 items-center gap-2 px-3 py-3">
         <Brain className="size-4" aria-hidden />
         <Txt tone="ink" variant="body">
-          Findings
+          {t('findings.title')}
         </Txt>
         <Badge variant="neutral" size="sm">
           {findings.length}
@@ -71,7 +76,7 @@ function FindingsContent({
         {groups.length === 0 ? (
           <div className="px-2 py-8 text-center">
             <Txt tone="muted" variant="caption">
-              No findings — everything looks healthy.
+              {t('findings.empty')}
             </Txt>
           </div>
         ) : (
@@ -107,7 +112,7 @@ function FindingsContent({
                           )}
                         </div>
                         <Button size="sm" variant="ghost" onClick={() => onAsk(findingPrompt(finding))}>
-                          Ask supervisor
+                          {t('findings.ask')}
                         </Button>
                       </li>
                     ))}
@@ -128,7 +133,7 @@ function FindingsContent({
           )}
         >
           <Txt as="span" variant="caption" className="block">
-            View all in Attention
+            {t('findings.viewAll')}
           </Txt>
         </Link>
       )}
@@ -144,12 +149,13 @@ export function SupervisorFindingsToggle({
   onOpenChange,
   onAsk,
 }: SupervisorFindingsPanelProps) {
+  const { t } = useTranslation('supervisor');
   const button = (
     <Button
       size="icon-sm"
       variant={open ? 'default' : 'ghost'}
-      tooltip={open ? 'Hide supervisor findings' : 'Show supervisor findings'}
-      aria-label="Supervisor findings"
+      tooltip={open ? t('findings.hide') : t('findings.show')}
+      aria-label={t('findings.region')}
       aria-pressed={open}
       onClick={() => onOpenChange(!open)}
     >
