@@ -451,6 +451,8 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
 }
 
 export interface SessionBranchOptions {
+  /** Repository-local authorship configured before setup commands or agent access. */
+  identity?: GitIdentity;
   branch: string;
   baseBranch: string;
   token: string;
@@ -529,6 +531,8 @@ export async function checkoutSessionBranch(
 }
 
 export interface SyncEnvironmentRepositoryOptions {
+  /** Repository-local authorship configured before setup commands or agent access. */
+  identity?: GitIdentity;
   /** The session branch to resume when the remote already carries it. */
   branch: string;
   /** The repository's default branch; new session branches start at its remote tip. */
@@ -565,6 +569,8 @@ export async function syncEnvironmentRepository(
   }
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
   const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+
+  await configureGitIdentity(sandbox, workdir, options.identity ?? {});
 
   const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
   if (current.exitCode !== 0) throw classifyGitFailure(current, 'pull-failed');
@@ -747,6 +753,8 @@ async function checkoutSessionBranchImpl(
     const configured = await execute(sandbox, 'git', ['-C', workdir, 'config', credentialKey, GH_CREDENTIAL_HELPER]);
     if (configured.exitCode !== 0) throw classifyGitFailure(configured, 'pull-failed');
   }
+
+  await configureGitIdentity(sandbox, workdir, options.identity ?? {});
 
   const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
   if (current.exitCode === 0 && current.stdout.trim() === branch) return;

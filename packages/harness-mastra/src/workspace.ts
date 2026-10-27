@@ -639,6 +639,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     const factorySandbox = sandboxConfig;
     const githubProvider = sourceControl.github;
+    const gitIdentity = githubProvider?.gitIdentity ?? { name: user.name, email: user.email };
 
     const storage = sourceControl.storage;
     const projectRepository = session.projectRepositoryId
@@ -1227,6 +1228,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         storage: storage.sessions,
       });
       await checkoutSessionBranch(target, workdir, {
+        identity: gitIdentity,
         branch: session.branch,
         baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
         token,
@@ -1372,6 +1374,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
             const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
               syncEnvironmentRepository(target, entry.dir, {
+                identity: gitIdentity,
                 branch: session.branch,
                 defaultBranch: repo.defaultBranch,
                 token,

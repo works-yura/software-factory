@@ -60,7 +60,7 @@ integrations/github/routes.test.ts	integration-github/src/routes.test.ts
 integrations/github/rules.test.ts	server/src/integrations/github/rules.test.ts
 integrations/github/sandbox-release.test.ts	sandbox/src/github/sandbox-release.test.ts
 integrations/github/sandbox-scenario.test.ts	sandbox/src/github/sandbox-scenario.test.ts
-integrations/github/sandbox.git.test.ts	sandbox/src/github/sandbox.git.test.ts
+integrations/github/sandbox.git.test.ts	sandbox/src/github/sandbox.git.test.ts	+1	git identity matrix ported from upstream ca08ed414a; its provider block lives in integration-github/src/git-identity.git.test.ts
 integrations/github/sandbox.test.ts	sandbox/src/github/sandbox.test.ts
 integrations/github/session-subscriptions.test.ts	integration-github/src/session-subscriptions.test.ts
 integrations/github/stale-reviews.test.ts	integration-github/src/stale-reviews.test.ts
