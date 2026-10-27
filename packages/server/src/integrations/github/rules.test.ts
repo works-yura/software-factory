@@ -3,7 +3,7 @@ import { defineBoard } from '@factory/core';
 import { createBoardRegistry } from '@factory/testing';
 import { createTestBoard } from '@factory/pipelines/testing';
 import { FactoryDecisionDispatcher } from '@factory/testing';
-import { FactoryStartCoordinator } from '@factory/harness-mastra';
+import { createMastraHarness, FactoryStartCoordinator } from '@factory/harness-mastra';
 import { FactoryTransitionService } from '@factory/testing';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
@@ -1007,7 +1007,7 @@ describe('GithubRules', () => {
     const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
-      harness: controller as never,
+      harness: createMastraHarness(controller as never),
       transitionService,
       storage: workItems,
       boards: createBoardRegistry(),
@@ -2487,7 +2487,7 @@ describe('GithubRules', () => {
       data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: prepared.workItemId },
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      harness: controller as never,
+      harness: createMastraHarness(controller as never),
       transitionService,
       storage: workItems,
       boards: createBoardRegistry(),
