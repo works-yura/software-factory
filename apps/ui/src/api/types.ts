@@ -28,15 +28,17 @@ import type {
   DirectoryEntry,
   DirectoryListing,
   WorkspaceChange,
+  WorkspaceChangePatches,
   WorkspaceChanges,
   WorkspaceChangesRepository,
+  WorkspaceChangesScope,
   WorkspaceChangeStatus,
-  WorkspaceDiff,
   WorkspaceFile,
   WorkspaceTreeEntry,
   WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
+  WorkspacePatchOmission,
 } from '@factory/api/fs';
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
@@ -46,15 +48,17 @@ export type {
   DirectoryEntry,
   DirectoryListing,
   WorkspaceChange,
+  WorkspaceChangePatches,
   WorkspaceChanges,
   WorkspaceChangesRepository,
+  WorkspaceChangesScope,
   WorkspaceChangeStatus,
-  WorkspaceDiff,
   WorkspaceFile,
   WorkspaceTreeEntry,
   WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
+  WorkspacePatchOmission,
 };
 
 // ── GET response envelopes ─────────────────────────────────────────────────

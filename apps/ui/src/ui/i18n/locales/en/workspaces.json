@@ -415,14 +415,6 @@
   },
   "changes": {
     "label": "Workspace changes",
-    "diffLabel": "Workspace change diff",
-    "backToChanged": "Back to changed files",
-    "repositoryRoot": "Repository root",
-    "refresh": "Refresh changes",
-    "refreshing": "Refreshing changes",
-    "refreshDiff": "Refresh selected diff",
-    "refreshingDiff": "Refreshing selected diff",
-    "diffTruncated": "Diff truncated at 512 KB.",
     "binary": "Binary",
     "fileCount_one": "{{count}} file",
     "fileCount_other": "{{count}} files",
@@ -442,6 +434,28 @@
       "copied": "Copied",
       "untracked": "Untracked",
       "conflicted": "Conflict"
-    }
+    },
+    "noTextualChanges": "No textual changes.",
+    "renamedFrom": "from",
+    "unreadableRepositories": "Couldn't read changes in {{repositories}}",
+    "diffsUnavailable": "Diffs unavailable: {{error}}",
+    "omitted": {
+      "fileTooLarge": "Diff too large to show",
+      "totalTooLarge": "Too many changes to show"
+    },
+    "diffUnavailable": "Diff unavailable",
+    "layout": {
+      "label": "Diff layout",
+      "unified": "Unified",
+      "split": "Split"
+    },
+    "options": "Changes options",
+    "refreshShort": "Refresh",
+    "scopes": {
+      "branch": "Branch changes",
+      "uncommitted": "Uncommitted changes"
+    },
+    "jumpToFile": "Jump to file",
+    "jumpToFileCount": "Jump to file, {{files}}"
   }
 }
