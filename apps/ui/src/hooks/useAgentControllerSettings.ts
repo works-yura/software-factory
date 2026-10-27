@@ -5,6 +5,9 @@ import {
   createAgentControllerClient,
   requireAgentControllerSession,
 } from '../ui/domains/chat/services/agentControllerClient';
+import { translator } from '../ui/i18n/t';
+
+const tk = translator('app');
 
 interface UseAgentControllerSettingsArgs {
   agentControllerId: string;
@@ -30,7 +33,7 @@ export function useAgentControllerSettings({
     queryKey: queryKeys.agentControllerSettings(agentControllerId, sessionId),
     queryFn: async () => {
       const state = await requireAgentControllerSession(session).state();
-      if (!state.settings) throw new Error('Session settings are unavailable');
+      if (!state.settings) throw new Error(tk('errors.sessionSettingsUnavailable'));
       return state.settings;
     },
     enabled: enabled && Boolean(session),

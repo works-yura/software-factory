@@ -8,6 +8,7 @@ import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { SessionExpiredDialog } from './SessionExpiredDialog';
+import { useTranslation } from 'react-i18next';
 
 export const RootGuards = () => {
   return (
@@ -21,13 +22,14 @@ export const RootGuards = () => {
 
 const AuthGuard = () => {
   const { isPending, isError, data } = useFactoryAuth({ monitorSession: true });
+  const { t } = useTranslation('auth');
   const location = useLocation();
   const [wasSignedIn, setWasSignedIn] = useState(false);
 
   if (data?.authenticated && !wasSignedIn) setWasSignedIn(true);
 
   if (isPending) return <AuthPendingSkeleton />;
-  if (isError && !data) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
+  if (isError && !data) return <AuthPendingSkeleton label={t('guards.serverUnreachable')} />;
   if (!data?.authEnabled) return <AuthNotConfiguredScreen />;
 
   const returnTo = `${location.pathname}${location.search}${location.hash}`;
@@ -44,10 +46,11 @@ const AuthGuard = () => {
 };
 
 const OnboardingGuard = () => {
+  const { t } = useTranslation('auth');
   const pathname = useLocation().pathname;
   const { data: factories, isPending: factoriesPending, isFetching, refetch } = useFactoriesQuery();
 
-  if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
+  if (factoriesPending) return <AuthPendingSkeleton label={t('guards.loadingFactories')} />;
   if (!factories) return <FactoriesUnavailableScreen retrying={isFetching} onRetry={() => void refetch()} />;
   if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
   if (factories.length > 0 && pathname === '/onboarding' && !hasResumableFactoryOnboarding(factories)) {
@@ -63,15 +66,15 @@ const OnboardingGuard = () => {
 };
 
 function AuthNotConfiguredScreen() {
+  const { t } = useTranslation('auth');
   return (
     <div className="bg-sidebar grid h-dvh w-full place-items-center px-6 text-center">
       <div className="max-w-md space-y-3">
         <Txt as="h1" variant="heading" tone="ink">
-          This MastraCode server has no authentication provider configured
+          {t('guards.notConfiguredTitle')}
         </Txt>
         <Txt as="p" variant="body" tone="muted">
-          MastraCode web requires authenticated remote Factories. Configure a supported auth provider on the server,
-          then reload this page.
+          {t('guards.notConfiguredBody')}
         </Txt>
       </div>
     </div>
@@ -79,27 +82,29 @@ function AuthNotConfiguredScreen() {
 }
 
 function FactoriesUnavailableScreen({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
+  const { t } = useTranslation('auth');
   return (
     <div className="bg-sidebar grid h-dvh w-full place-items-center px-6 text-center">
       <div role="alert" className="max-w-md space-y-3">
         <Txt as="h1" variant="heading" tone="ink">
-          Unable to load your factories
+          {t('guards.factoriesUnavailable')}
         </Txt>
         <Txt as="p" variant="body" tone="muted">
-          Try again in a moment.
+          {t('guards.tryAgainLater')}
         </Txt>
         <Button onClick={onRetry} disabled={retrying}>
-          Retry
+          {t('guards.retry')}
         </Button>
       </div>
     </div>
   );
 }
 
-export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
+export function AuthPendingSkeleton({ label }: { label?: string }) {
+  const { t } = useTranslation('auth');
   return (
     <div className="bg-sidebar flex h-dvh w-full items-center justify-center">
-      <BrandLoader size="lg" aria-label={label} />
+      <BrandLoader size="lg" aria-label={label ?? t('guards.checkingSignIn')} />
     </div>
   );
 }

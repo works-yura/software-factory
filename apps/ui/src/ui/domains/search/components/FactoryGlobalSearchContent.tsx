@@ -38,8 +38,10 @@ import { GlobalSearchSessionResults } from './GlobalSearchSessionResults';
 import { GlobalSearchSessionsStatus } from './GlobalSearchSessionsStatus';
 import { GlobalSearchWorkItemResults } from './GlobalSearchWorkItemResults';
 import { GlobalSearchWorkItemsStatus } from './GlobalSearchWorkItemsStatus';
+import { useTranslation } from 'react-i18next';
 
 export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factoryId: string; closeSearch: () => void }) {
+  const { t } = useTranslation('search');
   const currentUserId = useFactoryAuth().data?.user?.userId;
   const factories = useFactoriesQuery().data ?? [];
   const activeFactory = factories.find(factory => factory.id === factoryId);
@@ -90,7 +92,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     <>
       <CommandPaletteInput
         autoFocus
-        placeholder="Search sessions, reviews, #issues, pages, and Factories…"
+        placeholder={t('input.placeholder')}
         rightSlot={<Kbd>Esc</Kbd>}
       />
 
@@ -106,16 +108,19 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
       )}
       <CommandPaletteBody>
         <GlobalSearchRail activeScope={activeScope} counts={counts} onScopeChange={setActiveScope} />
-        <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Factory search" />}>
-          {!sessionsPending && !intake.pending && <CommandEmpty>No matching results.</CommandEmpty>}
+        <CommandPaletteResults
+          aria-label={t('results')}
+          footer={<CommandPaletteFooter label={t('footer')} />}
+        >
+          {!sessionsPending && !intake.pending && <CommandEmpty>{t('empty')}</CommandEmpty>}
           {scopeIncludes(activeScope, 'navigation') && (
             <GlobalSearchNavigationResults factoryId={factoryId} onSelect={selectPath} />
           )}
           {scopeIncludes(activeScope, 'work') && (
-            <GlobalSearchSessionResults title="Work Sessions" results={sessionGroups.work} onSelect={selectPath} />
+            <GlobalSearchSessionResults title={t('scopes.work')} results={sessionGroups.work} onSelect={selectPath} />
           )}
           {scopeIncludes(activeScope, 'review') && (
-            <GlobalSearchSessionResults title="Review Sessions" results={sessionGroups.review} onSelect={selectPath} />
+            <GlobalSearchSessionResults title={t('scopes.review')} results={sessionGroups.review} onSelect={selectPath} />
           )}
           {scopeIncludes(activeScope, 'items') && (
             <GlobalSearchWorkItemResults
@@ -158,13 +163,13 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                     if (result !== 'repository-selection-required') closeSearch();
                   })
                   .catch(error =>
-                    toast.error(error instanceof Error ? error.message : 'The session could not be started.'),
+                    toast.error(error instanceof Error ? error.message : t('sessionStartFailed')),
                   );
               }}
             />
           )}
           {scopeIncludes(activeScope, 'user') && (
-            <GlobalSearchSessionResults title="User Sessions" results={sessionGroups.user} onSelect={selectPath} />
+            <GlobalSearchSessionResults title={t('scopes.user')} results={sessionGroups.user} onSelect={selectPath} />
           )}
           {isSessionScope(activeScope) && hasRepositories && (
             <GlobalSearchSessionsStatus pending={sessionsPending} failed={sessions.failed} onRetry={sessions.retry} />

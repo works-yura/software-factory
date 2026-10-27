@@ -16,6 +16,9 @@ import {
   SLACK_SESSION_BRANCH_PREFIX,
 } from '../ui/domains/workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
+import { translator } from '../ui/i18n/t';
+
+const tk = translator('app');
 
 export interface WorkspacesData {
   workspaces: FactoryUserSession[];
@@ -165,8 +168,8 @@ export function useCreateWorkspaceMutation(factoryId: string | undefined, projec
   return useMutation({
     mutationFn: async (branch: string) => {
       const trimmedBranch = branch.trim();
-      if (!factoryId) throw new Error('No Factory selected');
-      if (!projectRepositoryId) throw new Error('Connect a repository before creating a workspace');
+      if (!factoryId) throw new Error(tk('errors.noFactorySelected'));
+      if (!projectRepositoryId) throw new Error(tk('errors.connectRepository'));
       return createUserSession(baseUrl, projectRepositoryId, { branch: trimmedBranch });
     },
     onSuccess: session => {
@@ -174,7 +177,7 @@ export function useCreateWorkspaceMutation(factoryId: string | undefined, projec
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(session.sessionId) });
       void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}`);
     },
-    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to create workspace'),
+    onError: error => toast.error(error instanceof Error ? error.message : tk('workspaces.createFailed')),
   });
 }
 
@@ -188,7 +191,7 @@ export function useDeleteWorkspaceMutation(factoryId: string | undefined) {
 
   return useMutation({
     mutationFn: async (workspace: FactoryUserSession) => {
-      if (!factoryId) throw new Error('No Factory selected');
+      if (!factoryId) throw new Error(tk('errors.noFactorySelected'));
       await deleteUserSession(baseUrl, workspace.sessionId);
       return workspace;
     },
@@ -200,9 +203,9 @@ export function useDeleteWorkspaceMutation(factoryId: string | undefined) {
       invalidateSessionQueries(queryClient, factoryId, workspace.sessionId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(workspace.sessionId) });
       if (workspace.sessionId === viewedSessionId) void navigate(`/factories/${factoryId}/new`);
-      toast('Workspace deleted');
+      toast(tk('workspaces.deleted'));
     },
-    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to delete workspace'),
+    onError: error => toast.error(error instanceof Error ? error.message : tk('workspaces.deleteFailed')),
   });
 }
 
@@ -221,11 +224,11 @@ export function useDeleteUserSessionMutation(factoryId: string | undefined) {
       removeCachedSession(queryClient, factoryId, session.sessionId);
       queryClient.removeQueries({ queryKey: queryKeys.userSession(session.sessionId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
-      toast('Session deleted');
+      toast(tk('workspaces.sessionDeleted'));
       if (location.pathname === `/factories/${factoryId}/user/threads/${session.sessionId}`) {
         void navigate(`/factories/${factoryId}`, { replace: true });
       }
     },
-    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to delete session'),
+    onError: error => toast.error(error instanceof Error ? error.message : tk('workspaces.sessionDeleteFailed')),
   });
 }

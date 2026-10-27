@@ -1,3 +1,6 @@
+import { translator } from '../ui/i18n/t';
+
+const tk = translator('app');
 /**
  * Platform-agnostic HTTP client for the settings API.
  *
@@ -34,7 +37,7 @@ async function extractError(res: Response): Promise<string> {
   } catch {
     // Non-JSON body — fall through to the status-based message.
   }
-  return `Request failed (${res.status})`;
+  return tk('errors.requestFailed', { status: res.status });
 }
 
 export function createApiClient({ baseUrl, fetchImpl }: ApiClientConfig): ApiClient {

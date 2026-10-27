@@ -26,9 +26,12 @@ import type {
   WorkItem,
   WorkItemStageEntry,
 } from '../ui/domains/factory/services/workItems';
+import { translator } from '../ui/i18n/t';
+
+const tk = translator('app');
 
 function requireFactoryProjectId(factoryProjectId: string | undefined): string {
-  if (!factoryProjectId) throw new Error('No Factory selected');
+  if (!factoryProjectId) throw new Error(tk('errors.noFactorySelected'));
   return factoryProjectId;
 }
 

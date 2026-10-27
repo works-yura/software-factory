@@ -2,6 +2,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { DropdownMenuTriggerProps } from '@mastra/playground-ui/components/DropdownMenu';
 import { RotateCcw, Settings2 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export function PropertiesMenu({
   label,
@@ -22,12 +23,13 @@ export function PropertiesMenu({
   icon?: ReactNode;
   children: ReactNode;
 }) {
+  const { t } = useTranslation('app');
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
         variant={variant}
         size={changedCount === 0 ? 'icon-sm' : 'sm'}
-        aria-label={changedCount === 0 ? label : `${label}, ${changedCount} changed`}
+        aria-label={changedCount === 0 ? label : t('properties.changed', { label, changed: changedCount })}
         tooltip={
           changes.length === 0 ? (
             label
@@ -51,7 +53,7 @@ export function PropertiesMenu({
         <DropdownMenu.Separator />
         <DropdownMenu.Item disabled={changedCount === 0} onClick={onReset}>
           <RotateCcw aria-hidden />
-          <span>Reset to default</span>
+          <span>{t('properties.reset')}</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>

@@ -11,6 +11,9 @@ import { useCardRepositorySlug } from '../ui/domains/factory/hooks/useCardReposi
 import { repositoryMatchesCardSource } from '../ui/domains/factory/boardRepository';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../ui/domains/factory/services/workItems';
+import { translator } from '../ui/i18n/t';
+
+const tk = translator('app');
 
 export interface StartFactoryRunWorkItem {
   id: string;
@@ -57,7 +60,7 @@ export function useStartFactoryRun() {
         : repositories.length === 1
           ? repositoriesForSource[0]
           : undefined;
-      if (!repository) throw new Error('Choose a repository before starting this Factory run');
+      if (!repository) throw new Error(tk('errors.chooseRepository'));
       const metadata = { ...workItem.metadata, repository: repository.slug };
       if (workItem.metadata?.repository !== repository.slug) {
         await updateWorkItem(baseUrl, workItem.id, { metadata });

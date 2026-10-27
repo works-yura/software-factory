@@ -19,6 +19,9 @@ import type {
 import { registerGitLabRepository } from '../ui/domains/factory/services/gitlab';
 import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
 import { useSaveIntakeConfigMutation } from './useIntakeConfig';
+import { translator } from '../ui/i18n/t';
+
+const tk = translator('app');
 
 function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
@@ -30,7 +33,7 @@ function refetchFactories(queryClient: ReturnType<typeof useQueryClient>) {
 
 async function fetchFactoryProjects(baseUrl: string): Promise<FactoryProject[]> {
   const projects = await listFactoryProjects(baseUrl);
-  if (!projects) throw new Error('Failed to load Factories');
+  if (!projects) throw new Error(tk('errors.loadFactoriesFailed'));
   return projects;
 }
 

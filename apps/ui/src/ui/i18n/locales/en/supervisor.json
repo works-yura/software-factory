@@ -1,1 +1,39 @@
-{}
+{
+  "title": "Supervisor",
+  "documentTitle": "Supervisor · {{factory}}",
+  "loading": "Loading supervisor",
+  "composer": "Supervisor composer",
+  "healthCheckFailed": "Couldn't run the health check: {{reason}}",
+  "empty": {
+    "title": "What needs your attention?",
+    "description": "Ask why a card is stuck, what changed overnight, or how to safely repair a Factory issue.",
+    "suggestions": "Suggested prompts",
+    "actions": {
+      "needsMe": "What needs me?",
+      "stalled": "Explain stalled work",
+      "overnight": "Overnight digest"
+    },
+    "prompts": {
+      "needsMe": "What needs me right now?",
+      "stalled": "What is stalled, and why?",
+      "overnight": "What finished overnight?"
+    }
+  },
+  "findings": {
+    "region": "Supervisor findings",
+    "title": "Findings",
+    "empty": "No findings — everything looks healthy.",
+    "ask": "Ask supervisor",
+    "viewAll": "View all in Attention",
+    "show": "Show supervisor findings",
+    "hide": "Hide supervisor findings",
+    "kinds": {
+      "decision-stuck": "Stuck decisions",
+      "start-stalled": "Stalled starts",
+      "seat-orphaned": "Orphaned seats",
+      "seat-missing": "Missing seats",
+      "held-waiting": "Held cards waiting",
+      "label-drift": "Label drift"
+    }
+  }
+}

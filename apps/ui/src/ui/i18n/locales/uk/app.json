@@ -1,1 +1,90 @@
-{}
+{
+  "relativeTime": {
+    "justNow": "щойно",
+    "minutes": "{{value}} хв",
+    "hours": "{{value}} год",
+    "days": "{{value}} дн",
+    "dateFormat": "d MMM"
+  },
+  "duration": {
+    "seconds": "{{value}} с",
+    "minutes": "{{value}} хв",
+    "hours": "{{value}} год",
+    "days": "{{value}} дн",
+    "hoursMinutes": "{{hours}} год {{minutes}} хв",
+    "daysHours": "{{days}} дн {{hours}} год"
+  },
+  "errors": {
+    "requestFailed": "Помилка запиту ({{status}})",
+    "loadModelsFailed": "Не вдалося завантажити моделі ({{status}})",
+    "loadFactoriesFailed": "Не вдалося завантажити Factory",
+    "sessionSettingsUnavailable": "Налаштування сесії недоступні",
+    "unknown": "Невідома помилка",
+    "settingsUnverified": "Не вдалося перевірити, чи оновлено налаштування: {{detail}}",
+    "settingsNotPersisted": "Сервер не зберіг запитані налаштування",
+    "threadNotFound": "Не вдалося перейти до треду: тред {{threadId}} не знайдено",
+    "switchThreadFailed": "Не вдалося перейти до треду: {{reason}}",
+    "noFactorySelected": "Factory не вибрано",
+    "chooseRepository": "Виберіть репозиторій, перш ніж запускати Factory",
+    "connectRepository": "Підключіть репозиторій, перш ніж створювати робочий простір"
+  },
+  "workspaces": {
+    "createFailed": "Не вдалося створити робочий простір",
+    "deleted": "Робочий простір видалено",
+    "deleteFailed": "Не вдалося видалити робочий простір",
+    "sessionDeleted": "Сесію видалено",
+    "sessionDeleteFailed": "Не вдалося видалити сесію"
+  },
+  "properties": {
+    "changed": "{{label}}, змінено: {{changed}}",
+    "reset": "Скинути до типових"
+  },
+  "pwa": {
+    "installApp": "Встановити застосунок",
+    "installHint": "Швидший доступ з головного екрана",
+    "notNow": "Не зараз",
+    "install": "Встановити",
+    "instructionsTitle": "Встановіть цей застосунок",
+    "instructionsDescription": "Додайте його на головний екран за три кроки",
+    "steps": {
+      "chromeShare": "Торкніться кнопки <em>Поділитися</em> в адресному рядку Chrome",
+      "menuShare": "Відкрийте меню браузера й торкніться <em>Поділитися</em>",
+      "safariShare": "Торкніться кнопки <em>Поділитися</em> на панелі інструментів Safari",
+      "addToHomeScreen": "Прокрутіть униз і торкніться <em>На початковий екран</em>",
+      "confirmAdd": "Торкніться <em>Додати</em>, щоб установити застосунок"
+    }
+  },
+  "slack": {
+    "breadcrumb": "Навігаційний ланцюжок",
+    "connections": "Підключення",
+    "connection": "Підключення",
+    "description": "Починайте й продовжуйте сесії Factory у Slack.",
+    "loading": "Завантаження підключення Slack…",
+    "loadFailed": "Не вдалося завантажити підключення Slack",
+    "notConnected": "Не підключено",
+    "notConfigured": "Підключення Slack не налаштовано",
+    "connect": "Підключити Slack",
+    "workspace": "Робочий простір Slack",
+    "workspaceId": "ID робочого простору",
+    "userId": "ID користувача Slack",
+    "connectedAt": "Підключено {{date}}",
+    "sessionBehavior": "Поведінка сесій",
+    "defaultFactory": "Factory за замовчуванням",
+    "defaultFactoryFor": "Factory за замовчуванням для {{user}}",
+    "defaultFactoryDescription": "Нові сесії зі Slack спрямовуються в цю Factory.",
+    "setDefaultFactory": "Вибрати Factory за замовчуванням",
+    "dangerZone": "Небезпечна зона",
+    "disconnectTitle": "Відключити Slack",
+    "disconnectDescription": "Повідомлення Slack від <user></user> більше не запускатимуть і не продовжуватимуть сесії Factory.",
+    "disconnectUser": "Відключити {{user}}",
+    "disconnect": "Відключити",
+    "disconnecting": "Відключення…",
+    "toasts": {
+      "disconnected": "Акаунт Slack відключено",
+      "alreadyDisconnected": "Акаунт уже було відключено",
+      "disconnectFailed": "Не вдалося відключити акаунт",
+      "defaultSet": "Сесії зі Slack надходитимуть у {{name}}",
+      "defaultFailed": "Не вдалося вибрати Factory за замовчуванням"
+    }
+  }
+}

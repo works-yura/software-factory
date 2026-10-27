@@ -1,20 +1,24 @@
+import { translator } from '../../ui/i18n/t';
+
+const tk = translator('app');
+
 /**
  * Compact duration for metrics UI ("45s", "5m", "3h 20m", "2d 4h").
  * Non-finite or negative input renders as an em dash so callers can
- * interpolate nullable server values without guarding.
+ * interpolate nullable server values without guarding. Follows the UI language.
  */
 export function formatDuration(ms: number | null | undefined): string {
   if (ms === null || ms === undefined || !Number.isFinite(ms) || ms < 0) return '—';
   const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 60) return tk('duration.seconds', { value: seconds });
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) return tk('duration.minutes', { value: minutes });
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
     const rest = minutes % 60;
-    return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+    return rest === 0 ? tk('duration.hours', { value: hours }) : tk('duration.hoursMinutes', { hours, minutes: rest });
   }
   const days = Math.floor(hours / 24);
   const rest = hours % 24;
-  return rest === 0 ? `${days}d` : `${days}d ${rest}h`;
+  return rest === 0 ? tk('duration.days', { value: days }) : tk('duration.daysHours', { days, hours: rest });
 }

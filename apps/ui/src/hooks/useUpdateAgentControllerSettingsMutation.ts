@@ -7,11 +7,14 @@ import {
   createAgentControllerClient,
   requireAgentControllerSession,
 } from '../ui/domains/chat/services/agentControllerClient';
+import { translator } from '../ui/i18n/t';
+
+const tk = translator('app');
 
 export class SettingsUpdateVerificationError extends Error {
   constructor(error: unknown) {
-    const detail = error instanceof Error ? error.message : 'Unknown error';
-    super(`Settings update could not be verified: ${detail}`);
+    const detail = error instanceof Error ? error.message : tk('errors.unknown');
+    super(tk('errors.settingsUnverified', { detail }));
     this.name = 'SettingsUpdateVerificationError';
   }
 }
@@ -58,7 +61,7 @@ export function useUpdateAgentControllerSettingsMutation({
   return useMutation({
     mutationFn: async (updates: SettingsUpdates) => {
       const current = queryClient.getQueryData<AgentControllerSessionSettings>(settingsQueryKey);
-      if (!current) throw new Error('Session settings are unavailable');
+      if (!current) throw new Error(tk('errors.sessionSettingsUnavailable'));
 
       const activeSession = requireAgentControllerSession(session);
       await activeSession.setState({ ...updates });
@@ -72,7 +75,7 @@ export function useUpdateAgentControllerSettingsMutation({
 
       const persistedSettings = persistedState.settings;
       if (!persistedSettings || !settingsIncludeUpdates(persistedSettings, updates)) {
-        throw new Error('The server did not persist the requested settings');
+        throw new Error(tk('errors.settingsNotPersisted'));
       }
 
       return persistedSettings;

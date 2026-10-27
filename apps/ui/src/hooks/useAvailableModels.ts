@@ -7,6 +7,9 @@ import { queryKeys } from '../api/keys';
 import type { AvailableModelsFilter } from '../api/keys';
 import { fetchSessionModelCatalog, sessionModelCatalogQueryOptions } from './useSessionModelCatalog';
 import type { SessionModelCatalog, SessionModelCatalogTarget } from './useSessionModelCatalog';
+import { translator } from '../ui/i18n/t';
+
+const tk = translator('app');
 
 /** One selectable model from `GET /web/config/models` (credentialed providers only). */
 export type AvailableModelOption = ModelCatalogEntry;
@@ -27,7 +30,7 @@ async function fetchSettingsModels(baseUrl: string, target?: AvailableModelsTarg
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  if (!res.ok) throw new Error(`Failed to load models (${res.status})`);
+  if (!res.ok) throw new Error(tk('errors.loadModelsFailed', { status: res.status }));
   const data = (await res.json()) as { models: AvailableModelOption[] };
   return data.models;
 }

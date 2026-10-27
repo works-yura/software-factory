@@ -1,11 +1,14 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { RefreshCw } from 'lucide-react';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('search');
 
 // Session titles come from board cards, so only a board failure downgrades them to branch names
 function failureMessage(boardFailed: boolean, intakeFailed: boolean): string {
-  if (!boardFailed) return 'Intake could not be loaded.';
-  if (!intakeFailed) return 'Board cards could not be loaded. Sessions still show, titled by branch.';
-  return 'Board cards and intake could not be loaded. Sessions still show, titled by branch.';
+  if (!boardFailed) return tk('status.intakeFailed');
+  if (!intakeFailed) return tk('status.boardFailed');
+  return tk('status.boardAndIntakeFailed');
 }
 
 export function GlobalSearchWorkItemsStatus({
@@ -25,7 +28,7 @@ export function GlobalSearchWorkItemsStatus({
         variant="warning"
         action={
           <Notice.Button onClick={onRetry}>
-            Retry <RefreshCw />
+            {tk('status.retry')} <RefreshCw />
           </Notice.Button>
         }
       >

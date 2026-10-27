@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { PwaInstallInstructions } from './PwaInstallInstructions';
 import { usePwaInstall } from './usePwaInstall';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Mobile-only banner offering to install the app as a PWA. Self-aware: renders
@@ -12,6 +13,7 @@ import { usePwaInstall } from './usePwaInstall';
  * and the user hasn't recently dismissed it. Hidden on desktop via CSS.
  */
 export function PwaInstallBanner() {
+  const { t } = useTranslation('app');
   const { canInstall, installationMethod, install, dismiss } = usePwaInstall();
   const [instructionsOpen, setInstructionsOpen] = useState(false);
 
@@ -29,17 +31,17 @@ export function PwaInstallBanner() {
       {canInstall && (
         <div
           role="region"
-          aria-label="Install app"
+          aria-label={t('pwa.installApp')}
           className="border-border bg-card fixed inset-x-0 bottom-0 z-50 border-t pb-[env(safe-area-inset-bottom)] lg:hidden"
         >
           <div className="flex items-center gap-3 px-4 py-3">
             <img src="/pwa-192.png" alt="" className="size-10 shrink-0 rounded-lg" />
             <div className="min-w-0 flex-1">
               <Txt tone="ink" as="p" variant="subheading">
-                Install app
+                {t('pwa.installApp')}
               </Txt>
               <Txt tone="muted" as="p" variant="caption" className="truncate">
-                Get faster access from your home screen
+                {t('pwa.installHint')}
               </Txt>
             </div>
             <button
@@ -51,7 +53,7 @@ export function PwaInstallBanner() {
               )}
             >
               <Txt as="span" variant="caption" className="block">
-                Not now
+                {t('pwa.notNow')}
               </Txt>
             </button>
             <button
@@ -60,7 +62,7 @@ export function PwaInstallBanner() {
               className={`bg-brand-green shrink-0 rounded-md px-3 py-1.5 text-black ${focusRing}`}
             >
               <Txt as="span" variant="column" className="block">
-                Install
+                {t('pwa.install')}
               </Txt>
             </button>
           </div>

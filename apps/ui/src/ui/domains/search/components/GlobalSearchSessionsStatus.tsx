@@ -2,17 +2,19 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 function LoadingSessionsRow() {
+  const { t } = useTranslation('search');
   return (
-    <div role="status" aria-label="Loading sessions" className="flex items-center gap-3 py-2">
+    <div role="status" aria-label={t('status.loadingSessions')} className="flex items-center gap-3 py-2">
       <Skeleton className="size-8 shrink-0" />
       <div className="flex flex-1 flex-col gap-1.5">
         <Skeleton className="h-3 w-40" />
         <Skeleton className="h-2.5 w-64 max-w-full" />
       </div>
       <Txt as="span" variant="meta" className="sr-only">
-        Loading sessions
+        {t('status.loadingSessions')}
       </Txt>
     </div>
   );
@@ -27,6 +29,7 @@ export function GlobalSearchSessionsStatus({
   failed: boolean;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation('search');
   if (!pending && !failed) return null;
 
   return (
@@ -37,11 +40,11 @@ export function GlobalSearchSessionsStatus({
           variant="destructive"
           action={
             <Notice.Button onClick={onRetry}>
-              Retry <RefreshCw />
+              {t('status.retry')} <RefreshCw />
             </Notice.Button>
           }
         >
-          Sessions could not be loaded.
+          {t('status.sessionsFailed')}
         </Notice>
       )}
     </div>
