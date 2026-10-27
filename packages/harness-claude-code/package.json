@@ -1,0 +1,23 @@
+{
+  "name": "@factory/harness-claude-code",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude Code harness: Factory sessions run as turns of the official `claude` CLI, resumed per session, with plan gates emulated by ending the turn.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/harness": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

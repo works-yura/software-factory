@@ -1,0 +1,236 @@
+import { spawn as nodeSpawn } from 'node:child_process';
+
+import { createLineSplitter } from './stream.ts';
+
+/**
+ * Permission modes the CLI accepts. `bypassPermissions` is deliberately left
+ * out: an unattended agent never skips permission checks; it runs with the
+ * tools its configuration allows.
+ */
+export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'manual';
+
+const FORBIDDEN_ARGS = new Set(['--dangerously-skip-permissions', '--allow-dangerously-skip-permissions']);
+
+export interface ClaudeArgsInput {
+  resumeSessionId?: string;
+  model?: string;
+  effort?: string;
+  permissionMode?: ClaudePermissionMode;
+  /** A path, a JSON string, or a config object (serialised to JSON). */
+  mcpConfig?: string | Record<string, unknown>;
+  /** Only use the MCP servers from {@link mcpConfig}, ignoring the user's and project's. */
+  strictMcpConfig?: boolean;
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  appendSystemPrompt?: string;
+  includePartialMessages?: boolean;
+  maxTurns?: number;
+  extraArgs?: string[];
+}
+
+/** Arguments for one non-interactive turn; the prompt goes on stdin (`-p -`). */
+export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
+  const args = ['-p', '-', '--output-format', 'stream-json', '--verbose'];
+  if (input.includePartialMessages) args.push('--include-partial-messages');
+  if (input.resumeSessionId) args.push('--resume', input.resumeSessionId);
+  if (input.model) args.push('--model', input.model);
+  if (input.effort) args.push('--effort', input.effort);
+  if (input.permissionMode) {
+    if ((input.permissionMode as string) === 'bypassPermissions') {
+      throw new Error('Claude Code harness never runs with bypassPermissions.');
+    }
+    args.push('--permission-mode', input.permissionMode);
+  }
+  if (input.mcpConfig) {
+    args.push('--mcp-config', typeof input.mcpConfig === 'string' ? input.mcpConfig : JSON.stringify(input.mcpConfig));
+    if (input.strictMcpConfig) args.push('--strict-mcp-config');
+  }
+  if (input.allowedTools?.length) args.push('--allowedTools', input.allowedTools.join(','));
+  if (input.disallowedTools?.length) args.push('--disallowedTools', input.disallowedTools.join(','));
+  if (input.maxTurns && input.maxTurns > 0) args.push('--max-turns', String(input.maxTurns));
+  if (input.appendSystemPrompt) args.push('--append-system-prompt', input.appendSystemPrompt);
+  for (const arg of input.extraArgs ?? []) {
+    if (FORBIDDEN_ARGS.has(arg.split('=')[0]!)) {
+      throw new Error(`Claude Code harness never passes ${arg}.`);
+    }
+    args.push(arg);
+  }
+  return args;
+}
+
+/**
+ * Environment variables that pick the CLI's credentials. They are always
+ * stripped from the inherited environment so a key in the server's own env
+ * never outranks the one the credentials hook chose for this turn.
+ */
+export const CREDENTIAL_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'CLAUDE_CONFIG_DIR',
+] as const;
+
+/** Set inside a Claude Code session; a nested `claude` refuses to start when it sees them. */
+const NESTED_SESSION_ENV_KEYS = ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SSE_PORT'];
+
+export function buildClaudeEnv(
+  base: Record<string, string | undefined>,
+  credentials: Record<string, string>,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  const drop = new Set<string>([...CREDENTIAL_ENV_KEYS, ...NESTED_SESSION_ENV_KEYS]);
+  for (const [key, value] of Object.entries(base)) {
+    if (value !== undefined && !drop.has(key)) env[key] = value;
+  }
+  return { ...env, ...credentials };
+}
+
+/** The slice of a Node child process the runner uses, so tests can hand in a fake. */
+export interface ClaudeChildProcess {
+  readonly pid?: number | undefined;
+  readonly stdin: { end(chunk?: string): unknown; on?(event: 'error', listener: (error: Error) => void): unknown } | null;
+  readonly stdout: { setEncoding?(encoding: 'utf8'): unknown; on(event: 'data', listener: (chunk: string | Buffer) => void): unknown } | null;
+  readonly stderr: { setEncoding?(encoding: 'utf8'): unknown; on(event: 'data', listener: (chunk: string | Buffer) => void): unknown } | null;
+  kill(signal?: NodeJS.Signals): boolean;
+  on(event: 'close', listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
+  on(event: 'error', listener: (error: Error) => void): unknown;
+}
+
+export type ClaudeSpawn = (
+  command: string,
+  args: string[],
+  options: { cwd: string; env: Record<string, string>; detached: boolean; stdio: ['pipe', 'pipe', 'pipe'] },
+) => ClaudeChildProcess;
+
+export interface ClaudeExit {
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  stderr: string;
+  timedOut: boolean;
+  /** Set when {@link ClaudeRun.terminate} stopped the process. */
+  terminated: boolean;
+  /** The process never started (missing binary, bad cwd). */
+  spawnError?: Error;
+}
+
+export interface ClaudeRun {
+  readonly pid: number | undefined;
+  readonly exited: Promise<ClaudeExit>;
+  isAlive(): boolean;
+  /** Stops the turn: SIGTERM to the process group, SIGKILL after a grace period. */
+  terminate(): void;
+}
+
+export interface RunClaudeInput {
+  command?: string;
+  args: string[];
+  cwd: string;
+  env: Record<string, string>;
+  prompt: string;
+  onLine: (line: string) => void;
+  spawn?: ClaudeSpawn;
+  /** The whole turn's budget; past it the process is terminated. */
+  timeoutMs?: number;
+  killGraceMs?: number;
+}
+
+const STDERR_LIMIT = 64 * 1024;
+
+/**
+ * Runs one `claude` turn. The real CLI runs in its own process group so
+ * terminating a turn also stops the tools it spawned (shells, MCP servers);
+ * an injected spawn gets a plain `kill`, since its pid is not ours to signal.
+ */
+export function runClaude(input: RunClaudeInput): ClaudeRun {
+  const usesNodeSpawn = !input.spawn;
+  const spawn = input.spawn ?? (nodeSpawn as unknown as ClaudeSpawn);
+  let alive = true;
+  let terminated = false;
+  let timedOut = false;
+  let stderr = '';
+  let killTimer: NodeJS.Timeout | undefined;
+  let timeoutTimer: NodeJS.Timeout | undefined;
+  let resolveExit!: (exit: ClaudeExit) => void;
+  const exited = new Promise<ClaudeExit>(resolve => {
+    resolveExit = resolve;
+  });
+  const lines = createLineSplitter(input.onLine);
+
+  let child: ClaudeChildProcess;
+  try {
+    child = spawn(input.command ?? 'claude', input.args, {
+      cwd: input.cwd,
+      env: input.env,
+      detached: usesNodeSpawn,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    alive = false;
+    resolveExit({
+      exitCode: null,
+      signal: null,
+      stderr: '',
+      timedOut: false,
+      terminated: false,
+      spawnError: error instanceof Error ? error : new Error(String(error)),
+    });
+    return { pid: undefined, exited, isAlive: () => false, terminate: () => {} };
+  }
+
+  const signal = (sig: NodeJS.Signals) => {
+    if (usesNodeSpawn && child.pid) {
+      try {
+        process.kill(-child.pid, sig);
+        return;
+      } catch {
+        // The group is gone or was never created; fall back to the child itself.
+      }
+    }
+    try {
+      child.kill(sig);
+    } catch {
+      // Already exited.
+    }
+  };
+  const terminate = () => {
+    if (!alive || terminated) return;
+    terminated = true;
+    signal('SIGTERM');
+    killTimer = setTimeout(() => {
+      if (alive) signal('SIGKILL');
+    }, input.killGraceMs ?? 5_000);
+    killTimer.unref?.();
+  };
+
+  const finish = (exit: Omit<ClaudeExit, 'stderr' | 'timedOut' | 'terminated'>) => {
+    if (!alive) return;
+    alive = false;
+    clearTimeout(killTimer);
+    clearTimeout(timeoutTimer);
+    lines.flush();
+    resolveExit({ ...exit, stderr, timedOut, terminated });
+  };
+
+  child.stdout?.setEncoding?.('utf8');
+  child.stderr?.setEncoding?.('utf8');
+  child.stdout?.on('data', chunk => lines.push(String(chunk)));
+  child.stderr?.on('data', chunk => {
+    if (stderr.length < STDERR_LIMIT) stderr += String(chunk);
+  });
+  child.on('error', (error: Error) => finish({ exitCode: null, signal: null, spawnError: error }));
+  child.on('close', (code: number | null, sig: NodeJS.Signals | null) => finish({ exitCode: code, signal: sig }));
+  // The CLI may exit before reading stdin; a broken pipe is not the turn's failure.
+  child.stdin?.on?.('error', () => {});
+  child.stdin?.end(input.prompt);
+
+  if (input.timeoutMs && input.timeoutMs > 0) {
+    timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      terminate();
+    }, input.timeoutMs);
+    timeoutTimer.unref?.();
+  }
+
+  return { pid: child.pid, exited, isAlive: () => alive, terminate };
+}

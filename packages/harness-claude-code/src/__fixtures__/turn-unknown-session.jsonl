@@ -1,0 +1,1 @@
+{"type":"result","subtype":"error_during_execution","is_error":true,"duration_ms":0,"num_turns":0,"session_id":"1b2c3d4e-0000-4000-8000-000000000041","total_cost_usd":0,"usage":{"input_tokens":0,"output_tokens":0},"errors":["No conversation found with session ID: 9f0c1a52-6b1e-4d6a-9a43-2f3b8f0e7c11"]}
