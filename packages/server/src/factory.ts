@@ -52,6 +52,8 @@ import { createBoardRegistry, isTerminalWorkItem } from '@factory/core';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { boardForWorkItem } from '@factory/core';
+import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
+import type { ClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import { EnvironmentBuildRunner } from '@factory/harness-mastra';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '@factory/harness-mastra';
 import { touchFeed } from '@factory/feed';
@@ -491,6 +493,8 @@ export class MastraFactory {
   /** The background session resource migration; resolves `true` when it moved run bindings. */
   #sessionResourceMigration: Promise<boolean> | undefined;
   #preparing = false;
+  /** Serves the chat's session routes for Claude Code sessions; inert until a session is attached or resolvable. */
+  readonly #claudeSessionUi: ClaudeSessionUi;
 
   constructor(config: MastraFactoryConfig) {
     if (!config?.storage) {
@@ -512,6 +516,21 @@ export class MastraFactory {
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
     this.#config = config;
+    this.#claudeSessionUi = createClaudeSessionUi({
+      controllerId: CONTROLLER_ID,
+      // Read per call: the Mastra store is only ready once the factory is prepared.
+      storage: { getStore: name => config.storage.getMastraStorage().getStore(name) },
+    });
+  }
+
+  /**
+   * Shows Claude Code sessions in the chat. Attach each session the Claude
+   * Code harness builds (`onSession: session => factory.claudeSessionUi.attach(session)`)
+   * and give it the harness's lookup (`setSessionResolver(id => harness.getSession(id))`);
+   * see `@factory/harness-claude-code-ui`.
+   */
+  get claudeSessionUi(): ClaudeSessionUi {
+    return this.#claudeSessionUi;
   }
 
   /**
@@ -1881,6 +1900,7 @@ export class MastraFactory {
                 ...timing,
                 createFactoryInteractiveMarker(),
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
+                this.#claudeSessionUi.middleware(),
                 ...spa,
               ],
               ...cors,
@@ -1896,7 +1916,8 @@ export class MastraFactory {
           //   3. primers — hydrate the caller's model-credential and custom
           //               provider snapshots so the request's first model call
           //               resolves tenant credentials and custom providers.
-          //   4. spa    — serves the built UI for everything the server doesn't own.
+          //   4. claude — answers the session routes of Claude Code sessions (see `claudeSessionUi`).
+          //   5. spa    — serves the built UI for everything the server doesn't own.
           // `auth` also lands on `server.auth` so the core auth middleware (and
           // Studio's dual-auth routing — see `studio.auth` on the returned args)
           // authenticates core `/api/*` routes with the same provider.
@@ -1923,6 +1944,8 @@ export class MastraFactory {
                 storage: customProvidersStorage,
                 authEnabled: Boolean(auth),
               }),
+              // After the access guard: a Claude Code session's routes get the same checks as any session's.
+              this.#claudeSessionUi.middleware(),
               ...spa,
             ],
             ...cors,
