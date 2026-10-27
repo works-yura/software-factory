@@ -1,0 +1,28 @@
+{
+  "name": "@factory/harness-claude-code-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shows Claude Code sessions in the chat UI: records their transcript as Mastra thread messages, streams it as agent-controller events, and answers the agent-controller session routes for them.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/harness": "workspace:*",
+    "@factory/harness-claude-code": "workspace:*",
+    "@mastra/core": "1.79.0",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@factory/http": "workspace:*",
+    "@factory/session": "workspace:*",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

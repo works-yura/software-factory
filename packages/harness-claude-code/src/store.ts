@@ -1,6 +1,8 @@
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import type { PlanDecision } from '@factory/harness';
+
 import type { PlanGate } from './events.ts';
 import type { ClaudeSessionMode } from './cli.ts';
 
@@ -9,6 +11,10 @@ export interface ClaudePendingInput {
   kind: 'signal' | 'notification';
   text: string;
   id?: string;
+  /** The prompt that answers a plan gate; the transcript records it as a `plan_decision`, not as an input. */
+  gate?: true;
+  /** A plan answer queued for the next turn (`queuePlanAnswer`); recorded when that turn starts. */
+  planDecision?: { toolCallId: string; decision: PlanDecision };
 }
 
 export interface ClaudeThreadState {

@@ -371,8 +371,10 @@ export class ClaudeCodeSession implements AgentSession {
     const approved = resumeData.action === 'approved';
     thread.mode = approved ? (this.#config.approvedPermissionMode ?? 'acceptEdits') : 'planning';
     const text = approved ? approvalPrompt(resumeData) : rejectionPrompt(resumeData);
-    const accepted = this.#accept([{ kind: 'signal', text }], true, { keepGate: true });
-    if (accepted.action !== 'persist') await accepted.run.started;
+    const accepted = this.#accept([{ kind: 'signal', text, gate: true }], true, { keepGate: true });
+    if (accepted.action === 'persist') return;
+    this.#emitTranscript({ kind: 'plan_decision', toolCallId: gate.toolCallId, decision: { ...resumeData } }, accepted.run);
+    await accepted.run.started;
   }
 
   /**
@@ -392,7 +394,12 @@ export class ClaudeCodeSession implements AgentSession {
     thread.mode = approved ? (this.#config.approvedPermissionMode ?? 'acceptEdits') : 'planning';
     const text = approved ? approvalPrompt(resumeData) : rejectionPrompt(resumeData);
     // Ahead of anything that queued while the plan waited, so Claude reads the verdict first.
-    thread.pendingInputs.unshift({ kind: 'signal', text });
+    thread.pendingInputs.unshift({
+      kind: 'signal',
+      text,
+      gate: true,
+      planDecision: { toolCallId: gate.toolCallId, decision: { ...resumeData } },
+    });
     await this.#save();
   }
 
@@ -595,6 +602,17 @@ export class ClaudeCodeSession implements AgentSession {
     const planning = (thread.mode ?? this.#config.mode) === 'planning';
     const lead = planning ? [this.#config.planningPrompt ?? PLANNING_PROMPT] : [];
     const prompt = [...lead, ...inputs.map(input => input.text)].join('\n\n');
+    if (!run.settled) {
+      for (const input of inputs) {
+        // A plan answer queued for this turn shows as the decision it is, not as typed input.
+        if (input.planDecision) {
+          this.#emitTranscript({ kind: 'plan_decision', ...input.planDecision }, run);
+          continue;
+        }
+        if (input.gate) continue;
+        this.#emitTranscript({ kind: 'input', source: input.kind, text: input.text, ...(input.id ? { id: input.id } : {}) }, run);
+      }
+    }
     const credentials = await this.#config.credentials(this);
     const cwd = await this.#cwd();
     const mcpConfig =

@@ -37,6 +37,30 @@ describe('createClaudeCodeHarness', () => {
     expect(await second.getSession('missing')).toBeUndefined();
   });
 
+  it('hands every session object it builds to onSession once, created or rehydrated', async () => {
+    const store = createInMemorySessionStore();
+    const seen: string[] = [];
+    const harness = createClaudeCodeHarness({
+      store,
+      credentials: async () => ({}),
+      cwdFor: () => root,
+      onSession: session => seen.push(session.id),
+    });
+    await harness.createSession({ sessionId: 'card-1', threadId: 'thread-1' });
+    await harness.createSession({ sessionId: 'card-1', threadId: 'thread-1' });
+    await harness.getSession('card-1');
+    expect(seen).toEqual(['card-1']);
+
+    const restarted = createClaudeCodeHarness({
+      store,
+      credentials: async () => ({}),
+      cwdFor: () => root,
+      onSession: session => seen.push(`restarted:${session.id}`),
+    });
+    await Promise.all([restarted.getSession('card-1'), restarted.getSession('card-1')]);
+    expect(seen).toEqual(['card-1', 'restarted:card-1']);
+  });
+
   it('lists the runs in flight by thread', async () => {
     const hold = deferred();
     const fake = fakeClaude([{ lines: fixture('turn-complete.jsonl'), holdAt: 1, hold: hold.promise }]);
