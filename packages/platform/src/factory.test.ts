@@ -26,7 +26,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestBoard } from '@factory/pipelines/testing';
-import type { VersionControl } from './capabilities/version-control.ts';
+import type { VersionControl } from '@factory/capabilities';
 import { MastraFactory } from './factory.ts';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.ts';
 import type * as platformGithubModule from './integrations/platform/github/integration.ts';

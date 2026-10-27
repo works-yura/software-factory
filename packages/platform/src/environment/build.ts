@@ -10,7 +10,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { FactorySandbox, FactorySandboxContext } from '@mastra/core/workspace';
-import type { VersionControl } from '../capabilities/version-control.ts';
+import type { VersionControl } from '@factory/capabilities';
 import type { FactoryProject, FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import { environmentSandboxContext, resolveProjectEnvironment } from '../workspace.ts';

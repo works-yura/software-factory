@@ -24,11 +24,11 @@ export type {
   MastraFactorySandboxOption,
   FactorySandboxStart,
 } from './factory.ts';
-export { LocalFactorySandbox, type LocalFactorySandboxOptions } from './sandbox/local-factory-sandbox.ts';
+export { LocalFactorySandbox, type LocalFactorySandboxOptions } from '@factory/sandbox';
 // The option type for `MastraFactoryConfig.github.rules`, so callers can
 // annotate a custom handler without importing the deep integration subpath.
 export type { GithubRuleOverrides } from './integrations/github/default-rules.ts';
-export type { FactorySandboxContext, SessionSetupGate, SessionSetupRun } from './sandbox/session-sandbox.ts';
+export type { FactorySandboxContext, SessionSetupGate, SessionSetupRun } from '@factory/sandbox';
 export { ChannelIdentityStorage } from '@factory/store';
 export type {
   ChannelAccountLink,

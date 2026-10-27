@@ -1,5 +1,5 @@
 import { workItemPhaseSemantics } from '@factory/core';
-import type { PullRequest } from '../../capabilities/version-control.ts';
+import type { PullRequest } from '@factory/capabilities';
 import type { FactoryProject } from '@factory/store';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '@factory/store';
 import type { WorkItemRow } from '@factory/store';

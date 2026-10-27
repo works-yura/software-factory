@@ -8,7 +8,7 @@ import type { LinearIssueIngress } from './rules.ts';
 
 export type LinearIssueReconciler = IssueReconciler;
 
-function issueToIngress(issue: import('../../capabilities/intake.ts').IntakeIssue): LinearIssueIngress {
+function issueToIngress(issue: import('@factory/capabilities').IntakeIssue): LinearIssueIngress {
   return {
     id: issue.id,
     identifier: issue.identifier,

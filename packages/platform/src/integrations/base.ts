@@ -26,8 +26,8 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry } from '@factory/core';
-import type { Intake } from '../capabilities/intake.ts';
-import type { VersionControl } from '../capabilities/version-control.ts';
+import type { Intake } from '@factory/capabilities';
+import type { VersionControl } from '@factory/capabilities';
 import type { RouteAuth } from '../routes/route.ts';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.ts';
 import type { StateSigner } from '../state-signing.ts';

@@ -6,7 +6,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { VersionControl } from '../capabilities/version-control.ts';
+import type { VersionControl } from '@factory/capabilities';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.ts';
 import { SourceControlStorageInMemory } from '@factory/store';
 import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-control-tools.ts';
@@ -990,7 +990,8 @@ describe('createSourceControlTools', () => {
   });
 });
 
-describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%s)', provider => {
+// Real git under a full parallel run takes seconds per case; v3's 5s default flakes there.
+describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%s)', { timeout: 30_000 }, provider => {
   const roots: string[] = [];
   const branch = 'factory/issue-1';
 

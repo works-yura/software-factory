@@ -7,7 +7,7 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
 
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.ts';
-import { isValidGitRef } from '../sandbox/git-ref.ts';
+import { isValidGitRef } from '@factory/sandbox';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.ts';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.ts';
 import { seedSessionOrg } from '../session/org-seed.ts';

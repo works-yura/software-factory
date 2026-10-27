@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbUpdates: Array<Record<string, unknown>> = [];
 
-import { requireExec } from '../../sandbox/materialization.ts';
-import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.ts';
-import { __clearSessionSandboxesForTests } from '../../sandbox/session-sandbox.ts';
+import { requireExec } from '@factory/sandbox';
+import type { ExecutableSandbox, SandboxCommandResult } from '@factory/sandbox';
+import { __clearSessionSandboxesForTests } from '@factory/sandbox';
 import type {
   ProjectRepositorySandbox,
   SourceControlStorageHandle,

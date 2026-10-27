@@ -17,7 +17,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { Intake } from '../../capabilities/intake.ts';
+import type { Intake } from '@factory/capabilities';
 import type { IntakeStorage } from '@factory/store';
 import { IncidentioApiError } from './api.ts';
 import { scopeSourceIdsToProject } from './routes.ts';

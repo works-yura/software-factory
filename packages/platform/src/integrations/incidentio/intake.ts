@@ -1,4 +1,4 @@
-import type { IntegrationConnection } from '../../capabilities/connection.ts';
+import type { IntegrationConnection } from '@factory/capabilities';
 import type {
   GetIntakeIssueInput,
   Intake,
@@ -10,7 +10,7 @@ import type {
   ResolveIntakeDispatchInput,
   ResolvedIntakeDispatch,
   UpdateIntakeIssueInput,
-} from '../../capabilities/intake.ts';
+} from '@factory/capabilities';
 import { IncidentioApiError } from './api.ts';
 import type { IncidentioApiClient, IncidentioActor, IncidentioFollowUp, IncidentioIncident } from './api.ts';
 

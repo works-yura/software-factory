@@ -3,7 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.ts';
-import { sanitizeSegment } from '../../sandbox/workdir.ts';
+import { sanitizeSegment } from '@factory/sandbox';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.ts';
 import type { IntakeStorage } from '@factory/store';
 import { GitLabApiError } from './api.ts';

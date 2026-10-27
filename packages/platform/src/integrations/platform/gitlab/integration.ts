@@ -1,6 +1,6 @@
 import type { MastraWorker } from '@mastra/core/worker';
 
-import type { IntegrationConnection } from '../../../capabilities/connection.ts';
+import type { IntegrationConnection } from '@factory/capabilities';
 import type { IntegrationContext } from '../../base.ts';
 import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.ts';
 import type { GitLabRuleOverrides } from '../../gitlab/default-rules.ts';

@@ -5,14 +5,14 @@ import type { MastraWorker } from '@mastra/core/worker';
 import { Octokit } from '@octokit/rest';
 import type { Context } from 'hono';
 
-import type { IntegrationConnection } from '../../../capabilities/connection.ts';
+import type { IntegrationConnection } from '@factory/capabilities';
 import type {
   CreateIntakeCommentInput,
   Intake,
   IntakeIssue,
   IntakeIssueDetail,
   UpdateIntakeIssueInput,
-} from '../../../capabilities/intake.ts';
+} from '@factory/capabilities';
 import type {
   CommitCheck,
   CreatePullRequestCommentInput,
@@ -40,7 +40,7 @@ import type {
   UpdateReviewInput,
   UpdateReviewersInput,
   VersionControl,
-} from '../../../capabilities/version-control.ts';
+} from '@factory/capabilities';
 import type { IntegrationStorageHandle } from '@factory/store';
 import type {
   SourceControlInstallation,

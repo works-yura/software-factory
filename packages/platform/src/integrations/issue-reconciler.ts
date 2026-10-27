@@ -1,4 +1,4 @@
-import type { Intake, IntakeIssue, ResolvedIntakeDispatch } from '../capabilities/intake.ts';
+import type { Intake, IntakeIssue, ResolvedIntakeDispatch } from '@factory/capabilities';
 import type { FactoryProject, FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 

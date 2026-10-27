@@ -3,8 +3,8 @@ import type { Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 
-import { FACTORY_WEB_PAGES } from '../telemetry-types.ts';
-import { captureFactoryWebActivity, isFactoryTelemetryEnabled } from '../telemetry.ts';
+import { FACTORY_WEB_PAGES } from '@factory/observability';
+import { captureFactoryWebActivity, isFactoryTelemetryEnabled } from '@factory/observability';
 import { Route } from './route.ts';
 import type { RouteDependencies } from './route.ts';
 

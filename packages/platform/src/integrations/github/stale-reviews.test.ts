@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Review } from '../../capabilities/version-control.ts';
+import type { Review } from '@factory/capabilities';
 import { dismissStaleFactoryReviews, isFactoryApproveVerdict, selectStaleFactoryReviews } from './stale-reviews.ts';
 
 let seq = 0;

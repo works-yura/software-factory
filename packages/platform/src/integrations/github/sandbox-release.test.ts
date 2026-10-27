@@ -4,7 +4,7 @@ import {
   __clearSessionSandboxesForTests,
   getSessionSandbox,
   peekSessionSandbox,
-} from '../../sandbox/session-sandbox.ts';
+} from '@factory/sandbox';
 import { reclaimDeletedSessionSandbox, releaseSessionSandbox } from './sandbox-release.ts';
 
 afterEach(() => {

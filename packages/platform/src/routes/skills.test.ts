@@ -7,7 +7,7 @@ import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { __clearSessionSandboxesForTests } from '../sandbox/session-sandbox.ts';
+import { __clearSessionSandboxesForTests } from '@factory/sandbox';
 import { SourceControlStorageInMemory } from '@factory/store';
 import { SkillRoutes } from './skills.ts';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';

@@ -8,7 +8,7 @@ import { LocalFilesystem } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { __clearSessionSandboxesForTests, getSessionSandbox } from '../sandbox/session-sandbox.ts';
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '@factory/sandbox';
 import {
   __clearSessionEnvironmentsForTests,
   recordSessionEnvironment,

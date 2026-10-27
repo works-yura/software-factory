@@ -4,8 +4,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 import type { Context } from 'hono';
 
-import type { IntegrationConnection } from '../../../capabilities/connection.ts';
-import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } from '../../../capabilities/intake.ts';
+import type { IntegrationConnection } from '@factory/capabilities';
+import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } from '@factory/capabilities';
 import type { RouteAuth } from '../../../routes/route.ts';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.ts';

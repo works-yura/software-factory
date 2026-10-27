@@ -9,10 +9,10 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { requireExec } from '../sandbox/materialization.ts';
-import type { ExecutableSandbox } from '../sandbox/materialization.ts';
-import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.ts';
-import type { SessionLayout, SessionLayoutRepository } from '../sandbox/session-sandbox.ts';
+import { requireExec } from '@factory/sandbox';
+import type { ExecutableSandbox } from '@factory/sandbox';
+import { peekSessionSandbox, sessionLayout } from '@factory/sandbox';
+import type { SessionLayout, SessionLayoutRepository } from '@factory/sandbox';
 import { peekSessionEnvironment } from '../session/environment-state-processor.ts';
 import type { SourceControlSession } from '@factory/store';
 import type { RouteAuth } from './route.ts';

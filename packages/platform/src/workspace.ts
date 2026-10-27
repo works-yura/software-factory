@@ -17,7 +17,7 @@ import type {
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.ts';
-import type { RepositoryAccess, VersionControl } from './capabilities/version-control.ts';
+import type { RepositoryAccess, VersionControl } from '@factory/capabilities';
 import { redactCredentials } from './environment/build.ts';
 import type { GithubIntegration } from './integrations/github/integration.ts';
 import { getGithubPat } from './integrations/github/pat.ts';
@@ -37,8 +37,8 @@ import {
   registerGithubTokenInjector,
   registerGithubTokenInjectorResolver,
 } from './integrations/github/token-refresh.ts';
-import { requireExec } from './sandbox/materialization.ts';
-import type { ExecutableSandbox } from './sandbox/materialization.ts';
+import { requireExec } from '@factory/sandbox';
+import type { ExecutableSandbox } from '@factory/sandbox';
 import {
   createEnvironmentSetupHook,
   createSessionSetupHook,
@@ -47,9 +47,9 @@ import {
   hasFailedSetupCommand,
   recordFailedSetupCommand,
   resolveSessionWorkdir,
-} from './sandbox/session-sandbox.ts';
-import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.ts';
-import { repositoryDirectoryName } from './sandbox/workdir.ts';
+} from '@factory/sandbox';
+import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from '@factory/sandbox';
+import { repositoryDirectoryName } from '@factory/sandbox';
 import {
   clearSessionEnvironment,
   recordSessionEnvironment,
@@ -60,7 +60,7 @@ import type { FactoryProject, FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession, SourceControlStorageHandle } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import { supervisorProjectIdFromContext } from './supervisor/session.ts';
-import { instrumentMethods, timed, timedPhase } from './timing.ts';
+import { instrumentMethods, timed, timedPhase } from '@factory/observability';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from '@factory/pipelines';
 
 const WORKSPACE_ID_PREFIX = 'mfw';

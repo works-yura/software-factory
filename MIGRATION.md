@@ -25,6 +25,16 @@
 
 `@factory/platform` — проміжний пакет («душитель»): уся решта v3 одним шматком, підключена до вже винесених пакетів. Пакети виносяться з нього по одному, кожен крок перевіряє `pnpm verify`.
 
+## Винесено з platform
+
+| Пакет | Модулі |
+| --- | --- |
+| `@factory/capabilities` | `capabilities/{connection,intake,version-control}` |
+| `@factory/observability` | `timing`, `telemetry`, `telemetry-types` |
+| `@factory/sandbox` | `sandbox/{session-sandbox,workdir,git-ref,local-factory-sandbox,callback-factory-sandbox,materialization}` |
+
+Винос робить `migration/tools/extract-package.py`: `git mv`, перешивання імпортів і `vi.mock`, маніфест із версіями з `platform`, оновлення `test-pairs.tsv`. Модуль, що імпортує щось із `platform`, інструмент не переносить.
+
 ## Не перенесено
 
 | Що | Чому |
@@ -63,7 +73,7 @@
 
 `platform`: `check` перевіряє лише код, як у v3. `pnpm --filter @factory/platform check:tests` рахує помилки типів у тестах: зараз 794. Борг закривається, коли пакет виходить із `platform`.
 
-Відомо нестабільний: `platform/src/session/source-control-tools.test.ts` (справжній git, 89 тестів ≈ 70 с) вилітає за 5 с під паралельним навантаженням.
+`platform/src/session/source-control-tools.test.ts`: блок зі справжнім git отримав таймаут 30 с (у v3 — 5 с за замовчуванням), бо під повним паралельним прогоном окремі кейси йдуть кілька секунд і вилітали.
 
 ### Виправлено при перенесенні
 

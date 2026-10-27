@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RouteAuth } from '../../routes/route.ts';
 import { mountApiRoutes } from '../../routes/test-utils.ts';
-import { __clearSessionSandboxesForTests, getSessionSandbox } from '../../sandbox/session-sandbox.ts';
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '@factory/sandbox';
 
 import { SourceControlStorageInMemory } from '@factory/store';
 import { buildGithubRoutes } from './routes.ts';

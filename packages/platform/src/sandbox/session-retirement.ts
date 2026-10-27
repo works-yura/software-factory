@@ -9,8 +9,8 @@ import type {
   SourceControlStorageHandle,
 } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import { requireExec } from './materialization.ts';
-import { evictSessionSandbox, peekSessionSandbox } from './session-sandbox.ts';
+import { requireExec } from '@factory/sandbox';
+import { evictSessionSandbox, peekSessionSandbox } from '@factory/sandbox';
 
 type WarningLogger = (message: string, details: Record<string, unknown>) => void;
 

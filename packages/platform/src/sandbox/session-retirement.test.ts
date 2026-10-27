@@ -12,7 +12,7 @@ import type { SourceControlSession } from '@factory/store';
 import { SourceControlStorageInMemory } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { SessionRetirementCoordinator } from './session-retirement.ts';
-import { __clearSessionSandboxesForTests, getSessionSandbox, peekSessionSandbox } from './session-sandbox.ts';
+import { __clearSessionSandboxesForTests, getSessionSandbox, peekSessionSandbox } from '@factory/sandbox';
 
 afterEach(() => {
   __clearSessionSandboxesForTests();

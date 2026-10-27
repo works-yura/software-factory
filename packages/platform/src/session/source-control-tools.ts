@@ -5,7 +5,7 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { z } from 'zod';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../auth.ts';
-import type { VersionControl } from '../capabilities/version-control.ts';
+import type { VersionControl } from '@factory/capabilities';
 import type { IntegrationTools } from '../integrations/base.ts';
 import {
   ensureLocalBranch,
@@ -14,8 +14,8 @@ import {
   refreshMergeRequestCheckout,
 } from '../integrations/github/sandbox.ts';
 import { normalizedVerdictLine } from '../review-verdict.ts';
-import type { ExecutableSandbox } from '../sandbox/materialization.ts';
-import { resolveSessionWorkdir } from '../sandbox/session-sandbox.ts';
+import type { ExecutableSandbox } from '@factory/sandbox';
+import { resolveSessionWorkdir } from '@factory/sandbox';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.ts';
 import type {
   ProjectRepository,

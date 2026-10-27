@@ -136,13 +136,13 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 import { MaterializeError, SetupCommandError } from './integrations/github/sandbox.ts';
 import { createGithubSubscriptionTools } from './integrations/github/session-subscriptions.ts';
 import { requireGithubTokenInjector } from './integrations/github/token-refresh.ts';
-import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.ts';
+import { CallbackFactorySandbox } from '@factory/sandbox';
 import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
   hasFailedSetupCommand,
   recordFailedSetupCommand,
-} from './sandbox/session-sandbox.ts';
+} from '@factory/sandbox';
 import {
   __clearSessionEnvironmentsForTests,
   peekSessionEnvironment,

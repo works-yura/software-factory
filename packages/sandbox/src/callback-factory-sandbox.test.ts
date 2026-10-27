@@ -14,7 +14,7 @@ describe('CallbackFactorySandbox', () => {
       capabilities: { template: false, builds: { available: false, history: false } },
     });
     const ctx = { sessionId: 's1', sandboxId: 'vm', getRepositoryAccess: undefined };
-    expect(sandbox.create(ctx, {})).toBe(created);
+    expect(sandbox.create(ctx)).toBe(created);
     expect(callback).toHaveBeenCalledWith(ctx);
   });
 });

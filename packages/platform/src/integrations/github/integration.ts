@@ -29,7 +29,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
-import type { IntegrationConnection } from '../../capabilities/connection.ts';
+import type { IntegrationConnection } from '@factory/capabilities';
 import type {
   CreateIntakeCommentInput,
   GetIntakeIssueInput,
@@ -38,7 +38,7 @@ import type {
   IntakeIssueDetail,
   ListIntakeIssuesInput,
   UpdateIntakeIssueInput,
-} from '../../capabilities/intake.ts';
+} from '@factory/capabilities';
 import type {
   CommitCheck,
   PullRequest,
@@ -46,7 +46,7 @@ import type {
   Review,
   ReviewComment,
   VersionControl,
-} from '../../capabilities/version-control.ts';
+} from '@factory/capabilities';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.ts';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.ts';
 import { resolveGithubRules } from './default-rules.ts';

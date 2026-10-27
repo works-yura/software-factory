@@ -327,6 +327,22 @@ importers:
 
   .: {}
 
+  packages/capabilities:
+    dependencies:
+      '@factory/store':
+        specifier: workspace:*
+        version: link:../store
+      '@mastra/core':
+        specifier: 1.79.0
+        version: 1.79.0(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
+    devDependencies:
+      '@types/node':
+        specifier: 22.20.1
+        version: 22.20.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/core:
     dependencies:
       zod:
@@ -359,6 +375,28 @@ importers:
         specifier: 'catalog:'
         version: 4.1.11(@opentelemetry/api@1.10.0)(@types/node@22.20.1)(vite@8.3.5(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/observability:
+    dependencies:
+      hono:
+        specifier: 4.13.13
+        version: 4.13.13
+      posthog-node:
+        specifier: 5.52.2
+        version: 5.52.2
+    devDependencies:
+      '@mastra/core':
+        specifier: 1.79.0
+        version: 1.79.0(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
+      '@types/node':
+        specifier: 22.20.1
+        version: 22.20.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@opentelemetry/api@1.10.0)(@types/node@22.20.1)(vite@8.3.5(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.1))
+
   packages/pipelines:
     dependencies:
       '@factory/core':
@@ -377,15 +415,24 @@ importers:
 
   packages/platform:
     dependencies:
+      '@factory/capabilities':
+        specifier: workspace:*
+        version: link:../capabilities
       '@factory/core':
         specifier: workspace:*
         version: link:../core
+      '@factory/observability':
+        specifier: workspace:*
+        version: link:../observability
       '@factory/pipelines':
         specifier: workspace:*
         version: link:../pipelines
       '@factory/runtime':
         specifier: workspace:*
         version: link:../runtime
+      '@factory/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
       '@factory/store':
         specifier: workspace:*
         version: link:../store
@@ -469,6 +516,28 @@ importers:
       '@factory/pipelines':
         specifier: workspace:*
         version: link:../pipelines
+      '@types/node':
+        specifier: 22.20.1
+        version: 22.20.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@opentelemetry/api@1.10.0)(@types/node@22.20.1)(vite@8.3.5(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.1))
+
+  packages/sandbox:
+    dependencies:
+      '@factory/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@internal/workspace':
+        specifier: workspace:*
+        version: link:../internal-workspace
+      '@mastra/core':
+        specifier: 1.79.0
+        version: 1.79.0(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
+    devDependencies:
       '@types/node':
         specifier: 22.20.1
         version: 22.20.1

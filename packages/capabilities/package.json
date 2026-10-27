@@ -1,0 +1,21 @@
+{
+  "name": "@factory/capabilities",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Capability contracts integrations implement: connection, intake, version control.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@factory/store": "workspace:*",
+    "@mastra/core": "1.79.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:"
+  }
+}

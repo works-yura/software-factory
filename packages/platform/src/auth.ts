@@ -20,8 +20,8 @@ import {
 } from './platform-auth-host.ts';
 import type { RouteAuth } from './routes/route.ts';
 import { actorFromAuthUser } from '@factory/store';
-import { isFactoryTelemetryEnabled } from './telemetry.ts';
-import { timedAboveThreshold } from './timing.ts';
+import { isFactoryTelemetryEnabled } from '@factory/observability';
+import { timedAboveThreshold } from '@factory/observability';
 
 const ORGANIZATION_ID_HEADER = 'X-Mastra-Organization-Id';
 

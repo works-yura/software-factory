@@ -101,10 +101,10 @@ import { createTerminalStageCleanup } from '@factory/runtime';
 import { createFactoryTransitionTools } from './rules/tools.ts';
 import { FactoryTransitionService } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
-import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.ts';
-import { isValidGitRef } from './sandbox/git-ref.ts';
+import { CallbackFactorySandbox } from '@factory/sandbox';
+import { isValidGitRef } from '@factory/sandbox';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.ts';
-import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.ts';
+import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
 import { handleServerError } from './server-error.ts';
@@ -158,7 +158,7 @@ import { createFactorySupervisorReadTools } from './supervisor/read-tools.ts';
 import { messageWorkerSession } from './supervisor/session-messaging.ts';
 import { hydrateSupervisorSession, supervisorProjectIdFromContext, resolveSupervisorScope } from './supervisor/session.ts';
 import { createFactorySupervisorWriteTools } from './supervisor/write-tools.ts';
-import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from './timing.ts';
+import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from '@factory/observability';
 import { deliverFactorySessionNotification } from './tools/deliver.ts';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.ts';
 import type { FactoryToolDependencies } from './tools/index.ts';
@@ -339,7 +339,7 @@ export interface MastraFactoryConfig {
   };
 }
 
-export type { MastraFactorySandboxConfig, MastraFactorySandboxOption } from './sandbox/session-sandbox.ts';
+export type { MastraFactorySandboxConfig, MastraFactorySandboxOption } from '@factory/sandbox';
 export type { FactorySandboxStart } from './workspace.ts';
 
 /**

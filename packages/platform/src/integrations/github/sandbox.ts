@@ -15,11 +15,11 @@
  * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
  */
 
-import type { RepositoryAccess } from '../../capabilities/version-control.ts';
-import { isValidGitRef } from '../../sandbox/git-ref.ts';
-import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.ts';
+import type { RepositoryAccess } from '@factory/capabilities';
+import { isValidGitRef } from '@factory/sandbox';
+import type { ExecutableSandbox, SandboxCommandResult } from '@factory/sandbox';
 import type { SourceControlStorageHandle } from '@factory/store';
-import { timedPhase } from '../../timing.ts';
+import { timedPhase } from '@factory/observability';
 
 type MaterializationStore = Pick<SourceControlStorageHandle['sessions'], 'markMaterialized'>;
 

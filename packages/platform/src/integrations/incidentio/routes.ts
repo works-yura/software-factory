@@ -17,7 +17,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { Intake } from '../../capabilities/intake.ts';
+import type { Intake } from '@factory/capabilities';
 import type { RouteAuth } from '../../routes/route.ts';
 import type { IntakeStorage } from '@factory/store';
 import { IncidentioApiError } from './api.ts';

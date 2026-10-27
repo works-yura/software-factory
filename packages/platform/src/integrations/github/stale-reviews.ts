@@ -1,4 +1,4 @@
-import type { Review, VersionControl } from '../../capabilities/version-control.ts';
+import type { Review, VersionControl } from '@factory/capabilities';
 import { normalizedVerdictLine } from '../../review-verdict.ts';
 import type { FactoryDismissStaleReviewsDecision } from '@factory/core';
 

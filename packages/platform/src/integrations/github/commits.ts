@@ -5,7 +5,7 @@
  * cast keeps the compiler quiet.
  */
 
-import type { VersionControl } from '../../capabilities/version-control.ts';
+import type { VersionControl } from '@factory/capabilities';
 
 const GITHUB_API = 'https://api.github.com';
 

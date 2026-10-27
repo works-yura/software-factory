@@ -17,7 +17,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { IntegrationConnection } from '../../../capabilities/connection.ts';
+import type { IntegrationConnection } from '@factory/capabilities';
 import { JIRA_UNTRUSTED_CONTENT_NOTICE } from '../../jira/agent-tools.ts';
 import { JiraApiError } from '../../jira/api.ts';
 import type { PlatformJiraIntegration } from './integration.ts';

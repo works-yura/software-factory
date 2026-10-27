@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import type { BoardRegistry } from '@factory/core';
 import { cardLabels, moveCardToBoard } from '@factory/core';
-import type { Intake, IntakeItem } from '../capabilities/intake.ts';
+import type { Intake, IntakeItem } from '@factory/capabilities';
 import type { AuditEmitter } from '../storage/domains/audit/domain.ts';
 import { normalizeIntakeLabel, resolveIntakeLabelRoute } from '@factory/store';
 import type { IntakeConfig, IntakeLabelRoute, IntakeStorage } from '@factory/store';

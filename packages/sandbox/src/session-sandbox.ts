@@ -14,7 +14,7 @@ import type {
   SandboxStartHook,
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
-import { timedPhase } from '../timing.ts';
+import { timedPhase } from '@factory/observability';
 import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder, repositoryDirectoryName } from './workdir.ts';
 
 /**

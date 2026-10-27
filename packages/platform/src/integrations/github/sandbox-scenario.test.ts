@@ -1,7 +1,7 @@
 import type { ExecuteCommandOptions } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.ts';
+import type { ExecutableSandbox, SandboxCommandResult } from '@factory/sandbox';
 import { createPullRequest, MaterializeError, pushBranch } from './sandbox.ts';
 
 type Responder = (script: string) => SandboxCommandResult;

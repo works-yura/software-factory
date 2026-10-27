@@ -22,7 +22,7 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
-import type { IntegrationConnection } from '../../capabilities/connection.ts';
+import type { IntegrationConnection } from '@factory/capabilities';
 import type {
   CreateIntakeCommentInput,
   GetIntakeIssueInput,
@@ -31,7 +31,7 @@ import type {
   IntakeIssueDetail,
   ListIntakeIssuesInput,
   UpdateIntakeIssueInput,
-} from '../../capabilities/intake.ts';
+} from '@factory/capabilities';
 import type { RouteAuth } from '../../routes/route.ts';
 import type { IntegrationStorageHandle } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';

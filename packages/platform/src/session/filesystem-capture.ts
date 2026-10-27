@@ -1,7 +1,7 @@
 import type { AgentControllerEvent, SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.ts';
-import type { SessionLayoutRepository } from '../sandbox/session-sandbox.ts';
+import { peekSessionSandbox, sessionLayout } from '@factory/sandbox';
+import type { SessionLayoutRepository } from '@factory/sandbox';
 
 import type { FilesystemFile, FilesystemStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';

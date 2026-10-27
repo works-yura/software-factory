@@ -6,7 +6,7 @@
  * whether a set of current heads differs from the recorded one.
  */
 
-import type { VersionControl } from '../capabilities/version-control.ts';
+import type { VersionControl } from '@factory/capabilities';
 import { getBranchHead } from '../integrations/github/commits.ts';
 
 export type EnvironmentHeads = Record<string, string>;

@@ -14,9 +14,12 @@
     "check:tests": "tsc --noEmit -p tsconfig.test.json | grep -c 'error TS' || true"
   },
   "dependencies": {
+    "@factory/capabilities": "workspace:*",
     "@factory/core": "workspace:*",
+    "@factory/observability": "workspace:*",
     "@factory/pipelines": "workspace:*",
     "@factory/runtime": "workspace:*",
+    "@factory/sandbox": "workspace:*",
     "@factory/store": "workspace:*",
     "@internal/workspace": "workspace:*",
     "@mastra/auth-studio": "1.3.10",

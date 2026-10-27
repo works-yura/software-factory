@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../test-support.ts';
 import type { BoardRegistry } from '@factory/core';
 import { createTestBoard } from '@factory/pipelines/testing';
-import type { Intake, IntakeIssueDetail } from '../capabilities/intake.ts';
+import type { Intake, IntakeIssueDetail } from '@factory/capabilities';
 import { FactoryDecisionDispatcher } from '../test-support.ts';
 import { FactoryTransitionService } from '../test-support.ts';
 import { AUTO_TRIAGED_LABEL } from '@factory/core';

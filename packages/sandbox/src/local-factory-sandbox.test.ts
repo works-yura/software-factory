@@ -10,10 +10,10 @@ describe('LocalFactorySandbox', () => {
       provider: 'local',
       capabilities: { template: false, builds: { available: false, history: false } },
     });
-    const created = sandbox.create({ sessionId: 'sess-1', getRepositoryAccess: undefined }, {});
+    const created = sandbox.create({ sessionId: 'sess-1', getRepositoryAccess: undefined });
     expect(created).toBeInstanceOf(LocalSandbox);
     expect(created.id).toBe('sess-1');
     expect(created.workingDirectory).toBe(join('/tmp/mc-sandboxes', 'sess-1'));
-    expect(created.env).toEqual({ PATH: '/usr/bin' });
+    expect(created['env']).toEqual({ PATH: '/usr/bin' });
   });
 });

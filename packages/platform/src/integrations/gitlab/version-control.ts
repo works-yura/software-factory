@@ -1,4 +1,4 @@
-import type { IntegrationConnection } from '../../capabilities/connection.ts';
+import type { IntegrationConnection } from '@factory/capabilities';
 import type {
   CommitCheckStatus,
   PullRequest,
@@ -7,7 +7,7 @@ import type {
   Review,
   ReviewComment,
   VersionControl,
-} from '../../capabilities/version-control.ts';
+} from '@factory/capabilities';
 import type { SourceControlStorageHandle } from '@factory/store';
 import {
   GITLAB_DISCUSSIONS_PAGE_SIZE,

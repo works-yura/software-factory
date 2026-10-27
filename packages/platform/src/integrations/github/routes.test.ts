@@ -1,13 +1,13 @@
 import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ListIntakeIssuesInput } from '../../capabilities/intake.ts';
-import type { CreatePullRequestInput, ListPullRequestsInput } from '../../capabilities/version-control.ts';
+import type { ListIntakeIssuesInput } from '@factory/capabilities';
+import type { CreatePullRequestInput, ListPullRequestsInput } from '@factory/capabilities';
 import type { RouteAuth } from '../../routes/route.ts';
 import { mountApiRoutes } from '../../routes/test-utils.ts';
 
 import { SessionRetirementCoordinator } from '../../sandbox/session-retirement.ts';
-import { __clearSessionSandboxesForTests, getSessionSandbox } from '../../sandbox/session-sandbox.ts';
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '@factory/sandbox';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock drizzle's `eq`/`and` so the fake DB below can honour `where` predicates.

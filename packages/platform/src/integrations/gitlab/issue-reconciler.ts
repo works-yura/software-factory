@@ -1,5 +1,5 @@
 import { workItemPhaseSemantics } from '@factory/core';
-import type { IntakeIssue } from '../../capabilities/intake.ts';
+import type { IntakeIssue } from '@factory/capabilities';
 import type { WorkItemRow } from '@factory/store';
 import type { IntegrationContext } from '../base.ts';
 import { createIssueReconciler } from '../issue-reconciler.ts';
