@@ -122,7 +122,7 @@ integrations/slack/feed-publisher.test.ts	platform/src/integrations/slack/feed-p
 integrations/slack/integration.test.ts	platform/src/integrations/slack/integration.test.ts
 integrations/slack/slack.test.ts	platform/src/integrations/slack/slack.test.ts
 integrations/subscription-session.test.ts	integrations/src/subscription-session.test.ts
-integrations/workos/integration.test.ts	platform/src/integrations/workos/integration.test.ts
+integrations/workos/integration.test.ts	integration-workos/src/integration.test.ts
 mcp/routes.test.ts	platform/src/mcp/routes.test.ts
 platform-auth-host.test.ts	auth/src/platform-auth-host.test.ts
 routes/apply-default-model.scenario.test.ts	platform/src/routes/apply-default-model.scenario.test.ts

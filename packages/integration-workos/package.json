@@ -1,0 +1,27 @@
+{
+  "name": "@factory/integration-workos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WorkOS integration.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/integrations": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/auth-workos": "1.6.7",
+    "@mastra/core": "1.79.0",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@factory/http": "workspace:*",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
