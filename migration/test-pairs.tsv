@@ -24,7 +24,7 @@ rules/terminal-cleanup.test.ts	runtime/src/terminal-cleanup.test.ts
 rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts
 rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts
 session/run-audit.test.ts	runtime/src/run-audit.test.ts
-skills/service.test.ts	runtime/src/skills/service.test.ts	-2	the two skill-cache rescan cases moved to harness-mastra/src/harness.test.ts with the Mastra harness adapter
+skills/service.test.ts	runtime/src/skills/service.test.ts	-1	the two skill-cache rescan cases moved to harness-mastra/src/harness.test.ts with the Mastra harness adapter (-2); formatSkillMessage case ported from upstream a5a9179daa (+1)
 storage/domains/channel-identity/base.test.ts	store/src/channel-identity/base.test.ts
 storage/domains/credentials/base.test.ts	store/src/credentials/base.test.ts
 storage/domains/custom-providers/base.test.ts	store/src/custom-providers/base.test.ts
@@ -329,7 +329,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptRevealOrder.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptRevealOrder.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSender.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSender.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSignalRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSignalRows.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	+1	typed skill signal row ported from upstream a5a9179daa
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolBurst.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolBurst.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolOutcomes.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolOutcomes.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx

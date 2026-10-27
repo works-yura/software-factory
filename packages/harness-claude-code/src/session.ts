@@ -9,6 +9,7 @@ import type {
   AgentRunContext,
   AgentRunEndReason,
   AgentSession,
+  AgentSignalInput,
   AgentSignalResult,
   PlanDecision,
 } from '@factory/harness';
@@ -308,12 +309,12 @@ export class ClaudeCodeSession implements AgentSession {
   }
 
   sendSignal(
-    input: { id: string; type: 'user'; tagName: 'user'; contents: string },
+    input: AgentSignalInput,
     options: { requestContext: AgentRunContext; requireDelivery?: boolean },
   ): AgentSignalResult {
     let accepted: Accepted;
     try {
-      accepted = this.#accept([{ kind: 'signal', id: input.id, text: input.contents }], true);
+      accepted = this.#accept([{ kind: 'signal', id: input.id, text: signalText(input) }], true);
     } catch (error) {
       return { accepted: Promise.reject(error) };
     }
@@ -685,4 +686,15 @@ export class ClaudeCodeSession implements AgentSession {
       return outcome;
     }
   }
+}
+
+/**
+ * Claude Code takes a turn as plain text, so a skill kickoff travels in the
+ * `<skill name="…">` envelope a human-invoked skill sends; only an early
+ * closing tag in the contents is escaped.
+ */
+function signalText(input: AgentSignalInput): string {
+  if (input.tagName !== 'skill') return input.contents;
+  const contents = input.contents.replace(/<\/skill\s*>/gi, match => match.replace('<', '&lt;').replace('>', '&gt;'));
+  return `<skill name="${input.attributes.name.replaceAll('"', '&quot;')}">\n${contents}\n</skill>`;
 }

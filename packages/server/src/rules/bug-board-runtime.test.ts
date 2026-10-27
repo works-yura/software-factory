@@ -123,6 +123,7 @@ describe('Bug board runtime', () => {
     const { workItems, sourceControl, integrationStorage, project, projectRepository, boards, transitionService, rules } =
       await setup();
     const delivered: string[] = [];
+    const skills: Array<string | undefined> = [];
     let threadId: string | undefined;
     const agentEndListeners = new Set<(event: { type: string }) => void>();
     const makeSession = (key: string) => ({
@@ -150,7 +151,9 @@ describe('Bug board runtime', () => {
           get: vi.fn(async (name: string) => ({ name, instructions: `Run ${name}.` })),
         },
       }),
-      sendSignal: vi.fn((input: { contents: string }) => {
+      sendSignal: vi.fn((input: { tagName: string; attributes?: { name: string }; contents: string }) => {
+        // Bug skills start as typed skill signals, like every Factory skill kickoff.
+        if (input.tagName === 'skill') skills.push(input.attributes?.name);
         delivered.push(input.contents);
         for (const listener of agentEndListeners) listener({ type: 'agent_end' });
         return { accepted: Promise.resolve({ accepted: true, action: 'wake' }) };
@@ -254,7 +257,8 @@ describe('Bug board runtime', () => {
     // A person starts triage: the triage seat runs bug-triage.
     await expect(move('triage', { type: 'human', id: 'user-1' })).resolves.toMatchObject({ status: 'accepted' });
     await drain();
-    expect(delivered.at(-1)).toContain('<skill name="bug-triage">');
+    expect(skills.at(-1)).toBe('bug-triage');
+    expect(delivered.at(-1)).toContain('Run bug-triage.');
 
     // Triage must classify; a non-bug cannot be carried on to Planning on this board.
     const triage = { type: 'agent' as const, bindingId: 'binding-triage', role: 'triage' };
@@ -267,7 +271,8 @@ describe('Bug board runtime', () => {
     await expect(move('planning', triage, { triageType: 'bug' })).resolves.toMatchObject({ status: 'accepted' });
     await drain();
     expect(await card()).toMatchObject({ stages: ['planning'], triageType: 'bug' });
-    expect(delivered.at(-1)).toContain('<skill name="bug-plan">');
+    expect(skills.at(-1)).toBe('bug-plan');
+    expect(delivered.at(-1)).toContain('Run bug-plan.');
 
     // The plan gate: without auto-approved plans the planner cannot start the reproduction test
     // itself, nor skip it straight to the fix.
@@ -278,7 +283,8 @@ describe('Bug board runtime', () => {
     await expect(move('tests', { type: 'human', id: 'user-1' })).resolves.toMatchObject({ status: 'accepted' });
     await drain();
     expect(await card()).toMatchObject({ stages: ['tests'] });
-    expect(delivered.at(-1)).toContain('<skill name="bug-test">');
+    expect(skills.at(-1)).toBe('bug-test');
+    expect(delivered.at(-1)).toContain('Run bug-test.');
 
     // The tester's seat cannot hand over to the fix until the failing test is recorded on the card
     // (factory_record_reproduction_test writes these keys after checking the commit in the checkout).
@@ -305,7 +311,8 @@ describe('Bug board runtime', () => {
     await drain();
     const building = await card();
     expect(building).toMatchObject({ stages: ['execute'] });
-    expect(delivered.at(-1)).toContain('<skill name="bug-build">');
+    expect(skills.at(-1)).toBe('bug-build');
+    expect(delivered.at(-1)).toContain('Run bug-build.');
     expect(delivered.at(-1)).toContain('"apps/mobile/test/profile_save_test.dart"');
 
     // The fix seat leaves through Review (where its tool checks the test files), then opens the

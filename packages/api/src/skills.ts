@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 
 import type { AgentHarness } from '@factory/harness';
 import { listFactorySkills } from '@factory/harness-mastra';
-import { resolveSkillInvocation, SkillInvocationError } from '@factory/runtime';
+import { formatSkillMessage, resolveSkillInvocation, SkillInvocationError } from '@factory/runtime';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
@@ -133,15 +133,16 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
 
       try {
         const resolved = await resolveSkillInvocation(harness, body);
+        const message = formatSkillMessage(resolved.skillName, resolved.contents);
         if (dispatch) {
           const requestContext = c.get('requestContext' as never) as RequestContext | undefined;
           void resolved.session
-            .sendMessage({ content: resolved.message, ...(requestContext ? { requestContext } : {}) })
+            .sendMessage({ content: message, ...(requestContext ? { requestContext } : {}) })
             .catch((error: unknown) => {
               console.error('Workspace skill dispatch failed after acceptance', error);
             });
         }
-        return c.json({ ok: true, skill: resolved.skillName, message: resolved.message });
+        return c.json({ ok: true, skill: resolved.skillName, message });
       } catch (error) {
         if (error instanceof SkillInvocationError) {
           return c.json({ error: error.code, message: error.message }, 404);

@@ -1012,8 +1012,19 @@ export class FactoryDecisionDispatcher {
           const kickoffContents = await withWorkItemFeed(
             this.#feedReader,
             { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
-            resolved.message,
+            resolved.contents,
           );
+          // A skill kickoff is system-generated, not something the human typed: send it
+          // as a typed `skill` signal so the model sees `<skill name="…">` and traces
+          // record the skill name. Plain-prompt kickoffs stay user messages.
+          const kickoffSignal =
+            resolved.skillName !== undefined
+              ? {
+                  type: 'reactive' as const,
+                  tagName: 'skill' as const,
+                  attributes: { name: resolved.skillName },
+                }
+              : { type: 'user' as const, tagName: 'user' as const };
           // The feed read is async storage I/O; the card can move while it runs.
           if (await kickoffLanded()) return;
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
@@ -1057,8 +1068,7 @@ export class FactoryDecisionDispatcher {
             const result = session.sendSignal(
               {
                 id: deliveryId,
-                type: 'user',
-                tagName: 'user',
+                ...kickoffSignal,
                 contents: kickoffContents,
               },
               // Without `requireDelivery` the session resolves `accepted` on the

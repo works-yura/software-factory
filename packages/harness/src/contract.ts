@@ -60,6 +60,16 @@ export interface PlanDecision {
   plan?: string;
 }
 
+/**
+ * What a delivery into a session carries: a user turn, or a skill kickoff. A
+ * skill kickoff is system-generated, not something a person typed; the harness
+ * shows it to the model as the named skill (`<skill name="…">`) and records the
+ * skill name in traces and memory. Its contents reach the model as written.
+ */
+export type AgentSignalInput =
+  | { id: string; type: 'user'; tagName: 'user'; contents: string }
+  | { id: string; type: 'reactive'; tagName: 'skill'; attributes: { name: string }; contents: string };
+
 export interface AgentSignalResult {
   accepted: Promise<{ accepted: true; runId?: string; action?: string }>;
 }
@@ -106,9 +116,9 @@ export interface AgentSession {
   readonly suspensions: { hasPending(): boolean };
   abort(): void;
   sendMessage(input: { content: string; requestContext?: AgentRunContext }): Promise<unknown>;
-  /** A user turn: starts a run on an idle session, or joins the run in flight. */
+  /** Starts a run on an idle session, or joins the run in flight. */
   sendSignal(
-    input: { id: string; type: 'user'; tagName: 'user'; contents: string },
+    input: AgentSignalInput,
     options: { requestContext: AgentRunContext; requireDelivery?: boolean },
   ): AgentSignalResult;
   sendNotificationSignal(

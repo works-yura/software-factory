@@ -333,5 +333,6 @@ overrides:
   'yuku-parser': 0.7.0
 
 patchedDependencies:
+  '@mastra/core@1.79.0': patches/@mastra__core@1.79.0.patch
   '@mastra/mcp@2.5.0': patches/@mastra__mcp@2.5.0.patch
   '@mastra/playground-ui@65.0.0': patches/@mastra__playground-ui@65.0.0.patch

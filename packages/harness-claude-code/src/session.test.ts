@@ -36,7 +36,7 @@ async function setup(turns: FakeTurn[], overrides: Partial<ClaudeCodeHarnessConf
   });
   const signal = (id: string, contents: string) =>
     session.sendSignal({ id, type: 'user', tagName: 'user', contents }, { requestContext, requireDelivery: true }).accepted;
-  return { fake, store, harness, session, events, transcript, signal };
+  return { fake, store, harness, session, events, transcript, signal, requestContext };
 }
 
 function nextEnd(session: ClaudeCodeSession): Promise<AgentRunEndReason | undefined> {
@@ -55,6 +55,27 @@ const flagValue = (args: string[], flag: string) => {
 };
 
 describe('ClaudeCodeSession', () => {
+  it('starts a skill kickoff as the skill envelope, contents as written', async () => {
+    const { fake, session, requestContext } = await setup([{ lines: fixture('turn-complete.jsonl') }]);
+    const end = nextEnd(session);
+
+    await session.sendSignal(
+      {
+        id: 'kickoff-skill',
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'bug-triage' },
+        contents: 'Run `pnpm test && pnpm lint`.\n\nDo not write </skill> here.',
+      },
+      { requestContext, requireDelivery: true },
+    ).accepted;
+    await end;
+
+    expect(fake.calls[0]!.stdin).toBe(
+      '<skill name="bug-triage">\nRun `pnpm test && pnpm lint`.\n\nDo not write &lt;/skill&gt; here.\n</skill>',
+    );
+  });
+
   it('wakes an idle session, runs one turn and ends complete', async () => {
     const { fake, session, events, transcript, signal, store } = await setup([{ lines: fixture('turn-complete.jsonl') }]);
     const end = nextEnd(session);
