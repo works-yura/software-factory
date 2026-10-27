@@ -1,5 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { ATTENTION_KINDS, NEEDS_YOU_KINDS } from '../../../services/attention';
 import { AttentionList } from './AttentionList';
@@ -17,13 +18,14 @@ function NothingHere({ children }: { children: string }) {
 
 /** Archived is history, so every kind shares one list; open keeps discussions apart from what waits on a person. */
 function NeedsYouLists({ factoryId, view }: { factoryId: string; view: NeedsYouView }) {
+  const { t } = useTranslation('activity');
   if (view === 'archived') {
     return (
       <AttentionList
         factoryId={factoryId}
         view="archived"
         kinds={ATTENTION_KINDS}
-        emptySlot={<NothingHere>Nothing archived.</NothingHere>}
+        emptySlot={<NothingHere>{t('needsYou.nothingArchived')}</NothingHere>}
       />
     );
   }
@@ -34,7 +36,7 @@ function NeedsYouLists({ factoryId, view }: { factoryId: string; view: NeedsYouV
         factoryId={factoryId}
         view="open"
         kinds={NEEDS_YOU_KINDS}
-        emptySlot={<NothingHere>Nothing needs you right now.</NothingHere>}
+        emptySlot={<NothingHere>{t('needsYou.nothingOpen')}</NothingHere>}
       />
       <FollowedDiscussions factoryId={factoryId} />
     </>

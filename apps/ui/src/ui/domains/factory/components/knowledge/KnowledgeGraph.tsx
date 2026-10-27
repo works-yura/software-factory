@@ -47,6 +47,8 @@ import {
   toRecordFlow,
 } from './graphModel';
 import type { Arrivals } from './graphDiff';
+import { currentLanguage } from '../../../../i18n';
+import { translator } from '../../../../i18n/t';
 import { runLayout } from './layout';
 import { knowledgeScopes } from './knowledgeScope';
 import {
@@ -60,7 +62,11 @@ import {
 import type { KnowledgeFlowNode } from './knowledgeStyles';
 import './knowledge.css';
 
-const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
+const tk = translator('knowledge');
+
+function rungLabel(rung: KnowledgeRung): string {
+  return rung === 'org' ? tk('rung.org') : rung === 'resource' ? tk('rung.resource') : tk('rung.thread');
+}
 
 function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
   const { node, size, degree, focused } = data;
@@ -96,7 +102,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
         ) : null}
         {labeled && (large || node.isBoundary) ? (
           <Txt as="span" variant="eyebrow" tone="muted" className="mt-0.5">
-            {node.isBoundary && node.rung ? `↗ ${RUNG_LABELS[node.rung]}` : node.kind.slice(0, 12)}
+            {node.isBoundary && node.rung ? `↗ ${rungLabel(node.rung)}` : node.kind.slice(0, 12)}
           </Txt>
         ) : null}
       </div>
@@ -106,7 +112,11 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
             variant="neutral"
             size="xs"
             className="bg-card"
-            aria-label={`${node.memberCount}${node.memberCountTruncated ? '+' : ''} direct members`}
+            aria-label={
+              node.memberCountTruncated
+                ? tk('graph.directMembersAtLeast', { count: node.memberCount })
+                : tk('graph.directMembers', { count: node.memberCount })
+            }
           >
             {node.memberCount}
             {node.memberCountTruncated ? '+' : ''}
@@ -164,7 +174,7 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
               transform: `translate(-50%, -50%) translate(${0.25 * startX + 0.5 * controlX + 0.25 * endX}px, ${0.25 * startY + 0.5 * controlY + 0.25 * endY}px)`,
             }}
           >
-            <Pin size={11} aria-label="Pinned relationship" />
+            <Pin size={11} aria-label={tk('graph.pinnedRelationship')} />
           </span>
         </EdgeLabelRenderer>
       ) : null}
@@ -199,7 +209,7 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
     >
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
-      {record.pinned ? <Pin size={11} aria-label="Pinned record" /> : null}
+      {record.pinned ? <Pin size={11} aria-label={tk('graph.pinnedRecord')} /> : null}
     </div>
   );
 }
@@ -243,8 +253,8 @@ export interface KnowledgeGraphProps {
 
 function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
   const parts: string[] = [];
-  if (payload.truncated) parts.push(`showing the newest ${payload.nodes.length} nodes`);
-  if (payload.unresolvedCapped.count > 0) parts.push(`${payload.unresolvedCapped.count} links unresolved (capped)`);
+  if (payload.truncated) parts.push(tk('graph.newestNodes', { count: payload.nodes.length }));
+  if (payload.unresolvedCapped.count > 0) parts.push(tk('graph.unresolvedLinks', { count: payload.unresolvedCapped.count }));
   if (parts.length === 0) return null;
   return (
     <Txt
@@ -254,7 +264,7 @@ function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
       data-testid="knowledge-truncation-banner"
       className="border-border bg-card pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1"
     >
-      Partial view — {parts.join(' · ')}
+      {tk('graph.partialView', { details: parts.join(' · ') })}
     </Txt>
   );
 }
@@ -522,7 +532,7 @@ function KnowledgeGraphInner({
           availableRungs.map(rung => (
             <FilterChip
               key={rung}
-              label={RUNG_LABELS[rung]}
+              label={rungLabel(rung)}
               activeClassName={knowledgeScopes[rung].filterClass}
               icon={rung === 'org' ? <Globe size={13} /> : <Boxes size={13} />}
               active={filters.rungs.size === 0 || filters.rungs.has(rung)}
@@ -530,7 +540,7 @@ function KnowledgeGraphInner({
             />
           ))}
         <FilterChip
-          label="Pinned"
+          label={tk('graph.pinned')}
           activeClassName="border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground"
           icon={<Pin size={13} />}
           active={filters.pinnedOnly}
@@ -636,15 +646,15 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
           {node.isScope ? (
             <>
-              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Type</dt>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.type')}</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
-                {node.kind === 'scope' ? 'scope' : node.kind}
+                {node.kind === 'scope' ? tk('kind.scope') : node.kind}
               </dd>
-              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Content nodes</dt>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.contentNodes')}</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.contentNodeCount ?? '—'}</dd>
-              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Child scopes</dt>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.childScopes')}</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.childScopeCount ?? '—'}</dd>
-              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Direct members</dt>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.directMembers')}</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
                 {node.memberCount ?? '—'}
                 {node.memberCountTruncated ? '+' : ''}
@@ -652,23 +662,23 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
             </>
           ) : (
             <>
-              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.kind')}</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind}</dd>
-              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.scope')}</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
-                {node.rung ? RUNG_LABELS[node.rung] : '—'}
+                {node.rung ? rungLabel(node.rung) : '—'}
               </dd>
-              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.knowledgeRecords')}</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.recordCount}</dd>
-              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Connections</dt>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.connections')}</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
-                {degree.incoming} in · {degree.outgoing} out
+                {tk('fields.connectionsValue', { incoming: degree.incoming, outgoing: degree.outgoing })}
               </dd>
             </>
           )}
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Updated</dt>
+          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.updated')}</dt>
           <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
-            {node.updatedAt ? new Date(node.updatedAt).toLocaleString() : '—'}
+            {node.updatedAt ? new Date(node.updatedAt).toLocaleString(currentLanguage()) : '—'}
           </dd>
         </dl>
       </div>
@@ -684,9 +694,9 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
       >
         <div className="text-foreground mb-1 flex items-center gap-1.5">
           <Txt as="span" variant="caption" className="block">
-            Record
+            {tk('graph.record')}
           </Txt>
-          {record.pinned ? <Pin size={11} className="text-badge-amber-indicator" aria-label="Pinned" /> : null}
+          {record.pinned ? <Pin size={11} className="text-badge-amber-indicator" aria-label={tk('graph.pinned')} /> : null}
         </div>
         <Txt as="p" variant="body-sm" tone="muted">
           {record.text}
@@ -705,7 +715,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         style={style}
       >
         <Txt as="p" variant="caption" tone="ink">
-          {source && target ? `${source} → ${target}` : 'Record'}
+          {source && target ? `${source} → ${target}` : tk('graph.record')}
         </Txt>
         <Txt as="p" variant="body-sm" tone="muted" className="mt-0.5">
           {knowledgeEdgeHoverText(hover.edge)}

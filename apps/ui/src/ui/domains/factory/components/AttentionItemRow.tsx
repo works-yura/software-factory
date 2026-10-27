@@ -28,15 +28,26 @@ import { attentionAuthorName, factoryAttentionTargetPath, readableAttentionDetai
 import type { FactoryAttentionItem } from '../services/attention';
 import { RAIL_ROW_BODY } from './Timeline';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
+
+import { lazyLabels } from '../../../i18n/lazy';
+import { translator } from '../../../i18n/t';
+
+const ta = translator('activity');
 
 const KIND = {
-  mention: { glyph: MessageSquare, label: 'mention', badge: 'green' },
-  activity: { glyph: MessagesSquare, label: 'comment', badge: 'neutral' },
-  'automation-failed': { glyph: TriangleAlert, label: 'failed', badge: 'destructive' },
-  'automation-proposed': { glyph: Sparkles, label: 'suggested', badge: 'orange' },
-  'supervisor-finding': { glyph: Brain, label: 'finding', badge: 'blue' },
-  'agent-waiting': { glyph: Hourglass, label: 'waiting', badge: 'orange' },
-} satisfies Record<FactoryAttentionItem['kind'], { glyph: typeof MessageSquare; label: string; badge: BadgeVariant }>;
+  mention: { glyph: MessageSquare, badge: 'green' },
+  activity: { glyph: MessagesSquare, badge: 'neutral' },
+  'automation-failed': { glyph: TriangleAlert, badge: 'destructive' },
+  'automation-proposed': { glyph: Sparkles, badge: 'orange' },
+  'supervisor-finding': { glyph: Brain, badge: 'blue' },
+  'agent-waiting': { glyph: Hourglass, badge: 'orange' },
+} satisfies Record<FactoryAttentionItem['kind'], { glyph: typeof MessageSquare; badge: BadgeVariant }>;
+
+const KIND_LABEL = lazyLabels(
+  Object.keys(KIND) as Array<FactoryAttentionItem['kind']>,
+  kind => `activity:attention.kinds.${kind}`,
+);
 
 /** Meta and actions stack in one grid cell, so a hover swaps them without reflow; touch has no hover, so they share a line under the title. */
 const SWAP_SLOT =
@@ -49,9 +60,9 @@ const SHOWN_ON_REVEAL =
   'flex items-center gap-0.5 transition-opacity duration-150 pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:pointer-events-auto pointer-fine:group-focus-within:opacity-100';
 
 function destinationLabel(item: FactoryAttentionItem): string {
-  if (item.target.kind === 'thread') return 'Open thread';
-  if (item.target.kind === 'work-item') return 'View card';
-  return 'View rules';
+  if (item.target.kind === 'thread') return ta('attention.openThreadFor', { title: item.title });
+  if (item.target.kind === 'work-item') return ta('attention.viewCardFor', { title: item.title });
+  return ta('attention.viewRulesFor', { title: item.title });
 }
 
 function RowAction({
@@ -110,6 +121,7 @@ export function AttentionItemRow({
   onRestore: () => void;
 }) {
   const navigate = useNavigate();
+  const { t } = useTranslation('activity');
   const author = attentionAuthorName(item);
 
   return (
@@ -121,11 +133,11 @@ export function AttentionItemRow({
     >
       <Link
         to={factoryAttentionTargetPath(factoryId, item.target)}
-        aria-label={`${destinationLabel(item)} for ${item.title}`}
+        aria-label={destinationLabel(item)}
         className={`absolute inset-0 rounded-lg ${focusRingInset}`}
       />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="sr-only">{item.read ? 'Read' : 'Unread'}</span>
+        <span className="sr-only">{item.read ? t('attention.read') : t('attention.unread')}</span>
         <Txt as="span" variant="column" tone="ink" className="truncate">
           {item.title}
         </Txt>
@@ -146,7 +158,7 @@ export function AttentionItemRow({
             size="xs"
             icon={createElement(KIND[item.kind].glyph)}
           >
-            {KIND[item.kind].label}
+            {KIND_LABEL[item.kind]}
           </Badge>
           <Txt as="time" variant="meta" tone="muted" font="mono" dateTime={item.occurredAt}>
             {relativeTime(item.occurredAt)}
@@ -156,16 +168,16 @@ export function AttentionItemRow({
           <Button
             variant="ghost"
             size="icon-sm"
-            tooltip="Ask supervisor"
-            aria-label={`Ask supervisor about ${item.title}`}
+            tooltip={t('attention.askSupervisor')}
+            aria-label={t('attention.askSupervisorAbout', { title: item.title })}
             onClick={() => void navigate(supervisorAskPath(factoryId, attentionPrompt(item)))}
           >
             <Brain aria-hidden />
           </Button>
           {onChooseRepository ? (
             <RowAction
-              tooltip="Choose repository"
-              label={`Choose repository for ${item.title}`}
+              tooltip={t('attention.chooseRepository')}
+              label={t('attention.chooseRepositoryFor', { title: item.title })}
               disabled={retrying}
               onClick={onChooseRepository}
             >
@@ -174,8 +186,12 @@ export function AttentionItemRow({
           ) : null}
           {onRetry && !onChooseRepository ? (
             <RowAction
-              tooltip="Retry"
-              label={`${retrying ? 'Retrying' : 'Retry'} ${item.title}`}
+              tooltip={t('attention.retry')}
+              label={
+                retrying
+                  ? t('attention.retryingTitle', { title: item.title })
+                  : t('attention.retryTitle', { title: item.title })
+              }
               disabled={retrying}
               onClick={onRetry}
             >
@@ -183,19 +199,23 @@ export function AttentionItemRow({
             </RowAction>
           ) : null}
           {onApprove ? (
-            <RowAction tooltip="Run it" label={`Run ${item.title}`} disabled={settling} onClick={onApprove}>
+            <RowAction tooltip={t('attention.runIt')}
+              label={t('attention.runTitle', { title: item.title })}
+              disabled={settling} onClick={onApprove}>
               {settling ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <Check aria-hidden />}
             </RowAction>
           ) : null}
           {onDismiss ? (
-            <RowAction tooltip="Dismiss" label={`Dismiss ${item.title}`} disabled={settling} onClick={onDismiss}>
+            <RowAction tooltip={t('attention.dismiss')}
+              label={t('attention.dismissTitle', { title: item.title })}
+              disabled={settling} onClick={onDismiss}>
               <X aria-hidden />
             </RowAction>
           ) : null}
           {!item.read ? (
             <RowAction
-              tooltip="Mark as read"
-              label={`Mark ${item.title} as read`}
+              tooltip={t('attention.markRead')}
+              label={t('attention.markTitleRead', { title: item.title })}
               disabled={updatingReceipt}
               onClick={onRead}
             >
@@ -203,13 +223,15 @@ export function AttentionItemRow({
             </RowAction>
           ) : null}
           {item.archived ? (
-            <RowAction tooltip="Restore" label={`Restore ${item.title}`} disabled={updatingReceipt} onClick={onRestore}>
+            <RowAction tooltip={t('attention.restore')}
+              label={t('attention.restoreTitle', { title: item.title })}
+              disabled={updatingReceipt} onClick={onRestore}>
               <ArchiveRestore aria-hidden />
             </RowAction>
           ) : (
             <RowAction
-              tooltip="Archive for me"
-              label={`Archive ${item.title}`}
+              tooltip={t('attention.archiveForMe')}
+              label={t('attention.archiveTitle', { title: item.title })}
               disabled={updatingReceipt}
               onClick={onArchive}
             >

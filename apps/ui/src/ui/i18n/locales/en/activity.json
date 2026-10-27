@@ -1,1 +1,312 @@
-{}
+{
+  "day": {
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "attention": {
+    "kinds": {
+      "mention": "mention",
+      "activity": "comment",
+      "automation-failed": "failed",
+      "automation-proposed": "suggested",
+      "supervisor-finding": "finding",
+      "agent-waiting": "waiting"
+    },
+    "openThreadFor": "Open thread for {{title}}",
+    "viewCardFor": "View card for {{title}}",
+    "viewRulesFor": "View rules for {{title}}",
+    "read": "Read",
+    "unread": "Unread",
+    "askSupervisor": "Ask supervisor",
+    "askSupervisorAbout": "Ask supervisor about {{title}}",
+    "chooseRepository": "Choose repository",
+    "chooseRepositoryFor": "Choose repository for {{title}}",
+    "retry": "Retry",
+    "retryingTitle": "Retrying {{title}}",
+    "retryTitle": "Retry {{title}}",
+    "runIt": "Run it",
+    "runTitle": "Run {{title}}",
+    "dismiss": "Dismiss",
+    "dismissTitle": "Dismiss {{title}}",
+    "markRead": "Mark as read",
+    "markTitleRead": "Mark {{title}} as read",
+    "restore": "Restore",
+    "restoreTitle": "Restore {{title}}",
+    "archiveForMe": "Archive for me",
+    "archiveTitle": "Archive {{title}}",
+    "errors": {
+      "saveRepository": "Unable to save repository and retry automation",
+      "retry": "Unable to retry automation",
+      "approve": "Unable to start the run",
+      "dismiss": "Unable to dismiss the run",
+      "read": "Unable to mark attention item as read",
+      "archive": "Unable to archive attention item",
+      "restore": "Unable to restore attention item"
+    }
+  },
+  "workItem": {
+    "actions": {
+      "assigned": "Assigned the item",
+      "updated": "Updated the item",
+      "moved": "Moved the item",
+      "removed": "Removed the item",
+      "runStarted": "Started a run",
+      "runEnded": "Run ended",
+      "suggestedRunStarted": "Started a suggested run",
+      "suggestedRunDismissed": "Dismissed a suggested run"
+    },
+    "factoryAgent": "Factory agent",
+    "createdAt": "Created at: {{time}}",
+    "viewActivityBy": "View activity by {{name}}",
+    "activityLabel": "Work item activity",
+    "activity": "Activity",
+    "lastWorkedOnBy": "Last worked on by {{name}}",
+    "noActivity": "No recorded activity yet."
+  },
+  "codebase": {
+    "viewOnGitHub": "View on GitHub",
+    "branchTip": "Tip of the branch",
+    "unknownAuthor": "Unknown",
+    "loadingCommits": "Loading commits",
+    "loadError": "Could not reach GitHub for the commit history.",
+    "noCommits": "No commits yet",
+    "noRepository": "No repository linked yet",
+    "linkRepository": "Link repository",
+    "repository": "Repository: {{slug}}",
+    "selected": "Selected"
+  },
+  "feed": {
+    "loading": "Loading activity",
+    "loadError": "Unable to load activity.",
+    "tryAgain": "Try again",
+    "noEventsInCategories": "No events in these categories.",
+    "showAllEvents": "Show all events",
+    "empty": "Nothing has happened yet.",
+    "loadMore": "Load more activity"
+  },
+  "needsYou": {
+    "loading": "Loading what needs you",
+    "loadError": "Unable to load what needs you.",
+    "showMore": "Show {{count}} more",
+    "loadingOlder": "Loading…",
+    "loadOlder": "Load older",
+    "followed": "Discussions you follow",
+    "nothingArchived": "Nothing archived.",
+    "nothingOpen": "Nothing needs you right now.",
+    "views": {
+      "open": "Open",
+      "archived": "Archived"
+    },
+    "title": "Needs you",
+    "markAllRead": "Mark all read",
+    "properties": "Needs you properties",
+    "show": "Show"
+  },
+  "rail": {
+    "details": "Details",
+    "showLess": "Show less"
+  },
+  "actor": {
+    "someone": "Someone",
+    "agent": "Agent",
+    "rule": "A rule"
+  },
+  "sentence": {
+    "deeds": {
+      "run_started": {
+        "title": "started a run on",
+        "group": "started a run on",
+        "none": "started a run"
+      },
+      "run_ended": {
+        "title": "ended a run on",
+        "group": "ended a run on",
+        "none": "ended a run"
+      },
+      "run_queued": {
+        "title": "queued a run on",
+        "group": "queued a run on",
+        "none": "queued a run"
+      },
+      "run_rejected": {
+        "title": "rejected the run on",
+        "group": "rejected the run on",
+        "none": "rejected the run"
+      },
+      "run_approved": {
+        "title": "approved the run on",
+        "group": "approved the run on",
+        "none": "approved the run"
+      },
+      "run_dismissed": {
+        "title": "dismissed the run on",
+        "group": "dismissed the run on",
+        "none": "dismissed the run"
+      },
+      "run_retry": {
+        "title": "retried the run on",
+        "group": "retried the run on",
+        "none": "retried the run"
+      },
+      "git_commit": {
+        "title": "committed to",
+        "group": "committed to",
+        "none": "committed"
+      },
+      "git_push": {
+        "title": "pushed to",
+        "group": "pushed to",
+        "none": "pushed"
+      },
+      "git_pr_opened": {
+        "title": "opened a pull request for",
+        "group": "opened a pull request for",
+        "none": "opened a pull request"
+      },
+      "agent_commit": {
+        "title": "committed to",
+        "group": "committed to",
+        "none": "committed"
+      },
+      "agent_push": {
+        "title": "pushed to",
+        "group": "pushed to",
+        "none": "pushed"
+      },
+      "agent_pr_opened": {
+        "title": "opened a pull request for",
+        "group": "opened a pull request for",
+        "none": "opened a pull request"
+      },
+      "agent_signaled": {
+        "title": "signaled",
+        "group": "signaled",
+        "none": "signaled"
+      },
+      "work_item_created": {
+        "title": "created",
+        "group": "created",
+        "none": "created"
+      },
+      "work_item_updated": {
+        "title": "updated",
+        "group": "updated",
+        "none": "updated"
+      },
+      "work_item_deleted": {
+        "title": "deleted",
+        "group": "deleted",
+        "none": "deleted"
+      },
+      "work_item_stage_moved": {
+        "title": "moved",
+        "group": "moved",
+        "none": "moved"
+      },
+      "work_item_transition_rejected": {
+        "title": "was blocked moving",
+        "group": "was blocked moving",
+        "none": "was blocked moving"
+      },
+      "work_item_comment_created": {
+        "title": "commented:",
+        "group": "commented on",
+        "none": "commented:"
+      },
+      "work_item_comment_edited": {
+        "title": "edited a comment:",
+        "group": "edited a comment on",
+        "none": "edited a comment:"
+      },
+      "work_item_comment_deleted": {
+        "title": "deleted a comment:",
+        "group": "deleted a comment on",
+        "none": "deleted a comment:"
+      },
+      "work_item_comment_mentioned": {
+        "title": "mentioned someone:",
+        "group": "mentioned someone on",
+        "none": "mentioned someone:"
+      },
+      "work_item_labels_reconciled": {
+        "title": "reconciled the labels on",
+        "group": "reconciled the labels on",
+        "none": "reconciled the labels"
+      },
+      "intake_config_updated": {
+        "title": "changed intake settings on",
+        "group": "changed intake settings on",
+        "none": "changed intake settings"
+      },
+      "intake_binding_updated": {
+        "title": "changed an intake binding on",
+        "group": "changed an intake binding on",
+        "none": "changed an intake binding"
+      },
+      "intake_label_route_updated": {
+        "title": "changed an intake label route on",
+        "group": "changed an intake label route on",
+        "none": "changed an intake label route"
+      }
+    },
+    "moved": "moved",
+    "times_one": "{{count}} time",
+    "times_other": "{{count}} times",
+    "cards_one": "{{count}} card",
+    "cards_other": "{{count}} cards",
+    "items_one": "{{count}} item",
+    "items_other": "{{count}} items",
+    "to": "to"
+  },
+  "timeline": {
+    "grouping": {
+      "similar": "Similar",
+      "none": "None"
+    },
+    "title": "Timeline",
+    "properties": "Timeline properties",
+    "group": "Group",
+    "compact": "Compact view",
+    "auditPortal": "Open audit log in WorkOS",
+    "categories": {
+      "work_item": "Work items",
+      "run": "Runs",
+      "git": "Git",
+      "agent": "Agent",
+      "intake": "Intake"
+    },
+    "all": "All",
+    "kinds_one": "{{count}} kind",
+    "kinds_other": "{{count}} kinds",
+    "filter": "Filter",
+    "allEvents": "All events"
+  },
+  "comments": {
+    "postError": "Unable to post comment",
+    "add": "Add a comment",
+    "mentions": "Mentions",
+    "placeholder": "Add a comment…",
+    "input": "Comment",
+    "send": "Send comment",
+    "loading": "Loading comments",
+    "loadError": "Unable to load comments.",
+    "empty": "No activity yet",
+    "showEarlier": "Show earlier comments",
+    "deleted": "Comment deleted",
+    "edited": "(edited)",
+    "quoteReply": "Quote reply",
+    "copyLink": "Copy link",
+    "edit": "Edit comment",
+    "delete": "Delete comment",
+    "panel": "Work item comments",
+    "back": "Back to workspace",
+    "title": "Comments",
+    "count_one": "{{count}} comment",
+    "count_other": "{{count}} comments",
+    "refresh": "Refresh comments"
+  },
+  "page": {
+    "view": "Activity view",
+    "codebase": "Codebase"
+  }
+}

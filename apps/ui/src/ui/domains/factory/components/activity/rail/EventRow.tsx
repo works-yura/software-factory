@@ -3,6 +3,7 @@ import { Code } from '@mastra/playground-ui/components/Code';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ActivityEntry } from '../../../activity';
 import type { FactoryMentionMember } from '../../../services/members';
@@ -24,6 +25,7 @@ export function EventRow({
   flagged: ReadonlySet<ActivityEntry>;
   compact: boolean;
 }) {
+  const { t } = useTranslation('activity');
   const [open, setOpen] = useState(false);
   const detail = entry.kind === 'deed' ? entry.detail : '';
   const hasMetadata = Object.keys(entry.metadata).length > 0;
@@ -42,7 +44,7 @@ export function EventRow({
               type="button"
               variant="ghost"
               size="icon-sm"
-              tooltip="Details"
+              tooltip={t('rail.details')}
               aria-expanded={open}
               onClick={() => setOpen(!open)}
             >

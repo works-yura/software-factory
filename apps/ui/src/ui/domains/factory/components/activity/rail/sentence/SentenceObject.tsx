@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 
 import { entryTarget } from '../../../../activity';
 import type { ActivityEntry } from '../../../../activity';
@@ -13,11 +14,12 @@ export interface GroupToggle {
 }
 
 function Repeats({ count }: { count: number }) {
+  const { t } = useTranslation('activity');
   if (count < 2) return null;
 
   return (
     <Txt as="span" variant="caption" tone="muted" className="shrink-0 tabular-nums">
-      {count} times
+      {t('sentence.times', { count })}
     </Txt>
   );
 }
@@ -34,6 +36,7 @@ export function SentenceObject({
   flagged: ReadonlySet<ActivityEntry>;
   groupToggle: GroupToggle | undefined;
 }) {
+  const { t } = useTranslation('activity');
   const object = deedObject(entries);
 
   if (object === 'none') return <Repeats count={entries.length} />;
@@ -47,8 +50,10 @@ export function SentenceObject({
     );
   }
 
-  const noun = entries.every(entry => entryTarget(entry) !== undefined) ? 'cards' : 'items';
-  const count = `${subjectCount(entries)} ${noun}`;
+  const subjects = subjectCount(entries);
+  const count = entries.every(entry => entryTarget(entry) !== undefined)
+    ? t('sentence.cards', { count: subjects })
+    : t('sentence.items', { count: subjects });
 
   if (groupToggle === undefined) {
     return (

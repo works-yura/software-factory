@@ -8,6 +8,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageCircle, RefreshCw } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   useDeleteWorkItemCommentMutation,
@@ -152,6 +153,7 @@ export function CommentList({
   /** False while `leading` still loads: the skeleton holds so both land together. */
   leadingLoaded?: boolean;
 }) {
+  const { t } = useTranslation('activity');
   const comments = useWorkItemComments({
     workItemId: item.id,
     aroundCommentId: highlightCommentId,
@@ -191,13 +193,13 @@ export function CommentList({
               <div aria-hidden style={landingStyle(1)} className="stream-landing flex items-center gap-2 px-3 pb-1">
                 <span className="bg-border h-px flex-1" />
                 <Txt tone="muted" as="span" variant="meta" className="block">
-                  Activity
+                  {t('workItem.activity')}
                 </Txt>
                 <span className="bg-border h-px flex-1" />
               </div>
             )}
             {showSkeleton ? (
-              <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="Loading comments">
+              <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label={t('comments.loading')}>
                 <Skeleton className="h-10 w-full" />
                 <Skeleton className="h-10 w-4/5" />
                 <Skeleton className="h-10 w-full" />
@@ -206,11 +208,11 @@ export function CommentList({
             {comments.isError ? (
               <div className="text-muted-foreground flex items-center gap-2 px-2 py-2">
                 <Txt as="span" variant="caption">
-                  Unable to load comments.
+                  {t('comments.loadError')}
                 </Txt>
                 <Button type="button" variant="ghost" size="sm" onClick={() => void comments.refetch()}>
                   <RefreshCw aria-hidden />
-                  Try again
+                  {t('feed.tryAgain')}
                 </Button>
               </div>
             ) : null}
@@ -218,7 +220,7 @@ export function CommentList({
               <div className="text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
                 <MessageCircle size={14} aria-hidden />
                 <Txt as="span" variant="caption">
-                  No activity yet
+                  {t('comments.empty')}
                 </Txt>
               </div>
             ) : null}
@@ -228,7 +230,7 @@ export function CommentList({
               role="log"
               aria-live="polite"
               aria-relevant="additions"
-              aria-label="Activity"
+              aria-label={t('workItem.activity')}
               className="px-1 py-1"
             >
               {showSkeleton || nothingToShow ? null : (
@@ -244,7 +246,7 @@ export function CommentList({
                           disabled={comments.isFetchingNextPage}
                           onClick={() => void comments.fetchNextPage()}
                         >
-                          {comments.isFetchingNextPage ? 'Loading…' : 'Show earlier comments'}
+                          {comments.isFetchingNextPage ? t('needsYou.loadingOlder') : t('comments.showEarlier')}
                         </Button>
                       ) : null}
                       {rows.map((row, index) => (

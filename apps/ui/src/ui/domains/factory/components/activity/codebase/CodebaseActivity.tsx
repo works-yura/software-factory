@@ -1,6 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ExternalLink } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { LinkedRepositoryPayload } from '../../../../workspaces/services/github';
 import { CommitRail } from './CommitRail';
@@ -13,6 +14,7 @@ export function CodebaseActivity({
   factoryId: string;
   repositories: LinkedRepositoryPayload[];
 }) {
+  const { t } = useTranslation('activity');
   const githubRepositories = repositories.filter(candidate => candidate.provider !== 'gitlab');
   const [selectedId, setSelectedId] = useState(githubRepositories[0]?.projectRepositoryId);
   const repository =
@@ -30,7 +32,7 @@ export function CodebaseActivity({
             className="text-muted-foreground hover:text-foreground flex items-center gap-1"
           >
             <Txt as="span" variant="caption">
-              View on GitHub
+              {t('codebase.viewOnGitHub')}
             </Txt>
             <ExternalLink size={12} aria-hidden />
           </a>

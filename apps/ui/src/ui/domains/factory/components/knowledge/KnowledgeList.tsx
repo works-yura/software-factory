@@ -3,7 +3,10 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, Pin } from 'lucide-react';
 
 import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../../services/knowledge';
+import { translator } from '../../../../i18n/t';
 import { parseRecordSegments } from './recordText';
+
+const tk = translator('knowledge');
 
 /**
  * Tap-friendly reading of the same bounded lens payload the canvas renders:
@@ -43,7 +46,7 @@ export function KnowledgeList({
         onClick={() => onNodeClick(node)}
       >
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{node.name}</span>
-        {node.pinned ? <Pin size={12} className="text-badge-amber-indicator shrink-0" aria-label="Pinned" /> : null}
+        {node.pinned ? <Pin size={12} className="text-badge-amber-indicator shrink-0" aria-label={tk('list.pinned')} /> : null}
         <span className="text-muted-foreground shrink-0 text-xs">{meta}</span>
       </button>
     );
@@ -52,9 +55,9 @@ export function KnowledgeList({
   return (
     <div data-testid="knowledge-list" className="min-h-0 flex-1 overflow-y-auto pb-16">
       {childScopes.length > 0 ? (
-        <section aria-label="Child scopes" className="mb-4">
+        <section aria-label={tk('list.childScopes')} className="mb-4">
           <Txt as="h3" variant="caption" className="text-muted-foreground mb-1 px-3 font-semibold">
-            Scopes
+            {tk('list.scopes')}
           </Txt>
           <ul className="flex flex-col gap-0.5">
             {childScopes.map(node => (
@@ -62,7 +65,7 @@ export function KnowledgeList({
                 {row(
                   node,
                   <span className="flex items-center gap-1">
-                    {node.kind || 'topic'}
+                    {node.kind || tk('kind.topic')}
                     <ChevronRight size={14} aria-hidden />
                   </span>,
                 )}
@@ -72,9 +75,9 @@ export function KnowledgeList({
         </section>
       ) : null}
       {contentNodes.length > 0 ? (
-        <section aria-label="Knowledge nodes">
+        <section aria-label={tk('list.nodesLabel')}>
           <Txt as="h3" variant="caption" className="text-muted-foreground mb-1 px-3 font-semibold">
-            Nodes
+            {tk('list.nodes')}
           </Txt>
           <ul className="flex flex-col gap-0.5">
             {contentNodes.map(node => {
@@ -82,9 +85,9 @@ export function KnowledgeList({
                 node.id === selectedNodeId ? payload.records.filter(record => record.nodeIds[0] === node.id) : [];
               return (
                 <li key={node.id}>
-                  {row(node, node.recordCount === 1 ? '1 record' : `${node.recordCount} records`)}
+                  {row(node, tk('list.records', { count: node.recordCount }))}
                   {records.length > 0 ? (
-                    <ul aria-label={`${node.name} records`} className="border-border my-1 ml-4 flex flex-col border-l">
+                    <ul aria-label={tk('list.nodeRecords', { name: node.name })} className="border-border my-1 ml-4 flex flex-col border-l">
                       {records.map(record => (
                         <li key={record.id}>
                           <button

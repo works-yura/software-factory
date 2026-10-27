@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuditEvents } from '../../../../../../hooks/useAuditEvents';
 import { useWorkItemsQuery } from '../../../../../../hooks/useWorkItems';
@@ -36,6 +37,7 @@ export function FactoryFeed({
   categories: ReadonlySet<AuditNamespace>;
   onClearCategories: () => void;
 }) {
+  const { t } = useTranslation('activity');
   const [shown, setShown] = useState(PAGE_SIZE);
   const itemsQuery = useWorkItemsQuery(factoryId);
   const auditQuery = useAuditEvents(factoryId, auditNamespacesForCategories(categories), AUDIT_PAGE_SIZE);
@@ -44,13 +46,13 @@ export function FactoryFeed({
   const cardsNeedingYou = useCardsNeedingYou(factoryId);
 
   if (itemsQuery.isPending || auditQuery.isPending) {
-    return <SkeletonRows label="Loading activity" rows={6} rowClassName="h-10 w-full" />;
+    return <SkeletonRows label={t('feed.loading')} rows={6} rowClassName="h-10 w-full" />;
   }
 
   if (itemsQuery.isError || auditQuery.isError) {
     return (
       <Notice variant="destructive">
-        <span>Unable to load activity.</span>
+        <span>{t('feed.loadError')}</span>
         <Button
           type="button"
           variant="ghost"
@@ -60,7 +62,7 @@ export function FactoryFeed({
             void auditQuery.refetch();
           }}
         >
-          Try again
+          {t('feed.tryAgain')}
         </Button>
       </Notice>
     );
@@ -79,17 +81,17 @@ export function FactoryFeed({
     return (
       <EmptyState
         variant="fill"
-        titleSlot="No events in these categories."
+        titleSlot={t('feed.noEventsInCategories')}
         actionSlot={
           <Button size="sm" onClick={onClearCategories}>
-            Show all events
+            {t('feed.showAllEvents')}
           </Button>
         }
       />
     );
   }
 
-  if (nothingToShow) return <EmptyState variant="fill" titleSlot="Nothing has happened yet." />;
+  if (nothingToShow) return <EmptyState variant="fill" titleSlot={t('feed.empty')} />;
 
   const showMore = () => {
     setShown(count => count + PAGE_SIZE);
@@ -110,7 +112,7 @@ export function FactoryFeed({
         hasNextPage={entries.length > shown || auditQuery.hasNextPage}
         isFetchingNextPage={auditQuery.isFetchingNextPage}
         onLoadMore={showMore}
-        label="Load more activity"
+        label={t('feed.loadMore')}
       />
     </div>
   );

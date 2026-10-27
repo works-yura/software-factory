@@ -21,9 +21,15 @@ import { getRecordBorderClass, getRecordRingClass } from './knowledgeStyles';
 
 import { useKnowledgeNode } from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeNodeRecord, KnowledgeRung } from '../../services/knowledge';
+import { currentLanguage } from '../../../../i18n';
+import { translator } from '../../../../i18n/t';
 import { parseRecordSegments } from './recordText';
 
-const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
+const tk = translator('knowledge');
+
+function rungLabel(rung: KnowledgeRung): string {
+  return rung === 'org' ? tk('rung.org') : rung === 'resource' ? tk('rung.resource') : tk('rung.thread');
+}
 
 function SectionHeader({ title, count }: { title: string; count?: number }) {
   return (
@@ -44,7 +50,7 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 function RungBadge({ rung }: { rung: KnowledgeRung }) {
   return (
     <Badge variant={knowledgeScopes[rung].tone} emphasis="subtle">
-      {RUNG_LABELS[rung].toLowerCase()}
+      {rungLabel(rung).toLocaleLowerCase(currentLanguage())}
     </Badge>
   );
 }
@@ -78,11 +84,11 @@ function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: stri
 function relativeTime(iso: string): string {
   const delta = Date.now() - new Date(iso).getTime();
   const minutes = Math.round(delta / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return tk('time.justNow');
+  if (minutes < 60) return tk('time.minutesAgo', { count: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
+  if (hours < 24) return tk('time.hoursAgo', { count: hours });
+  return tk('time.daysAgo', { count: Math.round(hours / 24) });
 }
 
 function RecordCard({
@@ -142,25 +148,25 @@ function RecordCard({
         <div className="text-foreground">
           <RecordText text={record.text} onNodeRef={onNodeRef} />
           {record.pinned ? (
-            <Pin size={11} className="text-badge-amber-indicator ml-1 inline" aria-label="Pinned knowledge record" />
+            <Pin size={11} className="text-badge-amber-indicator ml-1 inline" aria-label={tk('flyout.pinnedRecord')} />
           ) : null}
         </div>
         <div className="text-muted-foreground mt-1.5 flex items-center gap-2">
           <RungBadge rung={record.rung} />
           {record.relation === 'mentions' ? (
             <Txt as="span" variant="meta" tone="muted">
-              mentions
+              {tk('flyout.mentions')}
             </Txt>
           ) : null}
           <Txt as="span" variant="meta">
-            captured {relativeTime(record.capturedAt)}
+            {tk('flyout.captured', { time: relativeTime(record.capturedAt) })}
           </Txt>
         </div>
       </div>
       {expanded ? (
         <div data-testid="knowledge-record-detail" className="border-border border-t px-3 py-2.5">
           <dl className="text-muted-foreground grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
-            <dt className={textStyle({ variant: 'body-sm' })}>Captured in session</dt>
+            <dt className={textStyle({ variant: 'body-sm' })}>{tk('fields.capturedInSession')}</dt>
             <dd>
               {record.sourceThreadId ? (
                 <button
@@ -177,18 +183,20 @@ function RecordCard({
                 '—'
               )}
             </dd>
-            <dt className={textStyle({ variant: 'body-sm' })}>Captured at</dt>
-            <dd className={textStyle({ variant: 'body-sm' })}>{new Date(record.capturedAt).toLocaleString()}</dd>
+            <dt className={textStyle({ variant: 'body-sm' })}>{tk('fields.capturedAt')}</dt>
+            <dd className={textStyle({ variant: 'body-sm' })}>
+              {new Date(record.capturedAt).toLocaleString(currentLanguage())}
+            </dd>
             {record.when ? (
               <>
-                <dt className={textStyle({ variant: 'body-sm' })}>When</dt>
+                <dt className={textStyle({ variant: 'body-sm' })}>{tk('fields.when')}</dt>
                 <dd className={textStyle({ variant: 'body-sm' })}>{record.when}</dd>
               </>
             ) : null}
-            <dt className={textStyle({ variant: 'body-sm' })}>Scope chain</dt>
+            <dt className={textStyle({ variant: 'body-sm' })}>{tk('fields.scopeChain')}</dt>
             <dd className={cn(textStyle({ variant: 'body-sm' }), 'break-all')}>{record.scope.join(' → ')}</dd>
-            <dt className={textStyle({ variant: 'body-sm' })}>Pinned</dt>
-            <dd className={textStyle({ variant: 'body-sm' })}>{record.pinned ? 'yes' : 'no'}</dd>
+            <dt className={textStyle({ variant: 'body-sm' })}>{tk('fields.pinned')}</dt>
+            <dd className={textStyle({ variant: 'body-sm' })}>{record.pinned ? tk('fields.yes') : tk('fields.no')}</dd>
           </dl>
           {reason ? (
             <div
@@ -199,7 +207,7 @@ function RecordCard({
                 <Sparkles size={10} />
                 <Txt as="span" variant="meta" className="block">
                   {' '}
-                  Reasoning
+                  {tk('flyout.reasoning')}
                 </Txt>
               </div>
               <Txt as="p" variant="body-sm" tone="ink" className="italic">
@@ -208,7 +216,7 @@ function RecordCard({
             </div>
           ) : (
             <Txt as="p" variant="meta" tone="muted" className="mt-2 italic">
-              No capture reasoning was recorded for this knowledge record.
+              {tk('flyout.noReasoning')}
             </Txt>
           )}
           {otherMetadata.length > 0 ? (
@@ -260,15 +268,15 @@ export function KnowledgeFlyout({
     <aside
       data-testid="knowledge-flyout"
       className="border-border bg-card shadow-overlay fixed inset-x-0 bottom-0 z-30 flex max-h-[70vh] flex-col overflow-hidden rounded-t-xl border-t md:static md:z-auto md:max-h-none md:w-[380px] md:shrink-0 md:rounded-none md:border-t-0 md:border-l md:shadow-none"
-      aria-label="Knowledge node details"
+      aria-label={tk('flyout.label')}
     >
       {nodeQuery.isPending ? (
         <Txt as="p" variant="body" tone="muted" className="p-4">
-          Loading knowledge node…
+          {tk('flyout.loading')}
         </Txt>
       ) : nodeQuery.isError ? (
         <div className="p-4">
-          <Notice variant="destructive">Unable to load this knowledge node.</Notice>
+          <Notice variant="destructive">{tk('flyout.error')}</Notice>
         </div>
       ) : (
         <>
@@ -284,7 +292,7 @@ export function KnowledgeFlyout({
                 <RungBadge rung={nodeQuery.data.node.rung} />
               </div>
             </div>
-            <Button variant="ghost" size="icon-sm" aria-label="Close details" className="ml-auto" onClick={onClose}>
+            <Button variant="ghost" size="icon-sm" aria-label={tk('flyout.close')} className="ml-auto" onClick={onClose}>
               <X />
             </Button>
           </header>
@@ -295,7 +303,7 @@ export function KnowledgeFlyout({
             ) : null}
             {nodeQuery.data.node.content.trim() ? (
               <Collapsible defaultOpen>
-                <SectionHeader title="Content" />
+                <SectionHeader title={tk('flyout.content')} />
                 <CollapsibleContent>
                   <Txt as="p" variant="caption" tone="ink" className="px-4 pb-3 break-words whitespace-pre-wrap">
                     <RecordText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
@@ -305,26 +313,26 @@ export function KnowledgeFlyout({
             ) : null}
 
             <Collapsible defaultOpen>
-              <SectionHeader title="Knowledge node" />
+              <SectionHeader title={tk('flyout.node')} />
               <CollapsibleContent>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3">
-                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.kind')}</dt>
                   <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
                     {nodeQuery.data.node.kind}
                   </dd>
-                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.scope')}</dt>
                   <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right break-all')}>
                     {nodeQuery.data.node.scope.join(' → ')}
                   </dd>
-                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Created</dt>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.created')}</dt>
                   <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
-                    {new Date(nodeQuery.data.node.createdAt).toLocaleString()}
+                    {new Date(nodeQuery.data.node.createdAt).toLocaleString(currentLanguage())}
                   </dd>
-                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Updated</dt>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.updated')}</dt>
                   <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
-                    {new Date(nodeQuery.data.node.updatedAt).toLocaleString()}
+                    {new Date(nodeQuery.data.node.updatedAt).toLocaleString(currentLanguage())}
                   </dd>
-                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{tk('fields.knowledgeRecords')}</dt>
                   <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
                     {nodeQuery.data.records.length}
                   </dd>
@@ -333,12 +341,12 @@ export function KnowledgeFlyout({
             </Collapsible>
 
             <Collapsible defaultOpen>
-              <SectionHeader title="Knowledge records" count={nodeQuery.data.records.length} />
+              <SectionHeader title={tk('flyout.records')} count={nodeQuery.data.records.length} />
               <CollapsibleContent>
                 <div className="flex flex-col gap-2 px-4 pb-3">
                   {nodeQuery.data.records.length === 0 ? (
                     <Txt as="p" variant="caption" tone="muted">
-                      No knowledge records about this node yet.
+                      {tk('flyout.noRecords')}
                     </Txt>
                   ) : (
                     nodeQuery.data.records.map(record => (

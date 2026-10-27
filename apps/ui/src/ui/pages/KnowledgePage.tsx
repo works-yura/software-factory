@@ -23,7 +23,7 @@ import { KnowledgeFlyout } from '../domains/factory/components/knowledge/Knowled
 import { KnowledgeList } from '../domains/factory/components/knowledge/KnowledgeList';
 import {
   knowledgeActivityLabel,
-  KNOWLEDGE_ACTIVITY_TRUNCATED,
+  knowledgeActivityTruncated,
 } from '../domains/factory/components/knowledge/activityLabel';
 import { KnowledgeSearch } from '../domains/factory/components/knowledge/KnowledgeSearch';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
@@ -40,6 +40,10 @@ import type {
 import { RequestError } from '../domains/factory/services/request';
 import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
 import { KnowledgeScopeFlyout } from '../domains/factory/components/knowledge/KnowledgeScopeFlyout';
+import { currentLanguage } from '../i18n';
+import { translator } from '../i18n/t';
+
+const tk = translator('knowledge');
 
 /**
  * The Knowledge page: a live force-directed graph of the project's knowledge —
@@ -100,23 +104,23 @@ function Breadcrumb({
   onTrailClick: (index: number) => void;
 }) {
   return (
-    <nav aria-label="Knowledge scope" className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1">
+    <nav aria-label={tk('breadcrumb.label')} className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1">
       <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
         <Txt as="span" variant="caption" className="block">
-          org
+          {tk('breadcrumb.org')}
         </Txt>
       </button>
       <ChevronRight size={11} />
       <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
         <Txt as="span" variant="caption" className="block">
-          project
+          {tk('breadcrumb.project')}
         </Txt>
       </button>
       {threadId ? (
         <>
           <ChevronRight size={11} />
           <Txt as="span" variant="caption" title={threadId} className="text-badge-purple-indicator max-w-52 truncate">
-            session {threadId.slice(0, 8)}
+            {tk('breadcrumb.session', { id: threadId.slice(0, 8) })}
           </Txt>
         </>
       ) : null}
@@ -251,13 +255,13 @@ function ScopeTree({
     onNodesLoaded(page.scopeNodes ?? []);
   };
   const identityKind = (level: (typeof roots)[number]['level']) =>
-    level === 'resource' ? 'project' : level === 'thread' ? 'session' : 'org';
+    level === 'resource' ? tk('kind.project') : level === 'thread' ? tk('kind.session') : tk('kind.org');
   const renderScopeNode = (node: KnowledgeScopeNode, depth: number, path: Set<string>): React.ReactNode => {
     if (path.has(node.id)) return null;
     const nextPath = new Set(path).add(node.id);
     const marker = markerByNodeId.get(node.id);
     const sessionId = !marker && node.address.startsWith('thread:') ? node.address.slice('thread:'.length) : undefined;
-    const kind = marker ? identityKind(marker) : sessionId ? 'session' : (node.kind ?? 'scope');
+    const kind = marker ? identityKind(marker) : sessionId ? tk('kind.session') : (node.kind ?? tk('kind.scope'));
     const pressed = selection?.scopeNodeId === node.id || (marker !== undefined && selection?.scopeLevel === marker);
     const children = byParent.get(node.id) ?? [];
     // Roots and the viewed project start open, so the project's sessions are listed without a click.
@@ -274,7 +278,9 @@ function ScopeTree({
           {canExpand ? (
             <button
               type="button"
-              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${node.name}`}
+              aria-label={
+                expanded ? tk('scopes.collapse', { name: node.name }) : tk('scopes.expand', { name: node.name })
+              }
               aria-expanded={expanded}
               className="hover:text-foreground flex size-5 shrink-0 items-center justify-center"
               onClick={() => {
@@ -334,7 +340,7 @@ function ScopeTree({
             disabled={scopePage.isPending}
             onClick={() => void loadPage(node.id, childCursor ?? undefined)}
           >
-            Load more
+            {tk('scopes.loadMore')}
           </button>
         ) : null}
       </div>
@@ -344,11 +350,11 @@ function ScopeTree({
   const rootCursor = Object.hasOwn(nextCursorByParent, 'roots') ? nextCursorByParent.roots : scopes?.nextCursor;
   return (
     <aside
-      aria-label="Knowledge scopes"
+      aria-label={tk('scopes.label')}
       className={cn('border-border bg-card shrink-0 overflow-y-auto rounded-lg border p-3', className)}
     >
       <Txt as="h2" variant="caption" className="text-foreground mb-2 font-semibold">
-        Scopes
+        {tk('scopes.title')}
       </Txt>
       <div className="text-muted-foreground flex flex-col gap-1 text-xs">
         {treeRoots.map(node => renderScopeNode(node, 0, new Set()))}
@@ -359,7 +365,7 @@ function ScopeTree({
             disabled={scopePage.isPending}
             onClick={() => void loadPage(undefined, rootCursor)}
           >
-            Load more scopes
+            {tk('scopes.loadMoreScopes')}
           </button>
         ) : null}
         {fallbackRungs.map(root => (
@@ -376,9 +382,9 @@ function ScopeTree({
             <ScopeLabel name={root.id.slice(0, 8)} kind={identityKind(root.level)} />
           </button>
         ))}
-        {scopePage.isError ? <span className="px-2 text-red-400">Unable to load more scopes.</span> : null}
+        {scopePage.isError ? <span className="px-2 text-red-400">{tk('scopes.loadError')}</span> : null}
         {scopes?.truncated ? (
-          <span className="px-2">This org has more scopes than can be listed; some are not shown.</span>
+          <span className="px-2">{tk('scopes.truncated')}</span>
         ) : null}
       </div>
     </aside>
@@ -400,27 +406,27 @@ function ActivityPanel({
   if (!selection) {
     return (
       <Txt as="p" variant="body" className="text-muted-foreground">
-        Select a scope to view its recent activity.
+        {tk('activity.selectScope')}
       </Txt>
     );
   }
-  if (activity.isPending) return <SkeletonRows label="Loading knowledge activity" rows={6} />;
+  if (activity.isPending) return <SkeletonRows label={tk('activity.loading')} rows={6} />;
   if (activity.isError) {
-    const message = activity.error instanceof Error ? activity.error.message : 'Unable to load knowledge activity.';
+    const message = activity.error instanceof Error ? activity.error.message : tk('activity.error');
     return <Notice variant="destructive">{message}</Notice>;
   }
   const events = activity.data.pages
     .flatMap(page => page.events)
     .filter((event, index, all) => all.findIndex(candidate => candidate.id === event.id) === index);
   const truncatedNotice = activity.data.pages.some(page => page.truncated) ? (
-    <Notice variant="info">{KNOWLEDGE_ACTIVITY_TRUNCATED}</Notice>
+    <Notice variant="info">{knowledgeActivityTruncated()}</Notice>
   ) : null;
   if (events.length === 0) {
     return (
       <>
         {truncatedNotice}
         <Txt as="p" variant="body" className="text-muted-foreground">
-          No knowledge activity yet.
+          {tk('activity.empty')}
         </Txt>
       </>
     );
@@ -428,7 +434,7 @@ function ActivityPanel({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pr-2">
       {truncatedNotice}
-      <ol aria-label="Knowledge activity" className="divide-border divide-y">
+      <ol aria-label={tk('activity.label')} className="divide-border divide-y">
         {events.map(event => (
           <li key={event.id} className="flex items-start justify-between gap-4 py-3 text-sm">
             <div>
@@ -444,7 +450,7 @@ function ActivityPanel({
               <div className="text-muted-foreground mt-1 text-xs">{event.scope.join(' → ')}</div>
             </div>
             <time className="text-muted-foreground shrink-0 text-xs" dateTime={event.createdAt}>
-              {new Date(event.createdAt).toLocaleString()}
+              {new Date(event.createdAt).toLocaleString(currentLanguage())}
             </time>
           </li>
         ))}
@@ -456,7 +462,7 @@ function ActivityPanel({
           disabled={activity.isFetchingNextPage}
           onClick={() => void activity.fetchNextPage()}
         >
-          {activity.isFetchingNextPage ? 'Loading older activity…' : 'Load older activity'}
+          {activity.isFetchingNextPage ? tk('activity.loadingOlder') : tk('activity.loadOlder')}
         </button>
       ) : null}
     </div>
@@ -707,43 +713,43 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     body = (
       <div data-testid="knowledge-thread-gone" className="flex flex-col items-start gap-2 py-8">
         <Txt tone="muted" as="p" variant="body">
-          This session's knowledge is no longer available.
+          {tk('page.threadGone')}
         </Txt>
         <button type="button" className="text-badge-purple-indicator hover:underline" onClick={backToProject}>
           <Txt as="span" variant="body" className="block">
-            Back to the project view
+            {tk('page.backToProject')}
           </Txt>
         </button>
       </div>
     );
   } else if (scopesQuery.isError) {
-    const message = scopesQuery.error instanceof Error ? scopesQuery.error.message : 'Unable to load knowledge scopes.';
+    const message = scopesQuery.error instanceof Error ? scopesQuery.error.message : tk('page.scopesError');
     body = <Notice variant="destructive">{message}</Notice>;
   } else if (scopesQuery.isPending) {
-    body = <SkeletonRows label="Loading knowledge scopes" rows={3} />;
+    body = <SkeletonRows label={tk('page.scopesLoading')} rows={3} />;
   } else if (!selection) {
     body = (
       <Txt tone="muted" as="p" variant="body">
-        Select a scope to explore its knowledge.
+        {tk('page.selectScope')}
       </Txt>
     );
   } else if (graphQuery.isError) {
     const message =
-      graphQuery.error instanceof Error ? graphQuery.error.message : 'Unable to load the knowledge graph.';
+      graphQuery.error instanceof Error ? graphQuery.error.message : tk('page.graphError');
     body = <Notice variant="destructive">{message}</Notice>;
   } else if (graphQuery.isPending) {
-    body = <SkeletonRows label="Loading knowledge graph" rows={6} />;
+    body = <SkeletonRows label={tk('page.graphLoading')} rows={6} />;
   } else if (graphQuery.data.nodes.length === 0) {
     // Identity rungs use exact-scope visibility (v2 has no downward
     // inheritance), so an empty org/project view usually means knowledge only
     // exists at a narrower rung — explain that instead of reading as broken.
     const emptyMessage = selection.scopeNodeId
-      ? 'No knowledge in this scope yet.'
+      ? tk('page.empty.scope')
       : selection.scopeLevel === 'org'
-        ? 'No knowledge captured at organization scope yet — knowledge captured in projects and sessions does not roll up here.'
+        ? tk('page.empty.org')
         : selection.scopeLevel === 'resource'
-          ? 'No knowledge captured at project scope yet — knowledge captured in sessions does not roll up here.'
-          : 'No knowledge captured in this session yet — the graph fills in as factory sessions work.';
+          ? tk('page.empty.project')
+          : tk('page.empty.session');
     body = (
       <Txt tone="muted" as="p" variant="body">
         {emptyMessage}
@@ -844,14 +850,14 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           {selected && !detailsOpen ? (
             <div
               role="toolbar"
-              aria-label="Selected knowledge"
+              aria-label={tk('page.selectedToolbar')}
               className="border-border bg-card shadow-overlay absolute bottom-3 left-1/2 z-10 flex max-w-[90%] -translate-x-1/2 items-center gap-2 rounded-full border py-1 pr-1 pl-3"
             >
               <Txt as="span" variant="caption" className="text-foreground truncate">
                 {selected.name}
               </Txt>
               <Button type="button" size="sm" variant="ghost" onClick={() => setDetailsOpen(true)}>
-                Details
+                {tk('page.details')}
               </Button>
             </div>
           ) : null}
@@ -929,16 +935,16 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
+    <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label={tk('page.region')}>
       <header className="shrink-0">
         <Txt tone="ink" as="h1" variant="heading">
-          Knowledge
+          {tk('page.title')}
         </Txt>
         <Txt tone="muted" as="p" variant="body" className="mt-1">
-          Explore captured knowledge and review how it changes over time.
+          {tk('page.subtitle')}
         </Txt>
         <div className="mt-3 flex items-start justify-between gap-3">
-          <div className="flex gap-1" role="tablist" aria-label="Knowledge views">
+          <div className="flex gap-1" role="tablist" aria-label={tk('page.views')}>
             {(['explore', 'activity'] as const).map(view => (
               <button
                 key={view}
@@ -950,13 +956,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
                 }`}
                 onClick={() => setView(view)}
               >
-                {view}
+                {view === 'explore' ? tk('page.view.explore') : tk('page.view.activity')}
               </button>
             ))}
           </div>
           <div className="flex items-start gap-2">
             {activeView === 'explore' ? (
-              <div className="flex gap-1" role="group" aria-label="Knowledge layout">
+              <div className="flex gap-1" role="group" aria-label={tk('page.layouts')}>
                 {(['graph', 'list'] as const).map(option => (
                   <button
                     key={option}
@@ -967,7 +973,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
                     }`}
                     onClick={() => setLayout(option)}
                   >
-                    {option}
+                    {option === 'graph' ? tk('page.layout.graph') : tk('page.layout.list')}
                   </button>
                 ))}
               </div>

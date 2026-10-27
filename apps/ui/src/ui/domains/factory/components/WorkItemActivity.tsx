@@ -12,25 +12,30 @@ import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { ASSIGNED_ACTION, CREATED_ACTION } from '../workItemActivity';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 
-const timestampFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
+import { currentLanguage } from '../../../i18n';
+import { translator } from '../../../i18n/t';
 
-const ACTION_LABELS: Partial<Record<AuditAction | typeof ASSIGNED_ACTION, string>> = {
-  [ASSIGNED_ACTION]: 'Assigned the item',
-  'factory.work_item.updated': 'Updated the item',
-  'factory.work_item.stage_moved': 'Moved the item',
-  'factory.work_item.deleted': 'Removed the item',
-  'factory.run.started': 'Started a run',
-  'factory.run.ended': 'Run ended',
-  'factory.run.approved': 'Started a suggested run',
-  'factory.run.dismissed': 'Dismissed a suggested run',
+const ta = translator('activity');
+
+function formatTimestamp(at: Date): string {
+  return new Intl.DateTimeFormat(currentLanguage(), { dateStyle: 'medium', timeStyle: 'short' }).format(at);
+}
+
+const ACTION_LABELS: Partial<Record<AuditAction | typeof ASSIGNED_ACTION, () => string>> = {
+  [ASSIGNED_ACTION]: () => ta('workItem.actions.assigned'),
+  'factory.work_item.updated': () => ta('workItem.actions.updated'),
+  'factory.work_item.stage_moved': () => ta('workItem.actions.moved'),
+  'factory.work_item.deleted': () => ta('workItem.actions.removed'),
+  'factory.run.started': () => ta('workItem.actions.runStarted'),
+  'factory.run.ended': () => ta('workItem.actions.runEnded'),
+  'factory.run.approved': () => ta('workItem.actions.suggestedRunStarted'),
+  'factory.run.dismissed': () => ta('workItem.actions.suggestedRunDismissed'),
 };
 
 function knownActionLabel(action: string): string | undefined {
-  if (isAuditAction(action) || action === ASSIGNED_ACTION) return ACTION_LABELS[action];
+  if (isAuditAction(action) || action === ASSIGNED_ACTION) return ACTION_LABELS[action]?.();
   return undefined;
 }
 
@@ -51,7 +56,7 @@ function metadataString(event: AuditEvent, key: string): string | undefined {
 
 function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>): AuditActorProfile | undefined {
   if (event.actorType === 'agent') {
-    return { id: event.actorId, name: metadataString(event, 'agentName') ?? 'Factory agent' };
+    return { id: event.actorId, name: metadataString(event, 'agentName') ?? ta('workItem.factoryAgent') };
   }
   if (event.actorType === 'system') return { id: event.actorId, name: SYSTEM_ACTOR_NAME };
   return actors[event.actorId];
@@ -66,6 +71,7 @@ export function ActivityEvent({
   actors: Record<string, AuditActorProfile>;
   className?: string;
 }) {
+  const { t } = useTranslation('activity');
   const actor = eventActor(event, actors);
   if (!actor) return null;
   const modelId = event.actorType === 'agent' ? metadataString(event, 'modelId') : undefined;
@@ -87,7 +93,7 @@ export function ActivityEvent({
           <span className={cn('min-w-0', isCreated ? 'normal-case' : 'truncate first-letter:uppercase')}>
             {isCreated ? (
               <time dateTime={event.occurredAt}>
-                Created at: {timestampFormatter.format(new Date(event.occurredAt))}
+                {t('workItem.createdAt', { time: formatTimestamp(new Date(event.occurredAt)) })}
               </time>
             ) : (
               actionLabel(event.action)
@@ -113,6 +119,7 @@ export function WorkItemActivity({
   actors: Record<string, AuditActorProfile>;
   showName?: boolean;
 }) {
+  const { t } = useTranslation('activity');
   const worker = activity.lastWorker;
   const timeline = activity.events.slice(0, 8);
   const mergedActors = { ...actors, ...activity.extraActors };
@@ -127,7 +134,7 @@ export function WorkItemActivity({
           <button
             type="button"
             draggable={false}
-            aria-label={`View activity by ${worker.name}`}
+            aria-label={t('workItem.viewActivityBy', { name: worker.name })}
             onPointerDown={event => event.stopPropagation()}
             className={cn(
               'text-muted-foreground',
@@ -150,17 +157,17 @@ export function WorkItemActivity({
         collisionPadding={8}
         showArrow={false}
         className="w-80 max-w-[calc(100vw-2rem)]"
-        aria-label="Work item activity"
+        aria-label={t('workItem.activityLabel')}
       >
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <History size={14} className="text-muted-foreground" aria-hidden />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <Txt as="span" variant="column" tone="ink">
-                Activity
+                {t('workItem.activity')}
               </Txt>
               <Txt as="span" variant="meta" tone="muted" className="truncate">
-                Last worked on by {worker.name}
+                {t('workItem.lastWorkedOnBy', { name: worker.name })}
               </Txt>
             </div>
           </div>
@@ -174,7 +181,7 @@ export function WorkItemActivity({
             </ol>
           ) : (
             <Txt as="span" variant="meta" tone="muted">
-              No recorded activity yet.
+              {t('workItem.noActivity')}
             </Txt>
           )}
         </div>

@@ -8,6 +8,9 @@ import { useFactoryDecisionAction } from '../../../../hooks/useFactoryDecisions'
 import { updateWorkItem } from '../services/workItems';
 import type { FactoryAttentionItem } from '../services/attention';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { translator } from '../../../i18n/t';
+
+const ta = translator('activity');
 
 function isSameItem(a: FactoryAttentionItem | undefined, b: FactoryAttentionItem): boolean {
   return a?.key === b.key;
@@ -36,7 +39,7 @@ export function useAttentionItemActions(factoryId: string | undefined) {
       await retryDecision.mutateAsync(repositorySelection.decisionId);
       setRepositorySelection(undefined);
     } catch (error) {
-      notifyFailure('Unable to save repository and retry automation')(error);
+      notifyFailure(ta('attention.errors.saveRepository'))(error);
     }
   };
 
@@ -54,7 +57,7 @@ export function useAttentionItemActions(factoryId: string | undefined) {
       (restoreItem.isPending && isSameItem(restoreItem.variables, item)),
     onRetry:
       item.kind === 'automation-failed' && item.canRetry && item.failureCode !== 'source_repository_ambiguous'
-        ? () => retryDecision.mutate(item.decisionId, { onError: notifyFailure('Unable to retry automation') })
+        ? () => retryDecision.mutate(item.decisionId, { onError: notifyFailure(ta('attention.errors.retry')) })
         : undefined,
     onChooseRepository:
       item.kind === 'automation-failed' &&
@@ -65,15 +68,15 @@ export function useAttentionItemActions(factoryId: string | undefined) {
         : undefined,
     onApprove:
       item.kind === 'automation-proposed'
-        ? () => approveDecision.mutate(item.decisionId, { onError: notifyFailure('Unable to start the run') })
+        ? () => approveDecision.mutate(item.decisionId, { onError: notifyFailure(ta('attention.errors.approve')) })
         : undefined,
     onDismiss:
       item.kind === 'automation-proposed'
-        ? () => dismissDecision.mutate(item.decisionId, { onError: notifyFailure('Unable to dismiss the run') })
+        ? () => dismissDecision.mutate(item.decisionId, { onError: notifyFailure(ta('attention.errors.dismiss')) })
         : undefined,
-    onRead: () => readItem.mutate(item, { onError: notifyFailure('Unable to mark attention item as read') }),
-    onArchive: () => archiveItem.mutate(item, { onError: notifyFailure('Unable to archive attention item') }),
-    onRestore: () => restoreItem.mutate(item, { onError: notifyFailure('Unable to restore attention item') }),
+    onRead: () => readItem.mutate(item, { onError: notifyFailure(ta('attention.errors.read')) }),
+    onArchive: () => archiveItem.mutate(item, { onError: notifyFailure(ta('attention.errors.archive')) }),
+    onRestore: () => restoreItem.mutate(item, { onError: notifyFailure(ta('attention.errors.restore')) }),
   });
 
   return {

@@ -10,6 +10,7 @@ import {
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUp } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
 import { useCreateWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
@@ -32,6 +33,7 @@ export function CommentComposer({
   quote?: CommentQuoteDraft;
   onDismissQuote: () => void;
 }) {
+  const { t } = useTranslation('activity');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingSend = useRef<{ body: string; clientToken: string } | undefined>(undefined);
   const [draft, setDraft] = useState('');
@@ -67,7 +69,7 @@ export function CommentComposer({
           onDismissQuote();
         },
         onError: cause => {
-          setSendError(cause instanceof Error ? cause.message : 'Unable to post comment');
+          setSendError(cause instanceof Error ? cause.message : t('comments.postError'));
           setDraft(current => (current.length === 0 ? body : current));
         },
       },
@@ -89,7 +91,7 @@ export function CommentComposer({
         event.preventDefault();
         void sendComment();
       }}
-      aria-label="Add a comment"
+      aria-label={t('comments.add')}
     >
       <ComposerBox
         data-composing={variant === 'panel' && focused ? 'true' : undefined}
@@ -99,7 +101,7 @@ export function CommentComposer({
           id={suggestionsId}
           items={suggestionItems}
           activeIndex={mentions.activeIndex}
-          contextLabel="Mentions"
+          contextLabel={t('comments.mentions')}
           onSelect={mentions.pickSuggestion}
         />
         {quote ? (
@@ -113,8 +115,8 @@ export function CommentComposer({
         <ComposerInput
           ref={textareaRef}
           value={draft}
-          placeholder="Add a comment…"
-          aria-label="Comment"
+          placeholder={t('comments.placeholder')}
+          aria-label={t('comments.input')}
           aria-autocomplete="list"
           aria-controls={suggestionItems.length > 0 ? suggestionsId : undefined}
           aria-activedescendant={suggestionItems[mentions.activeIndex]?.id}
@@ -140,7 +142,7 @@ export function CommentComposer({
             type="submit"
             variant="primary"
             size="icon-sm"
-            aria-label="Send comment"
+            aria-label={t('comments.send')}
             disabled={draft.trim().length === 0 || createComment.isPending}
           >
             <ArrowUp aria-hidden />

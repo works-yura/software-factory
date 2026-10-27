@@ -2,9 +2,11 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LayoutGrid, Rows3 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { PropertiesMenu } from '../../../../../ui/PropertiesMenu';
 import type { ActivityGrouping } from '../../../activity';
+import { lazyOption } from '../../../../../i18n/lazy';
 import type { AuditNamespace } from '../../../auditPresentation';
 import { FactoryFeed } from '../feed/FactoryFeed';
 import { AuditPortalItem } from './AuditPortalItem';
@@ -13,11 +15,12 @@ import { setCompactTimeline, useCompactTimeline } from './compactTimeline';
 import { useTimelineGrouping } from './useTimelineGrouping';
 
 const GROUPING_OPTIONS = [
-  { value: 'similar', label: 'Similar' },
-  { value: 'none', label: 'None' },
+  lazyOption<ActivityGrouping>('similar', 'activity:timeline.grouping.similar'),
+  lazyOption<ActivityGrouping>('none', 'activity:timeline.grouping.none'),
 ] satisfies Array<{ value: ActivityGrouping; label: string }>;
 
 export function ActivityTimeline({ factoryId }: { factoryId: string }) {
+  const { t } = useTranslation('activity');
   const [grouping, setGrouping] = useTimelineGrouping();
   const compact = useCompactTimeline();
   const [categories, setCategories] = useState<ReadonlySet<AuditNamespace>>(() => new Set());
@@ -33,12 +36,12 @@ export function ActivityTimeline({ factoryId }: { factoryId: string }) {
     <section aria-labelledby="timeline-heading" className="flex flex-col gap-4">
       <div className="min-h-control-sm flex items-center gap-2">
         <Txt as="h2" variant="column" tone="ink" id="timeline-heading" className="m-0">
-          Timeline
+          {t('timeline.title')}
         </Txt>
         <span className="ml-auto">
-          <PropertiesMenu label="Timeline properties" align="end" changedCount={changedCount} onReset={reset}>
+          <PropertiesMenu label={t('timeline.properties')} align="end" changedCount={changedCount} onReset={reset}>
             <DropdownMenu.RadioSub
-              label="Group"
+              label={t('timeline.group')}
               icon={<LayoutGrid aria-hidden />}
               options={GROUPING_OPTIONS}
               value={grouping}
@@ -47,7 +50,7 @@ export function ActivityTimeline({ factoryId }: { factoryId: string }) {
             <CategoryFilter categories={categories} onChange={setCategories} />
             <DropdownMenu.CheckboxItem checked={compact} onCheckedChange={setCompactTimeline}>
               <Rows3 aria-hidden />
-              <span>Compact view</span>
+              <span>{t('timeline.compact')}</span>
             </DropdownMenu.CheckboxItem>
             <AuditPortalItem />
           </PropertiesMenu>

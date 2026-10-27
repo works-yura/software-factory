@@ -17,6 +17,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Link2, Pencil, Quote, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { Ref } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useEditWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
 import { relativeTime } from '../../../../../lib/date/relativeTime';
@@ -112,10 +113,11 @@ function CommentRowEditor({
 }
 
 function CommentRowBody({ comment, ref }: { comment: WorkItemComment; ref: Ref<HTMLElement> }) {
+  const { t } = useTranslation('activity');
   if (comment.deletedAt !== undefined)
     return (
       <Txt variant="caption" tone="faint" className="m-0 italic">
-        Comment deleted
+        {t('comments.deleted')}
       </Txt>
     );
 
@@ -124,7 +126,7 @@ function CommentRowBody({ comment, ref }: { comment: WorkItemComment; ref: Ref<H
       <MarkdownRenderer>{comment.body}</MarkdownRenderer>
       {comment.editedAt ? (
         <Txt as="span" variant="meta" tone="faint" className="ml-1">
-          (edited)
+          {t('comments.edited')}
         </Txt>
       ) : null}
     </CommentItemBody>
@@ -154,6 +156,7 @@ export function CommentRow({
   onQuote?: (draft: CommentQuoteDraft) => void;
   onDelete?: () => void;
 }) {
+  const { t } = useTranslation('activity');
   const bodyRef = useRef<HTMLElement | null>(null);
   const [editing, setEditing] = useState(false);
   const deleted = comment.deletedAt !== undefined;
@@ -195,22 +198,22 @@ export function CommentRow({
       {showActions ? (
         <CommentItemActions>
           {onQuote ? (
-            <RowAction label="Quote reply" onClick={quoteReply} onMouseDown={event => event.preventDefault()}>
+            <RowAction label={t('comments.quoteReply')} onClick={quoteReply} onMouseDown={event => event.preventDefault()}>
               <Quote aria-hidden />
             </RowAction>
           ) : null}
           {commentUrl ? (
-            <RowAction label="Copy link" onClick={() => void navigator.clipboard.writeText(commentUrl)}>
+            <RowAction label={t('comments.copyLink')} onClick={() => void navigator.clipboard.writeText(commentUrl)}>
               <Link2 aria-hidden />
             </RowAction>
           ) : null}
           {own ? (
-            <RowAction label="Edit comment" onClick={() => setEditing(true)}>
+            <RowAction label={t('comments.edit')} onClick={() => setEditing(true)}>
               <Pencil aria-hidden />
             </RowAction>
           ) : null}
           {own && onDelete ? (
-            <RowAction label="Delete comment" onClick={onDelete}>
+            <RowAction label={t('comments.delete')} onClick={onDelete}>
               <Trash2 aria-hidden />
             </RowAction>
           ) : null}
