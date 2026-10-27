@@ -64,28 +64,74 @@ describe('TurnTranslator', () => {
     ]);
   });
 
-  it('turns an ExitPlanMode call into a plan gate', () => {
+  function playUntilGate(name: string) {
     const translator = new TurnTranslator();
     const transcript: ClaudeTranscriptEntry[] = [];
-    for (const line of fixture('turn-plan.jsonl')) {
+    for (const line of fixture(name)) {
       transcript.push(...translator.push(parseStreamLine(line)!));
       if (translator.gate) break;
     }
+    return { translator, transcript };
+  }
+
+  it('turns a submit_plan call on the gate server into a plan gate', () => {
+    const { translator, transcript } = playUntilGate('turn-submit-plan.jsonl');
+
+    expect(translator.gate).toEqual({
+      toolCallId: 'toolu_03Gate',
+      toolName: 'mcp__factory_gate__submit_plan',
+      title: 'README usage section',
+      plan: '1. Add a usage section to README.md\n2. Link it from src/index.ts docs',
+    });
+    expect(transcript.slice(-2)).toEqual([
+      {
+        kind: 'tool_call',
+        toolCallId: 'toolu_03Gate',
+        toolName: 'mcp__factory_gate__submit_plan',
+        input: { title: 'README usage section', plan: expect.stringContaining('usage section') },
+      },
+      {
+        kind: 'plan',
+        toolCallId: 'toolu_03Gate',
+        toolName: 'mcp__factory_gate__submit_plan',
+        title: 'README usage section',
+        plan: expect.stringContaining('usage section'),
+      },
+    ]);
+    expect(translator.outcome({ exitCode: null, stderr: '' })).toMatchObject({ kind: 'gate' });
+  });
+
+  it('still treats an ExitPlanMode call as a plan gate', () => {
+    const { translator, transcript } = playUntilGate('turn-plan.jsonl');
 
     expect(translator.gate).toEqual({
       toolCallId: 'toolu_02Plan',
+      toolName: 'ExitPlanMode',
       plan: '1. Add a usage section to README.md\n2. Link it from src/index.ts docs',
     });
     expect(transcript.at(-1)).toMatchObject({ kind: 'plan', toolCallId: 'toolu_02Plan' });
     expect(translator.outcome({ exitCode: null, stderr: '' })).toMatchObject({ kind: 'gate' });
   });
 
-  it('ignores a subagent ExitPlanMode', () => {
+  it('ignores a submit_plan call on another MCP server', () => {
+    const translator = new TurnTranslator();
+    translator.push({
+      type: 'assistant',
+      content: [{ type: 'tool_use', id: 'toolu_x', name: 'mcp__other__submit_plan', input: { plan: 'x' } }],
+      raw: {},
+    });
+    expect(translator.gate).toBeUndefined();
+  });
+
+  it('ignores a subagent plan', () => {
     const translator = new TurnTranslator();
     translator.push({
       type: 'assistant',
       parentToolUseId: 'toolu_task',
-      content: [{ type: 'tool_use', id: 'toolu_sub', name: 'ExitPlanMode', input: { plan: 'x' } }],
+      content: [
+        { type: 'tool_use', id: 'toolu_sub', name: 'ExitPlanMode', input: { plan: 'x' } },
+        { type: 'tool_use', id: 'toolu_sub2', name: 'mcp__factory_gate__submit_plan', input: { plan: 'x' } },
+      ],
       raw: {},
     });
     expect(translator.gate).toBeUndefined();

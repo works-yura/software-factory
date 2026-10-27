@@ -1,6 +1,7 @@
 export * from './cli.ts';
 export * from './errors.ts';
 export * from './events.ts';
+export * from './gate.ts';
 export * from './harness.ts';
 export * from './session.ts';
 export * from './skills.ts';

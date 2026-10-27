@@ -19,6 +19,8 @@ export interface FakeTurn {
   hold?: Promise<void>;
   /** Never exit on its own; only a kill ends it. */
   hang?: boolean;
+  /** Lines the process still prints while it is being stopped, like the real CLI's last words. */
+  linesOnKill?: string[];
   /** Deliver the output in arbitrary chunks instead of whole lines. */
   chunkSize?: number;
 }
@@ -81,7 +83,10 @@ export function fakeClaude(turns: FakeTurn[]) {
       kill: (signal: NodeJS.Signals = 'SIGTERM') => {
         call.killed.push(signal);
         killed = true;
-        setImmediate(() => close(null, signal));
+        setImmediate(() => {
+          for (const line of turn.linesOnKill ?? []) stdout.emit('data', `${line}\n`);
+          close(null, signal);
+        });
         return true;
       },
     });

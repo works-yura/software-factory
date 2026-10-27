@@ -1,7 +1,8 @@
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { ClaudePermissionMode } from './cli.ts';
+import type { PlanGate } from './events.ts';
+import type { ClaudeSessionMode } from './cli.ts';
 
 /** Input that waits for the next turn: a persisted notification, or signals queued when a gate parked the run. */
 export interface ClaudePendingInput {
@@ -13,10 +14,11 @@ export interface ClaudePendingInput {
 export interface ClaudeThreadState {
   /** The CLI's own session id; every later turn resumes it. */
   claudeSessionId?: string;
-  permissionMode?: ClaudePermissionMode;
+  /** The thread's mode for its next turn; the session's configured mode when unset. */
+  mode?: ClaudeSessionMode;
   settings: Record<string, unknown>;
   /** The plan gate the thread is parked on. */
-  pendingGate?: { toolCallId: string; plan?: string };
+  pendingGate?: PlanGate;
   pendingInputs: ClaudePendingInput[];
   /** Recent signal ids Claude received, newest last; the dispatcher's replay guard reads them. */
   deliveredIds: string[];

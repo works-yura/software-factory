@@ -3,11 +3,24 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import { createLineSplitter } from './stream.ts';
 
 /**
- * Permission modes the CLI accepts. `bypassPermissions` is deliberately left
- * out: an unattended agent never skips permission checks; it runs with the
- * tools its configuration allows.
+ * Permission modes the harness passes to the CLI. `bypassPermissions` is
+ * deliberately left out: an unattended agent never skips permission checks;
+ * it runs with the tools its configuration allows. `plan` is left out too:
+ * `claude -p` has no ExitPlanMode, and plan mode writes plan files into the
+ * config dir (`~/.claude/plans`). The harness plans with its own gate instead
+ * (see {@link ClaudeSessionMode}).
  */
-export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'manual';
+export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'auto' | 'dontAsk' | 'manual';
+
+/**
+ * How a session's turns run: a CLI permission mode, or `planning`, the
+ * harness's own plan mode: the default permission mode with file edits denied
+ * and a prompt to finish with `submit_plan` (see `gate.ts`).
+ */
+export type ClaudeSessionMode = ClaudePermissionMode | 'planning';
+
+/** Where the CLI may read settings from. `user` is the person's own `~/.claude/settings.json`. */
+export type ClaudeSettingSource = 'user' | 'project' | 'local';
 
 const FORBIDDEN_ARGS = new Set(['--dangerously-skip-permissions', '--allow-dangerously-skip-permissions']);
 
@@ -16,10 +29,17 @@ export interface ClaudeArgsInput {
   model?: string;
   effort?: string;
   permissionMode?: ClaudePermissionMode;
-  /** A path, a JSON string, or a config object (serialised to JSON). */
-  mcpConfig?: string | Record<string, unknown>;
+  /**
+   * MCP server configs: each a path, a JSON string, or a config object
+   * (serialised to JSON). They are passed as one `--mcp-config` list.
+   */
+  mcpConfig?: string | Record<string, unknown> | Array<string | Record<string, unknown>>;
   /** Only use the MCP servers from {@link mcpConfig}, ignoring the user's and project's. */
   strictMcpConfig?: boolean;
+  /** `--setting-sources`; left out, the CLI reads all of them. */
+  settingSources?: ClaudeSettingSource[];
+  /** `--settings`: extra settings as an object (serialised to JSON). */
+  settings?: Record<string, unknown>;
   allowedTools?: string[];
   disallowedTools?: string[];
   appendSystemPrompt?: string;
@@ -36,15 +56,20 @@ export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
   if (input.model) args.push('--model', input.model);
   if (input.effort) args.push('--effort', input.effort);
   if (input.permissionMode) {
-    if ((input.permissionMode as string) === 'bypassPermissions') {
-      throw new Error('Claude Code harness never runs with bypassPermissions.');
+    const mode = input.permissionMode as string;
+    if (mode === 'bypassPermissions') throw new Error('Claude Code harness never runs with bypassPermissions.');
+    if (mode === 'plan') {
+      throw new Error("Claude Code harness does not use the CLI's plan mode; use the session mode 'planning'.");
     }
     args.push('--permission-mode', input.permissionMode);
   }
-  if (input.mcpConfig) {
-    args.push('--mcp-config', typeof input.mcpConfig === 'string' ? input.mcpConfig : JSON.stringify(input.mcpConfig));
-    if (input.strictMcpConfig) args.push('--strict-mcp-config');
+  if (input.settingSources) args.push('--setting-sources', input.settingSources.join(','));
+  if (input.settings && Object.keys(input.settings).length > 0) args.push('--settings', JSON.stringify(input.settings));
+  const mcpConfigs = input.mcpConfig === undefined ? [] : Array.isArray(input.mcpConfig) ? input.mcpConfig : [input.mcpConfig];
+  if (mcpConfigs.length > 0) {
+    args.push('--mcp-config', ...mcpConfigs.map(config => (typeof config === 'string' ? config : JSON.stringify(config))));
   }
+  if (input.strictMcpConfig) args.push('--strict-mcp-config');
   if (input.allowedTools?.length) args.push('--allowedTools', input.allowedTools.join(','));
   if (input.disallowedTools?.length) args.push('--disallowedTools', input.disallowedTools.join(','));
   if (input.maxTurns && input.maxTurns > 0) args.push('--max-turns', String(input.maxTurns));

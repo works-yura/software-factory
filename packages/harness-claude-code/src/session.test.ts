@@ -6,6 +6,7 @@ import { deferred, fakeClaude, fixture, type FakeTurn } from './__fixtures__/fak
 import { ClaudeCodeError } from './errors.ts';
 import { createClaudeCodeHarness, type ClaudeCodeHarnessConfig } from './harness.ts';
 import type { ClaudeTranscriptEntry } from './events.ts';
+import { GATE_SERVER_SCRIPT, PLANNING_PROMPT } from './gate.ts';
 import type { ClaudeCodeSession } from './session.ts';
 import { createInMemorySessionStore, type ClaudeSessionStore } from './store.ts';
 
@@ -103,7 +104,7 @@ describe('ClaudeCodeSession', () => {
     expect(flagValue(args, '--resume')).toBe(CLAUDE_SESSION);
     expect(flagValue(args, '--model')).toBe('claude-sonnet-4-6');
     expect(flagValue(args, '--effort')).toBe('high');
-    expect(flagValue(args, '--allowedTools')).toBe('Read,Edit,Bash(git status:*)');
+    expect(flagValue(args, '--allowedTools')).toBe('Read,Edit,Bash(git status:*),mcp__factory_gate__submit_plan');
   });
 
   it('queues a signal sent mid-turn and runs it as the next turn of the same run', async () => {
@@ -130,45 +131,86 @@ describe('ClaudeCodeSession', () => {
   });
 
   describe('plan gate', () => {
-    async function parkOnPlan(extraTurns: FakeTurn[] = []) {
-      const context = await setup([{ lines: fixture('turn-plan.jsonl') }, ...extraTurns], { permissionMode: 'plan' });
+    async function parkOnPlan(extraTurns: FakeTurn[] = [], first = 'turn-submit-plan.jsonl') {
+      const context = await setup([{ lines: fixture(first) }, ...extraTurns], { mode: 'planning' });
       const end = nextEnd(context.session);
       await context.signal('plan-1', 'Plan the README change.');
       expect(await end).toBe('suspended');
       return context;
     }
 
-    it('parks the run on submit_plan when Claude calls ExitPlanMode', async () => {
+    it('plans without the CLI plan mode: default permissions, edits denied, planning preamble', async () => {
+      const { fake } = await parkOnPlan();
+      const [call] = fake.calls;
+
+      expect(flagValue(call!.args, '--permission-mode')).toBe('default');
+      expect(call!.args.join(' ')).not.toMatch(/--permission-mode plan/);
+      expect(flagValue(call!.args, '--disallowedTools')?.split(',')).toEqual(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+      expect(flagValue(call!.args, '--allowedTools')).toBe('mcp__factory_gate__submit_plan');
+      expect(call!.stdin).toBe(`${PLANNING_PROMPT}\n\nPlan the README change.`);
+    });
+
+    it('parks the run when Claude calls the gate server’s submit_plan', async () => {
       const { fake, session, events, transcript } = await parkOnPlan();
 
-      expect(flagValue(fake.calls[0]!.args, '--permission-mode')).toBe('plan');
       expect(fake.calls[0]!.killed).toEqual(['SIGTERM']);
       expect(events.filter(event => event.type !== 'usage_update')).toEqual([
-        { type: 'tool_suspended', toolName: 'submit_plan', toolCallId: 'toolu_02Plan' },
+        { type: 'tool_suspended', toolName: 'submit_plan', toolCallId: 'toolu_03Gate' },
         { type: 'agent_end', reason: 'suspended' },
       ]);
       expect(session.suspensions.hasPending()).toBe(true);
       expect(session.run.isRunning()).toBe(false);
+      expect(session.pendingPlan).toEqual({
+        toolCallId: 'toolu_03Gate',
+        toolName: 'mcp__factory_gate__submit_plan',
+        title: 'README usage section',
+        plan: '1. Add a usage section to README.md\n2. Link it from src/index.ts docs',
+      });
       // Nothing Claude did after the plan reaches the thread.
-      expect(transcript.at(-1)).toMatchObject({ kind: 'plan', plan: expect.stringContaining('usage section') });
+      expect(transcript.at(-1)).toMatchObject({ kind: 'plan', title: 'README usage section', plan: expect.stringContaining('usage section') });
+      expect(transcript.some(entry => entry.kind === 'tool_result' && entry.toolCallId === 'toolu_03Gate')).toBe(false);
+    });
+
+    it('keeps what the CLI prints while it is stopped out of the transcript', async () => {
+      const gateFailed = JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_03Gate', content: 'Connection closed', is_error: true }] },
+        parent_tool_use_id: null,
+        session_id: CLAUDE_SESSION,
+      });
+      const { session, transcript, signal } = await setup(
+        [{ lines: fixture('turn-submit-plan.jsonl').slice(0, 4), hang: true, linesOnKill: [gateFailed] }],
+        { mode: 'planning' },
+      );
+      const end = nextEnd(session);
+      await signal('plan-1', 'Plan it.');
+      expect(await end).toBe('suspended');
+      expect(transcript.at(-1)).toMatchObject({ kind: 'plan', toolCallId: 'toolu_03Gate' });
+    });
+
+    it('still parks on ExitPlanMode, should a CLI offer it', async () => {
+      const { events } = await parkOnPlan([], 'turn-plan.jsonl');
+      expect(events).toContainEqual({ type: 'tool_suspended', toolName: 'submit_plan', toolCallId: 'toolu_02Plan' });
     });
 
     it('resumes the session with edits allowed once the plan is approved', async () => {
       const { fake, session } = await parkOnPlan([{ lines: fixture('turn-complete.jsonl') }]);
       const end = nextEnd(session);
 
-      await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId: 'toolu_02Plan' });
+      await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId: 'toolu_03Gate' });
 
       expect(session.suspensions.hasPending()).toBe(false);
       expect(await end).toBe('complete');
       const resumed = fake.calls[1]!;
       expect(flagValue(resumed.args, '--resume')).toBe(CLAUDE_SESSION);
       expect(flagValue(resumed.args, '--permission-mode')).toBe('acceptEdits');
-      expect(resumed.stdin).toContain('The plan was approved. Implement it.');
+      expect(resumed.args).not.toContain('--disallowedTools');
+      expect(resumed.stdin).toBe('The plan was approved. Implement it.');
+      expect(session.mode).toBe('acceptEdits');
     });
 
-    it('stays in plan mode and passes the feedback when the plan is rejected', async () => {
-      const { fake, session } = await parkOnPlan([{ lines: fixture('turn-plan.jsonl') }]);
+    it('resumes in planning with the feedback when the plan is rejected', async () => {
+      const { fake, session } = await parkOnPlan([{ lines: fixture('turn-submit-plan.jsonl') }]);
       const end = nextEnd(session);
 
       await session.respondToToolSuspension({ resumeData: { action: 'rejected', feedback: 'Also update CHANGELOG.md' } });
@@ -176,8 +218,11 @@ describe('ClaudeCodeSession', () => {
       expect(await end).toBe('suspended');
       const resumed = fake.calls[1]!;
       expect(flagValue(resumed.args, '--resume')).toBe(CLAUDE_SESSION);
-      expect(flagValue(resumed.args, '--permission-mode')).toBe('plan');
+      expect(flagValue(resumed.args, '--permission-mode')).toBe('default');
+      expect(flagValue(resumed.args, '--disallowedTools')).toContain('Write');
+      expect(resumed.stdin).toContain(PLANNING_PROMPT);
       expect(resumed.stdin).toContain('Also update CHANGELOG.md');
+      expect(resumed.stdin).toContain('submit it again with `mcp__factory_gate__submit_plan`');
       expect(session.suspensions.hasPending()).toBe(true);
     });
 
@@ -185,7 +230,7 @@ describe('ClaudeCodeSession', () => {
       const { session } = await parkOnPlan();
       await expect(
         session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId: 'toolu_other' }),
-      ).rejects.toThrow(/waiting on toolu_02Plan/);
+      ).rejects.toThrow(/waiting on toolu_03Gate/);
       expect(session.suspensions.hasPending()).toBe(true);
     });
 
@@ -195,7 +240,7 @@ describe('ClaudeCodeSession', () => {
 
       await signal('new-1', 'Forget the plan, just fix the typo.');
 
-      expect(events).toContainEqual({ type: 'tool_suspension_cancelled', toolCallId: 'toolu_02Plan' });
+      expect(events).toContainEqual({ type: 'tool_suspension_cancelled', toolCallId: 'toolu_03Gate' });
       expect(session.suspensions.hasPending()).toBe(false);
       expect(await end).toBe('complete');
     });
@@ -210,7 +255,88 @@ describe('ClaudeCodeSession', () => {
       });
       const session = await restarted.getSession('card-1');
       expect(session?.suspensions.hasPending()).toBe(true);
+      expect(session?.pendingPlan?.title).toBe('README usage section');
       expect(session?.claudeSessionId).toBe(CLAUDE_SESSION);
+    });
+
+    it('enters planning on demand', async () => {
+      const { fake, session, signal } = await setup([{ lines: fixture('turn-submit-plan.jsonl') }]);
+      await session.setMode('planning');
+      const end = nextEnd(session);
+      await signal('plan-1', 'Plan it.');
+      expect(await end).toBe('suspended');
+      expect(flagValue(fake.calls[0]!.args, '--disallowedTools')).toContain('Edit');
+    });
+  });
+
+  describe('isolation', () => {
+    const mcpConfigs = (args: string[]) => {
+      const index = args.indexOf('--mcp-config');
+      const values: string[] = [];
+      for (let i = index + 1; i < args.length && !args[i]!.startsWith('--'); i += 1) values.push(args[i]!);
+      return values;
+    };
+
+    async function firstCall(overrides: Partial<ClaudeCodeHarnessConfig> = {}) {
+      const { fake, session, signal } = await setup([{ lines: fixture('turn-complete.jsonl') }], overrides);
+      const end = nextEnd(session);
+      await signal('one', 'go');
+      await end;
+      return fake.calls[0]!;
+    }
+
+    it('keeps the person’s settings and MCP servers out and adds the gate server by default', async () => {
+      const call = await firstCall();
+
+      expect(flagValue(call.args, '--setting-sources')).toBe('project,local');
+      expect(call.args).toContain('--strict-mcp-config');
+      expect(JSON.parse(flagValue(call.args, '--settings')!)).toEqual({ plansDirectory: '.claude/plans' });
+      expect(call.args).not.toContain('--permission-mode');
+      expect(call.args).not.toContain('--disallowedTools');
+      expect(mcpConfigs(call.args).map(value => JSON.parse(value))).toEqual([
+        { mcpServers: { factory_gate: { type: 'stdio', command: process.execPath, args: [GATE_SERVER_SCRIPT] } } },
+      ]);
+      expect(flagValue(call.args, '--allowedTools')).toBe('mcp__factory_gate__submit_plan');
+      expect(flagValue(call.args, '--append-system-prompt')).toContain('mcp__factory_gate__submit_plan');
+    });
+
+    it('merges the configured MCP servers and tools with the gate', async () => {
+      const factory = { mcpServers: { factory: { type: 'http', url: 'http://localhost/mcp' } } };
+      const call = await firstCall({
+        mcpConfig: factory,
+        allowedTools: ['Read', 'mcp__factory'],
+        appendSystemPrompt: 'You work a Factory card.',
+        gateServer: { command: '/opt/node', args: ['/opt/gate.mjs'] },
+      });
+
+      expect(mcpConfigs(call.args).map(value => JSON.parse(value))).toEqual([
+        factory,
+        { mcpServers: { factory_gate: { type: 'stdio', command: '/opt/node', args: ['/opt/gate.mjs'] } } },
+      ]);
+      expect(flagValue(call.args, '--allowedTools')).toBe('Read,mcp__factory,mcp__factory_gate__submit_plan');
+      expect(flagValue(call.args, '--append-system-prompt')).toMatch(/^You work a Factory card\.\n\nPlan approval:/);
+    });
+
+    it('can be opted out of', async () => {
+      const call = await firstCall({ settingSources: false, strictMcpConfig: false, plansDirectory: false });
+
+      expect(call.args).not.toContain('--setting-sources');
+      expect(call.args).not.toContain('--strict-mcp-config');
+      expect(call.args).not.toContain('--settings');
+    });
+
+    it('sets the session’s config dir; a config dir from the credentials hook wins', async () => {
+      const call = await firstCall({ configDir: session => `/srv/claude-config/${session.id}` });
+      expect(call.env).toEqual({ PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-for-card-1', CLAUDE_CONFIG_DIR: '/srv/claude-config/card-1' });
+
+      const pooled = await firstCall({
+        configDir: () => '/srv/claude-config/card-1',
+        credentials: async () => ({ CLAUDE_CODE_OAUTH_TOKEN: 'oauth', CLAUDE_CONFIG_DIR: '/pool/a' }),
+      });
+      expect(pooled.env).toEqual({ PATH: '/usr/bin', CLAUDE_CODE_OAUTH_TOKEN: 'oauth', CLAUDE_CONFIG_DIR: '/pool/a' });
+
+      const unset = await firstCall({ configDir: () => undefined });
+      expect(unset.env).not.toHaveProperty('CLAUDE_CONFIG_DIR');
     });
   });
 
@@ -357,8 +483,8 @@ describe('ClaudeCodeSession', () => {
 
   it('never runs the CLI with permission checks skipped', async () => {
     const { fake, session, signal } = await setup(
-      [{ lines: fixture('turn-plan.jsonl') }, { lines: fixture('turn-complete.jsonl') }],
-      { permissionMode: 'plan' },
+      [{ lines: fixture('turn-submit-plan.jsonl') }, { lines: fixture('turn-complete.jsonl') }],
+      { mode: 'planning' },
     );
     let end = nextEnd(session);
     await signal('one', 'plan');
@@ -367,7 +493,7 @@ describe('ClaudeCodeSession', () => {
     await session.respondToToolSuspension({ resumeData: { action: 'approved' } });
     await end;
     for (const call of fake.calls) {
-      expect(call.args.join(' ')).not.toMatch(/dangerously|bypassPermissions/);
+      expect(call.args.join(' ')).not.toMatch(/dangerously|bypassPermissions|--permission-mode plan/);
     }
   });
 });

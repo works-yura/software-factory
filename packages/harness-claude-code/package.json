@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Claude Code harness: Factory sessions run as turns of the official `claude` CLI, resumed per session, with plan gates emulated by ending the turn.",
+  "description": "Claude Code harness: Factory sessions run as turns of the official `claude` CLI, resumed per session, with plan gates (its own submit_plan MCP tool) emulated by ending the turn.",
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts"

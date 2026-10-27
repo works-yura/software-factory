@@ -20,42 +20,100 @@ import {
   type ClaudeArgsInput,
   type ClaudePermissionMode,
   type ClaudeRun,
+  type ClaudeSessionMode,
+  type ClaudeSettingSource,
   type ClaudeSpawn,
 } from './cli.ts';
 import { ClaudeCodeError } from './errors.ts';
-import { PLAN_GATE_TOOL, TurnTranslator, type ClaudeTranscriptEntry, type TurnOutcome } from './events.ts';
+import { TurnTranslator, type ClaudeTranscriptEntry, type PlanGate, type TurnOutcome } from './events.ts';
+import {
+  GATE_SYSTEM_PROMPT,
+  PLANNING_DISALLOWED_TOOLS,
+  PLANNING_PROMPT,
+  SUBMIT_PLAN_TOOL_ID,
+  SUBMIT_PLAN_TOOL_NAME,
+  gateMcpConfig,
+  type GateServerCommand,
+} from './gate.ts';
 import { emptyThreadState, type ClaudePendingInput, type ClaudeSessionRecord, type ClaudeSessionStore, type ClaudeThreadState } from './store.ts';
 import { parseStreamLine } from './stream.ts';
 
 /** How many delivered signal ids and dedupe keys a thread remembers. */
 const RECENT_LIMIT = 200;
 
+/** Settings sources a turn reads by default: the repo's, never the person's own `~/.claude/settings.json`. */
+export const DEFAULT_SETTING_SOURCES: ClaudeSettingSource[] = ['project', 'local'];
+/** Where plan files would go if the CLI's plan mode ever ran (relative to the session cwd), instead of `~/.claude/plans`. */
+export const DEFAULT_PLANS_DIRECTORY = '.claude/plans';
+
+/**
+ * Configuration for Claude Code sessions.
+ *
+ * Planning: a thread in mode `planning` runs with the default permission
+ * mode, the file-editing tools denied (`planningDisallowedTools`) and a
+ * planning preamble on its prompt; Claude ends the plan by calling the gate's
+ * `submit_plan` tool (`mcp__factory_gate__submit_plan`), which stops the turn,
+ * emits `tool_suspended` and parks the thread. Approval resumes the same
+ * Claude session in `approvedPermissionMode`; rejection resumes it in
+ * `planning` with the feedback. The CLI's own plan mode is never used: `-p`
+ * has no ExitPlanMode and plan mode writes into the config dir.
+ *
+ * Isolation: by default turns read only the project's and local settings
+ * (`settingSources`) and only the MCP servers given here (`strictMcpConfig`),
+ * so the person's global plugins, hooks, output style and MCP servers stay out
+ * of Factory sessions. `configDir` moves everything else the CLI writes
+ * (session files, todos, plans) out of `~/.claude`.
+ */
 export interface ClaudeCodeSessionConfig
   extends Pick<
     ClaudeArgsInput,
-    | 'model'
-    | 'effort'
-    | 'mcpConfig'
-    | 'strictMcpConfig'
-    | 'allowedTools'
-    | 'disallowedTools'
-    | 'appendSystemPrompt'
-    | 'includePartialMessages'
-    | 'maxTurns'
-    | 'extraArgs'
+    'model' | 'effort' | 'allowedTools' | 'disallowedTools' | 'appendSystemPrompt' | 'includePartialMessages' | 'maxTurns' | 'extraArgs'
   > {
   store: ClaudeSessionStore;
-  /** Credentials for one turn as env (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDE_CONFIG_DIR`). */
+  /**
+   * Credentials for one turn as env (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
+   * `CLAUDE_CONFIG_DIR`). A `CLAUDE_CONFIG_DIR` returned here wins over {@link configDir}.
+   */
   credentials: (session: ClaudeCodeSession) => Promise<Record<string, string>>;
   /** The session's working directory; asked once, before its first turn. */
   cwdFor: (sessionId: string) => string | Promise<string>;
+  /**
+   * The CLI's config dir for this session (`CLAUDE_CONFIG_DIR`), so its session
+   * files and anything else the CLI writes stay out of the person's `~/.claude`.
+   * Unset (or `undefined`) keeps the default dir. The subscription login of the
+   * default dir does not carry over: with a custom dir the credentials hook must
+   * return `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or
+   * `ANTHROPIC_API_KEY`. Keep it stable per session, or `--resume` cannot find
+   * the session's files.
+   */
+  configDir?: (session: ClaudeCodeSession) => string | undefined;
+  /** MCP servers for every turn (e.g. the Factory MCP endpoint); the gate server is added to them. */
+  mcpConfig?: string | Record<string, unknown> | Array<string | Record<string, unknown>>;
+  /** Only the MCP servers given here and the gate; `true` by default. `false` also loads the user's and project's. */
+  strictMcpConfig?: boolean;
+  /**
+   * `--setting-sources`; `['project', 'local']` by default, which leaves out the
+   * person's `~/.claude/settings.json` (plugins, hooks, output style). `false`
+   * passes no flag, so the CLI reads every source.
+   */
+  settingSources?: ClaudeSettingSource[] | false;
+  /**
+   * The CLI's `plansDirectory` setting, relative to the session cwd; `.claude/plans`
+   * by default. The harness never enters plan mode itself; this keeps plan files
+   * out of `~/.claude/plans` should a project's settings turn plan mode on. `false` leaves it unset.
+   */
+  plansDirectory?: string | false;
+  /** How the gate server is started; `node gate-mcp-server.mjs` with this process's Node by default. */
+  gateServer?: GateServerCommand;
   spawn?: ClaudeSpawn;
   /** The CLI binary; `claude` on PATH by default. */
   command?: string;
-  /** Mode a new thread starts in. */
-  permissionMode?: ClaudePermissionMode;
-  /** Mode after a person approves a plan. */
+  /** Mode a new thread starts in; `planning` to start with a plan for approval. */
+  mode?: ClaudeSessionMode;
+  /** Mode after a person approves a plan; `acceptEdits` by default. */
   approvedPermissionMode?: ClaudePermissionMode;
+  /** Tools denied while planning; {@link PLANNING_DISALLOWED_TOOLS} by default. */
+  planningDisallowedTools?: string[];
   turnTimeoutMs?: number;
   /** The environment turns inherit, minus credential keys; `process.env` by default. */
   env?: Record<string, string | undefined>;
@@ -103,7 +161,7 @@ function approvalPrompt(decision: PlanDecision): string {
 function rejectionPrompt(decision: PlanDecision): string {
   const parts = ['The plan was not approved.'];
   if (decision.feedback?.trim()) parts.push(`Reviewer feedback:\n${decision.feedback.trim()}`);
-  parts.push('Stay in plan mode and make no changes. Revise the plan and present it again with ExitPlanMode.');
+  parts.push(`Make no changes. Revise the plan and submit it again with \`${SUBMIT_PLAN_TOOL_ID}\`.`);
   return parts.join('\n\n');
 }
 
@@ -119,8 +177,9 @@ function remember(list: string[], value: string): string[] {
  *  - a run is a chain of CLI turns: input that arrives mid-turn is queued and
  *    sent as the next turn (`--resume`) before the run ends, so a `deliver`
  *    really joins the run in flight;
- *  - a human gate ends the turn: an `ExitPlanMode` call stops the process and
- *    the run ends `suspended`; the answer resumes the session in a new run.
+ *  - a human gate ends the turn: a `submit_plan` call (the gate MCP server's
+ *    tool, or ExitPlanMode should a CLI offer it) stops the process and the
+ *    run ends `suspended`; the answer resumes the session in a new run.
  */
 export class ClaudeCodeSession implements AgentSession {
   readonly id: string;
@@ -154,14 +213,21 @@ export class ClaudeCodeSession implements AgentSession {
     return this.#threadState().claudeSessionId;
   }
 
-  get permissionMode(): ClaudePermissionMode | undefined {
-    return this.#threadState().permissionMode ?? this.#config.permissionMode;
+  /** The current thread's mode; `undefined` runs with the CLI's default permission mode. */
+  get mode(): ClaudeSessionMode | undefined {
+    return this.#threadState().mode ?? this.#config.mode;
   }
 
-  /** Switches the current thread's mode for its next turn, e.g. into `plan` before a planning stage. */
-  async setPermissionMode(mode: ClaudePermissionMode): Promise<void> {
-    this.#threadState().permissionMode = mode;
+  /** Switches the current thread's mode for its next turn, e.g. into `planning` before a planning stage. */
+  async setMode(mode: ClaudeSessionMode): Promise<void> {
+    this.#threadState().mode = mode;
     await this.#save();
+  }
+
+  /** The plan the current thread is parked on, if any. */
+  get pendingPlan(): PlanGate | undefined {
+    const gate = this.#threadState().pendingGate;
+    return gate ? { ...gate } : undefined;
   }
 
   /** The id of the run in flight. */
@@ -290,7 +356,7 @@ export class ClaudeCodeSession implements AgentSession {
     if (this.#run) throw new Error('Cannot answer a gate while a run is in flight.');
     thread.pendingGate = undefined;
     const approved = resumeData.action === 'approved';
-    thread.permissionMode = approved ? (this.#config.approvedPermissionMode ?? 'acceptEdits') : 'plan';
+    thread.mode = approved ? (this.#config.approvedPermissionMode ?? 'acceptEdits') : 'planning';
     const text = approved ? approvalPrompt(resumeData) : rejectionPrompt(resumeData);
     const accepted = this.#accept([{ kind: 'signal', text }], true, { keepGate: true });
     if (accepted.action !== 'persist') await accepted.run.started;
@@ -414,7 +480,7 @@ export class ClaudeCodeSession implements AgentSession {
           // Whatever arrived while the plan was being written goes with the answer.
           thread.pendingInputs.push(...run.queue);
           run.queue = [];
-          this.#emit({ type: 'tool_suspended', toolName: PLAN_GATE_TOOL, toolCallId: outcome.gate.toolCallId });
+          this.#emit({ type: 'tool_suspended', toolName: SUBMIT_PLAN_TOOL_NAME, toolCallId: outcome.gate.toolCallId });
           reason = 'suspended';
           break;
         }
@@ -456,26 +522,57 @@ export class ClaudeCodeSession implements AgentSession {
     return this.#record.cwd;
   }
 
+  /** The CLI options for one turn of this thread. */
+  #argsInput(thread: ClaudeThreadState, planning: boolean): ClaudeArgsInput {
+    const config = this.#config;
+    const mode = thread.mode ?? config.mode;
+    // Planning pins the default mode, so a project setting cannot put the turn into the CLI's plan mode.
+    const permissionMode: ClaudePermissionMode | undefined = planning ? 'default' : mode === 'planning' ? undefined : mode;
+    const configured = config.mcpConfig === undefined ? [] : Array.isArray(config.mcpConfig) ? config.mcpConfig : [config.mcpConfig];
+    const settingSources = config.settingSources ?? DEFAULT_SETTING_SOURCES;
+    const plansDirectory = config.plansDirectory ?? DEFAULT_PLANS_DIRECTORY;
+    const disallowedTools = [
+      ...(config.disallowedTools ?? []),
+      ...(planning ? (config.planningDisallowedTools ?? PLANNING_DISALLOWED_TOOLS) : []),
+    ];
+    return {
+      ...(thread.claudeSessionId ? { resumeSessionId: thread.claudeSessionId } : {}),
+      ...(config.model ? { model: config.model } : {}),
+      ...(config.effort ? { effort: config.effort } : {}),
+      ...(permissionMode ? { permissionMode } : {}),
+      ...(settingSources ? { settingSources } : {}),
+      ...(plansDirectory ? { settings: { plansDirectory } } : {}),
+      mcpConfig: [...configured, gateMcpConfig(config.gateServer)],
+      strictMcpConfig: config.strictMcpConfig ?? true,
+      allowedTools: [...new Set([...(config.allowedTools ?? []), SUBMIT_PLAN_TOOL_ID])],
+      ...(disallowedTools.length ? { disallowedTools: [...new Set(disallowedTools)] } : {}),
+      appendSystemPrompt: [config.appendSystemPrompt, GATE_SYSTEM_PROMPT].filter(Boolean).join('\n\n'),
+      ...(config.includePartialMessages ? { includePartialMessages: true } : {}),
+      ...(config.maxTurns ? { maxTurns: config.maxTurns } : {}),
+      ...(config.extraArgs ? { extraArgs: config.extraArgs } : {}),
+    };
+  }
+
   async #turn(
     run: ActiveRun,
     inputs: ClaudePendingInput[],
   ): Promise<TurnOutcome | { kind: 'aborted' }> {
     const thread = this.#threadState(run.threadId);
-    const prompt = inputs.map(input => input.text).join('\n\n');
+    const planning = (thread.mode ?? this.#config.mode) === 'planning';
+    const prompt = [...(planning ? [PLANNING_PROMPT] : []), ...inputs.map(input => input.text)].join('\n\n');
     const credentials = await this.#config.credentials(this);
     const cwd = await this.#cwd();
     if (run.abortRequested) return { kind: 'aborted' };
-    const env = buildClaudeEnv(this.#config.env ?? process.env, credentials);
+    const configDir = this.#config.configDir?.(this);
+    const env = buildClaudeEnv(this.#config.env ?? process.env, {
+      ...(configDir ? { CLAUDE_CONFIG_DIR: configDir } : {}),
+      ...credentials,
+    });
 
     // A stale resume id (the CLI's session files were lost) gets one fresh session instead of failing forever.
     for (let attempt = 0; ; attempt += 1) {
       const resumeSessionId = thread.claudeSessionId;
-      const permissionMode = thread.permissionMode ?? this.#config.permissionMode;
-      const args = buildClaudeArgs({
-        ...this.#config,
-        ...(resumeSessionId ? { resumeSessionId } : {}),
-        ...(permissionMode ? { permissionMode } : {}),
-      });
+      const args = buildClaudeArgs(this.#argsInput(thread, planning));
       const translator = new TurnTranslator();
       let processRef: ClaudeRun | undefined;
       let stopForGate = false;
@@ -487,7 +584,8 @@ export class ClaudeCodeSession implements AgentSession {
           thread.claudeSessionId = translator.sessionId;
           void this.#save().catch(() => {});
         }
-        if (!run.settled) for (const entry of entries) this.#emitTranscript(entry, run);
+        // Once the plan is in, the rest is the process being stopped (e.g. the gate call failing with "Connection closed").
+        if (!run.settled && !stopForGate) for (const entry of entries) this.#emitTranscript(entry, run);
         if (translator.gate && !stopForGate) {
           // The plan is the turn's last word: stop before Claude acts on a mode it was not granted.
           stopForGate = true;

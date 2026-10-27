@@ -1,10 +1,16 @@
 import type { AgentTokenUsage } from '@factory/harness';
 
 import { classifyFailure, type ClaudeCodeError } from './errors.ts';
+import { SUBMIT_PLAN_TOOL_ID } from './gate.ts';
 import type { ClaudeStreamMessage, ClaudeUsage } from './stream.ts';
 
-/** The Claude Code tool whose call means "the plan is ready for review". */
+/**
+ * Claude Code's own plan-mode tool. `claude -p` does not offer it today; it is
+ * still treated as a gate in case a future CLI does.
+ */
 export const EXIT_PLAN_MODE_TOOL = 'ExitPlanMode';
+/** Tool calls that mean "the plan is ready for review". */
+export const PLAN_GATE_TOOL_IDS: readonly string[] = [SUBMIT_PLAN_TOOL_ID, EXIT_PLAN_MODE_TOOL];
 /** The contract's name for a plan gate, so the dispatcher's plan handling applies unchanged. */
 export const PLAN_GATE_TOOL = 'submit_plan';
 
@@ -21,7 +27,7 @@ export type ClaudeTranscriptEntry =
   | { kind: 'text_delta' | 'thinking_delta'; text: string; parentToolCallId?: string }
   | { kind: 'tool_call'; toolCallId: string; toolName: string; input: unknown; parentToolCallId?: string }
   | { kind: 'tool_result'; toolCallId: string; content: string; isError: boolean; parentToolCallId?: string }
-  | { kind: 'plan'; toolCallId: string; plan?: string }
+  | { kind: 'plan'; toolCallId: string; toolName: string; plan?: string; title?: string }
   | {
       kind: 'result';
       subtype: string;
@@ -35,7 +41,10 @@ export type ClaudeTranscriptEntry =
 
 export interface PlanGate {
   toolCallId: string;
+  /** The tool Claude called: {@link SUBMIT_PLAN_TOOL_ID} or {@link EXIT_PLAN_MODE_TOOL}. */
+  toolName: string;
   plan?: string;
+  title?: string;
 }
 
 export type TurnOutcome =
@@ -131,11 +140,13 @@ export class TurnTranslator {
               withParent({ kind: 'tool_call', toolCallId: block.id, toolName: block.name, input: block.input }, parent),
             );
             // A subagent cannot ask the person for anything; only the main loop's plan is a gate.
-            if (block.name === EXIT_PLAN_MODE_TOOL && !parent && !this.#gate) {
-              const input = block.input as { plan?: unknown } | undefined;
+            if (PLAN_GATE_TOOL_IDS.includes(block.name) && !parent && !this.#gate) {
+              const input = block.input as { plan?: unknown; title?: unknown } | undefined;
               this.#gate = {
                 toolCallId: block.id,
+                toolName: block.name,
                 ...(typeof input?.plan === 'string' ? { plan: input.plan } : {}),
+                ...(typeof input?.title === 'string' && input.title.trim() ? { title: input.title } : {}),
               };
               entries.push({ kind: 'plan', ...this.#gate });
             }

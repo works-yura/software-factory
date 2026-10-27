@@ -10,8 +10,10 @@ describe('buildClaudeArgs', () => {
         resumeSessionId: 'abc',
         model: 'opus',
         effort: 'high',
-        permissionMode: 'plan',
-        mcpConfig: { mcpServers: { factory: { type: 'http', url: 'http://localhost/mcp' } } },
+        permissionMode: 'acceptEdits',
+        settingSources: ['project', 'local'],
+        settings: { plansDirectory: '.claude/plans' },
+        mcpConfig: ['/etc/factory/mcp.json', { mcpServers: { factory: { type: 'http', url: 'http://localhost/mcp' } } }],
         strictMcpConfig: true,
         allowedTools: ['Read', 'mcp__factory'],
         appendSystemPrompt: 'You work a Factory card.',
@@ -31,8 +33,13 @@ describe('buildClaudeArgs', () => {
       '--effort',
       'high',
       '--permission-mode',
-      'plan',
+      'acceptEdits',
+      '--setting-sources',
+      'project,local',
+      '--settings',
+      '{"plansDirectory":".claude/plans"}',
       '--mcp-config',
+      '/etc/factory/mcp.json',
       '{"mcpServers":{"factory":{"type":"http","url":"http://localhost/mcp"}}}',
       '--strict-mcp-config',
       '--allowedTools',
@@ -45,6 +52,10 @@ describe('buildClaudeArgs', () => {
   it('refuses to skip permission checks', () => {
     expect(() => buildClaudeArgs({ extraArgs: ['--dangerously-skip-permissions'] })).toThrow(/never passes/);
     expect(() => buildClaudeArgs({ permissionMode: 'bypassPermissions' as never })).toThrow(/bypassPermissions/);
+  });
+
+  it("refuses the CLI's plan mode", () => {
+    expect(() => buildClaudeArgs({ permissionMode: 'plan' as never })).toThrow(/planning/);
   });
 });
 
