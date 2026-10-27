@@ -8,6 +8,8 @@
   },
   "scripts": {
     "check": "pnpm -r --if-present check",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "compare-tests": "./scripts/compare-tests.sh",
+    "verify": "pnpm check && pnpm test && pnpm compare-tests"
   }
 }

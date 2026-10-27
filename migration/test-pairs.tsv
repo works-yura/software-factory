@@ -1,0 +1,27 @@
+# v3 test (from v3/packages/factory/src)	v4 test (from v4/packages)	expected delta	why the counts differ
+boards/define-board.test.ts	core/src/boards/define-board.test.ts	-6	Work/Review lifecycle cases moved to pipelines/src/pipelines.test.ts
+boards/events.test.ts	core/src/boards/events.test.ts
+boards/registry.test.ts	core/src/boards/registry.test.ts	-3	rewritten: v4 registry has no built-in boards (4 cases replace 7)
+boards/relocate.test.ts	core/src/boards/relocate.test.ts
+boards/semantics.test.ts	core/src/boards/semantics.test.ts
+boards/transition-policy.test.ts	core/src/boards/transition-policy.test.ts
+rules/resolve.test.ts	core/src/rules/resolve.test.ts	-1	built-in handler case moved to pipelines/src/pipelines.test.ts
+rules/validation.test.ts	core/src/rules/validation.test.ts	+1	regression: every rejection code, approval_required included
+boards/review.test.ts	pipelines/src/review/board.test.ts
+boards/work.test.ts	pipelines/src/work/board.test.ts
+boards/work-transition-policy.test.ts	pipelines/src/work/transition-policy.test.ts
+work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts
+storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts
+storage/domains/work-items/attention-events.test.ts	store/src/work-items/attention-events.test.ts
+storage/domains/audit/base.test.ts	store/src/audit/base.test.ts
+storage/domains/audit/actions.test.ts	store/src/audit/actions.test.ts
+rules/dispatch-errors.test.ts	store/src/dispatch-errors.test.ts
+storage/domains/comments/base.test.ts	store/src/comments/base.test.ts
+storage/domains/comments/activity.test.ts	store/src/comments/activity.test.ts
+storage/domains/comments/feed-context.test.ts	store/src/comments/feed-context.test.ts
+rules/transition-service.test.ts	runtime/src/transition-service.test.ts
+rules/terminal-cleanup.test.ts	runtime/src/terminal-cleanup.test.ts
+rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts
+rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts
+session/run-audit.test.ts	runtime/src/run-audit.test.ts
+skills/service.test.ts	runtime/src/skills/service.test.ts
