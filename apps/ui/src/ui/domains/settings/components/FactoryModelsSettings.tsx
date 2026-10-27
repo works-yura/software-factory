@@ -1,4 +1,5 @@
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { useTranslation } from 'react-i18next';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
@@ -10,16 +11,12 @@ import { ProviderAccessSection } from './ProviderAccessSection';
 
 export function FactoryModelsSettings({ models }: { models: AvailableModelOption[] }) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
+  const { t } = useTranslation('settings');
 
   const providerSubsections = (
     <>
-      <ProviderAccessSection
-        fixedScope="org"
-        description={
-          anyConnected ? undefined : 'Connect a provider to unlock model selection and observational-memory settings.'
-        }
-      />
-      <SettingsSubsection scope="org" title="Custom providers">
+      <ProviderAccessSection fixedScope="org" description={anyConnected ? undefined : t('models.connectToUnlock')} />
+      <SettingsSubsection scope="org" title={t('models.customProviders')}>
         <SettingsContainer className="p-4">
           <CustomProvidersSection />
         </SettingsContainer>
@@ -29,8 +26,8 @@ export function FactoryModelsSettings({ models }: { models: AvailableModelOption
   const factoryDefaultsSubsection = (
     <SettingsSubsection
       scope="factory"
-      title="Factory defaults"
-      description="Where this Factory's sessions and work-item runs get their model, credentials, and thinking level."
+      title={t('models.factoryDefaults.title')}
+      description={t('models.factoryDefaults.description')}
     >
       <SettingsContainer>
         <FactoryModelScopeSection />

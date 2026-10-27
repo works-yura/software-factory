@@ -5,6 +5,7 @@ import { SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/sett
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeLabelRoutesQuery, useSaveIntakeLabelRouteMutation } from '../../../../hooks/useIntakeConfig';
@@ -20,6 +21,7 @@ export function GithubLabelRouting({
   name: string;
   repositories: string[];
 }) {
+  const { t } = useTranslation('settings');
   const routesQuery = useIntakeLabelRoutesQuery(factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
   const save = useSaveIntakeLabelRouteMutation();
@@ -30,30 +32,30 @@ export function GithubLabelRouting({
   const boards = (catalog.data ?? []).filter(board => board.id !== 'work' && board.id !== 'review');
   const busy = save.isPending;
 
-  const scope = `Applies to issues from ${repositories.join(', ')}`;
+  const scope = t('labelRouting.scope', { repositories: repositories.join(', ') });
 
   const route = (label: string, board: string | null, onDone?: () => void) => {
     save.mutate(
       { factoryProjectId, integrationId: 'github', label, board },
       {
         onSuccess: () => {
-          toast.success('GitHub routing updated');
+          toast.success(t('labelRouting.saved'));
           onDone?.();
         },
-        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save GitHub routing'),
+        onError: err => toast.error(err instanceof Error ? err.message : t('labelRouting.saveFailed')),
       },
     );
   };
 
   if (routesQuery.isError) {
-    return <SettingsRow label={name} description={`${scope}. GitHub label routes are unavailable right now.`} />;
+    return <SettingsRow label={name} description={t('labelRouting.routesUnavailable', { scope })} />;
   }
 
   if (boards.length === 0 && catalog.isSuccess && routes.length === 0) {
     return (
       <SettingsRow
         label={name}
-        description={`${scope}. No custom boards are installed, so every issue files onto Work.`}
+        description={t('labelRouting.noBoards', { scope })}
       />
     );
   }
@@ -65,7 +67,7 @@ export function GithubLabelRouting({
     <div className="flex flex-col">
       <SettingsRow
         label={name}
-        description={catalog.isError ? `${scope}. Installed boards are unavailable right now.` : scope}
+        description={catalog.isError ? t('labelRouting.boardsUnavailable', { scope }) : scope}
       />
       {routes.map(existing => {
         const current = boards.find(board => board.id === existing.board);
@@ -76,15 +78,15 @@ export function GithubLabelRouting({
             description={
               current || catalog.isError
                 ? undefined
-                : `Board '${existing.board}' is not installed; issues stay on Work.`
+                : t('labelRouting.boardNotInstalled', { board: existing.board })
             }
           >
             <div className="flex items-center gap-2">
               <BoardSelect
-                ariaLabel={`Board for ${existing.label}`}
+                ariaLabel={t('labelRouting.boardFor', { label: existing.label })}
                 value={current?.id ?? null}
                 placeholder={
-                  current || catalog.isError ? (current?.title ?? existing.board) : `${existing.board} (not installed)`
+                  current || catalog.isError ? (current?.title ?? existing.board) : t('labelRouting.notInstalled', { board: existing.board })
                 }
                 boards={boards}
                 disabled={busy || !catalog.isSuccess}
@@ -93,33 +95,33 @@ export function GithubLabelRouting({
               <Button
                 size="sm"
                 variant="ghost"
-                aria-label={`Remove route for ${existing.label}`}
+                aria-label={t('labelRouting.removeRoute', { label: existing.label })}
                 disabled={busy}
                 onClick={() => route(existing.label, null)}
               >
-                Remove
+                {t('labelRouting.remove')}
               </Button>
             </div>
           </SettingsRow>
         );
       })}
       <SettingsFieldsetRow
-        label="Add label route"
-        description={duplicate ? 'That label is already routed — change its board above.' : undefined}
+        label={t('labelRouting.addRoute')}
+        description={duplicate ? t('labelRouting.duplicate') : undefined}
       >
         <div className="flex items-center gap-2">
           <Input
             size="sm"
-            aria-label={`Label for ${name}`}
-            placeholder="label"
+            aria-label={t('labelRouting.labelFor', { name })}
+            placeholder={t('labelRouting.labelPlaceholder')}
             value={draft}
             disabled={busy}
             onChange={event => setDraft(event.target.value)}
           />
           <BoardSelect
-            ariaLabel={`Board for new ${name} label`}
+            ariaLabel={t('labelRouting.boardForNew', { name })}
             value={draftBoard}
-            placeholder="Choose a board"
+            placeholder={t('labelRouting.chooseBoard')}
             boards={boards}
             disabled={busy || !catalog.isSuccess}
             onChange={setDraftBoard}
@@ -134,7 +136,7 @@ export function GithubLabelRouting({
               })
             }
           >
-            Add
+            {t('labelRouting.add')}
           </Button>
         </div>
       </SettingsFieldsetRow>
@@ -157,6 +159,7 @@ function BoardSelect({
   disabled: boolean;
   onChange: (board: string | null) => void;
 }) {
+  const { t } = useTranslation('settings');
   const current = boards.find(board => board.id === value);
   return (
     <Select
@@ -170,7 +173,7 @@ function BoardSelect({
         </Txt>
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={NO_BOARD}>No board</SelectItem>
+        <SelectItem value={NO_BOARD}>{t('labelRouting.noBoard')}</SelectItem>
         {boards.map(board => (
           <SelectItem key={board.id} value={board.id}>
             {board.title}

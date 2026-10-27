@@ -1,6 +1,7 @@
 import { Input } from '@mastra/playground-ui/components/Input';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { FactoryEnvironmentPatch } from '../../../workspaces/services/environment';
 
@@ -37,6 +38,7 @@ export function CommittedInput({
   className?: string;
   onCommit: (value: string) => Promise<unknown>;
 }) {
+  const { t } = useTranslation('settings');
   const [draft, setDraft] = useState<string>();
   const current = draft ?? value;
 
@@ -44,7 +46,7 @@ export function CommittedInput({
     // A number input reports '' while its text is not a number ("-", "1e");
     // treating that as "clear the setting" would silently drop a stored value.
     if (input.validity?.badInput) {
-      toast.error('Enter a number');
+      toast.error(t('environment.enterNumber'));
       return;
     }
     if (current.trim() === value) {

@@ -5,6 +5,9 @@ import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import type { FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import { useTranslation } from 'react-i18next';
+
+import { translator } from '../../../../i18n/t';
 
 import { CommittedInput } from './CommittedInput';
 import type { SaveEnvironment } from './CommittedInput';
@@ -35,18 +38,25 @@ function schemaChoices(schema: SettingSchema): Choice[] | undefined {
   return undefined;
 }
 
-const PROVIDER_LABELS: Record<string, string> = {
-  platform: 'the Mastra platform',
-  e2b: 'E2B',
-  docker: 'Docker',
-  local: 'the local machine',
-  custom: 'a custom sandbox',
-  none: 'no sandbox',
-};
+const tk = translator('settings');
+
+/** Product names shown as they are; other known providers have a sentence of their own. */
+const PROVIDER_NAMES: Record<string, string> = { e2b: 'E2B', docker: 'Docker' };
 
 /** "Sandboxes run on E2B" for a known provider id, the raw id otherwise. */
 export function providerLine(provider: string): string {
-  return `Sandboxes run on ${PROVIDER_LABELS[provider] ?? provider}.`;
+  switch (provider) {
+    case 'platform':
+      return tk('environment.provider.platform');
+    case 'local':
+      return tk('environment.provider.local');
+    case 'custom':
+      return tk('environment.provider.custom');
+    case 'none':
+      return tk('environment.provider.none');
+    default:
+      return tk('environment.provider.named', { provider: PROVIDER_NAMES[provider] ?? provider });
+  }
 }
 
 function schemaProperties(schema: Record<string, unknown>): Array<[string, SettingSchema]> {
@@ -96,6 +106,7 @@ function SettingRow({
   disabled: boolean;
   onCommit: (value: unknown | null) => Promise<boolean>;
 }) {
+  const { t } = useTranslation('settings');
   const label = schema.title ?? name;
   const type = Array.isArray(schema.type) ? schema.type.find(t => t !== 'null') : schema.type;
   const placeholder = schema.default === undefined ? undefined : String(schema.default);
@@ -108,9 +119,14 @@ function SettingRow({
     const unsetKey = defaultIsChoice ? placeholder! : UNSET;
     const labelOf = (key: string) => {
       const choiceLabel = choices.find(choice => String(choice.value) === key)?.label ?? key;
-      return defaultIsChoice && key === placeholder ? `${choiceLabel} (default)` : choiceLabel;
+      return defaultIsChoice && key === placeholder
+        ? t('environment.sandbox.defaultChoice', { label: choiceLabel })
+        : choiceLabel;
     };
     const current = value === undefined ? unsetKey : String(value);
+    const defaultLabel = placeholder
+      ? t('environment.sandbox.defaultWithValue', { value: placeholder })
+      : t('environment.sandbox.default');
     control = (
       <Select
         value={current}
@@ -119,12 +135,12 @@ function SettingRow({
       >
         <SelectTrigger size="sm" aria-label={label} className="w-auto">
           <Txt as="span" variant="caption">
-            {current === UNSET ? (placeholder ? `Default (${placeholder})` : 'Default') : labelOf(current)}
+            {current === UNSET ? defaultLabel : labelOf(current)}
           </Txt>
         </SelectTrigger>
         <SelectContent>
           {!defaultIsChoice && (
-            <SelectItem value={UNSET}>{placeholder ? `Default (${placeholder})` : 'Default'}</SelectItem>
+            <SelectItem value={UNSET}>{defaultLabel}</SelectItem>
           )}
           {choices.map(choice => (
             <SelectItem key={String(choice.value)} value={String(choice.value)}>
@@ -178,7 +194,7 @@ function SettingRow({
   } else {
     control = (
       <Txt as="span" variant="meta" tone="faint">
-        Unsupported setting type
+        {t('environment.sandbox.unsupported')}
       </Txt>
     );
   }
@@ -202,16 +218,24 @@ function numberInRange(raw: string, schema: SettingSchema, integer: boolean): nu
   const min = schema.minimum ?? -Infinity;
   const max = schema.maximum ?? Infinity;
   if (typed && value >= min && value <= max) return value;
-  const kind = integer ? 'a whole number' : 'a number';
-  const range =
+  const bounds = { min: schema.minimum, max: schema.maximum };
+  const message =
     schema.minimum !== undefined && schema.maximum !== undefined
-      ? ` between ${schema.minimum} and ${schema.maximum}`
+      ? integer
+        ? tk('environment.sandbox.enterInteger.between', bounds)
+        : tk('environment.sandbox.enterNumber.between', bounds)
       : schema.minimum !== undefined
-        ? ` of at least ${schema.minimum}`
+        ? integer
+          ? tk('environment.sandbox.enterInteger.atLeast', bounds)
+          : tk('environment.sandbox.enterNumber.atLeast', bounds)
         : schema.maximum !== undefined
-          ? ` of at most ${schema.maximum}`
-          : '';
-  toast.error(`Enter ${kind}${range}`);
+          ? integer
+            ? tk('environment.sandbox.enterInteger.atMost', bounds)
+            : tk('environment.sandbox.enterNumber.atMost', bounds)
+          : integer
+            ? tk('environment.sandbox.enterInteger.any')
+            : tk('environment.sandbox.enterNumber.any');
+  toast.error(message);
   return undefined;
 }
 

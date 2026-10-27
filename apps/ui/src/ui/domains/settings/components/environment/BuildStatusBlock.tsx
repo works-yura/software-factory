@@ -1,6 +1,10 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
+
+import { currentLanguage } from '../../../../i18n';
+import { translator } from '../../../../i18n/t';
 
 import type {
   FactoryEnvironmentBuild,
@@ -8,20 +12,31 @@ import type {
   FactoryEnvironmentLastBuild,
 } from '../../../workspaces/services/environment';
 
-export const BUILD_STATUS: Record<
-  FactoryEnvironmentBuildStatus,
-  { label: string; variant: 'neutral' | 'success' | 'destructive' | 'warning' | 'info' }
-> = {
-  pending: { label: 'Pending', variant: 'info' },
-  building: { label: 'Building', variant: 'info' },
-  ready: { label: 'Ready', variant: 'success' },
-  failed: { label: 'Failed', variant: 'destructive' },
-  unknown: { label: 'Unknown', variant: 'warning' },
+const tk = translator('settings');
+
+type BuildStatusVariant = 'neutral' | 'success' | 'destructive' | 'warning' | 'info';
+
+/** A status badge whose label is translated when read. */
+function buildStatus(label: () => string, variant: BuildStatusVariant): { readonly label: string; variant: BuildStatusVariant } {
+  return {
+    get label() {
+      return label();
+    },
+    variant,
+  };
+}
+
+export const BUILD_STATUS: Record<FactoryEnvironmentBuildStatus, { readonly label: string; variant: BuildStatusVariant }> = {
+  pending: buildStatus(() => tk('environment.status.pending'), 'info'),
+  building: buildStatus(() => tk('environment.status.building'), 'info'),
+  ready: buildStatus(() => tk('environment.status.ready'), 'success'),
+  failed: buildStatus(() => tk('environment.status.failed'), 'destructive'),
+  unknown: buildStatus(() => tk('environment.status.unknown'), 'warning'),
 };
 
 export function formatBuildTime(iso: string): string {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString(currentLanguage());
 }
 
 /**
@@ -40,6 +55,7 @@ export function BuildStatusBlock({
   requesting: boolean;
   onBuildNow: () => void;
 }) {
+  const { t } = useTranslation('settings');
   const active = build?.status === 'pending' || build?.status === 'building';
   const status = build ? BUILD_STATUS[build.status] : lastBuild ? undefined : null;
 
@@ -48,7 +64,7 @@ export function BuildStatusBlock({
       <div className="flex items-center gap-3">
         {status === undefined ? (
           <Txt as="span" variant="meta" tone="muted">
-            Loading
+            {t('environment.status.loading')}
           </Txt>
         ) : status ? (
           <span className="flex items-center gap-2">
@@ -63,7 +79,7 @@ export function BuildStatusBlock({
           </span>
         ) : null}
         <Button size="sm" variant="primary" disabled={requesting || active} onClick={onBuildNow}>
-          {active ? 'Building...' : 'Build now'}
+          {active ? t('environment.status.inProgress') : t('environment.status.buildNow')}
         </Button>
       </div>
       {build?.error && (

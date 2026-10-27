@@ -1,1 +1,51 @@
-{}
+{
+  "createFactory": {
+    "title": "New Factory"
+  },
+  "rules": {
+    "title": "Rule decisions",
+    "filterLabel": "Rule decision filter",
+    "loadFailed": "Unable to load rule decisions.",
+    "actionFailed": "Rule action failed",
+    "loading": "Loading rule decisions",
+    "loadMore": "Load more effects",
+    "groups": {
+      "all": "All effects",
+      "active": "Active",
+      "proposed": "Awaiting approval",
+      "failed": "Failed",
+      "succeeded": "Succeeded"
+    },
+    "statuses": {
+      "pending": "queued",
+      "proposed": "awaiting approval",
+      "dismissed": "dismissed",
+      "superseded": "superseded",
+      "leased": "running",
+      "retry": "retrying",
+      "succeeded": "done",
+      "failed": "failed"
+    },
+    "empty": {
+      "title": "No rule effects yet",
+      "filteredTitle": "No matching rule effects",
+      "description": "Durable rule effects will appear here when a rule queues work.",
+      "filteredDescription": "No rule effects match the “{{filter}}” filter.",
+      "selected": "selected",
+      "showAll": "Show all effects"
+    },
+    "row": {
+      "completed": "Completed {{time}}",
+      "updated": "Updated {{time}}",
+      "attempts": "Attempts",
+      "askSupervisor": "Ask supervisor",
+      "askSupervisorAbout": "Ask supervisor about failed {{type}} decision",
+      "dismiss": "Dismiss",
+      "dismissing": "Dismissing…",
+      "run": "Run",
+      "starting": "Starting…",
+      "retry": "Retry",
+      "retrying": "Retrying…"
+    }
+  }
+}

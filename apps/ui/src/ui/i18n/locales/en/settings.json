@@ -17,5 +17,700 @@
   "groups": {
     "personal": "Your settings",
     "factory": "Factory settings"
+  },
+  "intake": {
+    "retry": "Retry",
+    "loading": "Loading intake sources",
+    "unavailable": "Intake configuration is unavailable. Connect GitHub, GitLab, Linear, Jira, or incident.io first.",
+    "saved": "Intake sources updated",
+    "saveFailed": "Failed to save intake sources",
+    "connectedTo": "Connected to {{name}}",
+    "github": {
+      "title": "GitHub issues",
+      "checking": "Checking the GitHub connection…",
+      "statusUnavailable": "GitHub status could not be loaded.",
+      "authRequired": "Sign in again to manage GitHub issue syncing.",
+      "organizationRequired": "Select an organization to manage GitHub issue syncing.",
+      "notConfigured": "GitHub is not configured on this server.",
+      "notConnected": "Connect GitHub to sync issues from this organization.",
+      "ready": "Open issues from the selected repositories feed every member's board. Pull requests always appear in Review.",
+      "sync": "Sync GitHub issues",
+      "noRepositories": "No linked repositories yet — link a repository to a factory to add one.",
+      "repositories": "Repositories",
+      "routingTitle": "GitHub routing",
+      "routingDescription": "Issues carrying a routed label file onto that board in the Factory; everything else stays on Work."
+    },
+    "gitlab": {
+      "title": "GitLab issues",
+      "reauth": "A GitLab account needs to be reconnected in Mastra Platform.",
+      "connectPlatform": "Connect GitLab in Mastra Platform to sync issues from this organization.",
+      "notConfigured": "GitLab is not configured on this server. Configure a GitLab access token to enable it.",
+      "rejectedPlatform": "GitLab rejected a connected account. Reconnect it in Mastra Platform.",
+      "rejectedToken": "GitLab rejected the configured access token. Ask the operator to check it.",
+      "ready": "Open issues from the selected projects feed every member's board.",
+      "accounts_one": "{{count}} GitLab account connected",
+      "accounts_other": "{{count}} GitLab accounts connected",
+      "sync": "Sync GitLab issues",
+      "projects": "GitLab projects",
+      "routingTitle": "GitLab routing",
+      "routingDescription": "Each selected project feeds one factory board. Until a project is fully routed, its issues are not picked up."
+    },
+    "linear": {
+      "title": "Linear issues",
+      "notConfigured": "Linear is not configured on this server.",
+      "notConnected": "Connect a Linear workspace to sync its issues.",
+      "reauth": "Linear authorization expired. Reconnect to keep syncing issues.",
+      "ready": "Active issues from the selected projects and teams feed every member's board. Selecting a whole team also covers its projectless issues.",
+      "connect": "Connect Linear",
+      "reconnectLinear": "Reconnect Linear",
+      "reconnect": "Reconnect",
+      "connectedFallback": "Connected to a Linear workspace",
+      "sync": "Sync Linear issues",
+      "sources": "Linear projects and teams",
+      "mapHint": "Map Linear projects to repositories so their issues start in the intended repository.",
+      "repositoryFor": "Repository for {{name}}",
+      "noMapping": "No repository mapping",
+      "allIssuesIn": "All issues in {{team}}",
+      "projectPrecedence": "project takes precedence",
+      "includedViaTeam": "included via team",
+      "noTeam": "No team",
+      "routingTitle": "Linear routing",
+      "routingDescription": "Each selected source feeds one factory. Until a source is routed, its issues are not picked up."
+    },
+    "jira": {
+      "title": "Jira issues",
+      "reauth": "A connected Jira account needs to be reconnected.",
+      "connectPlatform": "Connect a Jira account to sync issues from this organization.",
+      "notConfigured": "Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.",
+      "rejectedPlatform": "Jira rejected a connected account. Reconnect it to resume syncing.",
+      "rejectedCredentials": "Jira rejected the configured credentials. Ask the operator to check the Jira API token.",
+      "ready": "Active issues from the selected projects.",
+      "connected": "Jira connected",
+      "sites_one": "{{count}} Jira site connected",
+      "sites_other": "{{count}} Jira sites connected",
+      "viaPlatform": "Connected through Mastra Platform",
+      "reconnect": "Reconnect Jira",
+      "connectAnother": "Connect another site",
+      "connect": "Connect Jira",
+      "sync": "Sync Jira issues",
+      "projects": "Jira projects",
+      "connectionOrdinal": "{{label}} · connection {{ordinal}}",
+      "routingTitle": "Jira routing",
+      "routingDescription": "Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
+    },
+    "incidentio": {
+      "title": "incident.io follow-ups",
+      "loadFailed": "Couldn't load incident.io connections.",
+      "apiKeyConfigured": "incident.io API key configured on this server",
+      "connect": "Connect {{name}}",
+      "connected": "{{name}} connected",
+      "accounts_one": "{{count}} {{name}} account connected",
+      "accounts_other": "{{count}} {{name}} accounts connected",
+      "connectAnother": "Connect another",
+      "reauth": "An incident.io account needs to be reconnected to keep syncing follow-ups.",
+      "ready": "Choose where outstanding follow-ups from connected incident.io accounts should be routed. Incidents stay out of intake.",
+      "sync": "Sync incident.io follow-ups",
+      "boardConfig": "Incident board configuration",
+      "boardConfigDescription": "Configure a dedicated board for incident response.",
+      "comingSoon": "Coming soon",
+      "sources": "Follow-up sources",
+      "sourcesFailed": "Couldn't load follow-up sources.",
+      "routingTitle": "incident.io routing",
+      "routingDescription": "Choose which Factory and board should receive each follow-up source. Incidents remain unrouted."
+    }
+  },
+  "intakeSource": {
+    "search": "Search {{label}}",
+    "searchPlaceholder": "Search…",
+    "saving": "Saving {{label}} selection",
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "noMatches": "No matches"
+  },
+  "labelRouting": {
+    "saved": "GitHub routing updated",
+    "saveFailed": "Failed to save GitHub routing",
+    "scope": "Applies to issues from {{repositories}}",
+    "routesUnavailable": "{{scope}}. GitHub label routes are unavailable right now.",
+    "noBoards": "{{scope}}. No custom boards are installed, so every issue files onto Work.",
+    "boardsUnavailable": "{{scope}}. Installed boards are unavailable right now.",
+    "boardNotInstalled": "Board '{{board}}' is not installed; issues stay on Work.",
+    "boardFor": "Board for {{label}}",
+    "notInstalled": "{{board}} (not installed)",
+    "removeRoute": "Remove route for {{label}}",
+    "remove": "Remove",
+    "addRoute": "Add label route",
+    "duplicate": "That label is already routed — change its board above.",
+    "labelFor": "Label for {{name}}",
+    "labelPlaceholder": "label",
+    "boardForNew": "Board for new {{name}} label",
+    "chooseBoard": "Choose a board",
+    "add": "Add",
+    "noBoard": "No board"
+  },
+  "linearRouting": {
+    "saved": "{{label}} routing updated",
+    "saveFailed": "Failed to save {{label}} routing",
+    "search": "Search {{label}} routing",
+    "searchPlaceholder": "Search…",
+    "group": "{{label}} routing",
+    "noMatches": "No matches",
+    "notRoutedHint": "Not routed — this source's issues won't be picked up.",
+    "chooseBoardHint": "Choose a board — this source's issues won't be picked up until one is set.",
+    "factoryFor": "Factory for {{name}}",
+    "notRouted": "Not routed",
+    "allIssuesIn": "All issues in {{team}}",
+    "boardFor": "Board for {{name}}",
+    "notInstalled": "{{board}} (not installed)",
+    "chooseBoard": "Choose a board",
+    "noBoard": "No board"
+  },
+  "environment": {
+    "selectFactory": "Select a factory to manage its environment.",
+    "loadFailed": "Failed to load environment",
+    "linkRepositoryFirst": "Link a repository first.",
+    "goToRepositories": "Go to Repositories",
+    "saved": "Environment saved",
+    "saveFailed": "Failed to save environment",
+    "repositories": {
+      "title": "Repositories",
+      "description": "Each repository is pre-cloned and set up in the sandbox for new sessions, in this order."
+    },
+    "configuration": {
+      "title": "Configuration",
+      "description": "How each sandbox is set up. {{providerLine}}"
+    },
+    "builds": {
+      "title": "Builds",
+      "description": "The template image built ahead of sessions, and when it rebuilds.",
+      "started": "Build started",
+      "notStarted": "Build not started: {{reason}}",
+      "startFailed": "Failed to start the build",
+      "loadFailed": "Failed to load builds"
+    },
+    "provider": {
+      "named": "Sandboxes run on {{provider}}.",
+      "platform": "Sandboxes run on the Mastra platform.",
+      "local": "Sandboxes run on the local machine.",
+      "custom": "Sandboxes run on a custom sandbox.",
+      "none": "Sandboxes run on no sandbox."
+    },
+    "history": {
+      "empty": "No builds yet.",
+      "buildAria": "Build {{id}}",
+      "noLogs": "No logs for this build."
+    },
+    "status": {
+      "pending": "Pending",
+      "building": "Building",
+      "ready": "Ready",
+      "failed": "Failed",
+      "unknown": "Unknown",
+      "loading": "Loading",
+      "inProgress": "Building...",
+      "buildNow": "Build now"
+    },
+    "enterNumber": "Enter a number",
+    "workspace": {
+      "workdir": "Working directory",
+      "workdirDescription": "Absolute path the repositories are cloned under.",
+      "setupCommand": "Setup command",
+      "setupCommandDescription": "Runs in the working directory once every repository is cloned and its own setup command has finished, while the template builds.",
+      "setupCommandPlaceholder": "e.g. ./scripts/bootstrap.sh"
+    },
+    "triggers": {
+      "rebuildOnPush": "Rebuild on push",
+      "rebuildOnPushDescription": "Rebuild after a push to a repository's default branch.",
+      "pushDebounce": "Push debounce",
+      "pushDebounceDescription": "Minimum minutes between push-triggered builds, 0 to 1440.",
+      "pushDebounceAria": "Push debounce in minutes",
+      "debounceRange": "Enter a whole number between 0 and 1440",
+      "frequency": {
+        "off": "Off",
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "custom": "Custom"
+      },
+      "days": {
+        "0": "Sunday",
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday"
+      },
+      "everyDay": {
+        "0": "every Sunday",
+        "1": "every Monday",
+        "2": "every Tuesday",
+        "3": "every Wednesday",
+        "4": "every Thursday",
+        "5": "every Friday",
+        "6": "every Saturday"
+      },
+      "scheduleOff": "Rebuild on a schedule when a repository head moved.",
+      "scheduleDaily": "Rebuilds daily at {{time}} {{timezone}}, when a repository head moved.",
+      "scheduleWeekly": "Rebuilds {{everyDay}} at {{time}} {{timezone}}, when a repository head moved.",
+      "scheduleCustom": "Rebuilds on `{{cron}}` ({{timezone}}), when a repository head moved.",
+      "scheduleUnavailable": "Needs a storage adapter with schedules. Build now and push builds still work.",
+      "buildSchedule": "Build schedule",
+      "buildFrequency": "Build frequency",
+      "buildTime": "Build time",
+      "buildDay": "Build day",
+      "rebuildAt": "Rebuild at",
+      "on": "On",
+      "at": "at",
+      "cron": "Cron",
+      "cronAria": "Build schedule cron",
+      "enterCron": "Enter a cron expression"
+    },
+    "sandbox": {
+      "defaultChoice": "{{label}} (default)",
+      "defaultWithValue": "Default ({{value}})",
+      "default": "Default",
+      "unsupported": "Unsupported setting type",
+      "enterInteger": {
+        "any": "Enter a whole number",
+        "between": "Enter a whole number between {{min}} and {{max}}",
+        "atLeast": "Enter a whole number of at least {{min}}",
+        "atMost": "Enter a whole number of at most {{max}}"
+      },
+      "enterNumber": {
+        "any": "Enter a number",
+        "between": "Enter a number between {{min}} and {{max}}",
+        "atLeast": "Enter a number of at least {{min}}",
+        "atMost": "Enter a number of at most {{max}}"
+      }
+    },
+    "repository": {
+      "showCommands": "Show commands for {{name}}",
+      "hideCommands": "Hide commands for {{name}}",
+      "drag": "Drag {{name}}",
+      "dragToReorder": "Drag to reorder",
+      "lastBuildFailed": "Last build failed",
+      "included": "Included",
+      "skipped": "Skipped",
+      "cloneInto": "Clone {{name}} into every session",
+      "includeTooltip": "Include in the environment",
+      "setup": "Setup",
+      "setupDescription": "Runs in this checkout after it is cloned, before the agent starts.",
+      "setupAria": "Setup command for {{name}}",
+      "setupPlaceholder": "e.g. pnpm i && pnpm build",
+      "teardown": "Teardown",
+      "teardownDescription": "Runs when the session is retired, and again if setup fails.",
+      "teardownAria": "Teardown command for {{name}}",
+      "teardownPlaceholder": "e.g. docker compose down"
+    }
+  },
+  "repositories": {
+    "selectFactory": "Select a factory to manage its repositories.",
+    "title": "Repositories",
+    "description": "Repositories {{name}} can edit. What feeds the board is set under Work Intake.",
+    "manageGithub": "Manage GitHub connection",
+    "reconnectGitlab": "Reconnect GitLab",
+    "manageGitlab": "Manage GitLab connection",
+    "connectAnotherGitlab": "Connect another GitLab account",
+    "connectGitlab": "Connect GitLab",
+    "gitlabFromEnv": "GitLab managed by deployment environment variables",
+    "environmentHint": "Sandbox resources, repository order and setup commands live in <link>Environment</link>."
+  },
+  "skills": {
+    "title": "Factory skills",
+    "description": "The built-in playbooks Factory agents follow when working your items, shipped with the server and read-only. Expand a skill to read the exact instructions the agent receives.",
+    "loading": "Loading skills…",
+    "loadFailed": "Failed to load skills",
+    "boardsLoadFailed": "Installed boards could not be loaded; showing built-in skills ungrouped.",
+    "noBoards": "No boards are installed, so no board skills apply.",
+    "showFormatted": "Show formatted",
+    "showRaw": "Show raw",
+    "failedBadge": "Failed to load",
+    "cannotLoad": "Agents cannot load this skill: {{error}}",
+    "noRoles": "This board declares no working roles.",
+    "kickoffNote": "Kickoff instructions for this board are defined in code by its board definition; there is no skill to show here.",
+    "boardAria": "{{title}} board",
+    "names": {
+      "triage": "Triage",
+      "plan": "Planning",
+      "review": "Review",
+      "rereview": "Re-review"
+    }
+  },
+  "credentials": {
+    "signedIn": "Signed in",
+    "keySaved": "Key saved",
+    "orgAdminsOnly": "Only organization admins can manage org-wide credentials.",
+    "fromDeployment": "From deployment",
+    "fromEnv": "From env",
+    "notSet": "Not set",
+    "personalOnly": "Personal {{name}} credential — teammates without their own can't run this model."
+  },
+  "providers": {
+    "title": "Provider access",
+    "tabs": {
+      "oauth": "Sign in with a provider",
+      "apiKey": "Connect with API key"
+    },
+    "loading": "Loading providers",
+    "noOAuthProviders": "No providers support sign in.",
+    "signOutOf": "Sign out of {{name}}",
+    "signOutOfOrg": "Sign out of {{name}} for the org",
+    "signingOut": "Signing out…",
+    "signOut": "Sign out",
+    "signInTo": "Sign in to {{name}}",
+    "starting": "Starting…",
+    "signIn": "Sign in",
+    "signOutFailed": "Failed to sign out",
+    "removeKeyFailed": "Failed to remove API key",
+    "search": "Search providers",
+    "searchPlaceholder": "Search providers to add an API key…",
+    "noMatch": "No providers match “{{query}}”.",
+    "noApiKeyProviders": "No API key providers are available.",
+    "updateKey": "Update key",
+    "addKey": "Add API key",
+    "updateKeyFor": "Update key for {{name}}",
+    "addKeyFor": "Add API key for {{name}}",
+    "removeKeyFor": "Remove key for {{name}}",
+    "removing": "Removing…",
+    "remove": "Remove"
+  },
+  "oauth": {
+    "title": "Sign in to {{name}}",
+    "pasteCodeDescription": "Authorize your account and paste the returned code.",
+    "deviceCodeDescription": "Enter the device code on the provider authorization page.",
+    "openPage": "Open authorization page",
+    "code": "Authorization code",
+    "codePlaceholder": "Paste authorization code",
+    "cancel": "Cancel",
+    "completing": "Completing…",
+    "complete": "Complete sign in",
+    "copyCode": "Copy code",
+    "waiting": "Waiting for authorization…"
+  },
+  "apiKey": {
+    "title": "API key for {{name}}",
+    "storedSecurely": "The key is stored securely and never displayed again.",
+    "access": {
+      "org": "Everyone in your organization can use this key.",
+      "user": "Only you can use this key. Shared organization access stays unchanged."
+    },
+    "replacesSignIn": "Saving replaces the provider sign-in at this scope.",
+    "placeholder": "Paste API key",
+    "whoCanUse": "Who can use this key",
+    "accessLabel": "API key access",
+    "justMe": "Just me",
+    "everyoneInOrg": "Everyone in org",
+    "orgAdminsOnly": "Only org admins can share a key with everyone",
+    "personalOnlyWarning": "Only you will be able to use this key. Ask an org admin to add a shared {{name}} key so teammates can use it too.",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "save": "Save"
+  },
+  "customProviders": {
+    "description": "OpenAI-compatible endpoints.",
+    "add": "Add provider",
+    "nameAndUrlRequired": "Name and URL are required.",
+    "name": "Name",
+    "namePlaceholder": "e.g. my-llm",
+    "baseUrl": "Base URL",
+    "apiKeyKeep": "API key (leave blank to keep)",
+    "apiKeyOptional": "API key (optional)",
+    "apiKeyPlaceholder": "Paste API key",
+    "models": "Models (comma-separated)",
+    "save": "Save",
+    "addShort": "Add",
+    "cancel": "Cancel",
+    "loading": "Loading custom providers",
+    "modelCount_one": "{{count}} model",
+    "modelCount_other": "{{count}} models",
+    "edit": "Edit",
+    "remove": "Remove"
+  },
+  "connectedAccounts": {
+    "fallbackName": "Connected account",
+    "apiKeyDescription": "Paste an API key from your {{name}} dashboard. The key is stored by Mastra Platform and never reaches the browser again.",
+    "apiKeyLabel": "{{name}} API key",
+    "apiKeyPlaceholder": "Paste your API key",
+    "cancel": "Cancel",
+    "connecting": "Connecting…",
+    "connect": "Connect",
+    "connected": "{{name}} connected",
+    "activating": "{{name}} authorization completed — the connection is activating",
+    "connectFailed": "Failed to connect {{name}}",
+    "needsReauth": "Needs reauthorization",
+    "reconnect": "Reconnect",
+    "loading": "Loading connected accounts",
+    "loadFailed": "Failed to load connected accounts",
+    "slack": {
+      "notConfigured": "Not configured",
+      "notSetUp": "Slack is not set up for this factory.",
+      "connectedCount_one": "{{count}} connected",
+      "connectedCount_other": "{{count}} connected",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "configure": "Configure"
+    }
+  },
+  "githubPat": {
+    "title": "GitHub CLI tokens",
+    "description": "Classic PATs agents use for gh CLI commands in sandboxes. The token's account needs access to the linked repositories.",
+    "worker": {
+      "title": "Worker token",
+      "description": "Used by every sandbox."
+    },
+    "reviewer": {
+      "title": "Reviewer token (optional)",
+      "description": "Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
+    },
+    "configured": "Configured",
+    "updateToken": "Update token",
+    "addToken": "Add token",
+    "removing": "Removing…",
+    "remove": "Remove",
+    "inputLabel": "{{title}} GitHub Personal Access Token",
+    "placeholder": "Paste classic Personal Access Token",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "save": "Save"
+  },
+  "account": {
+    "authProviders": {
+      "betterAuth": "Email and password",
+      "unknown": "Unknown"
+    },
+    "name": "Name",
+    "email": "Email",
+    "authentication": "Authentication",
+    "loadFailed": "Could not load your account details. Reload the page to try again.",
+    "authDisabled": "Authentication is not enabled for this deployment.",
+    "signInToView": "Sign in to view your account details.",
+    "notProvided": "Not provided",
+    "profile": {
+      "title": "Profile",
+      "description": "Your signed-in identity for this MastraCode deployment."
+    },
+    "accountId": {
+      "label": "Account ID",
+      "description": "Useful when contacting support.",
+      "copy": "Copy account ID"
+    },
+    "organizationId": {
+      "label": "Organization ID",
+      "description": "The organization that owns this Factory.",
+      "copy": "Copy organization ID"
+    },
+    "session": {
+      "title": "Session",
+      "logOut": "Log out",
+      "description": "End your MastraCode session on this device.",
+      "logOutLabel": "Log out of MastraCode"
+    },
+    "github": {
+      "title": "GitHub account",
+      "unknown": "unknown",
+      "connectedDescription": "Issues and PRs you create are authored as you.",
+      "notConnected": "Not connected",
+      "notConnectedDescription": "Connect it so issues and PRs you create are authored as you.",
+      "connect": "Connect GitHub"
+    }
+  },
+  "channels": {
+    "requestFailed": "Request failed ({{status}})"
+  },
+  "panel": {
+    "label": "Settings",
+    "updateFailed": "Failed to update settings",
+    "updateFailedWith": "Failed to update settings: {{message}}",
+    "connections": {
+      "title": "Connected accounts",
+      "description": "Connect your account to use Factory from Slack."
+    }
+  },
+  "scope": {
+    "personal": "Personal",
+    "factory": "Factory-wide",
+    "org": "Org-wide",
+    "deployment": "Deployment-wide",
+    "switchLabel": "Who these settings apply to"
+  },
+  "sounds": {
+    "play": "Play a sound",
+    "none": "None",
+    "chime": "Chime",
+    "arcade": "Arcade",
+    "fanfare": "Fanfare"
+  },
+  "behavior": {
+    "general": {
+      "title": "General",
+      "description": "Shared by everyone working in this Factory. Auto-approve and smart editing reset when the server restarts."
+    },
+    "autoApprove": {
+      "label": "Auto-approve tools",
+      "description": "Run tool calls without asking (YOLO)"
+    },
+    "smartEditing": {
+      "label": "Smart editing",
+      "description": "Use AST-aware edits when available"
+    },
+    "notifications": {
+      "label": "Notifications",
+      "description": "How completion alerts are delivered",
+      "off": "Off",
+      "bell": "Bell",
+      "system": "System",
+      "both": "Both"
+    },
+    "permissions": {
+      "title": "Tool permissions",
+      "description": "“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow. Shared by everyone working in this Factory, and reset when the server restarts.",
+      "controlLabel": "{{category}} permission",
+      "allow": "Allow",
+      "ask": "Ask",
+      "deny": "Deny",
+      "categories": {
+        "read": {
+          "label": "Read",
+          "hint": "View files and inspect the workspace"
+        },
+        "edit": {
+          "label": "Edit",
+          "hint": "Create, modify, or delete files"
+        },
+        "execute": {
+          "label": "Execute",
+          "hint": "Run shell commands"
+        },
+        "mcp": {
+          "label": "MCP",
+          "hint": "Call tools from MCP servers"
+        },
+        "other": {
+          "label": "Other",
+          "hint": "Anything not in the above categories"
+        }
+      }
+    }
+  },
+  "factory": {
+    "selectFactory": "Select a factory to manage its settings.",
+    "dangerZone": "Danger zone",
+    "deleteNamed": "Delete {{name}}",
+    "deleteDescription": "Also unlinks its repositories.",
+    "delete": "Delete",
+    "confirmTitle": "Delete {{name}}?",
+    "confirmDescription": "This deletes the Factory and unlinks its repositories. It cannot be undone.",
+    "cancel": "Cancel",
+    "deleteFailed": "Failed to delete Factory"
+  },
+  "models": {
+    "connectToUnlock": "Connect a provider to unlock model selection and observational-memory settings.",
+    "customProviders": "Custom providers",
+    "factoryDefaults": {
+      "title": "Factory defaults",
+      "description": "Where this Factory's sessions and work-item runs get their model, credentials, and thinking level."
+    },
+    "personal": {
+      "title": "Your defaults",
+      "description": "The model new chats start on.",
+      "providersDescription": "Connect your own provider account for interactive chats. Organization credentials are managed in Factory settings."
+    },
+    "default": {
+      "loading": "Loading default model",
+      "label": "Default model",
+      "unavailable": "None of your connected accounts can run {{model}}. Choose another model or connect its provider.",
+      "save": "Save",
+      "clear": "Clear",
+      "apply": "Apply to running sessions",
+      "applied_one": "Updated {{count}} running session(s); skipped {{skipped}}.",
+      "applied_other": "Updated {{count}} running session(s); skipped {{skipped}}."
+    },
+    "factoryDefault": {
+      "label": "Model and thinking",
+      "descriptionHybrid": "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead.",
+      "description": "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them.",
+      "saving": "Saving default model",
+      "placeholder": "Select a model",
+      "pickerLabel": "Factory default model",
+      "switched_one": "Switched {{count}} session",
+      "switched_other": "Switched {{count}} sessions",
+      "nothingToSwitch": "No running sessions to switch",
+      "skipped_one": ". {{count}} skipped: {{reasons}}",
+      "skipped_other": ". {{count}} skipped: {{reasons}}",
+      "confirmTitle": "Also switch running sessions to {{model}}?",
+      "confirmDescription": "New Factory runs will use this model. Running work and review sessions keep their current model unless you switch them. Switched sessions keep their work and pick up the new model on their next step.",
+      "keep": "Keep them as-is",
+      "switch": "Switch running sessions"
+    },
+    "scopeNotice": {
+      "title": "This Factory uses organization credentials only",
+      "body": "Sessions in this Factory don't use your personal provider sign-ins or default model. Manage organization credentials and the model scope in <link>Factory models settings</link>."
+    },
+    "scope": {
+      "label": "Model scope",
+      "description": "Hybrid: sessions use their owner's credentials and default model, while work items use organization credentials and the Factory default. Factory and User apply one of those to both. Changing the scope never replaces a model a thread already selected.",
+      "saving": "Saving model scope",
+      "options": {
+        "hybrid": "Personal for sessions, Factory for work items",
+        "factory": "Factory model and credentials",
+        "user": "Each user's model and credentials"
+      }
+    },
+    "thinking": {
+      "label": "Thinking",
+      "description": "Used by every session and work-item run in this Factory until it picks its own level. Each run caps it at what its model supports.",
+      "loadFailed": "The thinking level couldn't be loaded.",
+      "notLoaded": "The thinking level isn't loaded yet.",
+      "changeFailed": "Failed to change thinking level",
+      "adminsOnly": "Only organization admins can change the thinking level"
+    },
+    "picker": {
+      "auto": "Auto",
+      "autoWith": "Auto · {{model}}",
+      "currently": "Currently {{model}}",
+      "pickedForYou": "Picked for you",
+      "placeholder": "Select model…",
+      "search": "Search models…",
+      "empty": "No matching model."
+    }
+  },
+  "memory": {
+    "title": "Observational memory",
+    "descriptionFactory": "Models and token thresholds used to summarize and retain context in Factory runs.",
+    "descriptionPersonal": "Models and token thresholds used to summarize and retain context in your interactive chats.",
+    "empty": {
+      "title": "No models configured",
+      "description": "Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first.",
+      "action": "Open Models settings"
+    },
+    "loading": "Loading observational-memory settings",
+    "tokens": "tokens",
+    "credentialsRequired": "Model credentials required",
+    "credentialsHint": "Observational-memory model calls may fail until credentials are configured.",
+    "observer": {
+      "label": "Observer model",
+      "description": "Summarizes the conversation into observations",
+      "placeholder": "Select observer model…"
+    },
+    "reflector": {
+      "label": "Reflector model",
+      "description": "Distills observations into longer-term memory",
+      "placeholder": "Select reflector model…"
+    },
+    "observationThreshold": {
+      "label": "Messages before observation",
+      "description": "Message tokens processed before the observer runs."
+    },
+    "reflectionThreshold": {
+      "label": "Observations before reflection",
+      "description": "Observation tokens accumulated before the reflector runs."
+    },
+    "attachments": {
+      "label": "Observe attachments",
+      "description": "Whether attached files are included in observations",
+      "auto": "Auto",
+      "on": "On",
+      "off": "Off"
+    }
   }
 }

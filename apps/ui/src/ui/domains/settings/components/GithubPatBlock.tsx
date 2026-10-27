@@ -3,6 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   useGithubPatStatusQuery,
@@ -15,25 +16,26 @@ import { SettingsSubsection } from './SettingsSubsection';
 
 // GitHub App tokens cannot authorize the gh CLI endpoints; sandboxes use PATs.
 export function GithubPatBlock() {
+  const { t } = useTranslation('settings');
   const statusQuery = useGithubPatStatusQuery();
 
   return (
     <SettingsSubsection
       scope="org"
-      title="GitHub CLI tokens"
-      description="Classic PATs agents use for gh CLI commands in sandboxes. The token's account needs access to the linked repositories."
+      title={t('githubPat.title')}
+      description={t('githubPat.description')}
     >
       <SettingsContainer>
         <TokenRow
           kind="default"
-          title="Worker token"
-          description="Used by every sandbox."
+          title={t('githubPat.worker.title')}
+          description={t('githubPat.worker.description')}
           configured={statusQuery.data?.configured === true}
         />
         <TokenRow
           kind="reviewer"
-          title="Reviewer token (optional)"
-          description="Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
+          title={t('githubPat.reviewer.title')}
+          description={t('githubPat.reviewer.description')}
           configured={statusQuery.data?.reviewerConfigured === true}
         />
       </SettingsContainer>
@@ -52,6 +54,7 @@ function TokenRow({
   description: string;
   configured: boolean;
 }) {
+  const { t } = useTranslation('settings');
   const saveMutation = useSaveGithubPatMutation(kind);
   const removeMutation = useRemoveGithubPatMutation(kind);
   const [editing, setEditing] = useState(false);
@@ -82,7 +85,7 @@ function TokenRow({
               {title}
             </Txt>
             <Badge size="sm" variant={configured ? 'success' : 'neutral'}>
-              {configured ? 'Configured' : 'Not set'}
+              {configured ? t('githubPat.configured') : t('credentials.notSet')}
             </Badge>
           </div>
           <Txt tone="muted" variant="caption">
@@ -99,11 +102,11 @@ function TokenRow({
                 setDraft('');
               }}
             >
-              {configured ? 'Update token' : 'Add token'}
+              {configured ? t('githubPat.updateToken') : t('githubPat.addToken')}
             </Button>
             {configured && (
               <Button size="sm" disabled={busy} onClick={() => removeMutation.mutate()}>
-                {removeMutation.isPending ? 'Removing…' : 'Remove'}
+                {removeMutation.isPending ? t('githubPat.removing') : t('githubPat.remove')}
               </Button>
             )}
           </div>
@@ -116,8 +119,8 @@ function TokenRow({
             autoFocus
             type="password"
             size="sm"
-            aria-label={`${title} GitHub Personal Access Token`}
-            placeholder="Paste classic Personal Access Token"
+            aria-label={t('githubPat.inputLabel', { title })}
+            placeholder={t('githubPat.placeholder')}
             value={draft}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={event => {
@@ -136,10 +139,10 @@ function TokenRow({
               setDraft('');
             }}
           >
-            Cancel
+            {t('githubPat.cancel')}
           </Button>
           <Button variant="primary" size="sm" disabled={busy || !draft.trim()} onClick={() => void save()}>
-            {saveMutation.isPending ? 'Saving…' : 'Save'}
+            {saveMutation.isPending ? t('githubPat.saving') : t('githubPat.save')}
           </Button>
         </div>
       )}

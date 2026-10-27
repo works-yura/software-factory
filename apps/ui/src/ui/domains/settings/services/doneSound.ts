@@ -8,13 +8,15 @@
  * sidebar is the reliable signal, the sound is a nicety on top.
  */
 
+import { lazyOption } from '../../../i18n/lazy';
+
 export type DoneSound = 'none' | 'chime' | 'arcade' | 'fanfare';
 
-export const DONE_SOUND_OPTIONS: { value: DoneSound; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'chime', label: 'Chime' },
-  { value: 'arcade', label: 'Arcade' },
-  { value: 'fanfare', label: 'Fanfare' },
+export const DONE_SOUND_OPTIONS: readonly { readonly value: DoneSound; readonly label: string }[] = [
+  lazyOption('none' as const, 'settings:sounds.none'),
+  lazyOption('chime' as const, 'settings:sounds.chime'),
+  lazyOption('arcade' as const, 'settings:sounds.arcade'),
+  lazyOption('fanfare' as const, 'settings:sounds.fanfare'),
 ];
 
 const DONE_SOUND_KEY = 'mastracode.doneSound';

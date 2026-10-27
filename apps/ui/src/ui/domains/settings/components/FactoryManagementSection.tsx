@@ -2,6 +2,7 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
@@ -14,15 +15,19 @@ export function FactoryManagementSection() {
   const factoryQuery = useFactoryQuery(factoryId);
   const factory = factoryQuery.data;
   const deleteMutation = useDeleteFactoryMutation();
+  const { t } = useTranslation('settings');
 
   if (!factory) {
-    return <Notice variant="info">Select a factory to manage its settings.</Notice>;
+    return <Notice variant="info">{t('factory.selectFactory')}</Notice>;
   }
 
   return (
-    <SettingsSubsection scope="factory" title="Danger zone">
+    <SettingsSubsection scope="factory" title={t('factory.dangerZone')}>
       <SettingsContainer>
-        <SettingsRow label={`Delete ${factory.name}`} description="Also unlinks its repositories.">
+        <SettingsRow
+          label={t('factory.deleteNamed', { name: factory.name })}
+          description={t('factory.deleteDescription')}
+        >
           <AlertDialog>
             <AlertDialog.Trigger
               render={
@@ -30,23 +35,23 @@ export function FactoryManagementSection() {
                   size="sm"
                   variant="destructive-ghost"
                   disabled={deleteMutation.isPending}
-                  aria-label={`Delete ${factory.name}`}
+                  aria-label={t('factory.deleteNamed', { name: factory.name })}
                 >
                   <Trash2 size={14} />
-                  Delete
+                  {t('factory.delete')}
                 </Button>
               }
             />
             <AlertDialog.Content>
               <AlertDialog.Header>
-                <AlertDialog.Title>Delete {factory.name}?</AlertDialog.Title>
-                <AlertDialog.Description>
-                  This deletes the Factory and unlinks its repositories. It cannot be undone.
-                </AlertDialog.Description>
+                <AlertDialog.Title>{t('factory.confirmTitle', { name: factory.name })}</AlertDialog.Title>
+                <AlertDialog.Description>{t('factory.confirmDescription')}</AlertDialog.Description>
               </AlertDialog.Header>
               <AlertDialog.Footer>
-                <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                <AlertDialog.Action onClick={() => deleteMutation.mutate(factory.id)}>Delete</AlertDialog.Action>
+                <AlertDialog.Cancel>{t('factory.cancel')}</AlertDialog.Cancel>
+                <AlertDialog.Action onClick={() => deleteMutation.mutate(factory.id)}>
+                  {t('factory.delete')}
+                </AlertDialog.Action>
               </AlertDialog.Footer>
             </AlertDialog.Content>
           </AlertDialog>
@@ -54,7 +59,7 @@ export function FactoryManagementSection() {
         {deleteMutation.isError && (
           <div className="p-4">
             <Notice variant="destructive">
-              {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete Factory'}
+              {deleteMutation.error instanceof Error ? deleteMutation.error.message : t('factory.deleteFailed')}
             </Notice>
           </div>
         )}

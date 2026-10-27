@@ -5,6 +5,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { CustomProviderInfo } from '../../../../api/types';
 import {
@@ -32,6 +33,7 @@ const EMPTY_DRAFT: DraftState = { editingId: '', name: '', url: '', apiKey: '', 
  * key + model list). Keys are write-only; the server reports only their presence.
  */
 export function CustomProvidersSection() {
+  const { t } = useTranslation('settings');
   const providersQuery = useCustomProvidersQuery();
   const saveMutation = useSaveCustomProvider();
   const removeMutation = useRemoveCustomProvider();
@@ -57,7 +59,7 @@ export function CustomProvidersSection() {
     const name = draft.name.trim();
     const url = draft.url.trim();
     if (!name || !url) {
-      setDraftError('Name and URL are required.');
+      setDraftError(t('customProviders.nameAndUrlRequired'));
       return;
     }
     const models = draft.models
@@ -93,11 +95,11 @@ export function CustomProvidersSection() {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <Txt tone="muted" as="p" variant="caption">
-          OpenAI-compatible endpoints.
+          {t('customProviders.description')}
         </Txt>
         {!draft && (
           <Button size="sm" onClick={startAdd} disabled={busy}>
-            <Plus size={13} /> Add provider
+            <Plus size={13} /> {t('customProviders.add')}
           </Button>
         )}
       </div>
@@ -111,17 +113,17 @@ export function CustomProvidersSection() {
       {draft && (
         <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
           <Field className="gap-1">
-            <FieldLabel>Name</FieldLabel>
+            <FieldLabel>{t('customProviders.name')}</FieldLabel>
             <Input
               size="sm"
-              placeholder="e.g. my-llm"
+              placeholder={t('customProviders.namePlaceholder')}
               value={draft.name}
               onChange={e => setDraft({ ...draft, name: e.target.value })}
               autoFocus
             />
           </Field>
           <Field className="gap-1">
-            <FieldLabel>Base URL</FieldLabel>
+            <FieldLabel>{t('customProviders.baseUrl')}</FieldLabel>
             <Input
               size="sm"
               placeholder="https://api.example.com/v1"
@@ -130,17 +132,19 @@ export function CustomProvidersSection() {
             />
           </Field>
           <Field className="gap-1">
-            <FieldLabel>API key {draft.editingId ? '(leave blank to keep)' : '(optional)'}</FieldLabel>
+            <FieldLabel>
+              {draft.editingId ? t('customProviders.apiKeyKeep') : t('customProviders.apiKeyOptional')}
+            </FieldLabel>
             <Input
               type="password"
               size="sm"
-              placeholder="Paste API key"
+              placeholder={t('customProviders.apiKeyPlaceholder')}
               value={draft.apiKey}
               onChange={e => setDraft({ ...draft, apiKey: e.target.value })}
             />
           </Field>
           <Field className="gap-1">
-            <FieldLabel>Models (comma-separated)</FieldLabel>
+            <FieldLabel>{t('customProviders.models')}</FieldLabel>
             <Input
               size="sm"
               placeholder="model-a, model-b"
@@ -150,17 +154,17 @@ export function CustomProvidersSection() {
           </Field>
           <div className="flex items-center gap-2">
             <Button variant="primary" size="sm" disabled={busy} onClick={() => void save()}>
-              {draft.editingId ? 'Save' : 'Add'}
+              {draft.editingId ? t('customProviders.save') : t('customProviders.addShort')}
             </Button>
             <Button size="sm" disabled={busy} onClick={() => setDraft(null)}>
-              Cancel
+              {t('customProviders.cancel')}
             </Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <SkeletonRows label="Loading custom providers" rows={3} rowClassName="h-9 w-full" />
+        <SkeletonRows label={t('customProviders.loading')} rows={3} rowClassName="h-9 w-full" />
       ) : providers.length === 0 ? null : (
         <ul role="list" className="divide-border flex flex-col divide-y">
           {providers.map(p => (
@@ -172,7 +176,7 @@ export function CustomProvidersSection() {
                   </Txt>
                   {p.hasApiKey && (
                     <Badge size="sm" variant="success">
-                      Key saved
+                      {t('credentials.keySaved')}
                     </Badge>
                   )}
                 </div>
@@ -181,16 +185,16 @@ export function CustomProvidersSection() {
                 </Txt>
                 {p.models.length > 0 && (
                   <Txt tone="muted" as="span" variant="meta">
-                    {p.models.length} model{p.models.length === 1 ? '' : 's'}
+                    {t('customProviders.modelCount', { count: p.models.length })}
                   </Txt>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" disabled={busy} onClick={() => startEdit(p)}>
-                  Edit
+                  {t('customProviders.edit')}
                 </Button>
                 <Button size="sm" disabled={busy} onClick={() => void remove(p.id)}>
-                  Remove
+                  {t('customProviders.remove')}
                 </Button>
               </div>
             </li>

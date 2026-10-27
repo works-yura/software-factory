@@ -6,6 +6,7 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../api/types';
 import {
@@ -22,6 +23,8 @@ import { AddApiKeyDialog } from './AddApiKeyDialog';
 import { ProviderOAuthDialog } from './ProviderOAuthDialog';
 import { providerDisplayName } from '@factory/credentials/provider-display-name';
 import { credentialAt } from './provider-credential';
+import { lazyLabels } from '../../../i18n/lazy';
+import { translator } from '../../../i18n/t';
 import type { ProviderCredential as Credential } from './provider-credential';
 
 import { ScopeSwap, useScopeControl } from './SettingsScope';
@@ -30,8 +33,12 @@ import { SettingsSubsection } from './SettingsSubsection';
 
 type CredentialScope = 'user' | 'org';
 
-const CREDENTIAL_LABEL: Record<Credential, string> = { oauth: 'Signed in', api_key: 'Key saved' };
-const ORG_SCOPE_MEMBER_REASON = 'Only organization admins can manage org-wide credentials.';
+const tk = translator('settings');
+
+const CREDENTIAL_LABEL: Readonly<Record<Credential, string>> = lazyLabels(['oauth', 'api_key'] as const, id =>
+  id === 'oauth' ? 'settings:credentials.signedIn' : 'settings:credentials.keySaved',
+);
+const orgScopeMemberReason = () => tk('credentials.orgAdminsOnly');
 
 interface ActiveOAuthSession {
   provider: string;
@@ -43,6 +50,7 @@ function mutationErrorMessage(error: unknown, fallback: string): string {
 }
 
 function StatusBadge({ provider, scope }: { provider: ProviderInfo; scope: CredentialScope }) {
+  const { t } = useTranslation('settings');
   const own = credentialAt(provider, scope);
   if (own) {
     return (
@@ -54,20 +62,20 @@ function StatusBadge({ provider, scope }: { provider: ProviderInfo; scope: Crede
   if (provider.source === 'deployment') {
     return (
       <Badge size="sm" variant="blue">
-        From deployment
+        {t('credentials.fromDeployment')}
       </Badge>
     );
   }
   if (provider.source === 'env') {
     return (
       <Badge size="sm" variant="blue">
-        From env
+        {t('credentials.fromEnv')}
       </Badge>
     );
   }
   return (
     <Badge size="sm" variant="neutral">
-      Not set
+      {t('credentials.notSet')}
     </Badge>
   );
 }
@@ -79,6 +87,7 @@ export function ProviderAccessSection({
   description?: string;
   fixedScope?: CredentialScope;
 }) {
+  const { t } = useTranslation('settings');
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
   const startOAuthMutation = useStartProviderOAuth();
@@ -102,7 +111,7 @@ export function ProviderAccessSection({
     : authEnabled
       ? ['personal', 'org']
       : ['personal'];
-  const scopeControl = useScopeControl(scopeOptions, canWriteOrgKey ? undefined : { org: ORG_SCOPE_MEMBER_REASON });
+  const scopeControl = useScopeControl(scopeOptions, canWriteOrgKey ? undefined : { org: orgScopeMemberReason() });
   const scope: CredentialScope = pinnedScope ?? (scopeControl.shown === 'org' ? 'org' : 'user');
   const orgScopeUnresolved = fixedScope === 'org' && authQuery.isPending;
   const readOnly = authEnabled && scope === 'org' && !canWriteOrgKey;
@@ -152,14 +161,14 @@ export function ProviderAccessSection({
   const signOut = (provider: ProviderInfo) => {
     signOutMutation.mutate(
       { provider: provider.provider, ...scopeArg },
-      { onError: error => toast.error(mutationErrorMessage(error, 'Failed to sign out')) },
+      { onError: error => toast.error(mutationErrorMessage(error, t('providers.signOutFailed'))) },
     );
   };
 
   const removeKey = (provider: ProviderInfo) => {
     removeKeyMutation.mutate(
       { provider: provider.provider, ...scopeArg },
-      { onError: error => toast.error(mutationErrorMessage(error, 'Failed to remove API key')) },
+      { onError: error => toast.error(mutationErrorMessage(error, t('providers.removeKeyFailed'))) },
     );
   };
 
@@ -174,20 +183,20 @@ export function ProviderAccessSection({
   return (
     <Tabs defaultTab="oauth">
       <SettingsSubsection
-        title="Provider access"
+        title={t('providers.title')}
         description={description}
         scope={scopeControl}
         action={
           <TabList variant="pill">
-            <Tab value="oauth">Sign in with a provider</Tab>
-            <Tab value="api-key">Connect with API key</Tab>
+            <Tab value="oauth">{t('providers.tabs.oauth')}</Tab>
+            <Tab value="api-key">{t('providers.tabs.apiKey')}</Tab>
           </TabList>
         }
       >
         <div className="flex flex-col gap-3">
           {readOnly && (
             <Txt as="p" variant="caption">
-              {ORG_SCOPE_MEMBER_REASON}
+              {orgScopeMemberReason()}
             </Txt>
           )}
           {error && (
@@ -201,11 +210,11 @@ export function ProviderAccessSection({
               <SettingsContainer>
                 {providersQuery.isPending ? (
                   <div className="px-4 py-3">
-                    <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
+                    <SkeletonRows label={t('providers.loading')} rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : oauthProviders.length === 0 ? (
                   <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
-                    No providers support sign in.
+                    {t('providers.noOAuthProviders')}
                   </Txt>
                 ) : (
                   oauthProviders.map(provider => {
@@ -221,23 +230,23 @@ export function ProviderAccessSection({
                               size="sm"
                               aria-label={
                                 scope === 'org'
-                                  ? `Sign out of ${displayName} for the org`
-                                  : `Sign out of ${displayName}`
+                                  ? t('providers.signOutOfOrg', { name: displayName })
+                                  : t('providers.signOutOf', { name: displayName })
                               }
                               disabled={actionsDisabled || isSigningOut(provider)}
                               onClick={() => signOut(provider)}
                             >
-                              {isSigningOut(provider) ? 'Signing out…' : 'Sign out'}
+                              {isSigningOut(provider) ? t('providers.signingOut') : t('providers.signOut')}
                             </Button>
                           ) : (
                             <Button
                               variant={own ? 'default' : 'primary'}
                               size="sm"
-                              aria-label={`Sign in to ${displayName}`}
+                              aria-label={t('providers.signInTo', { name: displayName })}
                               disabled={actionsDisabled || startOAuthMutation.isPending}
                               onClick={() => void startOAuth(provider)}
                             >
-                              {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
+                              {startingProvider === provider.provider ? t('providers.starting') : t('providers.signIn')}
                             </Button>
                           )}
                         </span>
@@ -251,8 +260,8 @@ export function ProviderAccessSection({
 
           <TabContent value="api-key" className="flex flex-col gap-3">
             <SearchInput
-              label="Search providers"
-              placeholder="Search providers to add an API key…"
+              label={t('providers.search')}
+              placeholder={t('providers.searchPlaceholder')}
               value={search}
               onValueChange={setSearch}
             />
@@ -261,11 +270,11 @@ export function ProviderAccessSection({
               <SettingsContainer className="max-h-[280px] overflow-y-auto">
                 {providersQuery.isPending ? (
                   <div className="px-4 py-3">
-                    <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
+                    <SkeletonRows label={t('providers.loading')} rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : results.length === 0 ? (
                   <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
-                    {query ? `No providers match “${search.trim()}”.` : 'No API key providers are available.'}
+                    {query ? t('providers.noMatch', { query: search.trim() }) : t('providers.noApiKeyProviders')}
                   </Txt>
                 ) : (
                   results.map(provider => {
@@ -278,21 +287,25 @@ export function ProviderAccessSection({
                           {provider.source !== 'deployment' && (
                             <Button
                               size="sm"
-                              aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
+                              aria-label={
+                                storedKey
+                                  ? t('providers.updateKeyFor', { name: displayName })
+                                  : t('providers.addKeyFor', { name: displayName })
+                              }
                               disabled={actionsDisabled || isRemoving(provider)}
                               onClick={() => setKeyDialogProvider(provider)}
                             >
-                              {storedKey ? 'Update key' : 'Add API key'}
+                              {storedKey ? t('providers.updateKey') : t('providers.addKey')}
                             </Button>
                           )}
                           {storedKey && (
                             <Button
                               size="sm"
-                              aria-label={`Remove key for ${displayName}`}
+                              aria-label={t('providers.removeKeyFor', { name: displayName })}
                               disabled={actionsDisabled || isRemoving(provider)}
                               onClick={() => removeKey(provider)}
                             >
-                              {isRemoving(provider) ? 'Removing…' : 'Remove'}
+                              {isRemoving(provider) ? t('providers.removing') : t('providers.remove')}
                             </Button>
                           )}
                         </span>

@@ -11,6 +11,7 @@ import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/co
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   useOMQuery,
@@ -48,6 +49,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
   const [sent, setSent] = useState(value);
   const [editing, setEditing] = useState(false);
   const [syncedValue, setSyncedValue] = useState(value);
+  const { t } = useTranslation('settings');
   // Follow the saved value (e.g. after another surface changed it) without remounting, so
   // focus stays put. While the person is still in the field, a save landing must not
   // overwrite what they are typing; leaving the field saves the draft.
@@ -94,7 +96,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
       >
         <InputNumberInput onBlur={() => commit(draft)} />
         <InputGroupAddon align="inline-end" variant="flush">
-          <InputGroupText className="mr-2">tokens</InputGroupText>
+          <InputGroupText className="mr-2">{t('memory.tokens')}</InputGroupText>
           <InputNumberDecrement />
           <InputNumberIncrement />
         </InputGroupAddon>
@@ -112,6 +114,7 @@ export function OMSection({
   factoryId?: string;
   models: AvailableModelOption[];
 }) {
+  const { t } = useTranslation('settings');
   const omQuery = useOMQuery(sessionId, factoryId);
   const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId);
   const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId);
@@ -144,7 +147,7 @@ export function OMSection({
   if (loading) {
     return (
       <div className="px-4 py-3">
-        <SkeletonRows label="Loading observational-memory settings" rows={4} rowClassName="h-10 w-full" />
+        <SkeletonRows label={t('memory.loading')} rows={4} rowClassName="h-10 w-full" />
       </div>
     );
   }
@@ -161,37 +164,40 @@ export function OMSection({
       {config && !modelsAvailable && (
         <div className="flex items-center gap-2 px-4 py-3">
           <Badge size="md" variant="warning">
-            Model credentials required
+            {t('memory.credentialsRequired')}
           </Badge>
           <Txt tone="muted" as="p" variant="meta">
-            Observational-memory model calls may fail until credentials are configured.
+            {t('memory.credentialsHint')}
           </Txt>
         </div>
       )}
 
-      <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
+      <SettingsRow label={t('memory.observer.label')} description={t('memory.observer.description')}>
         <ModelCombobox
           models={models}
           value={config?.observer.model ?? ''}
           auto={{ effectiveModelId: config?.observer.effectiveModelId }}
-          placeholder="Select observer model…"
+          placeholder={t('memory.observer.placeholder')}
           disabled={busy || !config}
           onValueChange={modelId => switchModel('observer', modelId)}
         />
       </SettingsRow>
 
-      <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
+      <SettingsRow label={t('memory.reflector.label')} description={t('memory.reflector.description')}>
         <ModelCombobox
           models={models}
           value={config?.reflector.model ?? ''}
           auto={{ effectiveModelId: config?.reflector.effectiveModelId }}
-          placeholder="Select reflector model…"
+          placeholder={t('memory.reflector.placeholder')}
           disabled={busy || !config}
           onValueChange={modelId => switchModel('reflector', modelId)}
         />
       </SettingsRow>
 
-      <SettingsRow label="Messages before observation" description="Message tokens processed before the observer runs.">
+      <SettingsRow
+        label={t('memory.observationThreshold.label')}
+        description={t('memory.observationThreshold.description')}
+      >
         {config && (
           <TokenThresholdInput
             value={config.observationThreshold}
@@ -201,8 +207,8 @@ export function OMSection({
       </SettingsRow>
 
       <SettingsRow
-        label="Observations before reflection"
-        description="Observation tokens accumulated before the reflector runs."
+        label={t('memory.reflectionThreshold.label')}
+        description={t('memory.reflectionThreshold.description')}
       >
         {config && (
           <TokenThresholdInput
@@ -212,16 +218,16 @@ export function OMSection({
         )}
       </SettingsRow>
 
-      <SettingsRow label="Observe attachments" description="Whether attached files are included in observations">
+      <SettingsRow label={t('memory.attachments.label')} description={t('memory.attachments.description')}>
         <SegmentedControl
-          aria-label="Observe attachments"
+          aria-label={t('memory.attachments.label')}
           value={attachmentChoice}
           disabled={busy || !config}
           onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
         >
-          <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
-          <SegmentedControlItem value="on">On</SegmentedControlItem>
-          <SegmentedControlItem value="off">Off</SegmentedControlItem>
+          <SegmentedControlItem value="auto">{t('memory.attachments.auto')}</SegmentedControlItem>
+          <SegmentedControlItem value="on">{t('memory.attachments.on')}</SegmentedControlItem>
+          <SegmentedControlItem value="off">{t('memory.attachments.off')}</SegmentedControlItem>
         </SegmentedControl>
       </SettingsRow>
     </>

@@ -7,6 +7,9 @@ import { useMemo } from 'react';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
 import { providerDisplayName } from '@factory/credentials/provider-display-name';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('settings');
 
 /** Value the picker reports when the caller's `auto` choice is picked. */
 const AUTO_VALUE = 'auto';
@@ -32,9 +35,9 @@ function autoOption(effectiveModelId: string | null | undefined): ComboboxOption
   const effectiveName = effectiveModelId ? formatModelName(effectiveModelId) : undefined;
   return {
     value: AUTO_VALUE,
-    label: 'Auto',
-    description: effectiveName ? `Currently ${effectiveName}` : 'Picked for you',
-    displayLabel: effectiveName ? `Auto · ${effectiveName}` : 'Auto',
+    label: tk('models.picker.auto'),
+    description: effectiveName ? tk('models.picker.currently', { model: effectiveName }) : tk('models.picker.pickedForYou'),
+    displayLabel: effectiveName ? tk('models.picker.autoWith', { model: effectiveName }) : tk('models.picker.auto'),
     start: (
       <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">
         <Sparkles className="text-muted-foreground size-4" />
@@ -94,9 +97,9 @@ export function ModelCombobox({
       options={options}
       value={value}
       onValueChange={onValueChange}
-      placeholder={placeholder ?? 'Select model…'}
-      searchPlaceholder="Search models…"
-      emptyText="No matching model."
+      placeholder={placeholder ?? tk('models.picker.placeholder')}
+      searchPlaceholder={tk('models.picker.search')}
+      emptyText={tk('models.picker.empty')}
       allowCustomValue
       disabled={disabled}
       className={className}

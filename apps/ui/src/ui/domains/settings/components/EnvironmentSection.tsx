@@ -2,6 +2,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -29,6 +30,7 @@ import { SettingsSubsection } from './SettingsSubsection';
  * provider's own settings) and, when the sandbox can build, its builds.
  */
 export function EnvironmentSection() {
+  const { t } = useTranslation('settings');
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const environmentQuery = useFactoryEnvironmentQuery(factoryId);
@@ -39,13 +41,13 @@ export function EnvironmentSection() {
   );
 
   if (!factoryId || (factoryQuery.isSuccess && !factory)) {
-    return <Notice variant="info">Select a factory to manage its environment.</Notice>;
+    return <Notice variant="info">{t('environment.selectFactory')}</Notice>;
   }
 
   if (environmentQuery.isError) {
     return (
       <Notice variant="destructive">
-        {environmentQuery.error instanceof Error ? environmentQuery.error.message : 'Failed to load environment'}
+        {environmentQuery.error instanceof Error ? environmentQuery.error.message : t('environment.loadFailed')}
       </Notice>
     );
   }
@@ -70,14 +72,15 @@ function EnvironmentBlocks({
   environment: FactoryEnvironmentPayload;
   providers: RepositoryProviders;
 }) {
+  const { t } = useTranslation('settings');
   const saveMutation = useSaveFactoryEnvironmentMutation();
 
   if (environment.repositories.length === 0) {
     return (
       <Notice variant="info">
-        Link a repository first.{' '}
+        {t('environment.linkRepositoryFirst')}{' '}
         <Link to={settingsSectionPath(factoryId, 'repositories')} className="underline">
-          Go to Repositories
+          {t('environment.goToRepositories')}
         </Link>
       </Notice>
     );
@@ -89,8 +92,8 @@ function EnvironmentBlocks({
       .mutateAsync(
         { factoryId, input },
         {
-          onSuccess: () => toast.success('Environment saved'),
-          onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save environment'),
+          onSuccess: () => toast.success(t('environment.saved')),
+          onError: err => toast.error(err instanceof Error ? err.message : t('environment.saveFailed')),
         },
       )
       .then(
@@ -104,8 +107,8 @@ function EnvironmentBlocks({
     <div className="flex min-w-0 flex-col gap-8">
       <SettingsSubsection
         scope="factory"
-        title="Repositories"
-        description="Each repository is pre-cloned and set up in the sandbox for new sessions, in this order."
+        title={t('environment.repositories.title')}
+        description={t('environment.repositories.description')}
       >
         <RepositoriesBlock
           repositories={environment.repositories}
@@ -116,8 +119,10 @@ function EnvironmentBlocks({
       </SettingsSubsection>
       <SettingsSubsection
         scope="factory"
-        title="Configuration"
-        description={`How each sandbox is set up. ${providerLine(environment.sandbox.provider)}`}
+        title={t('environment.configuration.title')}
+        description={t('environment.configuration.description', {
+          providerLine: providerLine(environment.sandbox.provider),
+        })}
       >
         <WorkspaceSetupBlock
           workdir={environment.sandboxWorkingDirectory}
@@ -131,8 +136,8 @@ function EnvironmentBlocks({
       {canBuild && (
         <SettingsSubsection
           scope="factory"
-          title="Builds"
-          description="The template image built ahead of sessions, and when it rebuilds."
+          title={t('environment.builds.title')}
+          description={t('environment.builds.description')}
           action={<BuildNow factoryId={factoryId} environment={environment} />}
         >
           <div className="flex flex-col gap-4">
@@ -149,6 +154,7 @@ function EnvironmentBlocks({
 
 /** Build now with the last build's live status beside it; in the Builds header. */
 function BuildNow({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
+  const { t } = useTranslation('settings');
   const requestBuild = useRequestEnvironmentBuildMutation();
   const buildQuery = useEnvironmentBuildQuery(factoryId, environment.build?.buildId);
 
@@ -157,10 +163,10 @@ function BuildNow({ factoryId, environment }: { factoryId: string; environment: 
       { factoryId },
       {
         onSuccess: started => {
-          if (started.outcome === 'started') toast.success('Build started');
-          else toast.error(`Build not started: ${started.reason ?? started.outcome}`);
+          if (started.outcome === 'started') toast.success(t('environment.builds.started'));
+          else toast.error(t('environment.builds.notStarted', { reason: started.reason ?? started.outcome }));
         },
-        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to start the build'),
+        onError: err => toast.error(err instanceof Error ? err.message : t('environment.builds.startFailed')),
       },
     );
 
@@ -176,6 +182,7 @@ function BuildNow({ factoryId, environment }: { factoryId: string; environment: 
 
 /** The provider's build history; mounted only when the sandbox lists builds. */
 function BuildHistory({ factoryId }: { factoryId: string }) {
+  const { t } = useTranslation('settings');
   const buildsQuery = useEnvironmentBuildsQuery(factoryId, true);
   return (
     <BuildHistoryBlock
@@ -184,7 +191,7 @@ function BuildHistory({ factoryId }: { factoryId: string }) {
         buildsQuery.isError
           ? buildsQuery.error instanceof Error
             ? buildsQuery.error.message
-            : 'Failed to load builds'
+            : t('environment.builds.loadFailed')
           : undefined
       }
     />
