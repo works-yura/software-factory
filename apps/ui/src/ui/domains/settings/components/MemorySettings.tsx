@@ -1,4 +1,5 @@
 import { Brain } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
@@ -20,21 +21,22 @@ interface MemorySettingsProps {
 export function MemorySettings({ scope, factoryId, models, sessionId }: MemorySettingsProps) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
   const factoryView = scope === 'factory' && factoryId;
+  const { t } = useTranslation('settings');
 
   if (providersKnown && !anyConnected) {
     return (
       <EmptyState
         as="h2"
         iconSlot={<Brain />}
-        titleSlot="No models configured"
-        descriptionSlot="Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first."
+        titleSlot={t('memory.empty.title')}
+        descriptionSlot={t('memory.empty.description')}
         actionSlot={
           factoryId ? (
             <Link
               to={settingsSectionPath(factoryId, scope === 'factory' ? 'models' : 'personal-models')}
               className={buttonVariants({ variant: 'primary' })}
             >
-              Open Models settings
+              {t('memory.empty.action')}
             </Link>
           ) : undefined
         }
@@ -44,12 +46,8 @@ export function MemorySettings({ scope, factoryId, models, sessionId }: MemorySe
 
   return (
     <SettingsSubsection
-      title="Observational memory"
-      description={
-        factoryView
-          ? 'Models and token thresholds used to summarize and retain context in Factory runs.'
-          : 'Models and token thresholds used to summarize and retain context in your interactive chats.'
-      }
+      title={t('memory.title')}
+      description={factoryView ? t('memory.descriptionFactory') : t('memory.descriptionPersonal')}
       scope={scope}
     >
       <SettingsContainer>

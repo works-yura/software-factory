@@ -1,5 +1,6 @@
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { CommittedInput } from './CommittedInput';
 import type { SaveEnvironment } from './CommittedInput';
@@ -22,12 +23,13 @@ export function WorkspaceSetupBlock({
   onSave: SaveEnvironment;
   children?: ReactNode;
 }) {
+  const { t } = useTranslation('settings');
   return (
     <SettingsContainer>
-      <SettingsRow label="Working directory" description="Absolute path the repositories are cloned under.">
+      <SettingsRow label={t('environment.workspace.workdir')} description={t('environment.workspace.workdirDescription')}>
         <div className="w-full lg:max-w-96">
           <CommittedInput
-            label="Working directory"
+            label={t('environment.workspace.workdir')}
             placeholder="/workspace"
             value={workdir ?? ''}
             disabled={disabled}
@@ -36,14 +38,14 @@ export function WorkspaceSetupBlock({
         </div>
       </SettingsRow>
       <SettingsRow
-        label="Setup command"
-        description="Runs in the working directory once every repository is cloned and its own setup command has finished, while the template builds."
+        label={t('environment.workspace.setupCommand')}
+        description={t('environment.workspace.setupCommandDescription')}
       >
         <div className="w-full lg:max-w-96">
           <CommittedInput
-            label="Setup command"
+            label={t('environment.workspace.setupCommand')}
             value={command ?? ''}
-            placeholder="e.g. ./scripts/bootstrap.sh"
+            placeholder={t('environment.workspace.setupCommandPlaceholder')}
             disabled={disabled}
             onCommit={next => onSave({ workspaceSetupCommand: next || null })}
           />

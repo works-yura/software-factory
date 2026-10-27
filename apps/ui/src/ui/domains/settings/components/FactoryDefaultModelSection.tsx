@@ -6,6 +6,7 @@ import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { MouseEvent } from 'react';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
@@ -32,6 +33,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   const applyToSessions = useApplyFactoryDefaultModelMutation(factoryId ?? '');
   const [confirmModelId, setConfirmModelId] = useState<string>();
   const applyRequested = useRef(false);
+  const { t } = useTranslation('settings');
 
   if (!factoryId) return null;
 
@@ -63,13 +65,13 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   return (
     <>
       <SettingsRow
-        label="Model and thinking"
+        label={t('models.factoryDefault.label')}
         description={
           <>
             <span>
               {projectQuery.data?.modelScope === 'hybrid'
-                ? "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead."
-                : "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them."}
+                ? t('models.factoryDefault.descriptionHybrid')
+                : t('models.factoryDefault.description')}
             </span>
             {errorText && (
               <Txt as="span" variant="meta" className="text-destructive-foreground">
@@ -83,15 +85,19 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
         <div className="flex flex-col gap-2 sm:items-end">
           <div className="flex items-center gap-2">
             {setDefaultModel.isPending && (
-              <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
+              <Spinner
+                size="sm"
+                aria-label={t('models.factoryDefault.saving')}
+                className="text-muted-foreground shrink-0"
+              />
             )}
-            <ButtonsGroup size="sm" aria-label="Model and thinking">
+            <ButtonsGroup size="sm" aria-label={t('models.factoryDefault.label')}>
               <ModelCombobox
                 models={models}
                 value={defaultModelId}
                 onValueChange={saveDefaultModel}
-                placeholder="Select a model"
-                aria-label="Factory default model"
+                placeholder={t('models.factoryDefault.placeholder')}
+                aria-label={t('models.factoryDefault.pickerLabel')}
                 variant="ghost"
                 size="sm"
                 disabled={projectQuery.isPending || setDefaultModel.isPending}
@@ -102,13 +108,13 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
           {applyResult && (
             <Txt variant="meta">
               {applyResult.applied.length > 0
-                ? `Switched ${applyResult.applied.length} session${applyResult.applied.length === 1 ? '' : 's'}`
-                : 'No running sessions to switch'}
-              {applyResult.skipped.length > 0 && (
-                <>
-                  . {applyResult.skipped.length} skipped: {skippedReasonSummary(applyResult.skipped)}
-                </>
-              )}
+                ? t('models.factoryDefault.switched', { count: applyResult.applied.length })
+                : t('models.factoryDefault.nothingToSwitch')}
+              {applyResult.skipped.length > 0 &&
+                t('models.factoryDefault.skipped', {
+                  count: applyResult.skipped.length,
+                  reasons: skippedReasonSummary(applyResult.skipped),
+                })}
             </Txt>
           )}
         </div>
@@ -118,17 +124,18 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
         <AlertDialog.Content>
           <AlertDialog.Header>
             <AlertDialog.Title>
-              Also switch running sessions to {confirmModelId ? formatModelName(confirmModelId) : ''}?
+              {t('models.factoryDefault.confirmTitle', {
+                model: confirmModelId ? formatModelName(confirmModelId) : '',
+              })}
             </AlertDialog.Title>
-            <AlertDialog.Description>
-              New Factory runs will use this model. Running work and review sessions keep their current model unless you
-              switch them. Switched sessions keep their work and pick up the new model on their next step.
-            </AlertDialog.Description>
+            <AlertDialog.Description>{t('models.factoryDefault.confirmDescription')}</AlertDialog.Description>
           </AlertDialog.Header>
           <AlertDialog.Footer>
-            <AlertDialog.Cancel disabled={applyToSessions.isPending}>Keep them as-is</AlertDialog.Cancel>
+            <AlertDialog.Cancel disabled={applyToSessions.isPending}>
+              {t('models.factoryDefault.keep')}
+            </AlertDialog.Cancel>
             <AlertDialog.Action disabled={applyToSessions.isPending} onClick={switchRunningSessions}>
-              Switch running sessions
+              {t('models.factoryDefault.switch')}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>

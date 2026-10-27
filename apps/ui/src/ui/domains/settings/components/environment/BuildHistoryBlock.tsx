@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -18,6 +19,7 @@ export function BuildHistoryBlock({
   builds: FactoryEnvironmentBuild[] | undefined;
   error: string | undefined;
 }) {
+  const { t } = useTranslation('settings');
   const [open, setOpen] = useState<string>();
 
   return (
@@ -28,7 +30,7 @@ export function BuildHistoryBlock({
         <Skeleton className="h-12 w-full" />
       ) : builds.length === 0 ? (
         <Txt as="p" variant="meta" tone="muted">
-          No builds yet.
+          {t('environment.history.empty')}
         </Txt>
       ) : (
         <SettingsContainer>
@@ -43,7 +45,7 @@ export function BuildHistoryBlock({
                     type="button"
                     className="flex w-full items-center gap-3 px-4 py-3 text-left"
                     aria-expanded={expanded}
-                    aria-label={`Build ${build.buildId}`}
+                    aria-label={t('environment.history.buildAria', { id: build.buildId })}
                     onClick={() => setOpen(expanded ? undefined : build.buildId)}
                   >
                     {expanded ? (
@@ -86,7 +88,7 @@ export function BuildHistoryBlock({
                       )}
                       {!detail && (
                         <Txt as="p" variant="meta" tone="muted">
-                          No logs for this build.
+                          {t('environment.history.noLogs')}
                         </Txt>
                       )}
                     </div>

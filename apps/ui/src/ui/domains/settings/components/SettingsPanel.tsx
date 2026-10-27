@@ -1,6 +1,9 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useParams } from 'react-router';
+
+import { translator } from '../../../i18n/t';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
@@ -26,13 +29,16 @@ import { FactoryModelsSettings } from './FactoryModelsSettings';
 import { PersonalModelsSettings } from './PersonalModelsSettings';
 import { MemorySettings } from './MemorySettings';
 
+const tk = translator('settings');
+
 function getSettingsUpdateErrorMessage(error: unknown): string {
   if (error instanceof SettingsUpdateVerificationError) return error.message;
-  if (error instanceof Error) return `Failed to update settings: ${error.message}`;
-  return 'Failed to update settings';
+  if (error instanceof Error) return tk('panel.updateFailedWith', { message: error.message });
+  return tk('panel.updateFailed');
 }
 
 export function SettingsPanel() {
+  const { t } = useTranslation('settings');
   const section = useSettingsSection();
   const { hash } = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -69,15 +75,15 @@ export function SettingsPanel() {
   };
 
   return (
-    <section aria-label="Settings" className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
+    <section aria-label={t('panel.label')} className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
       {section === 'account' && <AccountSettingsSection />}
       {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && (
         <SettingsSubsection
           scope="personal"
-          title="Connected accounts"
-          description="Connect your account to use Factory from Slack."
+          title={t('panel.connections.title')}
+          description={t('panel.connections.description')}
         >
           <ConnectedAccountsSection />
         </SettingsSubsection>

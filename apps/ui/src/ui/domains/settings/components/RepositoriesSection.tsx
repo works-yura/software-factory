@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -18,6 +19,7 @@ import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function RepositoriesSection() {
+  const { t } = useTranslation('settings');
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
@@ -26,8 +28,11 @@ export function RepositoriesSection() {
   const activeFactory = factoryQuery.data;
 
   if (!activeFactory) {
-    return <Notice variant="info">Select a factory to manage its repositories.</Notice>;
+    return <Notice variant="info">{t('repositories.selectFactory')}</Notice>;
   }
+
+  // The catalog marks the in-sentence link as <link>…</link>, so each language places it where its grammar needs.
+  const [before = '', linkText = '', after = ''] = t('repositories.environmentHint').split(/<\/?link>/);
 
   const showGithubSettings = githubConnected || activeFactory.repositories.some(repo => repo.provider !== 'gitlab');
 
@@ -41,13 +46,13 @@ export function RepositoriesSection() {
     <div className="flex min-w-0 flex-col gap-8">
       <SettingsSubsection
         scope="factory"
-        title="Repositories"
-        description={`Repositories ${activeFactory.name} can edit. What feeds the board is set under Work Intake.`}
+        title={t('repositories.title')}
+        description={t('repositories.description', { name: activeFactory.name })}
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {githubConnected && (
               <Button size="sm" onClick={() => manageGithubConnection(baseUrl)}>
-                Manage GitHub connection
+                {t('repositories.manageGithub')}
               </Button>
             )}
             {gitlabStatus?.mode === 'platform' &&
@@ -55,19 +60,19 @@ export function RepositoriesSection() {
                 <ProviderConnectControl
                   provider="gitlab"
                   reconnectConnectionId={gitlabReconnectTarget.id}
-                  label="Reconnect GitLab"
+                  label={t('repositories.reconnectGitlab')}
                   size="sm"
                 />
               ) : (
                 <>
                   {gitlabStatus.configured && (
                     <Button as="a" href={MASTRA_PROJECTS_URL} target="_blank" size="sm">
-                      Manage GitLab connection
+                      {t('repositories.manageGitlab')}
                     </Button>
                   )}
                   <ProviderConnectControl
                     provider="gitlab"
-                    label={gitlabStatus.configured ? 'Connect another GitLab account' : 'Connect GitLab'}
+                    label={gitlabStatus.configured ? t('repositories.connectAnotherGitlab') : t('repositories.connectGitlab')}
                     size="sm"
                     variant={gitlabStatus.configured ? 'ghost' : 'default'}
                   />
@@ -75,7 +80,7 @@ export function RepositoriesSection() {
               ))}
             {gitlabStatus?.configured && gitlabStatus.mode === 'direct' && (
               <Txt as="span" variant="meta" tone="muted">
-                GitLab managed by deployment environment variables
+                {t('repositories.gitlabFromEnv')}
               </Txt>
             )}
           </div>
@@ -87,11 +92,11 @@ export function RepositoriesSection() {
       </SettingsSubsection>
 
       <Txt as="p" variant="meta" tone="muted">
-        Sandbox resources, repository order and setup commands live in{' '}
+        {before}
         <Link to={settingsSectionPath(activeFactory.id, 'environment')} className="underline">
-          Environment
+          {linkText}
         </Link>
-        .
+        {after}
       </Txt>
 
       {showGithubSettings && (

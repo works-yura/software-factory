@@ -8,6 +8,7 @@ import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Code as CodeIcon, FileText } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
@@ -15,20 +16,33 @@ import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types
 import { orderedBoards } from '../../factory/boardCatalog';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
+import { translator } from '../../../i18n/t';
 
 interface DisplayedSkill {
   name: string;
-  title: string;
+  readonly title: string;
+}
+
+const tk = translator('settings');
+
+/** A built-in skill whose title is translated when read. */
+function displayedSkill(name: string, title: () => string): DisplayedSkill {
+  return {
+    name,
+    get title() {
+      return title();
+    },
+  };
 }
 
 const BUILT_IN_BOARD_SKILLS: Record<'work' | 'review', DisplayedSkill[]> = {
   work: [
-    { name: 'factory-triage', title: 'Triage' },
-    { name: 'factory-plan', title: 'Planning' },
+    displayedSkill('factory-triage', () => tk('skills.names.triage')),
+    displayedSkill('factory-plan', () => tk('skills.names.plan')),
   ],
   review: [
-    { name: 'factory-review', title: 'Review' },
-    { name: 'factory-rereview', title: 'Re-review' },
+    displayedSkill('factory-review', () => tk('skills.names.review')),
+    displayedSkill('factory-rereview', () => tk('skills.names.rereview')),
   ],
 };
 
@@ -39,6 +53,7 @@ function isBuiltInBoard(id: string): id is 'work' | 'review' {
 }
 
 function SkillContent({ content }: { content: string }) {
+  const { t } = useTranslation('settings');
   const [raw, setRaw] = useState(false);
 
   return (
@@ -54,7 +69,7 @@ function SkillContent({ content }: { content: string }) {
       </ScrollArea>
       <Button
         size="icon-sm"
-        tooltip={raw ? 'Show formatted' : 'Show raw'}
+        tooltip={raw ? t('skills.showFormatted') : t('skills.showRaw')}
         onClick={() => setRaw(shown => !shown)}
         className="absolute top-1 right-4 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
       >
@@ -65,6 +80,7 @@ function SkillContent({ content }: { content: string }) {
 }
 
 function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo }) {
+  const { t } = useTranslation('settings');
   return (
     <SettingsContainer>
       <Collapsible>
@@ -77,11 +93,11 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
                   {skill.name}
                 </Txt>
               </Txt>
-              {skill.error && <Badge variant="destructive">Failed to load</Badge>}
+              {skill.error && <Badge variant="destructive">{t('skills.failedBadge')}</Badge>}
             </span>
             {skill.error ? (
               <Txt as="span" variant="caption" className="text-destructive-foreground whitespace-pre-wrap">
-                Agents cannot load this skill: {skill.error}
+                {t('skills.cannotLoad', { error: skill.error })}
               </Txt>
             ) : (
               <Txt tone="muted" as="span" variant="caption">
@@ -111,13 +127,14 @@ function SkillCards({ displayed, skills }: { displayed: DisplayedSkill[]; skills
 }
 
 function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
+  const { t } = useTranslation('settings');
   const roles = [...new Set(board.phases.flatMap(phase => (phase.role ? [phase.role] : [])))];
   return (
     <SettingsContainer>
       <div className="flex flex-col gap-2 px-4 py-3">
         {roles.length === 0 ? (
           <Txt tone="muted" as="p" variant="caption">
-            This board declares no working roles.
+            {t('skills.noRoles')}
           </Txt>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
@@ -131,8 +148,7 @@ function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
           </ul>
         )}
         <Txt tone="muted" as="p" variant="caption">
-          Kickoff instructions for this board are defined in code by its board definition; there is no skill to show
-          here.
+          {t('skills.kickoffNote')}
         </Txt>
       </div>
     </SettingsContainer>
@@ -140,8 +156,9 @@ function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
 }
 
 function BoardGroup({ board, skills }: { board: InstalledBoardInfo; skills: FactorySkillInfo[] }) {
+  const { t } = useTranslation('settings');
   return (
-    <section aria-label={`${board.title} board`} className="flex flex-col gap-2">
+    <section aria-label={t('skills.boardAria', { title: board.title })} className="flex flex-col gap-2">
       <Txt tone="ink" as="h4" variant="body" className="m-0">
         {board.title}
       </Txt>
@@ -155,6 +172,7 @@ function BoardGroup({ board, skills }: { board: InstalledBoardInfo; skills: Fact
 }
 
 export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
+  const { t } = useTranslation('settings');
   const skillsQuery = useFactorySkillsQuery();
   const catalog = useBoardCatalog(factoryId);
   const skills = skillsQuery.data ?? [];
@@ -163,29 +181,29 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
   return (
     <SettingsSubsection
       scope="deployment"
-      title="Factory skills"
-      description="The built-in playbooks Factory agents follow when working your items, shipped with the server and read-only. Expand a skill to read the exact instructions the agent receives."
+      title={t('skills.title')}
+      description={t('skills.description')}
     >
       {skillsQuery.isPending && (
         <Txt tone="muted" as="p" variant="caption" role="status">
-          Loading skills…
+          {t('skills.loading')}
         </Txt>
       )}
       {skillsQuery.error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
-          {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
+          {skillsQuery.error instanceof Error ? skillsQuery.error.message : t('skills.loadFailed')}
         </Txt>
       )}
       {catalog.error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
-          Installed boards could not be loaded; showing built-in skills ungrouped.
+          {t('skills.boardsLoadFailed')}
         </Txt>
       )}
       {boards === undefined ? (
         <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
       ) : boards.length === 0 ? (
         <Txt tone="muted" as="p" variant="caption">
-          No boards are installed, so no board skills apply.
+          {t('skills.noBoards')}
         </Txt>
       ) : (
         <div className="flex flex-col gap-5">

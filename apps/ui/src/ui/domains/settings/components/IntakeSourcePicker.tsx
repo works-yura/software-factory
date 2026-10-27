@@ -4,6 +4,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Fragment, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface SourcePickerItem {
   id: string;
@@ -43,6 +44,7 @@ export function SourcePicker({
   pending: boolean;
   onToggleItem: (id: string) => void;
 }) {
+  const { t } = useTranslation('settings');
   const [query, setQuery] = useState('');
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -64,14 +66,14 @@ export function SourcePicker({
     <>
       <div className="flex items-center gap-3 px-4 py-2">
         <div className="min-w-0 flex-1">
-          <ListSearch label={`Search ${label}`} placeholder="Search…" size="sm" value={query} onSearch={setQuery} />
+          <ListSearch label={t('intakeSource.search', { label })} placeholder={t('intakeSource.searchPlaceholder')} size="sm" value={query} onSearch={setQuery} />
         </div>
         {pending ? (
-          <Spinner size="sm" aria-label={`Saving ${label} selection`} />
+          <Spinner size="sm" aria-label={t('intakeSource.saving', { label })} />
         ) : (
           selectedCount > 0 && (
             <Txt tone="muted" as="span" variant="meta" className="shrink-0">
-              {selectedCount} selected
+              {t('intakeSource.selected', { count: selectedCount })}
             </Txt>
           )
         )}
@@ -81,7 +83,7 @@ export function SourcePicker({
         <div role="group" aria-label={label} className="flex flex-col gap-px p-2">
           {matchingGroups.length === 0 ? (
             <Txt tone="muted" as="p" variant="caption" className="px-2 py-2">
-              No matches
+              {t('intakeSource.noMatches')}
             </Txt>
           ) : (
             matchingGroups.map(group => (

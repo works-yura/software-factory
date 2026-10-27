@@ -7,6 +7,7 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { ChevronDown, GripVertical } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type {
   FactoryEnvironmentRepository,
@@ -108,6 +109,7 @@ function RepositoryRow({
   onToggle: (inEnvironment: boolean) => void;
   onCommands: (commands: { setupCommand?: string | null; teardownCommand?: string | null }) => Promise<unknown>;
 }) {
+  const { t } = useTranslation('settings');
   const label = repository.slug ?? '';
   const [expanded, setExpanded] = useState(false);
   const toggleExpanded = () => setExpanded(v => !v);
@@ -118,7 +120,11 @@ function RepositoryRow({
         role="button"
         tabIndex={0}
         aria-expanded={expanded}
-        aria-label={`${expanded ? 'Hide' : 'Show'} commands for ${label}`}
+        aria-label={
+          expanded
+            ? t('environment.repository.hideCommands', { name: label })
+            : t('environment.repository.showCommands', { name: label })
+        }
         className="hover:bg-surface3 flex cursor-pointer items-center gap-3 px-4 py-3"
         onClick={toggleExpanded}
         onKeyDown={event => {
@@ -135,7 +141,7 @@ function RepositoryRow({
               <span
                 {...dragHandleProps}
                 className="text-muted-foreground flex size-5 shrink-0 cursor-grab items-center justify-center"
-                aria-label={`Drag ${label}`}
+                aria-label={t('environment.repository.drag', { name: label })}
                 onClick={stop}
                 onPointerDown={event => {
                   stop(event);
@@ -149,7 +155,7 @@ function RepositoryRow({
             </Txt>
             <GripVertical className="hidden size-4 group-hover/row:block" aria-hidden />
           </TooltipTrigger>
-          <TooltipContent>Drag to reorder</TooltipContent>
+          <TooltipContent>{t('environment.repository.dragToReorder')}</TooltipContent>
         </Tooltip>
         <span className="min-w-0 flex-1">
           <Txt as="span" tone={repository.inEnvironment ? 'ink' : 'muted'} className="flex items-center gap-1.5">
@@ -163,25 +169,25 @@ function RepositoryRow({
         </span>
         {repository.lastBuildStatus === 'failed' && (
           <Badge size="sm" variant="destructive">
-            Last build failed
+            {t('environment.repository.lastBuildFailed')}
           </Badge>
         )}
         <span className="flex items-center gap-2" onClick={stop}>
           <Txt as="span" variant="caption" tone="muted">
-            {repository.inEnvironment ? 'Included' : 'Skipped'}
+            {repository.inEnvironment ? t('environment.repository.included') : t('environment.repository.skipped')}
           </Txt>
           <Tooltip disableHoverablePopup>
             <TooltipTrigger
               render={
                 <Switch
-                  aria-label={`Clone ${label} into every session`}
+                  aria-label={t('environment.repository.cloneInto', { name: label })}
                   checked={repository.inEnvironment}
                   disabled={disabled}
                   onCheckedChange={value => onToggle(value)}
                 />
               }
             />
-            <TooltipContent>Include in the environment</TooltipContent>
+            <TooltipContent>{t('environment.repository.includeTooltip')}</TooltipContent>
           </Tooltip>
         </span>
         <ChevronDown
@@ -196,23 +202,29 @@ function RepositoryRow({
       )}
       {expanded && (
         <>
-          <SettingsRow label="Setup" description="Runs in this checkout after it is cloned, before the agent starts.">
+          <SettingsRow
+            label={t('environment.repository.setup')}
+            description={t('environment.repository.setupDescription')}
+          >
             <div className="w-full lg:max-w-96">
               <CommittedInput
-                label={`Setup command for ${label}`}
+                label={t('environment.repository.setupAria', { name: label })}
                 value={repository.setupCommand ?? ''}
-                placeholder="e.g. pnpm i && pnpm build"
+                placeholder={t('environment.repository.setupPlaceholder')}
                 disabled={disabled}
                 onCommit={value => onCommands({ setupCommand: value || null })}
               />
             </div>
           </SettingsRow>
-          <SettingsRow label="Teardown" description="Runs when the session is retired, and again if setup fails.">
+          <SettingsRow
+            label={t('environment.repository.teardown')}
+            description={t('environment.repository.teardownDescription')}
+          >
             <div className="w-full lg:max-w-96">
               <CommittedInput
-                label={`Teardown command for ${label}`}
+                label={t('environment.repository.teardownAria', { name: label })}
                 value={repository.teardownCommand ?? ''}
-                placeholder="e.g. docker compose down"
+                placeholder={t('environment.repository.teardownPlaceholder')}
                 disabled={disabled}
                 onCommit={value => onCommands({ teardownCommand: value || null })}
               />

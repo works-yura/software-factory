@@ -8,6 +8,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
 import { useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export type SettingsScope = 'personal' | 'factory' | 'org' | 'deployment';
@@ -19,15 +20,17 @@ export type ScopeControl = {
   onChange: (scope: SettingsScope) => void;
 };
 
-const SCOPE_BADGE: Record<SettingsScope, { label: string; variant: BadgeVariant; icon: LucideIcon }> = {
-  personal: { label: 'Personal', variant: 'neutral', icon: CircleUserRound },
-  factory: { label: 'Factory-wide', variant: 'blue', icon: Building2 },
-  org: { label: 'Org-wide', variant: 'blue', icon: Users },
-  deployment: { label: 'Deployment-wide', variant: 'blue', icon: Server },
+const SCOPE_BADGE: Record<SettingsScope, { variant: BadgeVariant; icon: LucideIcon }> = {
+  personal: { variant: 'neutral', icon: CircleUserRound },
+  factory: { variant: 'blue', icon: Building2 },
+  org: { variant: 'blue', icon: Users },
+  deployment: { variant: 'blue', icon: Server },
 };
 
 export function ScopeBadge({ scope }: { scope: SettingsScope }) {
-  const { label, variant, icon: Icon } = SCOPE_BADGE[scope];
+  const { t } = useTranslation('settings');
+  const { variant, icon: Icon } = SCOPE_BADGE[scope];
+  const label = t(`scope.${scope}`);
   return (
     <Badge size="sm" variant={variant} icon={<Icon aria-hidden="true" />}>
       {label}
@@ -36,10 +39,11 @@ export function ScopeBadge({ scope }: { scope: SettingsScope }) {
 }
 
 export function ScopeSwitch({ value, options, disabledReasons, onChange }: ScopeControl) {
+  const { t } = useTranslation('settings');
   return (
     <div
       role="group"
-      aria-label="Who these settings apply to"
+      aria-label={t('scope.switchLabel')}
       className="border-border inline-flex items-center gap-0.5 rounded-[9px] border p-0.5"
     >
       {options.map(scope => (
@@ -66,7 +70,9 @@ function ScopeOption({
   disabledReason?: string;
   onPick: () => void;
 }) {
-  const { label, icon: Icon } = SCOPE_BADGE[scope];
+  const { t } = useTranslation('settings');
+  const { icon: Icon } = SCOPE_BADGE[scope];
+  const label = t(`scope.${scope}`);
   const disabled = disabledReason !== undefined;
   const button = (
     <button

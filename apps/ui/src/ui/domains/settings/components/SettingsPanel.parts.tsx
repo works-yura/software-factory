@@ -60,42 +60,43 @@ export function BehaviorSettings({
   permissions,
   setPermissionForCategory,
 }: BehaviorSettingsProps) {
+  const { t } = useTranslation('settings');
   const notificationMode = settings?.notifications ?? 'off';
   return (
     <div className="flex flex-col gap-8">
       <SettingsSubsection
         scope="factory"
-        title="General"
-        description="Shared by everyone working in this Factory. Auto-approve and smart editing reset when the server restarts."
+        title={t('behavior.general.title')}
+        description={t('behavior.general.description')}
       >
         <SettingsContainer>
-          <SettingsRow label="Auto-approve tools" description="Run tool calls without asking (YOLO)">
+          <SettingsRow label={t('behavior.autoApprove.label')} description={t('behavior.autoApprove.description')}>
             <Toggle
-              ariaLabel="Auto-approve tools"
+              ariaLabel={t('behavior.autoApprove.label')}
               checked={!!settings?.yolo}
               disabled={!settings}
               onChange={v => onBehaviorChange({ yolo: v })}
             />
           </SettingsRow>
-          <SettingsRow label="Smart editing" description="Use AST-aware edits when available">
+          <SettingsRow label={t('behavior.smartEditing.label')} description={t('behavior.smartEditing.description')}>
             <Toggle
-              ariaLabel="Smart editing"
+              ariaLabel={t('behavior.smartEditing.label')}
               checked={!!settings?.smartEditing}
               disabled={!settings}
               onChange={v => onBehaviorChange({ smartEditing: v })}
             />
           </SettingsRow>
-          <SettingsRow label="Notifications" description="How completion alerts are delivered">
+          <SettingsRow label={t('behavior.notifications.label')} description={t('behavior.notifications.description')}>
             <SegmentedControl
-              aria-label="Notifications"
+              aria-label={t('behavior.notifications.label')}
               value={notificationMode}
               disabled={!settings}
               onValueChange={v => onBehaviorChange({ notifications: v })}
             >
-              <SegmentedControlItem value="off">Off</SegmentedControlItem>
-              <SegmentedControlItem value="bell">Bell</SegmentedControlItem>
-              <SegmentedControlItem value="system">System</SegmentedControlItem>
-              <SegmentedControlItem value="both">Both</SegmentedControlItem>
+              <SegmentedControlItem value="off">{t('behavior.notifications.off')}</SegmentedControlItem>
+              <SegmentedControlItem value="bell">{t('behavior.notifications.bell')}</SegmentedControlItem>
+              <SegmentedControlItem value="system">{t('behavior.notifications.system')}</SegmentedControlItem>
+              <SegmentedControlItem value="both">{t('behavior.notifications.both')}</SegmentedControlItem>
             </SegmentedControl>
           </SettingsRow>
         </SettingsContainer>
@@ -105,28 +106,27 @@ export function BehaviorSettings({
   );
 }
 
-const TOOL_CATEGORIES: { value: ToolCategory; label: string; hint: string }[] = [
-  { value: 'read', label: 'Read', hint: 'View files and inspect the workspace' },
-  { value: 'edit', label: 'Edit', hint: 'Create, modify, or delete files' },
-  { value: 'execute', label: 'Execute', hint: 'Run shell commands' },
-  { value: 'mcp', label: 'MCP', hint: 'Call tools from MCP servers' },
-  { value: 'other', label: 'Other', hint: 'Anything not in the above categories' },
-];
+const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 function PermissionsSection({
   permissions,
   setPermissionForCategory,
 }: Pick<BehaviorSettingsProps, 'permissions' | 'setPermissionForCategory'>) {
+  const { t } = useTranslation('settings');
   return (
     <SettingsSubsection
       scope="factory"
-      title="Tool permissions"
-      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow. Shared by everyone working in this Factory, and reset when the server restarts."
+      title={t('behavior.permissions.title')}
+      description={t('behavior.permissions.description')}
     >
       <SettingsContainer>
-        {TOOL_CATEGORIES.map(({ value, label, hint }) => (
-          <SettingsRow key={value} label={label} description={hint}>
+        {TOOL_CATEGORIES.map(value => (
+          <SettingsRow
+            key={value}
+            label={t(`behavior.permissions.categories.${value}.label`)}
+            description={t(`behavior.permissions.categories.${value}.hint`)}
+          >
             <PermissionPolicyControl
-              category={label}
+              category={t(`behavior.permissions.categories.${value}.label`)}
               policy={permissions?.categories?.[value] ?? 'ask'}
               disabled={!permissions}
               onChange={policy => void setPermissionForCategory(value, policy)}
@@ -149,11 +149,17 @@ function PermissionPolicyControl({
   disabled: boolean;
   onChange: (policy: PermissionPolicy) => void;
 }) {
+  const { t } = useTranslation('settings');
   return (
-    <SegmentedControl aria-label={`${category} permission`} value={policy} disabled={disabled} onValueChange={onChange}>
-      <SegmentedControlItem value="allow">Allow</SegmentedControlItem>
-      <SegmentedControlItem value="ask">Ask</SegmentedControlItem>
-      <SegmentedControlItem value="deny">Deny</SegmentedControlItem>
+    <SegmentedControl
+      aria-label={t('behavior.permissions.controlLabel', { category })}
+      value={policy}
+      disabled={disabled}
+      onValueChange={onChange}
+    >
+      <SegmentedControlItem value="allow">{t('behavior.permissions.allow')}</SegmentedControlItem>
+      <SegmentedControlItem value="ask">{t('behavior.permissions.ask')}</SegmentedControlItem>
+      <SegmentedControlItem value="deny">{t('behavior.permissions.deny')}</SegmentedControlItem>
     </SegmentedControl>
   );
 }

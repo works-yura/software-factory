@@ -13,17 +13,19 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ProviderInfo } from '../../../../api/types';
 import { useOrgKeyAdminQuery, useSaveProviderKey } from '../../../../hooks/use-providers';
 import { providerDisplayName } from '@factory/credentials/provider-display-name';
+import { lazyLabels } from '../../../i18n/lazy';
 
 type KeyScope = 'user' | 'org';
 
-const SCOPED_KEY_ACCESS: Record<KeyScope, string> = {
-  org: 'Everyone in your organization can use this key.',
-  user: 'Only you can use this key. Shared organization access stays unchanged.',
-};
+const SCOPED_KEY_ACCESS: Readonly<Record<KeyScope, string>> = lazyLabels(
+  ['org', 'user'] as const,
+  scope => `settings:apiKey.access.${scope}`,
+);
 
 interface AddApiKeyDialogProps {
   provider: ProviderInfo;
@@ -47,6 +49,7 @@ export function AddApiKeyDialog({
   fixedScope,
   onClose,
 }: AddApiKeyDialogProps) {
+  const { t } = useTranslation('settings');
   const displayName = providerDisplayName(provider.provider);
   const saveKeyMutation = useSaveProviderKey();
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
@@ -84,19 +87,19 @@ export function AddApiKeyDialog({
     <Dialog open onOpenChange={open => !open && close()} pending={saveKeyMutation.isPending}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>API key for {displayName}</DialogTitle>
+          <DialogTitle>{t('apiKey.title', { name: displayName })}</DialogTitle>
           <DialogDescription>
-            The key is stored securely and never displayed again.
+            {t('apiKey.storedSecurely')}
             {fixedScope && ` ${SCOPED_KEY_ACCESS[fixedScope]}`}
-            {replacesSignIn && ' Saving replaces the provider sign-in at this scope.'}
+            {replacesSignIn && ` ${t('apiKey.replacesSignIn')}`}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
           <Input
             autoFocus
             type="password"
-            aria-label={`API key for ${displayName}`}
-            placeholder="Paste API key"
+            aria-label={t('apiKey.title', { name: displayName })}
+            placeholder={t('apiKey.placeholder')}
             value={keyDraft}
             disabled={saveKeyMutation.isPending}
             onChange={event => setKeyDraft(event.target.value)}
@@ -108,29 +111,28 @@ export function AddApiKeyDialog({
           {authEnabled && !fixedScope && (
             <div className="flex items-center justify-between gap-4">
               <Txt as="span" variant="caption" tone="muted">
-                Who can use this key
+                {t('apiKey.whoCanUse')}
               </Txt>
               <SegmentedControl
-                aria-label="API key access"
+                aria-label={t('apiKey.accessLabel')}
                 value={scope}
                 onValueChange={setChosenScope}
                 disabled={saveKeyMutation.isPending}
               >
-                <SegmentedControlItem value="user">Just me</SegmentedControlItem>
+                <SegmentedControlItem value="user">{t('apiKey.justMe')}</SegmentedControlItem>
                 <SegmentedControlItem
                   value="org"
                   disabled={!canWriteOrgKey}
-                  title={canWriteOrgKey ? undefined : 'Only org admins can share a key with everyone'}
+                  title={canWriteOrgKey ? undefined : t('apiKey.orgAdminsOnly')}
                 >
-                  Everyone in org
+                  {t('apiKey.everyoneInOrg')}
                 </SegmentedControlItem>
               </SegmentedControl>
             </div>
           )}
           {personalOnlyWarning && (
             <Txt as="p" variant="caption" tone="muted" role="note">
-              Only you will be able to use this key. Ask an org admin to add a shared {displayName} key so teammates can
-              use it too.
+              {t('apiKey.personalOnlyWarning', { name: displayName })}
             </Txt>
           )}
           {error && (
@@ -140,9 +142,9 @@ export function AddApiKeyDialog({
           )}
         </DialogBody>
         <DialogFooter>
-          <DialogCancel>Cancel</DialogCancel>
+          <DialogCancel>{t('apiKey.cancel')}</DialogCancel>
           <DialogAction disabled={!keyDraft.trim()} onConfirm={() => void saveKey()}>
-            {saveKeyMutation.isPending ? 'Saving…' : 'Save'}
+            {saveKeyMutation.isPending ? t('apiKey.saving') : t('apiKey.save')}
           </DialogAction>
         </DialogFooter>
       </DialogContent>

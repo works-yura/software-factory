@@ -5,6 +5,7 @@ import { SettingsFieldsetRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
@@ -32,6 +33,7 @@ export function IntakeSourceRouting({
   sources: { id: string; name: string }[];
   factories: { id: string; name: string }[];
 }) {
+  const { t } = useTranslation('settings');
   const bindingsQuery = useIntakeBindingsQuery();
   const saveBinding = useSaveIntakeBindingMutation();
   const [query, setQuery] = useState('');
@@ -47,8 +49,8 @@ export function IntakeSourceRouting({
     saveBinding.mutate(
       { integrationId, sourceId, factoryProjectId, board },
       {
-        onSuccess: () => toast.success(`${label} routing updated`),
-        onError: err => toast.error(err instanceof Error ? err.message : `Failed to save ${label} routing`),
+        onSuccess: () => toast.success(t('linearRouting.saved', { label })),
+        onError: err => toast.error(err instanceof Error ? err.message : t('linearRouting.saveFailed', { label })),
       },
     );
   };
@@ -59,8 +61,8 @@ export function IntakeSourceRouting({
         <div className="flex items-center gap-3 px-4 py-2">
           <div className="min-w-0 flex-1">
             <ListSearch
-              label={`Search ${label} routing`}
-              placeholder="Search…"
+              label={t('linearRouting.search', { label })}
+              placeholder={t('linearRouting.searchPlaceholder')}
               size="sm"
               value={query}
               onSearch={setQuery}
@@ -69,10 +71,10 @@ export function IntakeSourceRouting({
         </div>
       )}
       <ScrollArea orientation="vertical" maxHeight="20rem">
-        <div role="group" aria-label={`${label} routing`} className="flex flex-col">
+        <div role="group" aria-label={t('linearRouting.group', { label })} className="flex flex-col">
           {matchingSources.length === 0 ? (
             <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
-              No matches
+              {t('linearRouting.noMatches')}
             </Txt>
           ) : (
             matchingSources.map(({ sourceId, name }) => {
@@ -83,9 +85,9 @@ export function IntakeSourceRouting({
               const routedFactory = factories.find(candidate => candidate.id === binding?.factoryProjectId);
               const board = binding?.board ?? null;
               const description = !routedFactory
-                ? "Not routed — this source's issues won't be picked up."
+                ? t('linearRouting.notRoutedHint')
                 : board === null
-                  ? "Choose a board — this source's issues won't be picked up until one is set."
+                  ? t('linearRouting.chooseBoardHint')
                   : undefined;
               return (
                 <SettingsFieldsetRow key={sourceId} label={name} description={description}>
@@ -98,13 +100,13 @@ export function IntakeSourceRouting({
                         route(sourceId, next, next === routedFactory?.id ? board : null);
                       }}
                     >
-                      <SelectTrigger size="sm" aria-label={`Factory for ${name}`} className="w-auto">
+                      <SelectTrigger size="sm" aria-label={t('linearRouting.factoryFor', { name })} className="w-auto">
                         <Txt as="span" variant="caption">
-                          {routedFactory?.name ?? 'Not routed'}
+                          {routedFactory?.name ?? t('linearRouting.notRouted')}
                         </Txt>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={UNROUTED}>Not routed</SelectItem>
+                        <SelectItem value={UNROUTED}>{t('linearRouting.notRouted')}</SelectItem>
                         {factories.map(factory => (
                           <SelectItem key={factory.id} value={factory.id}>
                             {factory.name}
@@ -143,11 +145,12 @@ export function LinearRouting({
   teams: LinearTeam[];
   factories: { id: string; name: string }[];
 }) {
+  const { t } = useTranslation('settings');
   const teamBySourceId = new Map(teams.map(team => [linearTeamSourceId(team), team]));
   const labelFor = (sourceId: string): string => {
     if (isLinearTeamSourceId(sourceId)) {
       const team = teamBySourceId.get(sourceId);
-      return team ? `All issues in ${team.name}` : sourceId;
+      return team ? t('linearRouting.allIssuesIn', { team: team.name }) : sourceId;
     }
     return projects.find(project => project.id === sourceId)?.name ?? sourceId;
   };
@@ -176,24 +179,25 @@ function BoardPicker({
   disabled: boolean;
   onChange: (board: string | null) => void;
 }) {
+  const { t } = useTranslation('settings');
   const catalog = useBoardCatalog(factoryProjectId);
 
   const boards = (catalog.data ?? []).filter(candidate => candidate.id !== 'review');
   const current = boards.find(candidate => candidate.id === board);
-  const label = current?.title ?? (board ? `${board} (not installed)` : 'Choose a board');
+  const label = current?.title ?? (board ? t('linearRouting.notInstalled', { board }) : t('linearRouting.chooseBoard'));
   return (
     <Select
       value={current?.id ?? NO_BOARD}
       disabled={disabled || catalog.isPending}
       onValueChange={value => onChange(value === NO_BOARD ? null : value)}
     >
-      <SelectTrigger size="sm" aria-label={`Board for ${name}`} className="w-auto">
+      <SelectTrigger size="sm" aria-label={t('linearRouting.boardFor', { name })} className="w-auto">
         <Txt as="span" variant="caption">
           {label}
         </Txt>
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={NO_BOARD}>No board</SelectItem>
+        <SelectItem value={NO_BOARD}>{t('linearRouting.noBoard')}</SelectItem>
         {boards.map(candidate => (
           <SelectItem key={candidate.id} value={candidate.id}>
             {candidate.title}

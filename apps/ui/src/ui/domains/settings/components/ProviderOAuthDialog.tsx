@@ -15,6 +15,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { OAuthStartResponse } from '../../../../api/types';
 import { useCompleteProviderOAuth, usePollProviderOAuth } from '../../../../hooks/use-providers';
@@ -41,6 +42,7 @@ function openAuthorizationUrl(url: string) {
 }
 
 function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }: ProviderOAuthDialogProps) {
+  const { t } = useTranslation('settings');
   const displayName = providerDisplayName(provider);
   const completeMutation = useCompleteProviderOAuth();
   const [code, setCode] = useState('');
@@ -62,8 +64,8 @@ function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }
     <Dialog open onOpenChange={open => !open && close()} pending={completeMutation.isPending}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Sign in to {displayName}</DialogTitle>
-          <DialogDescription>{scopeNotice ?? 'Authorize your account and paste the returned code.'}</DialogDescription>
+          <DialogTitle>{t('oauth.title', { name: displayName })}</DialogTitle>
+          <DialogDescription>{scopeNotice ?? t('oauth.pasteCodeDescription')}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <Txt as="p" variant="caption" tone="muted">
@@ -71,12 +73,12 @@ function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }
           </Txt>
           <Button onClick={() => openAuthorizationUrl(session.url)}>
             <ExternalLink />
-            Open authorization page
+            {t('oauth.openPage')}
           </Button>
           <Input
             autoFocus
-            aria-label="Authorization code"
-            placeholder="Paste authorization code"
+            aria-label={t('oauth.code')}
+            placeholder={t('oauth.codePlaceholder')}
             value={code}
             disabled={completeMutation.isPending}
             onChange={event => setCode(event.target.value)}
@@ -91,9 +93,9 @@ function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }
           )}
         </DialogBody>
         <DialogFooter>
-          <DialogCancel>Cancel</DialogCancel>
+          <DialogCancel>{t('oauth.cancel')}</DialogCancel>
           <DialogAction disabled={!code.trim()} onConfirm={() => void complete()}>
-            {completeMutation.isPending ? 'Completing…' : 'Complete sign in'}
+            {completeMutation.isPending ? t('oauth.completing') : t('oauth.complete')}
           </DialogAction>
         </DialogFooter>
       </DialogContent>
@@ -102,6 +104,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }
 }
 
 function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice }: ProviderOAuthDialogProps) {
+  const { t } = useTranslation('settings');
   const displayName = providerDisplayName(provider);
   const pollMutation = usePollProviderOAuth();
   const { mutate: poll } = pollMutation;
@@ -144,9 +147,9 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
     <Dialog open onOpenChange={open => !open && close()}>
       <DialogContent>
         <DialogHeader className="items-center text-center">
-          <DialogTitle>Sign in to {displayName}</DialogTitle>
+          <DialogTitle>{t('oauth.title', { name: displayName })}</DialogTitle>
           <DialogDescription>
-            {scopeNotice ?? 'Enter the device code on the provider authorization page.'}
+            {scopeNotice ?? t('oauth.deviceCodeDescription')}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="items-center text-center">
@@ -160,12 +163,12 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
               >
                 {session.userCode}
               </Txt>
-              <CopyButton content={session.userCode} variant="ghost" size="icon-sm" tooltip="Copy code" />
+              <CopyButton content={session.userCode} variant="ghost" size="icon-sm" tooltip={t('oauth.copyCode')} />
             </div>
           )}
           <Button className="w-full" onClick={() => openAuthorizationUrl(session.url)}>
             <ExternalLink />
-            Open authorization page
+            {t('oauth.openPage')}
           </Button>
         </DialogBody>
         <DialogFooter>
@@ -182,11 +185,11 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
             <div className="text-muted-foreground mr-auto flex items-center gap-2" role="status">
               <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
               <Txt as="span" variant="caption">
-                Waiting for authorization…
+                {t('oauth.waiting')}
               </Txt>
             </div>
           )}
-          <DialogCancel disabled={pollMutation.isPending}>Cancel</DialogCancel>
+          <DialogCancel disabled={pollMutation.isPending}>{t('oauth.cancel')}</DialogCancel>
         </DialogFooter>
       </DialogContent>
     </Dialog>

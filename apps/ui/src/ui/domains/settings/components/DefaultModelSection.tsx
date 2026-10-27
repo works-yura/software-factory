@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   useApplyDefaultModel,
@@ -21,9 +22,10 @@ export function DefaultModelSection({
   modelsLoaded: boolean;
 }) {
   const defaultModelQuery = useDefaultModelQuery();
+  const { t } = useTranslation('settings');
 
   if (defaultModelQuery.isPending) {
-    return <SkeletonRows label="Loading default model" rows={1} rowClassName="h-9 w-full" />;
+    return <SkeletonRows label={t('models.default.loading')} rows={1} rowClassName="h-9 w-full" />;
   }
 
   if (defaultModelQuery.error) {
@@ -53,6 +55,7 @@ function DefaultModelEditor({
   modelsLoaded: boolean;
   defaultModelId: string | undefined;
 }) {
+  const { t } = useTranslation('settings');
   const setDefaultModel = useSetDefaultModel();
   const clearDefaultModel = useClearDefaultModel();
   const applyDefaultModel = useApplyDefaultModel();
@@ -93,12 +96,12 @@ function DefaultModelEditor({
   return (
     <div className="flex flex-col gap-3">
       <Field className="gap-1">
-        <FieldLabel>Default model</FieldLabel>
+        <FieldLabel>{t('models.default.label')}</FieldLabel>
         <ModelCombobox models={models} value={modelId} onValueChange={setModelId} disabled={busy} />
       </Field>
       {defaultUnavailable ? (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
-          None of your connected accounts can run {defaultModelId}. Choose another model or connect its provider.
+          {t('models.default.unavailable', { model: defaultModelId })}
         </Txt>
       ) : null}
       {error ? (
@@ -113,19 +116,21 @@ function DefaultModelEditor({
           disabled={busy || !modelId || modelId === defaultModelId}
           onClick={() => void save()}
         >
-          Save
+          {t('models.default.save')}
         </Button>
         <Button size="sm" disabled={busy || !defaultModelId} onClick={() => void clear()}>
-          Clear
+          {t('models.default.clear')}
         </Button>
         <Button size="sm" disabled={busy || !defaultModelId || modelId !== defaultModelId} onClick={() => void apply()}>
-          Apply to running sessions
+          {t('models.default.apply')}
         </Button>
       </div>
       {applyDefaultModel.data ? (
         <Txt as="p" variant="caption">
-          Updated {applyDefaultModel.data.applied.length} running session(s); skipped{' '}
-          {applyDefaultModel.data.skipped.length}.
+          {t('models.default.applied', {
+            count: applyDefaultModel.data.applied.length,
+            skipped: applyDefaultModel.data.skipped.length,
+          })}
         </Txt>
       ) : null}
     </div>

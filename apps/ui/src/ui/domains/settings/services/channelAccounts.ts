@@ -5,6 +5,10 @@
  * runs resolve their model credentials.
  */
 
+import { translator } from '../../../i18n/t';
+
+const tk = translator('settings');
+
 export interface ConnectedChannelAccount {
   platform: string;
   externalTeamId: string;
@@ -18,7 +22,7 @@ export interface ConnectedChannelAccount {
 }
 
 async function parseError(res: Response): Promise<Error> {
-  let message = `Request failed (${res.status})`;
+  let message = tk('channels.requestFailed', { status: res.status });
   try {
     const body = (await res.json()) as { error?: string; message?: string };
     if (body.message) message = body.message;

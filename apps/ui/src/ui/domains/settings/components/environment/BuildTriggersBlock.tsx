@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
@@ -6,6 +7,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
+import { translator } from '../../../../i18n/t';
 import type { FactoryEnvironmentBuildTriggers } from '../../../workspaces/services/environment';
 import { CommittedInput } from './CommittedInput';
 import type { SaveEnvironment } from './CommittedInput';
@@ -27,6 +29,7 @@ export function BuildTriggersRows({
   disabled: boolean;
   onSave: SaveEnvironment;
 }) {
+  const { t } = useTranslation('settings');
   const { schedule, push } = triggers;
   const saveCron = (cron: string) => onSave({ buildTriggers: { schedule: { enabled: true, cron } } });
 
@@ -37,19 +40,25 @@ export function BuildTriggersRows({
         disabled={disabled}
         onCommit={cron => (cron ? saveCron(cron) : onSave({ buildTriggers: { schedule: { enabled: false } } }))}
       />
-      <SettingsRow label="Rebuild on push" description="Rebuild after a push to a repository's default branch.">
+      <SettingsRow
+        label={t('environment.triggers.rebuildOnPush')}
+        description={t('environment.triggers.rebuildOnPushDescription')}
+      >
         <Switch
-          aria-label="Rebuild on push"
+          aria-label={t('environment.triggers.rebuildOnPush')}
           checked={push.enabled}
           disabled={disabled}
           onCheckedChange={enabled => void onSave({ buildTriggers: { push: { enabled } } })}
         />
       </SettingsRow>
       {push.enabled && (
-        <SettingsRow label="Push debounce" description="Minimum minutes between push-triggered builds, 0 to 1440.">
+        <SettingsRow
+          label={t('environment.triggers.pushDebounce')}
+          description={t('environment.triggers.pushDebounceDescription')}
+        >
           <div className="w-full lg:max-w-40">
             <CommittedInput
-              label="Push debounce in minutes"
+              label={t('environment.triggers.pushDebounceAria')}
               type="number"
               min={0}
               max={1440}
@@ -58,7 +67,7 @@ export function BuildTriggersRows({
               onCommit={raw => {
                 const debounceMinutes = Number(raw);
                 if (!Number.isInteger(debounceMinutes) || debounceMinutes < 0 || debounceMinutes > 1440) {
-                  toast.error('Enter a whole number between 0 and 1440');
+                  toast.error(t('environment.triggers.debounceRange'));
                   return Promise.reject(new Error('out of range'));
                 }
                 return onSave({ buildTriggers: { push: { debounceMinutes } } });
@@ -73,8 +82,12 @@ export function BuildTriggersRows({
 
 type Frequency = 'off' | 'daily' | 'weekly' | 'custom';
 
-const FREQUENCY_LABEL: Record<Frequency, string> = { off: 'Off', daily: 'Daily', weekly: 'Weekly', custom: 'Custom' };
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const tk = translator('settings');
+
+const FREQUENCIES: Frequency[] = ['off', 'daily', 'weekly', 'custom'];
+const frequencyLabel = (frequency: Frequency) => tk(`environment.triggers.frequency.${frequency}`);
+const DAYS = [0, 1, 2, 3, 4, 5, 6];
+const dayName = (day: number) => tk(`environment.triggers.days.${day}`);
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
 /** A cron the preset controls can express: on the hour, every day or one weekday. */
@@ -95,13 +108,17 @@ const pad = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
 function describe(frequency: Frequency, cron: string, hour: number, day: number, timezone: string) {
   switch (frequency) {
     case 'off':
-      return 'Rebuild on a schedule when a repository head moved.';
+      return tk('environment.triggers.scheduleOff');
     case 'daily':
-      return `Rebuilds daily at ${pad(hour)} ${timezone}, when a repository head moved.`;
+      return tk('environment.triggers.scheduleDaily', { time: pad(hour), timezone });
     case 'weekly':
-      return `Rebuilds every ${DAYS[day]} at ${pad(hour)} ${timezone}, when a repository head moved.`;
+      return tk('environment.triggers.scheduleWeekly', {
+        everyDay: tk(`environment.triggers.everyDay.${day}`),
+        time: pad(hour),
+        timezone,
+      });
     case 'custom':
-      return `Rebuilds on \`${cron}\` (${timezone}), when a repository head moved.`;
+      return tk('environment.triggers.scheduleCustom', { cron, timezone });
   }
 }
 
@@ -120,6 +137,7 @@ function ScheduleRows({
   disabled: boolean;
   onCommit: (cron: string) => Promise<unknown>;
 }) {
+  const { t } = useTranslation('settings');
   const cron = schedule.cron ?? DEFAULT_CRON;
   const timezone = schedule.timezone ?? 'UTC';
   const preset = parsePreset(cron);
@@ -146,7 +164,7 @@ function ScheduleRows({
 
   const hourSelect = (onPick: (hour: number) => void) => (
     <Select value={String(hour)} onValueChange={next => onPick(Number(next))} disabled={locked}>
-      <SelectTrigger size="sm" aria-label="Build time" className="w-auto">
+      <SelectTrigger size="sm" aria-label={t('environment.triggers.buildTime')} className="w-auto">
         {pad(hour)} {timezone}
       </SelectTrigger>
       <SelectContent>
@@ -162,21 +180,21 @@ function ScheduleRows({
   return (
     <div className="flex flex-col">
       <SettingsRow
-        label="Build schedule"
+        label={t('environment.triggers.buildSchedule')}
         description={
           schedule.scheduleAvailable
             ? describe(frequency, cron, hour, day, timezone)
-            : 'Needs a storage adapter with schedules. Build now and push builds still work.'
+            : t('environment.triggers.scheduleUnavailable')
         }
       >
         <Select value={frequency} onValueChange={next => pick(next)} disabled={locked}>
-          <SelectTrigger size="sm" aria-label="Build frequency" className="w-auto">
-            {FREQUENCY_LABEL[frequency]}
+          <SelectTrigger size="sm" aria-label={t('environment.triggers.buildFrequency')} className="w-auto">
+            {frequencyLabel(frequency)}
           </SelectTrigger>
           <SelectContent>
-            {(Object.keys(FREQUENCY_LABEL) as Frequency[]).map(value => (
+            {FREQUENCIES.map(value => (
               <SelectItem key={value} value={value}>
-                {FREQUENCY_LABEL[value]}
+                {frequencyLabel(value)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -187,7 +205,7 @@ function ScheduleRows({
           {frequency === 'daily' && (
             <>
               <Txt as="span" variant="caption" tone="muted">
-                Rebuild at
+                {t('environment.triggers.rebuildAt')}
               </Txt>
               {hourSelect(next => void onCommit(presetCron('daily', next, day)))}
             </>
@@ -195,26 +213,26 @@ function ScheduleRows({
           {frequency === 'weekly' && (
             <>
               <Txt as="span" variant="caption" tone="muted">
-                On
+                {t('environment.triggers.on')}
               </Txt>
               <Select
                 value={String(day)}
                 onValueChange={next => void onCommit(presetCron('weekly', hour, Number(next)))}
                 disabled={locked}
               >
-                <SelectTrigger size="sm" aria-label="Build day" className="w-auto">
-                  {DAYS[day]}
+                <SelectTrigger size="sm" aria-label={t('environment.triggers.buildDay')} className="w-auto">
+                  {dayName(day)}
                 </SelectTrigger>
                 <SelectContent>
-                  {DAYS.map((name, index) => (
-                    <SelectItem key={name} value={String(index)}>
-                      {name}
+                  {DAYS.map(index => (
+                    <SelectItem key={index} value={String(index)}>
+                      {dayName(index)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <Txt as="span" variant="caption" tone="muted">
-                at
+                {t('environment.triggers.at')}
               </Txt>
               {hourSelect(next => void onCommit(presetCron('weekly', next, day)))}
             </>
@@ -222,17 +240,17 @@ function ScheduleRows({
           {frequency === 'custom' && (
             <>
               <Txt as="span" variant="caption" tone="muted">
-                Cron
+                {t('environment.triggers.cron')}
               </Txt>
               <span className="w-48">
                 <CommittedInput
-                  label="Build schedule cron"
+                  label={t('environment.triggers.cronAria')}
                   value={cron}
                   placeholder={DEFAULT_CRON}
                   disabled={locked}
                   onCommit={next => {
                     if (!next) {
-                      toast.error('Enter a cron expression');
+                      toast.error(t('environment.triggers.enterCron'));
                       return Promise.reject(new Error('cron is required'));
                     }
                     return onCommit(next);

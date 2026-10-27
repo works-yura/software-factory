@@ -1,4 +1,5 @@
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { useTranslation } from 'react-i18next';
 
 import { usePersonalAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
@@ -12,6 +13,7 @@ export function PersonalModelsSettings() {
   // Personal defaults run only in user-scope Factories, on the caller's own credentials.
   const modelsQuery = usePersonalAvailableModelsQuery();
   const models = modelsQuery.data ?? [];
+  const { t } = useTranslation('settings');
 
   return (
     <div className="flex flex-col gap-8">
@@ -20,8 +22,8 @@ export function PersonalModelsSettings() {
         <SettingsSubsection
           scope="personal"
           id="default-model"
-          title="Your defaults"
-          description="The model new chats start on."
+          title={t('models.personal.title')}
+          description={t('models.personal.description')}
         >
           <SettingsContainer>
             <div className="p-4">
@@ -32,7 +34,7 @@ export function PersonalModelsSettings() {
       )}
       <ProviderAccessSection
         fixedScope="user"
-        description="Connect your own provider account for interactive chats. Organization credentials are managed in Factory settings."
+        description={t('models.personal.providersDescription')}
       />
     </div>
   );

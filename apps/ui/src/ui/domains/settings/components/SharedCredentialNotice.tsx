@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useProvidersQuery } from '../../../../hooks/use-providers';
@@ -12,6 +13,7 @@ import { providerDisplayName } from '@factory/credentials/provider-display-name'
  * manage keys separately).
  */
 export function SharedCredentialNotice({ modelId }: { modelId?: string }) {
+  const { t } = useTranslation('settings');
   const authQuery = useFactoryAuth();
   const providersQuery = useProvidersQuery();
 
@@ -25,8 +27,7 @@ export function SharedCredentialNotice({ modelId }: { modelId?: string }) {
 
   return (
     <Txt tone="muted" as="p" variant="caption" className="m-0" role="note">
-      Personal {providerDisplayName(provider.provider)} credential — teammates without their own can&apos;t run this
-      model.
+      {t('credentials.personalOnly', { name: providerDisplayName(provider.provider) })}
     </Txt>
   );
 }

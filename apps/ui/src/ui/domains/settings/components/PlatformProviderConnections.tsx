@@ -14,6 +14,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
 
 import {
@@ -22,9 +23,12 @@ import {
 } from '../../../../hooks/usePlatformConnections';
 import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('settings');
 
 function connectionName(connection: PlatformProviderConnection): string {
-  return connection.displayName?.trim() || connection.accountLabel?.trim() || 'Connected account';
+  return connection.displayName?.trim() || connection.accountLabel?.trim() || tk('connectedAccounts.fallbackName');
 }
 
 interface ApiKeyDialogProps {
@@ -36,6 +40,7 @@ interface ApiKeyDialogProps {
 }
 
 function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDialogProps) {
+  const { t } = useTranslation('settings');
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const [apiKey, setApiKey] = useState('');
   return (
@@ -44,23 +49,22 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            Paste an API key from your {meta.displayName} dashboard. The key is stored by Mastra Platform and never
-            reaches the browser again.
+            {t('connectedAccounts.apiKeyDescription', { name: meta.displayName })}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
           <Input
-            aria-label={`${meta.displayName} API key`}
+            aria-label={t('connectedAccounts.apiKeyLabel', { name: meta.displayName })}
             type="password"
-            placeholder="Paste your API key"
+            placeholder={t('connectedAccounts.apiKeyPlaceholder')}
             value={apiKey}
             onChange={event => setApiKey(event.target.value)}
           />
         </DialogBody>
         <DialogFooter>
-          <DialogCancel>Cancel</DialogCancel>
+          <DialogCancel>{t('connectedAccounts.cancel')}</DialogCancel>
           <DialogAction disabled={!apiKey.trim()} onConfirm={() => onSubmit(apiKey.trim())}>
-            {pending ? 'Connecting…' : 'Connect'}
+            {pending ? t('connectedAccounts.connecting') : t('connectedAccounts.connect')}
           </DialogAction>
         </DialogFooter>
       </DialogContent>
@@ -100,6 +104,7 @@ export function ProviderConnectControl({
   className,
   onCompleted,
 }: ProviderConnectControlProps) {
+  const { t } = useTranslation('settings');
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const connectMutation = useConnectPlatformProviderMutation(provider);
   const reconnectMutation = useReconnectPlatformProviderMutation(provider);
@@ -116,13 +121,13 @@ export function ProviderConnectControl({
         : await connectMutation.mutateAsync({ ...(credentials ? { credentials } : {}) });
       setCollectingApiKey(false);
       if (connection) {
-        toast.success(`${meta.displayName} connected`);
+        toast.success(t('connectedAccounts.connected', { name: meta.displayName }));
       } else {
-        toast.success(`${meta.displayName} authorization completed — the connection is activating`);
+        toast.success(t('connectedAccounts.activating', { name: meta.displayName }));
       }
       onCompleted?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Failed to connect ${meta.displayName}`);
+      toast.error(err instanceof Error ? err.message : t('connectedAccounts.connectFailed', { name: meta.displayName }));
     }
   };
 
@@ -137,7 +142,7 @@ export function ProviderConnectControl({
         aria-label={buttonLabel && !pending ? label : undefined}
         onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
       >
-        {pending ? 'Connecting…' : (buttonLabel ?? label)}
+        {pending ? t('connectedAccounts.connecting') : (buttonLabel ?? label)}
       </Button>
       {collectingApiKey && (
         <ApiKeyDialog
@@ -163,6 +168,7 @@ export interface ProviderConnectionsListProps {
  * provider rejected surface it prominently.
  */
 export function ProviderConnectionsList({ provider, connections }: ProviderConnectionsListProps) {
+  const { t } = useTranslation('settings');
   if (connections.length === 0) return null;
   return (
     <ul className="flex flex-col">
@@ -174,14 +180,14 @@ export function ProviderConnectionsList({ provider, connections }: ProviderConne
             </Txt>
             {connection.status === 'needs_reauth' && (
               <Txt as="span" variant="meta" className="text-destructive-foreground">
-                Needs reauthorization
+                {t('connectedAccounts.needsReauth')}
               </Txt>
             )}
           </span>
           <ProviderConnectControl
             provider={provider}
             reconnectConnectionId={connection.id}
-            label="Reconnect"
+            label={t('connectedAccounts.reconnect')}
             size="sm"
             variant={connection.status === 'needs_reauth' ? 'default' : 'ghost'}
           />
