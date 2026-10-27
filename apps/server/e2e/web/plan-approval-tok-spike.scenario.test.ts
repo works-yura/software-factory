@@ -20,7 +20,7 @@ import { runScenario } from './scenario-runner';
  * logic and proves the spike occurs from real SSE events.
  */
 describe('web scenario: plan-approval-tok-spike', () => {
-  // eclipt: stale upstream (not in its CI) — tok/s state moved to runtime.ts; web side reads NaN.
+  // Stale upstream (not in its CI) — tok/s state moved to runtime.ts; web side reads NaN.
   it.skip('TUI tok/s logic produces anomalous spike on plan approval resume', async () => {
     await runScenario({
       name: 'plan-approval-tok-spike',

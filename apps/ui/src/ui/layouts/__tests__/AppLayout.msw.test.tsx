@@ -116,7 +116,7 @@ describe('AppLayout', () => {
       `/factories/${FACTORY_ID}/activity`,
     );
     const nav = within(sidebar).getByRole('navigation', { name: 'Factory' });
-    // eclipt: Supervisor is restored from @mastra/factory 0.23.
+    // Supervisor is restored from @mastra/factory 0.23.
     expect(within(nav).getByRole('link', { name: 'Supervisor' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/supervisor`,

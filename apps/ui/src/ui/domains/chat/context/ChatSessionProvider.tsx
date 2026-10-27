@@ -64,7 +64,7 @@ export function ChatSessionConfigProvider({
     return (
       <ChatSessionContext.Provider
         value={{
-          // eclipt: 0.24 addresses sessions by id; the supervisor id doubles as its resource.
+          // 0.24 addresses sessions by id; the supervisor id doubles as its resource.
           sessionId: supervisor.threadId,
           resourceId: supervisor.resourceId,
           sessionEnabled: true,

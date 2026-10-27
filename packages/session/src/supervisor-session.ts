@@ -41,7 +41,7 @@ export function parseSupervisorResourceId(resourceId: string | undefined | null)
 }
 
 /**
- * eclipt: since @mastra/factory 0.24 sessions are addressed by their own id
+ * Since @mastra/factory 0.24 sessions are addressed by their own id
  * under the factory resource, so a supervisor may arrive with its marker on
  * either the session id or the resource id.
  */

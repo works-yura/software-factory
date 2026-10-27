@@ -1010,7 +1010,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (observation === undefined && reflection === undefined) {
             return c.json({ error: 'Provide observationThreshold and/or reflectionThreshold (positive numbers)' }, 400);
           }
-          // eclipt: observation keeps an absolute 2000-token buffer, and a threshold at or below it
+          // Observation keeps an absolute 2000-token buffer, and a threshold at or below it
           // makes every turn throw outside a request handler, which takes the whole server down.
           if (observation !== undefined && observation <= MIN_OBSERVATION_BUFFER_TOKENS) {
             return c.json(

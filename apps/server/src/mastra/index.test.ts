@@ -99,7 +99,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(factoryConfigVersion).toBe('mastracode-web-v1');
     expect(factoryConfigs[0]?.configVersion).toBe(factoryConfigVersion);
     expect(factoryConfigs[0]).not.toHaveProperty('rules');
-    // eclipt: the Acceptance board sits next to the built-in Work and Review boards.
+    // The Acceptance board sits next to the built-in Work and Review boards.
     expect(factoryConfigs[0]?.boards?.map(board => board.id)).toEqual(['acceptance']);
     expect(factoryConfigs[0]?.includeDefaultBoards).toBeUndefined();
   });

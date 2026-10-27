@@ -1,6 +1,7 @@
 /**
- * Eclipt additions to the Factory host. Keep fork-specific behavior here so
- * upstream `index.ts` only carries a few marked hook points (`eclipt:`).
+ * Local-development pieces of the Factory host: loopback-only sign-in, a stable
+ * credential key under ~/.mastracode, and a libSQL vector store when there is
+ * no Postgres.
  */
 export { createLocalDevAuth } from './local-dev-auth';
 export { localDevCredentialKey } from './local-dev-key';

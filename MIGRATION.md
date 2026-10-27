@@ -39,7 +39,7 @@
 
 | v3 | v4 | Шви |
 | --- | --- | --- |
-| `apps/server` | `apps/server` (`@factory/app-server`) | імпорти на `@factory/server` і пакети інтеграцій; Linear, Jira, incident.io, Slack прибрано з проводки й тестів хоста (`index.test` −14); дошка Acceptance — з `@factory/pipelines`; скрипти через `corepack`; база `eclipt-v4`; скіли з `harness-mastra/factory-skills` |
+| `apps/server` | `apps/server` (`@factory/app-server`) | імпорти на `@factory/server` і пакети інтеграцій; Linear, Jira, incident.io, Slack прибрано з проводки й тестів хоста (`index.test` −14); дошка Acceptance — з `@factory/pipelines`; скрипти через `corepack`; база `factory-v4`; скіли з `harness-mastra/factory-skills` |
 | `apps/ui` | `apps/ui` (`@factory/app-ui`) | глибокі імпорти `@eclipt/factory/*` → підшляхи пакетів (`./*` у `exports`); TypeScript 6 з каталогу `ts6` (конфіг Vite бере JS API TypeScript); `allowImportingTsExtensions`; тести з `--retry=2` |
 
 - `pipelines`: повернуто `WorkItemBranchSource` (= `WorkItemSource | 'slack-thread'`), бо UI показує картки з тредів Slack; перше злиття типів цю гілку загубило.

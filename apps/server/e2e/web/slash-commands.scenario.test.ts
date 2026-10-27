@@ -34,7 +34,7 @@ describe('slash commands (reducer-level)', () => {
     }
   });
 
-  // eclipt: stale upstream (not in its CI) — token usage moved from the transcript reducer to runtime.ts.
+  // Stale upstream (not in its CI) — token usage moved from the transcript reducer to runtime.ts.
   it.skip('/cost produces a notice with token usage', () => {
     // Simulate a usage_update event followed by a /cost notice.
     let state = transcriptReducer(initialTranscript, {

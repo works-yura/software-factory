@@ -132,7 +132,7 @@ export function createSessionAccessGuard({
 }): MiddlewareHandler {
   const canReachResource = async (resourceId: string, viewer: Viewer): Promise<boolean> => {
     if (resourceId === viewer.userId) return true;
-    // eclipt: the restored supervisor runs on `factory-supervisor:<projectId>`, reachable by the project's org.
+    // The restored supervisor runs on `factory-supervisor:<projectId>`, reachable by the project's org.
     const supervisorProjectId = parseSupervisorResourceId(resourceId);
     if (supervisorProjectId) {
       return viewer.orgId ? (await projects.get({ orgId: viewer.orgId, id: supervisorProjectId })) !== null : false;

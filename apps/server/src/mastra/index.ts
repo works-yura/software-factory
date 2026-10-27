@@ -33,8 +33,8 @@ import { GithubIntegration, parseAuthorizedBotsEnv } from '@factory/integration-
 import { GitLabIntegration } from '@factory/integration-gitlab';
 import { acceptanceBoard } from '@factory/pipelines';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-// eclipt: fork-specific boards, auth, and credential key.
-import { createLocalDevAuth, createLocalVector, localDevAuthEnabled, localDevCredentialKey } from './eclipt';
+// Local development: loopback sign-in, credential key, and vector store.
+import { createLocalDevAuth, createLocalVector, localDevAuthEnabled, localDevCredentialKey } from './local';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -60,7 +60,7 @@ function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer
 const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
 
 function credentialEncryption() {
-  // eclipt: local dev mode keeps a stable key in ~/.mastracode.
+  // Local dev mode keeps a stable key in ~/.mastracode.
   const encodedKey =
     process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim() || (localDevAuthEnabled ? localDevCredentialKey() : undefined);
   if (!encodedKey) {
@@ -152,7 +152,7 @@ const workosConfigured = Boolean(process.env.WORKOS_API_KEY?.trim() && process.e
 let auth: IMastraAuthProvider | null | undefined;
 
 if (localDevAuthEnabled) {
-  // eclipt: loopback-only single-user identity, checked before every other option.
+  // Loopback-only single-user identity, checked before every other option.
   auth = createLocalDevAuth();
 } else if (authDisabled) {
   auth = null;
@@ -281,7 +281,7 @@ const storage = databaseUrl
       url: `file:${getDatabasePath()}`,
       retention: DEFAULT_RETENTION,
     });
-// eclipt: without Postgres, keep semantic recall and Knowledge on a local libSQL vector file.
+// Without Postgres, keep semantic recall and Knowledge on a local libSQL vector file.
 const vector = databaseUrl
   ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl })
   : createLocalVector();
@@ -332,7 +332,7 @@ export const factory = new MastraFactory({
   secretEncryption,
   integrations,
   configVersion: factoryConfigVersion,
-  // eclipt: manual Acceptance board next to built-in Work and Review.
+  // Manual Acceptance board next to built-in Work and Review.
   boards: [acceptanceBoard],
   // Providers every signed-in account may run on this server's own credentials,
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
@@ -385,7 +385,7 @@ export const mastra = new Mastra({
   pubsub: preparedArgs.pubsub,
   workers: preparedArgs.workers,
   workflows: preparedArgs.workflows,
-  // eclipt: local dev auth trusts loopback only, so bind the server there too.
+  // Local dev auth trusts loopback only, so bind the server there too.
   ...(localDevAuthEnabled ? { server: { ...preparedArgs.server, host: '127.0.0.1' } } : {}),
 });
 

@@ -24,7 +24,7 @@ export default defineConfig({
           // + AgentController + Hono server, and concurrent runs can cause
           // port/state collisions in the shared process.
           fileParallelism: false,
-          // eclipt: scenarios import factory-ui sources, which pull in
+          // Scenarios import factory-ui sources, which pull in
           // playground-ui's dist with bare `.css` imports Node cannot load.
           server: { deps: { inline: [/@mastra\/playground-ui/] } },
         },

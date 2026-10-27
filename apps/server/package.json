@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
-    "dev:local": "corepack pnpm sync:skills && rm -rf .mastra/output && mkdir -p $HOME/.mastracode/eclipt-v4 && NODE_ENV=development HOST=127.0.0.1 FACTORY_LOCAL_DEV_AUTH=1 MASTRA_DB_PATH=${MASTRA_DB_PATH:-$HOME/.mastracode/eclipt-v4/mastra.db} MASTRACODE_UI_DIST=$PWD/../ui/dist PORT=${PORT:-5874} MASTRACODE_PUBLIC_URL=${MASTRACODE_PUBLIC_URL:-http://localhost:5874} varlock run -- mastra factory dev --dir src/mastra",
+    "dev:local": "corepack pnpm sync:skills && rm -rf .mastra/output && mkdir -p $HOME/.mastracode/factory-v4 && NODE_ENV=development HOST=127.0.0.1 FACTORY_LOCAL_DEV_AUTH=1 MASTRA_DB_PATH=${MASTRA_DB_PATH:-$HOME/.mastracode/factory-v4/mastra.db} MASTRACODE_UI_DIST=$PWD/../ui/dist PORT=${PORT:-5874} MASTRACODE_PUBLIC_URL=${MASTRACODE_PUBLIC_URL:-http://localhost:5874} varlock run -- mastra factory dev --dir src/mastra",
     "dev:platform": "corepack pnpm sync:skills && rm -rf .mastra/output && MASTRACODE_UI_DIST=$PWD/../ui/dist varlock run -- mastra factory dev --dir src/mastra",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",

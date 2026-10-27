@@ -11,7 +11,7 @@ export function localDevCredentialKey(): string {
   const directory = join(homedir(), '.mastracode');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);
-  const path = join(directory, 'eclipt-factory-local-dev-key');
+  const path = join(directory, 'factory-local-dev-key');
   try {
     writeFileSync(path, randomBytes(32).toString('base64'), { flag: 'wx', mode: 0o600 });
   } catch (error) {

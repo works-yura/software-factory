@@ -8,7 +8,7 @@ import { runScenario } from './scenario-runner';
  * controller can serve a chat.
  */
 describe('web scenario: workspace-status', () => {
-  // eclipt: stale upstream (not in its CI) — the scenario server never initializes its Workspace, so isReady stays false.
+  // Stale upstream (not in its CI) — the scenario server never initializes its Workspace, so isReady stays false.
   it.skip('reports workspace as ready when configured', async () => {
     await runScenario({
       name: 'workspace-status',

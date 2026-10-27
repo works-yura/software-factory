@@ -553,7 +553,7 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    // eclipt: the restored supervisor hydration listener is registered first.
+    // The restored supervisor hydration listener is registered first.
     expect(blockingCalls).toHaveLength(4);
     const blockingCall = blockingCalls[1];
 
@@ -2314,7 +2314,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    // eclipt: the restored supervisor health worker runs next to integration workers.
+    // The restored supervisor health worker runs next to integration workers.
     expect(args.workers).toHaveLength(2);
     expect(args.workers).toContainEqual(worker);
     // The workers factory gets the same integration context shape as routes().
@@ -2359,7 +2359,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    // eclipt: only the restored supervisor health worker remains.
+    // Only the restored supervisor health worker remains.
     expect(args.workers).toHaveLength(1);
   });
 
