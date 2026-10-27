@@ -16,8 +16,7 @@ const bob: FactoryActorRef = { kind: 'user', id: 'user-bob', displayName: 'Bob' 
 const carol: FactoryActorRef = { kind: 'user', id: 'user-carol', displayName: 'Carol' };
 
 async function seedItem(seed: FactoryStorageTestSeed, { createdBy = 'user-owner' } = {}) {
-  // v3 created a projects-domain row here only for its id; cards do not reference that table.
-  const project = { id: 'project-acme' };
+  const project = await seed.projects.create({ orgId: ORG, userId: createdBy, input: { name: 'Acme' } });
   const { item } = await seed.workItems.upsert({
     orgId: ORG,
     userId: createdBy,

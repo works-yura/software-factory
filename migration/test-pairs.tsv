@@ -25,3 +25,16 @@ rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts
 rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts
 session/run-audit.test.ts	runtime/src/run-audit.test.ts
 skills/service.test.ts	runtime/src/skills/service.test.ts
+storage/domains/channel-identity/base.test.ts	store/src/channel-identity/base.test.ts
+storage/domains/credentials/base.test.ts	store/src/credentials/base.test.ts
+storage/domains/custom-providers/base.test.ts	store/src/custom-providers/base.test.ts
+storage/domains/filesystem/base.test.ts	store/src/filesystem/base.test.ts
+storage/domains/intake/base.test.ts	store/src/intake/base.test.ts
+storage/domains/integrations/base.test.ts	store/src/integrations/base.test.ts
+storage/domains/memory-settings/base.test.ts	store/src/memory-settings/base.test.ts
+storage/domains/model-defaults/base.test.ts	store/src/model-defaults/base.test.ts
+storage/domains/projects/base.test.ts	store/src/projects/base.test.ts
+storage/domains/projects/model-scope.test.ts	store/src/projects/model-scope.test.ts
+storage/domains/queue-health/base.test.ts	store/src/queue-health/base.test.ts
+secret-encryption.test.ts	store/src/secret-encryption.test.ts
+storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts

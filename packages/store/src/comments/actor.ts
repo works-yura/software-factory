@@ -12,6 +12,7 @@
  *   display snapshot captured at write time.
  */
 
+import type { ChannelAccountLink } from '../channel-identity/base.ts';
 
 export type FactoryActorKind = 'user' | 'agent' | 'integration';
 
@@ -72,7 +73,7 @@ export function actorFromAgentBinding(bindingId: string, displayName?: string): 
  */
 export function actorFromChannelAuthor(
   external: FactoryActorExternalIdentity,
-  link?: { userId: string } | null,
+  link?: Pick<ChannelAccountLink, 'userId'> | null,
 ): FactoryActorRef {
   const displayName = external.fullName?.trim() || external.userName?.trim();
   return {

@@ -14,6 +14,8 @@
 | `storage/domains/audit/{base,actions,actors}.ts` | `store/src/audit` |
 | `storage/domains/comments/{base,activity,actor,feed-context,schema}.ts` | `store/src/comments` |
 | `rules/dispatch-errors.ts` | `store/src/dispatch-errors.ts` |
+| `storage/domains/{projects,intake,credentials,source-control,integrations,model-defaults,memory-settings,custom-providers,channel-identity,queue-health,filesystem}` | `store/src/<domain>` |
+| `secret-encryption.ts`, `storage/test-utils.ts` | `store/src/secret-encryption.ts`, `store/src/testing.ts` |
 | `rules/{transition-service,dispatcher,decision-applicability,terminal-cleanup}.ts` | `runtime/src` |
 | `session/run-audit.ts`, `skills/service.ts`, `routes/attention-providers.ts` | `runtime/src` |
 
@@ -32,7 +34,6 @@
 | `runtime/src/skills/rescan.ts` | дві речі з `workspace.ts` | `workspace.ts` тягне GitHub і пісочниці; синхронізація з резолвером переїде в харнес |
 | `runtime/src/run-end-report.ts` | лише типи звіту | доставка звіту йде через нотифікації Mastra, переїде в харнес |
 | `store/src/supervisor-finding.ts` | копія типу знахідки | `WorkItemsStorage` зберігає знахідки; Supervisor ще не перенесено |
-| `store/src/comments/actor.ts` | `{ userId }` замість `Pick<ChannelAccountLink>` | домен channel-identity ще не перенесено |
 | класи помилок | поля замість параметрів-властивостей | `erasableSyntaxOnly`, щоб Node запускав `.ts` напряму |
 
 ## Борг тестів v3, знайдений тайпчеком
@@ -41,6 +42,8 @@
 
 - `dispatcher.test.ts`: `failDeferredDecision` з `error` замість `lastError`, без `now` і `failureCode`; моки `reportRunEnd` без результату; `DecisionAttentionProvider` без `boards`; `counts` без `userId`.
 - `transition-service.test.ts`, `terminal-cleanup.test.ts`, `run-audit.test.ts`, `comments/base.test.ts`, `work-items/base.test.ts`: неточні типи фікстур.
+- `source-control/base.test.ts`: створення сесій без `factoryProjectId`, який тип вимагає. Реалізація це допускає (сховище бере проєкт зі з'єднання), тому фікстури йдуть через `fixtureSession`, а тип для продакшн-викликів лишився обов'язковим.
+- `integrations/base.test.ts`, `credentials/base.test.ts`: тип даних підписки і мок `decrypt`.
 - `pipelines` тести: `'issue'` замість `'github-issue'`, `id` замість `bindingId` в актора.
 
 ## Далі
