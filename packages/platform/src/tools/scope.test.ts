@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createSourceControlSessionLookup } from '../session/factory-session.ts';
 import type { SourceControlSessionVisibility } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { FACTORY_INTERACTIVE_KEY, FACTORY_SLACK_SENDER_KEY, resolveFactoryToolScope } from './scope.ts';
 import type { FactoryToolScope } from './scope.ts';
 import { createFactoryTools } from './index.ts';

@@ -4,7 +4,7 @@
  */
 
 import type { BoardRegistry } from '@factory/core';
-import { factoryDecisionType } from '../routes/attention.ts';
+import { factoryDecisionType } from '@factory/runtime';
 import { decisionRetryable, overtakenDecisionIds } from '@factory/runtime';
 import type { FactoryDeferredDecisionRecord, WorkItemsStorage } from '@factory/store';
 import type { FactoryAuditEmit } from './create-work-item.ts';

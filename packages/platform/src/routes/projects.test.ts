@@ -8,8 +8,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { EnvironmentBuildRunner } from '../environment/build-runner.ts';
 import { scheduleIdFor } from '../environment/build-schedule.ts';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '../environment/build-workflow.ts';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import type { FactoryStorageTestSeed } from '@factory/testing';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { ProjectRoutes } from './projects.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 

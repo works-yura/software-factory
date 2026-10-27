@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import type { PullRequest, VersionControl } from '@factory/capabilities';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '@factory/store';
-import { createFactoryStorageForTests } from '../../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import type { IntegrationContext } from '../base.ts';
 import { resolveGitLabRules } from './default-rules.ts';
 import { encodeSourceId } from './integration.ts';

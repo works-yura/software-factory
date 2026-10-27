@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { defineBoard, workItemPhaseSemantics } from '@factory/core';
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { createTestBoard } from '@factory/pipelines/testing';
 import { NEEDS_APPROVAL_LABEL } from '@factory/core';
 import type {
@@ -10,7 +10,7 @@ import type {
   FactoryRunBindingRecord,
   WorkItemRow,
 } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { computeFactoryHealth, DEFAULT_HEALTH_THRESHOLDS, runFactoryHealthCheck } from './health.ts';
 
 const NOW = new Date('2026-09-03T12:00:00.000Z');

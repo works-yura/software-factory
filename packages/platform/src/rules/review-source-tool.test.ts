@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 
 import type { WorkItemsStorage } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './review-source-tool.ts';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';

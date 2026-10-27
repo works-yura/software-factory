@@ -14,11 +14,16 @@ import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.ts';
 import type { ModelDefaultsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
-import type { SupervisorScope } from './read-tools.ts';
 
 const RESOURCE_PREFIX = 'factory-supervisor:';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
+
+/** The project a Supervisor session works in. */
+export interface SupervisorScope {
+  orgId: string;
+  factoryProjectId: string;
+}
 
 export function supervisorResourceId(factoryProjectId: string): string {
   return `${RESOURCE_PREFIX}${factoryProjectId}`;

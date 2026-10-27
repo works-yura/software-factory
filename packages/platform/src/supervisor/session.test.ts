@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import {
   hydrateSupervisorSession,
   parseSupervisorResourceId,

@@ -2,11 +2,11 @@ import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { defineBoard } from '@factory/core';
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import type { Intake } from '@factory/capabilities';
 import type { AuditEmitter } from '@factory/feed';
-import { createFactoryStorageForTests } from '../test-support.ts';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
+import type { FactoryStorageTestSeed } from '@factory/testing';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 

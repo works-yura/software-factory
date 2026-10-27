@@ -19,7 +19,7 @@ import {
   waitForSessionRunAudit,
 } from '@factory/runtime';
 import type { SourceControlStorageHandle } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 

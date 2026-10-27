@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { createTestBoard } from '@factory/pipelines/testing';
 import type { GithubIntegration } from '../integrations/github/integration.ts';
 import { FactoryDispatchError } from '@factory/store';
-import type { FactoryBindingPreparationInput } from '../test-support.ts';
+import type { FactoryBindingPreparationInput } from '@factory/testing';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
-import { FactoryTransitionService } from '../test-support.ts';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { FactoryTransitionService } from '@factory/testing';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { prepareFactoryRuleBinding } from './surface.ts';
 
 async function seedFactoryWithRepository(options?: { defaultModelId?: string; modelScope?: 'factory' | 'user' }) {

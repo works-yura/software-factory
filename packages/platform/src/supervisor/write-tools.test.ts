@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { defineBoard } from '@factory/core';
-import { createBoardRegistry } from '../test-support.ts';
-import { FactoryTransitionService } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
+import { FactoryTransitionService } from '@factory/testing';
 import type { WorkItemsStorage } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { createFactorySupervisorWriteTools } from './write-tools.ts';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';

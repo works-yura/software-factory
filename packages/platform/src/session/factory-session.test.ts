@@ -8,7 +8,7 @@ import {
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
 } from '@factory/credentials';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,

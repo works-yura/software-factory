@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defineBoard } from '@factory/core';
-import { createBoardRegistry } from '../../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { createTestBoard } from '@factory/pipelines/testing';
 import type { FactoryLinearRuleContext } from '@factory/core';
-import { createFactoryStorageForTests } from '../../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { linearClaimKey } from './claim.ts';
 import { resolveLinearRules } from './default-rules.ts';
 import type { LinearRuleOverrides } from './default-rules.ts';

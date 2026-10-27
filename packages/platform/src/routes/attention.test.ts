@@ -7,11 +7,11 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FactoryTransitionService } from '../test-support.ts';
+import { FactoryTransitionService } from '@factory/testing';
 import type { ParkedRun } from '../session/live-sessions.ts';
 import type { FactoryDeferredDecisionRecord, WorkItemRow } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
+import type { FactoryStorageTestSeed } from '@factory/testing';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { WorkItemRoutes } from './work-items.ts';

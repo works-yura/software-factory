@@ -8,7 +8,7 @@ vi.mock('../issue-reconcile-worker.ts', () => ({
   },
 }));
 
-import { createBoardRegistry } from '../../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { INCIDENTIO_FOLLOW_UPS_SOURCE_ID, INCIDENTIO_INCIDENTS_SOURCE_ID } from './intake.ts';
 import { IncidentioIntegration } from './integration.ts';
 import { incidentioReconciliationInterval } from './reconciliation-config.ts';

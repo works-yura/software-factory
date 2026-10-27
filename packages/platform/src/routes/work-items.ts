@@ -12,7 +12,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import { createBoardRegistry } from '@factory/core';
-import { createDefaultBoardRegistry } from '../boards.ts';
+import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry } from '@factory/core';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.ts';
 import { decisionRetryable, overtakenDecisionIds } from '@factory/runtime';

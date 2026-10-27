@@ -2,9 +2,9 @@ import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { createSourceControlSessionLookup } from '../session/factory-session.ts';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { FACTORY_SESSIONS_MAX_AGE_MS, FactorySessionsStateProcessor } from './sessions-state-processor.ts';
 
 const DAY = FACTORY_SESSIONS_MAX_AGE_MS;

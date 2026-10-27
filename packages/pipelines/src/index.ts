@@ -6,6 +6,7 @@ import { isReviewBoardPhase, reviewBoard } from './review/board.ts';
 import { isWorkBoardPhase, workBoard } from './work/board.ts';
 
 export { acceptanceBoard } from './acceptance/board.ts';
+export { createDefaultBoardRegistry, defaultBoards } from './defaults.ts';
 export { isReviewBoardPhase, reviewBoard } from './review/board.ts';
 export { hasRecordedVerdict } from './review/phase-rules.ts';
 export type { ReviewBoardPhase } from './review/board.ts';

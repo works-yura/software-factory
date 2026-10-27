@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry } from '../../../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 
 import type { IntegrationContext } from '../../base.ts';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.ts';

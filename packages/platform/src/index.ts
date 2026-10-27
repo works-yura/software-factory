@@ -1,7 +1,7 @@
 export { BoardDefinitionError, createBoardRegistry, defineBoard } from '@factory/core';
 export { reviewBoard, workBoard } from '@factory/pipelines';
 export type { ReviewBoardPhase, WorkBoardPhase } from '@factory/pipelines';
-export { defaultBoards } from './boards.ts';
+export { defaultBoards } from '@factory/pipelines';
 export type {
   BoardDefinition,
   BoardEventIntegration,

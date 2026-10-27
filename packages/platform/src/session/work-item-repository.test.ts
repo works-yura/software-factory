@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { resolveWorkItemRepository } from './work-item-repository.ts';
 
 async function seedRepositories(slugs: string[], integrationId: 'github' | 'gitlab' = 'github') {

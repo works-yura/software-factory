@@ -37,8 +37,8 @@ vi.mock('@mastra/code-sdk/auth/providers/github-copilot', async importOriginal =
   pollGitHubCopilotDeviceLogin: (...args: unknown[]) => pollGitHubCopilotDeviceLogin(...args),
 }));
 
-import { createFactoryStorageForTests } from '../test-support.ts';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
+import type { FactoryStorageTestSeed } from '@factory/testing';
 import { OAuthRoutes } from './oauth.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 

@@ -7,7 +7,7 @@ import type { MemoryStorage } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlSession } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import {
   migrateSessionResources,
   privatizeOwnerResourceSessions,

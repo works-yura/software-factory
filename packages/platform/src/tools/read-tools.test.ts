@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import type { AuditEventRow } from '@factory/store';
 import type { WorkItemCommentRow } from '@factory/store';
 import type {

@@ -36,7 +36,9 @@ function loose(c: unknown): RouteContext {
   return c as RouteContext;
 }
 
-export const USER_SESSION_BRANCH_PREFIX = 'user/session-';
+import { USER_SESSION_BRANCH_PREFIX } from '../session/branches.ts';
+
+export { USER_SESSION_BRANCH_PREFIX } from '../session/branches.ts';
 // Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
 const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

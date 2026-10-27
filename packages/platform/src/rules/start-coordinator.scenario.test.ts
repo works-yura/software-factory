@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { listFactorySessionThreads } from '../session/session-threads.ts';
 import { observeSessionThreadStamp } from '../session/thread-session-stamp.ts';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { FactoryStartCoordinator } from './start-coordinator.ts';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';

@@ -4,12 +4,12 @@ import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
 import { defineBoard } from '@factory/core';
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { createToolRuleTestRegistry } from '@factory/pipelines/testing';
 import type { WorkItemsStorage } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { FactoryPhaseStateProcessor } from './processor.ts';
-import { FactoryTransitionService } from '../test-support.ts';
+import { FactoryTransitionService } from '@factory/testing';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 

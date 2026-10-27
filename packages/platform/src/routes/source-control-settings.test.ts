@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
 import type { SourceControlStorageHandle } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 

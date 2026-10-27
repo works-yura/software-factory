@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defineBoard } from '@factory/core';
-import { createBoardRegistry } from '../../test-support.ts';
-import { FactoryDecisionDispatcher } from '../../test-support.ts';
-import { FactoryTransitionService } from '../../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
+import { FactoryDecisionDispatcher } from '@factory/testing';
+import { FactoryTransitionService } from '@factory/testing';
 import type { FactoryGitLabRuleContext } from '@factory/core';
-import { createFactoryStorageForTests } from '../../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { resolveGitLabRules } from './default-rules.ts';
 import { encodeSourceId } from './integration.ts';
 import { GitLabRules } from './rules.ts';

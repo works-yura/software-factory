@@ -22,7 +22,7 @@ import {
   resetTenantCredentialResolverForTests,
 } from '@factory/credentials';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { resolveFactoryCredentialTenant } from './credential-policy.ts';
 import { hydrateSessionDefaultModel } from './default-model-hydration.ts';
 import { createSourceControlSessionLookup, ensureFactorySourceSession } from './factory-session.ts';

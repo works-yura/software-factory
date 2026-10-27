@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import type { BoardRegistry } from '@factory/core';
 import { createTestBoard } from '@factory/pipelines/testing';
 import type { Intake, IntakeIssueDetail } from '@factory/capabilities';
-import { FactoryDecisionDispatcher } from '../test-support.ts';
-import { FactoryTransitionService } from '../test-support.ts';
+import { FactoryDecisionDispatcher } from '@factory/testing';
+import { FactoryTransitionService } from '@factory/testing';
 import { AUTO_TRIAGED_LABEL } from '@factory/core';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { defaultGithubRules, resolveGithubRules } from './github/default-rules.ts';
 import type { GithubRuleOverrides } from './github/default-rules.ts';
 import { createGithubIssueReconciler } from './github/issue-reconciler.ts';

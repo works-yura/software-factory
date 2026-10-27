@@ -4,8 +4,8 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, expect, it } from 'vitest';
 
-import { createFactoryStorageForTests } from '../test-support.ts';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
+import type { FactoryStorageTestSeed } from '@factory/testing';
 import { hydrateSessionDefaultModel } from './default-model-hydration.ts';
 
 async function mountController(

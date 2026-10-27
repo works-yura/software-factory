@@ -4,7 +4,7 @@ import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { fakeRouteAuth } from '@factory/http/testing';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
@@ -18,7 +18,7 @@ import {
 } from '@factory/runtime';
 import { AuditDomain } from '@factory/feed';
 import type { SourceControlSessionVisibility } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { deliverFactorySessionNotification } from './deliver.ts';
 import { FACTORY_TOOLS_WITHOUT_APPROVAL, applyFactoryToolPermissions } from './permissions.ts';
 import { createSessionRunEndReporter } from './reports.ts';

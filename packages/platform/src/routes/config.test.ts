@@ -13,8 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { factoryMemorySettingsUserId } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
+import type { FactoryStorageTestSeed } from '@factory/testing';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 

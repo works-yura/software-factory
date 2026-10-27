@@ -6,8 +6,8 @@ import type {
   FactorySandboxContext,
 } from '@mastra/core/workspace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import type { FactoryStorageTestSeed } from '@factory/testing';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { resolveProjectEnvironment } from '../workspace.ts';
 import { environmentBuildContext, environmentBuildInputs, redactCredentials, runEnvironmentBuild } from './build.ts';
 import type { EnvironmentBuildDeps } from './build.ts';

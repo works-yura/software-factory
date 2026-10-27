@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { defineBoard, workItemPhaseSemantics } from '@factory/core';
-import { createBoardRegistry } from '../test-support.ts';
-import { createFactoryStorageForTests } from '../test-support.ts';
-import { FactoryDecisionDispatcher } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
+import { createFactoryStorageForTests } from '@factory/testing';
+import { FactoryDecisionDispatcher } from '@factory/testing';
 import { createTerminalStageCleanup } from '@factory/runtime';
-import { FactoryTransitionService } from '../test-support.ts';
+import { FactoryTransitionService } from '@factory/testing';
 import type { FactoryStageRuleContext, FactoryRuleHandler } from '@factory/core';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';

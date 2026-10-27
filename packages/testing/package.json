@@ -1,0 +1,24 @@
+{
+  "name": "@factory/testing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Test seams for suites copied from v3: Work and Review installed by default, libsql storage.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@factory/pipelines": "workspace:*",
+    "@factory/runtime": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/libsql": "1.27.0",
+    "vitest": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:"
+  }
+}

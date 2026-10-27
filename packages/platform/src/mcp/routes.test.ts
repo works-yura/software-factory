@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { PLATFORM_AUTH_PROVIDER } from '@factory/auth';
 import type { RouteAuth } from '@factory/http';
 import type { WorkItemRow } from '@factory/store';

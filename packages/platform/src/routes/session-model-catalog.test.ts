@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createSourceControlSessionLookup } from '../session/factory-session.ts';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { ConfigRoutes } from './config.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 

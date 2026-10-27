@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // ── Mocks ────────────────────────────────────────────────────────────────
 
 import { defineBoard } from '@factory/core';
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import type { BoardRegistry } from '@factory/core';
-import { FactoryTransitionService } from '../test-support.ts';
+import { FactoryTransitionService } from '@factory/testing';
 import type { FactoryRuleActor } from '@factory/core';
 import type { AuditEmitter, AuditRecorder } from '@factory/feed';
 import {
@@ -59,8 +59,8 @@ const audit: AuditEmitter = {
     }
   },
 };
-import { createFactoryStorageForTests } from '../test-support.ts';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
+import type { FactoryStorageTestSeed } from '@factory/testing';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.ts';
 

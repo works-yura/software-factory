@@ -24,10 +24,9 @@ import type {
 import type { FactoryHealthReport, FactoryHealthThresholds } from './health.ts';
 import { runFactoryHealthCheck } from './health.ts';
 
-export interface SupervisorScope {
-  orgId: string;
-  factoryProjectId: string;
-}
+import type { SupervisorScope } from './session.ts';
+
+export type { SupervisorScope } from './session.ts';
 
 export interface SupervisorMessageReader {
   listMessages(input: {

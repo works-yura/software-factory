@@ -6,10 +6,10 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { FactoryTransitionService } from '../test-support.ts';
+import { FactoryTransitionService } from '@factory/testing';
 import type { WorkItemRow } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
+import type { FactoryStorageTestSeed } from '@factory/testing';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { WorkItemRoutes } from './work-items.ts';
 

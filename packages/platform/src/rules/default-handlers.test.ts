@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defineBoard } from '@factory/core';
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { reviewBoard } from '@factory/pipelines';
 import { withBoardClosure } from '@factory/core';
 import { workBoard } from '@factory/pipelines';

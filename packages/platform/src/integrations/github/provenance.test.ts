@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createFactoryStorageForTests } from '../../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import type { GithubIntegration } from './integration.ts';
 import { recordFactoryPullRequestProvenance } from './provenance.ts';
 import type { FactoryPullRequestProvenanceData } from './provenance.ts';

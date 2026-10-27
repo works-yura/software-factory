@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { createLifecycleTestRegistry } from '@factory/pipelines/testing';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.ts';
 import { factoryMemorySettingsUserId } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { FactoryStartCoordinator } from './start-coordinator.ts';
-import { FactoryTransitionService } from '../test-support.ts';
+import { FactoryTransitionService } from '@factory/testing';
 
 const { primeTenant } = vi.hoisted(() => ({ primeTenant: vi.fn() }));
 // widened from a v3 module mock: real package exports, then the original overrides

@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import type { TestAuthUser } from '@factory/http/testing';
 import type { StateSigner } from '@factory/auth';
-import { createFactoryStorageForTests } from '../../test-support.ts';
-import type { FactoryStorageTestSeed } from '../../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
+import type { FactoryStorageTestSeed } from '@factory/testing';
 import { LinearIntegration } from './integration.ts';
 import { buildLinearRoutes } from './routes.ts';
 

@@ -3,7 +3,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import { fakeRouteAuth } from '@factory/http/testing';
 import { createStateSigner } from '@factory/auth';
-import { createFactoryStorageForTests } from '../../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { GithubIntegration, normalizePrivateKey } from './integration.ts';
 
 // Real RSA key so we can prove Node's PEM decoder accepts the normalized

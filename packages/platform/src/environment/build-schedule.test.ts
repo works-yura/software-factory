@@ -3,8 +3,8 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { FactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandboxBuild, FactorySandboxBuilds } from '@mastra/core/workspace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import type { FactoryStorageTestSeed } from '@factory/testing';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { EnvironmentBuildRunner } from './build-runner.ts';
 import {
   ensureSchedule,

@@ -5,7 +5,7 @@ import { Workspace } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { ProjectRoutes } from './projects.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry } from '../../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { createTestBoard } from '@factory/pipelines/testing';
-import { createFactoryStorageForTests } from '../../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { jiraClaimKey } from './claim.ts';
 import { resolveJiraRules } from './default-rules.ts';
 import type { JiraRuleOverrides } from './default-rules.ts';

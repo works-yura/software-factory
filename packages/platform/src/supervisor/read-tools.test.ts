@@ -1,11 +1,11 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { describe, expect, it } from 'vitest';
 
-import { createBoardRegistry } from '../test-support.ts';
+import { createBoardRegistry } from '@factory/testing';
 import { createLifecycleTestRegistry } from '@factory/pipelines/testing';
-import { FactoryTransitionService } from '../test-support.ts';
+import { FactoryTransitionService } from '@factory/testing';
 import type { WorkItemsStorage } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import type { SupervisorMessageReader } from './read-tools.ts';
 import { createFactorySupervisorReadTools } from './read-tools.ts';
 

@@ -68,9 +68,15 @@ def main():
     parser.add_argument('modules', nargs='+')
     args = parser.parse_args()
 
+    # Run on a clean tree only, so a failed run is undone with `git reset --hard && git clean -fd`.
+    dirty = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, cwd=ROOT).stdout.strip()
+    if dirty and not os.environ.get('EXTRACT_ALLOW_DIRTY'):
+        sys.exit('working tree is dirty; commit first so a failed extraction can be reset')
     src_root = os.path.join(PACKAGES, args.source, 'src')
-    moved = set(args.modules)
-    target_of = {m: m[len(args.strip):] if m.startswith(args.strip) else m for m in moved}
+    # A module may name its place in the new package: `session/org-seed` or `supervisor/session=supervisor-session`.
+    renames = dict(m.split('=', 1) for m in args.modules if '=' in m)
+    moved = {m.split('=', 1)[0] for m in args.modules}
+    target_of = {m: renames.get(m) or (m[len(args.strip):] if m.startswith(args.strip) else m) for m in moved}
     leave = set(filter(None, args.leave_tests.split(',')))
     files = {m: [f for f in files_of(src_root, m) if not (m in leave and f.endswith('.test.ts'))] for m in moved}
     missing = [m for m, f in files.items() if not any(x == m + '.ts' for x in f)]

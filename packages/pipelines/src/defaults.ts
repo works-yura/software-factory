@@ -1,6 +1,7 @@
 import { createBoardRegistry } from '@factory/core';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
-import { reviewBoard, workBoard } from '@factory/pipelines';
+import { reviewBoard } from './review/board.ts';
+import { workBoard } from './work/board.ts';
 
 /**
  * The boards v3 installed unless a deployment opted out. Acceptance is a v4

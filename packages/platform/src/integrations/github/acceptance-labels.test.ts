@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NEEDS_APPROVAL_LABEL } from '@factory/core';
-import { createFactoryStorageForTests } from '../../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
 import { reconcileGithubAcceptanceLabels } from './acceptance-labels.ts';
 import type { GithubIntegration } from './integration.ts';
 

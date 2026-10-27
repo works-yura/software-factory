@@ -48,7 +48,7 @@ import {
   getFactoryAuthUserId,
 } from '@factory/auth';
 import { createBoardRegistry, isTerminalWorkItem } from '@factory/core';
-import { createDefaultBoardRegistry } from './boards.ts';
+import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { boardForWorkItem } from '@factory/core';
 import { EnvironmentBuildRunner } from './environment/build-runner.ts';

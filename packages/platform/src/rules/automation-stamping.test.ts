@@ -8,8 +8,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { WorkItemsStorage } from '@factory/store';
-import { createFactoryStorageForTests } from '../test-support.ts';
-import { FactoryTransitionService } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/testing';
+import { FactoryTransitionService } from '@factory/testing';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 const DISPATCHER = 'factory-rule-dispatcher';
