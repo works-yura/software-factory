@@ -29,7 +29,7 @@ import type {
 } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import type { RouteAuth } from '@factory/http';
-import { canReadSessionResource, canViewSourceControlSession } from '@factory/session';
+import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from '@factory/session';
 
 type RouteContext = Context;
 
@@ -101,8 +101,10 @@ function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean
   return Boolean(options.sessionRetirement) && options.sandboxRecreateSupported === true;
 }
 
-function withCapabilities<T extends object>(session: T, recreateSandbox: boolean) {
-  return { ...session, capabilities: { recreateSandbox } };
+type SessionCapabilities = { recreateSandbox: boolean; switchModel: boolean };
+
+function withCapabilities<T extends object>(session: T, capabilities: SessionCapabilities) {
+  return { ...session, capabilities };
 }
 
 /** Abort the session's active run and wait (bounded) for it to stop. Returns whether a run was aborted. */
@@ -414,7 +416,9 @@ function projectSessionRoutes(
               return c.json({ error: 'Session ID conflict' }, 409);
             }
             await startUserSessionConversation(options.controller, existing);
-            return c.json({ session: withCapabilities(existing, canRecreateSandbox(options)) });
+            return c.json({
+              session: withCapabilities(existing, { recreateSandbox: canRecreateSandbox(options), switchModel: true }),
+            });
           }
         }
 
@@ -448,7 +452,9 @@ function projectSessionRoutes(
         }
         await startUserSessionConversation(options.controller, session);
         // The creator owns the session, so no admin check is needed.
-        return c.json({ session: withCapabilities(session, canRecreateSandbox(options)) });
+        return c.json({
+          session: withCapabilities(session, { recreateSandbox: canRecreateSandbox(options), switchModel: true }),
+        });
       },
     }),
   ];
@@ -504,7 +510,13 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
         return c.json({
-          session: { ...withCapabilities(withOwnerProfile(session, owners), recreateSandbox), resourceId },
+          session: {
+            ...withCapabilities(withOwnerProfile(session, owners), {
+              recreateSandbox,
+              switchModel: canSwitchSessionModel(session, resolved.tenant),
+            }),
+            resourceId,
+          },
         });
       },
     }),

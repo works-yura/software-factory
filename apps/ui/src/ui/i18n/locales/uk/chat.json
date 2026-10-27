@@ -206,7 +206,10 @@
     "sessionModelNotConfigured": "Модель сесії, {{label}} не налаштовано",
     "sessionModel": "Модель сесії",
     "search": "Пошук моделей…",
-    "noMatch": "Немає відповідних моделей."
+    "noMatch": "Немає відповідних моделей.",
+    "lockedLabel": "Модель сесії: {{label}}. {{reason}}",
+    "lockedReason": "Лише {{name}} може змінити модель або рівень міркування цієї сесії.",
+    "lockedReasonOwnerUnknown": "Лише власник сесії може змінити модель або рівень міркування цієї сесії."
   },
   "thinking": {
     "label": "Міркування",
@@ -227,7 +230,8 @@
     "changeFailed": "Не вдалося змінити рівень міркування",
     "follows": "Успадковано: {{source}}.",
     "setForSession": "Задано для цієї сесії.",
-    "useDefault": "Використати типовий"
+    "useDefault": "Використати типовий",
+    "lockedLabel": "{{label}}: {{level}}. {{reason}}"
   },
   "credential": {
     "connection": "Підключення {{provider}}",

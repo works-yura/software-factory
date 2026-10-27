@@ -1,6 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Command,
   CommandEmpty,
@@ -28,7 +27,8 @@ import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { settingsSectionPath } from '../../../settings/settingsSections';
-import { SessionThinkingControl } from './SessionThinkingControl';
+import { LockedModelButton } from './LockedModelButton';
+import { ModelThinkingGroup } from './ModelThinkingGroup';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
   const groups = new Map<string, AvailableModelOption[]>();
@@ -40,14 +40,21 @@ function groupByProvider(models: AvailableModelOption[]): [string, AvailableMode
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
-function canSwitchModel(kind: ChatSessionContextApi['kind'], isDraft: boolean, sessionEnabled: boolean): boolean {
-  if (kind === 'user' && isDraft) return true;
+function canSwitchModel({
+  kind,
+  draftSessionId,
+  sessionEnabled,
+  modelLockedReason,
+}: Pick<ChatSessionContextApi, 'kind' | 'draftSessionId' | 'sessionEnabled' | 'modelLockedReason'>): boolean {
+  if (modelLockedReason) return false;
+  if (kind === 'user' && draftSessionId) return true;
   return sessionEnabled;
 }
 
 export function ModelPicker() {
   const { t } = useTranslation('chat');
-  const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
+  const chatSession = useChatSessionContext();
+  const { modelLockedReason } = chatSession;
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -72,13 +79,21 @@ export function ModelPicker() {
     );
   }
 
+  if (modelLockedReason && activeModelId) {
+    return (
+      <ModelThinkingGroup modelId={activeModelId} switchingModel={false} lockedReason={modelLockedReason}>
+        <LockedModelButton modelId={activeModelId} reason={modelLockedReason} />
+      </ModelThinkingGroup>
+    );
+  }
+
   const label = selectedModelId ? formatModelName(selectedModelId) : t('modelPicker.noModel');
   const notConfigured =
     !catalogLoading &&
     Boolean(selectedModelId) &&
     modelsQuery.isSuccess &&
     !modelsQuery.data.some(model => model.id === selectedModelId);
-  const switchable = canSwitchModel(kind, Boolean(draftSessionId), sessionEnabled);
+  const switchable = canSwitchModel(chatSession);
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
   if (modelsQuery.isError && noModelsToOffer) {
@@ -132,7 +147,7 @@ export function ModelPicker() {
   const modelMenuLocked = busy || modelsQuery.isPending || catalogLoading;
 
   return (
-    <ButtonsGroup size="sm" aria-label={t('modelPicker.group')}>
+    <ModelThinkingGroup modelId={activeModelId} switchingModel={busy}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           type="button"
@@ -187,7 +202,6 @@ export function ModelPicker() {
           </Command>
         </PopoverContent>
       </Popover>
-      {activeModelId ? <SessionThinkingControl modelId={activeModelId} switchingModel={busy} /> : null}
-    </ButtonsGroup>
+    </ModelThinkingGroup>
   );
 }

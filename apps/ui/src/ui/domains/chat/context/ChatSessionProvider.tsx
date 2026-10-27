@@ -11,6 +11,7 @@ import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentCont
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
@@ -23,6 +24,15 @@ import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
+
+function modelLockedReason(session: FactoryUserSession | undefined): string | undefined {
+  if (session?.capabilities?.switchModel !== false) return undefined;
+  const name = session.owner?.name;
+  return name ? tk('modelPicker.lockedReason', { name }) : tk('modelPicker.lockedReasonOwnerUnknown');
+}
 
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */
 export function ChatSessionConfigProvider({
@@ -46,6 +56,8 @@ export function ChatSessionConfigProvider({
 }) {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl } = useApiConfig();
+  // Re-renders the provider when the language changes, so the lock reason follows it.
+  useTranslation('chat');
   const factoryQuery = useFactoryQuery(factoryId);
   const isUserDraft = userScoped && Boolean(draftSessionId);
   const sessionQuery = useUserSessionQuery(supervisor ? undefined : userScoped ? threadId : sessionId);
@@ -184,6 +196,7 @@ export function ChatSessionConfigProvider({
     baseUrl,
     kind: userScoped ? ('user' as const) : ('factory' as const),
     owner,
+    modelLockedReason: modelLockedReason(storedSession),
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;

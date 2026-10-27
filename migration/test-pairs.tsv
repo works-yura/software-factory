@@ -104,7 +104,7 @@ routes/knowledge.test.ts	api/src/knowledge.test.ts
 routes/oauth.test.ts	api/src/oauth.test.ts
 routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts
 routes/projects.test.ts	api/src/projects.test.ts
-routes/session-access.test.ts	session/src/session-access.test.ts
+routes/session-access.test.ts	session/src/session-access.test.ts	+2	model-switch guard and multipart body cases ported from upstream 8fb8a82428
 routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts	-1	user and hybrid scope catalogs removed; one Factory-catalog case remains
 routes/skills.test.ts	api/src/skills.test.ts
 routes/source-control-sessions.test.ts	api/src/source-control-sessions.test.ts
@@ -485,6 +485,6 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageReviewMergeRequestLink.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageReviewMergeRequestLink.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageReviewPullRequestLink.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageReviewPullRequestLink.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageRevisit.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageRevisit.msw.test.tsx
-../../../apps/ui/src/ui/pages/__tests__/ThreadPageTeammateSession.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageTeammateSession.msw.test.tsx
+../../../apps/ui/src/ui/pages/__tests__/ThreadPageTeammateSession.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageTeammateSession.msw.test.tsx	+3	locked model and thinking cases ported from upstream 8fb8a82428
 ../../../apps/ui/src/ui/pages/__tests__/UserSessionDraftHandoff.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/UserSessionDraftHandoff.msw.test.tsx
 ../../../apps/ui/src/ui/ui/__tests__/SkeletonRows.msw.test.tsx	../apps/ui/src/ui/ui/__tests__/SkeletonRows.msw.test.tsx

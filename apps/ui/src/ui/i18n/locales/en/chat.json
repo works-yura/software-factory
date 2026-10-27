@@ -204,7 +204,10 @@
     "sessionModelNotConfigured": "Session model, {{label}} is not configured",
     "sessionModel": "Session model",
     "search": "Search models…",
-    "noMatch": "No matching model."
+    "noMatch": "No matching model.",
+    "lockedLabel": "Session model: {{label}}. {{reason}}",
+    "lockedReason": "Only {{name}} can change this session’s model or thinking level.",
+    "lockedReasonOwnerUnknown": "Only the session owner can change this session’s model or thinking level."
   },
   "thinking": {
     "label": "Thinking",
@@ -225,7 +228,8 @@
     "changeFailed": "Failed to change thinking level",
     "follows": "Follows the {{source}}.",
     "setForSession": "Set for this session.",
-    "useDefault": "Use default"
+    "useDefault": "Use default",
+    "lockedLabel": "{{label}}: {{level}}. {{reason}}"
   },
   "credential": {
     "connection": "{{provider}} connection",

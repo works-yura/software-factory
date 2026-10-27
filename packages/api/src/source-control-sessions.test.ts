@@ -1253,7 +1253,7 @@ describe('session sandbox recreate', () => {
 
     const opened = await app.request(`/web/user-sessions/${session.sessionId}`);
     const body = (await opened.json()) as { session: { capabilities: { recreateSandbox: boolean } } };
-    expect(body.session.capabilities).toEqual({ recreateSandbox: false });
+    expect(body.session.capabilities).toEqual({ recreateSandbox: false, switchModel: true });
   });
 
   it('returns 503 when the server has no retirement coordinator', async () => {
@@ -1356,7 +1356,7 @@ describe('session sandbox recreate', () => {
       };
       expect(body).not.toHaveProperty('capabilities');
       expect(body.session.sessionId).toBe(session.sessionId);
-      expect(body.session.capabilities).toEqual({ recreateSandbox: expected });
+      expect(body.session.capabilities).toEqual({ recreateSandbox: expected, switchModel: owner === 'user-1' });
     },
   );
 

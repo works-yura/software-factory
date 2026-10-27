@@ -50,7 +50,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
-  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, modelLockedReason } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
@@ -119,7 +119,9 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       description: tk('commands.model'),
       requiresSession: true,
       execute: async rawArguments => {
-        if (rawArguments) await setModel(rawArguments);
+        if (!rawArguments) return;
+        if (modelLockedReason) return pushNotice(modelLockedReason);
+        await setModel(rawArguments);
       },
     },
     {
@@ -216,6 +218,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             );
             return;
           }
+          const changesThinkingLevel = action.kind === 'set' || action.kind === 'clear';
+          if (modelLockedReason && changesThinkingLevel) return pushNotice(modelLockedReason);
           if (action.kind === 'set') {
             await ensureSettings();
             await updateSettingsMutation.mutateAsync({ thinkingLevel: action.level });
