@@ -1,5 +1,6 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { createContext, useContext } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Navigate, Outlet, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
@@ -23,16 +24,17 @@ export function useActiveFactory(): FactoryProject {
  * the factories list; the URL is the single source of truth for the active factory.
  */
 export function FactoryLayout() {
+  const { t } = useTranslation('workspaces');
   const { factoryId } = useParams<{ factoryId: string }>();
   const { data: factories, isPending, isError } = useFactoriesQuery();
 
-  if (isPending) return <AuthPendingSkeleton label="Loading factories" />;
+  if (isPending) return <AuthPendingSkeleton label={t('factory.loading')} />;
 
   if (isError) {
     return (
       <div className="bg-sidebar grid h-dvh w-full place-items-center px-4">
         <Notice variant="destructive" className="w-full max-w-md">
-          Could not load factories. Check the server connection and reload.
+          {t('factory.loadError')}
         </Notice>
       </div>
     );
@@ -42,7 +44,7 @@ export function FactoryLayout() {
   // Unknown/deleted factory: bounce to the landing route, which redirects to
   // the first available factory (or onboarding when none exist).
   if (!factoryId || !factory) {
-    return <Navigate to="/" replace state={{ routeErrorNotice: 'Factory not found' }} />;
+    return <Navigate to="/" replace state={{ routeErrorNotice: t('factory.notFound') }} />;
   }
 
   return (

@@ -11,6 +11,9 @@ import { providerDisplayName } from '@factory/credentials/provider-display-name'
 import { useProviderModels } from '../../hooks/useProviderModels';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
+import { translator } from '../../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export interface CreateFactoryModelRowsProps {
   provider: ProviderInfo;
@@ -33,7 +36,7 @@ export function CreateFactoryModelRows({
   const catalog = useProviderModels(provider.provider);
 
   if (catalog.isPending) {
-    return <SkeletonRows label="Loading models" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <SkeletonRows label={tk('models.loading')} rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
   }
   if (catalog.catalogError)
     return <CreateFactoryPaletteAlert>{catalog.catalogError.message}</CreateFactoryPaletteAlert>;
@@ -52,20 +55,20 @@ export function CreateFactoryModelRows({
         <SharedCredentialNotice modelId={catalog.suggestedModelId} />
       </div>
       {models.length > 0 ? (
-        <CommandGroup heading={`${providerDisplayName(provider.provider)} models`}>
+        <CommandGroup heading={tk('createFactory.models.heading', { provider: providerDisplayName(provider.provider) })}>
           {models.map(model => (
             <CommandPaletteItem
               key={model.id}
               icon={
                 savingModelId === model.id ? (
-                  <Spinner size="sm" aria-label="Creating Factory" />
+                  <Spinner size="sm" aria-label={tk('createFactory.models.creating')} />
                 ) : (
                   <ProviderBrandIcon provider={model.provider} />
                 )
               }
               title={model.id}
               subtitle={model.modelName}
-              badge={model.id === catalog.suggestedModelId ? 'Suggested' : undefined}
+              badge={model.id === catalog.suggestedModelId ? tk('createFactory.models.suggested') : undefined}
               shortcut={<Kbd size="sm">↵</Kbd>}
               value={model.id}
               disabled={saving}
@@ -74,12 +77,12 @@ export function CreateFactoryModelRows({
           ))}
         </CommandGroup>
       ) : (
-        <CreateFactoryPaletteMessage>No models match this search.</CreateFactoryPaletteMessage>
+        <CreateFactoryPaletteMessage>{tk('createFactory.models.noMatch')}</CreateFactoryPaletteMessage>
       )}
-      <CommandGroup heading="Provider">
+      <CommandGroup heading={tk('createFactory.models.provider')}>
         <CommandPaletteItem
           icon={<RefreshCw />}
-          title="Change provider"
+          title={tk('models.changeProvider')}
           subtitle={providerDisplayName(provider.provider)}
           value="change-provider"
           disabled={saving}

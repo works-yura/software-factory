@@ -1,4 +1,5 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router';
 
 import { setSessionPinned } from '../hooks/usePinnedSessions';
@@ -22,6 +23,7 @@ export function SessionListItem({
   merged: boolean | undefined;
   onDelete: (row: SessionListRow) => void;
 }) {
+  const { t } = useTranslation('workspaces');
   const navigate = useNavigate();
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
@@ -31,9 +33,9 @@ export function SessionListItem({
   async function handleVisibilityChange(visibility: UserSessionVisibility) {
     try {
       const session = await changeVisibility(visibility);
-      toast(session.visibility === 'org' ? 'Session shared with your organization' : 'Session is now private');
+      toast(session.visibility === 'org' ? t('sharing.sharedToast') : t('sharing.privateToast'));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to change session visibility');
+      toast.error(error instanceof Error ? error.message : t('sharing.changeFailed'));
     }
   }
 

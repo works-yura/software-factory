@@ -2,6 +2,7 @@ import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { CircleDashed, GitPullRequest, MessageSquare, SquareKanban, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Fragment, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { collapsedRowsKeepingActive } from '../services/sessionGroups';
 import type { SessionGroup, SessionGroupIcon } from '../services/sessionGroups';
@@ -26,11 +27,12 @@ export function SessionGroupList({
   showHeader: boolean;
   renderRow: (row: SessionListRow) => ReactNode;
 }) {
+  const { t } = useTranslation('workspaces');
   const [expanded, setExpanded] = useState(false);
   const collapsedRows = collapsedRowsKeepingActive(group.rows);
 
   return (
-    <section className="flex flex-col gap-1" aria-label={`${group.label} sessions`}>
+    <section className="flex flex-col gap-1" aria-label={t('sessions.groupLabel', { label: group.label })}>
       {showHeader && (
         <Sidebar.NavHeader className="mt-0" icon={GROUP_ICONS[group.icon]}>
           {group.label}

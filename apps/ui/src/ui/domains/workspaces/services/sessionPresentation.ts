@@ -2,6 +2,9 @@ import type { WorkItem, WorkItemSource } from '../../factory/services/workItems'
 import { isPullRequestSource } from '../../factory/services/workItems';
 import { SLACK_SESSION_BRANCH_PREFIX, USER_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 const GITHUB_REVIEW_BRANCH = /^factory\/pr-([1-9]\d*)$/;
 const GITLAB_REVIEW_BRANCH = /^factory\/gitlab-mr-([1-9]\d*)-[a-z0-9]+$/;
@@ -65,6 +68,6 @@ export function getUserSessionLabel(session: FactoryUserSession): string {
   const title = session.title?.trim();
   if (title) return title;
   if (!session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)) return session.branch;
-  if (isAutomaticUserSessionBranch(session)) return 'New session';
+  if (isAutomaticUserSessionBranch(session)) return tk('sessions.newSession');
   return session.branch.slice(USER_SESSION_BRANCH_PREFIX.length);
 }

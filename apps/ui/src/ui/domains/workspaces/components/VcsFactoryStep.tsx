@@ -19,6 +19,10 @@ import { ProviderConnectControl } from '../../settings/components/PlatformProvid
 import { GitLabIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { OnboardingConnectionRow } from './onboarding/OnboardingConnectionRow';
+import { lazyLabels } from '../../../i18n/lazy';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 type SourceControlView = 'github' | 'gitlab' | 'providers';
 
@@ -26,11 +30,10 @@ type GitLabUnavailableReason = 'missing_config' | 'organization_required' | 'una
 
 const HOST_NAMES = { github: 'GitHub', gitlab: 'GitLab' } as const;
 
-const GITLAB_UNAVAILABLE_DESCRIPTIONS: Record<GitLabUnavailableReason, string> = {
-  missing_config: 'Unavailable for this deployment.',
-  organization_required: 'Join an organization to connect GitLab.',
-  unavailable: "Couldn't load GitLab status.",
-};
+const GITLAB_UNAVAILABLE_DESCRIPTIONS: Readonly<Record<GitLabUnavailableReason, string>> = lazyLabels(
+  ['missing_config', 'organization_required', 'unavailable'],
+  reason => `workspaces:vcs.gitlabUnavailable.${reason}`,
+);
 
 function gitLabUnavailableReason(status?: { enabled: boolean; reason?: string }): GitLabUnavailableReason | undefined {
   if (status?.reason === 'unavailable') return 'unavailable';
@@ -107,8 +110,8 @@ export function VcsFactoryStep({
   };
 
   return (
-    <section aria-label="Source control repository" className="w-full text-left">
-      {statusPending && <SkeletonRows label="Loading source control status" rows={2} rowClassName="h-16 w-full" />}
+    <section aria-label={tk('vcs.label')} className="w-full text-left">
+      {statusPending && <SkeletonRows label={tk('vcs.loadingStatus')} rows={2} rowClassName="h-16 w-full" />}
       {!statusPending && selectedProvider === 'providers' && (
         <ProviderChoice
           githubConnected={connected}
@@ -135,7 +138,7 @@ export function VcsFactoryStep({
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Check className="text-muted-foreground size-3.5" aria-hidden="true" />
-              <ProviderHeading>{`${HOST_NAMES[selectedProvider]} connected`}</ProviderHeading>
+              <ProviderHeading>{tk('vcs.hostConnected', { host: HOST_NAMES[selectedProvider] })}</ProviderHeading>
             </div>
             <Button
               variant="ghost"
@@ -147,12 +150,12 @@ export function VcsFactoryStep({
                 setProviderChoice('providers');
               }}
             >
-              Change provider
+              {tk('models.changeProvider')}
             </Button>
           </div>
           <SearchInput
-            label="Search repositories"
-            placeholder="Find a repository…"
+            label={tk('vcs.searchLabel')}
+            placeholder={tk('vcs.searchPlaceholder')}
             value={query}
             onValueChange={value => {
               setQuery(value);
@@ -188,7 +191,7 @@ export function VcsFactoryStep({
                 if (repositoryForProvider) onSelectRepository(repositoryForProvider);
               }}
             >
-              Continue
+              {tk('actions.continue')}
               <span className="flex size-4 shrink-0 items-center justify-center">
                 <ArrowRight
                   className="size-3.5 motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-action:translate-x-0.5"
@@ -199,12 +202,12 @@ export function VcsFactoryStep({
             {selectedProvider === 'github' && (
               <>
                 <Button variant="ghost" size="sm" onClick={onManageConnection}>
-                  Manage access
+                  {tk('vcs.manageAccess')}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  aria-label="Refresh GitHub repositories"
+                  aria-label={tk('vcs.refreshGithub')}
                   disabled={refreshRepos.isPending}
                   onClick={() => refreshRepos.mutate()}
                 >
@@ -212,7 +215,7 @@ export function VcsFactoryStep({
                     className={refreshRepos.isPending ? 'size-3.5 animate-spin' : 'size-3.5'}
                     aria-hidden="true"
                   />
-                  Refresh
+                  {tk('actions.refresh')}
                 </Button>
               </>
             )}
@@ -250,13 +253,13 @@ function ProviderChoice({
         name="GitHub"
         icon={<GithubIcon />}
         description={
-          githubUnavailable ? 'Unavailable for this deployment.' : 'Repositories, branches, and pull requests.'
+          githubUnavailable ? tk('vcs.gitlabUnavailable.missing_config') : tk('vcs.githubDescription')
         }
         connected={githubConnected}
         action={
           <Button variant="default" disabled={githubRedirecting || githubUnavailable} onClick={onChooseGithub}>
-            {githubRedirecting && <Spinner size="sm" aria-label="Connecting to GitHub" />}
-            {githubConnected ? 'Continue with GitHub' : 'Connect GitHub'}
+            {githubRedirecting && <Spinner size="sm" aria-label={tk('vcs.connectingGithub')} />}
+            {githubConnected ? tk('vcs.continueWith', { host: 'GitHub' }) : tk('vcs.connect', { host: 'GitHub' })}
           </Button>
         }
       />
@@ -266,7 +269,7 @@ function ProviderChoice({
         description={
           gitlabUnavailableReason
             ? GITLAB_UNAVAILABLE_DESCRIPTIONS[gitlabUnavailableReason]
-            : 'Projects, branches, and merge requests.'
+            : tk('vcs.gitlabDescription')
         }
         connected={gitlabConnected}
         action={
@@ -298,29 +301,29 @@ function GitLabAction({
 }) {
   if (unavailableReason === 'unavailable') {
     return (
-      <Button variant="ghost" aria-label="Retry GitLab" onClick={onRetry}>
-        Retry
+      <Button variant="ghost" aria-label={tk('vcs.retryGitlab')} onClick={onRetry}>
+        {tk('actions.retry')}
       </Button>
     );
   }
   if (unavailableReason) {
     return (
       <Button variant="default" disabled>
-        Connect GitLab
+        {tk('vcs.connect', { host: 'GitLab' })}
       </Button>
     );
   }
   if (connected) {
     return (
       <Button variant="default" onClick={onChoose}>
-        Continue with GitLab
+        {tk('vcs.continueWith', { host: 'GitLab' })}
       </Button>
     );
   }
   return (
     <ProviderConnectControl
       provider="gitlab"
-      label="Connect GitLab"
+      label={tk('vcs.connect', { host: 'GitLab' })}
       variant="default"
       size="md"
       onCompleted={onConnected}
@@ -343,7 +346,7 @@ function RepositoryError({ message, onRetry }: { message: string; onRetry: () =>
         {message}
       </Txt>
       <Button variant="ghost" size="sm" onClick={onRetry}>
-        Retry
+        {tk('actions.retry')}
       </Button>
     </div>
   );
@@ -366,7 +369,8 @@ function RepositoryRows({
   onSelectRepository: (repository: SourceControlRepository) => void;
   onPreviewRepository?: (repository: SourceControlRepository | undefined) => void;
 }) {
-  if (pending) return <SkeletonRows label={`Loading ${provider} repositories`} rows={3} rowClassName="h-12 w-full" />;
+  if (pending)
+    return <SkeletonRows label={tk('vcs.loadingRepositories', { provider })} rows={3} rowClassName="h-12 w-full" />;
   const normalizedQuery = query.trim().toLowerCase();
   const visible = normalizedQuery
     ? repositories.filter(repository => repository.fullName.toLowerCase().includes(normalizedQuery))
@@ -374,13 +378,13 @@ function RepositoryRows({
   if (visible.length === 0) {
     return (
       <Txt tone="muted" as="p" variant="caption" className="m-0 py-4">
-        {query ? 'No matching repositories.' : `No ${HOST_NAMES[provider]} repositories found.`}
+        {query ? tk('vcs.noMatching') : tk('vcs.noRepositories', { host: HOST_NAMES[provider] })}
       </Txt>
     );
   }
   return (
     <RadioGroup
-      aria-label="Choose a repository"
+      aria-label={tk('vcs.chooseRepository')}
       value={selectedRepositoryId === undefined ? null : String(selectedRepositoryId)}
       onValueChange={value => {
         const repository = visible.find(repo => String(repo.id) === value);
@@ -405,7 +409,7 @@ function RepositoryRows({
             </Txt>
             <Txt as="span" variant="meta" tone="muted" className="mt-0.5 block">
               {repo.defaultBranch}
-              {repo.private ? ' · Private' : ''}
+              {repo.private ? ` · ${tk('vcs.private')}` : ''}
             </Txt>
           </span>
         </label>

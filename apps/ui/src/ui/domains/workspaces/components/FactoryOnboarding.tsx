@@ -7,6 +7,7 @@ import {
   restoredOnboardingStep,
 } from '../services/onboardingSteps';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useApiConfig } from '../../../../api/config';
 import { useCompleteFactorySetup } from '../hooks/useCompleteFactorySetup';
@@ -56,6 +57,7 @@ function shownModel(previewedModel?: string, previewedProvider?: string, savedMo
 }
 
 export function FactoryOnboarding({ local }: { local: boolean }) {
+  const { t } = useTranslation('workspaces');
   const { baseUrl } = useApiConfig();
   const complete = useCompleteFactorySetup({ local });
   const [draft, setDraft] = useState<OnboardingDraft>(() => {
@@ -118,11 +120,11 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
                       setReturnToReview(false);
                       goTo(previousStep);
                     }}
-                    aria-label="Go back to previous step"
+                    aria-label={t('onboarding.backLabel')}
                     disabled={complete.isPending}
                   >
                     <ArrowLeft aria-hidden="true" />
-                    Back
+                    {t('actions.back')}
                   </Button>
                 )}
               </div>
@@ -176,7 +178,7 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
               )}
               {step === 'model-setup' &&
                 (companyAccess.isPending ? (
-                  <SkeletonRows label="Loading account options" rows={2} />
+                  <SkeletonRows label={t('onboarding.loadingAccountOptions')} rows={2} />
                 ) : (
                   <OnboardingSetupStep
                     scope={setupScope}

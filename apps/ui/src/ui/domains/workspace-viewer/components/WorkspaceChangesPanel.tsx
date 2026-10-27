@@ -19,20 +19,17 @@ import { useWorkspaceDiff } from '../../../../hooks/use-fs';
 import { GitLabIcon } from '../../../ui/icons';
 import { treeRowContainmentClass } from '../layout';
 import { WakeSandbox } from './WakeSandbox';
+import { useTranslation } from 'react-i18next';
+import { lazyLabels } from '../../../i18n/lazy';
 
 const CodeDiff = lazy(() =>
   import('@mastra/playground-ui/components/CodeDiff').then(({ CodeDiff }) => ({ default: CodeDiff })),
 );
 
-const STATUS_LABELS: Record<WorkspaceChangeStatus, string> = {
-  modified: 'Modified',
-  added: 'Added',
-  deleted: 'Deleted',
-  renamed: 'Renamed',
-  copied: 'Copied',
-  untracked: 'Untracked',
-  conflicted: 'Conflict',
-};
+const STATUS_LABELS: Readonly<Record<WorkspaceChangeStatus, string>> = lazyLabels(
+  ['modified', 'added', 'deleted', 'renamed', 'copied', 'untracked', 'conflicted'],
+  status => `workspaces:changes.statuses.${status}`,
+);
 
 const STATUS_CLASSES: Record<WorkspaceChangeStatus, string> = {
   modified: 'text-info-indicator!',
@@ -46,10 +43,11 @@ const STATUS_CLASSES: Record<WorkspaceChangeStatus, string> = {
 const FOLDER_CLASS = 'text-muted-foreground!';
 
 function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'additions' | 'deletions' | 'binary'>) {
+  const { t } = useTranslation('workspaces');
   if (binary) {
     return (
       <Txt as="span" variant="meta" tone="muted" className="shrink-0">
-        Binary
+        {t('changes.binary')}
       </Txt>
     );
   }
@@ -61,9 +59,10 @@ function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'a
       variant="meta"
       font="mono"
       className="flex shrink-0 items-center gap-1 tabular-nums"
-      aria-label={`${additions} ${additions === 1 ? 'addition' : 'additions'} and ${deletions} ${
-        deletions === 1 ? 'deletion' : 'deletions'
-      }`}
+      aria-label={t('changes.countsLabel', {
+        additions: t('changes.additions', { count: additions }),
+        deletions: t('changes.deletions', { count: deletions }),
+      })}
     >
       <span className="text-success-indicator">+{additions}</span>
       <span className="text-destructive-foreground">−{deletions}</span>
@@ -72,13 +71,14 @@ function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'a
 }
 
 function ChangesEmptyState({ workspacePath }: { workspacePath?: string }) {
+  const { t } = useTranslation('workspaces');
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
       {workspacePath ? (
         <WakeSandbox workspacePath={workspacePath} />
       ) : (
         <Txt tone="muted" variant="caption">
-          No changes
+          {t('overview.noChanges')}
         </Txt>
       )}
     </div>
@@ -173,12 +173,13 @@ interface RepositoryGroupHeaderProps {
 
 /** The collapsible row a repository's files sit under when the session holds several repositories. */
 export function RepositoryGroupHeader({ label, provider, open, onOpenChange, children }: RepositoryGroupHeaderProps) {
+  const { t } = useTranslation('workspaces');
   return (
     <button
       type="button"
       className="flex min-h-8 w-full items-center gap-1.5 px-2 text-left"
       aria-expanded={open}
-      aria-label={`${open ? 'Hide' : 'Show'} files in ${label}`}
+      aria-label={open ? t('changes.hideRepositoryFiles', { label }) : t('changes.showRepositoryFiles', { label })}
       data-testid="workspace-repository-group"
       onClick={() => onOpenChange(!open)}
     >
@@ -280,12 +281,13 @@ function DiffViewer({
   onBack,
   onRefresh,
 }: DiffViewerProps) {
+  const { t } = useTranslation('workspaces');
   const { name, directory } = splitPath(selectedPath);
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Workspace change diff">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={t('changes.diffLabel')}>
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to changed files">
+        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label={t('changes.backToChanged')}>
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">
@@ -293,7 +295,7 @@ function DiffViewer({
             {name}
           </Txt>
           <Txt tone="muted" variant="meta" font="mono" className="truncate">
-            {directory || 'Repository root'}
+            {directory || t('changes.repositoryRoot')}
           </Txt>
         </div>
         {change ? (
@@ -309,7 +311,7 @@ function DiffViewer({
           variant="ghost"
           onClick={onRefresh}
           disabled={isRefreshing}
-          aria-label={isRefreshing ? 'Refreshing selected diff' : 'Refresh selected diff'}
+          aria-label={isRefreshing ? t('changes.refreshingDiff') : t('changes.refreshDiff')}
         >
           {isRefreshing ? <Spinner size="sm" /> : <RefreshCw size={14} />}
         </Button>
@@ -333,7 +335,7 @@ function DiffViewer({
           </Suspense>
           {truncated ? (
             <Txt tone="muted" variant="meta" className="block p-3">
-              Diff truncated at 512 KB.
+              {t('changes.diffTruncated')}
             </Txt>
           ) : null}
         </div>
@@ -369,6 +371,7 @@ export function WorkspaceChangesPanel({
   onRefresh,
   onBack,
 }: WorkspaceChangesPanelProps) {
+  const { t } = useTranslation('workspaces');
   const [view, setView] = useState<WorkspaceChangesView>({ type: 'list' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const requestedPath = view.type === 'diff' ? view.path : undefined;
@@ -404,20 +407,20 @@ export function WorkspaceChangesPanel({
   return (
     <aside
       className="flex min-h-0 min-w-0 grow flex-col"
-      aria-label="Workspace changes"
+      aria-label={t('changes.label')}
       data-testid="workspace-changes-panel"
     >
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
+        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label={t('fileBrowser.back')}>
           <ArrowLeft />
         </Button>
         <FileDiff className="text-muted-foreground" size={14} />
         <Txt tone="ink" as="h2" variant="column">
-          Changes
+          {t('overview.changes')}
         </Txt>
         {!isLoading && !error ? (
           <Txt tone="muted" variant="meta" className="ml-auto">
-            {changes?.changes.length ?? 0} {changes?.changes.length === 1 ? 'file' : 'files'}
+            {t('changes.fileCount', { count: changes?.changes.length ?? 0 })}
           </Txt>
         ) : null}
         {!error && changes?.changes.length ? (
@@ -429,7 +432,7 @@ export function WorkspaceChangesPanel({
           variant="ghost"
           onClick={onRefresh}
           disabled={isRefreshing}
-          aria-label={isRefreshing ? 'Refreshing changes' : 'Refresh changes'}
+          aria-label={isRefreshing ? t('changes.refreshing') : t('changes.refresh')}
         >
           {isRefreshing ? <Spinner size="sm" /> : <RefreshCw size={14} />}
         </Button>
@@ -509,15 +512,16 @@ function RepositoryChangesGroup({
   selectedId,
   onSelect,
 }: RepositoryChangesGroupProps) {
+  const { t } = useTranslation('workspaces');
   const tree = buildChangeTree(repository.changes, repository.prefix);
 
   return (
-    <section aria-label={`Changes in ${repository.slug}`}>
+    <section aria-label={t('changes.inRepository', { slug: repository.slug })}>
       <RepositoryGroupHeader label={repository.slug} provider={provider} open={open} onOpenChange={onOpenChange}>
         <Txt as="span" tone="muted" variant="meta" className="shrink-0">
           {!repository.available
-            ? 'Unavailable'
-            : `${repository.changes.length} ${repository.changes.length === 1 ? 'file' : 'files'}`}
+            ? t('overview.unavailable')
+            : t('changes.fileCount', { count: repository.changes.length })}
         </Txt>
         {repository.changes.length ? (
           <ChangeCounts additions={repository.additions} deletions={repository.deletions} />

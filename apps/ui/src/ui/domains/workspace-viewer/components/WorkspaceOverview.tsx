@@ -6,6 +6,10 @@ import { RecreateSandboxAction } from './RecreateSandboxAction';
 import type { RecreateSandboxTarget } from './RecreateSandboxAction';
 import { WorkspaceOverviewStatus } from './WorkspaceOverviewStatus';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 interface WorkspaceOverviewProps {
   changes?: WorkspaceChanges;
@@ -22,8 +26,8 @@ interface WorkspaceOverviewProps {
 
 function changesSummary(changes: WorkspaceChanges | undefined) {
   if (!changes?.available) return null;
-  if (changes.changes.length === 0) return 'No changes';
-  return `${changes.changes.length} changed`;
+  if (changes.changes.length === 0) return tk('overview.noChanges');
+  return tk('overview.changedCount', { count: changes.changes.length });
 }
 
 export function WorkspaceOverview({
@@ -36,6 +40,7 @@ export function WorkspaceOverview({
   onShowComments,
   recreateSandbox,
 }: WorkspaceOverviewProps) {
+  const { t } = useTranslation('workspaces');
   const changeCount = changes?.changes.length ?? 0;
   const changesLabel = changesSummary(changes);
   const hasChangeStats =
@@ -53,10 +58,10 @@ export function WorkspaceOverview({
   );
 
   return (
-    <aside className="flex min-h-0 w-full min-w-0 grow flex-col gap-0.5 p-1.5" aria-label="Workspace">
+    <aside className="flex min-h-0 w-full min-w-0 grow flex-col gap-0.5 p-1.5" aria-label={t('overview.label')}>
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowChanges}>
         <FileDiff />
-        <span>Changes</span>
+        <span>{t('overview.changes')}</span>
         <Txt as="span" variant="meta" className="ml-auto">
           <WorkspaceOverviewStatus loading={changesLoading} error={changesError}>
             {changesStatus}
@@ -65,14 +70,14 @@ export function WorkspaceOverview({
       </Button>
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowFiles}>
         <NotepadText />
-        <span>Files</span>
+        <span>{t('overview.files')}</span>
       </Button>
       {onShowComments ? (
         <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowComments}>
           <MessageSquare />
-          <span>Comments</span>
+          <span>{t('overview.comments')}</span>
           <Txt as="span" variant="meta" tone="muted" className="ml-auto">
-            {commentCount === 0 ? 'None yet' : commentCount}
+            {commentCount === 0 ? t('overview.noneYet') : commentCount}
           </Txt>
         </Button>
       ) : null}

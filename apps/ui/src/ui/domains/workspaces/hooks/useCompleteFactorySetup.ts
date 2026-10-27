@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
+import { translator } from '../../../i18n/t';
 import { useApiConfig } from '../../../../api/config';
 import { isProviderConnected } from './useProviderConnection';
 import { queryKeys } from '../../../../api/keys';
@@ -26,6 +27,8 @@ import {
 } from '../services/onboardingFlow';
 import type { OnboardingDraft } from '../services/onboardingFlow';
 
+const tk = translator('workspaces');
+
 async function findPendingFactory(baseUrl: string, pendingId: string) {
   try {
     return await fetchFactoryProject(baseUrl, pendingId);
@@ -44,7 +47,7 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
   return useMutation({
     mutationFn: async (draft: OnboardingDraft) => {
       const parsed = completeOnboardingSchema.safeParse(draft);
-      if (!parsed.success) throw new Error('Choose your setup and its required models before creating your factory.');
+      if (!parsed.success) throw new Error(tk('setup.incomplete'));
       const setup = parsed.data;
       const repo = setup.repository;
       const modelScope = setup.modelScope;
@@ -61,13 +64,17 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
         ),
       ]);
       for (const [index, { scope, choice }] of plan.checks.entries()) {
-        const account = scope === 'org' ? 'the company account' : 'your account';
+        const company = scope === 'org';
         if (!catalogs[index].some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
-          throw new Error(`${choice.modelId} is no longer available for ${account}. Choose another model.`);
+          throw new Error(
+            company
+              ? tk('setup.modelUnavailableCompany', { model: choice.modelId })
+              : tk('setup.modelUnavailableYours', { model: choice.modelId }),
+          );
         }
         const provider = providers.providers.find(item => item.provider === choice.providerId);
         if (!provider || !isProviderConnected(provider, local ? undefined : scope, choice.method)) {
-          throw new Error(`The connection for ${account} has changed. Review your provider connection.`);
+          throw new Error(company ? tk('setup.connectionChangedCompany') : tk('setup.connectionChangedYours'));
         }
       }
 

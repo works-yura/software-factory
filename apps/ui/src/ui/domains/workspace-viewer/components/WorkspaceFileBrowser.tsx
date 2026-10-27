@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { queryKeys } from '../../../../api/keys';
 import { WakeSandbox } from './WakeSandbox';
@@ -101,6 +102,7 @@ interface TreeLevelProps {
 
 /** The contents of one open folder: fetched only once it is open. */
 function FolderChildren({ path, ...props }: TreeLevelProps & { path: string }) {
+  const { t } = useTranslation('workspaces');
   const listing = useWorkspaceTree(props.workspacePath, path);
   if (listing.isLoading) {
     return (
@@ -120,7 +122,7 @@ function FolderChildren({ path, ...props }: TreeLevelProps & { path: string }) {
   if (entries.length === 0) {
     return (
       <li className="px-2 py-1">
-        <TreeMessage>Empty</TreeMessage>
+        <TreeMessage>{t('fileBrowser.emptyFolder')}</TreeMessage>
       </li>
     );
   }
@@ -196,6 +198,7 @@ export function WorkspaceFileBrowser({
   onShowHiddenChange,
   onBack,
 }: WorkspaceFileBrowserProps) {
+  const { t } = useTranslation('workspaces');
   const queryClient = useQueryClient();
   const root = useWorkspaceTree(workspacePath, '', { enabled: visible });
   const isRefreshing = useIsFetching({ queryKey: queryKeys.workspaceTreeScope(workspacePath) }) > 0;
@@ -217,18 +220,19 @@ export function WorkspaceFileBrowser({
   } else if (root.data && !root.data.available) {
     content = <WakeSandbox workspacePath={workspacePath} />;
   } else if (entries.length === 0) {
-    content = <TreeMessage>No files</TreeMessage>;
+    content = <TreeMessage>{t('fileBrowser.noFiles')}</TreeMessage>;
   }
+  const hiddenFilesLabel = showHidden ? t('fileBrowser.hideHidden') : t('fileBrowser.showHidden');
 
   return (
-    <aside className="flex min-h-0 w-full min-w-0 grow flex-col" aria-label="Workspace files">
+    <aside className="flex min-h-0 w-full min-w-0 grow flex-col" aria-label={t('files.label')}>
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
+        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label={t('fileBrowser.back')}>
           <ArrowLeft />
         </Button>
         <NotepadText className="text-muted-foreground" size={14} />
         <Txt tone="ink" as="h2" variant="column">
-          Files
+          {t('overview.files')}
         </Txt>
         <Tooltip>
           <TooltipTrigger
@@ -239,20 +243,20 @@ export function WorkspaceFileBrowser({
                 variant="ghost"
                 onClick={() => onShowHiddenChange(!showHidden)}
                 aria-pressed={showHidden}
-                aria-label={showHidden ? 'Hide hidden files' : 'Show hidden files'}
+                aria-label={hiddenFilesLabel}
               >
                 {showHidden ? <Eye /> : <EyeOff />}
               </Button>
             }
           />
-          <TooltipContent>{showHidden ? 'Hide hidden files' : 'Show hidden files'}</TooltipContent>
+          <TooltipContent>{hiddenFilesLabel}</TooltipContent>
         </Tooltip>
         <Button
           size="icon-sm"
           variant="ghost"
           onClick={refresh}
           disabled={isRefreshing}
-          aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
+          aria-label={isRefreshing ? t('fileBrowser.refreshing') : t('fileBrowser.refresh')}
         >
           {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
         </Button>

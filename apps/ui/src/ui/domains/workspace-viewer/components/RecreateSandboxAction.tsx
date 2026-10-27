@@ -3,10 +3,14 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { RotateCcw } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { WorkspaceChanges } from '../../../../api/types';
 import { useRecreateSessionSandbox } from '../../workspaces/hooks/useRecreateSessionSandbox';
 import type { RecreateSandboxTarget } from '../../workspaces/hooks/useRecreateSessionSandbox';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export type { RecreateSandboxTarget };
 
@@ -18,15 +22,16 @@ interface RecreateSandboxActionProps {
 }
 
 function changesWarning({ changes, changesLoading, changesError }: Omit<RecreateSandboxActionProps, 'target'>) {
-  if (changesLoading) return 'Checking for uncommitted changes…';
+  if (changesLoading) return tk('recreateSandbox.checkingChanges');
   // A stuck sandbox often can't report its changes, so assume they exist.
-  if (changesError || !changes?.available) return "Uncommitted changes couldn't be checked and will be lost.";
+  if (changesError || !changes?.available) return tk('recreateSandbox.changesUnknown');
   const count = changes.changes.length;
   if (count === 0) return undefined;
-  return `${count} uncommitted ${count === 1 ? 'change' : 'changes'} will be lost.`;
+  return tk('recreateSandbox.changesLost', { count });
 }
 
 export function RecreateSandboxAction({ target, ...changesState }: RecreateSandboxActionProps) {
+  const { t } = useTranslation('workspaces');
   const [open, setOpen] = useState(false);
   const recreate = useRecreateSessionSandbox(target, { onSuccess: () => setOpen(false) });
   const warning = changesWarning(changesState);
@@ -41,19 +46,17 @@ export function RecreateSandboxAction({ target, ...changesState }: RecreateSandb
     <>
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={() => setDialogOpen(true)}>
         <RotateCcw />
-        <span>Recreate sandbox</span>
+        <span>{t('recreateSandbox.action')}</span>
       </Button>
       <AlertDialog open={open} onOpenChange={setDialogOpen}>
         <AlertDialog.Content>
           <AlertDialog.Header>
-            <AlertDialog.Title>Recreate sandbox?</AlertDialog.Title>
-            <AlertDialog.Description>
-              This destroys the current sandbox. The next message boots a fresh one from the template.
-            </AlertDialog.Description>
+            <AlertDialog.Title>{t('recreateSandbox.title')}</AlertDialog.Title>
+            <AlertDialog.Description>{t('recreateSandbox.description')}</AlertDialog.Description>
           </AlertDialog.Header>
           <AlertDialog.Body className="flex flex-col gap-1">
             {warning ? <Txt variant="body-sm">{warning}</Txt> : null}
-            <Txt variant="body-sm">A running agent will be stopped.</Txt>
+            <Txt variant="body-sm">{t('recreateSandbox.agentStops')}</Txt>
             {recreate.error ? (
               <Txt variant="body-sm" className="text-destructive-foreground" role="alert">
                 {recreate.error.message}
@@ -61,9 +64,9 @@ export function RecreateSandboxAction({ target, ...changesState }: RecreateSandb
             ) : null}
           </AlertDialog.Body>
           <AlertDialog.Footer>
-            <AlertDialog.Cancel disabled={recreate.isPending}>Cancel</AlertDialog.Cancel>
+            <AlertDialog.Cancel disabled={recreate.isPending}>{t('actions.cancel')}</AlertDialog.Cancel>
             <Button variant="destructive" size="md" disabled={recreate.isPending} onClick={() => recreate.mutate()}>
-              {recreate.isPending ? 'Recreating…' : 'Recreate'}
+              {recreate.isPending ? t('recreateSandbox.recreating') : t('recreateSandbox.confirm')}
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>

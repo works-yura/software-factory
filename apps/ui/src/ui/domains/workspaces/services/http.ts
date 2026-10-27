@@ -2,6 +2,9 @@
  * Transport for the factory server's HTTP API: JSON parsing and the per-project
  * POST helper, shared by every service module in this domain.
  */
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export async function readJsonOrThrow<T>(res: Response, failure: string): Promise<T> {
   if (!res.ok) {
@@ -32,7 +35,7 @@ async function postRepositoryOperation<T>(url: string, payload: unknown): Promis
   });
   if (!res.ok) {
     let code = `http_${res.status}`;
-    let message = `Request failed (${res.status})`;
+    let message = tk('errors.requestFailed', { status: res.status });
     try {
       const body = (await res.json()) as { error?: string; message?: string };
       if (body.error) code = body.error;

@@ -10,11 +10,14 @@ import type { OnboardingDraft, OnboardingModelScope, OnboardingStep } from '../.
 
 import { OnboardingReviewRow } from './OnboardingReviewRow';
 import { OnboardingWorkReviewRow } from './OnboardingWorkReviewRow';
+import { translator } from '../../../../i18n/t';
+
+const tk = translator('workspaces');
 
 function sharedModelDetail(scope: OnboardingModelScope | undefined, local: boolean) {
-  if (local) return 'Factory default · local connection';
-  if (scope === 'hybrid') return 'Company account · Factory work';
-  return 'Company account · Factory work and sessions';
+  if (local) return tk('review.sharedModel.local');
+  if (scope === 'hybrid') return tk('review.sharedModel.hybrid');
+  return tk('review.sharedModel.factory');
 }
 
 export function OnboardingReviewStep({
@@ -38,12 +41,12 @@ export function OnboardingReviewStep({
   const shared = draft.modelScope !== 'user';
   const readyToCreate = completeOnboardingSchema.safeParse(draft).success;
   return (
-    <section aria-label="Review factory setup" className="flex flex-col gap-5">
+    <section aria-label={tk('review.label')} className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 sm:gap-4">
         <OnboardingReviewRow
           icon={<GitBranch />}
-          label="Codebase"
-          value={repo?.fullName ?? 'Choose a repository'}
+          label={tk('review.codebase')}
+          value={repo?.fullName ?? tk('vcs.chooseRepository')}
           detail={repo ? `${isGitLabRepository(repo) ? 'GitLab' : 'GitHub'} · ${repo.defaultBranch}` : undefined}
           disabled={pending}
           onEdit={() => onEdit('vcs')}
@@ -52,9 +55,9 @@ export function OnboardingReviewStep({
         {!local && (
           <OnboardingReviewRow
             icon={<Building2 />}
-            label="Setup"
-            value={draft.modelScope ? SETUP_LABELS[draft.modelScope] : 'Choose a setup'}
-            detail="Applies to this Factory"
+            label={tk('review.setup')}
+            value={draft.modelScope ? SETUP_LABELS[draft.modelScope] : tk('review.chooseSetup')}
+            detail={tk('review.setupDetail')}
             disabled={pending}
             onEdit={() => onEdit('model-setup')}
           />
@@ -62,8 +65,8 @@ export function OnboardingReviewStep({
         {shared ? (
           <OnboardingReviewRow
             icon={<Sparkles />}
-            label="Model"
-            value={draft.model?.modelId ?? 'Choose a model'}
+            label={tk('review.model')}
+            value={draft.model?.modelId ?? tk('review.chooseModel')}
             detail={sharedModelDetail(draft.modelScope, local)}
             disabled={pending}
             onEdit={() => onEdit('model-provider')}
@@ -71,9 +74,9 @@ export function OnboardingReviewStep({
         ) : (
           <OnboardingReviewRow
             icon={<Sparkles />}
-            label="Model"
-            value={personal?.modelId ?? 'Choose a model'}
-            detail={personal && `${personalMethod} · your default for work and sessions`}
+            label={tk('review.model')}
+            value={personal?.modelId ?? tk('review.chooseModel')}
+            detail={personal && tk('review.personalDefaultAll', { method: personalMethod })}
             disabled={pending}
             onEdit={() => onEdit('personal-provider')}
           />
@@ -81,9 +84,9 @@ export function OnboardingReviewStep({
         {draft.modelScope === 'hybrid' && (
           <OnboardingReviewRow
             icon={<UserRound />}
-            label="Personal model"
-            value={personal?.modelId ?? 'Choose your session model'}
-            detail={personal ? `${personalMethod} · your default for sessions` : undefined}
+            label={tk('review.personalModel')}
+            value={personal?.modelId ?? tk('review.chooseSessionModel')}
+            detail={personal ? tk('review.personalDefaultSessions', { method: personalMethod }) : undefined}
             disabled={pending}
             onEdit={() => onEdit('personal-provider')}
           />
@@ -91,8 +94,7 @@ export function OnboardingReviewStep({
       </div>
       {draft.modelScope !== 'factory' && (
         <Txt variant="meta" tone="muted">
-          Your personal default is used wherever your account powers a session or Factory work. Teammates keep their own
-          defaults.
+          {tk('review.personalDefaultNote')}
         </Txt>
       )}
       {error && (
@@ -102,8 +104,8 @@ export function OnboardingReviewStep({
       )}
       <div>
         <Button variant="primary" size="lg" disabled={pending || !readyToCreate} onClick={onConfirm}>
-          {pending && <Spinner size="sm" aria-label="Creating factory" />}
-          {pending ? 'Creating your factory…' : 'Create factory'}
+          {pending && <Spinner size="sm" aria-label={tk('review.creatingLabel')} />}
+          {pending ? tk('review.creating') : tk('review.create')}
         </Button>
       </div>
     </section>

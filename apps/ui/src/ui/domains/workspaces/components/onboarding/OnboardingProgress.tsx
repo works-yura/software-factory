@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 import type { OnboardingStep } from '../../services/onboardingFlow';
 import { onboardingSteps, STEP_META } from '../../services/onboardingSteps';
 
@@ -11,12 +12,13 @@ export function OnboardingProgress({
   editingReview: boolean;
   local?: boolean;
 }) {
+  const { t } = useTranslation('workspaces');
   const steps: OnboardingStep[] = onboardingSteps(undefined, local).filter(item => item !== 'initial');
   const activeStep = step === 'personal-provider' ? 'model-provider' : step;
   const progressIndex = editingReview ? steps.length - 1 : steps.indexOf(activeStep);
   return (
     <footer className="bg-background fixed inset-x-0 bottom-0 z-20 px-6 pt-4 pb-5 sm:px-10 lg:px-12 xl:px-16">
-      <ol className="grid auto-cols-fr grid-flow-col gap-3 sm:gap-5" aria-label="Factory setup progress">
+      <ol className="grid auto-cols-fr grid-flow-col gap-3 sm:gap-5" aria-label={t('onboarding.progress')}>
         {steps.map((item, index) => (
           <li key={item} aria-current={item === activeStep ? 'step' : undefined}>
             <div className="bg-fill h-0.5 overflow-hidden rounded-full" aria-hidden="true">

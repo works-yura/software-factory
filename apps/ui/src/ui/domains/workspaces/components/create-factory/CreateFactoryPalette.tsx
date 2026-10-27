@@ -6,6 +6,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { CREATE_FACTORY_STEPS } from '../../hooks/useCreateFactoryFlow';
 import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
@@ -42,6 +43,7 @@ export function CreateFactoryPalette({
   onSkip,
   children,
 }: CreateFactoryPaletteProps) {
+  const { t } = useTranslation('workspaces');
   const stepIndex = CREATE_FACTORY_STEPS.indexOf(step);
 
   return (
@@ -58,10 +60,10 @@ export function CreateFactoryPalette({
             size="sm"
             onMouseDown={event => event.preventDefault()}
             onClick={onBack}
-            aria-label="Go back to previous step"
+            aria-label={t('onboarding.backLabel')}
           >
             <ArrowLeft aria-hidden="true" />
-            Back
+            {t('actions.back')}
           </Button>
         )}
         <Txt
@@ -76,11 +78,14 @@ export function CreateFactoryPalette({
         </Txt>
         {onSkip && (
           <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onSkip}>
-            Skip
+            {t('actions.skip')}
             <ArrowRight aria-hidden="true" />
           </Button>
         )}
-        <ol className="flex shrink-0 gap-1" aria-label={`Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>
+        <ol
+          className="flex shrink-0 gap-1"
+          aria-label={t('createFactory.stepOf', { step: stepIndex + 1, total: CREATE_FACTORY_STEPS.length })}
+        >
           {CREATE_FACTORY_STEPS.map((item, index) => (
             <li
               key={item}

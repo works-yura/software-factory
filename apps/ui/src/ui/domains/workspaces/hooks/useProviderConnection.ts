@@ -10,15 +10,19 @@ import {
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { providerDisplayName } from '@factory/credentials/provider-display-name';
 import { credentialAt } from '../../settings/components/provider-credential';
+import { lazyLabels } from '../../../i18n/lazy';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export type ProviderCredentialScope = 'org' | 'user';
 export type ProviderConnectionMethod = 'api_key' | 'oauth';
 export type PreviewProvider = (providerId: string | undefined, method?: ProviderConnectionMethod) => void;
 
-export const CONNECTION_METHOD_LABEL: Record<ProviderConnectionMethod, string> = {
-  api_key: 'API key',
-  oauth: 'Provider sign-in',
-};
+export const CONNECTION_METHOD_LABEL: Readonly<Record<ProviderConnectionMethod, string>> = lazyLabels(
+  ['api_key', 'oauth'],
+  method => `workspaces:providers.methods.${method}`,
+);
 
 export interface ActiveProviderOAuth {
   provider: string;
@@ -149,7 +153,7 @@ export function useProviderConnection({
         replaces: providerCredentialMethod(chosen, credentialScope),
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to start provider sign in');
+      setError(cause instanceof Error ? cause.message : tk('providers.signInFailed'));
     }
   };
 

@@ -5,6 +5,7 @@ import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-sur
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, GripVertical, LayoutGrid } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { SESSION_GROUP_BY_LABELS, SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
 import type { SessionGroupBy, SessionGroupHeading } from '../services/sessionGroups';
@@ -46,6 +47,7 @@ export function SessionGroupMenu({
   onVisibilityChange: (key: string, visible: boolean) => void;
   onOrderChange: (keys: string[]) => void;
 }) {
+  const { t } = useTranslation('workspaces');
   const groupKeys = groups.map(group => group.key);
   const isVisible = (key: string) => !hiddenKeys.includes(key);
 
@@ -64,11 +66,11 @@ export function SessionGroupMenu({
     <DropdownMenu.Sub>
       <DropdownMenu.SubTrigger hint={SESSION_GROUP_BY_LABELS[groupBy]}>
         <LayoutGrid aria-hidden />
-        <span>Group</span>
+        <span>{t('sessions.group')}</span>
       </DropdownMenu.SubTrigger>
       <DropdownMenu.SubContent>
         <DropdownMenu.RadioSub
-          label="Group by"
+          label={t('sessions.groupBy.label')}
           options={SESSION_GROUP_BY_OPTIONS}
           value={groupBy}
           onValueChange={onGroupByChange}

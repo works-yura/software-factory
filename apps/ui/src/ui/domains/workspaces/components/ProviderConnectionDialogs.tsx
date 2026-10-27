@@ -1,12 +1,15 @@
+import { useTranslation } from 'react-i18next';
+
 import type { ProviderInfo } from '../../../../api/types';
+import { lazyLabels } from '../../../i18n/lazy';
 import { AddApiKeyDialog } from '../../settings/components/AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../settings/components/ProviderOAuthDialog';
 import type { ActiveProviderOAuth, ProviderCredentialScope } from '../hooks/useProviderConnection';
 
-const SCOPED_SIGN_IN_ACCESS: Record<ProviderCredentialScope, string> = {
-  org: 'Everyone in your organization can use this provider connection.',
-  user: 'This provider connection is only for you. Shared organization access stays unchanged.',
-};
+const SCOPED_SIGN_IN_ACCESS: Readonly<Record<ProviderCredentialScope, string>> = lazyLabels(
+  ['org', 'user'],
+  scope => `workspaces:providers.scopeNotice.${scope}`,
+);
 
 export interface ProviderConnectionDialogsProps {
   keyProvider?: ProviderInfo;
@@ -28,9 +31,8 @@ export function ProviderConnectionDialogs({
   onCloseOAuth,
   onCompleteOAuth,
 }: ProviderConnectionDialogsProps) {
-  const replacementNotice = oauth?.replaces
-    ? ' Completing sign-in replaces the existing connection for this provider at this scope.'
-    : '';
+  const { t } = useTranslation('workspaces');
+  const replacementNotice = oauth?.replaces ? ` ${t('providers.replacesNotice')}` : '';
   return (
     <>
       {keyProvider && (

@@ -4,6 +4,7 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, KeyRound, LogIn } from 'lucide-react';
 import { useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { providerDisplayName } from '@factory/credentials/provider-display-name';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
@@ -17,17 +18,19 @@ export function ModelProviderPicker({
   connection: ProviderConnection;
   onPreviewProvider?: PreviewProvider;
 }) {
+  const { t } = useTranslation('workspaces');
   const [search, setSearch] = useState('');
   const [method, setMethod] = useState<ProviderConnectionMethod>(connection.method ?? 'api_key');
   const connectedDescriptionId = useId();
-  if (connection.isPending) return <SkeletonRows label="Loading model providers" rows={3} rowClassName="h-9 w-full" />;
+  if (connection.isPending)
+    return <SkeletonRows label={t('providers.loading')} rows={3} rowClassName="h-9 w-full" />;
   if (connection.catalogError)
     return (
       <div className="flex flex-col items-start gap-3">
         <Txt variant="caption" role="alert">
           {connection.catalogError.message}
         </Txt>
-        <Button onClick={connection.retry}>Retry</Button>
+        <Button onClick={connection.retry}>{t('actions.retry')}</Button>
       </div>
     );
 
@@ -61,15 +64,15 @@ export function ModelProviderPicker({
         <TabContent value="api_key">
           <div className="flex h-36 flex-col gap-3 pt-2">
             <SearchInput
-              label="Search model providers"
-              placeholder="Search providers…"
+              label={t('providers.searchLabel')}
+              placeholder={t('providers.searchPlaceholder')}
               value={search}
               onValueChange={setSearch}
             />
             <span id={connectedDescriptionId} hidden>
-              Connected
+              {t('providers.connected')}
             </span>
-            <div role="group" aria-label="API key providers" className="flex flex-wrap gap-2 overflow-y-auto">
+            <div role="group" aria-label={t('providers.apiKeyGroup')} className="flex flex-wrap gap-2 overflow-y-auto">
               {visible.map(provider => (
                 <Button
                   key={provider.provider}
@@ -91,7 +94,9 @@ export function ModelProviderPicker({
             </div>
             {visible.length === 0 && (
               <Txt variant="caption" tone="muted">
-                {search.trim() ? `No providers match “${search.trim()}”.` : 'No API key providers available.'}
+                {search.trim()
+                  ? t('providers.noMatch', { query: search.trim() })
+                  : t('providers.noApiKeyProviders')}
               </Txt>
             )}
           </div>
@@ -99,7 +104,7 @@ export function ModelProviderPicker({
         <TabContent value="oauth">
           <div
             role="group"
-            aria-label="Sign in with a provider"
+            aria-label={t('providers.signInGroup')}
             className="flex h-36 flex-col gap-2 overflow-y-auto pt-2"
           >
             {connection.signInProviders.map(provider => (
@@ -116,13 +121,13 @@ export function ModelProviderPicker({
               >
                 <ProviderBrandIcon provider={provider.provider} />
                 {connection.isConfigured(provider, 'oauth')
-                  ? `Use ${providerDisplayName(provider.provider)} connection`
-                  : `Continue with ${providerDisplayName(provider.provider)}`}
+                  ? t('providers.useConnection', { provider: providerDisplayName(provider.provider) })
+                  : t('providers.continueWith', { provider: providerDisplayName(provider.provider) })}
               </Button>
             ))}
             {connection.signInProviders.length === 0 && (
               <Txt variant="caption" tone="muted">
-                Provider sign-in isn’t available on this deployment. Use an API key.
+                {t('providers.signInUnavailable')}
               </Txt>
             )}
           </div>

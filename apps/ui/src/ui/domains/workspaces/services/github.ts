@@ -17,6 +17,9 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 
 import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 import type { GitLabRepository } from '../../factory/services/gitlab';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export interface GithubInstallation {
   installationId: number;
@@ -180,7 +183,7 @@ export async function fetchGithubPatStatus(baseUrl: string): Promise<GithubPatSt
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to load GitHub token status (${res.status})`);
+  if (!res.ok) throw new Error(tk('errors.loadGithubToken', { status: res.status }));
   return (await res.json()) as GithubPatStatus;
 }
 
@@ -194,7 +197,7 @@ export async function saveGithubPat(baseUrl: string, token: string, kind: Github
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
-    throw new Error(body?.error ?? `Failed to save GitHub token (${res.status})`);
+    throw new Error(body?.error ?? tk('errors.saveGithubToken', { status: res.status }));
   }
 }
 
@@ -205,7 +208,7 @@ export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'de
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to remove GitHub token (${res.status})`);
+  if (!res.ok) throw new Error(tk('errors.removeGithubToken', { status: res.status }));
 }
 
 /**
@@ -223,7 +226,7 @@ export async function listGithubRepos(
   const search = params.toString();
   const url = `${baseUrl}/web/github/repos${search ? `?${search}` : ''}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
-  if (!res.ok) throw new Error(`Failed to list repos (${res.status})`);
+  if (!res.ok) throw new Error(tk('errors.listRepos', { status: res.status }));
   const body = (await res.json()) as { repos: GithubRepo[] };
   return body.repos;
 }
@@ -314,7 +317,7 @@ async function listProjectConnections(baseUrl: string, factoryProjectId: string)
   );
   const { connections } = await readJsonOrThrow<{ connections: ProjectConnectionPayload[] }>(
     res,
-    'Failed to list Factory repositories',
+    tk('errors.listFactoryRepositories'),
   );
   return connections;
 }
@@ -331,7 +334,7 @@ export async function listFactoryProjects(baseUrl: string): Promise<FactoryProje
     headers: { Accept: 'application/json' },
   });
   if (res.status === 401 || res.status === 403 || res.status === 404) return null;
-  const { projects } = await readJsonOrThrow<{ projects: FactoryProjectPayload[] }>(res, 'Failed to list Factories');
+  const { projects } = await readJsonOrThrow<{ projects: FactoryProjectPayload[] }>(res, tk('errors.listFactories'));
   return Promise.all(
     projects.map(async project => {
       const connections = await listProjectConnections(baseUrl, project.id);
@@ -362,7 +365,7 @@ export async function createFactoryProject(
       ...(modelScope ? { modelScope } : {}),
     }),
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to create Factory');
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.createFactory'));
   return project;
 }
 
@@ -372,7 +375,7 @@ export async function fetchFactoryProject(baseUrl: string, factoryProjectId: str
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to load Factory');
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.loadFactory'));
   return project;
 }
 
@@ -390,7 +393,7 @@ export async function updateFactoryDefaultModel(
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
     res,
-    'Failed to update Factory default model',
+    tk('errors.updateDefaultModel'),
   );
   return project;
 }
@@ -406,7 +409,7 @@ export async function renameFactoryProject(
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ name }),
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update Factory name');
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.updateName'));
   return project;
 }
 
@@ -424,7 +427,7 @@ export async function updateFactoryModelScope(
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
     res,
-    'Failed to update Factory model scope',
+    tk('errors.updateModelScope'),
   );
   return project;
 }
@@ -443,7 +446,7 @@ export async function updateFactoryThinkingDefault(
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
     res,
-    'Failed to update Factory thinking level',
+    tk('errors.updateThinkingLevel'),
   );
   return project;
 }
@@ -470,7 +473,7 @@ export async function applyFactoryDefaultModelToSessions(
       headers: { Accept: 'application/json' },
     },
   );
-  return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, 'Failed to switch running sessions');
+  return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, tk('errors.switchSessions'));
 }
 
 /** Toggle a Factory's automation settings: rule-started runs, plan approval. */
@@ -488,7 +491,7 @@ export async function updateFactoryAutomation(
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(patch),
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.updateAutomation'));
   return project;
 }
 
@@ -518,7 +521,7 @@ export async function connectInstallation(
   );
   const { connection } = await readJsonOrThrow<{ connection: { id: string } }>(
     res,
-    `Failed to connect ${integrationId === 'gitlab' ? 'GitLab' : 'GitHub'} installation`,
+    tk('errors.connectInstallation', { host: integrationId === 'gitlab' ? 'GitLab' : 'GitHub' }),
   );
   return connection.id;
 }
@@ -550,7 +553,7 @@ export async function linkRepository(
   );
   const { projectRepository } = await readJsonOrThrow<{ projectRepository: ProjectRepositoryPayload }>(
     res,
-    `Failed to link ${gitlab ? 'GitLab' : 'GitHub'} repository`,
+    tk('errors.linkRepository', { host: gitlab ? 'GitLab' : 'GitHub' }),
   );
   return toLinkedRepositoryPayload(
     { id: factoryProjectId, name: repo.fullName },
@@ -572,7 +575,7 @@ export async function unlinkRepository(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/repositories/${encodeURIComponent(projectRepositoryId)}`,
     { method: 'DELETE', credentials: 'include', headers: { Accept: 'application/json' } },
   );
-  if (!res.ok && res.status !== 404) throw new Error(`Failed to unlink repository (${res.status})`);
+  if (!res.ok && res.status !== 404) throw new Error(tk('errors.unlinkRepository', { status: res.status }));
 }
 
 /**
@@ -586,7 +589,7 @@ export async function deleteFactoryProject(baseUrl: string, factoryProjectId: st
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete Factory (${res.status})`);
+  if (!res.ok && res.status !== 404) throw new Error(tk('errors.deleteFactory', { status: res.status }));
 }
 
 export interface CommitResult {
@@ -661,7 +664,7 @@ export async function fetchRepositorySettings(
       credentials: 'include',
     },
   );
-  if (!res.ok) throw new Error(`Failed to load repository settings (${res.status})`);
+  if (!res.ok) throw new Error(tk('errors.loadRepositorySettings', { status: res.status }));
   return (await res.json()) as RepositorySettings;
 }
 

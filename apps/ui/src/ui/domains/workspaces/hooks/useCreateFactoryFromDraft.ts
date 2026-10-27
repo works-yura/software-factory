@@ -9,6 +9,9 @@ import { fetchIntakeConfig, selectIntakeSource } from '../../factory/services/in
 import { updateFactoryDefaultModel } from '../services/github';
 import type { FactoryProjectPayload } from '../services/github';
 import type { CreateFactoryDraft } from './useCreateFactoryFlow';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export interface CreateFactoryFromDraftOptions {
   draft?: CreateFactoryDraft;
@@ -68,7 +71,7 @@ export function useCreateFactoryFromDraft({
 
   return useMutation({
     mutationFn: async ({ modelId }: { modelId: string }) => {
-      if (!draft?.name || !draft.repository) throw new Error('Start over from the name step.');
+      if (!draft?.name || !draft.repository) throw new Error(tk('createFactory.startOver'));
 
       const factory = draft.factoryId
         ? { id: draft.factoryId, name: draft.name }

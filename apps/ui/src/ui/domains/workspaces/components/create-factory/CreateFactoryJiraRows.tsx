@@ -12,6 +12,9 @@ import { isJiraAuthError } from '../../../factory/services/jira';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { JiraIcon } from '../../../../ui/icons';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
+import { translator } from '../../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export interface CreateFactoryJiraRowsProps {
   query: string;
@@ -30,7 +33,7 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
   const normalizedQuery = query.trim().toLowerCase();
   const matches = (title: string) => title.toLowerCase().includes(normalizedQuery);
   const pending = connect.isPending || reconnect.isPending;
-  const connectTitle = reauthConnection ? 'Reconnect Jira' : 'Connect Jira';
+  const connectTitle = reauthConnection ? tk('createFactory.jira.reconnect') : tk('vcs.connect', { host: 'Jira' });
   const connectError = reconnect.error ?? connect.error;
 
   const runConnect = () => {
@@ -42,7 +45,7 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
   };
 
   if (jiraStatus.isPending || (connected && projects.isPending)) {
-    return <SkeletonRows label="Loading Jira projects" rows={2} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <SkeletonRows label={tk('createFactory.jira.loading')} rows={2} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
   }
 
   if (!connected) {
@@ -54,15 +57,15 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
         {connectable && matches(connectTitle) ? (
           <CommandPaletteItem
             icon={<JiraIcon />}
-            title={pending ? 'Connecting Jira…' : connectTitle}
-            subtitle="Import Jira issues into the Factory Work board"
+            title={pending ? tk('createFactory.jira.connecting') : connectTitle}
+            subtitle={tk('createFactory.jira.connectHint')}
             value="connect-jira"
             disabled={pending}
             onSelect={runConnect}
           />
         ) : (
           !connectable && (
-            <CreateFactoryPaletteMessage>Jira is not available for this organization.</CreateFactoryPaletteMessage>
+            <CreateFactoryPaletteMessage>{tk('createFactory.jira.unavailable')}</CreateFactoryPaletteMessage>
           )
         )}
       </CommandGroup>
@@ -75,8 +78,8 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
         {isJiraAuthError(projects.error) && reauthConnection ? (
           <CommandPaletteItem
             icon={<JiraIcon />}
-            title={pending ? 'Connecting Jira…' : 'Reconnect Jira'}
-            subtitle="Its authorization expired, so its projects cannot be read"
+            title={pending ? tk('createFactory.jira.connecting') : tk('createFactory.jira.reconnect')}
+            subtitle={tk('createFactory.linear.expired')}
             value="reconnect-jira"
             disabled={pending}
             onSelect={runConnect}
@@ -94,14 +97,14 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
   );
 
   return (
-    <CommandGroup heading="Jira projects">
+    <CommandGroup heading={tk('createFactory.jira.projects')}>
       {matchingProjects.map(project => (
         <CommandPaletteItem
           key={project.id}
           icon={<JiraIcon />}
           title={project.name}
           subtitle={
-            [project.key, project.site].filter(Boolean).join(' · ') || 'Its issues feed this Factory Work board'
+            [project.key, project.site].filter(Boolean).join(' · ') || tk('createFactory.jira.projectHint')
           }
           shortcut={<Kbd size="sm">↵</Kbd>}
           value={`jira-${project.id}`}
@@ -110,7 +113,7 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
       ))}
       {matchingProjects.length === 0 && (
         <CreateFactoryPaletteMessage>
-          {allProjects.length > 0 ? 'No Jira project matches this search.' : 'No Jira projects are available yet.'}
+          {allProjects.length > 0 ? tk('createFactory.jira.noMatch') : tk('createFactory.jira.noProjects')}
         </CreateFactoryPaletteMessage>
       )}
     </CommandGroup>

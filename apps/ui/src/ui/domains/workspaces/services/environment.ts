@@ -6,6 +6,9 @@
  */
 
 import { readJsonOrThrow } from './http';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export type EnvironmentRepositoryBuildStatus = 'unbuilt' | 'configured' | 'failed';
 
@@ -121,7 +124,7 @@ export async function getFactoryEnvironment(
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  const { environment } = await readJsonOrThrow<FactoryEnvironmentResponse>(res, 'Failed to load environment');
+  const { environment } = await readJsonOrThrow<FactoryEnvironmentResponse>(res, tk('errors.loadEnvironment'));
   return environment;
 }
 
@@ -136,7 +139,7 @@ export async function patchFactoryEnvironment(
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(input),
   });
-  return readJsonOrThrow<FactoryEnvironmentResponse>(res, 'Failed to save environment');
+  return readJsonOrThrow<FactoryEnvironmentResponse>(res, tk('errors.saveEnvironment'));
 }
 
 export async function requestEnvironmentBuild(
@@ -148,7 +151,7 @@ export async function requestEnvironmentBuild(
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  return readJsonOrThrow<FactoryEnvironmentBuildStart>(res, 'Failed to start the build');
+  return readJsonOrThrow<FactoryEnvironmentBuildStart>(res, tk('errors.startBuild'));
 }
 
 export async function listEnvironmentBuilds(
@@ -159,7 +162,7 @@ export async function listEnvironmentBuilds(
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  const { builds } = await readJsonOrThrow<{ builds: FactoryEnvironmentBuild[] }>(res, 'Failed to load builds');
+  const { builds } = await readJsonOrThrow<{ builds: FactoryEnvironmentBuild[] }>(res, tk('errors.loadBuilds'));
   return builds;
 }
 
@@ -173,6 +176,6 @@ export async function getEnvironmentBuild(
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  const { build } = await readJsonOrThrow<{ build: FactoryEnvironmentBuild }>(res, 'Failed to load the build');
+  const { build } = await readJsonOrThrow<{ build: FactoryEnvironmentBuild }>(res, tk('errors.loadBuild'));
   return build;
 }

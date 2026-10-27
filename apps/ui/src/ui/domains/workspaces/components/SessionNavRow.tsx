@@ -7,6 +7,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Lock, MoreHorizontal, Pin, PinOff, RefreshCw, Trash2, User, Users } from 'lucide-react';
 import { useRef } from 'react';
 import type { RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
@@ -16,6 +17,9 @@ import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 import { SessionSharingPopover } from './SessionSharingPopover';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
@@ -80,6 +84,7 @@ export function SessionNavRow({
   /** Disables the visibility item while a change is in flight, so overlapping requests cannot land out of order. */
   changingVisibility?: boolean;
 }) {
+  const { t } = useTranslation('workspaces');
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
   const sidebar = useMaybeSidebar();
@@ -100,13 +105,18 @@ export function SessionNavRow({
       {source ? <SessionSourceIcon source={source} /> : null}
       <Sidebar.NavLabel>{name}</Sidebar.NavLabel>
       {pinned && !loading ? (
-        <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
+        <Pin aria-label={t('sessionRow.pinned', { name })} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
     </button>
   );
   const belt = loading ? undefined : status;
   const trailing = trailingKind({ loading, status, merged });
-  const mergedLabel = changeRequestProvider === 'gitlab' ? 'Merge request merged' : 'Pull request merged';
+  const mergedLabel =
+    changeRequestProvider === 'gitlab' ? t('sessionRow.mergeRequestMerged') : t('sessionRow.pullRequestMerged');
+  const mergedAriaLabel =
+    changeRequestProvider === 'gitlab'
+      ? t('sessionRow.mergeRequestMergedFor', { name })
+      : t('sessionRow.pullRequestMergedFor', { name });
   const action = (
     <>
       {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
@@ -120,12 +130,12 @@ export function SessionNavRow({
       ) : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
         {trailing === 'loading' ? (
-          <Spinner size="sm" aria-label={`Opening ${name}`} className="text-muted-foreground" />
+          <Spinner size="sm" aria-label={t('sessionRow.opening', { name })} className="text-muted-foreground" />
         ) : null}
         {trailing === 'merged' ? (
           <span
             role="img"
-            aria-label={`${mergedLabel} for ${name}`}
+            aria-label={mergedAriaLabel}
             title={mergedLabel}
             className={cn('flex', yieldsToActions)}
           >
@@ -186,9 +196,9 @@ const revealedSlot =
   'hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid';
 
 function beltLabel(status: SessionRowStatus, name: string) {
-  if (status === 'initializing') return `Initializing ${name}`;
-  if (status === 'working') return `Agent working in ${name}`;
-  return `${name} waiting on you`;
+  if (status === 'initializing') return tk('sessionRow.initializing', { name });
+  if (status === 'working') return tk('sessionRow.agentWorking', { name });
+  return tk('sessionRow.waitingOnYou', { name });
 }
 
 /** A merge badge is worth the slot only on a session with no lifecycle left to report. */
@@ -222,6 +232,7 @@ function SessionActionsMenu({
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
   changingVisibility?: boolean;
 }) {
+  const { t } = useTranslation('workspaces');
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
@@ -230,7 +241,7 @@ function SessionActionsMenu({
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={`Session actions for ${name}`}
+            aria-label={t('sessionRow.actions', { name })}
             disabled={disabled}
             className="hidden group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex"
           >
@@ -241,12 +252,12 @@ function SessionActionsMenu({
       <DropdownMenu.Content anchor={anchor} align="end">
         <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
           {pinned ? <PinOff /> : <Pin />}
-          {pinned ? 'Unpin' : 'Pin session'}
+          {pinned ? t('sessionRow.unpin') : t('sessionRow.pin')}
         </DropdownMenu.Item>
         {onRegenerateTitle ? (
           <DropdownMenu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
             <RefreshCw className={cn(regeneratingTitle && 'animate-spin')} />
-            Regenerate title
+            {t('sessionRow.regenerateTitle')}
           </DropdownMenu.Item>
         ) : null}
         {onVisibilityChange && visibility ? (
@@ -255,13 +266,13 @@ function SessionActionsMenu({
             onClick={() => onVisibilityChange(visibility === 'private' ? 'org' : 'private')}
           >
             {visibility === 'private' ? <Users /> : <Lock />}
-            {visibility === 'private' ? 'Share with organization' : 'Make private'}
+            {visibility === 'private' ? t('sharing.shareWithOrg') : t('sharing.makePrivate')}
           </DropdownMenu.Item>
         ) : null}
         {onDelete ? (
           <DropdownMenu.Item variant="destructive" onClick={onDelete}>
             <Trash2 />
-            Delete
+            {t('actions.delete')}
           </DropdownMenu.Item>
         ) : null}
       </DropdownMenu.Content>

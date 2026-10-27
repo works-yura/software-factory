@@ -1,5 +1,6 @@
 import type { OnboardingModelChoice } from '../services/onboardingFlow';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 import { useProviderConnection } from '../hooks/useProviderConnection';
 import type { PreviewProvider } from '../hooks/useProviderConnection';
 import { FactoryDefaultModelForm } from './FactoryDefaultModelForm';
@@ -19,10 +20,11 @@ export function PersonalProviderFactoryStep({
   initialChoice,
   onPreviewModel,
 }: PersonalProviderFactoryStepProps) {
+  const { t } = useTranslation('workspaces');
   const connection = useProviderConnection({ scope: 'user', initialSelection: initialChoice });
   const connectedProvider = connection.connected ? connection.provider : undefined;
   return (
-    <section aria-label="Personal provider setup" className="flex max-w-xl flex-col gap-6">
+    <section aria-label={t('providers.personalSetupLabel')} className="flex max-w-xl flex-col gap-6">
       {connectedProvider ? (
         <FactoryDefaultModelForm
           key={connectedProvider.provider}
@@ -30,7 +32,7 @@ export function PersonalProviderFactoryStep({
           provider={connectedProvider}
           initialModelId={initialChoice?.providerId === connectedProvider.provider ? initialChoice.modelId : undefined}
           onPreviewModel={onPreviewModel}
-          submitLabel="Review setup"
+          submitLabel={t('providers.reviewSetup')}
           onChangeProvider={() => {
             connection.clear();
             onPreviewProvider?.(undefined);
