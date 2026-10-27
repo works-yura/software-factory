@@ -70,7 +70,7 @@ import { buildPlatformConnectRoutes } from '@factory/integrations';
 import { PlatformGithubIntegration } from '@factory/integration-github';
 import { PlatformGitLabIntegration } from '@factory/integration-gitlab';
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.ts';
-import { PlatformJiraIntegration } from './integrations/platform/jira/integration.ts';
+import { PlatformJiraIntegration } from '@factory/integration-jira';
 import { PlatformLinearIntegration } from '@factory/integration-linear';
 import { createSessionAsRowOwner, prepareSessionRunContext } from '@factory/integrations';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.ts';

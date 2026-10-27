@@ -18,8 +18,8 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { IntegrationConnection } from '@factory/capabilities';
-import { JIRA_UNTRUSTED_CONTENT_NOTICE } from '../../jira/agent-tools.ts';
-import { JiraApiError } from '../../jira/api.ts';
+import { JIRA_UNTRUSTED_CONTENT_NOTICE } from '../agent-tools.ts';
+import { JiraApiError } from '../api.ts';
 import type { PlatformJiraIntegration } from './integration.ts';
 
 /** The `Intake` contract requires a connection argument; the Platform adapter resolves the real connection. */

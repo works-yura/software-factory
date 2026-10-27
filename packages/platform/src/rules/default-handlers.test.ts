@@ -7,7 +7,7 @@ import { workBoard } from '@factory/pipelines';
 import { defaultGithubRules } from '@factory/integration-github';
 import { defaultGitLabRules } from '@factory/integration-gitlab';
 import { defaultIncidentioRules } from '../integrations/incidentio/default-rules.ts';
-import { defaultJiraRules } from '../integrations/jira/default-rules.ts';
+import { defaultJiraRules } from '@factory/integration-jira';
 import { defaultLinearRules } from '@factory/integration-linear';
 import type {
   FactoryGithubRuleContext,

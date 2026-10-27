@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeRouteAuth } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
 import type { FactoryStorageTestSeed } from '@factory/testing';
-import { JIRA_UNTRUSTED_CONTENT_NOTICE } from '../../jira/agent-tools.ts';
-import { JiraApiError } from '../../jira/api.ts';
+import { JIRA_UNTRUSTED_CONTENT_NOTICE } from '../agent-tools.ts';
+import { JiraApiError } from '../api.ts';
 import { buildPlatformJiraAgentTools } from './agent-tools.ts';
 import { PlatformJiraIntegration } from './integration.ts';
 

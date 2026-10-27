@@ -5,7 +5,7 @@ import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import type { TestAuthUser } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
 import type { FactoryStorageTestSeed } from '@factory/testing';
-import { JiraApiError } from '../../jira/api.ts';
+import { JiraApiError } from '../api.ts';
 import { PlatformJiraIntegration } from './integration.ts';
 import { buildPlatformJiraRoutes } from './routes.ts';
 

@@ -18,8 +18,8 @@ import type { Context } from 'hono';
 
 import type { RouteAuth } from '@factory/http';
 import type { IntakeStorage } from '@factory/store';
-import { JiraApiError } from '../../jira/api.ts';
-import type { JiraRulesIngress } from '../../jira/rules.ts';
+import { JiraApiError } from '../api.ts';
+import type { JiraRulesIngress } from '../rules.ts';
 import type { PlatformJiraIntegration } from './integration.ts';
 
 type RouteContext = Context;

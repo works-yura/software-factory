@@ -23,6 +23,7 @@
     "@factory/http": "workspace:*",
     "@factory/integration-github": "workspace:*",
     "@factory/integration-gitlab": "workspace:*",
+    "@factory/integration-jira": "workspace:*",
     "@factory/integration-linear": "workspace:*",
     "@factory/integrations": "workspace:*",
     "@factory/observability": "workspace:*",

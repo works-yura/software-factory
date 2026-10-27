@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '@factory/testing';
 import { fakeRouteAuth } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
-import type { JiraApiError } from '../../jira/api.ts';
-import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.ts';
+import type { JiraApiError } from '../api.ts';
+import { attachJiraIssueReconciler } from '../issue-reconciler.ts';
 import {
   decodeIssueReference,
   decodeSourceId,
