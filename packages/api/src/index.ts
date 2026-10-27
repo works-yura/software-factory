@@ -6,6 +6,7 @@ export * from './automation-runs.ts';
 export * from './config.ts';
 export * from './custom-provider-source.ts';
 export * from './fs.ts';
+export * from './harness-start.ts';
 export * from './intake.ts';
 export * from './knowledge.ts';
 export * from './metrics.ts';

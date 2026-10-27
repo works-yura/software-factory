@@ -15,6 +15,8 @@ import { MaterializeError } from '@factory/sandbox';
 import { FactoryDispatchError } from '@factory/store';
 import type { FactoryBindingPreparationInput } from '@factory/runtime';
 import { createMastraHarness, FactoryStartCoordinator } from '@factory/harness-mastra';
+import { HarnessRoutingStartCoordinator } from './harness-start.ts';
+import type { HarnessStartCoordinators } from './harness-start.ts';
 import { FactoryTransitionService } from '@factory/runtime';
 import {
   createSourceControlSessionLookup,
@@ -132,6 +134,8 @@ export interface FactoryApiRoutesDeps {
   sessionRetirement?: import('@factory/sandbox').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /** Start paths of the other harnesses a factory may be created with (see `HarnessRoutingStartCoordinator`). */
+  harnessStartCoordinators?: HarnessStartCoordinators;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     startCoordinator: FactoryStartCoordinator;
@@ -646,18 +650,21 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       }))
     : undefined;
   const startCoordinator = transitionService
-    ? new FactoryStartCoordinator(
-        deps.controller,
-        deps.domains.workItems,
-        transitionService,
-        request =>
-          resolveFactorySourceControl({
-            sourceControls,
-            orgId: request.orgId,
-            factoryProjectId: request.factoryProjectId,
-            sessionId: request.sessionId,
-          }),
-        { projects: deps.domains.projects },
+    ? new HarnessRoutingStartCoordinator(
+        [
+          deps.controller,
+          deps.domains.workItems,
+          transitionService,
+          request =>
+            resolveFactorySourceControl({
+              sourceControls,
+              orgId: request.orgId,
+              factoryProjectId: request.factoryProjectId,
+              sessionId: request.sessionId,
+            }),
+          { projects: deps.domains.projects },
+        ],
+        { projects: deps.domains.projects, coordinators: deps.harnessStartCoordinators ?? {} },
       )
     : undefined;
   if (transitionService && startCoordinator) {
