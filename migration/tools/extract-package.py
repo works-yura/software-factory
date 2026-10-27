@@ -78,7 +78,11 @@ def main():
     moved = {m.split('=', 1)[0] for m in args.modules}
     target_of = {m: renames.get(m) or (m[len(args.strip):] if m.startswith(args.strip) else m) for m in moved}
     leave = set(filter(None, args.leave_tests.split(',')))
-    files = {m: [f for f in files_of(src_root, m) if not (m in leave and f.endswith('.test.ts'))] for m in moved}
+    # An entry is a module (all its tests stay) or one test file path.
+    files = {
+        m: [f for f in files_of(src_root, m) if not (f.endswith('.test.ts') and (m in leave or f in leave))]
+        for m in moved
+    }
     missing = [m for m, f in files.items() if not any(x == m + '.ts' for x in f)]
     if missing:
         sys.exit(f'no such module: {missing}')
