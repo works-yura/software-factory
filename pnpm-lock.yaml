@@ -327,6 +327,9 @@ overrides:
   yuku-codegen: 0.7.0
   yuku-parser: 0.7.0
 
+patchedDependencies:
+  '@mastra/playground-ui@65.0.0': a69d941c97d0853b5312ed57dcd50177a778d854682d7f4134977f0104d1bfea
+
 importers:
 
   .: {}
@@ -468,7 +471,7 @@ importers:
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/playground-ui':
         specifier: 65.0.0
-        version: 65.0.0(b9e77e20707945e971b20cf6c38b4a3c)
+        version: 65.0.0(patch_hash=a69d941c97d0853b5312ed57dcd50177a778d854682d7f4134977f0104d1bfea)(b9e77e20707945e971b20cf6c38b4a3c)
       '@mastra/react':
         specifier: 1.12.0
         version: 1.12.0(703268ef458dcbf7cdfb0739a1337def)
@@ -10566,7 +10569,7 @@ snapshots:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       e2b: 2.38.0
 
-  '@mastra/playground-ui@65.0.0(b9e77e20707945e971b20cf6c38b4a3c)':
+  '@mastra/playground-ui@65.0.0(patch_hash=a69d941c97d0853b5312ed57dcd50177a778d854682d7f4134977f0104d1bfea)(b9e77e20707945e971b20cf6c38b4a3c)':
     dependencies:
       '@autoform/core': 3.0.0
       '@autoform/react': 4.0.0(@hookform/resolvers@3.10.0(react-hook-form@7.87.0(react@19.2.7)))(react-hook-form@7.87.0(react@19.2.7))(react@19.2.7)
@@ -10747,7 +10750,7 @@ snapshots:
 
   '@mcp-ui/client@7.1.1(@cfworker/json-schema@4.1.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)':
     dependencies:
-      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@7.2.0)(zod@4.6.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)
+      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@7.2.0)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)
       '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.1)(supports-color@7.2.0)(zod@3.25.76)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
@@ -10770,9 +10773,9 @@ snapshots:
     dependencies:
       zod: 4.6.7
 
-  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@7.2.0)(zod@4.6.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)':
+  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@7.2.0)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.1)(supports-color@7.2.0)(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.1)(supports-color@7.2.0)(zod@3.25.76)
       '@standard-schema/spec': 1.1.0
       zod: 3.25.76
     optionalDependencies:

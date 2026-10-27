@@ -331,3 +331,6 @@ overrides:
   'yuku-ast': 0.7.0
   'yuku-codegen': 0.7.0
   'yuku-parser': 0.7.0
+
+patchedDependencies:
+  '@mastra/playground-ui@65.0.0': patches/@mastra__playground-ui@65.0.0.patch

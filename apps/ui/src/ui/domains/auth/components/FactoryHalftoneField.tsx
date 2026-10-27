@@ -1,5 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import './sign-in-page.css';
 
@@ -71,6 +72,7 @@ function densityAt(lane: number, laneProgress: number, verticalProgress: number,
  *   stays legible. Used behind the Factory onboarding flow.
  */
 export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' | 'backdrop' }) {
+  const { t } = useTranslation('auth');
   const backdrop = variant === 'backdrop';
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -284,7 +286,7 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
         tone="faint"
         className="factory-visual-hint pointer-events-none absolute right-0 bottom-8 hidden items-center gap-2 lg:inline-flex"
       >
-        Move across the factory
+        {t('visual.hint')}
       </Txt>
     </div>
   );

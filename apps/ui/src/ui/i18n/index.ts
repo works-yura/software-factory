@@ -60,6 +60,17 @@ if (!i18next.isInitialized) {
 
 export const i18n = i18next;
 
+// @mastra/playground-ui ships English labels; our patch routes each one through
+// `globalThis.__factoryLibT`. Catalogs are keyed by the English text.
+const libraryCatalogs = import.meta.glob<{ default: Record<string, string> }>('./library/*.json', { eager: true });
+const libraryText: Record<string, Record<string, string>> = {};
+for (const [path, module] of Object.entries(libraryCatalogs)) {
+  const language = /\.\/library\/([^/]+)\.json$/.exec(path)?.[1];
+  if (language) libraryText[language] = module.default;
+}
+(globalThis as { __factoryLibT?: (text: string) => string }).__factoryLibT = text =>
+  libraryText[currentLanguage()]?.[text] ?? text;
+
 /** The supported language currently in use. */
 export function currentLanguage(): Language {
   const resolved = i18next.resolvedLanguage ?? i18next.language;

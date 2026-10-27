@@ -712,5 +712,11 @@
       "on": "On",
       "off": "Off"
     }
+  },
+  "nav": {
+    "backToApp": "Back to app",
+    "searchLabel": "Search settings",
+    "searchPlaceholder": "Search settings…",
+    "noResults": "No settings found."
   }
 }

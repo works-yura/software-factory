@@ -1,3 +1,5 @@
+// Must run first: library modules read their translated labels when they load.
+import './i18n';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
@@ -7,7 +9,6 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router/dom';
 
 import { ApiConfigProvider } from '../api/config';
-import './i18n';
 import { LanguageBoundary } from './i18n/LanguageBoundary';
 import { createQueryClient } from '../query-client';
 import { PwaInstallBanner } from './lib/pwa';

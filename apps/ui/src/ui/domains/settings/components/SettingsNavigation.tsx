@@ -23,6 +23,7 @@ import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
 import type { SettingsSection } from '../settingsSections';
 import { i18n } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -171,6 +172,7 @@ export function SettingsNavigation() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const location = useLocation();
   const closeSettings = useCloseSettings();
+  const { t } = useTranslation('settings');
   const { state } = useSidebar();
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
@@ -184,16 +186,19 @@ export function SettingsNavigation() {
   return (
     <>
       <Sidebar.NavList>
-        <Sidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
-          <button type="button" aria-label="Back to app" onClick={closeSettings}>
+        <Sidebar.NavLink asChild link={{ name: t('nav.backToApp'), url: '#', icon: <ArrowLeft /> }}>
+          <button type="button" aria-label={t('nav.backToApp')} onClick={closeSettings}>
             <ArrowLeft aria-hidden="true" />
-            <Sidebar.NavLabel>Back to app</Sidebar.NavLabel>
+            <Sidebar.NavLabel>{t('nav.backToApp')}</Sidebar.NavLabel>
           </button>
         </Sidebar.NavLink>
       </Sidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <SearchInput label="Search settings" placeholder="Search settings…" value={query} onValueChange={setQuery} />
+          <SearchInput
+            label={t('nav.searchLabel')}
+            placeholder={t('nav.searchPlaceholder')}
+            value={query} onValueChange={setQuery} />
         </div>
       )}
       {filteredGroups.length > 0 ? (
@@ -234,7 +239,7 @@ export function SettingsNavigation() {
         })
       ) : (
         <Txt as="p" variant="caption" role="status" className="px-3 py-2">
-          No settings found.
+          {t('nav.noResults')}
         </Txt>
       )}
     </>
