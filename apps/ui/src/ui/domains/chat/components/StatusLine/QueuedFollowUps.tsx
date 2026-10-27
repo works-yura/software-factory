@@ -1,12 +1,15 @@
+import { useTranslation } from 'react-i18next';
+
 import { useChatRuntime } from '../../context/useChatRuntime';
 
 const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
 
 /** Count of queued follow-up messages, shown only when work is pending. */
 export function QueuedFollowUps() {
+  const { t } = useTranslation('chat');
   const { followUpCount } = useChatRuntime();
 
   if ((followUpCount ?? 0) <= 0) return null;
 
-  return <span className={statusItem}>{followUpCount} queued</span>;
+  return <span className={statusItem}>{t('status.queued', { count: followUpCount ?? 0 })}</span>;
 }

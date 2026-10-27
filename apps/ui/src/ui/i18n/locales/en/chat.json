@@ -1,1 +1,320 @@
-{}
+{
+  "common": {
+    "retry": "Retry",
+    "default": "Default",
+    "none": "(none)"
+  },
+  "pageTitles": {
+    "activity": "Activity",
+    "knowledge": "Knowledge",
+    "new": "New session",
+    "new-factory": "New factory",
+    "review": "Review",
+    "rules": "Rules",
+    "supervisor": "Supervisor",
+    "work": "Work",
+    "session": "Session"
+  },
+  "layout": {
+    "breadcrumb": "Breadcrumb"
+  },
+  "newPage": {
+    "userSessions": "User sessions",
+    "newSession": "New session",
+    "modelSetupRequired": "Model setup required",
+    "credentialRequired": "Provider credential required",
+    "heading": "What do you want to work on?",
+    "configError": "Failed to load session configuration: {{message}}",
+    "noAccessTitle": "You don't have access to {{provider}}",
+    "noAccessDescription": "The Factory default model ({{modelId}}) needs a {{provider}} credential. Add your own key in Your models settings.",
+    "noAccessDescriptionOrg": "The Factory default model ({{modelId}}) needs a {{provider}} credential. Add your own key in Your models settings, or ask an org admin to share an org-wide key with your team.",
+    "openModelsSettings": "Open Models settings",
+    "noDefaultModelTitle": "No default model configured for this Factory",
+    "noDefaultModelDescription": "Connect a model provider and choose a default model in Models settings before starting a chat."
+  },
+  "threadPage": {
+    "loadingSession": "Loading session",
+    "notFoundTitle": "Session not found",
+    "loadFailedTitle": "Could not load this session",
+    "notFoundDescription": "This session does not exist, or it is private to another user.",
+    "loadFailedDescription": "Failed to load the session: {{message}}",
+    "startNewSession": "Start a new session",
+    "composer": "Thread composer"
+  },
+  "session": {
+    "notFoundOrPrivate": "This session was not found or is private to another user.",
+    "workspaceFailed": "Failed to prepare the workspace: {{message}}",
+    "loadingMessages": "Loading messages",
+    "messagesFailedWithReason": "Failed to load messages: {{message}}",
+    "messagesFailed": "Failed to load messages.",
+    "preparing": "Preparing session",
+    "starting": "Starting session",
+    "loadingMessagesProgress": "Loading messages…",
+    "startingProgress": "Starting…",
+    "jumpToLatest": "Jump to latest message",
+    "loadingOlder": "Loading older messages",
+    "currentTasks": "Current tasks",
+    "teammateNamed": "You’re steering {{name}}’s session",
+    "teammate": "You’re steering a teammate’s session"
+  },
+  "emptyThread": {
+    "title": "What can I help you build?",
+    "subtitle": "Ask about this codebase, plan a change, or describe something that isn't working.",
+    "suggestedPrompts": "Suggested prompts",
+    "explore": "Explore this codebase",
+    "explorePrompt": "Help me understand how this codebase is structured.",
+    "plan": "Plan a feature",
+    "planPrompt": "Help me plan a new feature.",
+    "review": "Review recent changes",
+    "reviewPrompt": "Review the recent changes and suggest improvements.",
+    "debug": "Debug an issue",
+    "debugPrompt": "Help me debug an issue.",
+    "workingIn": "Working in <name>{{name}}</name>",
+    "resourceId": "Resource ID",
+    "branch": "Branch",
+    "sessionId": "Session ID"
+  },
+  "composer": {
+    "planFeedbackPlaceholder": "Give feedback on this plan…",
+    "steerPlaceholder": "Steer the agent…",
+    "placeholder": "Ask Mastra Code…",
+    "initializingSession": "Initializing session…",
+    "initializingWorkSession": "Initializing work session",
+    "sendFailed": "The message could not be sent.",
+    "commandNeedsSession": "This command needs a session. Send a prompt to create one first.",
+    "commandsWaitForSession": "Commands run once the session is ready.",
+    "message": "Message",
+    "attachImages": "Attach images",
+    "actions": "Composer actions",
+    "attachImage": "Attach image",
+    "imagesOnly": "Images only",
+    "abort": "Abort",
+    "send": "Send message",
+    "readFileFailed": "Failed to read file"
+  },
+  "handoff": {
+    "previousMaybeUnsent": "The previous message may not have been sent. Check the transcript before retrying.",
+    "couldNotStartOn": "Could not start on {{modelId}}.",
+    "maybeSent": "{{reason}} The message may have been sent. Check the transcript before retrying."
+  },
+  "draftSession": {
+    "reload": "Could not create the session. Reload the page and try again.",
+    "configNotReady": "Session configuration is not ready. Try again.",
+    "creationFailed": "Session creation failed",
+    "createFailed": "Could not create the session: {{message}}. Try again."
+  },
+  "permissions": {
+    "updateFailed": "Could not update the permission. Please try again."
+  },
+  "commands": {
+    "factoryDefault": "Factory default",
+    "settingsUnavailable": "Session settings are unavailable",
+    "factoryThinkingUnavailable": "The Factory thinking level is unavailable",
+    "model": "Switch model",
+    "goal": "Set a goal",
+    "goalClear": "Clear the active goal",
+    "goalPause": "Pause the active goal",
+    "goalResume": "Resume the paused goal",
+    "permissions": "Show permission rules",
+    "permissionsNotice": "Categories:\n{{categories}}\nTools:\n{{tools}}",
+    "yolo": "Auto-allow all tool categories",
+    "yoloNotice": "YOLO mode: all tool categories set to auto-allow",
+    "cost": "Show token usage",
+    "noUsage": "No token usage recorded yet.",
+    "usage": "Tokens — prompt: {{prompt}}, completion: {{completion}}, total: {{total}}",
+    "think": "Show or set session thinking level",
+    "unknownThinkingLevel": "Unknown thinking level: {{value}}. Use: {{levels}}, default, status",
+    "thinkingLevelSet": "Thinking level set to {{level}}.",
+    "thinkingLevelDefault": "Thinking level set to default: {{level}}.",
+    "thinkingLevelDefaultUnknown": "Thinking level set to default. Current default is unavailable.",
+    "thinkingLevelOverride": "Thinking level: {{level}} (session override). Default: {{defaultLevel}}.",
+    "thinkingLevel": "Thinking level: {{level}}.",
+    "om": "Show observational-memory phase",
+    "omNotice": "Observational memory phase: {{phase}}",
+    "settings": "Show session state",
+    "settingsNotice": "Factory: {{factory}}\nSession: {{session}}\nModel: {{model}}\nThread: {{thread}}\nRunning: {{running}}",
+    "connect": "Connect a model provider",
+    "login": "Sign in with a provider account",
+    "followUp": "Queue a follow-up message",
+    "abort": "Abort the current run",
+    "help": "Show the command list",
+    "available": "Available commands:",
+    "unknown": "Unknown command: /{{name}}"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "search": "Search and navigate",
+    "items": {
+      "help": "Show this shortcuts help",
+      "send": "Send the message",
+      "newline": "Insert a newline",
+      "slash": "Start a slash command",
+      "escape": "Close a dialog, or stop a running turn"
+    }
+  },
+  "status": {
+    "line": "Session status line",
+    "reconnecting": "Reconnecting…",
+    "reconnectHint": "Check the server and reload to reconnect",
+    "disconnected": "Disconnected",
+    "preparingWorkspace": "Preparing workspace…",
+    "connecting": "Connecting…",
+    "working": "Working…",
+    "goalPaused": "goal paused",
+    "pursuingGoal": "pursuing goal",
+    "savingMemory": "saving memory",
+    "consolidatingMemory": "consolidating memory",
+    "tokensPerSecond": "{{rate}} tok/s",
+    "queued_one": "{{count}} queued",
+    "queued_other": "{{count}} queued"
+  },
+  "goal": {
+    "pause": "Pause",
+    "resume": "Resume",
+    "clear": "Clear"
+  },
+  "memory": {
+    "messages": {
+      "idle": "Message window until next observation",
+      "background": "Saving the message window to memory in the background",
+      "blocking": "Saving the message window to memory"
+    },
+    "observations": {
+      "idle": "Observations accumulated until next reflection",
+      "background": "Consolidating observations in the background",
+      "blocking": "Consolidating observations"
+    },
+    "reading": "{{tokens}} of {{threshold}}k",
+    "budgets": "Memory budgets: {{budgets}}",
+    "messagesDescription": "Read into memory once full",
+    "messagesLabel": "Messages",
+    "observationsDescription": "Consolidated into a reflection once full",
+    "observationsLabel": "Observations"
+  },
+  "modelPicker": {
+    "loading": "Loading model",
+    "unavailable": "Model unavailable",
+    "noModel": "No model",
+    "listUnavailable": "{{label}} · model list unavailable",
+    "needsOrgCredential": "needs an organization credential",
+    "isNotConfigured": "{{label}} is not configured",
+    "notConfigured": "not configured",
+    "switchFailed": "Failed to switch model",
+    "group": "Model and thinking",
+    "sessionModelNotConfigured": "Session model, {{label}} is not configured",
+    "sessionModel": "Session model",
+    "search": "Search models…",
+    "noMatch": "No matching model.",
+    "resetToDefault": "Reset to your default",
+    "scopeFooter": "Showing models this Factory's organization credentials can run.",
+    "manage": "Manage"
+  },
+  "thinking": {
+    "label": "Thinking",
+    "levels": {
+      "off": "Off",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Max"
+    },
+    "catalogLoading": "This model's thinking levels aren't loaded yet.",
+    "loadFailed": "The thinking level couldn't be loaded.",
+    "notLoaded": "The thinking level isn't loaded yet.",
+    "switchingModel": "Switching model…",
+    "thisSession": "this session",
+    "resetFailed": "Failed to reset thinking level",
+    "changeFailed": "Failed to change thinking level",
+    "follows": "Follows the {{source}}.",
+    "setForSession": "Set for this session.",
+    "useDefault": "Use default"
+  },
+  "credential": {
+    "connection": "{{provider}} connection",
+    "organization": "Shared by the organization",
+    "deployment": "Configured on the server",
+    "ownerNamed": "{{name}} · session owner",
+    "owner": "Session owner",
+    "youNamed": "{{name}} (you)",
+    "you": "You",
+    "youOwnerNamed": "{{name}} · session owner (you)",
+    "youOwner": "You · session owner",
+    "teammateWarningNamed": "Your messages use {{name}}’s {{credential}}",
+    "teammateWarning": "Your messages use the session owner’s {{credential}}",
+    "replyOrganization": "Organization {{label}}",
+    "replyYours": "Your {{label}}",
+    "replyOwner": "{{name}}’s {{label}}",
+    "replyPersonal": "Personal {{label}}"
+  },
+  "plan": {
+    "title": "Plan",
+    "approval": "Plan approval",
+    "loadingLabel": "Loading plan",
+    "loading": "Loading plan…",
+    "unavailableAt": "The plan could not be loaded from {{path}}. You can still respond below.",
+    "unavailable": "The plan could not be loaded from its file. You can still respond below.",
+    "feedbackLabel": "Plan feedback",
+    "feedback": "Feedback",
+    "approveLabel": "Approve the plan and build it",
+    "approve": "Approve & build",
+    "rejectLabel": "Reject the plan",
+    "reject": "Reject"
+  },
+  "prompts": {
+    "accessRequest": "Access request",
+    "grantAccessTo": "Grant access to {{path}}?",
+    "grantAccess": "Grant access to a path?",
+    "reason": "Reason: {{reason}}",
+    "allowAccessTo": "Allow access to {{path}}",
+    "allowAccess": "Allow access to the requested path",
+    "allow": "Allow",
+    "denyAccessTo": "Deny access to {{path}}",
+    "denyAccess": "Deny access to the requested path",
+    "deny": "Deny",
+    "agentQuestion": "The agent has a question",
+    "questionFromAgent": "Question from the agent",
+    "subagent": "subagent: {{type}}"
+  },
+  "messages": {
+    "steering": "Steering…",
+    "notSent": "Not sent",
+    "steered": "Steered message",
+    "error": "Error",
+    "systemReminder": "System reminder",
+    "sentFrom": "Sent from {{platform}}",
+    "via": "via {{platform}}",
+    "sentBy": "Sent by {{name}}",
+    "thinking": "Thinking",
+    "tool": "Tool: {{name}}",
+    "login": "Login"
+  },
+  "notifications": {
+    "openOnGitLab": "Open on GitLab",
+    "openOnGitHub": "Open on GitHub",
+    "openTarget": "Open notification target",
+    "notification": "notification",
+    "summary": "Notification summary"
+  },
+  "changeRequest": {
+    "open": "Open {{status}} {{repo}} {{noun}} {{number}}",
+    "nouns": {
+      "github": "pull request",
+      "gitlab": "merge request"
+    },
+    "statuses": {
+      "open": "open",
+      "merged": "merged",
+      "closed": "closed"
+    }
+  },
+  "errors": {
+    "workspace": "Workspace: {{message}}",
+    "runFailedType": "Run failed ({{type}}). Check the server logs for details.",
+    "runFailed": "Run failed with an unknown error. Check the server logs for details.",
+    "sessionUnavailable": "Agent controller session is not available",
+    "controllerUnavailable": "Agent controller client is not available",
+    "skillInvalidResponse": "Skill invocation returned an invalid response.",
+    "skillFailed": "Skill invocation failed ({{status}})."
+  }
+}

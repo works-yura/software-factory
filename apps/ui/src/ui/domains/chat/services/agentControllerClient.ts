@@ -1,5 +1,9 @@
 import { MastraClient } from '@mastra/client-js';
 
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
+
 export type AgentController = ReturnType<MastraClient['getAgentController']>;
 export type AgentControllerSession = ReturnType<AgentController['session']>;
 
@@ -26,12 +30,12 @@ const cacheKey = (agentControllerId: string, sessionId: string | undefined, base
   JSON.stringify([baseUrl, agentControllerId, sessionId ?? null]);
 
 export function requireAgentControllerSession(session: AgentControllerSession | null) {
-  if (!session) throw new Error('Agent controller session is not available');
+  if (!session) throw new Error(tk('errors.sessionUnavailable'));
   return session;
 }
 
 export function requireAgentController(controller: AgentController | null) {
-  if (!controller) throw new Error('Agent controller client is not available');
+  if (!controller) throw new Error(tk('errors.controllerUnavailable'));
   return controller;
 }
 
@@ -94,16 +98,12 @@ async function requestWorkspaceSkill(
     try {
       result = (await response.json()) as typeof result;
     } catch {
-      throw new WorkspaceSkillInvocationError(
-        'Skill invocation returned an invalid response.',
-        502,
-        'invalid_response',
-      );
+      throw new WorkspaceSkillInvocationError(tk('errors.skillInvalidResponse'), 502, 'invalid_response');
     }
     if (typeof result.skill === 'string' && typeof result.message === 'string') {
       return { skill: result.skill, message: result.message };
     }
-    throw new WorkspaceSkillInvocationError('Skill invocation returned an invalid response.', 502, 'invalid_response');
+    throw new WorkspaceSkillInvocationError(tk('errors.skillInvalidResponse'), 502, 'invalid_response');
   }
 
   let error: { error?: unknown; message?: unknown } = {};
@@ -113,7 +113,7 @@ async function requestWorkspaceSkill(
     // Preserve a useful status-based fallback when an intermediary returns HTML.
   }
   const code = typeof error.error === 'string' ? error.error : 'skill_invocation_failed';
-  const message = typeof error.message === 'string' ? error.message : `Skill invocation failed (${response.status}).`;
+  const message = typeof error.message === 'string' ? error.message : tk('errors.skillFailed', { status: response.status });
   throw new WorkspaceSkillInvocationError(message, response.status, code);
 }
 

@@ -11,6 +11,9 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import { useComposerImagesState } from '../context/useComposerImagesState';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { takeHandoffFiles } from '../services/handoffFiles';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
 
 interface PromptHandoff {
   handoffPrompt: string;
@@ -103,7 +106,7 @@ export function useHandoffPrompt(): void {
       const interruptedPrompt = readPendingHandoff(sessionId);
       if (interruptedPrompt) {
         prefillComposer(interruptedPrompt);
-        pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
+        pushNotice(tk('handoff.previousMaybeUnsent'), 'error');
       }
       return;
     }
@@ -119,7 +122,7 @@ export function useHandoffPrompt(): void {
     void (async () => {
       if (modelId) {
         await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
-          pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
+          pushNotice(error instanceof Error ? error.message : tk('handoff.couldNotStartOn', { modelId }), 'error'),
         );
       }
       await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
@@ -128,14 +131,14 @@ export function useHandoffPrompt(): void {
       prefillComposer(prompt);
       setImages(current => [...files, ...current]);
       clearPending();
-      const reason = error instanceof Error ? error.message : 'The message could not be sent.';
+      const reason = error instanceof Error ? error.message : tk('composer.sendFailed');
       // A 4xx means the server refused the message. Anything else (network
       // failure, 5xx) can come after the server accepted it, so warn before a
       // retry posts it twice.
       pushNotice(
         isRejectedRequest(error)
           ? reason
-          : `${reason} The message may have been sent. Check the transcript before retrying.`,
+          : tk('handoff.maybeSent', { reason }),
         'error',
       );
     });

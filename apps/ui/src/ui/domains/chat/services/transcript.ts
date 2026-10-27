@@ -5,6 +5,9 @@ import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 
 import { sentByOther } from './message-author';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
 
 export interface ToolCall {
   toolCallId: string;
@@ -389,10 +392,10 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       return state;
 
     case 'workspace_error':
-      return pushNotice(state, 'error', `Workspace: ${event.error.message}`);
+      return pushNotice(state, 'error', tk('errors.workspace', { message: event.error.message }));
     case 'workspace_status_changed':
       if (event.status !== 'error' || !event.error) return state;
-      return pushNotice(state, 'error', `Workspace: ${event.error.message}`);
+      return pushNotice(state, 'error', tk('errors.workspace', { message: event.error.message }));
 
     case 'info':
       return pushNotice(state, 'info', event.message);
@@ -412,8 +415,8 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
 function describeErrorEvent(event: { error: { message?: string } | string; errorType?: string }): string {
   const message = typeof event.error === 'string' ? event.error : event.error?.message;
   if (message) return message;
-  if (event.errorType) return `Run failed (${event.errorType}). Check the server logs for details.`;
-  return 'Run failed with an unknown error. Check the server logs for details.';
+  if (event.errorType) return tk('errors.runFailedType', { type: event.errorType });
+  return tk('errors.runFailed');
 }
 
 function isProviderAuthError(error: unknown): boolean {

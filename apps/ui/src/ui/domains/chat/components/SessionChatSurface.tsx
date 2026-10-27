@@ -1,6 +1,7 @@
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode, RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { composerColumnClass } from '../../workspace-viewer/layout';
 import { ActivityLine } from './ActivityLine';
@@ -36,6 +37,7 @@ export function SessionChatSurface({
   contentOverlay,
   stageSurface,
 }: SessionChatSurfaceProps) {
+  const { t } = useTranslation('chat');
   const { busy, loadMore, transcript } = useChatTranscript();
   const { historyInitializing, preparing } = useChatMessagePreparation();
   const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
@@ -67,7 +69,7 @@ export function SessionChatSurface({
               </ChatShell.Column>
             </ChatShell.Content>
             <ChatShell.Dock>
-              <ChatShell.ScrollButton aria-label="Jump to latest message" />
+              <ChatShell.ScrollButton aria-label={t('session.jumpToLatest')} />
               <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />
                 <div role="region" aria-label={composerLabel} className="flex flex-col gap-2">

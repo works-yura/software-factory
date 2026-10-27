@@ -1,11 +1,13 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 
 export function TeammateSessionLine() {
+  const { t } = useTranslation('chat');
   const { sessionId, threadId } = useParams<{ sessionId?: string; threadId?: string }>();
   const session = useUserSessionQuery(sessionId ?? threadId).data;
   const viewerUserId = useFactoryAuth().data?.user?.userId;
@@ -20,7 +22,7 @@ export function TeammateSessionLine() {
         </div>
       )}
       <Txt as="p" variant="caption" tone="muted" className="truncate">
-        You’re steering {owner ? `${owner.name}’s` : 'a teammate’s'} session
+        {owner ? t('session.teammateNamed', { name: owner.name }) : t('session.teammate')}
       </Txt>
     </div>
   );

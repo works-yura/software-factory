@@ -5,18 +5,20 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 
 import type { ChannelOrigin, MessageAuthor } from '../services/message-author';
+import { useTranslation } from 'react-i18next';
 
 const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
   slack: 'Slack',
 };
 
 export function ChannelOriginBadge({ origin }: { origin: ChannelOrigin }) {
+  const { t } = useTranslation('chat');
   const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
   return (
-    <div aria-label={`Sent from ${label}`} className="text-muted-foreground mt-1 flex items-center gap-1">
+    <div aria-label={t('messages.sentFrom', { platform: label })} className="text-muted-foreground mt-1 flex items-center gap-1">
       {origin.platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
       <Txt as="span" variant="meta">
-        via {label}
+        {t('messages.via', { platform: label })}
         {origin.authorName ? ` · ${origin.authorName}` : ''}
       </Txt>
     </div>
@@ -25,12 +27,13 @@ export function ChannelOriginBadge({ origin }: { origin: ChannelOrigin }) {
 
 /** The bubble beside a message someone else sent; hover or focus it for their name. */
 export function SenderAvatar({ author }: { author: MessageAuthor }) {
+  const { t } = useTranslation('chat');
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <span
-            aria-label={`Sent by ${author.name}`}
+            aria-label={t('messages.sentBy', { name: author.name })}
             className={`mt-1 shrink-0 rounded-full ${focusRing}`}
             tabIndex={0}
           >

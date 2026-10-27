@@ -3,6 +3,9 @@ import type { ChangeEvent, ClipboardEvent, DragEvent } from 'react';
 
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { useComposerImagesState } from '../context/useComposerImagesState';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
 
 let pendingImageSequence = 0;
 
@@ -17,7 +20,7 @@ function readFileAsBase64(file: File): Promise<string> {
       const result = String(reader.result);
       resolve(result.slice(result.indexOf(',') + 1));
     };
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+    reader.onerror = () => reject(reader.error ?? new Error(tk('composer.readFileFailed')));
     reader.readAsDataURL(file);
   });
 }

@@ -4,6 +4,7 @@ import { ActivityItem } from '@mastra/playground-ui/components/ai/activity';
 import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useChatTranscript } from '../context/useChatTranscript';
 import { isTerminalInvocationState } from '../services/transcript';
@@ -79,6 +80,7 @@ function useLinger(on: boolean): boolean {
  * sweep settles and the line fades under the output replacing it, instead of vanishing mid-sweep.
  */
 export function ActivityLine() {
+  const { t } = useTranslation('chat');
   const { busy, transcript } = useChatTranscript();
   const thinking = busy && awaitingFirstOutput(transcript.entries);
   const shown = useLinger(thinking);
@@ -89,9 +91,9 @@ export function ActivityLine() {
       <div aria-hidden className={cn('transition-opacity duration-300', !thinking && 'opacity-0')}>
         <ActivityItem
           icon={<Sparkles aria-hidden />}
-          label="Thinking"
+          label={t('messages.thinking')}
           status={thinking ? 'running' : 'idle'}
-          aria-label="Thinking"
+          aria-label={t('messages.thinking')}
         />
       </div>
     </Arriving>

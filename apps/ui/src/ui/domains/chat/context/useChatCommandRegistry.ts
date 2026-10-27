@@ -8,6 +8,8 @@ import {
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
+import { translator } from '../../../i18n/t';
+
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -27,7 +29,7 @@ import { settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { FACTORY_THINKING_SOURCE_LABEL, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
+import { factoryThinkingSourceLabel, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
 import { useChatModelScope } from './useChatModelScope';
 import { useChatPermissions } from './useChatPermissions';
@@ -35,10 +37,12 @@ import { useChatSessionContext } from './useChatSessionContext';
 import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 
+const tk = translator('chat');
+
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
 function describeFactoryDefault(level: string): string {
-  return `${level} (${FACTORY_THINKING_SOURCE_LABEL})`;
+  return `${level} (${factoryThinkingSourceLabel()})`;
 }
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
@@ -77,8 +81,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const thinkingLevelOptions: SlashCommandOption[] = [
     {
       value: 'default',
-      label: 'Default',
-      description: 'Factory default',
+      label: tk('common.default'),
+      description: tk('commands.factoryDefault'),
       active: settingsQuery.data !== undefined && currentThinkingLevel === undefined,
     },
     ...availableThinkingLevels.map(level => ({
@@ -91,13 +95,13 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const ensureSettings = async (): Promise<AgentControllerSessionSettings> => {
     if (settingsQuery.data) return settingsQuery.data;
     const result = await settingsQuery.refetch();
-    if (!result.data) throw new Error('Session settings are unavailable');
+    if (!result.data) throw new Error(tk('commands.settingsUnavailable'));
     return result.data;
   };
   const ensureFactoryThinkingDefault = async (): Promise<ThinkingLevelSetting> => {
     if (factoryThinkingQuery.data) return factoryThinkingQuery.data;
     const result = await factoryThinkingQuery.refetch();
-    if (!result.data) throw new Error('The Factory thinking level is unavailable');
+    if (!result.data) throw new Error(tk('commands.factoryThinkingUnavailable'));
     return result.data;
   };
 
@@ -105,7 +109,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     {
       name: 'model',
       args: '<id>',
-      description: 'Switch model',
+      description: tk('commands.model'),
       requiresSession: true,
       execute: async rawArguments => {
         if (rawArguments) await setModel(rawArguments);
@@ -114,7 +118,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     {
       name: 'goal',
       args: '<objective>',
-      description: 'Set a goal',
+      description: tk('commands.goal'),
       requiresSession: true,
       execute: async rawArguments => {
         if (rawArguments) await setGoalMutation.mutateAsync(rawArguments);
@@ -122,7 +126,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     },
     {
       name: 'goal-clear',
-      description: 'Clear the active goal',
+      description: tk('commands.goalClear'),
       requiresSession: true,
       execute: async () => {
         await clearGoalMutation.mutateAsync();
@@ -130,7 +134,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     },
     {
       name: 'goal-pause',
-      description: 'Pause the active goal',
+      description: tk('commands.goalPause'),
       requiresSession: true,
       execute: async () => {
         await pauseGoalMutation.mutateAsync();
@@ -138,7 +142,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     },
     {
       name: 'goal-resume',
-      description: 'Resume the paused goal',
+      description: tk('commands.goalResume'),
       requiresSession: true,
       execute: async () => {
         await resumeGoalMutation.mutateAsync();
@@ -146,7 +150,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     },
     {
       name: 'permissions',
-      description: 'Show permission rules',
+      description: tk('commands.permissions'),
       requiresSession: true,
       execute: async () => {
         if (permissionsLoading) return;
@@ -154,39 +158,44 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         const categories =
           Object.entries(rules.categories ?? {})
             .map(([key, value]) => `  ${key}: ${value}`)
-            .join('\n') || '  (none)';
+            .join('\n') || `  ${tk('common.none')}`;
         const tools =
           Object.entries(rules.tools ?? {})
             .map(([key, value]) => `  ${key}: ${value}`)
-            .join('\n') || '  (none)';
-        pushNotice(`Categories:\n${categories}\nTools:\n${tools}`);
+            .join('\n') || `  ${tk('common.none')}`;
+        pushNotice(tk('commands.permissionsNotice', { categories, tools }));
       },
     },
     {
       name: 'yolo',
-      description: 'Auto-allow all tool categories',
+      description: tk('commands.yolo'),
       requiresSession: true,
       execute: async () => {
         for (const category of TOOL_CATEGORIES) {
           await setPermissionForCategory(category, 'allow');
         }
-        pushNotice('YOLO mode: all tool categories set to auto-allow');
+        pushNotice(tk('commands.yoloNotice'));
       },
     },
     {
       name: 'cost',
-      description: 'Show token usage',
+      description: tk('commands.cost'),
       requiresSession: false,
       execute: async () => {
         pushNotice(
           !usage?.totalTokens
-            ? 'No token usage recorded yet.'
-            : `Tokens — prompt: ${usage.promptTokens ?? 0}, completion: ${usage.completionTokens ?? 0}, total: ${usage.totalTokens}`,
+            ? tk('commands.noUsage')
+            : tk('commands.usage', {
+                prompt: usage.promptTokens ?? 0,
+                completion: usage.completionTokens ?? 0,
+                total: usage.totalTokens,
+              }),
         );
       },
     },
     {
       ...THINK_COMMAND_DESCRIPTOR,
+      description: tk('commands.think'),
       requiresSession: true,
       options: thinkingLevelOptions,
       execute: async (rawArguments, originalText) => {
@@ -195,7 +204,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
           if (action.kind === 'invalid') {
             prefillComposer(originalText);
             pushNotice(
-              `Unknown thinking level: ${action.value}. Use: ${action.levels.join(', ')}, default, status`,
+              tk('commands.unknownThinkingLevel', { value: action.value, levels: action.levels.join(', ') }),
               'error',
             );
             return;
@@ -203,7 +212,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
           if (action.kind === 'set') {
             await ensureSettings();
             await updateSettingsMutation.mutateAsync({ thinkingLevel: action.level });
-            pushNotice(`Thinking level set to ${action.level}.`);
+            pushNotice(tk('commands.thinkingLevelSet', { level: action.level }));
             return;
           }
           if (action.kind === 'clear') {
@@ -211,9 +220,9 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
             try {
               const factoryDefault = await ensureFactoryThinkingDefault();
-              pushNotice(`Thinking level set to default: ${describeFactoryDefault(factoryDefault)}.`);
+              pushNotice(tk('commands.thinkingLevelDefault', { level: describeFactoryDefault(factoryDefault) }));
             } catch {
-              pushNotice('Thinking level set to default. Current default is unavailable.');
+              pushNotice(tk('commands.thinkingLevelDefaultUnknown'));
             }
             return;
           }
@@ -221,8 +230,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
           const defaultLevel = describeFactoryDefault(factoryDefault);
           pushNotice(
             settings.thinkingLevel
-              ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${defaultLevel}.`
-              : `Thinking level: ${defaultLevel}.`,
+              ? tk('commands.thinkingLevelOverride', { level: settings.thinkingLevel, defaultLevel })
+              : tk('commands.thinkingLevel', { level: defaultLevel }),
           );
         } catch (error) {
           prefillComposer(originalText);
@@ -232,29 +241,29 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     },
     {
       name: 'om',
-      description: 'Show observational-memory phase',
+      description: tk('commands.om'),
       requiresSession: false,
-      execute: async () => pushNotice(`Observational memory phase: ${omPhase}`),
+      execute: async () => pushNotice(tk('commands.omNotice', { phase: omPhase })),
     },
     {
       name: 'settings',
-      description: 'Show session state',
+      description: tk('commands.settings'),
       requiresSession: false,
       execute: async () => {
         pushNotice(
-          [
-            `Factory: ${factoryQuery.data?.name ?? '(none)'}`,
-            `Session: ${sessionId || '—'}`,
-            `Model: ${activeModelId ?? '—'}`,
-            `Thread: ${transcript.threadId ?? '—'}`,
-            `Running: ${busy}`,
-          ].join('\n'),
+          tk('commands.settingsNotice', {
+            factory: factoryQuery.data?.name ?? tk('common.none'),
+            session: sessionId || '—',
+            model: activeModelId ?? '—',
+            thread: transcript.threadId ?? '—',
+            running: String(busy),
+          }),
         );
       },
     },
     {
       name: 'connect',
-      description: 'Connect a model provider',
+      description: tk('commands.connect'),
       requiresSession: false,
       execute: async () => {
         if (factoryId) void navigate(settingsSectionPath(factoryId, 'personal-models'), { state: { from: location } });
@@ -262,7 +271,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     },
     {
       name: 'login',
-      description: 'Sign in with a provider account',
+      description: tk('commands.login'),
       requiresSession: false,
       execute: async () => {
         if (factoryId) void navigate(settingsSectionPath(factoryId, 'personal-models'), { state: { from: location } });
@@ -271,7 +280,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     {
       name: 'follow-up',
       args: '<message>',
-      description: 'Queue a follow-up message',
+      description: tk('commands.followUp'),
       requiresSession: true,
       execute: async rawArguments => {
         if (rawArguments) {
@@ -282,7 +291,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     },
     {
       name: 'abort',
-      description: 'Abort the current run',
+      description: tk('commands.abort'),
       requiresSession: true,
       execute: async () => {
         await abortMutation.mutateAsync();
@@ -292,7 +301,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
 
   const helpCommand: SlashCommand = {
     name: 'help',
-    description: 'Show the command list',
+    description: tk('commands.help'),
     requiresSession: false,
     execute: async () => {
       const commands = [...commandsWithoutHelp, helpCommand];
@@ -301,7 +310,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         const signature = `/${command.name} ${command.args ?? ''}`.padEnd(width);
         return `  ${signature}  — ${command.description}`;
       });
-      pushNotice(['Available commands:', ...lines].join('\n'));
+      pushNotice([tk('commands.available'), ...lines].join('\n'));
     },
   };
 
@@ -313,7 +322,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     const parsed = parseSlashCommand(text);
     if (!command) {
       prefillComposer(text);
-      pushNotice(`Unknown command: /${parsed.name ?? ''}`, 'error');
+      pushNotice(tk('commands.unknown', { name: parsed.name ?? '' }), 'error');
       return true;
     }
     await command.execute(parsed.rawArguments, text);

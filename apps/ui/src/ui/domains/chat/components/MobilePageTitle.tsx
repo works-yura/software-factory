@@ -2,24 +2,21 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode, Ref } from 'react';
 import { useLocation } from 'react-router';
 
-const PAGE_TITLES: Record<string, string> = {
-  activity: 'Activity',
-  knowledge: 'Knowledge',
-  new: 'New session',
-  'new-factory': 'New factory',
-  review: 'Review',
-  rules: 'Rules',
-  supervisor: 'Supervisor',
-  work: 'Work',
-};
+import { lazyLabels } from '../../../i18n/lazy';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
+
+const PAGE_IDS = ['activity', 'knowledge', 'new', 'new-factory', 'review', 'rules', 'supervisor', 'work'] as const;
+const PAGE_TITLES: Readonly<Record<string, string>> = lazyLabels(PAGE_IDS, page => `chat:pageTitles.${page}`);
 
 function routeTitle(pathname: string): string {
   const segments = pathname.split('/').filter(Boolean);
   const page = segments.at(-1);
 
   if (page && PAGE_TITLES[page]) return PAGE_TITLES[page];
-  if (segments.includes('threads')) return 'Session';
-  if (segments.includes('workspaces') || segments.includes('user')) return 'New session';
+  if (segments.includes('threads')) return tk('pageTitles.session');
+  if (segments.includes('workspaces') || segments.includes('user')) return tk('pageTitles.new');
   return 'Factory';
 }
 

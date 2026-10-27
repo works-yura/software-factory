@@ -12,6 +12,9 @@ import type { PendingImage } from '../context/ComposerImagesContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { stashHandoffFiles } from '../services/handoffFiles';
 import { promptHandoffState } from './useHandoffPrompt';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
 
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
@@ -25,10 +28,10 @@ export function useCreateUserSessionFromDraft() {
     mutationFn: async ({ prompt, files }: { prompt: string; files: PendingImage[] }) => {
       const projectRepositoryId = factorySessionState?.projectRepositoryId;
       if (!draftSessionId || !factoryId || !projectRepositoryId) {
-        throw new Error('Could not create the session. Reload the page and try again.');
+        throw new Error(tk('draftSession.reload'));
       }
       if (!activeModelId) {
-        throw new Error('Session configuration is not ready. Try again.');
+        throw new Error(tk('draftSession.configNotReady'));
       }
 
       const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
@@ -43,8 +46,8 @@ export function useCreateUserSessionFromDraft() {
         });
         return { session, prompt, files, factoryId, handoffModelId, thinkingLevelOverride };
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Session creation failed';
-        throw new Error(`Could not create the session: ${message}. Try again.`, { cause: error });
+        const message = error instanceof Error ? error.message : tk('draftSession.creationFailed');
+        throw new Error(tk('draftSession.createFailed', { message }), { cause: error });
       }
     },
     onSuccess: ({ session, prompt, files, factoryId, handoffModelId, thinkingLevelOverride }) => {

@@ -3,14 +3,15 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
 
-export const THINKING_LEVEL_LABELS: Record<ThinkingLevelSetting, string> = {
-  off: 'Off',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max',
-};
+import { lazyLabels } from '../../../i18n/lazy';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
+
+export const THINKING_LEVEL_LABELS: Readonly<Record<ThinkingLevelSetting, string>> = lazyLabels(
+  THINKING_LEVEL_VALUES,
+  level => `chat:thinking.levels.${level}`,
+);
 
 const THINKING_LEVEL_EMPHASIS: Partial<Record<ThinkingLevelSetting, ThinkingLevelOption['emphasis']>> = {
   off: 'muted',
@@ -19,9 +20,12 @@ const THINKING_LEVEL_EMPHASIS: Partial<Record<ThinkingLevelSetting, ThinkingLeve
 };
 
 function thinkingLevelOptions(levels: readonly ThinkingLevelSetting[]): ThinkingLevelOption<ThinkingLevelSetting>[] {
+  // The label is a getter so options built once (ALL_THINKING_LEVEL_OPTIONS) follow the language.
   return levels.map(level => ({
     value: level,
-    label: THINKING_LEVEL_LABELS[level],
+    get label() {
+      return THINKING_LEVEL_LABELS[level];
+    },
     emphasis: THINKING_LEVEL_EMPHASIS[level],
   }));
 }
@@ -37,7 +41,9 @@ export function thinkingLevelOptionsForModel(
 
 export type ThinkingLevelOrigin = 'session' | 'factory';
 
-export const FACTORY_THINKING_SOURCE_LABEL = 'Factory default';
+export function factoryThinkingSourceLabel(): string {
+  return tk('commands.factoryDefault');
+}
 
 export interface EffectiveThinkingLevel {
   level: ThinkingLevelSetting;

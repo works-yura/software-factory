@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 
-const BASE = 'Initializing work session';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
+
 const CYCLE = ['', '.', '..', '...'] as const;
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
@@ -29,6 +32,6 @@ export function useInitializingPlaceholder(initializing: boolean, isEmpty: boole
   }, [active, reducedMotion]);
 
   if (!active) return undefined;
-  if (reducedMotion) return `${BASE}${CYCLE[CYCLE.length - 1]}`;
-  return `${BASE}${CYCLE[tick]}`;
+  if (reducedMotion) return `${tk('composer.initializingWorkSession')}${CYCLE[CYCLE.length - 1]}`;
+  return `${tk('composer.initializingWorkSession')}${CYCLE[tick]}`;
 }

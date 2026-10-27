@@ -16,6 +16,7 @@ import {
   PlanPath,
   PlanTitle,
 } from '@mastra/playground-ui/components/ai/plan';
+import { useTranslation } from 'react-i18next';
 
 import { normalizePlanPath, usePlanFile, useWorkspaceRenderedListing } from '../../../../hooks/use-fs';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
@@ -41,6 +42,7 @@ export interface SubmitPlanCardProps {
 }
 
 export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false, onRespond }: SubmitPlanCardProps) {
+  const { t } = useTranslation('chat');
   const inline = resolveInlinePlan(input, output);
   const path = inline.path;
 
@@ -55,7 +57,9 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
   const file = usePlanFile(workspace.workspacePath, readablePath, toolCallId, { enabled: fetchable });
   const fetched = fetchable && file.data?.content !== undefined ? parsePlanMarkdown(file.data.content) : undefined;
 
+  // `title` is persisted into the resume data, so its fallback stays English; only the display is translated.
   const title = inline.title ?? fetched?.title ?? 'Plan';
+  const displayTitle = inline.title ?? fetched?.title ?? t('plan.title');
   const plan = inline.plan ?? fetched?.plan ?? '';
   const loading =
     inline.plan === undefined &&
@@ -82,7 +86,7 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
     });
 
   return (
-    <Plan role="group" aria-label="Plan approval">
+    <Plan role="group" aria-label={t('plan.approval')}>
       <PlanHeader>
         <PlanLabel />
         <PlanHeaderActions>
@@ -91,25 +95,25 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
       </PlanHeader>
       <PlanBody>
         <PlanIntro>
-          <PlanTitle>{title}</PlanTitle>
+          <PlanTitle>{displayTitle}</PlanTitle>
           {path ? <PlanPath>{path}</PlanPath> : null}
         </PlanIntro>
         <PlanMain>
           {loading ? (
-            <Txt variant="caption" tone="muted" aria-label="Loading plan" className="my-2">
-              Loading plan…
+            <Txt variant="caption" tone="muted" aria-label={t('plan.loadingLabel')} className="my-2">
+              {t('plan.loading')}
             </Txt>
           ) : unavailable ? (
             <Txt variant="caption" tone="muted" role="note" className="my-2">
-              The plan could not be loaded from {path ?? 'its file'}. You can still respond below.
+              {path ? t('plan.unavailableAt', { path }) : t('plan.unavailable')}
             </Txt>
           ) : (
             <PlanContent>{plan}</PlanContent>
           )}
           {inline.feedback ? (
-            <div role="note" aria-label="Plan feedback" className="border-badge-green-indicator mt-4 border-l-2 pl-3">
+            <div role="note" aria-label={t('plan.feedbackLabel')} className="border-badge-green-indicator mt-4 border-l-2 pl-3">
               <Txt variant="meta" tone="muted" className="mb-1">
-                Feedback
+                {t('plan.feedback')}
               </Txt>
               <Txt variant="caption" tone="ink" className="whitespace-pre-wrap">
                 {inline.feedback}
@@ -125,11 +129,11 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
                     size="sm"
                     variant="primary"
                     className="whitespace-nowrap"
-                    aria-label="Approve the plan and build it"
+                    aria-label={t('plan.approveLabel')}
                     disabled={approveDisabled}
                     onClick={() => respond({ action: 'approved' })}
                   >
-                    Approve & build
+                    {t('plan.approve')}
                   </Button>
                 </PlanActionGroup>
                 <span className="flex justify-center">
@@ -140,11 +144,11 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
                     type="button"
                     size="sm"
                     className="whitespace-nowrap"
-                    aria-label="Reject the plan"
+                    aria-label={t('plan.rejectLabel')}
                     disabled={respondDisabled}
                     onClick={() => respond({ action: 'rejected' })}
                   >
-                    Reject
+                    {t('plan.reject')}
                   </Button>
                 </PlanActionGroup>
               </>

@@ -8,6 +8,9 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatPermissionsContext } from './ChatPermissionsContext';
 import type { ChatPermissionsApi } from './ChatPermissionsContext';
 import { useChatSessionContext } from './useChatSessionContext';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
 
 interface ChatPermissionsProviderProps {
   children: ReactNode;
@@ -40,7 +43,7 @@ export function ChatPermissionsProvider({ children }: ChatPermissionsProviderPro
     try {
       await setPermissionForCategoryMutation.mutateAsync({ category, policy });
     } catch {
-      toast.error('Could not update the permission. Please try again.');
+      toast.error(tk('permissions.updateFailed'));
     }
   };
 

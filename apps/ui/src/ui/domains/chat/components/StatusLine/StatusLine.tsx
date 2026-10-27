@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../hooks/useFactories';
@@ -18,6 +19,7 @@ import { RuntimeActivity } from './RuntimeActivity';
  * reads its own slice of the existing chat/session context.
  */
 export function StatusLine() {
+  const { t } = useTranslation('chat');
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
   const { factorySessionState } = useChatSessionContext();
   const { data: factory } = useFactoryQuery(factoryId);
@@ -34,7 +36,7 @@ export function StatusLine() {
 
   return (
     <div
-      aria-label="Session status line"
+      aria-label={t('status.line')}
       className="text-caption text-muted-foreground flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
     >
       <ModelPicker />

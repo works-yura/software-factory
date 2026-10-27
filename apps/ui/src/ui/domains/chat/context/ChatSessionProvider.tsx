@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { useContext, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -276,6 +277,7 @@ export function ChatMessageBoundary({
 }
 
 function ChatMessageFeedback({ error }: { error: Error }) {
+  const { t } = useTranslation('chat');
   const { retrySession } = useChatSessionContext();
   // The server intentionally returns the same 404 for a missing session and a
   // private one owned by someone else, so the message covers both.
@@ -284,13 +286,13 @@ function ChatMessageFeedback({ error }: { error: Error }) {
     <div className="flex flex-col items-stretch gap-4">
       <Notice variant="destructive">
         {notFound
-          ? 'This session was not found or is private to another user.'
-          : `Failed to prepare the workspace: ${error.message}`}
+          ? t('session.notFoundOrPrivate')
+          : t('session.workspaceFailed', { message: error.message })}
       </Notice>
       {retrySession && (
         <div>
           <Button variant="default" onClick={retrySession}>
-            Retry
+            {t('common.retry')}
           </Button>
         </div>
       )}
@@ -299,10 +301,11 @@ function ChatMessageFeedback({ error }: { error: Error }) {
 }
 
 function ChatMessageFallback({ threadId, isPending, error }: ChatThreadMessagesApi) {
+  const { t } = useTranslation('chat');
   if (threadId && isPending) {
     return (
       <div className="flex flex-col gap-4">
-        <SkeletonRows label="Loading messages" rows={6} />
+        <SkeletonRows label={t('session.loadingMessages')} rows={6} />
       </div>
     );
   }
@@ -311,7 +314,7 @@ function ChatMessageFallback({ threadId, isPending, error }: ChatThreadMessagesA
     const errorMessage = error instanceof Error ? error.message : undefined;
     return (
       <Notice variant="destructive">
-        {errorMessage ? `Failed to load messages: ${errorMessage}` : 'Failed to load messages.'}
+        {errorMessage ? t('session.messagesFailedWithReason', { message: errorMessage }) : t('session.messagesFailed')}
       </Notice>
     );
   }
