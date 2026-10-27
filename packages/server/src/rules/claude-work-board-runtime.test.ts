@@ -77,11 +77,7 @@ async function setup() {
   const seeded = await createFactoryStorageForTests();
   const workItems = seeded.workItems;
   const sourceControl = seeded.sourceControl.forIntegration('github');
-  const integrationStorage = seeded.integrations.forIntegration<
-    Record<string, unknown>,
-    Record<string, unknown>,
-    { kind: 'factory-pr-provenance'; factoryProjectId: string; workItemId: string }
-  >('github');
+  const integrationStorage = seeded.integrations.forIntegration('github');
   const project = await seeded.projects.create({
     orgId: 'org-1',
     userId: 'user-1',
