@@ -2,13 +2,18 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ThinkingLevelPicker, ThinkingLevelUnavailable } from '@mastra/playground-ui/components/ThinkingLevel';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
+
+import { translator } from '../../../../i18n/t';
 import { useChatModelScope } from '../../context/useChatModelScope';
 
 import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
 import { useChatThinking } from '../../context/useChatThinking';
-import { FACTORY_THINKING_SOURCE_LABEL, thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
+import { factoryThinkingSourceLabel, thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
 import type { EffectiveThinkingLevel, ThinkingLevelOrigin } from '../../services/thinkingLevels';
+
+const tk = translator('chat');
 
 interface SessionThinkingControlProps {
   modelId: string;
@@ -26,10 +31,10 @@ function thinkingControlState({
   thinking: ChatThinkingApi;
   switchingModel: boolean;
 }): ThinkingControlState {
-  if (catalog.isPending) return { unavailableReason: "This model's thinking levels aren't loaded yet." };
-  if (thinking.loadError) return { unavailableReason: "The thinking level couldn't be loaded." };
-  if (!thinking.level) return { unavailableReason: "The thinking level isn't loaded yet." };
-  if (switchingModel) return { unavailableReason: 'Switching model…' };
+  if (catalog.isPending) return { unavailableReason: tk('thinking.catalogLoading') };
+  if (thinking.loadError) return { unavailableReason: tk('thinking.loadFailed') };
+  if (!thinking.level) return { unavailableReason: tk('thinking.notLoaded') };
+  if (switchingModel) return { unavailableReason: tk('thinking.switchingModel') };
   return { effective: thinking.level };
 }
 
@@ -38,10 +43,11 @@ function showFailure(fallback: string) {
 }
 
 function originLabel(origin: ThinkingLevelOrigin) {
-  return origin === 'session' ? 'this session' : FACTORY_THINKING_SOURCE_LABEL;
+  return origin === 'session' ? tk('thinking.thisSession') : factoryThinkingSourceLabel();
 }
 
 export function SessionThinkingControl({ modelId, switchingModel }: SessionThinkingControlProps) {
+  const { t } = useTranslation('chat');
   const thinking = useChatThinking();
   const { catalogTarget } = useChatModelScope();
   const catalog = useAvailableModelsQuery(catalogTarget);
@@ -50,7 +56,7 @@ export function SessionThinkingControl({ modelId, switchingModel }: SessionThink
   const state = thinkingControlState({ catalog, thinking, switchingModel });
 
   if ('unavailableReason' in state) {
-    return <ThinkingLevelUnavailable options={options} label="Thinking" reason={state.unavailableReason} />;
+    return <ThinkingLevelUnavailable options={options} label={t('thinking.label')} reason={state.unavailableReason} />;
   }
 
   const { level, origin } = state.effective;
@@ -60,16 +66,16 @@ export function SessionThinkingControl({ modelId, switchingModel }: SessionThink
     <ThinkingLevelPicker
       options={options}
       value={level}
-      label="Thinking"
+      label={t('thinking.label')}
       origin={source}
       footer={
         <ThinkingLevelOriginNote
           source={source}
           setForSession={origin === 'session'}
-          onUseDefault={() => thinking.resetLevel().catch(showFailure('Failed to reset thinking level'))}
+          onUseDefault={() => thinking.resetLevel().catch(showFailure(t('thinking.resetFailed')))}
         />
       }
-      onChange={next => thinking.setLevel(next).catch(showFailure('Failed to change thinking level'))}
+      onChange={next => thinking.setLevel(next).catch(showFailure(t('thinking.changeFailed')))}
     />
   );
 }
@@ -81,20 +87,21 @@ interface ThinkingLevelOriginNoteProps {
 }
 
 function ThinkingLevelOriginNote({ source, setForSession, onUseDefault }: ThinkingLevelOriginNoteProps) {
+  const { t } = useTranslation('chat');
   if (!setForSession) {
     return (
       <Txt as="p" variant="caption" tone="muted">
-        Follows the {source}.
+        {t('thinking.follows', { source })}
       </Txt>
     );
   }
   return (
     <div className="flex items-center justify-between gap-3">
       <Txt as="p" variant="caption" tone="muted">
-        Set for this session.
+        {t('thinking.setForSession')}
       </Txt>
       <Button variant="ghost" size="sm" onClick={onUseDefault}>
-        Use default
+        {t('thinking.useDefault')}
       </Button>
     </div>
   );

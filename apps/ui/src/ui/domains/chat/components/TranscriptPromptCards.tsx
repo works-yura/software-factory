@@ -5,6 +5,7 @@ import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval'
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 
 import type { ApprovalPrompt, SubagentEntry, SuspensionPrompt } from '../services/transcript';
 import { AskUserPromptAnswers } from './AskUserPromptAnswers';
@@ -100,6 +101,7 @@ export function SuspensionCard({
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
+  const { t } = useTranslation('chat');
   const payload = suspensionPayloadShape(prompt.suspendPayload);
 
   if (prompt.toolName === 'submit_plan') {
@@ -114,34 +116,35 @@ export function SuspensionCard({
   }
 
   if (prompt.toolName === 'request_access') {
+    const path = payload.requestedPath;
     return (
-      <div className={promptCardSuspension} role="group" aria-label="Access request">
+      <div className={promptCardSuspension} role="group" aria-label={t('prompts.accessRequest')}>
         <Txt as="p" variant="subheading" tone="ink" className={promptTitle}>
-          Grant access to {payload.requestedPath ?? 'a path'}?
+          {path ? t('prompts.grantAccessTo', { path }) : t('prompts.grantAccess')}
         </Txt>
         {payload.reason && (
           <Txt as="p" variant="caption" tone="muted" className="mt-0.5">
-            Reason: {payload.reason}
+            {t('prompts.reason', { reason: payload.reason })}
           </Txt>
         )}
         <div className={promptActions}>
           <Button
             variant="primary"
             size="sm"
-            aria-label={`Allow access to ${payload.requestedPath ?? 'the requested path'}`}
+            aria-label={path ? t('prompts.allowAccessTo', { path }) : t('prompts.allowAccess')}
             autoFocus
             disabled={isSubmitting}
             onClick={() => onRespond(prompt.toolCallId, 'Yes', prompt.id)}
           >
-            Allow
+            {t('prompts.allow')}
           </Button>
           <Button
             size="sm"
-            aria-label={`Deny access to ${payload.requestedPath ?? 'the requested path'}`}
+            aria-label={path ? t('prompts.denyAccessTo', { path }) : t('prompts.denyAccess')}
             disabled={isSubmitting}
             onClick={() => onRespond(prompt.toolCallId, 'No', prompt.id)}
           >
-            Deny
+            {t('prompts.deny')}
           </Button>
         </div>
       </div>
@@ -162,6 +165,7 @@ function AskUserCard({
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: AskUserAnswer, promptId: string) => void;
 }) {
+  const { t } = useTranslation('chat');
   const options = payload.options ?? [];
   const selectionMode = options.length > 0 ? payload.selectionMode : 'single_select';
 
@@ -178,7 +182,7 @@ function AskUserCard({
       onSubmit={handleAnswerSubmit}
     >
       <AskUser.Body>
-        <AskUser.Question>{payload.question ?? 'The agent has a question'}</AskUser.Question>
+        <AskUser.Question>{payload.question ?? t('prompts.agentQuestion')}</AskUser.Question>
         <AskUserPromptAnswers options={options} selectionMode={selectionMode} />
         {isSubmitting ? <AskUser.Pending className="mt-3 block" /> : null}
       </AskUser.Body>
@@ -187,10 +191,11 @@ function AskUserCard({
 }
 
 export function SubagentCard({ entry }: { entry: SubagentEntry }) {
+  const { t } = useTranslation('chat');
   return (
     <div className="border-border border-l-info-indicator bg-fill my-2 rounded-lg border border-l-4 px-3 py-2">
       <div className="flex items-center gap-2">
-        <Badge variant={entry.done ? 'success' : 'info'}>subagent: {entry.agentType}</Badge>
+        <Badge variant={entry.done ? 'success' : 'info'}>{t('prompts.subagent', { type: entry.agentType })}</Badge>
         <Txt tone="muted" variant="meta">
           {lastSegment(entry.modelId)}
         </Txt>

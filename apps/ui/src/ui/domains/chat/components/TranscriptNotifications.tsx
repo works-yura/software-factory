@@ -8,12 +8,15 @@ import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '
 import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { isRecord } from './transcript-shared';
 import { signalPartsText } from './TranscriptSignals';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
 
 /** Where a notification's "Open on …" link points; GitHub and GitLab name the provider. */
 export function notificationLinkLabel(entry: Pick<NotificationEntry, 'source'>): string {
-  if (entry.source === 'gitlab') return 'Open on GitLab';
-  if (entry.source === 'github') return 'Open on GitHub';
-  return 'Open notification target';
+  if (entry.source === 'gitlab') return tk('notifications.openOnGitLab');
+  if (entry.source === 'github') return tk('notifications.openOnGitHub');
+  return tk('notifications.openTarget');
 }
 
 export function notificationUrl(entry: Pick<NotificationEntry, 'source' | 'metadata'>): string | undefined {
@@ -58,7 +61,7 @@ export function NotificationCard({ entry }: { entry: NotificationEntry }) {
   return (
     <NotificationActivity
       state={presentation.state}
-      label={entry.source ?? 'notification'}
+      label={entry.source ?? tk('notifications.notification')}
       message={entry.message}
       icon={<span className={cn('flex items-center', presentation.className)}>{presentation.icon}</span>}
       link={url ? { href: url, label: notificationLinkLabel(entry) } : undefined}
@@ -67,7 +70,7 @@ export function NotificationCard({ entry }: { entry: NotificationEntry }) {
 }
 
 export function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
-  return <NotificationActivity state="summary" label="Notification summary" message={entry.message} />;
+  return <NotificationActivity state="summary" label={tk('notifications.summary')} message={entry.message} />;
 }
 
 export function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {

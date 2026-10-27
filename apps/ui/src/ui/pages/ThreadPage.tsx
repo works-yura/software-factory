@@ -5,6 +5,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquareOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../hooks/useFactories';
@@ -62,11 +63,12 @@ export function ThreadPage() {
 }
 
 function ResolvingSessionMain() {
+  const { t } = useTranslation('chat');
   return (
     <ChatPageLayout>
       <SessionFavicon state="initializing" />
       <div className="grid min-h-0 place-items-center">
-        <Spinner aria-label="Loading session" className="text-muted-foreground" />
+        <Spinner aria-label={t('threadPage.loadingSession')} className="text-muted-foreground" />
       </div>
     </ChatPageLayout>
   );
@@ -81,6 +83,7 @@ function SessionUnavailableMain({
   factoryId: string | undefined;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation('chat');
   const navigate = useNavigate();
   // The server answers a missing session and a teammate's private one with the same 404.
   const notFound = (error as { status?: number }).status === 404;
@@ -90,11 +93,11 @@ function SessionUnavailableMain({
         <EmptyState
           as="h1"
           iconSlot={<MessageSquareOff />}
-          titleSlot={notFound ? 'Session not found' : 'Could not load this session'}
+          titleSlot={notFound ? t('threadPage.notFoundTitle') : t('threadPage.loadFailedTitle')}
           descriptionSlot={
             notFound
-              ? 'This session does not exist, or it is private to another user.'
-              : `Failed to load the session: ${error.message}`
+              ? t('threadPage.notFoundDescription')
+              : t('threadPage.loadFailedDescription', { message: error.message })
           }
           actionSlot={
             notFound ? (
@@ -103,12 +106,12 @@ function SessionUnavailableMain({
                   variant="primary"
                   onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
                 >
-                  Start a new session
+                  {t('threadPage.startNewSession')}
                 </Button>
               )
             ) : (
               <Button variant="primary" onClick={onRetry}>
-                Retry
+                {t('common.retry')}
               </Button>
             )
           }
@@ -125,6 +128,7 @@ function ThreadPageMain({
   workspacePath: string | undefined;
   threadId: string | undefined;
 }) {
+  const { t } = useTranslation('chat');
   useGlobalShortcuts();
   useRouteThreadSync();
   useHandoffPrompt();
@@ -137,7 +141,7 @@ function ThreadPageMain({
         <SessionChatSurface
           secondaryBar={<GoalPanel />}
           emptyState={<EmptyThreadState />}
-          composerLabel="Thread composer"
+          composerLabel={t('threadPage.composer')}
           composerFooter={<TeammateSessionLine />}
           className={threadShellClass}
           contentRef={railBoxRef}

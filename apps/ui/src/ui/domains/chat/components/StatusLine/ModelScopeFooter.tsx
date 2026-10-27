@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
@@ -17,11 +18,12 @@ export function useOrganizationScopedFactory(): boolean {
  * so a personally connected provider is missing from it. Say why.
  */
 export function ModelScopeFooter({ factoryId }: { factoryId: string }) {
+  const { t } = useTranslation('chat');
   return (
     <Txt as="p" variant="caption" tone="muted" role="note" className="border-border border-t px-3 py-2">
-      Showing models this Factory&apos;s organization credentials can run.{' '}
+      {t('modelPicker.scopeFooter')}{' '}
       <Link to={settingsSectionPath(factoryId, 'models')} className="underline underline-offset-2">
-        Manage
+        {t('modelPicker.manage')}
       </Link>
     </Txt>
   );

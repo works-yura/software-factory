@@ -6,6 +6,9 @@ import type { ChangeRequestProvider, PullRequestSubscription } from '../../facto
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { usePullRequestSubscriptions } from '../hooks/usePullRequestSubscriptions';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
 
 interface PullRequestLinksProps {
   repository?: Pick<LinkedRepositoryPayload, 'slug' | 'provider'>;
@@ -14,9 +17,9 @@ interface PullRequestLinksProps {
 }
 
 /** Provider vocabulary: GitHub numbers pull requests `#n`, GitLab numbers merge requests `!n`. */
-const CHANGE_REQUEST_WORDING: Record<ChangeRequestProvider, { noun: string; prefix: string }> = {
-  github: { noun: 'pull request', prefix: 'PR #' },
-  gitlab: { noun: 'merge request', prefix: 'MR !' },
+const CHANGE_REQUEST_PREFIX: Record<ChangeRequestProvider, string> = {
+  github: 'PR #',
+  gitlab: 'MR !',
 };
 
 function reviewStatus(reviewItem: WorkItem): PullRequestSubscription['status'] {
@@ -79,7 +82,8 @@ export function PullRequestLinks({ repository, reviewItem, threadId }: PullReque
   const activeReview = reviewSubscription(reviewItem, repository?.slug, provider);
   const links = pullRequestLinks(subscriptions, activeReview);
   if (links.length === 0) return null;
-  const wording = CHANGE_REQUEST_WORDING[provider];
+  const prefix = CHANGE_REQUEST_PREFIX[provider];
+  const noun = tk(`changeRequest.nouns.${provider}`);
 
   return (
     <div className="ml-auto flex items-center gap-2">
@@ -92,11 +96,16 @@ export function PullRequestLinks({ repository, reviewItem, threadId }: PullReque
           href={subscription.url}
           target="_blank"
           rel="noreferrer"
-          aria-label={`Open ${subscription.status} ${subscription.repoFullName} ${wording.noun} ${subscription.pullRequestNumber}`}
+          aria-label={tk('changeRequest.open', {
+            status: tk(`changeRequest.statuses.${subscription.status}`),
+            repo: subscription.repoFullName,
+            noun,
+            number: subscription.pullRequestNumber,
+          })}
         >
           <PullRequestStatusIcon status={subscription.status} size={13} decorative />
           <span>
-            {wording.prefix}
+            {prefix}
             {subscription.pullRequestNumber}
           </span>
         </Button>

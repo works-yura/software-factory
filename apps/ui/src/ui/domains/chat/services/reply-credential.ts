@@ -1,3 +1,7 @@
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
+
 /** The user whose personal credentials a thread runs on. */
 export interface ThreadOwner {
   id: string;
@@ -18,8 +22,11 @@ export function replyCredentialLabel(
 ): string | undefined {
   const { credentialLabel, credentialOwnerId } = metadata;
   if (typeof credentialLabel !== 'string') return undefined;
-  if (typeof credentialOwnerId !== 'string') return `Organization ${credentialLabel}`;
-  if (credentialOwnerId === viewerId) return `Your ${credentialLabel}`;
-  if (credentialOwnerId === threadOwner?.id && threadOwner.name) return `${threadOwner.name}’s ${credentialLabel}`;
-  return `Personal ${credentialLabel}`;
+  const label = credentialLabel;
+  if (typeof credentialOwnerId !== 'string') return tk('credential.replyOrganization', { label });
+  if (credentialOwnerId === viewerId) return tk('credential.replyYours', { label });
+  if (credentialOwnerId === threadOwner?.id && threadOwner.name) {
+    return tk('credential.replyOwner', { name: threadOwner.name, label });
+  }
+  return tk('credential.replyPersonal', { label });
 }

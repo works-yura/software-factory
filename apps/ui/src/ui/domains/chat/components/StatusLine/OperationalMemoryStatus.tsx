@@ -1,28 +1,27 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { formatCompactTokens, TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
 import { Brain, MessageSquare } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+import { lazyLabels } from '../../../../i18n/lazy';
+import { translator } from '../../../../i18n/t';
 
 import { useChatRuntime } from '../../context/useChatRuntime';
 import type { OMWork } from '../../services/om';
 import { omWork } from '../../services/om';
 
-const messageLabel: Record<OMWork, string> = {
-  idle: 'Message window until next observation',
-  background: 'Saving the message window to memory in the background',
-  blocking: 'Saving the message window to memory',
-};
+const tk = translator('chat');
 
-const observationLabel: Record<OMWork, string> = {
-  idle: 'Observations accumulated until next reflection',
-  background: 'Consolidating observations in the background',
-  blocking: 'Consolidating observations',
-};
+const OM_WORK: readonly OMWork[] = ['idle', 'background', 'blocking'];
+const messageLabel = lazyLabels(OM_WORK, work => `chat:memory.messages.${work}`);
+const observationLabel = lazyLabels(OM_WORK, work => `chat:memory.observations.${work}`);
 
 function reading(tokens: number, threshold: number) {
-  return `${formatCompactTokens(tokens)} of ${formatCompactTokens(threshold)}k`;
+  return tk('memory.reading', { tokens: formatCompactTokens(tokens), threshold: formatCompactTokens(threshold) });
 }
 
 export function OperationalMemoryStatus() {
+  const { t } = useTranslation('chat');
   const runtime = useChatRuntime();
   const om = runtime.omProgress;
   const work = omWork(runtime);
@@ -41,7 +40,7 @@ export function OperationalMemoryStatus() {
 
   return (
     <Popover>
-      <PopoverTrigger variant="ghost" size="sm" aria-label={`Memory budgets: ${spoken.join('. ')}`} className="gap-3">
+      <PopoverTrigger variant="ghost" size="sm" aria-label={t('memory.budgets', { budgets: spoken.join('. ') })} className="gap-3">
         {showMsg && (
           <TokenBudget
             label={messageLabel[work.messages]}
@@ -64,9 +63,9 @@ export function OperationalMemoryStatus() {
       <PopoverContent align="start" className="flex flex-col gap-3.5" side="top">
         {showMsg && (
           <TokenBudgetDetail
-            description="Read into memory once full"
+            description={t('memory.messagesDescription')}
             icon={<MessageSquare />}
-            label="Messages"
+            label={t('memory.messagesLabel')}
             threshold={om.threshold}
             tokens={om.pendingTokens}
             tone={messageTone}
@@ -74,9 +73,9 @@ export function OperationalMemoryStatus() {
         )}
         {showMem && (
           <TokenBudgetDetail
-            description="Consolidated into a reflection once full"
+            description={t('memory.observationsDescription')}
             icon={<Brain />}
-            label="Observations"
+            label={t('memory.observationsLabel')}
             threshold={om.reflectionThreshold}
             tokens={om.observationTokens}
             tone={observationTone}

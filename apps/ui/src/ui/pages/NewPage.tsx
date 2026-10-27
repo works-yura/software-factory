@@ -3,6 +3,7 @@ import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Bot, GitBranch } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useParams } from 'react-router';
 
 import { FolderIcon } from '../ui/icons';
@@ -25,6 +26,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 const draftStartClass = 'flex min-w-0 w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
+  const { t } = useTranslation('chat');
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const activeFactory = factoryQuery.data;
@@ -45,9 +47,9 @@ export function NewPage() {
     <ChatPageLayout
       crumbs={
         <>
-          <Crumb as="span">User sessions</Crumb>
+          <Crumb as="span">{t('newPage.userSessions')}</Crumb>
           <Crumb as="span" isCurrent>
-            New session
+            {t('newPage.newSession')}
           </Crumb>
         </>
       }
@@ -125,9 +127,10 @@ function DraftStart({
   missingDefaultModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
 }) {
+  const { t } = useTranslation('chat');
   if (activeFactory && missingDefaultModel) {
     return (
-      <section className={draftStartClass} aria-label="Model setup required">
+      <section className={draftStartClass} aria-label={t('newPage.modelSetupRequired')}>
         <MissingDefaultModelState factoryId={activeFactory.id} />
       </section>
     );
@@ -135,7 +138,7 @@ function DraftStart({
 
   if (activeFactory && missingCredential) {
     return (
-      <section className={draftStartClass} aria-label="Provider credential required">
+      <section className={draftStartClass} aria-label={t('newPage.credentialRequired')}>
         <MissingCredentialState factoryId={activeFactory.id} guard={missingCredential} />
       </section>
     );
@@ -144,10 +147,12 @@ function DraftStart({
   return (
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0 text-center">
-        What do you want to work on?
+        {t('newPage.heading')}
       </Txt>
       {configurationError && (
-        <Notice variant="destructive">Failed to load session configuration: {configurationError.message}</Notice>
+        <Notice variant="destructive">
+          {t('newPage.configError', { message: configurationError.message })}
+        </Notice>
       )}
 
       <div className="flex min-w-0 flex-col gap-2">
@@ -159,19 +164,23 @@ function DraftStart({
 }
 
 function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard: MissingCredentialGuard }) {
+  const { t } = useTranslation('chat');
   const authQuery = useFactoryAuth();
   const providerName = providerDisplayName(guard.provider);
-  const orgHint =
-    authQuery.data?.authEnabled === true ? ', or ask an org admin to share an org-wide key with your team' : '';
+  const descriptionValues = { modelId: guard.modelId, provider: providerName };
   return (
     <EmptyState
       as="h2"
       iconSlot={<Bot />}
-      titleSlot={`You don't have access to ${providerName}`}
-      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Your models settings${orgHint}.`}
+      titleSlot={t('newPage.noAccessTitle', { provider: providerName })}
+      descriptionSlot={
+        authQuery.data?.authEnabled === true
+          ? t('newPage.noAccessDescriptionOrg', descriptionValues)
+          : t('newPage.noAccessDescription', descriptionValues)
+      }
       actionSlot={
         <Link to={settingsSectionPath(factoryId, 'personal-models')} className={buttonVariants({ variant: 'primary' })}>
-          Open Models settings
+          {t('newPage.openModelsSettings')}
         </Link>
       }
     />
@@ -179,15 +188,16 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
 }
 
 function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
+  const { t } = useTranslation('chat');
   return (
     <EmptyState
       as="h2"
       iconSlot={<Bot />}
-      titleSlot="No default model configured for this Factory"
-      descriptionSlot="Connect a model provider and choose a default model in Models settings before starting a chat."
+      titleSlot={t('newPage.noDefaultModelTitle')}
+      descriptionSlot={t('newPage.noDefaultModelDescription')}
       actionSlot={
         <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
-          Open Models settings
+          {t('newPage.openModelsSettings')}
         </Link>
       }
     />

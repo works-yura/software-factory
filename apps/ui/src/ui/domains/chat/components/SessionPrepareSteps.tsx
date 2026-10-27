@@ -1,5 +1,6 @@
 import { ProcessStepListItem } from '@mastra/playground-ui/components/Steps';
 import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
+import { useTranslation } from 'react-i18next';
 
 import { useChatMessagesInitializing } from '../context/useChatMessagesInitializing';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -8,8 +9,8 @@ import { useChatSessionContext } from '../context/useChatSessionContext';
 // command — so the only work worth showing is resolving the session and then
 // loading its history.
 const GROUPS = [
-  { id: 'preparing-session', title: 'Preparing session' },
-  { id: 'starting-session', title: 'Starting session' },
+  { id: 'preparing-session', titleKey: 'session.preparing' },
+  { id: 'starting-session', titleKey: 'session.starting' },
 ] as const;
 
 type GroupId = (typeof GROUPS)[number]['id'];
@@ -29,13 +30,14 @@ export function SessionPrepareSteps({
   finishing?: boolean;
   historyInitializing?: boolean;
 }) {
+  const { t } = useTranslation('chat');
   const { sandboxPreparing } = useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
 
   const loadingMessages = !sandboxPreparing && messagesInitializing;
   const startingSession = loadingMessages || (!sandboxPreparing && historyInitializing);
 
-  const activeDescription = loadingMessages ? 'Loading messages…' : 'Starting…';
+  const activeDescription = loadingMessages ? t('session.loadingMessagesProgress') : t('session.startingProgress');
   const activeGroup: GroupId = startingSession ? 'starting-session' : 'preparing-session';
   const activeIndex = finishing ? GROUPS.length : GROUPS.findIndex(group => group.id === activeGroup);
 
@@ -46,7 +48,7 @@ export function SessionPrepareSteps({
       position: index + 1,
       step: {
         id: group.id,
-        title: group.title,
+        title: t(group.titleKey),
         status,
         isActive: status === 'running',
         description: status === 'running' ? activeDescription : '',
@@ -57,7 +59,7 @@ export function SessionPrepareSteps({
   return (
     <div
       role="status"
-      aria-label="Preparing session"
+      aria-label={t('session.preparing')}
       data-testid="session-prepare-steps"
       className="flex flex-1 items-center justify-center px-4 py-8"
     >

@@ -1,1 +1,322 @@
-{}
+{
+  "common": {
+    "retry": "Повторити",
+    "default": "За замовчуванням",
+    "none": "(немає)"
+  },
+  "pageTitles": {
+    "activity": "Активність",
+    "knowledge": "Знання",
+    "new": "Нова сесія",
+    "new-factory": "Нова фабрика",
+    "review": "Рев'ю коду",
+    "rules": "Правила",
+    "supervisor": "Наглядач",
+    "work": "Робота",
+    "session": "Сесія"
+  },
+  "layout": {
+    "breadcrumb": "Навігаційний ланцюжок"
+  },
+  "newPage": {
+    "userSessions": "Сесії користувачів",
+    "newSession": "Нова сесія",
+    "modelSetupRequired": "Потрібно налаштувати модель",
+    "credentialRequired": "Потрібні облікові дані провайдера",
+    "heading": "Над чим хочете попрацювати?",
+    "configError": "Не вдалося завантажити конфігурацію сесії: {{message}}",
+    "noAccessTitle": "У вас немає доступу до {{provider}}",
+    "noAccessDescription": "Модель Factory за замовчуванням ({{modelId}}) потребує облікових даних {{provider}}. Додайте власний ключ у налаштуваннях «Ваші моделі».",
+    "noAccessDescriptionOrg": "Модель Factory за замовчуванням ({{modelId}}) потребує облікових даних {{provider}}. Додайте власний ключ у налаштуваннях «Ваші моделі» або попросіть адміністратора організації надати вашій команді спільний ключ організації.",
+    "openModelsSettings": "Відкрити налаштування моделей",
+    "noDefaultModelTitle": "Для цієї Factory не налаштовано модель за замовчуванням",
+    "noDefaultModelDescription": "Перш ніж почати чат, підключіть провайдера моделей і виберіть модель за замовчуванням у налаштуваннях моделей."
+  },
+  "threadPage": {
+    "loadingSession": "Завантаження сесії",
+    "notFoundTitle": "Сесію не знайдено",
+    "loadFailedTitle": "Не вдалося завантажити цю сесію",
+    "notFoundDescription": "Цієї сесії не існує, або вона приватна й належить іншому користувачу.",
+    "loadFailedDescription": "Не вдалося завантажити сесію: {{message}}",
+    "startNewSession": "Почати нову сесію",
+    "composer": "Поле повідомлення треду"
+  },
+  "session": {
+    "notFoundOrPrivate": "Сесію не знайдено, або вона приватна й належить іншому користувачу.",
+    "workspaceFailed": "Не вдалося підготувати робочий простір: {{message}}",
+    "loadingMessages": "Завантаження повідомлень",
+    "messagesFailedWithReason": "Не вдалося завантажити повідомлення: {{message}}",
+    "messagesFailed": "Не вдалося завантажити повідомлення.",
+    "preparing": "Підготовка сесії",
+    "starting": "Запуск сесії",
+    "loadingMessagesProgress": "Завантаження повідомлень…",
+    "startingProgress": "Запуск…",
+    "jumpToLatest": "Перейти до останнього повідомлення",
+    "loadingOlder": "Завантаження старіших повідомлень",
+    "currentTasks": "Поточні задачі",
+    "teammateNamed": "Ви керуєте сесією користувача {{name}}",
+    "teammate": "Ви керуєте сесією колеги"
+  },
+  "emptyThread": {
+    "title": "Що допомогти вам створити?",
+    "subtitle": "Запитайте про цю кодову базу, сплануйте зміну або опишіть, що не працює.",
+    "suggestedPrompts": "Запропоновані промпти",
+    "explore": "Дослідити кодову базу",
+    "explorePrompt": "Допоможи мені зрозуміти, як влаштована ця кодова база.",
+    "plan": "Спланувати функцію",
+    "planPrompt": "Допоможи мені спланувати нову функцію.",
+    "review": "Переглянути останні зміни",
+    "reviewPrompt": "Переглянь останні зміни й запропонуй покращення.",
+    "debug": "Налагодити проблему",
+    "debugPrompt": "Допоможи мені налагодити проблему.",
+    "workingIn": "Робота в <name>{{name}}</name>",
+    "resourceId": "ID ресурсу",
+    "branch": "Гілка",
+    "sessionId": "ID сесії"
+  },
+  "composer": {
+    "planFeedbackPlaceholder": "Напишіть відгук щодо цього плану…",
+    "steerPlaceholder": "Скеруйте агента…",
+    "placeholder": "Запитайте Mastra Code…",
+    "initializingSession": "Ініціалізація сесії…",
+    "initializingWorkSession": "Ініціалізація робочої сесії",
+    "sendFailed": "Не вдалося надіслати повідомлення.",
+    "commandNeedsSession": "Для цієї команди потрібна сесія. Спершу надішліть промпт, щоб її створити.",
+    "commandsWaitForSession": "Команди виконуються, щойно сесія буде готова.",
+    "message": "Повідомлення",
+    "attachImages": "Прикріпити зображення",
+    "actions": "Дії поля повідомлення",
+    "attachImage": "Прикріпити зображення",
+    "imagesOnly": "Лише зображення",
+    "abort": "Перервати",
+    "send": "Надіслати повідомлення",
+    "readFileFailed": "Не вдалося прочитати файл"
+  },
+  "handoff": {
+    "previousMaybeUnsent": "Попереднє повідомлення могло не надіслатися. Перевірте транскрипт, перш ніж повторювати.",
+    "couldNotStartOn": "Не вдалося почати на {{modelId}}.",
+    "maybeSent": "{{reason}} Повідомлення могло бути надіслане. Перевірте транскрипт, перш ніж повторювати."
+  },
+  "draftSession": {
+    "reload": "Не вдалося створити сесію. Перезавантажте сторінку й спробуйте ще раз.",
+    "configNotReady": "Конфігурація сесії ще не готова. Спробуйте ще раз.",
+    "creationFailed": "Не вдалося створити сесію",
+    "createFailed": "Не вдалося створити сесію: {{message}}. Спробуйте ще раз."
+  },
+  "permissions": {
+    "updateFailed": "Не вдалося оновити дозвіл. Спробуйте ще раз."
+  },
+  "commands": {
+    "factoryDefault": "За замовчуванням Factory",
+    "settingsUnavailable": "Налаштування сесії недоступні",
+    "factoryThinkingUnavailable": "Рівень мислення Factory недоступний",
+    "model": "Змінити модель",
+    "goal": "Задати ціль",
+    "goalClear": "Скинути активну ціль",
+    "goalPause": "Призупинити активну ціль",
+    "goalResume": "Відновити призупинену ціль",
+    "permissions": "Показати правила дозволів",
+    "permissionsNotice": "Категорії:\n{{categories}}\nІнструменти:\n{{tools}}",
+    "yolo": "Автоматично дозволити всі категорії інструментів",
+    "yoloNotice": "Режим YOLO: усі категорії інструментів дозволено автоматично",
+    "cost": "Показати використання токенів",
+    "noUsage": "Використання токенів ще не зафіксовано.",
+    "usage": "Токени — промпт: {{prompt}}, відповідь: {{completion}}, усього: {{total}}",
+    "think": "Показати або задати рівень мислення сесії",
+    "unknownThinkingLevel": "Невідомий рівень мислення: {{value}}. Використовуйте: {{levels}}, default, status",
+    "thinkingLevelSet": "Рівень мислення: {{level}}.",
+    "thinkingLevelDefault": "Рівень мислення скинуто до типового: {{level}}.",
+    "thinkingLevelDefaultUnknown": "Рівень мислення скинуто до типового. Поточне типове значення недоступне.",
+    "thinkingLevelOverride": "Рівень мислення: {{level}} (задано для сесії). Типовий: {{defaultLevel}}.",
+    "thinkingLevel": "Рівень мислення: {{level}}.",
+    "om": "Показати фазу спостережної пам’яті",
+    "omNotice": "Фаза спостережної пам’яті: {{phase}}",
+    "settings": "Показати стан сесії",
+    "settingsNotice": "Factory: {{factory}}\nСесія: {{session}}\nМодель: {{model}}\nТред: {{thread}}\nВиконується: {{running}}",
+    "connect": "Підключити провайдера моделей",
+    "login": "Увійти через обліковий запис провайдера",
+    "followUp": "Поставити наступне повідомлення в чергу",
+    "abort": "Перервати поточний запуск",
+    "help": "Показати список команд",
+    "available": "Доступні команди:",
+    "unknown": "Невідома команда: /{{name}}"
+  },
+  "shortcuts": {
+    "title": "Клавіатурні скорочення",
+    "search": "Пошук і навігація",
+    "items": {
+      "help": "Показати цю довідку зі скорочень",
+      "send": "Надіслати повідомлення",
+      "newline": "Новий рядок",
+      "slash": "Почати слеш-команду",
+      "escape": "Закрити діалог або зупинити поточний хід"
+    }
+  },
+  "status": {
+    "line": "Рядок стану сесії",
+    "reconnecting": "Повторне підключення…",
+    "reconnectHint": "Перевірте сервер і перезавантажте сторінку, щоб підключитися знову",
+    "disconnected": "Відключено",
+    "preparingWorkspace": "Підготовка робочого простору…",
+    "connecting": "Підключення…",
+    "working": "Виконується…",
+    "goalPaused": "ціль призупинено",
+    "pursuingGoal": "виконується ціль",
+    "savingMemory": "збереження пам’яті",
+    "consolidatingMemory": "ущільнення пам’яті",
+    "tokensPerSecond": "{{rate}} ток/с",
+    "queued_one": "{{count}} у черзі",
+    "queued_few": "{{count}} у черзі",
+    "queued_many": "{{count}} у черзі",
+    "queued_other": "{{count}} у черзі"
+  },
+  "goal": {
+    "pause": "Призупинити",
+    "resume": "Відновити",
+    "clear": "Скинути"
+  },
+  "memory": {
+    "messages": {
+      "idle": "Вікно повідомлень до наступного спостереження",
+      "background": "Вікно повідомлень зберігається в пам’ять у фоні",
+      "blocking": "Вікно повідомлень зберігається в пам’ять"
+    },
+    "observations": {
+      "idle": "Спостереження, накопичені до наступної рефлексії",
+      "background": "Спостереження ущільнюються у фоні",
+      "blocking": "Спостереження ущільнюються"
+    },
+    "reading": "{{tokens}} з {{threshold}}k",
+    "budgets": "Бюджети пам’яті: {{budgets}}",
+    "messagesDescription": "Коли заповниться, переноситься в пам’ять",
+    "messagesLabel": "Повідомлення",
+    "observationsDescription": "Коли заповниться, ущільнюється в рефлексію",
+    "observationsLabel": "Спостереження"
+  },
+  "modelPicker": {
+    "loading": "Завантаження моделі",
+    "unavailable": "Модель недоступна",
+    "noModel": "Немає моделі",
+    "listUnavailable": "{{label}} · список моделей недоступний",
+    "needsOrgCredential": "потрібні облікові дані організації",
+    "isNotConfigured": "{{label}} не налаштовано",
+    "notConfigured": "не налаштовано",
+    "switchFailed": "Не вдалося змінити модель",
+    "group": "Модель і мислення",
+    "sessionModelNotConfigured": "Модель сесії, {{label}} не налаштовано",
+    "sessionModel": "Модель сесії",
+    "search": "Пошук моделей…",
+    "noMatch": "Немає відповідних моделей.",
+    "resetToDefault": "Повернути вашу модель за замовчуванням",
+    "scopeFooter": "Показано моделі, які можна запускати з обліковими даними організації цієї Factory.",
+    "manage": "Керувати"
+  },
+  "thinking": {
+    "label": "Мислення",
+    "levels": {
+      "off": "Вимкнено",
+      "low": "Низький",
+      "medium": "Середній",
+      "high": "Високий",
+      "xhigh": "Дуже високий",
+      "max": "Максимальний"
+    },
+    "catalogLoading": "Рівні мислення цієї моделі ще не завантажено.",
+    "loadFailed": "Не вдалося завантажити рівень мислення.",
+    "notLoaded": "Рівень мислення ще не завантажено.",
+    "switchingModel": "Зміна моделі…",
+    "thisSession": "ця сесія",
+    "resetFailed": "Не вдалося скинути рівень мислення",
+    "changeFailed": "Не вдалося змінити рівень мислення",
+    "follows": "Успадковано: {{source}}.",
+    "setForSession": "Задано для цієї сесії.",
+    "useDefault": "Використати типовий"
+  },
+  "credential": {
+    "connection": "Підключення {{provider}}",
+    "organization": "Надано організацією",
+    "deployment": "Налаштовано на сервері",
+    "ownerNamed": "{{name}} · власник сесії",
+    "owner": "Власник сесії",
+    "youNamed": "{{name}} (ви)",
+    "you": "Ви",
+    "youOwnerNamed": "{{name}} · власник сесії (ви)",
+    "youOwner": "Ви · власник сесії",
+    "teammateWarningNamed": "Ваші повідомлення використовують {{credential}} користувача {{name}}",
+    "teammateWarning": "Ваші повідомлення використовують {{credential}} власника сесії",
+    "replyOrganization": "{{label}} організації",
+    "replyYours": "Ваш {{label}}",
+    "replyOwner": "{{label}} користувача {{name}}",
+    "replyPersonal": "Особистий {{label}}"
+  },
+  "plan": {
+    "title": "План",
+    "approval": "Затвердження плану",
+    "loadingLabel": "Завантаження плану",
+    "loading": "Завантаження плану…",
+    "unavailableAt": "Не вдалося завантажити план з {{path}}. Ви все одно можете відповісти нижче.",
+    "unavailable": "Не вдалося завантажити план з його файлу. Ви все одно можете відповісти нижче.",
+    "feedbackLabel": "Відгук щодо плану",
+    "feedback": "Відгук",
+    "approveLabel": "Затвердити план і реалізувати його",
+    "approve": "Затвердити й реалізувати",
+    "rejectLabel": "Відхилити план",
+    "reject": "Відхилити"
+  },
+  "prompts": {
+    "accessRequest": "Запит на доступ",
+    "grantAccessTo": "Надати доступ до {{path}}?",
+    "grantAccess": "Надати доступ до шляху?",
+    "reason": "Причина: {{reason}}",
+    "allowAccessTo": "Дозволити доступ до {{path}}",
+    "allowAccess": "Дозволити доступ до запитаного шляху",
+    "allow": "Дозволити",
+    "denyAccessTo": "Заборонити доступ до {{path}}",
+    "denyAccess": "Заборонити доступ до запитаного шляху",
+    "deny": "Заборонити",
+    "agentQuestion": "Агент має запитання",
+    "questionFromAgent": "Запитання від агента",
+    "subagent": "субагент: {{type}}"
+  },
+  "messages": {
+    "steering": "Скерування…",
+    "notSent": "Не надіслано",
+    "steered": "Скероване повідомлення",
+    "error": "Помилка",
+    "systemReminder": "Системне нагадування",
+    "sentFrom": "Надіслано з {{platform}}",
+    "via": "через {{platform}}",
+    "sentBy": "Надіслав(-ла) {{name}}",
+    "thinking": "Мислення",
+    "tool": "Інструмент: {{name}}",
+    "login": "Увійти"
+  },
+  "notifications": {
+    "openOnGitLab": "Відкрити в GitLab",
+    "openOnGitHub": "Відкрити в GitHub",
+    "openTarget": "Відкрити ціль сповіщення",
+    "notification": "сповіщення",
+    "summary": "Зведення сповіщень"
+  },
+  "changeRequest": {
+    "open": "Відкрити {{noun}} {{number}} у {{repo}} ({{status}})",
+    "nouns": {
+      "github": "пул-реквест",
+      "gitlab": "мерж-реквест"
+    },
+    "statuses": {
+      "open": "відкритий",
+      "merged": "злитий",
+      "closed": "закритий"
+    }
+  },
+  "errors": {
+    "workspace": "Робочий простір: {{message}}",
+    "runFailedType": "Запуск завершився помилкою ({{type}}). Подробиці — у логах сервера.",
+    "runFailed": "Запуск завершився невідомою помилкою. Подробиці — у логах сервера.",
+    "sessionUnavailable": "Сесія контролера агента недоступна",
+    "controllerUnavailable": "Клієнт контролера агента недоступний",
+    "skillInvalidResponse": "Виклик скіла повернув некоректну відповідь.",
+    "skillFailed": "Не вдалося викликати скіл ({{status}})."
+  }
+}

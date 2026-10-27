@@ -15,9 +15,12 @@ import {
   toolEdit,
 } from '@mastra/playground-ui/components/ai/tool-call';
 
+import { translator } from '../../../../i18n/t';
 import { toolCallStatus } from '../../services/transcript';
 import type { ToolCall } from '../../services/transcript';
 import { ToolTime } from '../ToolTime';
+
+const tk = translator('chat');
 
 function toolResultText(tool: ToolCall): string | undefined {
   if (tool.status === 'running' || tool.result === undefined || tool.result === null) return undefined;
@@ -73,7 +76,7 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
     <Activity
       foldable={toolHasBody(tool, command)}
       status={toolCallStatus(tool.status)}
-      aria-label={`Tool: ${tool.toolName}`}
+      aria-label={tk('messages.tool', { name: tool.toolName })}
       aria-busy={tool.status === 'running'}
     >
       <ActivityTrigger>

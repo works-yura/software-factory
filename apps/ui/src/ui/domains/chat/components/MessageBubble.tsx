@@ -50,11 +50,15 @@ import {
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
+
 function steeringLabel(entry: MessageEntry): string | undefined {
   if (!entry.steer) return undefined;
-  if (entry.deliveryStatus === 'pending') return 'Steering…';
-  if (entry.deliveryStatus === 'failed') return 'Not sent';
-  return 'Steered message';
+  if (entry.deliveryStatus === 'pending') return tk('messages.steering');
+  if (entry.deliveryStatus === 'failed') return tk('messages.notSent');
+  return tk('messages.steered');
 }
 
 function metaText(entry: MessageEntry, prose: string, reply?: string): string | undefined {
@@ -168,7 +172,7 @@ export function MessageBubble({
     Error: (part: MastraErrorPart) => (
       <Notice
         variant="destructive"
-        title={part.error.name ?? 'Error'}
+        title={part.error.name ?? tk('messages.error')}
         action={part.error.name === PROVIDER_AUTH_REQUIRED_ERROR ? <ProviderLoginAction /> : undefined}
       >
         <Notice.Message>{part.error.message}</Notice.Message>
@@ -266,7 +270,7 @@ export function MessageBubble({
     }
     if (signalRow.kind === 'gap') return <TimeGap text={signalRow.text} />;
     if (signalRow.kind === 'reminder') {
-      return <SignalRow kind="reminder" label="System reminder" message={signalRow.text} />;
+      return <SignalRow kind="reminder" label={tk('messages.systemReminder')} message={signalRow.text} />;
     }
     if (!signalRow.tagName || HIDDEN_REACTIVE_SIGNAL_TAGS.has(signalRow.tagName)) return null;
     return <SignalRow kind="reactive" label={signalRow.tagName} message={signalRow.text} />;

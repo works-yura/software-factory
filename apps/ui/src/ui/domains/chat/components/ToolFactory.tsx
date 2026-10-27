@@ -7,6 +7,9 @@ import type { ReactNode } from 'react';
 
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { SubmitPlanCard } from './SubmitPlanCard';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('chat');
 
 type ToolStatus = 'running' | 'done' | 'error';
 
@@ -84,8 +87,8 @@ function ToolFactoryComponent({
     return (
       <AskUser
         role="group"
-        aria-label="Question from the agent"
-        payload={payload ?? { question: 'Question from the agent' }}
+        aria-label={tk('prompts.questionFromAgent')}
+        payload={payload ?? { question: tk('prompts.questionFromAgent') }}
         {...(result ? { result } : {})}
         isSubmitting={isSubmitting}
         onSubmit={answer => onRespond?.(answer)}
@@ -121,7 +124,7 @@ function ToolFactoryComponent({
     return (
       <AskUser
         role="group"
-        aria-label="Question from the agent"
+        aria-label={tk('prompts.questionFromAgent')}
         payload={pausedQuestion}
         isSubmitting={isSubmitting}
         onSubmit={answer => onRespond?.(answer)}

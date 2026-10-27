@@ -17,6 +17,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
@@ -46,6 +47,7 @@ function canSwitchModel(kind: ChatSessionContextApi['kind'], isDraft: boolean, s
 }
 
 export function ModelPicker() {
+  const { t } = useTranslation('chat');
   const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
@@ -61,17 +63,17 @@ export function ModelPicker() {
   const providerGroups = groupByProvider(modelsQuery.data ?? []);
 
   if (!selectedModelId && (isLoading || status === 'connecting')) {
-    return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
+    return <Skeleton aria-label={t('modelPicker.loading')} className="h-3.5 w-24" />;
   }
   if (!selectedModelId && error) {
     return (
-      <span className="text-destructive-foreground" aria-label="Model unavailable" title={error.message}>
-        Model unavailable
+      <span className="text-destructive-foreground" aria-label={t('modelPicker.unavailable')} title={error.message}>
+        {t('modelPicker.unavailable')}
       </span>
     );
   }
 
-  const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
+  const label = selectedModelId ? formatModelName(selectedModelId) : t('modelPicker.noModel');
   const notConfigured =
     !scopeLoading &&
     Boolean(selectedModelId) &&
@@ -87,7 +89,7 @@ export function ModelPicker() {
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
   if (modelsQuery.isError && noModelsToOffer) {
-    const unavailableLabel = `${label} · model list unavailable`;
+    const unavailableLabel = t('modelPicker.listUnavailable', { label });
     return (
       <span className="text-destructive-foreground" aria-label={unavailableLabel} title={modelsQuery.error.message}>
         {unavailableLabel}
@@ -100,7 +102,7 @@ export function ModelPicker() {
         <span className="text-destructive-foreground" title={selectedModelId}>
           {label} ·{' '}
           <Link to={settingsSectionPath(factoryId, 'models')} className="underline underline-offset-2">
-            needs an organization credential
+            {t('modelPicker.needsOrgCredential')}
           </Link>
         </span>
       );
@@ -108,11 +110,11 @@ export function ModelPicker() {
     return (
       <span
         className={notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground'}
-        aria-label={notConfigured ? `${label} is not configured` : undefined}
+        aria-label={notConfigured ? t('modelPicker.isNotConfigured', { label }) : undefined}
         title={selectedModelId}
       >
         {label}
-        {notConfigured ? ' · not configured' : null}
+        {notConfigured ? ` · ${t('modelPicker.notConfigured')}` : null}
       </span>
     );
   }
@@ -132,17 +134,19 @@ export function ModelPicker() {
     setOpen(false);
     if (modelId === activeModelId) return;
     setPendingModelId(modelId);
-    runAction(setModel(modelId), 'Failed to switch model');
+    runAction(setModel(modelId), t('modelPicker.switchFailed'));
   };
   const modelMenuLocked = busy || modelsQuery.isPending || scopeLoading;
 
   return (
-    <ButtonsGroup size="sm" aria-label="Model and thinking">
+    <ButtonsGroup size="sm" aria-label={t('modelPicker.group')}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           type="button"
           disabled={modelMenuLocked}
-          aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
+          aria-label={
+            notConfigured ? t('modelPicker.sessionModelNotConfigured', { label }) : t('modelPicker.sessionModel')
+          }
           aria-busy={modelMenuLocked}
           className={cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
@@ -152,15 +156,15 @@ export function ModelPicker() {
         >
           <span className="max-w-48 truncate">
             {label}
-            {notConfigured ? ' · not configured' : null}
+            {notConfigured ? ` · ${t('modelPicker.notConfigured')}` : null}
           </span>
           <ChevronDown aria-hidden size={12} />
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 p-0">
           <Command loop>
-            <CommandInput placeholder="Search models…" />
+            <CommandInput placeholder={t('modelPicker.search')} />
             <CommandList className="max-h-80">
-              <CommandEmpty>No matching model.</CommandEmpty>
+              <CommandEmpty>{t('modelPicker.noMatch')}</CommandEmpty>
               {providerGroups.map(([provider, models]) => (
                 <CommandGroup
                   key={provider}
@@ -178,7 +182,7 @@ export function ModelPicker() {
                       <span className="truncate">{model.modelName}</span>
                       {model.id === defaultModelId ? (
                         <Badge variant="blue" size="xs">
-                          Default
+                          {t('common.default')}
                         </Badge>
                       ) : null}
                       {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
@@ -195,7 +199,7 @@ export function ModelPicker() {
                     onSelect={() => pickModel(defaultModelId)}
                   >
                     <RotateCcw aria-hidden />
-                    <span>Reset to your default</span>
+                    <span>{t('modelPicker.resetToDefault')}</span>
                   </CommandItem>
                 </CommandGroup>
               ) : null}

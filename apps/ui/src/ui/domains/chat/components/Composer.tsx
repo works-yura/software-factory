@@ -15,6 +15,7 @@ import { useOptionalMessageScroller } from '@mastra/playground-ui/components/Mes
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
@@ -43,6 +44,7 @@ import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
+  const { t } = useTranslation('chat');
   const { sessionId, sessionEnabled, baseUrl, factorySessionState } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
@@ -87,12 +89,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
-    ? 'Give feedback on this plan…'
+    ? t('composer.planFeedbackPlaceholder')
     : liveRun
-      ? 'Steer the agent…'
-      : 'Ask Mastra Code…';
+      ? t('composer.steerPlaceholder')
+      : t('composer.placeholder');
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
-  const sendTitle = chatPreparing ? 'Initializing session…' : undefined;
+  const sendTitle = chatPreparing ? t('composer.initializingSession') : undefined;
 
   const updateDraft = setComposerDraft;
 
@@ -168,7 +170,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     void handleInput(text).catch(error => {
       if (planFeedback.pending) updateDraft(text);
       clearPending();
-      pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
+      pushNotice(error instanceof Error ? error.message : t('composer.sendFailed'), 'error');
     });
   };
 
@@ -209,7 +211,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     if (onUserDraft && text.startsWith('/')) {
       if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
-        pushNotice('This command needs a session. Send a prompt to create one first.');
+        pushNotice(t('composer.commandNeedsSession'));
       } else {
         await runComposerCommand(text);
       }
@@ -226,7 +228,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(commands, text)) {
       updateDraft(text);
-      pushNotice('Commands run once the session is ready.');
+      pushNotice(t('composer.commandsWaitForSession'));
       return;
     }
     if (await runComposerCommand(text)) return;
@@ -251,7 +253,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             placeholder={placeholder}
             disabled={textareaDisabled}
             variant={variant}
-            aria-label="Message"
+            aria-label={t('composer.message')}
           />
           <input
             ref={fileInputRef}
@@ -260,18 +262,18 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             multiple
             onChange={onFileInputChange}
             className="hidden"
-            aria-label="Attach images"
+            aria-label={t('composer.attachImages')}
           />
           <ComposerActions>
             <StatusLine />
-            <ButtonsGroup size="sm" className="ml-auto" aria-label="Composer actions">
+            <ButtonsGroup size="sm" className="ml-auto" aria-label={t('composer.actions')}>
               <Button
                 type="button"
                 size="icon-sm"
                 disabled={attachDisabled}
                 onClick={() => fileInputRef.current?.click()}
-                aria-label="Attach image"
-                tooltip="Images only"
+                aria-label={t('composer.attachImage')}
+                tooltip={t('composer.imagesOnly')}
               >
                 <ImagePlus size={14} />
               </Button>
@@ -280,7 +282,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                   type="button"
                   size="icon-sm"
                   onClick={() => void abortMutation.mutateAsync()}
-                  aria-label="Abort"
+                  aria-label={t('composer.abort')}
                 >
                   <Square size={14} />
                 </Button>
@@ -291,7 +293,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 disabled={
                   sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
                 }
-                aria-label="Send message"
+                aria-label={t('composer.send')}
                 title={sendTitle}
               >
                 <ArrowUp size={16} />

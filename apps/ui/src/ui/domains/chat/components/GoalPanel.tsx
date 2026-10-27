@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Target } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatRuntime } from '../context/useChatRuntime';
@@ -14,6 +15,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border bg-badge-pink-subtle px-4 py-2';
 
 export function GoalPanel() {
+  const { t } = useTranslation('chat');
   const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { goal } = useChatRuntime();
   const hookArgs = {
@@ -53,16 +55,16 @@ export function GoalPanel() {
       )}
       {goal.status === 'active' && (
         <Button size="sm" onClick={() => void pauseGoalMutation.mutateAsync()}>
-          Pause
+          {t('goal.pause')}
         </Button>
       )}
       {goal.status === 'paused' && (
         <Button variant="primary" size="sm" onClick={() => void resumeGoalMutation.mutateAsync()}>
-          Resume
+          {t('goal.resume')}
         </Button>
       )}
       <Button size="sm" onClick={() => void clearGoalMutation.mutateAsync()}>
-        Clear
+        {t('goal.clear')}
       </Button>
     </div>
   );
