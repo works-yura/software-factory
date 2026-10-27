@@ -90,7 +90,7 @@ def main():
             text = open(os.path.join(src_root, f)).read()
             for match in SPEC.finditer(text):
                 target = module_of(match['spec'], os.path.dirname(os.path.join(src_root, f)), src_root)
-                if target not in moved and os.path.exists(os.path.join(src_root, target + '.ts')):
+                if not target.startswith('..') and target not in moved and os.path.exists(os.path.join(src_root, target + '.ts')):
                     violations.append(f'{f} -> {target}')
     if violations:
         sys.exit('moved modules import modules that stay behind:\n  ' + '\n  '.join(sorted(set(violations))))
@@ -125,6 +125,11 @@ def main():
 
             def local(match):
                 target = module_of(match['spec'], os.path.dirname(path), src_root)
+                if target.startswith('..'):
+                    # A path into another package (a test mocking that package's internals).
+                    absolute = os.path.normpath(os.path.join(os.path.dirname(path), match['spec']))
+                    rel = os.path.relpath(absolute, new_dir)
+                    return f"{match['lead']}{match['q']}{rel}{match['q']}"
                 if target not in moved:
                     return match.group(0)
                 ext = '.ts' if re.search(r'\.(ts|js)$', match['spec']) else ''
