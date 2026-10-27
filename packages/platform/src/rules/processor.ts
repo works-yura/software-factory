@@ -14,7 +14,7 @@ import type {
 import { boardForWorkItem, resolveBoardToolRule, workItemPhaseSemantics } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '@factory/store';
-import { findSessionRunBinding, getFactorySessionCoordinates } from './binding-context.ts';
+import { findSessionRunBinding, getFactorySessionCoordinates } from '@factory/session';
 import type { FactoryTransitionService } from '@factory/runtime';
 import { workItemSource } from '@factory/core';
 import type {

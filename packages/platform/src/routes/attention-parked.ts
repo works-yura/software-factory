@@ -1,6 +1,6 @@
 /** Sessions parked on a tool, read live from the registry: the item exists exactly as long as an answer is owed. */
 
-import type { LiveSessions } from '../session/live-sessions.ts';
+import type { LiveSessions } from '@factory/session';
 import type {
   FactoryAttentionIdentity,
   FactoryAttentionReceiptRecord,

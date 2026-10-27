@@ -59,7 +59,7 @@ import type { SessionEnvironmentRepositoryState } from '@factory/sandbox';
 import type { FactoryProject, FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession, SourceControlStorageHandle } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import { supervisorProjectIdFromContext } from './supervisor/session.ts';
+import { supervisorProjectIdFromContext } from '@factory/session';
 import { instrumentMethods, timed, timedPhase } from '@factory/observability';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from '@factory/pipelines';
 

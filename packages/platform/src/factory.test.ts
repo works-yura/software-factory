@@ -38,9 +38,9 @@ import { FactoryPhaseStateProcessor } from './rules/processor.ts';
 import type * as runtimeModule from '@factory/runtime';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { createFactorySecretEncryption } from '@factory/store';
-import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.ts';
+import { FactoryChannelReplyProcessor } from '@factory/session';
 import { FactoryEnvironmentStateProcessor } from '@factory/sandbox';
-import type * as resourceMigrationModule from './session/resource-migration.ts';
+import type * as resourceMigrationModule from '@factory/session';
 import type { CustomProvidersStorage } from '@factory/store';
 import type { MemorySettingsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
@@ -237,14 +237,18 @@ vi.mock('./routes/surface', async importOriginal => {
 const sessionMigrationOverride: {
   current?: () => Promise<Awaited<ReturnType<typeof resourceMigrationModule.migrateSessionResources>>>;
 } = {};
-vi.mock('./session/resource-migration', async importOriginal => {
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/session', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/session')>()),
+  ...(await (async importOriginal => {
   const actual = await importOriginal<typeof resourceMigrationModule>();
   return {
     ...actual,
     migrateSessionResources: (deps: Parameters<typeof actual.migrateSessionResources>[0]) =>
       sessionMigrationOverride.current?.() ?? actual.migrateSessionResources(deps),
   };
-});
+})(importOriginal)),
+}));
 
 /** An SSO-shaped fake provider: gets the hosted-login `/auth/*` routes. */
 function fakeProvider(

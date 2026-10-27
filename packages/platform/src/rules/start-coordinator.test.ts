@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createLifecycleTestRegistry } from '@factory/pipelines/testing';
-import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.ts';
+import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '@factory/session';
 import { factoryMemorySettingsUserId } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { FactoryStartCoordinator } from './start-coordinator.ts';

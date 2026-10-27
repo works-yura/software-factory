@@ -21,10 +21,10 @@ import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
   resolveFactorySourceControl,
-} from '../session/factory-session.ts';
-import type { EnsuredFactorySourceSession } from '../session/factory-session.ts';
-import type { LiveSessions } from '../session/live-sessions.ts';
-import { resolveWorkItemRepository } from '../session/work-item-repository.ts';
+} from '@factory/session';
+import type { EnsuredFactorySourceSession } from '@factory/session';
+import type { LiveSessions } from '@factory/session';
+import { resolveWorkItemRepository } from '@factory/session';
 import type { StateSigner } from '@factory/auth';
 import type { AuditEmitter, AuditRecorder } from '@factory/feed';
 import type { ChannelIdentityStorage } from '@factory/store';

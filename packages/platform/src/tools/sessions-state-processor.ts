@@ -4,7 +4,7 @@ import type { ComputeStateSignalArgs, ComputeStateSignalResult, Processor } from
 
 import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import type { SourceControlSessionLookup } from '../session/factory-session.ts';
+import type { SourceControlSessionLookup } from '@factory/session';
 import type { WorkItemsStorage } from '@factory/store';
 import { resolveFactoryToolScope } from './scope.ts';
 import type { FactoryToolScope, ResolveFactoryToolScopeOptions } from './scope.ts';

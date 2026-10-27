@@ -2,11 +2,11 @@ import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { Context, MiddlewareHandler } from 'hono';
 
-import type { SourceControlSessionLookup } from '../session/factory-session.ts';
+import type { SourceControlSessionLookup } from './factory-session.ts';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession } from '@factory/store';
 import type { RouteAuth } from '@factory/http';
-import { parseSupervisorResourceId } from '../supervisor/session.ts';
+import { parseSupervisorResourceId } from './supervisor-session.ts';
 
 /**
  * Whether the viewer may read a visible session's conversation. A session on its owner's memory is

@@ -246,7 +246,7 @@ vi.mock('@factory/sandbox', async importOriginal => ({
     MaterializeError,
     SetupCommandError,
   };
-})(importOriginal)),
+})()),
 }));
 
 let featureEnabled = true;

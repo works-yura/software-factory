@@ -23,9 +23,9 @@ import {
 } from '@factory/credentials';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
 import { createFactoryStorageForTests } from '@factory/testing';
-import { resolveFactoryCredentialTenant } from './credential-policy.ts';
-import { hydrateSessionDefaultModel } from './default-model-hydration.ts';
-import { createSourceControlSessionLookup, ensureFactorySourceSession } from './factory-session.ts';
+import { resolveFactoryCredentialTenant } from '@factory/session';
+import { hydrateSessionDefaultModel } from '@factory/session';
+import { createSourceControlSessionLookup, ensureFactorySourceSession } from '@factory/session';
 
 const ORG = 'org-1';
 const OWNER = 'owner';

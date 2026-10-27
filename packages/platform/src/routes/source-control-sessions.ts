@@ -9,15 +9,15 @@ import type { Context } from 'hono';
 import { reclaimDeletedSessionSandbox } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
 import type { SessionRetirementCoordinator } from '@factory/sandbox';
-import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.ts';
-import { seedSessionOrg } from '../session/org-seed.ts';
+import { waitForPendingFilesystemCapture } from '@factory/session';
+import { seedSessionOrg } from '@factory/session';
 import {
   sessionMemoryResourceId,
   listFactorySessionThreads,
   sessionThreadsToMove,
   userSessionResourceFor,
-} from '../session/session-threads.ts';
-import { normalizeSessionTitle } from '../session/session-title.ts';
+} from '@factory/session';
+import { normalizeSessionTitle } from '@factory/session';
 import type { FilesystemStorage } from '@factory/store';
 import type { MemorySettingsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
@@ -28,7 +28,7 @@ import type {
 } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import type { RouteAuth } from '@factory/http';
-import { canReadSessionResource, canViewSourceControlSession } from './session-access.ts';
+import { canReadSessionResource, canViewSourceControlSession } from '@factory/session';
 
 type RouteContext = Context;
 
@@ -36,9 +36,9 @@ function loose(c: unknown): RouteContext {
   return c as RouteContext;
 }
 
-import { USER_SESSION_BRANCH_PREFIX } from '../session/branches.ts';
+import { USER_SESSION_BRANCH_PREFIX } from '@factory/session';
 
-export { USER_SESSION_BRANCH_PREFIX } from '../session/branches.ts';
+export { USER_SESSION_BRANCH_PREFIX } from '@factory/session';
 // Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
 const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

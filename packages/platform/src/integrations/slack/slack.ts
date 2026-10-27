@@ -19,7 +19,7 @@ import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
 } from '@factory/credentials';
-import { markNewChannelSession } from '../../session/channel-session-link-processor.ts';
+import { markNewChannelSession } from '@factory/session';
 import {
   createSourceControlSessionLookup,
   FactorySourceControlConflictError,
@@ -27,10 +27,10 @@ import {
   resolveFactorySessionModel,
   resolveFactorySourceControl,
   resolvePrimaryEnvironmentRepository,
-} from '../../session/factory-session.ts';
-import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.ts';
-import { isRunBound, memoryResourceOf, sessionStampCounts } from '../../session/session-threads.ts';
-import type { SessionRunBindings } from '../../session/session-threads.ts';
+} from '@factory/session';
+import { readRequestContextOrgId, seedSessionOrg } from '@factory/session';
+import { isRunBound, memoryResourceOf, sessionStampCounts } from '@factory/session';
+import type { SessionRunBindings } from '@factory/session';
 import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,

@@ -8,7 +8,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { BoardRegistry } from '@factory/core';
 
-import type { LiveSessions } from '../session/live-sessions.ts';
+import type { LiveSessions } from '@factory/session';
 import type { WorkItemCommentsStorage } from '@factory/store';
 import type {
   FactoryAttentionKind,

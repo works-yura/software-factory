@@ -13,7 +13,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { BoardRegistry } from '@factory/core';
 import type { WorkItemsStorage } from '@factory/store';
 import { runFactoryHealthCheck } from '../supervisor/health.ts';
-import { supervisorResourceId, supervisorThreadId } from '../supervisor/session.ts';
+import { supervisorResourceId, supervisorThreadId } from '@factory/session';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 
 interface SupervisorRouteDependencies {

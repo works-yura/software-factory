@@ -274,7 +274,7 @@ def widen_package_mocks(path, package_name):
             "// widened from a v3 module mock: real package exports, then the original overrides\n"
             f"{head}async importOriginal => ({{\n"
             f"  ...(await importOriginal<typeof import('{package_name}')>()),\n"
-            f"  ...(await ({factory})(importOriginal)),\n"
+            f"  ...(await ({factory})({'' if re.match(r'(async\s*)?\(\s*\)\s*=>', factory.strip()) else 'importOriginal'})),\n"
             "}))"
         )
         i = k

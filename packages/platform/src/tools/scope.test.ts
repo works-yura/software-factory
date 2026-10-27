@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 
-import { createSourceControlSessionLookup } from '../session/factory-session.ts';
+import { createSourceControlSessionLookup } from '@factory/session';
 import type { SourceControlSessionVisibility } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { FACTORY_INTERACTIVE_KEY, FACTORY_SLACK_SENDER_KEY, resolveFactoryToolScope } from './scope.ts';

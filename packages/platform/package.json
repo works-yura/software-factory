@@ -25,6 +25,7 @@
     "@factory/pipelines": "workspace:*",
     "@factory/runtime": "workspace:*",
     "@factory/sandbox": "workspace:*",
+    "@factory/session": "workspace:*",
     "@factory/store": "workspace:*",
     "@internal/workspace": "workspace:*",
     "@mastra/auth-studio": "1.3.10",

@@ -1,6 +1,6 @@
 import type { NotificationRecord, NotificationsStorage } from '@mastra/core/notifications';
 
-import type { SourceControlSessionLookup } from '../session/factory-session.ts';
+import type { SourceControlSessionLookup } from '@factory/session';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { FACTORY_SESSION_NOTIFICATION_SOURCE, resolveSessionThread } from './deliver.ts';
 import type { FactoryDeliveryController } from './deliver.ts';

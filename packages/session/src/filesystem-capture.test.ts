@@ -38,7 +38,7 @@ function createSession(
   const listeners: SessionBeforeAgentEndListener[] = [];
   const eventListeners: Array<(event: unknown) => void> = [];
   const session: FilesystemCaptureSession = {
-    identity: { getId: () => sessionId, getResourceId: () => resourceId },
+    identity: { getId: () => sessionId },
     thread: { requireId: () => 'thread-1' },
     getWorkspace: () => ({
       sandbox: {
@@ -278,7 +278,7 @@ describe('captureSessionFilesystem across environment repositories', () => {
   ) {
     const executeCommand = vi.fn(async (_command: string, args: string[]) => {
       if (args[1] === 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true') return artifacts;
-      if (args[1].includes('-newer "$ref"')) return rootFiles;
+      if (args[1]?.includes('-newer "$ref"')) return rootFiles;
       return answers[args[3]!] ?? commandResult();
     });
     const base = createSession([]);

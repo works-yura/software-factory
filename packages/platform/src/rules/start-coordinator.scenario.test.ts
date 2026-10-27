@@ -3,8 +3,8 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { listFactorySessionThreads } from '../session/session-threads.ts';
-import { observeSessionThreadStamp } from '../session/thread-session-stamp.ts';
+import { listFactorySessionThreads } from '@factory/session';
+import { observeSessionThreadStamp } from '@factory/session';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { FactoryStartCoordinator } from './start-coordinator.ts';
 

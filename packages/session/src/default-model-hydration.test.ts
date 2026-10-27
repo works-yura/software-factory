@@ -17,7 +17,7 @@ vi.mock('@factory/credentials', async importOriginal => ({
   ...(await (() => ({
   primeTenantCredentialsForTenant: primeTenant,
   resolveTenantProviderDefaultModel: providerDefault,
-}))(importOriginal)),
+}))()),
 }));
 
 const modelId = 'anthropic/claude-opus-5';
@@ -50,7 +50,7 @@ function sourceControlRow(): SourceControlSession {
     firstMeaningfulExecAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-  };
+  } as SourceControlSession;
 }
 
 function createSession(state: Record<string, unknown> = {}, resourceId = 'session-1'): DefaultModelHydrationSession {

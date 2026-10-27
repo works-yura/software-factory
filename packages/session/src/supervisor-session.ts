@@ -11,7 +11,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '@factory/auth';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
-import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.ts';
+import { hydrateFactorySession, resolveFactorySessionModel } from './factory-session.ts';
 import type { ModelDefaultsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 

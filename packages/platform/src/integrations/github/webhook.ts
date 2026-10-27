@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
-import { requestsChangesVerdict } from '../../review-verdict.ts';
+import { requestsChangesVerdict } from '@factory/session';
 import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.ts';
 import type { FactorySessionOwner } from '../subscription-session.ts';
 import type { GithubAppIdentity } from './app-identity.ts';

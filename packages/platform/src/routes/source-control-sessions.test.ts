@@ -8,9 +8,9 @@ import { Workspace } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { getFactorySessionAddress, resolveFactorySessionAddress } from '../rules/binding-context.ts';
+import { getFactorySessionAddress, resolveFactorySessionAddress } from '@factory/session';
 import type { SessionRetirementCoordinator } from '@factory/sandbox';
-import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.ts';
+import { waitForPendingFilesystemCapture } from '@factory/session';
 import {
   FACTORY_OPEN_RUNS_SETTING,
   listSessionOpenRuns,
@@ -23,10 +23,14 @@ import { createFactoryStorageForTests } from '@factory/testing';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
-vi.mock('../session/filesystem-capture.ts', async importOriginal => {
-  const actual = await importOriginal<typeof import('../session/filesystem-capture.ts')>();
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/session', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/session')>()),
+  ...(await (async importOriginal => {
+  const actual = await importOriginal<typeof import('@factory/session')>();
   return { ...actual, waitForPendingFilesystemCapture: vi.fn(actual.waitForPendingFilesystemCapture) };
-});
+})(importOriginal)),
+}));
 
 const user = { workosId: 'user-1', organizationId: 'org-1' };
 

@@ -24,7 +24,7 @@ import type {
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.ts';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '@factory/runtime';
 import type { WorkItemSource } from '@factory/core';
-import type { LiveSessions } from '../session/live-sessions.ts';
+import type { LiveSessions } from '@factory/session';
 import { auditRequestOrigin } from '@factory/feed';
 import type { AuditEmitter } from '@factory/feed';
 import type { WorkItemCommentsStorage } from '@factory/store';

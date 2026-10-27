@@ -2,7 +2,7 @@ import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraFactory } from '../factory.ts';
-import { seedSessionOrg } from './org-seed.ts';
+import { seedSessionOrg } from '@factory/session';
 
 /**
  * Wire regression for the org-classification fail-open (PR #21823 review):

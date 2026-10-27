@@ -74,7 +74,7 @@ async function render(requestContext: RequestContext, chunks: ChunkType[], downs
     const primary = await runner.processPart(part, states, undefined, requestContext);
     if (primary.part) out.push(primary.part);
     for (const r of await runner.drainReprocessParts(states, undefined, requestContext)) {
-      if (r.part) out.push(r.part);
+      if (r.part) out.push(r.part as ChunkType);
     }
   }
   return out;

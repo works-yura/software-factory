@@ -1,5 +1,5 @@
 import type { Review, VersionControl } from '@factory/capabilities';
-import { normalizedVerdictLine } from '../../review-verdict.ts';
+import { normalizedVerdictLine } from '@factory/session';
 import type { FactoryDismissStaleReviewsDecision } from '@factory/core';
 
 export function isFactoryApproveVerdict(body: string | null | undefined): boolean {

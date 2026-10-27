@@ -51,7 +51,7 @@ function createRow(title: string | null): SourceControlSession {
     firstMeaningfulExecAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-  };
+  } as SourceControlSession;
 }
 
 function createDependencies(rowTitle: string | null = null): ThreadTitleMirrorDependencies {
@@ -74,7 +74,7 @@ describe('observeSessionThreadTitle', () => {
     observeSessionThreadTitle(session, dependencies);
 
     emit({ type: 'thread_title_updated', threadId: 'thread-1', title: overlong });
-    emit({ type: 'thread_changed', threadId: 'thread-1' });
+    emit({ type: 'thread_changed', threadId: 'thread-1' } as AgentControllerEvent);
 
     await vi.waitFor(() => expect(dependencies.sourceControl.sessions.getBySessionId).toHaveBeenCalled());
     expect(dependencies.sourceControl.sessions.rename).not.toHaveBeenCalled();

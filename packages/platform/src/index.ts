@@ -16,7 +16,7 @@ export type {
   InstalledBoard,
 } from '@factory/core';
 export { MastraFactory } from './factory.ts';
-export { waitForPendingFilesystemCapture } from './session/filesystem-capture.ts';
+export { waitForPendingFilesystemCapture } from '@factory/session';
 export type {
   MastraArgs,
   MastraFactoryConfig,

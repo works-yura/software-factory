@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { getFactoryAuthUser } from '@factory/auth';
 import { PLATFORM_AUTH_PROVIDER } from '@factory/auth';
 import type { RouteAuth } from '@factory/http';
-import { ensureFactorySourceSession, FactorySourceSessionResolutionError } from '../session/factory-session.ts';
+import { ensureFactorySourceSession, FactorySourceSessionResolutionError } from '@factory/session';
 import { auditActorProfile } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';

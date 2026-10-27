@@ -13,7 +13,7 @@ vi.mock('@factory/credentials', async importOriginal => ({
   ...(await importOriginal<typeof import('@factory/credentials')>()),
   ...(await (() => ({
   primeTenantCredentialsForRequestContext: (context: unknown) => prime(context),
-}))(importOriginal)),
+}))()),
 }));
 
 import {

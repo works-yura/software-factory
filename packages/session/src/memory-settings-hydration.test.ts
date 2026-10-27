@@ -10,7 +10,9 @@ import type {
   MemorySettingsHydrationSession,
 } from './memory-settings-hydration.ts';
 
-function createSession(state: MastraCodeState = {}) {
+// Tests seed only the state fields hydration reads.
+function createSession(seed: Partial<MastraCodeState> = {}) {
+  const state = seed as MastraCodeState;
   return {
     identity: { getId: () => 'session-1' },
     state: {
@@ -38,7 +40,7 @@ function sourceControlRow(): SourceControlSession {
     firstMeaningfulExecAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-  };
+  } as SourceControlSession;
 }
 
 function createDependencies(

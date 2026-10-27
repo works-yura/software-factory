@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FactoryTransitionService } from '@factory/testing';
-import type { ParkedRun } from '../session/live-sessions.ts';
+import type { ParkedRun } from '@factory/session';
 import type { FactoryDeferredDecisionRecord, WorkItemRow } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
 import type { FactoryStorageTestSeed } from '@factory/testing';

@@ -1,0 +1,32 @@
+{
+  "name": "@factory/session",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Factory sessions: hydration, credential policy, threads, capture processors, session access, Supervisor session identity.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/auth": "workspace:*",
+    "@factory/contracts": "workspace:*",
+    "@factory/core": "workspace:*",
+    "@factory/credentials": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@factory/sandbox": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/code-sdk": "1.15.0",
+    "@mastra/core": "1.79.0",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@factory/testing": "workspace:*",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

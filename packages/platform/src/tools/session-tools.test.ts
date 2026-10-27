@@ -8,8 +8,8 @@ import { createBoardRegistry } from '@factory/testing';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { fakeRouteAuth } from '@factory/http/testing';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
-import { resolveFactoryCredentialTenant } from '../session/credential-policy.ts';
-import { createSourceControlSessionLookup } from '../session/factory-session.ts';
+import { resolveFactoryCredentialTenant } from '@factory/session';
+import { createSourceControlSessionLookup } from '@factory/session';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   FACTORY_OPEN_RUNS_SETTING,

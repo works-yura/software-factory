@@ -4,8 +4,8 @@ import { RequestContext } from '@mastra/core/request-context';
 
 import { boardForWorkItem } from '@factory/core';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
-import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.ts';
-import { resolveWorkItemRepository } from '../session/work-item-repository.ts';
+import { hydrateFactorySession, resolveFactorySessionModel } from '@factory/session';
+import { resolveWorkItemRepository } from '@factory/session';
 import type { IntakeStorage } from '@factory/store';
 import type { ModelDefaultsStorage } from '@factory/store';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '@factory/store';

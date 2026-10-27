@@ -6,19 +6,19 @@ import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import type { IntegrationTools } from '../integrations/base.ts';
 import { buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
-import { USER_SESSION_BRANCH_PREFIX } from '../session/branches.ts';
+import { USER_SESSION_BRANCH_PREFIX } from '@factory/session';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.ts';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
-import { resolveFactoryModelPolicy } from '../session/credential-policy.ts';
-import type { SourceControlSessionLookup } from '../session/factory-session.ts';
+import { resolveFactoryModelPolicy } from '@factory/session';
+import type { SourceControlSessionLookup } from '@factory/session';
 import {
   ensureFactorySourceSession,
   hydrateFactorySession,
   resolveFactorySessionModel,
-} from '../session/factory-session.ts';
+} from '@factory/session';
 import { recordSessionRunStart } from '@factory/runtime';
-import { resolveWorkItemRepository } from '../session/work-item-repository.ts';
+import { resolveWorkItemRepository } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
 import type { CustomProvidersStorage } from '@factory/store';

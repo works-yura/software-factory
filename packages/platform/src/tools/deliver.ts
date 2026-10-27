@@ -2,9 +2,9 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 
 import { createSessionAsRowOwner } from '../integrations/subscription-session.ts';
-import type { SourceControlSessionLookup } from '../session/factory-session.ts';
-import { listFactorySessionThreads, sessionMemoryResourceId, sessionStampCounts } from '../session/session-threads.ts';
-import type { FactorySessionOwnership, SessionRunBindings } from '../session/session-threads.ts';
+import type { SourceControlSessionLookup } from '@factory/session';
+import { listFactorySessionThreads, sessionMemoryResourceId, sessionStampCounts } from '@factory/session';
+import type { FactorySessionOwnership, SessionRunBindings } from '@factory/session';
 import type { WorkItemsStorage } from '@factory/store';
 
 /** Notifications between Factory sessions all carry this source. */

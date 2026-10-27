@@ -539,12 +539,15 @@ vi.mock('@factory/sandbox', async importOriginal => ({
     MaterializeError,
     SetupCommandError,
   };
-})(importOriginal)),
+})()),
 }));
 
 const filesystemCaptureMock = vi.hoisted(() => ({ waitError: null as Error | null }));
-vi.mock('../../session/filesystem-capture.ts', async importOriginal => {
-  const actual = await importOriginal<typeof import('../../session/filesystem-capture.ts')>();
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/session', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/session')>()),
+  ...(await (async importOriginal => {
+  const actual = await importOriginal<typeof import('@factory/session')>();
   return {
     ...actual,
     waitForPendingFilesystemCapture: vi.fn(
@@ -554,7 +557,8 @@ vi.mock('../../session/filesystem-capture.ts', async importOriginal => {
       },
     ),
   };
-});
+})(importOriginal)),
+}));
 
 let featureEnabled = true;
 vi.mock('./config', () => ({

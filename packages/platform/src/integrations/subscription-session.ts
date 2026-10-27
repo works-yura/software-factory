@@ -2,7 +2,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import { RequestContext } from '@mastra/core/request-context';
 
 import { primeTenantCredentialsForRequestContext } from '@factory/credentials';
-import { hasResolvedOrg, seedSessionOrg } from '../session/org-seed.ts';
+import { hasResolvedOrg, seedSessionOrg } from '@factory/session';
 import type { IntegrationSubscription } from '@factory/store';
 
 /** The Factory session row fields a woken session has to run as. */

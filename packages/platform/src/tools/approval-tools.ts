@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.ts';
-import type { SourceControlSessionLookup } from '../session/factory-session.ts';
+import type { SourceControlSessionLookup } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
 import type { WorkItemsStorage } from '@factory/store';
 import type { FactoryMessaging } from './messaging-tools.ts';

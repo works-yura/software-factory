@@ -4,8 +4,8 @@ import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.ts';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
-import type { FactorySessionSourceLookup } from './binding-context.ts';
-import { resolveFactorySessionAddress } from './binding-context.ts';
+import type { FactorySessionSourceLookup } from '@factory/session';
+import { resolveFactorySessionAddress } from '@factory/session';
 
 export interface ReviewSourceOutput {
   /**

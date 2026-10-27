@@ -8,7 +8,7 @@ import {
   resolveSupervisorScope,
   supervisorResourceId,
   supervisorThreadId,
-} from './session.ts';
+} from './supervisor-session.ts';
 
 function requestContext(overrides: Partial<{ orgId: string; resourceId: string }> = {}) {
   const context = new RequestContext();

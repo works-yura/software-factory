@@ -3,7 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 
 import { createBoardRegistry } from '@factory/testing';
-import { createSourceControlSessionLookup } from '../session/factory-session.ts';
+import { createSourceControlSessionLookup } from '@factory/session';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { FACTORY_SESSIONS_MAX_AGE_MS, FactorySessionsStateProcessor } from './sessions-state-processor.ts';
 

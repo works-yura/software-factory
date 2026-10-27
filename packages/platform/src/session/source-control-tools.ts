@@ -13,7 +13,7 @@ import {
   pushRepositoryBranch,
   refreshMergeRequestCheckout,
 } from '@factory/sandbox';
-import { normalizedVerdictLine } from '../review-verdict.ts';
+import { normalizedVerdictLine } from '@factory/session';
 import type { ExecutableSandbox } from '@factory/sandbox';
 import { resolveSessionWorkdir } from '@factory/sandbox';
 import type { AuditAgentEmitter } from '@factory/feed';
@@ -24,7 +24,7 @@ import type {
   SourceControlStorageHandle,
 } from '@factory/store';
 import { mergeRequestNumberFromBranch } from '@factory/pipelines';
-import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from './environment-repositories.ts';
+import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from '@factory/session';
 import { updateSessionEnvironmentRepository } from '@factory/sandbox';
 
 type RepositorySessionState = {

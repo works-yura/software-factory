@@ -7,7 +7,7 @@ import { UUID_PATTERN } from '@factory/contracts';
 import { effectiveModelScope } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import { supervisorProjectIdFromContext } from '../supervisor/session.ts';
+import { supervisorProjectIdFromContext } from './supervisor-session.ts';
 import type { SourceControlSessionLookup } from './factory-session.ts';
 
 const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);

@@ -1,5 +1,5 @@
 import { hasRecordedVerdict } from '@factory/pipelines';
-import { requestsChangesVerdict } from '../../review-verdict.ts';
+import { requestsChangesVerdict } from '@factory/session';
 import { recordExplicitRuleOverrides } from '@factory/core';
 import { isTerminalFactoryRuleStage } from '@factory/core';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '@factory/core';

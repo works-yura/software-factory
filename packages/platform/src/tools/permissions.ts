@@ -1,6 +1,6 @@
 import type { PermissionPolicy, PermissionRules } from '@mastra/core/agent-controller';
 
-import type { SourceControlSessionLookup } from '../session/factory-session.ts';
+import type { SourceControlSessionLookup } from '@factory/session';
 
 /**
  * Factory tools that run without asking. Factory tools fall into the SDK's

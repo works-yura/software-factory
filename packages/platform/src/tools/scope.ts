@@ -7,7 +7,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from '@factory/auth';
-import type { SourceControlSessionLookup } from '../session/factory-session.ts';
+import type { SourceControlSessionLookup } from '@factory/session';
 import { auditActorProfile } from '@factory/store';
 import type { AuditActorProfileInput } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
