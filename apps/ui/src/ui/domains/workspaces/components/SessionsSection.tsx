@@ -3,17 +3,17 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
+import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';
 import { useSessionFilters } from '../hooks/useSessionFilters';
 import { useSessionListRows } from '../hooks/useSessionListRows';
 import { useSessionListView } from '../hooks/useSessionListView';
-import { newUserSessionPath } from '../services/factoryPaths';
 import {
   SESSION_STATUS_OPTIONS,
   SESSION_UPDATED_OPTIONS,
@@ -41,7 +41,7 @@ export function SessionsSection() {
   const { t } = useTranslation('nav');
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
-  const navigate = useNavigate();
+  const openNewUserSession = useOpenNewUserSession();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
   const {
@@ -91,7 +91,7 @@ export function SessionsSection() {
                 variant="ghost"
                 size="icon-sm"
                 aria-label={t('sessions.new')}
-                onClick={() => void navigate(newUserSessionPath(factoryId))}
+                onClick={() => openNewUserSession(factoryId)}
                 disabled={deletion.deleting}
               >
                 <Plus size={15} />

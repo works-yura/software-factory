@@ -1,17 +1,15 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { SquarePen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { newUserSessionPath } from '../services/factoryPaths';
+import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
 
 export function SidebarNewSessionButton() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factory = useFactoryQuery(factoryId);
-  const navigate = useNavigate();
-  const { setOpenMobile } = useSidebar();
+  const openNewUserSession = useOpenNewUserSession();
   const { t } = useTranslation('nav');
 
   const hasRepositories = (factory.data?.repositories.length ?? 0) > 0;
@@ -24,10 +22,7 @@ export function SidebarNewSessionButton() {
       aria-label={t('newSession')}
       tooltip={t('newSession')}
       tooltipPosition="bottom"
-      onClick={() => {
-        void navigate(newUserSessionPath(factoryId));
-        setOpenMobile(false);
-      }}
+      onClick={() => openNewUserSession(factoryId)}
     >
       <SquarePen />
     </Button>

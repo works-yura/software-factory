@@ -463,7 +463,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionStatus.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionStatus.test.ts
-../../../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	+1	upstream c583bc9549 (#28271): New session opens a fresh draft
+../../../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	+2	upstream c583bc9549 (#28271): New session opens a fresh draft (+1); f39f5d64d2 (#28300): New session and + close the mobile drawer (+1)
 ../../../apps/ui/src/ui/lib/readSSE.test.ts	../apps/ui/src/ui/lib/readSSE.test.ts
 ../../../apps/ui/src/ui/lib/overlays/__tests__/overlays.msw.test.tsx	../apps/ui/src/ui/lib/overlays/__tests__/overlays.msw.test.tsx
 ../../../apps/ui/src/ui/lib/pwa/PwaInstallBanner.msw.test.tsx	../apps/ui/src/ui/lib/pwa/PwaInstallBanner.msw.test.tsx
