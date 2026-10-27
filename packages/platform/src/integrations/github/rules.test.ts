@@ -3,7 +3,7 @@ import { defineBoard } from '@factory/core';
 import { createBoardRegistry } from '@factory/testing';
 import { createTestBoard } from '@factory/pipelines/testing';
 import { FactoryDecisionDispatcher } from '@factory/testing';
-import { FactoryStartCoordinator } from '../../rules/start-coordinator.ts';
+import { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { FactoryTransitionService } from '@factory/testing';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';

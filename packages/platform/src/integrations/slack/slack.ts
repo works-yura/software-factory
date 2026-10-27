@@ -43,7 +43,7 @@ import type { ModelDefaultsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '@factory/store';
-import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.ts';
+import { FACTORY_SLACK_SENDER_KEY } from '@factory/harness-mastra';
 import type { FactoryChannelsConfig } from '@factory/integrations';
 import { prepareSessionRunContext } from '@factory/integrations';
 

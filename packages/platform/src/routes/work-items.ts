@@ -20,8 +20,8 @@ import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
   FactoryStartRequest,
-} from '../rules/start-coordinator.ts';
-import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.ts';
+} from '@factory/harness-mastra';
+import { FactoryStartTransitionError, WorkItemRepositoryError } from '@factory/harness-mastra';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '@factory/runtime';
 import type { WorkItemSource } from '@factory/core';
 import type { LiveSessions } from '@factory/session';

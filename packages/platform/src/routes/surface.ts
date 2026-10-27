@@ -14,7 +14,7 @@ import type { GithubIntegration } from '@factory/integration-github';
 import { MaterializeError } from '@factory/sandbox';
 import { FactoryDispatchError } from '@factory/store';
 import type { FactoryBindingPreparationInput } from '@factory/runtime';
-import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
+import { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { FactoryTransitionService } from '@factory/runtime';
 import {
   createSourceControlSessionLookup,

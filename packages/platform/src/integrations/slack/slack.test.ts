@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FACTORY_INTERACTIVE_KEY } from '@factory/auth';
 import { NEW_CHANNEL_SESSION_KEY } from '@factory/session';
 import type { ExternalWorkItemSource } from '@factory/store';
-import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.ts';
+import { FACTORY_SLACK_SENDER_KEY } from '@factory/harness-mastra';
 
 // Captures the tenant each prime saw: the stamp can be overwritten later in
 // the gate, so asserting on the final request context alone isn't enough.

@@ -1,0 +1,45 @@
+{
+  "name": "@factory/harness-mastra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mastra harness: start coordinator, phase-state processor, agent tools, workspace and skills, MCP, environment builds.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "check:tests": "tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@factory/auth": "workspace:*",
+    "@factory/capabilities": "workspace:*",
+    "@factory/contracts": "workspace:*",
+    "@factory/core": "workspace:*",
+    "@factory/credentials": "workspace:*",
+    "@factory/feed": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@factory/integration-github": "workspace:*",
+    "@factory/integrations": "workspace:*",
+    "@factory/observability": "workspace:*",
+    "@factory/pipelines": "workspace:*",
+    "@factory/runtime": "workspace:*",
+    "@factory/sandbox": "workspace:*",
+    "@factory/session": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@factory/work-items": "workspace:*",
+    "@mastra/code-sdk": "1.15.0",
+    "@mastra/core": "1.79.0",
+    "@mastra/mcp": "2.5.0",
+    "fetch-to-node": "2.1.0",
+    "hono": "4.13.13",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@factory/testing": "workspace:*",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

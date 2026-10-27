@@ -6,9 +6,9 @@ import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
-import type { EnvironmentBuildRunner } from '../environment/build-runner.ts';
-import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.ts';
-import { redactCredentials } from '../environment/build.ts';
+import type { EnvironmentBuildRunner } from '@factory/harness-mastra';
+import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '@factory/harness-mastra';
+import { redactCredentials } from '@factory/harness-mastra';
 import type { SessionRetirementCoordinator } from '@factory/sandbox';
 import type {
   FactoryProject,

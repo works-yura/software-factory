@@ -5,9 +5,9 @@ import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/w
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
-import { EnvironmentBuildRunner } from '../environment/build-runner.ts';
-import { scheduleIdFor } from '../environment/build-schedule.ts';
-import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '../environment/build-workflow.ts';
+import { EnvironmentBuildRunner } from '@factory/harness-mastra';
+import { scheduleIdFor } from '@factory/harness-mastra';
+import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '@factory/harness-mastra';
 import type { FactoryStorageTestSeed } from '@factory/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { ProjectRoutes } from './projects.ts';

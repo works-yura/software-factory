@@ -51,8 +51,8 @@ import { createBoardRegistry, isTerminalWorkItem } from '@factory/core';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { boardForWorkItem } from '@factory/core';
-import { EnvironmentBuildRunner } from './environment/build-runner.ts';
-import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.ts';
+import { EnvironmentBuildRunner } from '@factory/harness-mastra';
+import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '@factory/harness-mastra';
 import { touchFeed } from '@factory/feed';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from '@factory/integrations';
 import { reconcileGithubAcceptanceLabels } from '@factory/integration-github';
@@ -73,8 +73,8 @@ import { PlatformIncidentioIntegration } from '@factory/integration-incidentio';
 import { PlatformJiraIntegration } from '@factory/integration-jira';
 import { PlatformLinearIntegration } from '@factory/integration-linear';
 import { createSessionAsRowOwner, prepareSessionRunContext } from '@factory/integrations';
-import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.ts';
-import type { FactoryMcpConfig } from './mcp/routes.ts';
+import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/harness-mastra';
+import type { FactoryMcpConfig } from '@factory/harness-mastra';
 import { resolveDeploymentModelProviders } from './routes/config.ts';
 import {
   createCustomProvidersPrimer,
@@ -93,12 +93,12 @@ import {
 } from '@factory/credentials';
 import { readFactorySessionScope, resolveFactorySessionAddress } from '@factory/session';
 import { FactoryDecisionDispatcher } from '@factory/runtime';
-import type { FactoryRuleActor } from './rules/index.ts';
-import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.ts';
-import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.ts';
-import type { FactoryStartCoordinator } from './rules/start-coordinator.ts';
+import type { FactoryRuleActor } from '@factory/harness-mastra';
+import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from '@factory/harness-mastra';
+import { createReviewSourceTool, resolveReviewSourceUiOrigin } from '@factory/harness-mastra';
+import type { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { createTerminalStageCleanup } from '@factory/runtime';
-import { createFactoryTransitionTools } from './rules/tools.ts';
+import { createFactoryTransitionTools } from '@factory/harness-mastra';
 import { FactoryTransitionService } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { CallbackFactorySandbox } from '@factory/sandbox';
@@ -125,13 +125,13 @@ import { FactoryReplyCredentialProcessor } from '@factory/session';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from '@factory/session';
 import { observeSessionRunEnd } from '@factory/runtime';
 import { sessionMemoryResourceId, sessionStampCounts } from '@factory/session';
-import { createSourceControlTools } from './session/source-control-tools.ts';
+import { createSourceControlTools } from '@factory/harness-mastra';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from '@factory/session';
 import { observeSessionThreadStamp } from '@factory/session';
 import { observeSessionThreadTitle } from '@factory/session';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '@factory/http';
 import { createStateSigner } from '@factory/auth';
-import { observeAgentGitAction } from './storage/domains/audit/agent-audit.ts';
+import { observeAgentGitAction } from '@factory/harness-mastra';
 import { AuditStorage } from '@factory/store';
 import { AuditDomain } from '@factory/feed';
 import { ChannelIdentityStorage } from '@factory/store';
@@ -159,20 +159,20 @@ import { messageWorkerSession } from '@factory/supervisor';
 import { hydrateSupervisorSession, supervisorProjectIdFromContext, resolveSupervisorScope } from '@factory/session';
 import { createFactorySupervisorWriteTools } from '@factory/supervisor';
 import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from '@factory/observability';
-import { deliverFactorySessionNotification } from './tools/deliver.ts';
-import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.ts';
-import type { FactoryToolDependencies } from './tools/index.ts';
+import { deliverFactorySessionNotification } from '@factory/harness-mastra';
+import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from '@factory/harness-mastra';
+import type { FactoryToolDependencies } from '@factory/harness-mastra';
 import {
   createSessionApprovalNotifier,
   createSessionRunEndReporter,
   createStageChangeNotifier,
   createWorkItemRunEndReporter,
-} from './tools/reports.ts';
-import type { FactoryReporting } from './tools/reports.ts';
-import { observeSessionRunReports } from './tools/run-watch.ts';
-import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.ts';
-import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.ts';
-import type { FactorySandboxStart } from './workspace.ts';
+} from '@factory/harness-mastra';
+import type { FactoryReporting } from '@factory/harness-mastra';
+import { observeSessionRunReports } from '@factory/harness-mastra';
+import { FactorySessionsStateProcessor } from '@factory/harness-mastra';
+import { createWorkspaceFactory, FactoryWorkspaceRegistry } from '@factory/harness-mastra';
+import type { FactorySandboxStart } from '@factory/harness-mastra';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
 
@@ -340,7 +340,7 @@ export interface MastraFactoryConfig {
 }
 
 export type { MastraFactorySandboxConfig, MastraFactorySandboxOption } from '@factory/sandbox';
-export type { FactorySandboxStart } from './workspace.ts';
+export type { FactorySandboxStart } from '@factory/harness-mastra';
 
 /**
  * Per-process cap on concurrent background Factory dispatches. Omitted means

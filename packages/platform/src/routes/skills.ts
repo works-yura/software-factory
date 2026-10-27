@@ -5,7 +5,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { listFactorySkills } from '../skills/catalog.ts';
+import { listFactorySkills } from '@factory/harness-mastra';
 import { resolveSkillInvocation, SkillInvocationError } from '@factory/runtime';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { RouteDependencies } from '@factory/http';

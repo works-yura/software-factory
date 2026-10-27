@@ -21,7 +21,7 @@ import {
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
 } from '@factory/credentials';
-import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
+import { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { resolveFactoryCredentialTenant } from '@factory/session';
 import { hydrateSessionDefaultModel } from '@factory/session';

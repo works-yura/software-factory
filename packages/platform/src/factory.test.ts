@@ -34,7 +34,7 @@ import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-sou
 import type * as projectRoutesModule from './routes/projects.ts';
 import type * as surfaceModule from './routes/surface.ts';
 import type * as tenantCredentialsModule from '@factory/credentials';
-import { FactoryPhaseStateProcessor } from './rules/processor.ts';
+import { FactoryPhaseStateProcessor } from '@factory/harness-mastra';
 import type * as runtimeModule from '@factory/runtime';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { createFactorySecretEncryption } from '@factory/store';
@@ -46,8 +46,8 @@ import type { MemorySettingsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import type * as reportsModule from './tools/reports.ts';
-import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.ts';
+import type * as reportsModule from '@factory/harness-mastra';
+import { FactorySessionsStateProcessor } from '@factory/harness-mastra';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
@@ -77,7 +77,10 @@ const controllerMock = {
 
 // Run-end reports the factory's session reporter is asked to send.
 const runEndReports = vi.hoisted(() => [] as unknown[]);
-vi.mock('./tools/reports', async importOriginal => {
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/harness-mastra', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/harness-mastra')>()),
+  ...(await (async importOriginal => {
   const actual = await importOriginal<typeof reportsModule>();
   return {
     ...actual,
@@ -89,7 +92,8 @@ vi.mock('./tools/reports', async importOriginal => {
       };
     },
   };
-});
+})(importOriginal)),
+}));
 
 const sessionNotifierStub = {
   onSessionCreated: () => () => {},

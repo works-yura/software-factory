@@ -5,7 +5,7 @@ import { createTestBoard } from '@factory/pipelines/testing';
 import type { GithubIntegration } from '@factory/integration-github';
 import { FactoryDispatchError } from '@factory/store';
 import type { FactoryBindingPreparationInput } from '@factory/testing';
-import type { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
+import type { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { FactoryTransitionService } from '@factory/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { prepareFactoryRuleBinding } from './surface.ts';
