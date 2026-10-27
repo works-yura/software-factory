@@ -361,6 +361,9 @@ importers:
       '@factory/store':
         specifier: workspace:*
         version: link:../../packages/store
+      '@mastra/agent-browser':
+        specifier: 0.5.4
+        version: 0.5.4(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/auth-workos':
         specifier: 1.6.7
         version: 1.6.7(hono@4.13.11)(supports-color@7.2.0)(typescript@7.0.2)
@@ -375,10 +378,10 @@ importers:
         version: 0.15.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))
       '@mastra/libsql':
         specifier: 1.27.0
-        version: 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+        version: 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
       '@mastra/pg':
         specifier: 1.32.0
-        version: 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))
+        version: 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
       '@mastra/platform-workspace':
         specifier: 1.9.0
         version: 1.9.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))
@@ -466,7 +469,7 @@ importers:
         version: 1.56.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(debug@4.4.3(supports-color@7.2.0))(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
+        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(debug@4.4.3(supports-color@7.2.0))(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -638,13 +641,13 @@ importers:
         version: link:../internal-workspace
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
+        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/libsql':
         specifier: 1.27.0
-        version: 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+        version: 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
       hono:
         specifier: 4.13.13
         version: 4.13.13
@@ -657,7 +660,7 @@ importers:
         version: link:../testing
       '@mastra/pg':
         specifier: 1.32.0
-        version: 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))
+        version: 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
       '@types/node':
         specifier: 22.20.1
         version: 22.20.1
@@ -728,7 +731,7 @@ importers:
         version: link:../store
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)
+        version: 1.15.0(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -769,7 +772,7 @@ importers:
         version: link:../store
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
+        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -867,7 +870,7 @@ importers:
         version: link:../work-items
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
+        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -944,7 +947,7 @@ importers:
         version: link:../store
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
+        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -966,7 +969,7 @@ importers:
         version: link:../testing
       '@mastra/libsql':
         specifier: 1.27.0
-        version: 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+        version: 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
       '@types/node':
         specifier: 22.20.1
         version: 22.20.1
@@ -1005,7 +1008,7 @@ importers:
         version: link:../store
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
+        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -1021,7 +1024,7 @@ importers:
         version: link:../testing
       '@mastra/libsql':
         specifier: 1.27.0
-        version: 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+        version: 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
       '@types/node':
         specifier: 22.20.1
         version: 22.20.1
@@ -1063,7 +1066,7 @@ importers:
         version: link:../store
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
+        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -1073,7 +1076,7 @@ importers:
     devDependencies:
       '@mastra/libsql':
         specifier: 1.27.0
-        version: 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+        version: 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
       '@types/node':
         specifier: 22.20.1
         version: 22.20.1
@@ -1322,7 +1325,7 @@ importers:
         version: 1.6.7(hono@4.13.13)(supports-color@7.2.0)(typescript@7.0.2)
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
+        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -1353,10 +1356,10 @@ importers:
         version: link:../testing
       '@mastra/libsql':
         specifier: 1.27.0
-        version: 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+        version: 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
       '@mastra/pg':
         specifier: 1.32.0
-        version: 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))
+        version: 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
       '@mastra/server':
         specifier: 1.79.0
         version: 1.79.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
@@ -1395,7 +1398,7 @@ importers:
         version: link:../store
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
+        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -1423,14 +1426,14 @@ importers:
         version: link:../core
       '@mastra/code-sdk':
         specifier: 1.15.0
-        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)
+        version: 1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
     devDependencies:
       '@mastra/libsql':
         specifier: 1.27.0
-        version: 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+        version: 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
       '@types/node':
         specifier: 22.20.1
         version: 22.20.1
@@ -1497,7 +1500,7 @@ importers:
         version: link:../store
       '@mastra/libsql':
         specifier: 1.27.0
-        version: 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+        version: 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
       vitest:
         specifier: 'catalog:'
         version: 4.1.11(@opentelemetry/api@1.10.0)(@types/node@22.20.1)(jsdom@30.1.1)(msw@2.14.6(@types/node@22.20.1)(typescript@7.0.2))(vite@8.3.5(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -9908,7 +9911,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/agent-browser@0.5.4(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)':
+  '@mastra/agent-browser@0.5.4(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7)':
     dependencies:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       agent-browser: 0.19.0(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)
@@ -9922,10 +9925,24 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@mastra/agent-browser@0.5.4(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)':
+  '@mastra/agent-browser@0.5.4(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)':
     dependencies:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       agent-browser: 0.19.0(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - bufferutil
+      - puppeteer-core
+      - react-native-b4a
+      - supports-color
+      - utf-8-validate
+
+  '@mastra/agent-browser@0.5.4(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)':
+    dependencies:
+      '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
+      agent-browser: 0.19.0(supports-color@7.2.0)
       zod: 4.6.7
     transitivePeerDependencies:
       - bare-abort-controller
@@ -10022,7 +10039,7 @@ snapshots:
       - utf-8-validate
       - workflow
 
-  '@mastra/code-sdk@1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(debug@4.4.3(supports-color@7.2.0))(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)':
+  '@mastra/code-sdk@1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(debug@4.4.3(supports-color@7.2.0))(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)':
     dependencies:
       '@agentclientprotocol/sdk': 0.21.0(zod@4.6.7)
       '@ai-sdk/amazon-bedrock': 3.0.140(zod@4.6.7)
@@ -10031,7 +10048,7 @@ snapshots:
       '@ai-sdk/openai-compatible': 2.0.87(zod@4.6.7)
       '@ast-grep/napi': 0.42.3
       '@aws-sdk/credential-providers': 3.1104.0
-      '@mastra/agent-browser': 0.5.4(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/agent-browser': 0.5.4(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/client-js': 1.56.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/duckdb': 1.15.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))
@@ -10095,21 +10112,21 @@ snapshots:
       '@ai-sdk/openai-compatible': 2.0.87(zod@4.6.7)
       '@ast-grep/napi': 0.42.3
       '@aws-sdk/credential-providers': 3.1104.0
-      '@mastra/agent-browser': 0.5.4(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/agent-browser': 0.5.4(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/client-js': 1.56.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
-      '@mastra/duckdb': 1.15.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))
+      '@mastra/duckdb': 1.15.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
       '@mastra/fastembed': 1.3.4
-      '@mastra/github-signals': 0.5.2(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
-      '@mastra/libsql': 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+      '@mastra/github-signals': 0.5.2(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/libsql': 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
       '@mastra/mcp': 2.5.0(patch_hash=e6ee761047c02ecaf310545eb0195b35671bec63c2fd2ab96dc56dda88ad785c)(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(hono@4.13.11)(zod@4.6.7)
-      '@mastra/memory': 1.39.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)
-      '@mastra/observability': 1.21.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
-      '@mastra/parallel': 0.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
-      '@mastra/pg': 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))
+      '@mastra/memory': 1.39.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)
+      '@mastra/observability': 1.21.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/parallel': 0.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/pg': 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
       '@mastra/schema-compat': 1.3.16(zod@4.6.7)
-      '@mastra/stagehand': 0.3.6(@cfworker/json-schema@4.1.1)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)(zod@4.6.7)
-      '@mastra/tavily': 1.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/stagehand': 0.3.6(@cfworker/json-schema@4.1.1)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/tavily': 1.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)
       ai: 6.0.315(zod@4.6.7)
       execa: 9.6.1
       libsql: 0.5.29
@@ -10150,7 +10167,7 @@ snapshots:
       - utf-8-validate
       - workflow
 
-  '@mastra/code-sdk@1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)':
+  '@mastra/code-sdk@1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(hono@4.13.13)(openapi-types@12.1.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@7.2.0)':
     dependencies:
       '@agentclientprotocol/sdk': 0.21.0(zod@4.6.7)
       '@ai-sdk/amazon-bedrock': 3.0.140(zod@4.6.7)
@@ -10159,21 +10176,21 @@ snapshots:
       '@ai-sdk/openai-compatible': 2.0.87(zod@4.6.7)
       '@ast-grep/napi': 0.42.3
       '@aws-sdk/credential-providers': 3.1104.0
-      '@mastra/agent-browser': 0.5.4(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/agent-browser': 0.5.4(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/client-js': 1.56.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
-      '@mastra/duckdb': 1.15.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))
+      '@mastra/duckdb': 1.15.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
       '@mastra/fastembed': 1.3.4
-      '@mastra/github-signals': 0.5.2(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
-      '@mastra/libsql': 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+      '@mastra/github-signals': 0.5.2(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/libsql': 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
       '@mastra/mcp': 2.5.0(patch_hash=e6ee761047c02ecaf310545eb0195b35671bec63c2fd2ab96dc56dda88ad785c)(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(hono@4.13.13)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.7)
-      '@mastra/memory': 1.39.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)
-      '@mastra/observability': 1.21.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
-      '@mastra/parallel': 0.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
-      '@mastra/pg': 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))
+      '@mastra/memory': 1.39.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)
+      '@mastra/observability': 1.21.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/parallel': 0.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/pg': 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
       '@mastra/schema-compat': 1.3.16(zod@4.6.7)
-      '@mastra/stagehand': 0.3.6(@cfworker/json-schema@4.1.1)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)(zod@4.6.7)
-      '@mastra/tavily': 1.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/stagehand': 0.3.6(@cfworker/json-schema@4.1.1)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/tavily': 1.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)
       ai: 6.0.315(zod@4.6.7)
       execa: 9.6.1
       libsql: 0.5.29
@@ -10214,7 +10231,7 @@ snapshots:
       - utf-8-validate
       - workflow
 
-  '@mastra/code-sdk@1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)':
+  '@mastra/code-sdk@1.15.0(@bufbuild/protobuf@2.16.0)(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(bufferutil@4.1.0)(deepmerge@4.3.1)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)':
     dependencies:
       '@agentclientprotocol/sdk': 0.21.0(zod@4.6.7)
       '@ai-sdk/amazon-bedrock': 3.0.140(zod@4.6.7)
@@ -10223,21 +10240,85 @@ snapshots:
       '@ai-sdk/openai-compatible': 2.0.87(zod@4.6.7)
       '@ast-grep/napi': 0.42.3
       '@aws-sdk/credential-providers': 3.1104.0
-      '@mastra/agent-browser': 0.5.4(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/agent-browser': 0.5.4(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/client-js': 1.56.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
-      '@mastra/duckdb': 1.15.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))
+      '@mastra/duckdb': 1.15.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
       '@mastra/fastembed': 1.3.4
-      '@mastra/github-signals': 0.5.2(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
-      '@mastra/libsql': 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
-      '@mastra/mcp': 2.5.0(patch_hash=e6ee761047c02ecaf310545eb0195b35671bec63c2fd2ab96dc56dda88ad785c)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
-      '@mastra/memory': 1.39.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)
-      '@mastra/observability': 1.21.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
-      '@mastra/parallel': 0.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
-      '@mastra/pg': 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))
+      '@mastra/github-signals': 0.5.2(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/libsql': 1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)
+      '@mastra/mcp': 2.5.0(patch_hash=e6ee761047c02ecaf310545eb0195b35671bec63c2fd2ab96dc56dda88ad785c)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/memory': 1.39.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)
+      '@mastra/observability': 1.21.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/parallel': 0.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/pg': 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
       '@mastra/schema-compat': 1.3.16(zod@4.6.7)
-      '@mastra/stagehand': 0.3.6(@cfworker/json-schema@4.1.1)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)(zod@4.6.7)
-      '@mastra/tavily': 1.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/stagehand': 0.3.6(@cfworker/json-schema@4.1.1)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/tavily': 1.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)
+      ai: 6.0.315(zod@4.6.7)
+      execa: 9.6.1
+      libsql: 0.5.29
+      posthog-node: 5.52.2
+      smol-toml: 1.9.0
+      tokenx: 1.6.0
+      vscode-jsonrpc: 8.2.1
+      vscode-languageserver-protocol: 3.18.5
+      yaml: 2.9.1
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - '@bufbuild/protobuf'
+      - '@cfworker/json-schema'
+      - '@grpc/grpc-js'
+      - '@hono/standard-validator'
+      - '@opentelemetry/api'
+      - '@opentelemetry/exporter-trace-otlp-proto'
+      - '@opentelemetry/sdk-trace-base'
+      - '@standard-community/standard-json'
+      - '@standard-community/standard-openapi'
+      - '@types/json-schema'
+      - bare-abort-controller
+      - bare-buffer
+      - bufferutil
+      - debug
+      - deepmerge
+      - encoding
+      - express
+      - hono
+      - openapi-types
+      - pg-native
+      - puppeteer-core
+      - react
+      - react-dom
+      - react-native-b4a
+      - rxjs
+      - supports-color
+      - utf-8-validate
+      - workflow
+
+  '@mastra/code-sdk@1.15.0(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)':
+    dependencies:
+      '@agentclientprotocol/sdk': 0.21.0(zod@4.6.7)
+      '@ai-sdk/amazon-bedrock': 3.0.140(zod@4.6.7)
+      '@ai-sdk/anthropic': 3.0.135(zod@4.6.7)
+      '@ai-sdk/openai': 3.0.131(zod@4.6.7)
+      '@ai-sdk/openai-compatible': 2.0.87(zod@4.6.7)
+      '@ast-grep/napi': 0.42.3
+      '@aws-sdk/credential-providers': 3.1104.0
+      '@mastra/agent-browser': 0.5.4(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/client-js': 1.56.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/duckdb': 1.15.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
+      '@mastra/fastembed': 1.3.4
+      '@mastra/github-signals': 0.5.2(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/libsql': 1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
+      '@mastra/mcp': 2.5.0(patch_hash=e6ee761047c02ecaf310545eb0195b35671bec63c2fd2ab96dc56dda88ad785c)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/memory': 1.39.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)
+      '@mastra/observability': 1.21.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/parallel': 0.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)
+      '@mastra/pg': 1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))
+      '@mastra/schema-compat': 1.3.16(zod@4.6.7)
+      '@mastra/stagehand': 0.3.6(@cfworker/json-schema@4.1.1)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/tavily': 1.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)
       ai: 6.0.315(zod@4.6.7)
       execa: 9.6.1
       libsql: 0.5.29
@@ -10417,7 +10498,7 @@ snapshots:
       '@duckdb/node-api': 1.5.2-r.2
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
 
-  '@mastra/duckdb@1.15.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))':
+  '@mastra/duckdb@1.15.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))':
     dependencies:
       '@duckdb/node-api': 1.5.2-r.2
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -10439,7 +10520,7 @@ snapshots:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       zod: 4.6.7
 
-  '@mastra/github-signals@0.5.2(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)':
+  '@mastra/github-signals@0.5.2(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)':
     dependencies:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       zod: 4.6.7
@@ -10466,7 +10547,15 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@mastra/libsql@1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)':
+  '@mastra/libsql@1.27.0(@mastra/core@1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)':
+    dependencies:
+      '@libsql/client': 0.18.0(bufferutil@4.1.0)
+      '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@mastra/libsql@1.27.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))':
     dependencies:
       '@libsql/client': 0.18.0(bufferutil@4.1.0)
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -10528,7 +10617,7 @@ snapshots:
       - react
       - react-dom
 
-  '@mastra/mcp@2.5.0(patch_hash=e6ee761047c02ecaf310545eb0195b35671bec63c2fd2ab96dc56dda88ad785c)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)':
+  '@mastra/mcp@2.5.0(patch_hash=e6ee761047c02ecaf310545eb0195b35671bec63c2fd2ab96dc56dda88ad785c)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)':
     dependencies:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@modelcontextprotocol/client': 2.2.0
@@ -10558,7 +10647,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/memory@1.39.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)':
+  '@mastra/memory@1.39.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)':
     dependencies:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/schema-compat': 1.3.16(zod@4.6.7)
@@ -10577,7 +10666,7 @@ snapshots:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       zod: 4.6.7
 
-  '@mastra/observability@1.21.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)':
+  '@mastra/observability@1.21.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)':
     dependencies:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       zod: 4.6.7
@@ -10588,7 +10677,7 @@ snapshots:
       parallel-web: 1.3.5
       zod: 4.6.7
 
-  '@mastra/parallel@0.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)':
+  '@mastra/parallel@0.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(zod@4.6.7)':
     dependencies:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       parallel-web: 1.3.5
@@ -10604,7 +10693,7 @@ snapshots:
     transitivePeerDependencies:
       - pg-native
 
-  '@mastra/pg@1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))':
+  '@mastra/pg@1.32.0(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))':
     dependencies:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       async-mutex: 0.5.0
@@ -10762,7 +10851,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@mastra/stagehand@0.3.6(@cfworker/json-schema@4.1.1)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)(zod@4.6.7)':
+  '@mastra/stagehand@0.3.6(@cfworker/json-schema@4.1.1)(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)(zod@4.6.7)':
     dependencies:
       '@browserbasehq/stagehand': 3.3.0(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.10.0)(deepmerge@4.3.1)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
@@ -10789,7 +10878,7 @@ snapshots:
       - debug
       - supports-color
 
-  '@mastra/tavily@1.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)':
+  '@mastra/tavily@1.1.3(@mastra/core@1.79.0(ai@6.0.315(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7))(supports-color@7.2.0)(zod@4.6.7)':
     dependencies:
       '@mastra/core': 1.79.0(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(supports-color@7.2.0)(zod@4.6.7)
       '@tavily/core': 0.7.14(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
@@ -12498,6 +12587,22 @@ snapshots:
       node-simctl: 7.7.5
       playwright-core: 1.61.1
       webdriverio: 9.27.1(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0)(supports-color@7.2.0))(supports-color@7.2.0)
+      ws: 8.22.0(bufferutil@4.1.0)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - bufferutil
+      - puppeteer-core
+      - react-native-b4a
+      - supports-color
+      - utf-8-validate
+
+  agent-browser@0.19.0(supports-color@7.2.0):
+    dependencies:
+      node-simctl: 7.7.5
+      playwright-core: 1.61.1
+      webdriverio: 9.27.1(supports-color@7.2.0)
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 3.25.76
     transitivePeerDependencies:
@@ -16483,6 +16588,41 @@ snapshots:
       webdriver: 9.27.1(bufferutil@4.1.0)(supports-color@7.2.0)
     optionalDependencies:
       puppeteer-core: 22.15.0(bufferutil@4.1.0)(supports-color@7.2.0)
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - bufferutil
+      - react-native-b4a
+      - supports-color
+      - utf-8-validate
+
+  webdriverio@9.27.1(supports-color@7.2.0):
+    dependencies:
+      '@types/node': 20.19.43
+      '@types/sinonjs__fake-timers': 8.1.5
+      '@wdio/config': 9.27.1(supports-color@7.2.0)
+      '@wdio/logger': 9.18.0
+      '@wdio/protocols': 9.27.1
+      '@wdio/repl': 9.16.2
+      '@wdio/types': 9.27.1
+      '@wdio/utils': 9.27.1(supports-color@7.2.0)
+      archiver: 7.0.1
+      aria-query: 5.3.2
+      cheerio: 1.0.0-rc.12
+      css-shorthand-properties: 1.1.2
+      css-value: 0.0.1
+      grapheme-splitter: 1.0.4
+      htmlfy: 0.8.1
+      is-plain-obj: 4.1.0
+      jszip: 3.10.1
+      lodash.clonedeep: 4.5.0
+      lodash.zip: 4.2.0
+      query-selector-shadow-dom: 1.0.1
+      resq: 1.11.0
+      rgb2hex: 0.2.5
+      serialize-error: 12.0.0
+      urlpattern-polyfill: 10.1.0
+      webdriver: 9.27.1(bufferutil@4.1.0)(supports-color@7.2.0)
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer

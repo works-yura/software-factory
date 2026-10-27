@@ -63,6 +63,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'INCIDENT_IO_API_KEY',
       'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
+      'FACTORY_BROWSER',
     ]) {
       vi.stubEnv(name, '');
     }
@@ -110,6 +111,23 @@ describe('platform entry (src/mastra/index.ts)', () => {
 
     expect(factoryConfigs).toHaveLength(1);
     expect(factoryConfigs[0]?.dispatcher).toEqual({ maxInFlight: 7 });
+  });
+
+  it('gives agent sessions a browser only when FACTORY_BROWSER is agent-browser', { timeout: 60_000 }, async () => {
+    await import('./index.js');
+    expect(factoryConfigs[0]?.browser).toBeUndefined();
+
+    factoryConfigs.length = 0;
+    vi.resetModules();
+    vi.stubEnv('FACTORY_BROWSER', 'agent-browser');
+    await import('./index.js');
+    // `vi.resetModules()` reloads the entry's graph, so assert on the provider, not the class.
+    expect(factoryConfigs[0]?.browser).toMatchObject({ provider: 'vercel-labs/agent-browser' });
+
+    factoryConfigs.length = 0;
+    vi.resetModules();
+    vi.stubEnv('FACTORY_BROWSER', 'stagehand');
+    await expect(import('./index.js')).rejects.toThrow('FACTORY_BROWSER must be unset or agent-browser');
   });
 
   it('uses the installed GitHub rules to retriage linked issue updates without moving their stage', async () => {

@@ -28,6 +28,7 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { AgentBrowser } from '@mastra/agent-browser';
 import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } from '@factory/server';
 import { GithubIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
 import { GitLabIntegration } from '@factory/integration-gitlab';
@@ -327,6 +328,17 @@ const sandbox =
           env: localSandboxEnv(),
         });
 
+/**
+ * Browser automation for agent sessions, off unless FACTORY_BROWSER names a
+ * provider. `agent-browser` runs headless Chromium on this server host (not
+ * in the session sandbox), one isolated browser per thread.
+ */
+const browserProvider = process.env.FACTORY_BROWSER?.trim();
+if (browserProvider && browserProvider !== 'agent-browser') {
+  throw new Error(`FACTORY_BROWSER must be unset or agent-browser, got ${JSON.stringify(browserProvider)}.`);
+}
+const browser = browserProvider === 'agent-browser' ? new AgentBrowser({ headless: true, scope: 'thread' }) : undefined;
+
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
@@ -341,6 +353,7 @@ export const factory = new MastraFactory({
   // machine (Claude Code, Cursor) connect without an OAuth server.
   ...(localDevAuthEnabled ? { mcp: { tokenless: true } } : {}),
   sandbox,
+  ...(browser ? { browser } : {}),
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {

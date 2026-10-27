@@ -44,7 +44,7 @@ environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule
 environment/build.test.ts	harness-mastra/src/environment/build.test.ts
 environment/heads.test.ts	harness-mastra/src/environment/heads.test.ts
 factory-disable-builtin-tools.test.ts	server/src/factory-disable-builtin-tools.test.ts
-factory.test.ts	server/src/factory.test.ts	+1	upstream 7e428dc80e (recreate sandbox), after 4c22623ea3
+factory.test.ts	server/src/factory.test.ts	+2	upstream a95f079204 (browser) and 7e428dc80e (recreate sandbox), after 4c22623ea3
 index.test.ts	server/src/index.test.ts
 integrations/github/acceptance-labels.test.ts	integration-github/src/acceptance-labels.test.ts
 integrations/github/app-identity.test.ts	integration-github/src/app-identity.test.ts
@@ -186,7 +186,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/server/src/factory-dev/settings.test.ts	../apps/server/src/factory-dev/settings.test.ts
 ../../../apps/server/src/factory-dev/token-lifecycle.test.ts	../apps/server/src/factory-dev/token-lifecycle.test.ts
 ../../../apps/server/src/mastra/env-schema.test.ts	../apps/server/src/mastra/env-schema.test.ts
-../../../apps/server/src/mastra/index.test.ts	../apps/server/src/mastra/index.test.ts	-14	Linear, Jira, incident.io, and Slack host wiring cases dropped with the integrations
+../../../apps/server/src/mastra/index.test.ts	../apps/server/src/mastra/index.test.ts	-13	Linear, Jira, incident.io, and Slack host wiring cases dropped with the integrations (-14); FACTORY_BROWSER wiring (+1)
 ../../../apps/server/src/mastra/production-boot-guards.test.ts	../apps/server/src/mastra/production-boot-guards.test.ts
 ../../../apps/server/src/mastra/sandbox-provider.test.ts	../apps/server/src/mastra/sandbox-provider.test.ts
 ../../../apps/server/e2e/web/ask-user.scenario.test.ts	../apps/server/e2e/web/ask-user.scenario.test.ts

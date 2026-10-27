@@ -27,6 +27,7 @@
     "@factory/pipelines": "workspace:*",
     "@factory/server": "workspace:*",
     "@factory/store": "workspace:*",
+    "@mastra/agent-browser": "0.5.4",
     "@mastra/auth-workos": "1.6.7",
     "@mastra/code-sdk": "1.15.0",
     "@mastra/core": "1.79.0",
