@@ -1,5 +1,5 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Trans, useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
@@ -20,14 +20,17 @@ export function FactoryModelScopeNotice() {
   if (!factoryId || authQuery.data?.authEnabled !== true) return null;
   if ((projectQuery.data?.modelScope ?? 'user') !== 'factory') return null;
 
+  // The catalog marks the in-sentence link as <link>…</link>, so each language places it where its grammar needs.
+  const [before = '', linkText = '', after = ''] = t('models.scopeNotice.body').split(/<\/?link>/);
+
   return (
     <div role="note">
       <Notice variant="info" title={t('models.scopeNotice.title')}>
-        <Trans
-          t={t}
-          i18nKey="models.scopeNotice.body"
-          components={{ link: <Link to={settingsSectionPath(factoryId, 'models')} className="underline" /> }}
-        />
+        {before}
+        <Link to={settingsSectionPath(factoryId, 'models')} className="underline">
+          {linkText}
+        </Link>
+        {after}
       </Notice>
     </div>
   );

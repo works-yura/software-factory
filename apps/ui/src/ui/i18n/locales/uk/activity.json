@@ -12,7 +12,7 @@
       "supervisor-finding": "знахідка",
       "agent-waiting": "очікує"
     },
-    "openThreadFor": "Відкрити обговорення «{{title}}»",
+    "openThreadFor": "Відкрити тред «{{title}}»",
     "viewCardFor": "Переглянути картку «{{title}}»",
     "viewRulesFor": "Переглянути правила для «{{title}}»",
     "read": "Прочитане",

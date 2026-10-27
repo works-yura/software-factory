@@ -11,7 +11,7 @@ import { useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canStartRun } from '../../factory/boardCardState';
+import { boardCardState, busyCardMoveRefusal, canStartRun } from '../../factory/boardCardState';
 import { itemStageLabel } from '../../factory/boardStages';
 import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
@@ -148,7 +148,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 });
                 if (!canStartRun(owner.kind)) {
                   closeSearch();
-                  toast.error(BUSY_CARD_MOVE_REFUSAL);
+                  toast.error(busyCardMoveRefusal());
                   return;
                 }
                 const [move] = cardMoves(item, 'intake');

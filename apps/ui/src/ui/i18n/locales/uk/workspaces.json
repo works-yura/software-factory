@@ -418,7 +418,7 @@
     "updateDefaultModel": "Не вдалося оновити модель Factory за замовчуванням",
     "updateName": "Не вдалося оновити назву Factory",
     "updateModelScope": "Не вдалося оновити область моделі Factory",
-    "updateThinkingLevel": "Не вдалося оновити рівень мислення Factory",
+    "updateThinkingLevel": "Не вдалося оновити рівень міркування Factory",
     "switchSessions": "Не вдалося перемкнути запущені сесії",
     "updateAutomation": "Не вдалося оновити автоматизацію",
     "connectInstallation": "Не вдалося підключити встановлення {{host}}",

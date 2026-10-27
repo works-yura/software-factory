@@ -74,9 +74,6 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
   };
 }
 
-/** @deprecated English only; use `busyCardMoveRefusal()`, which follows the UI language. */
-export const BUSY_CARD_MOVE_REFUSAL = "Another run can't start while this card is busy.";
-
 export function busyCardMoveRefusal(): string {
   return tk('cardState.busyMoveRefusal');
 }
