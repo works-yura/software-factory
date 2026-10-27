@@ -11,11 +11,11 @@ import { Hono } from 'hono';
 import { SSEStreamingApi } from 'hono/streaming';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { feedTopic } from '@factory/feed';
+import { feedTopic } from '../feed-events.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import type { TestAuthUser } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '@factory/store/testing';
-import { CommentsDomain } from '@factory/feed';
+import { CommentsDomain } from './domain.ts';
 
 type Seed = Awaited<ReturnType<typeof createFactoryStorageForTests>>;
 
@@ -76,11 +76,14 @@ function openFeed(response: Response) {
 class GatedPubSub extends EventEmitterPubSub {
   subscribed = false;
 
+  private readonly gate: Promise<void>;
+
   constructor(
     emitter: EventEmitter,
-    private readonly gate: Promise<void>,
+    gate: Promise<void>,
   ) {
     super(emitter);
+    this.gate = gate;
   }
 
   override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {

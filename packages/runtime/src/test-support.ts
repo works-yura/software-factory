@@ -5,6 +5,8 @@
  */
 
 import { createPipelines } from '@factory/pipelines';
+
+export { createDefaultBoardRegistry as createBoardRegistry } from '@factory/pipelines';
 import { createFactoryStorageForTests as createStorage } from '@factory/store/testing';
 
 import { FactoryDecisionDispatcher as DecisionDispatcher } from './dispatcher.ts';

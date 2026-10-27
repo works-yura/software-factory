@@ -115,9 +115,9 @@ routes/surface.test.ts	api/src/surface.test.ts
 routes/telemetry.test.ts	api/src/telemetry.test.ts
 routes/tenant-credentials.test.ts	credentials/src/tenant-credentials.test.ts
 routes/work-items.test.ts	api/src/work-items.test.ts
-rules/automation-stamping.test.ts	platform/src/rules/automation-stamping.test.ts
+rules/automation-stamping.test.ts	runtime/src/automation-stamping.test.ts
 rules/binding-context.test.ts	session/src/binding-context.test.ts
-rules/bindings.test.ts	platform/src/rules/bindings.test.ts
+rules/bindings.test.ts	runtime/src/bindings.test.ts
 rules/custom-board-lifecycle.test.ts	platform/src/rules/custom-board-lifecycle.test.ts
 rules/custom-board-runtime.test.ts	platform/src/rules/custom-board-runtime.test.ts
 rules/default-handlers.test.ts	platform/src/rules/default-handlers.test.ts	-3	Linear integration cases dropped with the integration (Jira and incident.io were it.each rows)
@@ -159,7 +159,7 @@ state-signing.test.ts	auth/src/state-signing.test.ts
 storage/domains/audit/agent-audit.test.ts	harness-mastra/src/agent-audit.test.ts
 storage/domains/audit/domain.test.ts	feed/src/audit/domain.test.ts
 storage/domains/comments/domain.test.ts	feed/src/comments/domain.test.ts
-storage/domains/comments/feed-events.test.ts	platform/src/storage/domains/comments/feed-events.test.ts
+storage/domains/comments/feed-events.test.ts	feed/src/comments/feed-events.test.ts
 storage/domains/work-items/metrics.test.ts	api/src/metrics.test.ts
 supervisor/health.test.ts	supervisor/src/health.test.ts
 supervisor/read-tools.test.ts	supervisor/src/read-tools.test.ts
