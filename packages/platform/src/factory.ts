@@ -69,9 +69,6 @@ import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/inte
 import { buildPlatformConnectRoutes } from '@factory/integrations';
 import { PlatformGithubIntegration } from '@factory/integration-github';
 import { PlatformGitLabIntegration } from '@factory/integration-gitlab';
-import { PlatformIncidentioIntegration } from '@factory/integration-incidentio';
-import { PlatformJiraIntegration } from '@factory/integration-jira';
-import { PlatformLinearIntegration } from '@factory/integration-linear';
 import { createSessionAsRowOwner, prepareSessionRunContext } from '@factory/integrations';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/harness-mastra';
 import type { FactoryMcpConfig } from '@factory/harness-mastra';
@@ -295,11 +292,10 @@ export interface MastraFactoryConfig {
    * Registered capability providers. The factory registers the pieces each
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
    * agent/session tools, intake, source control, and diagnostics — into the
-   * system. When Platform credentials are configured, missing `github`,
-   * `gitlab`, and `linear` integrations default to their Platform-backed
-   * implementations. Missing `jira` and `incidentio` integrations also default
-   * to their Platform-backed implementations, which discover visible `jira` and
-   * `incident-io` connections at runtime.
+   * system. When Platform credentials are configured, missing `github` and
+   * `gitlab` integrations default to their Platform-backed implementations.
+   * v4 carries only GitHub and GitLab; Linear, Jira, incident.io, and Slack
+   * were dropped (see MIGRATION.md).
    */
   integrations?: FactoryIntegration[];
   /**
@@ -583,17 +579,8 @@ export class MastraFactory {
         );
         installedPlatformGithub = true;
       }
-      if (!integrations.some(integration => integration.id === 'incidentio')) {
-        integrations.push(new PlatformIncidentioIntegration());
-      }
-      if (!integrations.some(integration => integration.id === 'jira')) {
-        integrations.push(new PlatformJiraIntegration());
-      }
       if (!integrations.some(integration => integration.id === 'gitlab')) {
         integrations.push(new PlatformGitLabIntegration());
-      }
-      if (!integrations.some(integration => integration.id === 'linear')) {
-        integrations.push(new PlatformLinearIntegration());
       }
     }
     // Never let the key be a silent no-op: it only applies to the integration

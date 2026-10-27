@@ -35,6 +35,18 @@
 
 Винос робить `migration/tools/extract-package.py`: `git mv`, перешивання імпортів і `vi.mock`, маніфест із версіями з `platform`, оновлення `test-pairs.tsv`. Модуль, що імпортує щось із `platform`, інструмент не переносить.
 
+## Прибрані інтеграції
+
+v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS прибрано на вимогу (у git історія збережена, коміт «drop integrations»):
+
+- пакети `integration-{linear,jira,incidentio,slack,workos}` видалено разом із тестами (пари тестів прибрано з `test-pairs.tsv`);
+- `factory.ts` більше не ставить Platform-версії Linear, Jira, incident.io;
+- з наскрізних тестів прибрано кейси, що їх кликали (`default-handlers` −3, `issue-reconciler` −1);
+- WorkOS-інтеграцію у v3 ніхто не імпортував; вхід через WorkOS лишається в `@factory/auth`;
+- Slack у v3 ставив хост (`apps/server`), не пакет.
+
+Словник провайдерів у `core` і `pipelines` (`linear-issue`, `jiraIssue`, події Linear/Jira/incident.io, обробники тріажу Work для них) поки лишився: це окремий крок.
+
 ## Не перенесено
 
 | Що | Чому |

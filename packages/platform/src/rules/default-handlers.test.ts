@@ -6,15 +6,9 @@ import { withBoardClosure } from '@factory/core';
 import { workBoard } from '@factory/pipelines';
 import { defaultGithubRules } from '@factory/integration-github';
 import { defaultGitLabRules } from '@factory/integration-gitlab';
-import { defaultIncidentioRules } from '@factory/integration-incidentio';
-import { defaultJiraRules } from '@factory/integration-jira';
-import { defaultLinearRules } from '@factory/integration-linear';
 import type {
   FactoryGithubRuleContext,
   FactoryGitLabRuleContext,
-  FactoryIncidentioRuleContext,
-  FactoryJiraRuleContext,
-  FactoryLinearRuleContext,
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
 } from '@factory/core';
@@ -145,30 +139,6 @@ function githubContext(
   };
 }
 
-function linearContext(): FactoryLinearRuleContext {
-  return {
-    ...base,
-    actor: { type: 'human', id: 'user-1' },
-    ingress: { type: 'linear', id: 'linear:issue-1:2026-07-02T00:00:00Z' },
-    event: 'issueObserved',
-    issue: {
-      id: 'issue-1',
-      identifier: 'ENG-42',
-      title: 'Fix intake sync',
-      url: 'https://linear.app/acme/issue/ENG-42',
-      state: 'Todo',
-      stateType: 'unstarted',
-      priorityLabel: 'High',
-      assignee: 'ada',
-      creator: 'grace',
-      team: 'ENG',
-      labels: ['bug'],
-      createdAt: '2026-07-01T00:00:00Z',
-      updatedAt: '2026-07-02T00:00:00Z',
-    },
-  };
-}
-
 describe('built-in board and integration handlers', () => {
   it('ships ordinary visible default leaves', () => {
     expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
@@ -186,39 +156,7 @@ describe('built-in board and integration handlers', () => {
     expect(defaultGithubRules.pullRequestUpdated).toBeTypeOf('function');
     expect(defaultGithubRules.pullRequestReviewRequested).toBeTypeOf('function');
     expect(defaultGithubRules.pullRequestMerged).toBeTypeOf('function');
-    expect(defaultLinearRules.issueObserved).toBeTypeOf('function');
     expect(workBoard.rules.triage?.linearIssue?.onEnter).toBeTypeOf('function');
-  });
-
-  it('materializes observed Linear issues directly in Intake', async () => {
-    const rule = defaultLinearRules.issueObserved;
-
-    expect(await rule?.(linearContext())).toMatchObject({
-      type: 'upsertLinkedWorkItem',
-      source: 'linear-issue',
-      sourceKey: 'linear:ENG-42',
-      title: 'ENG-42: Fix intake sync',
-      stage: 'intake',
-      metadata: { linearIssueId: 'issue-1', identifier: 'ENG-42' },
-    });
-  });
-
-  it('does not move an existing Linear issue backward when polling observes an update', async () => {
-    const rule = defaultLinearRules.issueObserved;
-
-    expect(
-      await rule?.({
-        ...linearContext(),
-        item: {
-          ...item,
-          source: 'linear-issue',
-          sourceKey: 'linear:ENG-42',
-          stages: ['execute'],
-        },
-        board: 'work',
-        itemRevision: 4,
-      }),
-    ).toBeUndefined();
   });
 
   it('transitions linked GitHub issue cards deterministically on closure', async () => {
@@ -255,34 +193,12 @@ describe('built-in board and integration handlers', () => {
 
   it('only closes non-terminal linked work-board issue cards', async () => {
     const githubRule = defaultGithubRules.issueClosed;
-    const linearRule = defaultLinearRules.issueClosed;
     const github = githubContext('issueClosed');
-    const linear = linearContext();
 
     expect(
       githubRule?.({ ...github, item: { ...item, source: 'github-pr' }, board: 'review', itemRevision: 1 }),
     ).toBeUndefined();
     expect(githubRule?.({ ...github, ...onBoard('work', ['done']) })).toBeUndefined();
-    expect(
-      linearRule?.({
-        ...linear,
-        event: 'issueClosed',
-        ...onBoard('work', ['planning'], 'linear-issue'),
-        issue: { ...linear.issue, stateType: 'completed' },
-      }),
-    ).toMatchObject({
-      type: 'transition',
-      stage: 'done',
-      idempotencyKey: 'linear:issue-1:2026-07-02T00:00:00Z:issue-closed',
-    });
-    expect(
-      linearRule?.({
-        ...linear,
-        event: 'issueClosed',
-        ...onBoard('work', ['canceled'], 'linear-issue'),
-        issue: { ...linear.issue, stateType: 'canceled' },
-      }),
-    ).toBeUndefined();
   });
 
   describe('source-closed rules follow the board the card is on', () => {
@@ -344,47 +260,6 @@ describe('built-in board and integration handlers', () => {
         cancelSuffix: undefined,
         run: (_canceled: boolean, card: ReturnType<typeof onBoard>) =>
           defaultGitLabRules.issueClosed?.({ ...gitlab(), ...card }),
-      },
-      {
-        name: 'Linear',
-        source: 'linear-issue',
-        label: 'Linear issue ENG-42 was',
-        cancelSuffix: ' canceled',
-        run: (canceled: boolean, card: ReturnType<typeof onBoard>) =>
-          defaultLinearRules.issueClosed?.({
-            ...linearContext(),
-            event: 'issueClosed',
-            ...card,
-            issue: { ...linearContext().issue, stateType: canceled ? 'canceled' : 'completed' },
-          }),
-      },
-      {
-        name: 'Jira',
-        source: 'jira-issue',
-        label: 'Jira issue ENG-42 was',
-        cancelSuffix: ' canceled',
-        run: (canceled: boolean, card: ReturnType<typeof onBoard>) =>
-          defaultJiraRules.issueClosed?.({
-            ...base,
-            actor: { type: 'human', id: 'user-1' },
-            event: 'issueClosed',
-            ...card,
-            issue: { ...trackerIssue(canceled ? 'canceled' : 'completed'), project: 'ENG', site: null },
-          } as FactoryJiraRuleContext),
-      },
-      {
-        name: 'incident.io',
-        source: 'incidentio-follow-up',
-        label: 'incident.io follow-up ENG-42 was',
-        cancelSuffix: ' canceled',
-        run: (canceled: boolean, card: ReturnType<typeof onBoard>) =>
-          defaultIncidentioRules.followUpClosed?.({
-            ...base,
-            actor: { type: 'human', id: 'user-1' },
-            event: 'followUpClosed',
-            ...card,
-            issue: { ...trackerIssue(canceled ? 'canceled' : 'completed'), incident: null },
-          } as FactoryIncidentioRuleContext),
       },
     ];
 
@@ -1360,18 +1235,6 @@ describe('built-in board and integration handlers', () => {
     });
     expect(await defaultGithubRules.pullRequestOpened?.(githubContext('pullRequestOpened'))).toMatchObject({
       metadata: { author: 'author' },
-    });
-  });
-
-  it('mirrors the Linear assignee under `assignee` and the creator under `author` for provider-agnostic attribution', async () => {
-    expect(await defaultLinearRules.issueObserved?.(linearContext())).toMatchObject({
-      metadata: {
-        linearAssignee: 'ada',
-        assignee: 'ada',
-        linearCreator: 'grace',
-        creator: 'grace',
-        author: 'grace',
-      },
     });
   });
 
