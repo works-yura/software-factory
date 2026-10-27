@@ -358,8 +358,10 @@ export class ClaudeCodeSession implements AgentSession {
     const approved = resumeData.action === 'approved';
     thread.mode = approved ? (this.#config.approvedPermissionMode ?? 'acceptEdits') : 'planning';
     const text = approved ? approvalPrompt(resumeData) : rejectionPrompt(resumeData);
-    const accepted = this.#accept([{ kind: 'signal', text }], true, { keepGate: true });
-    if (accepted.action !== 'persist') await accepted.run.started;
+    const accepted = this.#accept([{ kind: 'signal', text, gate: true }], true, { keepGate: true });
+    if (accepted.action === 'persist') return;
+    this.#emitTranscript({ kind: 'plan_decision', toolCallId: gate.toolCallId, decision: { ...resumeData } }, accepted.run);
+    await accepted.run.started;
   }
 
   // -- internals ------------------------------------------------------------
@@ -560,6 +562,12 @@ export class ClaudeCodeSession implements AgentSession {
     const thread = this.#threadState(run.threadId);
     const planning = (thread.mode ?? this.#config.mode) === 'planning';
     const prompt = [...(planning ? [PLANNING_PROMPT] : []), ...inputs.map(input => input.text)].join('\n\n');
+    if (!run.settled) {
+      for (const input of inputs) {
+        if (input.gate) continue;
+        this.#emitTranscript({ kind: 'input', source: input.kind, text: input.text, ...(input.id ? { id: input.id } : {}) }, run);
+      }
+    }
     const credentials = await this.#config.credentials(this);
     const cwd = await this.#cwd();
     if (run.abortRequested) return { kind: 'aborted' };

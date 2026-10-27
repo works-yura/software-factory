@@ -11,6 +11,12 @@ export interface ClaudeCodeHarnessConfig extends ClaudeCodeSessionConfig {
    * A relative path resolves against the session's cwd.
    */
   skillsDir?: string;
+  /**
+   * Called once for every session object the harness builds, whether created
+   * or rehydrated from the store, before anyone can drive it: the place to
+   * attach observers such as the chat UI's transcript recorder.
+   */
+  onSession?: (session: ClaudeCodeSession) => void;
 }
 
 /** The context a delivery runs with; a plain map, since Claude Code tools never read it in-process. */
@@ -56,8 +62,15 @@ export function createClaudeCodeHarness(config: ClaudeCodeHarnessConfig): Claude
         .get(sessionId)
         .then(record => {
           if (!record) return undefined;
-          const session = sessions.get(sessionId) ?? new ClaudeCodeSession(record, config);
+          const cached = sessions.get(sessionId);
+          if (cached) return cached;
+          const session = new ClaudeCodeSession(record, config);
           sessions.set(sessionId, session);
+          try {
+            config.onSession?.(session);
+          } catch (error) {
+            console.warn('[claude-code harness] Session observer failed.', error);
+          }
           return session;
         })
         .finally(() => loading.delete(sessionId));

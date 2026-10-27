@@ -1,4 +1,4 @@
-import type { AgentTokenUsage } from '@factory/harness';
+import type { AgentTokenUsage, PlanDecision } from '@factory/harness';
 
 import { classifyFailure, type ClaudeCodeError } from './errors.ts';
 import { SUBMIT_PLAN_TOOL_ID } from './gate.ts';
@@ -19,6 +19,15 @@ export const PLAN_GATE_TOOL = 'submit_plan';
  * writes this into the UI thread.
  */
 export type ClaudeTranscriptEntry =
+  /**
+   * What the turn was given, one entry per input, before the CLI starts: a
+   * person's or the dispatcher's message (`signal`, with its signal id when it
+   * had one) or a notification. The planning preamble and the prompt that
+   * carries a plan decision are not inputs; see `plan_decision`.
+   */
+  | { kind: 'input'; source: 'signal' | 'notification'; text: string; id?: string }
+  /** A person answered the plan the thread was parked on; the next turn carries the answer. */
+  | { kind: 'plan_decision'; toolCallId: string; decision: PlanDecision }
   | { kind: 'init'; sessionId: string; model?: string; permissionMode?: string }
   | { kind: 'user'; text: string; parentToolCallId?: string }
   | { kind: 'text'; text: string; messageId?: string; parentToolCallId?: string }

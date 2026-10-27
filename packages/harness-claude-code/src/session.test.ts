@@ -73,7 +73,8 @@ describe('ClaudeCodeSession', () => {
     expect(call!.cwd).toBe('/work/card-1');
 
     expect(events.map(event => event.type)).toEqual(['usage_update', 'usage_update', 'agent_end']);
-    expect(transcript.map(entry => entry.kind)).toEqual(['init', 'thinking', 'tool_call', 'tool_result', 'text', 'result']);
+    expect(transcript.map(entry => entry.kind)).toEqual(['input', 'init', 'thinking', 'tool_call', 'tool_result', 'text', 'result']);
+    expect(transcript[0]).toEqual({ kind: 'input', source: 'signal', text: 'Update the README.', id: 'kickoff-1' });
     expect(await session.thread.listActiveMessages()).toEqual([{ id: 'kickoff-1' }]);
     expect(session.claudeSessionId).toBe(CLAUDE_SESSION);
     expect((await store.get('card-1'))?.threads['thread-1']?.claudeSessionId).toBe(CLAUDE_SESSION);
@@ -194,8 +195,9 @@ describe('ClaudeCodeSession', () => {
     });
 
     it('resumes the session with edits allowed once the plan is approved', async () => {
-      const { fake, session } = await parkOnPlan([{ lines: fixture('turn-complete.jsonl') }]);
+      const { fake, session, transcript } = await parkOnPlan([{ lines: fixture('turn-complete.jsonl') }]);
       const end = nextEnd(session);
+      const before = transcript.length;
 
       await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId: 'toolu_03Gate' });
 
@@ -207,6 +209,9 @@ describe('ClaudeCodeSession', () => {
       expect(resumed.args).not.toContain('--disallowedTools');
       expect(resumed.stdin).toBe('The plan was approved. Implement it.');
       expect(session.mode).toBe('acceptEdits');
+      // The decision is recorded as such; the prompt carrying it is not a person's message.
+      expect(transcript[before]).toEqual({ kind: 'plan_decision', toolCallId: 'toolu_03Gate', decision: { action: 'approved' } });
+      expect(transcript.slice(before).some(entry => entry.kind === 'input')).toBe(false);
     });
 
     it('resumes in planning with the feedback when the plan is rejected', async () => {

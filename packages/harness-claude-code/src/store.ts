@@ -9,6 +9,8 @@ export interface ClaudePendingInput {
   kind: 'signal' | 'notification';
   text: string;
   id?: string;
+  /** The prompt that answers a plan gate; the transcript records it as a `plan_decision`, not as an input. */
+  gate?: true;
 }
 
 export interface ClaudeThreadState {
