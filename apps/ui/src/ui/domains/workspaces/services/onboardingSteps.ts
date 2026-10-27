@@ -1,10 +1,14 @@
 import type { OnboardingDraft, OnboardingModelScope, OnboardingStep } from './onboardingFlow';
+import { i18n } from '../../../i18n';
+import { lazyLabels } from '../../../i18n/lazy';
+import { translator } from '../../../i18n/t';
 
-export const SETUP_LABELS: Record<OnboardingModelScope, string> = {
-  factory: 'Company account',
-  hybrid: 'Company work · personal sessions',
-  user: 'Personal accounts',
-};
+const tk = translator('workspaces');
+
+export const SETUP_LABELS: Readonly<Record<OnboardingModelScope, string>> = lazyLabels(
+  ['factory', 'hybrid', 'user'],
+  scope => `workspaces:onboarding.setups.${scope}.label`,
+);
 
 export function onboardingSteps(scope?: OnboardingModelScope, local = false): OnboardingStep[] {
   return [
@@ -36,25 +40,45 @@ export function restoredOnboardingStep(saved: OnboardingStep, draft: OnboardingD
   return onboardingSteps(draft.modelScope, local).includes(saved) ? saved : firstModelStep(draft.modelScope);
 }
 
-export const STEP_META: Record<OnboardingStep, { label: string; title: string; description?: string }> = {
-  initial: { label: 'Welcome', title: 'Set up your factory.' },
-  vcs: { label: 'Codebase', title: 'Choose your codebase.' },
-  'project-management': { label: 'Work', title: 'Connect your work.' },
-  'model-setup': {
-    label: 'Setup',
-    title: 'Choose your setup.',
-    description: 'Choose whose accounts power this Factory.',
-  },
-  'model-provider': { label: 'Model', title: 'Choose your model.' },
-  'personal-provider': { label: 'Model', title: 'Choose your model.' },
-  review: {
-    label: 'Review',
-    title: 'Ready to create.',
-    description: 'Review your Factory settings. Connected accounts are already saved.',
-  },
-};
+interface StepMeta {
+  label: string;
+  title: string;
+  description?: string;
+}
 
-export function onboardingStepMeta(step: OnboardingStep, scope?: OnboardingModelScope, local = false) {
+const ONBOARDING_STEPS: readonly OnboardingStep[] = [
+  'initial',
+  'vcs',
+  'project-management',
+  'model-setup',
+  'model-provider',
+  'personal-provider',
+  'review',
+];
+
+/** Step copy, translated when read: module constants outlive a language switch. */
+function lazyStepMeta(step: OnboardingStep): StepMeta {
+  const key = `workspaces:onboarding.steps.${step}`;
+  const meta = {
+    get label() {
+      return i18n.t(`${key}.label` as never);
+    },
+    get title() {
+      return i18n.t(`${key}.title` as never);
+    },
+  };
+  if (!i18n.exists(`${key}.description`)) return meta;
+  return Object.defineProperty(meta, 'description', {
+    enumerable: true,
+    get: () => i18n.t(`${key}.description` as never),
+  }) as StepMeta;
+}
+
+export const STEP_META: Readonly<Record<OnboardingStep, StepMeta>> = Object.fromEntries(
+  ONBOARDING_STEPS.map(step => [step, lazyStepMeta(step)]),
+) as Record<OnboardingStep, StepMeta>;
+
+export function onboardingStepMeta(step: OnboardingStep, scope?: OnboardingModelScope, local = false): StepMeta {
   if (step === 'model-provider')
     return {
       ...STEP_META[step],
@@ -63,17 +87,18 @@ export function onboardingStepMeta(step: OnboardingStep, scope?: OnboardingModel
   if (step === 'personal-provider')
     return {
       ...STEP_META[step],
-      title: scope === 'hybrid' ? 'Set up your sessions.' : 'Choose your model.',
+      title: scope === 'hybrid' ? tk('onboarding.personalStep.hybridTitle') : tk('onboarding.personalStep.title'),
       description:
         scope === 'hybrid'
-          ? 'Your account · your default model for sessions.'
-          : 'Your account · your default model for Factory work and sessions.',
+          ? tk('onboarding.personalStep.hybridDescription')
+          : tk('onboarding.personalStep.description'),
     };
-  return STEP_META[step];
+  const meta = STEP_META[step];
+  return { label: meta.label, title: meta.title, ...(meta.description ? { description: meta.description } : {}) };
 }
 
 function companyModelDescription(scope: OnboardingModelScope | undefined, local: boolean) {
-  if (local) return 'Connect a provider and choose the model for your Factory.';
-  if (scope === 'hybrid') return 'Company account · model for Factory work.';
-  return 'Company account · model for Factory work and sessions.';
+  if (local) return tk('onboarding.companyModel.local');
+  if (scope === 'hybrid') return tk('onboarding.companyModel.hybrid');
+  return tk('onboarding.companyModel.factory');
 }

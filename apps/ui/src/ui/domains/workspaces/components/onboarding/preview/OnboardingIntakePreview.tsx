@@ -5,40 +5,25 @@ import { useWorkSourceConnections, WORK_SOURCE_NAME } from '../../../hooks/useWo
 import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
 import { IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
 import { SketchLabel } from './SketchLabel';
+import { translator } from '../../../../../i18n/t';
+
+const tk = translator('workspaces');
 
 const SOURCES = {
-  linear: {
-    Icon: LinearIcon,
-    example: 'Add repository search',
-    id: 'ENG-124',
-    previousId: 'ENG-123',
-    previousExample: 'Fix keyboard focus',
-    kind: 'Issue',
-  },
-  jira: {
-    Icon: JiraIcon,
-    example: 'Improve sign-in errors',
-    id: 'APP-124',
-    previousId: 'APP-123',
-    previousExample: 'Keep sessions alive',
-    kind: 'Issue',
-  },
-  'incident-io': {
-    Icon: IncidentIoIcon,
-    example: 'Add a health check',
-    id: 'INC-124',
-    previousId: 'INC-123',
-    previousExample: 'Retry failed requests',
-    kind: 'Follow-up',
-  },
-};
+  linear: { Icon: LinearIcon, id: 'ENG-124', previousId: 'ENG-123', kind: 'issue' },
+  jira: { Icon: JiraIcon, id: 'APP-124', previousId: 'APP-123', kind: 'issue' },
+  'incident-io': { Icon: IncidentIoIcon, id: 'INC-124', previousId: 'INC-123', kind: 'followUp' },
+} as const;
 
 export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
   const status = useWorkSourceConnections();
   const name = WORK_SOURCE_NAME[source];
-  const { Icon, example, id, previousId, previousExample, kind } = SOURCES[source];
+  const { Icon, id, previousId } = SOURCES[source];
+  const kind = tk(`intakePreview.kinds.${SOURCES[source].kind}`);
+  const example = tk(`intakePreview.sources.${source}.example`);
+  const previousExample = tk(`intakePreview.sources.${source}.previousExample`);
   return (
-    <section aria-label="Work intake preview" className="relative h-full">
+    <section aria-label={tk('intakePreview.label')} className="relative h-full">
       <SketchLabel x={28} y={24} width={148}>
         <div className="flex items-center gap-2">
           <Icon className="size-3.5 shrink-0" />
@@ -48,7 +33,7 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
       <SketchLabel x={282} y={24} width={90}>
         <div className="onboarding-intake-detail text-right">
           <Txt variant="meta" tone="muted">
-            {status[source] ? 'Connected' : 'Example'}
+            {status[source] ? tk('providers.connected') : tk('intakePreview.example')}
           </Txt>
         </div>
       </SketchLabel>
@@ -68,14 +53,14 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
       </SketchLabel>
       <SketchLabel x={115} y={133} width={98}>
         <Txt variant="meta" tone="muted" className="onboarding-intake-detail">
-          Bring into your board
+          {tk('intakePreview.bringIn')}
         </Txt>
       </SketchLabel>
       <SketchLabel x={28} y={162} width={104}>
         <div className="flex items-center gap-1.5">
           <CircleDashed className="text-muted-foreground size-3" />
           <Txt variant="meta" tone="muted">
-            To do
+            {tk('intakePreview.columns.todo')}
           </Txt>
         </div>
       </SketchLabel>
@@ -83,7 +68,7 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
         <div className="flex items-center gap-1.5">
           <Code2 className="text-muted-foreground size-3" />
           <Txt variant="meta" tone="muted">
-            Build
+            {tk('intakePreview.columns.build')}
           </Txt>
         </div>
       </SketchLabel>
@@ -91,7 +76,7 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
         <div className="flex items-center gap-1.5">
           <Check className="text-muted-foreground size-3" />
           <Txt variant="meta" tone="muted">
-            Review
+            {tk('intakePreview.columns.review')}
           </Txt>
         </div>
       </SketchLabel>
@@ -120,10 +105,10 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
       ))}
       <SketchLabel x={28} y={302} width={344}>
         <Txt variant="meta" tone="muted" className="onboarding-intake-detail">
-          Choose what to bring in after setup.
+          {tk('intakePreview.chooseLater')}
         </Txt>
         <Txt variant="meta" tone="muted" className="min-[900px]:hidden">
-          Example workflow
+          {tk('intakePreview.exampleWorkflow')}
         </Txt>
       </SketchLabel>
     </section>

@@ -6,33 +6,18 @@ import { ArrowRight, Blend, Building2, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { OnboardingModelScope } from '../../services/onboardingFlow';
 import { SETUP_LABELS } from '../../services/onboardingSteps';
+import { useTranslation } from 'react-i18next';
 
 interface SetupOption {
   scope: OnboardingModelScope;
   icon: ReactNode;
-  detail: string;
   needsCompanyAccount: boolean;
 }
 
 const SETUP_OPTIONS: SetupOption[] = [
-  {
-    scope: 'factory',
-    icon: <Building2 />,
-    detail: 'A shared account and model for Factory work and sessions.',
-    needsCompanyAccount: true,
-  },
-  {
-    scope: 'hybrid',
-    icon: <Blend />,
-    detail: 'Factory work uses the company account. Each person uses their own account for sessions.',
-    needsCompanyAccount: true,
-  },
-  {
-    scope: 'user',
-    icon: <Users />,
-    detail: 'Each person uses their own account and default model, for Factory work and sessions.',
-    needsCompanyAccount: false,
-  },
+  { scope: 'factory', icon: <Building2 />, needsCompanyAccount: true },
+  { scope: 'hybrid', icon: <Blend />, needsCompanyAccount: true },
+  { scope: 'user', icon: <Users />, needsCompanyAccount: false },
 ];
 
 export function OnboardingSetupStep({
@@ -46,10 +31,11 @@ export function OnboardingSetupStep({
   onChange: (scope: OnboardingModelScope) => void;
   onContinue: () => void;
 }) {
+  const { t } = useTranslation('workspaces');
   return (
-    <section aria-label="Factory account setup" className="flex w-full flex-col gap-7">
+    <section aria-label={t('onboarding.setupLabel')} className="flex w-full flex-col gap-7">
       <RadioGroup
-        aria-label="Accounts for this Factory"
+        aria-label={t('onboarding.setupAccounts')}
         value={scope}
         onValueChange={value => {
           const option = SETUP_OPTIONS.find(item => item.scope === value);
@@ -66,14 +52,16 @@ export function OnboardingSetupStep({
               icon={option.icon}
               selected={scope === option.scope}
               disabled={disabled}
-              detail={disabled ? 'An admin needs to connect the company account first.' : option.detail}
+              detail={
+                disabled ? t('onboarding.adminNeeded') : t(`onboarding.setups.${option.scope}.detail` as const)
+              }
             />
           );
         })}
       </RadioGroup>
       <div>
         <Button variant="primary" size="lg" onClick={onContinue}>
-          Continue <ArrowRight aria-hidden="true" />
+          {t('actions.continue')} <ArrowRight aria-hidden="true" />
         </Button>
       </div>
     </section>

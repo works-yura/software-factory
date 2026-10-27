@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 
 import { companyAccountNeedsAdmin, useProviderConnection } from '../hooks/useProviderConnection';
 import type { PreviewProvider } from '../hooks/useProviderConnection';
@@ -23,20 +24,21 @@ export function ModelProviderFactoryStep({
   onPreviewModel,
   onPreviewProvider,
 }: ModelProviderFactoryStepProps) {
+  const { t } = useTranslation('workspaces');
   const connection = useProviderConnection({ scope: 'org', initialSelection: initialChoice });
   const needsAdmin = companyAccountNeedsAdmin(connection);
   const connectedProvider = connection.connected ? connection.provider : undefined;
 
   return (
-    <section aria-label="Model provider setup" className="flex max-w-xl flex-col gap-5">
+    <section aria-label={t('providers.setupLabel')} className="flex max-w-xl flex-col gap-5">
       {needsAdmin && (
         <div className="flex flex-col gap-3">
           <Txt variant="caption" tone="muted">
-            An admin needs to connect the company account first. Choose personal accounts to continue now.
+            {t('providers.adminNeeded')}
           </Txt>
           <div>
             <Button variant="primary" onClick={onChangeSetup}>
-              Change setup
+              {t('providers.changeSetup')}
             </Button>
           </div>
         </div>

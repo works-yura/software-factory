@@ -6,21 +6,23 @@ import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS, sessionOwners } from 
 import type { SessionActivityStatus, SessionListRow } from './sessionRows';
 import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 import { boardTitle } from '../../../i18n/boardLabels';
+import { lazyLabels, lazyOption } from '../../../i18n/lazy';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export const SESSION_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
 export type SessionGroupBy = (typeof SESSION_GROUP_BYS)[number];
 
 export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'board';
 
-export const SESSION_GROUP_BY_LABELS: Record<SessionGroupBy, string> = {
-  board: 'Board',
-  status: 'Status',
-  owner: 'Owner',
-  none: 'None',
-};
+export const SESSION_GROUP_BY_LABELS: Readonly<Record<SessionGroupBy, string>> = lazyLabels(
+  SESSION_GROUP_BYS,
+  groupBy => `workspaces:sessions.groupBy.${groupBy}`,
+);
 
 export const SESSION_GROUP_BY_OPTIONS: readonly DropdownMenuRadioOption<SessionGroupBy>[] = SESSION_GROUP_BYS.map(
-  value => ({ value, label: SESSION_GROUP_BY_LABELS[value] }),
+  value => lazyOption(value, `workspaces:sessions.groupBy.${value}`),
 );
 
 export function isSessionGroupBy(value: unknown): value is SessionGroupBy {
@@ -46,9 +48,21 @@ export interface SessionGroupContext {
   viewerUserId: string | undefined;
 }
 
-const USER_GROUP: SessionGroupHeading = { key: 'user', label: 'User', icon: 'user' };
+const USER_GROUP: SessionGroupHeading = {
+  key: 'user',
+  get label() {
+    return tk('sessions.groups.user');
+  },
+  icon: 'user',
+};
 const SLACK_GROUP: SessionGroupHeading = { key: 'slack', label: 'Slack', icon: 'slack' };
-const ALL_GROUP: SessionGroupHeading = { key: 'all', label: 'All', icon: 'all' };
+const ALL_GROUP: SessionGroupHeading = {
+  key: 'all',
+  get label() {
+    return tk('sessions.groups.all');
+  },
+  icon: 'all',
+};
 
 function boardGroupKey(boardId: string): string {
   return `board:${boardId}`;
@@ -64,7 +78,9 @@ function ownerGroupKey(userId: string): string {
 
 const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_ACTIVITY_STATUSES.map(status => ({
   key: statusGroupKey(status),
-  label: SESSION_STATUS_LABELS[status],
+  get label() {
+    return SESSION_STATUS_LABELS[status];
+  },
   icon: 'status',
 }));
 

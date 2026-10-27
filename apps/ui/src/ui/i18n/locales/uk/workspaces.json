@@ -1,1 +1,598 @@
-{}
+{
+  "actions": {
+    "cancel": "Скасувати",
+    "delete": "Видалити",
+    "deleting": "Видалення…",
+    "retry": "Повторити",
+    "continue": "Продовжити",
+    "back": "Назад",
+    "refresh": "Оновити",
+    "skipForNow": "Поки пропустити",
+    "skip": "Пропустити"
+  },
+  "setup": {
+    "loading": "Завантаження налаштування Factory",
+    "accountError": "Не вдалося завантажити ваш акаунт.",
+    "incomplete": "Перш ніж створювати Factory, виберіть варіант налаштування і потрібні для нього моделі.",
+    "modelUnavailableCompany": "Модель {{model}} більше недоступна для акаунта компанії. Виберіть іншу модель.",
+    "modelUnavailableYours": "Модель {{model}} більше недоступна для вашого акаунта. Виберіть іншу модель.",
+    "connectionChangedCompany": "Підключення акаунта компанії змінилося. Перевірте підключення провайдера.",
+    "connectionChangedYours": "Підключення вашого акаунта змінилося. Перевірте підключення провайдера."
+  },
+  "initialStep": {
+    "repository": "Підключіть репозиторій",
+    "work": "Додайте свої задачі",
+    "model": "Виберіть модель",
+    "create": "Створити мою першу Factory"
+  },
+  "projectManagement": {
+    "label": "Підключення систем керування проєктами"
+  },
+  "providers": {
+    "setupLabel": "Налаштування провайдера моделей",
+    "personalSetupLabel": "Налаштування особистого провайдера",
+    "reviewSetup": "Перевірити налаштування",
+    "adminNeeded": "Спочатку адміністратор має підключити акаунт компанії. Щоб продовжити зараз, виберіть особисті акаунти.",
+    "changeSetup": "Змінити налаштування",
+    "loading": "Завантаження провайдерів моделей",
+    "searchLabel": "Пошук провайдерів моделей",
+    "searchPlaceholder": "Пошук провайдерів…",
+    "connected": "Підключено",
+    "apiKeyGroup": "Провайдери з API-ключем",
+    "noMatch": "Немає провайдерів за запитом «{{query}}».",
+    "noApiKeyProviders": "Немає провайдерів з API-ключем.",
+    "signInGroup": "Вхід через провайдера",
+    "useConnection": "Використати підключення {{provider}}",
+    "continueWith": "Продовжити з {{provider}}",
+    "signInUnavailable": "Вхід через провайдера недоступний у цьому розгортанні. Використайте API-ключ.",
+    "signInFailed": "Не вдалося почати вхід через провайдера",
+    "replacesNotice": "Після входу наявне підключення цього провайдера в цій області буде замінено.",
+    "methods": {
+      "api_key": "API-ключ",
+      "oauth": "Вхід через провайдера"
+    },
+    "scopeNotice": {
+      "org": "Усі у вашій організації зможуть користуватися цим підключенням провайдера.",
+      "user": "Це підключення провайдера лише для вас. Спільний доступ організації не зміниться."
+    }
+  },
+  "createFactory": {
+    "startOver": "Почніть знову з кроку назви.",
+    "genericError": "Щось пішло не так. Спробуйте ще раз.",
+    "stepOf": "Крок {{step}} з {{total}}",
+    "nameGroup": "Створення",
+    "createNamed": "Створити «{{name}}»",
+    "typeName": "Введіть назву, щоб створити Factory",
+    "steps": {
+      "name": {
+        "title": "Назвіть нову Factory",
+        "placeholder": "наприклад, Mastra"
+      },
+      "vcs": {
+        "title": "Виберіть кодову базу",
+        "placeholder": "Пошук репозиторіїв…"
+      },
+      "projectManagement": {
+        "title": "Підключіть задачі, що стоять за кодом",
+        "placeholder": "Пошук варіантів…"
+      },
+      "modelProvider": {
+        "title": "Виберіть модель для Factory",
+        "placeholder": "Пошук моделей і провайдерів…"
+      }
+    },
+    "repos": {
+      "githubNotConfigured": "GitHub не налаштовано в цьому розгортанні.",
+      "githubOrganizationRequired": "Приєднайтеся до організації, щоб підключити репозиторії GitHub.",
+      "githubAuthRequired": "Увійдіть знову, щоб підключити GitHub.",
+      "githubInstall": "Встановіть GitHub App, щоб надати доступ до репозиторіїв.",
+      "gitlabConnectFailed": "Не вдалося підключити GitLab",
+      "unavailable": "{{host}} недоступний",
+      "manageGithub": "Керувати підключенням GitHub",
+      "manageGithubHint": "Додати встановлення або надати доступ до інших репозиторіїв",
+      "gitlabNotAvailable": "GitLab недоступний у цьому розгортанні.",
+      "gitlabOrganizationRequired": "Приєднайтеся до організації, щоб підключити репозиторії GitLab.",
+      "gitlabSignIn": "Увійдіть у GitLab, щоб надати доступ до своїх проєктів.",
+      "connectingGitlab": "Підключення до GitLab",
+      "repositories": "Репозиторії",
+      "gitlabRepositories": "Репозиторії GitLab",
+      "public": "Публічний"
+    },
+    "linear": {
+      "skipHint": "Ця Factory братиме задачі лише з GitHub",
+      "loading": "Завантаження проєктів Linear",
+      "reconnect": "Перепідключити Linear",
+      "connectHint": "Імпортувати задачі й пріоритети на дошку Factory",
+      "notConfigured": "Linear не налаштовано в цьому розгортанні.",
+      "expired": "Термін авторизації минув, тому проєкти неможливо прочитати",
+      "projectsIn": "Проєкти в {{workspace}}",
+      "projectHint": "Його задачі надходять на цю дошку Factory",
+      "noMatch": "Жоден проєкт Linear не відповідає пошуку.",
+      "noProjects": "У цьому робочому просторі ще немає проєктів."
+    },
+    "jira": {
+      "reconnect": "Перепідключити Jira",
+      "loading": "Завантаження проєктів Jira",
+      "connecting": "Підключення Jira…",
+      "connectHint": "Імпортувати задачі Jira на дошку Work у Factory",
+      "unavailable": "Jira недоступна для цієї організації.",
+      "projects": "Проєкти Jira",
+      "projectHint": "Його задачі надходять на дошку Work цієї Factory",
+      "noMatch": "Жоден проєкт Jira не відповідає пошуку.",
+      "noProjects": "Проєктів Jira поки немає."
+    },
+    "models": {
+      "heading": "Моделі {{provider}}",
+      "creating": "Створення Factory",
+      "suggested": "Рекомендовано",
+      "noMatch": "Немає моделей за цим пошуком.",
+      "provider": "Провайдер"
+    },
+    "providers": {
+      "noMatch": "Немає провайдерів за цим пошуком.",
+      "signIn": "Вхід",
+      "signedIn": "Вхід виконано в цьому розгортанні",
+      "signInWithAccount": "Увійти зі своїм акаунтом",
+      "keySaved": "API-ключ збережено",
+      "connectWithKey": "Підключити за API-ключем"
+    }
+  },
+  "vcs": {
+    "label": "Репозиторій системи контролю версій",
+    "loadingStatus": "Завантаження статусу системи контролю версій",
+    "hostConnected": "{{host}} підключено",
+    "searchLabel": "Пошук репозиторіїв",
+    "searchPlaceholder": "Знайти репозиторій…",
+    "manageAccess": "Керувати доступом",
+    "refreshGithub": "Оновити репозиторії GitHub",
+    "githubDescription": "Репозиторії, гілки й пул-реквести.",
+    "gitlabDescription": "Проєкти, гілки й мерж-реквести.",
+    "connectingGithub": "Підключення до GitHub",
+    "continueWith": "Продовжити з {{host}}",
+    "connect": "Підключити {{host}}",
+    "retryGitlab": "Повторити для GitLab",
+    "loadingRepositories": "Завантаження репозиторіїв {{provider}}",
+    "noMatching": "Немає відповідних репозиторіїв.",
+    "noRepositories": "Репозиторіїв {{host}} не знайдено.",
+    "chooseRepository": "Виберіть репозиторій",
+    "private": "Приватний",
+    "gitlabUnavailable": {
+      "missing_config": "Недоступно в цьому розгортанні.",
+      "organization_required": "Приєднайтеся до організації, щоб підключити GitLab.",
+      "unavailable": "Не вдалося завантажити статус GitLab."
+    }
+  },
+  "connectRepos": {
+    "label": "Підключення репозиторіїв",
+    "searchPlaceholder": "Пошук…",
+    "linked": "Прив'язані",
+    "available": "Доступні",
+    "defaultBranch": "Гілка за замовчуванням: {{branch}}",
+    "unlink": "Відв'язати",
+    "unlinking": "Відв'язування…",
+    "loading": "Завантаження репозиторіїв",
+    "allLinked": "Усі доступні репозиторії вже прив'язано.",
+    "noneFound": "Репозиторіїв не знайдено.",
+    "repoMeta": "{{kind}} · гілка за замовчуванням: {{branch}}",
+    "private": "приватний",
+    "public": "публічний",
+    "linking": "Прив'язування…",
+    "callout": {
+      "authRequired": "Щоб користуватися GitHub, потрібно увійти. Перезавантажте сторінку, а якщо це не допоможе — вийдіть і увійдіть знову.",
+      "disabled": "GitHub вимкнено на сервері.",
+      "missingEnv": "Бракує змінних середовища: <code>{{vars}}</code>",
+      "configure": "Задайте їх у <code>mastracode/web/.env</code>, зареєструйте <code>http://localhost:5173/auth/github/callback</code> як callback URL для GitHub App, а потім перезапустіть <code>pnpm web:dev</code> з <code>mastracode/web</code>.",
+      "organizationRequired": "Ваш акаунт не має організації WorkOS. Для підключення репозиторіїв потрібна організація. Вийдіть і увійдіть знову, щоб створити її автоматично, або попросіть адміністратора додати вас до організації.",
+      "notConnected": "GitHub App ще не підключено. Натисніть <strong>Підключити GitHub</strong>, щоб встановити його. Після встановлення GitHub переспрямує на <code>/auth/github/callback</code> — переконайтеся, що цю адресу зареєстровано в налаштуваннях вашого GitHub App (Callback URL).",
+      "noAccess": "Репозиторіїв не знайдено. Можливо, ваше встановлення GitHub App не має доступу до жодного репозиторію. Перевірте доступ до репозиторіїв на <code>https://github.com/settings/installations</code> і надайте доступ принаймні до одного."
+    }
+  },
+  "factory": {
+    "loading": "Завантаження Factory",
+    "loadError": "Не вдалося завантажити Factory. Перевірте з'єднання із сервером і перезавантажте сторінку.",
+    "notFound": "Factory не знайдено"
+  },
+  "models": {
+    "loading": "Завантаження моделей",
+    "noneForConnection": "Для цього підключення ще немає доступних моделей.",
+    "changeProvider": "Змінити провайдера",
+    "yourDefault": "Ваша модель за замовчуванням",
+    "factoryDefault": "Модель Factory за замовчуванням",
+    "selectDefault": "Виберіть модель за замовчуванням…",
+    "previousUnavailable": "Попередня модель більше недоступна. Виберіть іншу.",
+    "updatesPersonalDefault": "Створення цієї Factory також оновить вашу особисту модель за замовчуванням."
+  },
+  "onboarding": {
+    "backLabel": "Повернутися до попереднього кроку",
+    "loadingAccountOptions": "Завантаження варіантів акаунта",
+    "progress": "Прогрес налаштування Factory",
+    "setupLabel": "Налаштування акаунтів Factory",
+    "setupAccounts": "Акаунти для цієї Factory",
+    "adminNeeded": "Спочатку адміністратор має підключити акаунт компанії.",
+    "setups": {
+      "factory": {
+        "label": "Акаунт компанії",
+        "detail": "Спільний акаунт і модель для роботи Factory та сесій."
+      },
+      "hybrid": {
+        "label": "Робота — компанії · сесії — особисті",
+        "detail": "Робота Factory йде через акаунт компанії. Для сесій кожен використовує власний акаунт."
+      },
+      "user": {
+        "label": "Особисті акаунти",
+        "detail": "Кожен використовує власний акаунт і модель за замовчуванням — і для роботи Factory, і для сесій."
+      }
+    },
+    "steps": {
+      "initial": {
+        "label": "Вітання",
+        "title": "Налаштуйте свою Factory."
+      },
+      "vcs": {
+        "label": "Кодова база",
+        "title": "Виберіть кодову базу."
+      },
+      "project-management": {
+        "label": "Задачі",
+        "title": "Підключіть свої задачі."
+      },
+      "model-setup": {
+        "label": "Налаштування",
+        "title": "Виберіть варіант налаштування.",
+        "description": "Виберіть, чиї акаунти працюватимуть для цієї Factory."
+      },
+      "model-provider": {
+        "label": "Модель",
+        "title": "Виберіть модель."
+      },
+      "personal-provider": {
+        "label": "Модель",
+        "title": "Виберіть модель."
+      },
+      "review": {
+        "label": "Перевірка",
+        "title": "Усе готово до створення.",
+        "description": "Перевірте налаштування Factory. Підключені акаунти вже збережено."
+      }
+    },
+    "personalStep": {
+      "title": "Виберіть модель.",
+      "hybridTitle": "Налаштуйте свої сесії.",
+      "description": "Ваш акаунт · ваша модель за замовчуванням для роботи Factory і сесій.",
+      "hybridDescription": "Ваш акаунт · ваша модель за замовчуванням для сесій."
+    },
+    "companyModel": {
+      "local": "Підключіть провайдера й виберіть модель для своєї Factory.",
+      "hybrid": "Акаунт компанії · модель для роботи Factory.",
+      "factory": "Акаунт компанії · модель для роботи Factory і сесій."
+    }
+  },
+  "welcomePreview": {
+    "label": "Вітальна ілюстрація",
+    "ideas": "Задачі та ідеї",
+    "build": "Реалізація і рев'ю",
+    "ship": "Готово до релізу"
+  },
+  "codebasePreview": {
+    "label": "Попередній перегляд кодової бази",
+    "factory": "Ваша Factory",
+    "repository": "Ваш репозиторій",
+    "branch": "Вибрана гілка"
+  },
+  "intakePreview": {
+    "label": "Попередній перегляд надходження задач",
+    "example": "Приклад",
+    "bringIn": "Перенести на дошку",
+    "chooseLater": "Що саме переносити, виберете після налаштування.",
+    "exampleWorkflow": "Приклад процесу",
+    "columns": {
+      "todo": "До виконання",
+      "build": "Реалізація",
+      "review": "Перевірка"
+    },
+    "kinds": {
+      "issue": "Задача",
+      "followUp": "Подальша дія"
+    },
+    "sources": {
+      "linear": {
+        "example": "Додати пошук репозиторіїв",
+        "previousExample": "Виправити фокус клавіатури"
+      },
+      "jira": {
+        "example": "Покращити помилки входу",
+        "previousExample": "Не обривати сесії"
+      },
+      "incident-io": {
+        "example": "Додати перевірку стану",
+        "previousExample": "Повторювати невдалі запити"
+      }
+    }
+  },
+  "accountsPreview": {
+    "label": "Попередній перегляд налаштування акаунтів",
+    "workOwnerAccount": "Акаунт власника задачі",
+    "workOwner": "Власник задачі",
+    "localAccount": "Локальний акаунт",
+    "company": "Компанія",
+    "personal": "Особистий",
+    "team": "Команда",
+    "you": "Ви",
+    "factoryWork": "Робота Factory",
+    "teamSessions": "Сесії команди",
+    "yourSessions": "Ваші сесії",
+    "workModel": "Модель для роботи Factory",
+    "sessionModel": "Модель для сесій",
+    "sameModel": "Та сама модель для сесій",
+    "yourSessionModel": "Ваша модель для сесій",
+    "connectedYours": "Підключено · ваш акаунт",
+    "connectYours": "Підключіть свій акаунт"
+  },
+  "connections": {
+    "loadingLinear": "Завантаження статусу Linear",
+    "loadingNamed": "Завантаження підключень {{name}}",
+    "connectedTo": "Підключено до {{account}}.",
+    "accountsConnected_one": "Підключено {{count}} акаунт.",
+    "accountsConnected_few": "Підключено {{count}} акаунти.",
+    "accountsConnected_many": "Підключено {{count}} акаунтів.",
+    "accountsConnected_other": "Підключено {{count}} акаунта.",
+    "linearOrganizationRequired": "Приєднайтеся до організації, щоб підключити Linear.",
+    "linearExpired": "Термін авторизації минув. Перепідключіть Linear, щоб продовжити.",
+    "linearLoadError": "Не вдалося завантажити підключення Linear.",
+    "loadErrorNamed": "Не вдалося завантажити підключення {{name}}.",
+    "workPurpose": "Задачі й пріоритети для вашої робочої дошки.",
+    "incidentPurpose": "Переносьте подальші дії за інцидентами на свою робочу дошку.",
+    "reconnectHint": "Перепідключіть, щоб відновити доступ.",
+    "connect": "Підключити",
+    "reconnect": "Перепідключити",
+    "reconnectNamed": "Перепідключити {{name}}",
+    "retryNamed": "Повторити для {{name}}"
+  },
+  "review": {
+    "label": "Перевірка налаштування Factory",
+    "edit": "Змінити",
+    "editLabel": "Змінити: {{label}}",
+    "codebase": "Кодова база",
+    "work": "Задачі",
+    "setUpLater": "Налаштувати пізніше",
+    "workConnected": "Підключено · задачі можна вибрати після налаштування",
+    "setup": "Налаштування",
+    "chooseSetup": "Виберіть варіант налаштування",
+    "setupDetail": "Стосується цієї Factory",
+    "model": "Модель",
+    "chooseModel": "Виберіть модель",
+    "personalModel": "Особиста модель",
+    "chooseSessionModel": "Виберіть модель для сесій",
+    "personalDefaultAll": "{{method}} · ваша модель за замовчуванням для роботи й сесій",
+    "personalDefaultSessions": "{{method}} · ваша модель за замовчуванням для сесій",
+    "personalDefaultNote": "Ваша особиста модель за замовчуванням використовується всюди, де ваш акаунт забезпечує сесію чи роботу Factory. Колеги зберігають власні налаштування.",
+    "creatingLabel": "Створення Factory",
+    "creating": "Створення вашої Factory…",
+    "create": "Створити Factory",
+    "sharedModel": {
+      "local": "Factory за замовчуванням · локальне підключення",
+      "hybrid": "Акаунт компанії · робота Factory",
+      "factory": "Акаунт компанії · робота Factory і сесії"
+    }
+  },
+  "githubCallback": {
+    "requested": "Запит на встановлення GitHub App надіслано. Власник організації має схвалити його, перш ніж тут з'являться репозиторії.",
+    "installed": "GitHub App встановлено",
+    "userAuthorized": "Акаунт GitHub підключено",
+    "failed": "Не вдалося підключити GitHub",
+    "errors": {
+      "github_app_installation_preexisting": "Mastra GitHub App уже було встановлено у вашому акаунті GitHub до того, як ви натиснули «Підключити GitHub», тож це посилання його не підключило. Видаліть Mastra GitHub App з цього акаунта чи організації GitHub і знову виберіть «Підключити GitHub».",
+      "github_app_installation_not_owned": "Прив'язати це встановлення може лише власник цього акаунта GitHub або власник організації GitHub.",
+      "github_app_installation_linked_elsewhere": "Це встановлення GitHub уже прив'язане до іншої організації Mastra. Спочатку вилучіть його там або встановіть застосунок знову для цієї організації.",
+      "github_app_sign_in_required": "Увійдіть у Mastra Platform у цьому браузері, а потім знову підключіть GitHub.",
+      "github_app_session_mismatch": "Це посилання GitHub створено для іншого акаунта чи організації Mastra. Підключіть GitHub знову зі свого акаунта.",
+      "github_app_person_not_platform_user": "Це посилання GitHub створено для акаунта, який не є акаунтом Mastra. Щоб прив'язати GitHub через Mastra Platform, увійдіть у Factory через Mastra.",
+      "github_app_link_already_used": "Це посилання GitHub уже використано. Якщо ви щойно завершили підключення GitHub, усе готово; інакше підключіть GitHub знову.",
+      "github_app_link_not_started_here": "Це посилання GitHub відкрито в іншому браузері або напряму, а не з Factory. Поверніться у Factory і виберіть «Підключити GitHub», щоб почати знову.",
+      "github_app_connection_mismatch": "Ваш акаунт Mastra вже підключено до іншого акаунта GitHub. Спочатку відключіть той акаунт GitHub у Mastra Platform, а потім знову підключіть GitHub тут.",
+      "github_app_user_authorization_required": "Щоб прив'язати це встановлення, Mastra Platform потребує авторизації GitHub App у вашому акаунті GitHub. Підключіть GitHub знову й підтвердьте крок авторизації.",
+      "github_app_user_authorization_failed": "Авторизація в GitHub не вдалася. Підключіть GitHub знову."
+    }
+  },
+  "errors": {
+    "requestFailed": "Запит не вдався ({{status}})",
+    "listSessions": "Не вдалося отримати список сесій",
+    "loadSession": "Не вдалося завантажити сесію",
+    "deleteSession": "Не вдалося видалити сесію ({{status}})",
+    "recreateSandbox": "Не вдалося перестворити пісочницю ({{status}})",
+    "startSandbox": "Не вдалося запустити пісочницю ({{status}})",
+    "renameSession": "Не вдалося перейменувати сесію ({{status}})",
+    "loadEnvironment": "Не вдалося завантажити середовище",
+    "saveEnvironment": "Не вдалося зберегти середовище",
+    "startBuild": "Не вдалося запустити збірку",
+    "loadBuilds": "Не вдалося завантажити збірки",
+    "loadBuild": "Не вдалося завантажити збірку",
+    "loadGithubToken": "Не вдалося завантажити статус токена GitHub ({{status}})",
+    "saveGithubToken": "Не вдалося зберегти токен GitHub ({{status}})",
+    "removeGithubToken": "Не вдалося видалити токен GitHub ({{status}})",
+    "listRepos": "Не вдалося отримати список репозиторіїв ({{status}})",
+    "listFactoryRepositories": "Не вдалося отримати список репозиторіїв Factory",
+    "listFactories": "Не вдалося отримати список Factory",
+    "createFactory": "Не вдалося створити Factory",
+    "loadFactory": "Не вдалося завантажити Factory",
+    "updateDefaultModel": "Не вдалося оновити модель Factory за замовчуванням",
+    "updateName": "Не вдалося оновити назву Factory",
+    "updateModelScope": "Не вдалося оновити область моделі Factory",
+    "updateThinkingLevel": "Не вдалося оновити рівень мислення Factory",
+    "switchSessions": "Не вдалося перемкнути запущені сесії",
+    "updateAutomation": "Не вдалося оновити автоматизацію",
+    "connectInstallation": "Не вдалося підключити встановлення {{host}}",
+    "linkRepository": "Не вдалося прив'язати репозиторій {{host}}",
+    "unlinkRepository": "Не вдалося відв'язати репозиторій ({{status}})",
+    "deleteFactory": "Не вдалося видалити Factory ({{status}})",
+    "loadRepositorySettings": "Не вдалося завантажити налаштування репозиторію ({{status}})"
+  },
+  "sessions": {
+    "newSession": "Нова сесія",
+    "group": "Групування",
+    "groupLabel": "Сесії: {{label}}",
+    "groupBy": {
+      "label": "Групувати за",
+      "board": "Дошкою",
+      "status": "Статусом",
+      "owner": "Власником",
+      "none": "Без групування"
+    },
+    "groups": {
+      "user": "Користувацькі",
+      "all": "Усі"
+    }
+  },
+  "deleteSession": {
+    "workspaceLabel": "Видалити робочий простір",
+    "userLabel": "Видалити сесію користувача",
+    "workspaceTitle": "Видалити робочий простір?",
+    "userTitle": "Видалити сесію?",
+    "workspaceDescription": "Буде видалено робочу копію <name>{{branch}}</name> разом із незакоміченими змінами. Цю дію не можна скасувати. Треди цього робочого простору збережуться.",
+    "userDescription": "Буде видалено сесію <name>{{name}}</name> і її робочу копію з усіма незакоміченими змінами. Цю дію не можна скасувати. Розмова збережеться."
+  },
+  "sessionRow": {
+    "pinned": "{{name}} закріплено",
+    "opening": "Відкриття {{name}}",
+    "pullRequestMerged": "Пул-реквест змерджено",
+    "mergeRequestMerged": "Мерж-реквест змерджено",
+    "pullRequestMergedFor": "Пул-реквест для {{name}} змерджено",
+    "mergeRequestMergedFor": "Мерж-реквест для {{name}} змерджено",
+    "initializing": "Запуск {{name}}",
+    "agentWorking": "Агент працює в {{name}}",
+    "waitingOnYou": "{{name}} чекає на вас",
+    "actions": "Дії із сесією {{name}}",
+    "pin": "Закріпити сесію",
+    "unpin": "Відкріпити",
+    "regenerateTitle": "Згенерувати назву заново",
+    "renamed": "Перейменовано на «{{title}}»",
+    "regenerateFailed": "Не вдалося згенерувати назву"
+  },
+  "preview": {
+    "label": "Подробиці сесії {{name}}",
+    "owner": "Власник",
+    "pullRequest": "Пул-реквест",
+    "workItem": "Картка",
+    "branch": "Гілка",
+    "baseBranch": "Базова гілка",
+    "kinds": {
+      "work": "Робоча сесія",
+      "review": "Сесія рев'ю",
+      "user": "Сесія користувача"
+    },
+    "statuses": {
+      "initializing": "Запуск",
+      "working": "Агент працює",
+      "ready": "Чекає на вас"
+    }
+  },
+  "sharing": {
+    "private": "Приватна",
+    "privateSession": "Приватна сесія",
+    "privateSessionNamed": "Приватна сесія: {{name}}",
+    "privateTitle": "Ця сесія приватна",
+    "privateDescription": "Цю сесію бачите лише ви.",
+    "privateDescriptionShareable": "Цю сесію бачите лише ви. Поділіться нею, щоб будь-хто у вашій організації міг переглянути й продовжити розмову.",
+    "shareWithOrg": "Поділитися з організацією",
+    "makePrivate": "Зробити приватною",
+    "sharedToast": "Сесією поділилися з вашою організацією",
+    "privateToast": "Сесія тепер приватна",
+    "changeFailed": "Не вдалося змінити видимість сесії"
+  },
+  "recreateSandbox": {
+    "action": "Перестворити пісочницю",
+    "title": "Перестворити пісочницю?",
+    "description": "Поточну пісочницю буде знищено. Наступне повідомлення запустить нову з шаблону.",
+    "agentStops": "Запущеного агента буде зупинено.",
+    "checkingChanges": "Перевірка незакомічених змін…",
+    "changesUnknown": "Не вдалося перевірити незакомічені зміни — їх буде втрачено.",
+    "changesLost_one": "{{count}} незакомічену зміну буде втрачено.",
+    "changesLost_few": "{{count}} незакомічені зміни буде втрачено.",
+    "changesLost_many": "{{count}} незакомічених змін буде втрачено.",
+    "changesLost_other": "{{count}} незакомічених змін буде втрачено.",
+    "recreating": "Перестворення…",
+    "confirm": "Перестворити",
+    "done": "Пісочницю перестворено. Надішліть повідомлення, щоб продовжити."
+  },
+  "wakeSandbox": {
+    "notRunning": "Пісочницю не запущено.",
+    "waking": "Запуск пісочниці…",
+    "wake": "Запустити пісочницю"
+  },
+  "files": {
+    "label": "Файли робочого простору",
+    "show": "Показати файли робочого простору",
+    "hide": "Сховати файли робочого простору"
+  },
+  "overview": {
+    "label": "Робочий простір",
+    "changes": "Зміни",
+    "files": "Файли",
+    "comments": "Коментарі",
+    "noneYet": "Поки нема",
+    "noChanges": "Змін нема",
+    "changedCount_one": "{{count}} змінено",
+    "changedCount_few": "{{count}} змінено",
+    "changedCount_many": "{{count}} змінено",
+    "changedCount_other": "{{count}} змінено",
+    "unavailable": "Недоступно"
+  },
+  "fileViewer": {
+    "label": "Перегляд файлу робочого простору",
+    "back": "Назад до файлів робочого простору",
+    "copy": "Копіювати вміст файлу",
+    "refresh": "Оновити файл",
+    "refreshing": "Оновлення файлу",
+    "truncated": "Обрізано",
+    "unsupported": "Файл цього типу не можна переглянути як текст.",
+    "bytes": "{{size}} Б",
+    "kilobytes": "{{size}} КБ",
+    "megabytes": "{{size}} МБ"
+  },
+  "fileBrowser": {
+    "back": "Назад до робочого простору",
+    "emptyFolder": "Порожньо",
+    "noFiles": "Файлів нема",
+    "showHidden": "Показати приховані файли",
+    "hideHidden": "Сховати приховані файли",
+    "refresh": "Оновити файли робочого простору",
+    "refreshing": "Оновлення файлів робочого простору"
+  },
+  "changes": {
+    "label": "Зміни в робочому просторі",
+    "diffLabel": "Диф зміни в робочому просторі",
+    "backToChanged": "Назад до змінених файлів",
+    "repositoryRoot": "Корінь репозиторію",
+    "refresh": "Оновити зміни",
+    "refreshing": "Оновлення змін",
+    "refreshDiff": "Оновити вибраний диф",
+    "refreshingDiff": "Оновлення вибраного дифу",
+    "diffTruncated": "Диф обрізано на 512 КБ.",
+    "binary": "Бінарний",
+    "fileCount_one": "{{count}} файл",
+    "fileCount_few": "{{count}} файли",
+    "fileCount_many": "{{count}} файлів",
+    "fileCount_other": "{{count}} файлу",
+    "countsLabel": "{{additions}} і {{deletions}}",
+    "additions_one": "{{count}} рядок додано",
+    "additions_few": "{{count}} рядки додано",
+    "additions_many": "{{count}} рядків додано",
+    "additions_other": "{{count}} рядка додано",
+    "deletions_one": "{{count}} рядок видалено",
+    "deletions_few": "{{count}} рядки видалено",
+    "deletions_many": "{{count}} рядків видалено",
+    "deletions_other": "{{count}} рядка видалено",
+    "showRepositoryFiles": "Показати файли в {{label}}",
+    "hideRepositoryFiles": "Сховати файли в {{label}}",
+    "inRepository": "Зміни в {{slug}}",
+    "statuses": {
+      "modified": "Змінено",
+      "added": "Додано",
+      "deleted": "Видалено",
+      "renamed": "Перейменовано",
+      "copied": "Скопійовано",
+      "untracked": "Не відстежується",
+      "conflicted": "Конфлікт"
+    }
+  }
+}

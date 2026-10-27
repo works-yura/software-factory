@@ -10,6 +10,9 @@ import { SketchLabel } from './SketchLabel';
 import { OnboardingIllustration } from './OnboardingIllustration';
 import type { AccountsMode, DrawingScene } from './onboarding-drawing';
 import '../onboarding-preview.css';
+import { translator } from '../../../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export interface OnboardingPreviewProps {
   step: OnboardingStep;
@@ -48,20 +51,20 @@ function OnboardingScene({ active, children }: { active: boolean; children: Reac
 
 function OnboardingWelcomePreview() {
   return (
-    <section aria-label="Welcome illustration" className="relative h-full">
+    <section aria-label={tk('welcomePreview.label')} className="relative h-full">
       <SketchLabel x={20} y={300} width={112}>
         <Txt variant="meta" tone="muted">
-          Issues & ideas
+          {tk('welcomePreview.ideas')}
         </Txt>
       </SketchLabel>
       <SketchLabel x={147} y={42} width={126}>
         <Txt variant="meta" tone="muted">
-          Build & review
+          {tk('welcomePreview.build')}
         </Txt>
       </SketchLabel>
       <SketchLabel x={288} y={300} width={110}>
         <Txt variant="meta" tone="muted">
-          Ready to ship
+          {tk('welcomePreview.ship')}
         </Txt>
       </SketchLabel>
     </section>
@@ -70,20 +73,20 @@ function OnboardingWelcomePreview() {
 
 function OnboardingCodebasePreview({ repository }: Pick<OnboardingPreviewProps, 'repository'>) {
   return (
-    <section aria-label="Codebase preview" className="relative h-full">
+    <section aria-label={tk('codebasePreview.label')} className="relative h-full">
       <SketchLabel x={279} y={220} width={114}>
         <Txt variant="meta" tone="muted">
-          Your Factory
+          {tk('codebasePreview.factory')}
         </Txt>
       </SketchLabel>
       <SketchLabel x={25} y={256} width={220}>
         <Txt variant="caption" className="truncate">
-          {repository?.fullName ?? 'Your repository'}
+          {repository?.fullName ?? tk('codebasePreview.repository')}
         </Txt>
         <div className="text-muted-foreground mt-2 flex items-center gap-2">
           <GitBranch className="size-3 shrink-0" />
           <Txt variant="meta" tone="muted">
-            {repository?.defaultBranch ?? 'Selected branch'}
+            {repository?.defaultBranch ?? tk('codebasePreview.branch')}
           </Txt>
         </div>
       </SketchLabel>

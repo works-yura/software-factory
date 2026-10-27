@@ -6,6 +6,7 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { RefreshCw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
 import { useApiConfig } from '../../../../api/config';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
@@ -24,6 +25,7 @@ import { connectGithub, isGitLabRepository } from '../services/github';
  * source-control provider.
  */
 export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
+  const { t } = useTranslation('workspaces');
   const { baseUrl } = useApiConfig();
   const statusQuery = useGithubStatusQuery();
   const status = statusQuery.data;
@@ -68,11 +70,11 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
   const unlinkingId = unlinkRepository.isPending ? unlinkRepository.variables?.projectRepositoryId : null;
 
   if (statusQuery.isPending || gitlabStatusQuery.isPending) {
-    return <SkeletonRows label="Loading source control status" rows={3} rowClassName="h-10 w-full rounded-xl" />;
+    return <SkeletonRows label={t('vcs.loadingStatus')} rows={3} rowClassName="h-10 w-full rounded-xl" />;
   }
 
   return (
-    <div className="flex min-w-0 flex-col" aria-label="Connect repositories">
+    <div className="flex min-w-0 flex-col" aria-label={t('connectRepos.label')}>
       {status && !gitlabConfigured && (
         <StatusCallout
           status={status}
@@ -88,7 +90,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           <div className="px-4 py-3">
             <Button variant="primary" onClick={() => connectGithub(baseUrl)}>
               <GithubIcon className="size-4" />
-              Connect GitHub
+              {t('vcs.connect', { host: 'GitHub' })}
             </Button>
           </div>
         )
@@ -97,8 +99,8 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           <div className="flex items-center gap-2 px-4 py-2">
             <div className="min-w-0 flex-1">
               <ListSearch
-                label="Search repositories"
-                placeholder="Search…"
+                label={t('vcs.searchLabel')}
+                placeholder={t('connectRepos.searchPlaceholder')}
                 size="sm"
                 value={query}
                 onSearch={setQuery}
@@ -108,7 +110,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
               <Button
                 variant="ghost"
                 size="sm"
-                aria-label="Refresh GitHub repositories"
+                aria-label={t('vcs.refreshGithub')}
                 disabled={refreshRepos.isPending}
                 onClick={() => refreshRepos.mutate()}
               >
@@ -116,7 +118,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                   className={refreshRepos.isPending ? 'size-3.5 animate-spin' : 'size-3.5'}
                   aria-hidden="true"
                 />
-                Refresh
+                {t('actions.refresh')}
               </Button>
             )}
           </div>
@@ -129,7 +131,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
 
           <ScrollArea orientation="vertical" maxHeight="20rem">
             <div className="flex min-w-0 flex-col gap-px p-2">
-              {visibleLinked.length > 0 && <ListHeading>Linked</ListHeading>}
+              {visibleLinked.length > 0 && <ListHeading>{t('connectRepos.linked')}</ListHeading>}
               {visibleLinked.map(repo => (
                 <div key={repo.projectRepositoryId} className="flex w-full items-center gap-3 rounded-md px-2 py-2">
                   <span className="min-w-0 flex-1">
@@ -143,7 +145,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                     </Txt>
                     {repo.gitBranch && (
                       <Txt as="span" variant="caption" tone="muted" className="block truncate">
-                        Default branch: {repo.gitBranch}
+                        {t('connectRepos.defaultBranch', { branch: repo.gitBranch })}
                       </Txt>
                     )}
                   </span>
@@ -155,24 +157,24 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                       unlinkRepository.mutate({ factoryProjectId, projectRepositoryId: repo.projectRepositoryId })
                     }
                   >
-                    {unlinkingId === repo.projectRepositoryId ? 'Unlinking…' : 'Unlink'}
+                    {unlinkingId === repo.projectRepositoryId ? t('connectRepos.unlinking') : t('connectRepos.unlink')}
                   </Button>
                 </div>
               ))}
 
               {(githubConnected && reposQuery.isPending) || (gitlabConfigured && gitlabProjectsQuery.isPending) ? (
                 <div className="px-2 py-2">
-                  <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-8 w-full rounded-md" />
+                  <SkeletonRows label={t('connectRepos.loading')} rows={3} rowClassName="h-8 w-full rounded-md" />
                 </div>
               ) : available.length === 0 ? (
                 visibleLinked.length === 0 && (
                   <Txt tone="muted" as="p" variant="caption" className="px-2 py-2">
-                    {repos.length > 0 ? 'All available repositories are linked.' : 'No repositories found.'}
+                    {repos.length > 0 ? t('connectRepos.allLinked') : t('connectRepos.noneFound')}
                   </Txt>
                 )
               ) : (
                 <>
-                  {visibleLinked.length > 0 && <ListHeading>Available</ListHeading>}
+                  {visibleLinked.length > 0 && <ListHeading>{t('connectRepos.available')}</ListHeading>}
                   {available.map(repo => {
                     const gitlab = isGitLabRepository(repo);
                     return (
@@ -194,13 +196,19 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                             <span className="min-w-0 truncate">{repo.fullName}</span>
                           </Txt>
                           <Txt as="span" variant="caption" tone="muted" className="block truncate">
-                            {gitlab ? 'GitLab' : repo.private ? 'private' : 'public'} · Default branch:{' '}
-                            {repo.defaultBranch}
+                            {t('connectRepos.repoMeta', {
+                              kind: gitlab
+                                ? 'GitLab'
+                                : repo.private
+                                  ? t('connectRepos.private')
+                                  : t('connectRepos.public'),
+                              branch: repo.defaultBranch,
+                            })}
                           </Txt>
                         </span>
                         {busyRepoId === repo.id && (
                           <Txt as="span" variant="caption" tone="muted">
-                            Linking…
+                            {t('connectRepos.linking')}
                           </Txt>
                         )}
                       </button>
@@ -230,13 +238,15 @@ function ListHeading({ children }: { children: ReactNode }) {
  * booleans, and public URLs.
  */
 function StatusCallout({ status, connected, empty }: { status: GithubStatus; connected: boolean; empty: boolean }) {
+  const { t } = useTranslation('workspaces');
   const calloutClass = 'px-4 py-3';
+  const markup = { code: <code />, strong: <strong /> };
 
   // Auth required: the session expired or was never established.
   if (status.authRequired) {
     return (
       <Txt as="p" variant="caption" tone="muted" className={calloutClass}>
-        You need to sign in to use GitHub. Reload the page — if that doesn't work, sign out and back in.
+        {t('connectRepos.callout.authRequired')}
       </Txt>
     );
   }
@@ -247,16 +257,20 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
     return (
       <div className={calloutClass}>
         <Txt as="p" variant="caption" tone="muted" className="m-0 mb-1">
-          GitHub is disabled on the server.
+          {t('connectRepos.callout.disabled')}
         </Txt>
         {missing.length > 0 && (
           <Txt as="p" variant="caption" tone="muted" className="m-0 mb-1">
-            Missing env vars: <code>{missing.join(', ')}</code>
+            <Trans
+              t={t}
+              i18nKey="connectRepos.callout.missingEnv"
+              values={{ vars: missing.join(', ') }}
+              components={markup}
+            />
           </Txt>
         )}
         <Txt as="p" variant="caption" tone="muted" className="m-0">
-          Set them in <code>mastracode/web/.env</code>, register <code>http://localhost:5173/auth/github/callback</code>{' '}
-          as the GitHub App callback URL, then restart <code>pnpm web:dev</code> from <code>mastracode/web</code>.
+          <Trans t={t} i18nKey="connectRepos.callout.configure" components={markup} />
         </Txt>
       </div>
     );
@@ -266,8 +280,7 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
   if (status.organizationRequired || status.reason === 'organization_required') {
     return (
       <Txt as="p" variant="caption" tone="muted" className={calloutClass}>
-        Your account has no WorkOS organization. Connecting repositories requires an org. Sign out and back in to
-        auto-create one, or ask your admin to add you to an org.
+        {t('connectRepos.callout.organizationRequired')}
       </Txt>
     );
   }
@@ -276,9 +289,7 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
   if (!connected && status.reason === 'not_connected') {
     return (
       <Txt as="p" variant="caption" tone="muted" className={calloutClass}>
-        The GitHub App isn't connected yet. Click <strong>Connect GitHub</strong> to install it. After install, GitHub
-        redirects to <code>/auth/github/callback</code> — make sure that URL is registered in your GitHub App settings
-        (Callback URL).
+        <Trans t={t} i18nKey="connectRepos.callout.notConnected" components={markup} />
       </Txt>
     );
   }
@@ -287,9 +298,7 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
   if (connected && empty) {
     return (
       <Txt as="p" variant="caption" tone="muted" className={calloutClass}>
-        No repositories found. Your GitHub App installation may not have access to any repos. Check the installation's
-        repository access at <code>https://github.com/settings/installations</code> and grant access to at least one
-        repo.
+        <Trans t={t} i18nKey="connectRepos.callout.noAccess" components={markup} />
       </Txt>
     );
   }

@@ -17,6 +17,9 @@ import { CreateFactoryModelStep } from './CreateFactoryModelStep';
 import { CreateFactoryNameRows } from './CreateFactoryNameRows';
 import { CreateFactoryPalette } from './CreateFactoryPalette';
 import { CreateFactoryRepositoryRows } from './CreateFactoryRepositoryRows';
+import { translator } from '../../../../i18n/t';
+
+const tk = translator('workspaces');
 
 interface StepChrome {
   title: string;
@@ -24,28 +27,31 @@ interface StepChrome {
   searchable?: boolean;
 }
 
-const STEP_CHROME: Record<CreateFactoryFlowStep, StepChrome> = {
-  name: {
-    title: 'Name your new Factory',
-    placeholder: 'e.g. Mastra',
-    searchable: false,
-  },
-  vcs: {
-    title: 'Choose your codebase',
-    placeholder: 'Search repositories…',
-  },
-  'project-management': {
-    title: 'Connect the work behind the code',
-    placeholder: 'Search options…',
-  },
-  'model-provider': {
-    title: 'Choose your Factory model',
-    placeholder: 'Search models and providers…',
-  },
-};
+function stepChrome(step: CreateFactoryFlowStep): StepChrome {
+  switch (step) {
+    case 'name':
+      return {
+        title: tk('createFactory.steps.name.title'),
+        placeholder: tk('createFactory.steps.name.placeholder'),
+        searchable: false,
+      };
+    case 'vcs':
+      return { title: tk('createFactory.steps.vcs.title'), placeholder: tk('createFactory.steps.vcs.placeholder') };
+    case 'project-management':
+      return {
+        title: tk('createFactory.steps.projectManagement.title'),
+        placeholder: tk('createFactory.steps.projectManagement.placeholder'),
+      };
+    case 'model-provider':
+      return {
+        title: tk('createFactory.steps.modelProvider.title'),
+        placeholder: tk('createFactory.steps.modelProvider.placeholder'),
+      };
+  }
+}
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+  return error instanceof Error ? error.message : tk('createFactory.genericError');
 }
 
 /**
@@ -95,7 +101,7 @@ export function CreateFactoryWizard() {
   return (
     <div className="flex min-h-0 flex-col gap-2 pt-6">
       <CreateFactoryPalette
-        {...STEP_CHROME[step]}
+        {...stepChrome(step)}
         step={step}
         value={value}
         onValueChange={nextValue => setTyped({ step, value: nextValue })}

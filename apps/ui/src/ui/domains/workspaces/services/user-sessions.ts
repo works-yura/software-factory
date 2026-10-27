@@ -5,6 +5,9 @@
  * the provider from the durable session row.
  */
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export const USER_SESSION_BRANCH_PREFIX = 'user/';
 export const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
@@ -57,7 +60,7 @@ export async function listUserSessions(
     credentials: 'include',
     signal,
   });
-  const body = await readJsonOrThrow<{ sessions: FactoryUserSessionPayload[] }>(res, 'Failed to list sessions');
+  const body = await readJsonOrThrow<{ sessions: FactoryUserSessionPayload[] }>(res, tk('errors.listSessions'));
   return body.sessions.map(normalizeUserSession);
 }
 
@@ -88,7 +91,7 @@ export async function getUserSession(baseUrl: string, sessionId: string): Promis
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(res, 'Failed to load session');
+  const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(res, tk('errors.loadSession'));
   return normalizeUserSession(body.session);
 }
 
@@ -97,7 +100,7 @@ export async function deleteUserSession(baseUrl: string, sessionId: string): Pro
     method: 'DELETE',
     credentials: 'include',
   });
-  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete session (${res.status})`);
+  if (!res.ok && res.status !== 404) throw new Error(tk('errors.deleteSession', { status: res.status }));
 }
 
 /** Destroy the session's sandbox (stopping any active run) so the next message boots a fresh one. */
@@ -110,7 +113,7 @@ export async function recreateSessionSandbox(
     credentials: 'include',
   });
   const body: { recreated?: boolean; aborted?: boolean; error?: string } = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? `Failed to recreate sandbox (${res.status})`);
+  if (!res.ok) throw new Error(body.error ?? tk('errors.recreateSandbox', { status: res.status }));
   return { recreated: body.recreated === true, aborted: body.aborted === true };
 }
 
@@ -121,7 +124,7 @@ export async function startSessionSandbox(baseUrl: string, sessionId: string): P
     credentials: 'include',
   });
   const body: { error?: string } = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? `Failed to start sandbox (${res.status})`);
+  if (!res.ok) throw new Error(body.error ?? tk('errors.startSandbox', { status: res.status }));
 }
 
 /** Ask the title model to re-name a session's conversation. Resolves to the new title. */
@@ -131,7 +134,7 @@ export async function regenerateSessionTitle(baseUrl: string, sessionId: string)
     credentials: 'include',
   });
   const body: { title?: string; error?: string } = await res.json().catch(() => ({}));
-  if (!res.ok || !body.title) throw new Error(body.error ?? `Failed to rename session (${res.status})`);
+  if (!res.ok || !body.title) throw new Error(body.error ?? tk('errors.renameSession', { status: res.status }));
   return body.title;
 }
 
@@ -159,7 +162,7 @@ export async function setUserSessionVisibility(
   }
   const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(
     res,
-    'Failed to change session visibility',
+    tk('sharing.changeFailed'),
   );
   return normalizeUserSession(body.session);
 }

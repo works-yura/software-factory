@@ -17,6 +17,9 @@ import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
 import type { GithubRepo, GithubStatus, SourceControlRepository } from '../../services/github';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
+import { translator } from '../../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export interface CreateFactoryRepositoryRowsProps {
   query: string;
@@ -29,13 +32,13 @@ export interface CreateFactoryRepositoryRowsProps {
 function connectionMessage(status: GithubStatus | undefined): string {
   switch (status?.reason) {
     case 'missing_config':
-      return 'GitHub is not configured for this deployment.';
+      return tk('createFactory.repos.githubNotConfigured');
     case 'organization_required':
-      return 'Join an organization to connect GitHub repositories.';
+      return tk('createFactory.repos.githubOrganizationRequired');
     case 'auth_required':
-      return 'Sign in again to connect GitHub.';
+      return tk('createFactory.repos.githubAuthRequired');
     default:
-      return 'Install the GitHub App to grant access to repositories.';
+      return tk('createFactory.repos.githubInstall');
   }
 }
 
@@ -56,14 +59,14 @@ export function CreateFactoryRepositoryRows({
   const startGitlabConnect = async () => {
     try {
       await gitlabConnect.mutateAsync({});
-      toast.success('GitLab connected');
+      toast.success(tk('vcs.hostConnected', { host: 'GitLab' }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to connect GitLab');
+      toast.error(err instanceof Error ? err.message : tk('createFactory.repos.gitlabConnectFailed'));
     }
   };
 
   if (githubStatus.isPending || gitlabStatus.isPending) {
-    return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <SkeletonRows label={tk('connectRepos.loading')} rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
   }
 
   const githubRows = !connected ? (
@@ -74,8 +77,8 @@ export function CreateFactoryRepositoryRows({
       return (
         <CommandGroup heading="GitHub">
           <CommandPaletteItem
-            icon={githubRedirecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon />}
-            title={unavailable ? 'GitHub unavailable' : 'Connect GitHub'}
+            icon={githubRedirecting ? <Spinner size="sm" aria-label={tk('vcs.connectingGithub')} /> : <GithubIcon />}
+            title={unavailable ? tk('createFactory.repos.unavailable', { host: 'GitHub' }) : tk('vcs.connect', { host: 'GitHub' })}
             subtitle={connectionMessage(githubStatus.data)}
             value="connect-github"
             disabled={unavailable || githubRedirecting}
@@ -90,8 +93,8 @@ export function CreateFactoryRepositoryRows({
       <CommandGroup heading="GitHub">
         <CommandPaletteItem
           icon={<Settings2 />}
-          title="Manage GitHub connection"
-          subtitle="Add installations or grant access to more repositories"
+          title={tk('createFactory.repos.manageGithub')}
+          subtitle={tk('createFactory.repos.manageGithubHint')}
           value="manage-github"
           onSelect={onManageConnection}
         />
@@ -120,15 +123,25 @@ export function CreateFactoryRepositoryRows({
           // button here to keep it from starting a doomed Nango session.
           const gitlabUnavailable = !gitlabStatus.data?.enabled || gitlabStatus.data.reason === 'organization_required';
           const gitlabSubtitle = !gitlabStatus.data?.enabled
-            ? 'GitLab is not available for this deployment.'
+            ? tk('createFactory.repos.gitlabNotAvailable')
             : gitlabStatus.data.reason === 'organization_required'
-              ? 'Join an organization to connect GitLab repositories.'
-              : 'Sign in to GitLab to grant access to your projects.';
+              ? tk('createFactory.repos.gitlabOrganizationRequired')
+              : tk('createFactory.repos.gitlabSignIn');
           return (
             <CommandGroup heading="GitLab">
               <CommandPaletteItem
-                icon={gitlabConnecting ? <Spinner size="sm" aria-label="Connecting to GitLab" /> : <GitLabIcon />}
-                title={gitlabUnavailable ? 'GitLab unavailable' : 'Connect GitLab'}
+                icon={
+                  gitlabConnecting ? (
+                    <Spinner size="sm" aria-label={tk('createFactory.repos.connectingGitlab')} />
+                  ) : (
+                    <GitLabIcon />
+                  )
+                }
+                title={
+                  gitlabUnavailable
+                    ? tk('createFactory.repos.unavailable', { host: 'GitLab' })
+                    : tk('vcs.connect', { host: 'GitLab' })
+                }
                 subtitle={gitlabSubtitle}
                 value="connect-gitlab"
                 disabled={gitlabUnavailable || gitlabConnecting}
@@ -150,19 +163,20 @@ function GithubRepositoryResults({
   const repos = useGithubReposQuery(debouncedQuery || undefined, true);
 
   if (repos.isPending) {
-    return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <SkeletonRows label={tk('connectRepos.loading')} rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
   }
   if (repos.isError) return <CreateFactoryPaletteAlert>{repos.error.message}</CreateFactoryPaletteAlert>;
-  if (repos.data.length === 0) return <CreateFactoryPaletteMessage>No repositories found.</CreateFactoryPaletteMessage>;
+  if (repos.data.length === 0)
+    return <CreateFactoryPaletteMessage>{tk('connectRepos.noneFound')}</CreateFactoryPaletteMessage>;
 
   return (
-    <CommandGroup heading="Repositories">
+    <CommandGroup heading={tk('createFactory.repos.repositories')}>
       {repos.data.map(repo => (
         <CommandPaletteItem
           key={repo.id}
           icon={<GithubIcon />}
           title={repo.fullName}
-          subtitle={`${repo.private ? 'Private' : 'Public'} · ${repo.defaultBranch}`}
+          subtitle={`${repo.private ? tk('vcs.private') : tk('createFactory.repos.public')} · ${repo.defaultBranch}`}
           value={`repo-${repo.id}`}
           onSelect={() => onSelectRepository(repo)}
         />
@@ -187,13 +201,19 @@ function GitLabRepositoryResults({
   const normalizedQuery = query.trim().toLowerCase();
   const matches = (projects ?? []).filter(project => project.fullName.toLowerCase().includes(normalizedQuery));
   if (pending) {
-    return <SkeletonRows label="Loading GitLab repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return (
+      <SkeletonRows
+        label={tk('vcs.loadingRepositories', { provider: 'GitLab' })}
+        rows={3}
+        rowClassName="mx-2 my-1 h-12 rounded-xl"
+      />
+    );
   }
   if (error) return <CreateFactoryPaletteAlert>{error.message}</CreateFactoryPaletteAlert>;
   return (
-    <CommandGroup heading="GitLab repositories">
+    <CommandGroup heading={tk('createFactory.repos.gitlabRepositories')}>
       {matches.length === 0 ? (
-        <CreateFactoryPaletteMessage>No GitLab repositories found.</CreateFactoryPaletteMessage>
+        <CreateFactoryPaletteMessage>{tk('vcs.noRepositories', { host: 'GitLab' })}</CreateFactoryPaletteMessage>
       ) : (
         matches.map(repo => (
           <CommandPaletteItem

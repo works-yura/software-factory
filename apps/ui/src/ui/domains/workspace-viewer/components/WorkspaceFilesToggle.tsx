@@ -2,12 +2,14 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { PanelRightIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
 import { cardRadiusClass, popoverSizeClass } from '../layout';
 import { WorkspaceFilesContent } from './WorkspaceFilesContent';
 
 export function WorkspaceFilesToggle() {
+  const { t } = useTranslation('workspaces');
   const { open, setOpen, workspacePath, size, setSize, canDock } = useWorkspacePanel();
 
   if (!workspacePath) return null;
@@ -22,8 +24,8 @@ export function WorkspaceFilesToggle() {
       <Button
         size="icon-sm"
         variant={open ? 'default' : 'ghost'}
-        tooltip={open ? 'Hide workspace files' : 'Show workspace files'}
-        aria-label="Workspace files"
+        tooltip={open ? t('files.hide') : t('files.show')}
+        aria-label={t('files.label')}
         aria-pressed={open}
         onClick={() => setOpen(!open)}
       >
@@ -35,7 +37,7 @@ export function WorkspaceFilesToggle() {
   return (
     <Popover open={open} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
-        <Button size="icon-sm" variant={open ? 'default' : 'ghost'} aria-label="Workspace files" aria-pressed={open}>
+        <Button size="icon-sm" variant={open ? 'default' : 'ghost'} aria-label={t('files.label')} aria-pressed={open}>
           <PanelRightIcon />
         </Button>
       </PopoverTrigger>

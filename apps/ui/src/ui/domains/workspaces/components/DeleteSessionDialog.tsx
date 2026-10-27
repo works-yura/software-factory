@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { Trans, useTranslation } from 'react-i18next';
 
 import type { SessionListRow } from '../services/sessionRows';
 
@@ -22,29 +23,30 @@ export function DeleteSessionDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation('workspaces');
   const factorySession = row.origin === 'factory';
+  const highlight = { name: <span className="text-foreground" /> };
   return (
     <Dialog open onOpenChange={open => !open && onCancel()} intent="destructive" pending={pending}>
-      <DialogContent size="sm" aria-label={factorySession ? 'Delete workspace' : 'Delete user session'}>
+      <DialogContent size="sm" aria-label={factorySession ? t('deleteSession.workspaceLabel') : t('deleteSession.userLabel')}>
         <DialogHeader>
-          <DialogTitle>{factorySession ? 'Delete workspace?' : 'Delete session?'}</DialogTitle>
+          <DialogTitle>{factorySession ? t('deleteSession.workspaceTitle') : t('deleteSession.userTitle')}</DialogTitle>
           <DialogDescription>
             {factorySession ? (
-              <>
-                This deletes the <span className="text-foreground">{row.session.branch}</span> checkout and its
-                uncommitted changes. This can’t be undone. Threads from this workspace are kept.
-              </>
+              <Trans
+                t={t}
+                i18nKey="deleteSession.workspaceDescription"
+                values={{ branch: row.session.branch }}
+                components={highlight}
+              />
             ) : (
-              <>
-                This deletes the <span className="text-foreground">{row.name}</span> session and its checkout with any
-                uncommitted changes. This can’t be undone. Its conversation is kept.
-              </>
+              <Trans t={t} i18nKey="deleteSession.userDescription" values={{ name: row.name }} components={highlight} />
             )}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <DialogCancel>Cancel</DialogCancel>
-          <DialogAction onConfirm={onConfirm}>{pending ? 'Deleting…' : 'Delete'}</DialogAction>
+          <DialogCancel>{t('actions.cancel')}</DialogCancel>
+          <DialogAction onConfirm={onConfirm}>{pending ? t('actions.deleting') : t('actions.delete')}</DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

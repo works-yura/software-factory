@@ -5,6 +5,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Lock, Users } from 'lucide-react';
 import { useId } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /** Private-session entry point shared by the sidebar and session header. */
 export function SessionSharingPopover({
@@ -20,6 +21,7 @@ export function SessionSharingPopover({
   onShare?: () => void;
   sharing?: boolean;
 }) {
+  const { t } = useTranslation('workspaces');
   const titleId = useId();
   const inHeader = placement === 'header';
 
@@ -30,7 +32,7 @@ export function SessionSharingPopover({
           <Button
             variant="ghost"
             size={inHeader ? 'sm' : 'icon-sm'}
-            aria-label={inHeader ? 'Private session' : `Private session: ${name}`}
+            aria-label={inHeader ? t('sharing.privateSession') : t('sharing.privateSessionNamed', { name })}
             disabled={disabled}
           >
             {inHeader ? (
@@ -40,24 +42,20 @@ export function SessionSharingPopover({
                 <Lock />
               </Icon>
             )}
-            {inHeader ? 'Private' : null}
+            {inHeader ? t('sharing.private') : null}
           </Button>
         }
       />
       <PopoverContent align="end" aria-labelledby={titleId}>
         <EmptyState
           iconSlot={<EmptyStateIllustration name="locked" />}
-          titleSlot={<span id={titleId}>This session is private</span>}
-          descriptionSlot={
-            onShare
-              ? 'Only you can see this session. Share it to let anyone in your organization view and continue the conversation.'
-              : 'Only you can see this session.'
-          }
+          titleSlot={<span id={titleId}>{t('sharing.privateTitle')}</span>}
+          descriptionSlot={onShare ? t('sharing.privateDescriptionShareable') : t('sharing.privateDescription')}
           actionSlot={
             onShare ? (
               <Button onClick={onShare} disabled={disabled || sharing} aria-busy={sharing}>
                 {sharing ? <Spinner size="sm" aria-hidden /> : <Users />}
-                Share with organization
+                {t('sharing.shareWithOrg')}
               </Button>
             ) : undefined
           }

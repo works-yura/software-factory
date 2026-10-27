@@ -6,17 +6,20 @@ import type { OnboardingPreviewProps } from './OnboardingPreview';
 import { SketchLabel } from './SketchLabel';
 import { OnboardingModelLabel } from './OnboardingModelLabel';
 import { OnboardingPersonalConnectionStatus } from './OnboardingPersonalConnectionStatus';
+import { translator } from '../../../../../i18n/t';
+
+const tk = translator('workspaces');
 
 function workAccountLabel(personalWork: boolean, local: boolean) {
-  if (personalWork) return 'Work owner’s account';
-  if (local) return 'Local account';
-  return 'Company account';
+  if (personalWork) return tk('accountsPreview.workOwnerAccount');
+  if (local) return tk('accountsPreview.localAccount');
+  return tk('onboarding.setups.factory.label');
 }
 
 function workSourceLabel(personalWork: boolean, local: boolean) {
-  if (personalWork) return 'Work owner';
-  if (local) return 'Local account';
-  return 'Company';
+  if (personalWork) return tk('accountsPreview.workOwner');
+  if (local) return tk('accountsPreview.localAccount');
+  return tk('accountsPreview.company');
 }
 
 export function OnboardingAccountsPreview({
@@ -36,34 +39,34 @@ export function OnboardingAccountsPreview({
   const accountLabel = workAccountLabel(personalWork, local);
   const sourceLabel = workSourceLabel(personalWork, local);
   return (
-    <section key={modelScope} aria-label="Account setup preview" className="onboarding-account-labels relative h-full">
+    <section key={modelScope} aria-label={tk('accountsPreview.label')} className="onboarding-account-labels relative h-full">
       <AccountSource x={shared ? 148 : 28} label={sourceLabel} icon={personalWork ? <KeyRound /> : <Building2 />} />
       {!shared && (
         <>
-          <AccountSource x={148} label="Personal" icon={<KeyRound />} />
-          <AccountSource x={268} label="Personal" icon={<KeyRound />} />
+          <AccountSource x={148} label={tk('accountsPreview.personal')} icon={<KeyRound />} />
+          <AccountSource x={268} label={tk('accountsPreview.personal')} icon={<KeyRound />} />
         </>
       )}
-      <SessionIllustration x={148} label="Team" />
-      <SessionIllustration x={268} label="You" />
+      <SessionIllustration x={148} label={tk('accountsPreview.team')} />
+      <SessionIllustration x={268} label={tk('accountsPreview.you')} />
       <SketchLabel x={28} y={260} width={104}>
         <Txt variant="meta" tone="muted">
-          Factory work
+          {tk('accountsPreview.factoryWork')}
         </Txt>
       </SketchLabel>
       <SketchLabel x={148} y={260} width={104}>
         <Txt variant="meta" tone="muted">
-          Team sessions
+          {tk('accountsPreview.teamSessions')}
         </Txt>
       </SketchLabel>
       <SketchLabel x={268} y={260} width={104}>
         <Txt variant="meta" tone="muted">
-          Your sessions
+          {tk('accountsPreview.yourSessions')}
         </Txt>
       </SketchLabel>
       {!setup && (
         <div className="onboarding-scene-detail absolute inset-x-7 top-[89%] grid grid-cols-2 gap-6">
-          <div role="group" aria-label="Factory work model" className="min-w-0">
+          <div role="group" aria-label={tk('accountsPreview.workModel')} className="min-w-0">
             <Txt variant="meta" className="mb-2">
               {accountLabel}
             </Txt>
@@ -78,9 +81,9 @@ export function OnboardingAccountsPreview({
               </Txt>
             )}
           </div>
-          <div role="group" aria-label="Session model" className="min-w-0">
+          <div role="group" aria-label={tk('accountsPreview.sessionModel')} className="min-w-0">
             <Txt variant="meta" className="mb-2">
-              {shared ? 'Same model for sessions' : 'Your session model'}
+              {shared ? tk('accountsPreview.sameModel') : tk('accountsPreview.yourSessionModel')}
             </Txt>
             <OnboardingModelLabel
               scope={shared ? 'org' : 'user'}

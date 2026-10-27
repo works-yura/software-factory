@@ -8,6 +8,7 @@ import { ModelCombobox } from '../../settings/components/ModelCombobox';
 import { SharedCredentialNotice } from '../../settings/components/SharedCredentialNotice';
 import { providerDisplayName } from '@factory/credentials/provider-display-name';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProviderModels } from '../hooks/useProviderModels';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 
@@ -28,24 +29,25 @@ export function FactoryDefaultModelForm({
   onContinue,
   onChangeProvider,
   onPreviewModel,
-  submitLabel = 'Continue',
+  submitLabel,
 }: FactoryDefaultModelFormProps) {
+  const { t } = useTranslation('workspaces');
   const choice = useProviderModels(provider.provider, scope);
   const [selectedModelId, setModelId] = useState(initialModelId);
   const modelId = selectedModelId
     ? (choice.models.find(model => model.id === selectedModelId)?.id ?? '')
     : (choice.suggestedModelId ?? '');
 
-  if (choice.isPending) return <SkeletonRows label="Loading models" rows={2} rowClassName="h-9 w-full" />;
+  if (choice.isPending) return <SkeletonRows label={t('models.loading')} rows={2} rowClassName="h-9 w-full" />;
   if (choice.catalogError || choice.models.length === 0) {
     return (
       <div className="flex flex-col items-start gap-3">
         <Txt as="p" variant="caption" role="alert">
-          {choice.catalogError?.message ?? 'No models are available for this connection yet.'}
+          {choice.catalogError?.message ?? t('models.noneForConnection')}
         </Txt>
         <div className="flex gap-2">
-          <Button onClick={choice.retry}>Retry</Button>
-          <Button onClick={onChangeProvider}>Change provider</Button>
+          <Button onClick={choice.retry}>{t('actions.retry')}</Button>
+          <Button onClick={onChangeProvider}>{t('models.changeProvider')}</Button>
         </div>
       </div>
     );
@@ -60,10 +62,10 @@ export function FactoryDefaultModelForm({
             {providerDisplayName(provider.provider)}
           </Txt>
         </div>
-        <Button onClick={onChangeProvider}>Change provider</Button>
+        <Button onClick={onChangeProvider}>{t('models.changeProvider')}</Button>
       </div>
       <Field>
-        <FieldLabel>{scope === 'user' ? 'Your default model' : 'Factory default model'}</FieldLabel>
+        <FieldLabel>{scope === 'user' ? t('models.yourDefault') : t('models.factoryDefault')}</FieldLabel>
         <ModelCombobox
           models={choice.models}
           value={modelId}
@@ -71,22 +73,22 @@ export function FactoryDefaultModelForm({
             setModelId(modelId);
             onPreviewModel?.(modelId);
           }}
-          placeholder="Select a default model…"
+          placeholder={t('models.selectDefault')}
         />
       </Field>
       {selectedModelId && !modelId && (
         <Txt variant="caption" role="alert">
-          Your previous model is no longer available. Choose another model.
+          {t('models.previousUnavailable')}
         </Txt>
       )}
       {scope === 'user' && (
         <Txt variant="meta" tone="muted">
-          Creating this Factory also updates your personal default model.
+          {t('models.updatesPersonalDefault')}
         </Txt>
       )}
       {scope === 'org' && <SharedCredentialNotice modelId={modelId || undefined} />}
       <Button variant="primary" className="w-full" disabled={!modelId} onClick={() => onContinue(modelId)}>
-        {submitLabel}
+        {submitLabel ?? t('actions.continue')}
       </Button>
     </div>
   );

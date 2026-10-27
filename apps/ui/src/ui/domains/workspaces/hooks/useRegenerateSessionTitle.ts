@@ -4,6 +4,9 @@ import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-quer
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { regenerateSessionTitle } from '../services/user-sessions';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export function useRegenerateSessionTitle(factoryId: string, sessionId: string) {
   const { baseUrl } = useApiConfig();
@@ -15,9 +18,9 @@ export function useRegenerateSessionTitle(factoryId: string, sessionId: string) 
     mutationFn: () => regenerateSessionTitle(baseUrl, sessionId),
     onSuccess: title => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
-      toast(`Renamed to “${title}”`);
+      toast(tk('sessionRow.renamed', { title }));
     },
-    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to regenerate title'),
+    onError: error => toast.error(error instanceof Error ? error.message : tk('sessionRow.regenerateFailed')),
   });
   return { regenerate: () => mutate(), regenerating };
 }

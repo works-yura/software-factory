@@ -9,6 +9,9 @@ import { relativeTime } from '../../../../lib/date/relativeTime';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionRowStatus } from '../services/sessionStatus';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('workspaces');
 
 export interface SessionPreviewDetails {
   kind: 'Work session' | 'Review session' | 'User session';
@@ -21,10 +24,16 @@ export interface SessionPreviewDetails {
 }
 
 function getStatusLabel(status: SessionRowStatus | undefined) {
-  if (status === 'initializing') return 'Initializing';
-  if (status === 'working') return 'Agent working';
-  if (status === 'ready') return 'Waiting on you';
+  if (status === 'initializing') return tk('preview.statuses.initializing');
+  if (status === 'working') return tk('preview.statuses.working');
+  if (status === 'ready') return tk('preview.statuses.ready');
   return undefined;
+}
+
+function getKindLabel(kind: SessionPreviewDetails['kind']) {
+  if (kind === 'Work session') return tk('preview.kinds.work');
+  if (kind === 'Review session') return tk('preview.kinds.review');
+  return tk('preview.kinds.user');
 }
 
 /** The icon carries the meaning visually, so `label` names the row for screen readers. */
@@ -67,6 +76,7 @@ export function SessionPreviewCard({
   details: SessionPreviewDetails;
 }) {
   const statusLabel = getStatusLabel(status);
+  const kindLabel = getKindLabel(details.kind);
   const itemTitle = details.itemTitle?.trim();
   const subtitle = itemTitle && itemTitle !== name ? itemTitle : undefined;
   const updated = relativeTime(details.updatedAt);
@@ -80,7 +90,7 @@ export function SessionPreviewCard({
 
   return (
     <HoverCardContent
-      aria-label={`${name} session details`}
+      aria-label={tk('preview.label', { name })}
       anchor={anchor}
       side="right"
       align="start"
@@ -102,17 +112,17 @@ export function SessionPreviewCard({
             )}
           </div>
           <Txt tone="muted" as="p" variant="meta" className="m-0">
-            {statusLabel ? `${details.kind} · ${statusLabel}` : details.kind}
+            {statusLabel ? `${kindLabel} · ${statusLabel}` : kindLabel}
           </Txt>
         </div>
         <div className="flex flex-col gap-1.5">
-          <DetailRow icon={<Avatar src={details.owner.avatarUrl} name={ownerName} size="sm" />} label="Owner" centered>
+          <DetailRow icon={<Avatar src={details.owner.avatarUrl} name={ownerName} size="sm" />} label={tk('preview.owner')} centered>
             <Txt tone="ink" as="p" variant="caption" className="m-0 truncate">
               {ownerName}
             </Txt>
           </DetailRow>
           {(details.itemLabel || subtitle) && (
-            <DetailRow icon={itemIcon} label={details.kind === 'Review session' ? 'Pull request' : 'Work item'}>
+            <DetailRow icon={itemIcon} label={details.kind === 'Review session' ? tk('preview.pullRequest') : tk('preview.workItem')}>
               {details.itemLabel && (
                 <Txt tone="ink" as="p" variant="caption" className="m-0 truncate">
                   {details.itemLabel}
@@ -125,12 +135,12 @@ export function SessionPreviewCard({
               )}
             </DetailRow>
           )}
-          <DetailRow icon={<GitBranch size={14} aria-hidden />} label="Branch">
+          <DetailRow icon={<GitBranch size={14} aria-hidden />} label={tk('preview.branch')}>
             <Txt tone="ink" as="p" variant="caption" className="m-0 truncate">
               {details.branch}
             </Txt>
           </DetailRow>
-          <DetailRow icon={<GitMerge size={14} aria-hidden />} label="Base branch">
+          <DetailRow icon={<GitMerge size={14} aria-hidden />} label={tk('preview.baseBranch')}>
             <Txt tone="ink" as="p" variant="caption" className="m-0 truncate">
               {details.baseBranch}
             </Txt>
