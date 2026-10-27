@@ -246,6 +246,37 @@ function createSession(
     ),
     // Empty registry by default: the level-triggered timeout check sees no run.
     listActiveThreadRuns: vi.fn((): Array<{ runId: string; resourceId?: string; threadId: string }> => []),
+    // What the Mastra harness puts in a run's context, so tests can read the caller back.
+    runContext: vi.fn(
+      (
+        bound: typeof session,
+        input: { userId: string; orgId: string; threadId: string; resourceId: string },
+      ): { get(key: string): unknown } => {
+        const values = new Map<string, unknown>([
+          ['user', { workosId: input.userId, organizationId: input.orgId }],
+          [
+            'controller',
+            {
+              state: bound.state.get(),
+              threadId: input.threadId,
+              resourceId: input.resourceId,
+              session: {
+                id: bound.identity.getId(),
+                ownerId: bound.identity.getOwnerId(),
+                modelId: bound.model.get() ?? '',
+              },
+            },
+          ],
+        ]);
+        return { get: key => values.get(key) };
+      },
+    ),
+    findSkill: vi.fn(async (bound: typeof session, name: string) => {
+      const skills = bound.getWorkspace().skills;
+      await skills.maybeRefresh();
+      const skill = await skills.get(name);
+      return skill ? { name: skill.name, userInvocable: true, activation: skill.instructions } : undefined;
+    }),
   };
   return {
     controller,
@@ -391,7 +422,7 @@ describe('FactoryDecisionDispatcher', () => {
       observeSessionRunEnd(session as never, { audit: seed.audit });
       const prepareBinding = vi.fn();
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         storage,
         transitionService,
         audit: seed.audit,
@@ -454,7 +485,7 @@ describe('FactoryDecisionDispatcher', () => {
       signalAccepted: Promise.resolve({ accepted: true, action: 'persist' }),
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       storage,
       transitionService,
       audit: seed.audit,
@@ -477,7 +508,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -501,7 +532,7 @@ describe('FactoryDecisionDispatcher', () => {
     );
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
@@ -536,7 +567,7 @@ describe('FactoryDecisionDispatcher', () => {
     const sweep = vi.spyOn(storage, 'revokeStaleRunBindings');
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
@@ -572,7 +603,7 @@ describe('FactoryDecisionDispatcher', () => {
     const sweep = vi.spyOn(storage, 'revokeStaleRunBindings');
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
@@ -620,7 +651,7 @@ describe('FactoryDecisionDispatcher', () => {
     const reconcileToolResults = vi.fn(async () => {});
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
@@ -841,7 +872,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -871,7 +902,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, sendNotificationSignal } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -918,7 +949,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -961,7 +992,7 @@ describe('FactoryDecisionDispatcher', () => {
       agentEndReason: 'complete',
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -1018,7 +1049,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -1086,7 +1117,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const renew = vi.spyOn(storage, 'renewDeferredDecisionLease');
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1146,7 +1177,7 @@ describe('FactoryDecisionDispatcher', () => {
         kickoffMessage: null,
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1228,7 +1259,7 @@ describe('FactoryDecisionDispatcher', () => {
         kickoffMessage: null,
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1308,7 +1339,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -1390,7 +1421,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -1461,7 +1492,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1509,7 +1540,7 @@ describe('FactoryDecisionDispatcher', () => {
         });
         await bindRole(storage, item.id, 'plan');
         const dispatcher = new FactoryDecisionDispatcher({
-          controller: controller as never,
+          harness: controller as never,
           isAutoRunEnabled: async () => true,
           transitionService,
           storage,
@@ -1543,7 +1574,7 @@ describe('FactoryDecisionDispatcher', () => {
       await bindRole(storage, item.id, 'work');
       const prepareBinding = vi.fn(async () => {});
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1577,7 +1608,7 @@ describe('FactoryDecisionDispatcher', () => {
         await bindRole(storage, item.id, 'plan', 'plan-after-other-resource');
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1616,7 +1647,7 @@ describe('FactoryDecisionDispatcher', () => {
         await bindRole(storage, item.id, 'plan', 'plan-second-pass');
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1646,7 +1677,7 @@ describe('FactoryDecisionDispatcher', () => {
         revokedAt: new Date('2030-01-01T00:00:00Z'),
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1691,7 +1722,7 @@ describe('FactoryDecisionDispatcher', () => {
         evaluation: { outcome: 'accepted', decisions: [] },
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1712,7 +1743,7 @@ describe('FactoryDecisionDispatcher', () => {
       const { controller } = createSession(undefined, { agentEndReason: 'error' });
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1736,7 +1767,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1761,7 +1792,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1785,7 +1816,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -1820,7 +1851,7 @@ describe('FactoryDecisionDispatcher', () => {
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -1861,7 +1892,7 @@ describe('FactoryDecisionDispatcher', () => {
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     const { controller, session } = createSession(undefined, { initialDeliveredSignalIds: [decision!.id] });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -1907,7 +1938,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -1954,7 +1985,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2003,7 +2034,7 @@ describe('FactoryDecisionDispatcher', () => {
       signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2112,7 +2143,7 @@ describe('FactoryDecisionDispatcher', () => {
     controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
     observeSessionRunEnd(session as never, { audit: seed.audit });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2177,7 +2208,7 @@ describe('FactoryDecisionDispatcher', () => {
       controller.listActiveThreadRuns.mockReturnValue([]);
       observeSessionRunEnd(session as never, { audit: seed.audit });
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -2233,7 +2264,7 @@ describe('FactoryDecisionDispatcher', () => {
         controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
         observeSessionRunEnd(session as never, { audit: seed.audit });
         const dispatcher = new FactoryDecisionDispatcher({
-          controller: controller as never,
+          harness: controller as never,
           isAutoRunEnabled: async () => true,
           transitionService,
           storage,
@@ -2311,7 +2342,7 @@ describe('FactoryDecisionDispatcher', () => {
       signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2366,7 +2397,7 @@ describe('FactoryDecisionDispatcher', () => {
         signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -2431,7 +2462,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: 'thread-1' }]);
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -2499,7 +2530,7 @@ describe('FactoryDecisionDispatcher', () => {
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: 'thread-1' }]);
       const heartbeat = FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs;
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -2561,7 +2592,7 @@ describe('FactoryDecisionDispatcher', () => {
       emitAgentEndDuringSignal: true,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2615,7 +2646,7 @@ describe('FactoryDecisionDispatcher', () => {
       agentEndReason: reason,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2682,7 +2713,7 @@ describe('FactoryDecisionDispatcher', () => {
       acceptRedeliveredSignal: true,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2738,7 +2769,7 @@ describe('FactoryDecisionDispatcher', () => {
       acceptRedeliveredSignal: true,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2797,7 +2828,7 @@ describe('FactoryDecisionDispatcher', () => {
       acceptRedeliveredSignal: true,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2823,7 +2854,7 @@ describe('FactoryDecisionDispatcher', () => {
       },
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2846,7 +2877,7 @@ describe('FactoryDecisionDispatcher', () => {
       signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2907,7 +2938,7 @@ describe('FactoryDecisionDispatcher', () => {
       signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2934,7 +2965,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, session, abort, sendNotificationSignal } = createSession(undefined, { streamActive: true });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -2969,7 +3000,7 @@ describe('FactoryDecisionDispatcher', () => {
       return { persisted: Promise.resolve(), accepted: Promise.resolve({ action: 'persist' }) } as never;
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -3020,7 +3051,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -3067,7 +3098,7 @@ describe('FactoryDecisionDispatcher', () => {
     await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['review'] } });
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -3097,7 +3128,7 @@ describe('FactoryDecisionDispatcher', () => {
       },
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -3169,7 +3200,7 @@ describe('FactoryDecisionDispatcher', () => {
     await new Promise(resolve => setTimeout(resolve, 5));
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -3194,7 +3225,7 @@ describe('FactoryDecisionDispatcher', () => {
       },
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -3242,7 +3273,7 @@ describe('FactoryDecisionDispatcher', () => {
       accepted: Promise.reject(new Error('Platform proxy request failed with 500: internal_error')),
     }));
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -3274,7 +3305,7 @@ describe('FactoryDecisionDispatcher', () => {
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3314,7 +3345,7 @@ describe('FactoryDecisionDispatcher', () => {
     await armItem(storage, item.id);
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3366,7 +3397,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3411,7 +3442,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3452,7 +3483,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3488,7 +3519,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3540,7 +3571,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3578,7 +3609,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       boards,
@@ -3628,7 +3659,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3689,7 +3720,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3752,7 +3783,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(planned.status).toBe('accepted');
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3804,7 +3835,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3854,7 +3885,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3909,7 +3940,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3963,7 +3994,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3986,7 +4017,7 @@ describe('FactoryDecisionDispatcher', () => {
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4014,7 +4045,7 @@ describe('FactoryDecisionDispatcher', () => {
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4042,7 +4073,7 @@ describe('FactoryDecisionDispatcher', () => {
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession(undefined, { suspendsOnTool: 'ask_user' });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4068,7 +4099,7 @@ describe('FactoryDecisionDispatcher', () => {
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession(undefined, { suspendsOnTool: 'ask_user' });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4090,7 +4121,7 @@ describe('FactoryDecisionDispatcher', () => {
     const person = await queueRunKickoff(personStorage);
     const personSession = createSession(undefined, { suspendsOnTool: 'ask_user' });
     await new FactoryDecisionDispatcher({
-      controller: personSession.controller as never,
+      harness: personSession.controller as never,
       transitionService: person.transitionService,
       storage: personStorage,
       ownerId: 'worker-1',
@@ -4107,7 +4138,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { transitionService } = await queueRunKickoff(storage);
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4126,7 +4157,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { transitionService } = await queueRunKickoff(storage);
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4148,7 +4179,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { item, transitionService } = await queueRunKickoff(storage, { preapprovePlans: true });
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4174,7 +4205,7 @@ describe('FactoryDecisionDispatcher', () => {
     await bindWorkRun(storage, item.id, { preapprovePlans: true });
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4199,7 +4230,7 @@ describe('FactoryDecisionDispatcher', () => {
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true, replansAfterApproval: true });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4224,7 +4255,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4278,7 +4309,7 @@ describe('FactoryDecisionDispatcher', () => {
       }),
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4370,7 +4401,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4394,7 +4425,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, sendNotificationSignal } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4439,7 +4470,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSession: vi.fn(async () => undefined), listActiveThreadRuns: vi.fn(() => []) },
+      harness: { getSession: vi.fn(async () => undefined), listActiveThreadRuns: vi.fn(() => []) } as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4484,7 +4515,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4541,7 +4572,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4594,7 +4625,7 @@ describe('FactoryDecisionDispatcher', () => {
       accepted: Promise.resolve({ accepted: true as const, action: 'blocked' }),
     }));
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4643,7 +4674,7 @@ describe('FactoryDecisionDispatcher', () => {
       accepted: Promise.resolve({ accepted: true as const, action: undefined }),
     }));
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4693,7 +4724,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4765,7 +4796,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4817,7 +4848,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session } = createSession();
     vi.spyOn(storage, 'completeDeferredDecision').mockRejectedValueOnce(new Error('database unavailable'));
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4867,7 +4898,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     vi.spyOn(storage, 'completeDeferredDecision').mockRejectedValueOnce(new Error('database unavailable'));
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4937,7 +4968,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4984,7 +5015,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5058,7 +5089,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5125,7 +5156,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5193,7 +5224,7 @@ describe('FactoryDecisionDispatcher', () => {
     };
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService: recoveringTransition,
       storage,
@@ -5263,7 +5294,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5325,7 +5356,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5379,7 +5410,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5439,7 +5470,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5489,7 +5520,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, sendNotificationSignal } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5548,7 +5579,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5595,7 +5626,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5657,7 +5688,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { transitionService } = await preparePromptKickoff(storage);
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5667,7 +5698,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     const restarted = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5704,7 +5735,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5729,7 +5760,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5752,7 +5783,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession(undefined, { agentEndReason: 'error' });
     const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5782,7 +5813,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, delivered } = createSession();
     const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -5807,7 +5838,7 @@ describe('FactoryDecisionDispatcher', () => {
         configVersion: 'rules-v1',
       });
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
+        harness: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
@@ -5868,7 +5899,7 @@ describe('custom-board deferred targets', () => {
     configVersion = 'custom-v1',
   ) {
     return new FactoryDecisionDispatcher({
-      controller: createSession().controller as never,
+      harness: createSession().controller as never,
       storage,
       boards,
       transitionService: new FactoryTransitionService({ storage, boards, configVersion }),
@@ -6275,7 +6306,7 @@ describe('custom-board deferred targets', () => {
       storage,
       boards,
       transitionService: service,
-      controller: createSession().controller as never,
+      harness: createSession().controller as never,
       isAutoRunEnabled: async () => true,
     }).runOnce();
     expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({
@@ -6426,7 +6457,7 @@ describe('run-end backstop report', () => {
     const binding = await bindWorkRun(storage, item.id);
     const { controller } = createSession(undefined, sessionOptions);
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6494,7 +6525,7 @@ describe('run-end backstop report', () => {
     const { controller } = createSession(undefined, { agentEndReason: 'error' });
     const reportRunEnd = vi.fn<FactoryRunEndReporter>(async () => ({ waiting: false }));
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6519,7 +6550,7 @@ describe('run-end backstop report', () => {
     const { controller } = createSession(undefined, { agentEndReason: 'complete' });
     const reportRunEnd = vi.fn<FactoryRunEndReporter>(async () => ({ waiting: false }));
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6568,7 +6599,7 @@ describe('run-end backstop report', () => {
     });
     const fake = createSession(undefined, sessionOptions);
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: fake.controller as never,
+      harness: fake.controller as never,
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -6626,7 +6657,7 @@ describe('a skill run that ends in error (#27740)', () => {
     await bindWorkRun(storage, item.id);
     const { controller } = createSession(undefined, { agentEndReason: 'error', runError: PROVIDER_401 });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6683,7 +6714,7 @@ describe('a skill run that ends in error (#27740)', () => {
     await bindWorkRun(storage, item.id);
     const { controller } = createSession(undefined, { agentEndReason: 'error', runError: NO_USER_ERROR });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6723,7 +6754,7 @@ describe('a skill run that ends in error (#27740)', () => {
       runError: 'Provider stream closed unexpectedly (ECONNRESET)',
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6754,7 +6785,7 @@ describe('a skill run that ends in error (#27740)', () => {
     await bindWorkRun(storage, item.id);
     const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6787,7 +6818,7 @@ describe('a skill run that ends in error (#27740)', () => {
     await bindWorkRun(storage, item.id);
     const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6826,7 +6857,7 @@ describe('a skill run that ends in error (#27740)', () => {
     await bindWorkRun(storage, item.id);
     const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6853,7 +6884,7 @@ describe('a skill run that ends in error (#27740)', () => {
     const runError = 'ENOENT: no such file /workspace/cache/Zm9vYmFyQmF6UXV4MTIzNDU2Nzg5MA/run.log';
     const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6883,7 +6914,7 @@ describe('a skill run that ends in error (#27740)', () => {
       'while rebasing fix-Lease2Loss-in-replica-handover';
     const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',

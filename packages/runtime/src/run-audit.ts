@@ -1,4 +1,4 @@
-import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import type { AgentEvent } from '@factory/harness';
 import { z } from 'zod';
 
 import type { AuditActorType } from '@factory/store';
@@ -48,11 +48,11 @@ export interface RunEndCaptureSession {
     getSetting(args: { key: string }): Promise<unknown>;
     setSetting(args: { key: string; value: unknown }): Promise<void>;
   };
-  subscribe(listener: (event: AgentControllerEvent) => void): () => void;
+  subscribe(listener: (event: AgentEvent) => void): () => void;
 }
 
-type RunEndReason = Extract<AgentControllerEvent, { type: 'agent_end' }>['reason'];
-type StepUsage = Extract<AgentControllerEvent, { type: 'usage_update' }>['usage'];
+type RunEndReason = Extract<AgentEvent, { type: 'agent_end' }>['reason'];
+type StepUsage = Extract<AgentEvent, { type: 'usage_update' }>['usage'];
 const pendingWrites = new WeakMap<RunEndCaptureSession, Promise<void>>();
 
 /**

@@ -4,6 +4,7 @@ export * from './environment/build-runner.ts';
 export * from './environment/build-schedule.ts';
 export * from './environment/build-workflow.ts';
 export * from './environment/heads.ts';
+export * from './harness.ts';
 export * from './rules/index.ts';
 export * from './rules/processor.ts';
 export * from './rules/reproduction-test.ts';

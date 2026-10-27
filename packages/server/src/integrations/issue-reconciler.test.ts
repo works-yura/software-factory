@@ -483,7 +483,7 @@ describe('issue reconcilers', () => {
     // Planning — the same landing an arrival gets, with no phase rule run for it.
     const boards = createBoardRegistry();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: {} as never,
+      harness: {} as never,
       storage: setup.workItems,
       boards,
       transitionService: new FactoryTransitionService({
@@ -531,7 +531,7 @@ describe('issue reconcilers', () => {
 
     const boards = createBoardRegistry();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: {} as never,
+      harness: {} as never,
       storage: setup.workItems,
       boards,
       transitionService: new FactoryTransitionService({
@@ -657,7 +657,7 @@ describe('issue reconcilers', () => {
     });
     const boards = createBoardRegistry();
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: {} as never,
+      harness: {} as never,
       storage: setup.workItems,
       boards,
       transitionService: new FactoryTransitionService({

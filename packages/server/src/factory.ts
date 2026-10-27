@@ -93,6 +93,7 @@ import { readFactorySessionScope, resolveFactorySessionAddress } from '@factory/
 import { FactoryDecisionDispatcher } from '@factory/runtime';
 import type { FactoryRuleActor } from '@factory/harness-mastra';
 import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from '@factory/harness-mastra';
+import { asAgentSession, createMastraHarness } from '@factory/harness-mastra';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from '@factory/harness-mastra';
 import type { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { createTerminalStageCleanup } from '@factory/runtime';
@@ -1780,7 +1781,7 @@ export class MastraFactory {
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;
               this.#dispatcher ??= new FactoryDecisionDispatcher({
-                controller,
+                harness: createMastraHarness(controller),
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
@@ -1946,7 +1947,7 @@ export class MastraFactory {
       observeSessionThreadTitle(session, {
         sourceControl: { sessions: sourceControlSessions },
       });
-      observeSessionRunEnd(session, { audit: auditDomain });
+      observeSessionRunEnd(asAgentSession(session), { audit: auditDomain });
       // Every run end of a work or side session, and every tool call it holds for
       // approval, reaches whoever follows it, however the run started;
       // re-attached when a session is created again.

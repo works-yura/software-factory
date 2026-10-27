@@ -14,7 +14,7 @@ import type { GithubIntegration } from '@factory/integration-github';
 import { MaterializeError } from '@factory/sandbox';
 import { FactoryDispatchError } from '@factory/store';
 import type { FactoryBindingPreparationInput } from '@factory/runtime';
-import { FactoryStartCoordinator } from '@factory/harness-mastra';
+import { createMastraHarness, FactoryStartCoordinator } from '@factory/harness-mastra';
 import { FactoryTransitionService } from '@factory/runtime';
 import {
   createSourceControlSessionLookup,
@@ -724,7 +724,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     ...new SkillRoutes({
       auth: deps.auth,
       controllerId: deps.controllerId,
-      controller: deps.controller,
+      harness: createMastraHarness(deps.controller),
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
     }).routes(),

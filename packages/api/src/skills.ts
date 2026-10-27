@@ -1,10 +1,9 @@
-import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import type { AgentController } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import type { AgentHarness } from '@factory/harness';
 import { listFactorySkills } from '@factory/harness-mastra';
 import { resolveSkillInvocation, SkillInvocationError } from '@factory/runtime';
 import type { SourceControlStorageHandle } from '@factory/store';
@@ -31,7 +30,8 @@ interface SessionAuthorizationResult {
 
 export interface SkillRoutesDeps extends RouteDependencies {
   controllerId: string;
-  controller: Pick<AgentController<MastraCodeState>, 'getSession'>;
+  /** The harness whose sessions the skills run in. */
+  harness: Pick<AgentHarness, 'getSession' | 'findSkill'>;
   sourceControlStorage?: SourceControlStorageHandle;
   ensureSourceControlReady?: () => Promise<void>;
   authorizeSessionAddress?: (context: Context, address: { sessionId: string }) => Promise<SessionAuthorizationResult>;
@@ -105,7 +105,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const { controllerId, controller, authorizeSessionAddress: customAuthorize } = this.deps;
+    const { controllerId, harness, authorizeSessionAddress: customAuthorize } = this.deps;
     const authorize =
       customAuthorize ??
       ((context: Context, address: { sessionId: string }) => this.#authorizeSessionAddress(context, address));
@@ -132,7 +132,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
       }
 
       try {
-        const resolved = await resolveSkillInvocation(controller, body);
+        const resolved = await resolveSkillInvocation(harness, body);
         if (dispatch) {
           const requestContext = c.get('requestContext' as never) as RequestContext | undefined;
           void resolved.session

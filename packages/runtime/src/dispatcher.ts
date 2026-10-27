@@ -1,7 +1,4 @@
-import type { HarnessSessionState } from './harness-state.ts';
-import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
-import { RequestContext } from '@mastra/core/request-context';
-import type { SubmitPlanResumeData } from '@mastra/core/tools';
+import type { AgentHarness, AgentNotificationResult, AgentSession } from '@factory/harness';
 
 import {
   boardForWorkItem,
@@ -20,7 +17,6 @@ import {
   waitForSessionRunAudit,
 } from './run-audit.ts';
 import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from './skills/service.ts';
-import type { SkillSession } from './skills/service.ts';
 import { isHumanActorId } from '@factory/store';
 import type { AuditRecorder } from './audit-recorder.ts';
 import { withWorkItemFeed } from '@factory/store';
@@ -302,62 +298,8 @@ function waitForAgentEndOrTimeout(agentEnd: Promise<void>, timeoutMs: number): P
   });
 }
 
-interface ThreadSwitchSession {
-  thread: {
-    requireId(): string;
-    switch(input: { threadId: string }): Promise<unknown>;
-  };
-}
-
-interface FactoryNotificationResult {
-  persisted?: Promise<unknown>;
-  accepted?: Promise<{
-    action?: string;
-    output?: { consumeStream(): Promise<unknown> };
-  }>;
-}
-
-interface DispatcherSession extends SkillSession {
-  thread: {
-    switch(input: { threadId: string }): Promise<unknown>;
-    listActiveMessages(): Promise<Array<{ id: string }>>;
-  };
-  stream: { isActive(): boolean };
-  abort(): void;
-  sendSignal(
-    input: { id: string; type: 'user'; tagName: 'user'; contents: string },
-    options: { requestContext: RequestContext; requireDelivery?: boolean },
-  ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
-  subscribe(listener: AgentControllerEventListener): () => void;
-  respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
-}
-
-type FactoryController = Pick<AgentController<HarnessSessionState>, 'getSession' | 'listActiveThreadRuns'>;
-type BoundDispatcherSession = Session<HarnessSessionState>;
-
-function factoryRequestContext(input: {
-  session: BoundDispatcherSession;
-  binding: FactoryRunBindingRecord;
-  userId: string;
-  orgId: string;
-}): RequestContext {
-  const { session, binding, userId, orgId } = input;
-  const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: userId, organizationId: orgId });
-  requestContext.set('controller', {
-    state: session.state.get(),
-    getState: () => session.state.get(),
-    threadId: binding.threadId,
-    resourceId: binding.resourceId,
-    session: {
-      id: session.identity.getId(),
-      ownerId: session.identity.getOwnerId(),
-      modelId: session.model.get() ?? '',
-    },
-    workspace: session.getWorkspace(),
-  });
-  return requestContext;
-}
+type ThreadSwitchSession = Pick<AgentSession, 'thread'>;
+type DispatcherSession = AgentSession;
 
 export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
@@ -367,7 +309,8 @@ export interface FactoryBindingPreparationInput {
 
 export interface FactoryDecisionDispatcherOptions {
   audit?: AuditRecorder;
-  controller: FactoryController;
+  /** The agent harness every session of this Factory runs on. */
+  harness: AgentHarness;
   transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   storage: WorkItemsStorage;
   /** Installed boards; defaults to the built-in Work and Review boards. */
@@ -526,7 +469,7 @@ function leaseIdentity(
 }
 
 async function awaitNotification(
-  send: () => Promise<FactoryNotificationResult>,
+  send: () => Promise<AgentNotificationResult>,
   requireDelivery = false,
 ): Promise<{ action?: string } | undefined> {
   try {
@@ -568,7 +511,7 @@ async function awaitNotification(
 
 export class FactoryDecisionDispatcher {
   readonly #audit?: AuditRecorder;
-  readonly #controller: FactoryController;
+  readonly #harness: AgentHarness;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   readonly #boards: BoardRegistry;
   readonly #storage: WorkItemsStorage;
@@ -602,7 +545,7 @@ export class FactoryDecisionDispatcher {
 
   constructor(options: FactoryDecisionDispatcherOptions) {
     this.#audit = options.audit;
-    this.#controller = options.controller;
+    this.#harness = options.harness;
     this.#transitionService = options.transitionService;
     this.#boards = options.boards ?? createBoardRegistry();
     this.#storage = options.storage;
@@ -749,7 +692,7 @@ export class FactoryDecisionDispatcher {
         // suspension and run state belong to that thread. Lookup failures revoke.
         keep: async binding => {
           try {
-            const session = await this.#controller.getSession(binding.sessionId);
+            const session = await this.#harness.getSession(binding.sessionId);
             if (session?.thread.getId() !== binding.threadId) return false;
             return session.suspensions.hasPending() || session.run.isRunning();
           } catch {
@@ -988,25 +931,25 @@ export class FactoryDecisionDispatcher {
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
           const session = await this.#requireSession(binding);
-          const requestContext = factoryRequestContext({
-            session,
-            binding,
+          const requestContext = this.#harness.runContext(session, {
             userId: startedBy,
             orgId: record.orgId,
+            threadId: binding.threadId,
+            resourceId: binding.resourceId,
           });
           const resolved =
             decision.skillName === undefined
-              ? await resolvePromptInvocation(this.#controller, {
+              ? await resolvePromptInvocation(this.#harness, {
                   sessionId: binding.sessionId,
                   prompt: decision.prompt,
                 })
               : decision.resume === true
-                ? await resolveSkillResumeInvocation(this.#controller, {
+                ? await resolveSkillResumeInvocation(this.#harness, {
                     sessionId: binding.sessionId,
                     name: decision.skillName,
                     arguments: decision.arguments,
                   })
-                : await resolveSkillInvocation(this.#controller, {
+                : await resolveSkillInvocation(this.#harness, {
                     sessionId: binding.sessionId,
                     name: decision.skillName,
                     arguments: decision.arguments,
@@ -1021,7 +964,7 @@ export class FactoryDecisionDispatcher {
             (await this.#findBinding(record, decision.role))?.id !== binding.id ||
             (await this.#decisionOvertaken(record, decision.role));
           const runStillActive = () =>
-            this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
+            this.#harness.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
           // Only a *live* run on this binding can be duplicated by a second
           // kickoff, so that is the only thing worth waiting on. The open-run
           // ledger is shared by every replica, but the run registry is local, so
@@ -1216,11 +1159,11 @@ export class FactoryDecisionDispatcher {
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
         const session = await this.#requireSession(binding);
-        const requestContext = factoryRequestContext({
-          session,
-          binding,
+        const requestContext = this.#harness.runContext(session, {
           userId: startedBy,
           orgId: record.orgId,
+          threadId: binding.threadId,
+          resourceId: binding.resourceId,
         });
         await awaitNotification(
           () =>
@@ -1542,7 +1485,7 @@ export class FactoryDecisionDispatcher {
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
     if (binding) {
-      const session = await this.#controller.getSession(binding.sessionId);
+      const session = await this.#harness.getSession(binding.sessionId);
       if (session) return binding;
     }
     if (!this.#prepareBinding) {
@@ -1556,8 +1499,8 @@ export class FactoryDecisionDispatcher {
     return this.#requireBinding(record, role);
   }
 
-  async #findSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession | undefined> {
-    const session = await this.#controller.getSession(binding.sessionId);
+  async #findSession(binding: FactoryRunBindingRecord): Promise<AgentSession | undefined> {
+    const session = await this.#harness.getSession(binding.sessionId);
     if (!session) return undefined;
     await this.#switchThread(session, binding);
     return session;
@@ -1574,7 +1517,7 @@ export class FactoryDecisionDispatcher {
     return this.#autoApprovePlans ? await this.#autoApprovePlans({ orgId, factoryProjectId }) : false;
   }
 
-  async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {
+  async #requireSession(binding: FactoryRunBindingRecord): Promise<AgentSession> {
     const session = await this.#findSession(binding);
     if (!session) throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
     return session;
@@ -1628,7 +1571,7 @@ export class FactoryDecisionDispatcher {
 
   /** Keep this process's claim on an open run fresh for as long as it is watching the run. */
   async #withOpenRunHeartbeat<T>(
-    session: BoundDispatcherSession,
+    session: AgentSession,
     kickoffId: string,
     effect: () => Promise<T>,
   ): Promise<T> {
@@ -1699,7 +1642,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #recordRunStart(
-    session: BoundDispatcherSession,
+    session: AgentSession,
     binding: FactoryRunBindingRecord,
     kickoffId: string,
     approvedBy: string | undefined,
@@ -1754,11 +1697,11 @@ export class FactoryDecisionDispatcher {
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
           const session = await this.#requireSession(binding);
-          const requestContext = factoryRequestContext({
-            session,
-            binding,
+          const requestContext = this.#harness.runContext(session, {
             userId: startedBy,
             orgId: record.orgId,
+            threadId: binding.threadId,
+            resourceId: binding.resourceId,
           });
           // The run's own verdict, not the delivery's: a kickoff delivered
           // into a run that is already terminating is consumed without
@@ -1770,7 +1713,7 @@ export class FactoryDecisionDispatcher {
             approvePlans: await this.#plansAreAutoApproved(record),
             label: 'Factory kickoff run',
             runStillActive: () =>
-              this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
+              this.#harness.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
           });
           const sendKickoff = (dedupeKey: string) =>
             awaitNotification(

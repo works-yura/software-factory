@@ -6,21 +6,15 @@ const SKILL_INSTRUCTIONS = 'Follow the entire factory-review protocol in extensi
 function makeController(options?: { skill?: unknown; session?: unknown }) {
   const skill =
     options && 'skill' in options ? options.skill : { name: 'factory-review', instructions: SKILL_INSTRUCTIONS };
-  const session =
-    options && 'session' in options
-      ? options.session
-      : {
-          getWorkspace: () => ({
-            skills: {
-              maybeRefresh: vi.fn(async () => {}),
-              refresh: vi.fn(async () => {}),
-              get: vi.fn(async () => skill),
-            },
-          }),
-          sendMessage: vi.fn(async () => {}),
-        };
+  const session = options && 'session' in options ? options.session : { sendMessage: vi.fn(async () => {}) };
+  const found = skill as { name: string; instructions?: string; 'user-invocable'?: boolean } | undefined;
   return {
     getSession: vi.fn(async () => session as never),
+    findSkill: vi.fn(async () =>
+      found
+        ? { name: found.name, userInvocable: found['user-invocable'] !== false, activation: found.instructions ?? '' }
+        : undefined,
+    ),
   };
 }
 
@@ -69,40 +63,5 @@ describe('resolveSkillResumeInvocation', () => {
     await expect(resolveSkillResumeInvocation(makeController({ session: undefined }), input)).rejects.toMatchObject({
       code: 'session_not_found',
     });
-  });
-});
-
-describe('resolveSkillInvocation', () => {
-  it('rescans a skill cache built before the session was given its review binding', async () => {
-    let scannedAsReview = false;
-    const skills = {
-      maybeRefresh: vi.fn(async () => {}),
-      refresh: vi.fn(async () => {
-        scannedAsReview = true;
-      }),
-      get: vi.fn(async () =>
-        scannedAsReview ? { name: 'factory-review', instructions: SKILL_INSTRUCTIONS } : undefined,
-      ),
-    };
-    const controller = makeController({ session: { getWorkspace: () => ({ skills }) } });
-
-    const resolved = await resolveSkillInvocation(controller, { sessionId: 'card-1', name: 'factory-review' });
-
-    expect(resolved.skillName).toBe('factory-review');
-    expect(skills.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not rescan for a missing skill that is not review-only', async () => {
-    const skills = {
-      maybeRefresh: vi.fn(async () => {}),
-      refresh: vi.fn(async () => {}),
-      get: vi.fn(async () => undefined),
-    };
-    const controller = makeController({ session: { getWorkspace: () => ({ skills }) } });
-
-    await expect(resolveSkillInvocation(controller, { sessionId: 'card-1', name: 'missing' })).rejects.toMatchObject({
-      code: 'skill_not_found',
-    });
-    expect(skills.refresh).not.toHaveBeenCalled();
   });
 });

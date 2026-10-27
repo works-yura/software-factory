@@ -28,6 +28,7 @@ import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { deliverFactorySessionNotification, resolveSessionThread } from './deliver.ts';
 import type { FactoryMessaging } from './messaging-tools.ts';
 import { findWorkItem, workItemNotFound, workItemNumber, workItemRefSchema } from './read-tools.ts';
+import { asAgentSession } from '../harness.ts';
 import { heartbeatOpenRunUntilEnd } from './run-watch.ts';
 import type { FactoryToolScope } from './scope.ts';
 import { sessionModel } from './side-sessions.ts';
@@ -459,7 +460,7 @@ export function createFactorySessionTools(
     // Heartbeat from before the kickoff so a fast run's end is seen; the open-run
     // entry and audit follow the accepted kickoff, as the dispatcher records them.
     // The run's end reaches this item's followers through the session's listener.
-    const heartbeat = heartbeatOpenRunUntilEnd(session, kickoffId);
+    const heartbeat = heartbeatOpenRunUntilEnd(asAgentSession(session), kickoffId);
     const kickoffContext = new RequestContext();
     kickoffContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
     try {
@@ -472,7 +473,7 @@ export function createFactorySessionTools(
       throw error;
     }
 
-    await recordSessionRunStart(session, {
+    await recordSessionRunStart(asAgentSession(session), {
       audit: deps.auditRecorder,
       actorType: 'human',
       observedEnd: heartbeat.endReason,

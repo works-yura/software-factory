@@ -121,7 +121,7 @@ async function setup(options: { reject?: 'exit' | 'enter'; advance?: boolean } =
     storage,
     boards,
     transitionService: service,
-    controller: {} as never,
+    harness: {} as never,
     isAutoRunEnabled: async () => true,
   });
   return {

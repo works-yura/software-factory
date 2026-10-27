@@ -28,7 +28,8 @@
 | `@factory/integration-github` | `packages/integration-github` | GitHub integration: app, PAT, webhooks, rules, reconcilers, routes, platform-mode adapter. |
 | `@factory/integration-gitlab` | `packages/integration-gitlab` | GitLab integration: API, webhooks, rules, reconcilers, merge requests, routes, platform-mode adapter. |
 | **Агент і нагляд** | | |
-| `@factory/harness-mastra` | `packages/harness-mastra` | Mastra harness: start coordinator, phase-state processor, agent tools, workspace and skills, environment builds. |
+| `@factory/harness` | `packages/harness` | Agent harness contract: the sessions, runs, events and human gates the runtime drives, independent of any agent framework. |
+| `@factory/harness-mastra` | `packages/harness-mastra` | Mastra harness (implements `@factory/harness` over Mastra Code's AgentController): start coordinator, phase-state processor, agent tools, workspace and skills, environment builds. |
 | `@factory/supervisor` | `packages/supervisor` | Supervisor: health checks and worker, read and write tools, session messaging, instructions. |
 | **API і сервер** | | |
 | `@factory/mcp` | `packages/mcp` | MCP surface: the Factory's MCP endpoint for Claude, ChatGPT and other MCP clients (OAuth as the signed-in user, the agent tools injected by the host), `factory.activity` events. |

@@ -1,11 +1,4 @@
-import type { HarnessSessionState } from '../harness-state.ts';
-import type { SendAgentSignalResult } from '@mastra/core/agent';
-import type { AgentController } from '@mastra/core/agent-controller';
-import type { RequestContext } from '@mastra/core/request-context';
-import { formatSkillActivation } from '@mastra/core/workspace';
-import type { Workspace } from '@mastra/core/workspace';
-
-import { REVIEW_ONLY_FACTORY_SKILLS, rescanFactorySkills } from './rescan.ts';
+import type { AgentHarness, AgentNotificationInput, AgentNotificationOptions, AgentNotificationResult, AgentRunContext } from '@factory/harness';
 
 export interface SkillInvocationInput {
   sessionId: string;
@@ -14,25 +7,14 @@ export interface SkillInvocationInput {
 }
 
 export interface SkillSession {
-  getWorkspace(): Workspace;
-  sendMessage(input: { content: string; requestContext?: RequestContext }): Promise<unknown>;
+  sendMessage(input: { content: string; requestContext?: AgentRunContext }): Promise<unknown>;
   sendNotificationSignal(
-    input: {
-      source: string;
-      kind: string;
-      summary: string;
-      priority?: 'low' | 'medium' | 'high' | 'urgent';
-      payload?: unknown;
-      dedupeKey?: string;
-      sourceId?: string;
-    },
-    options?: {
-      ifActive?: { behavior?: 'deliver' | 'persist' };
-      ifIdle?: { behavior?: 'persist' | 'wake' };
-      requestContext?: RequestContext;
-    },
-  ): Promise<Pick<SendAgentSignalResult, 'persisted' | 'accepted'>>;
+    input: AgentNotificationInput,
+    options?: AgentNotificationOptions,
+  ): Promise<AgentNotificationResult>;
 }
+
+type SkillHarness = Pick<AgentHarness, 'getSession' | 'findSkill'>;
 
 export class SkillInvocationError extends Error {
   readonly code: 'session_not_found' | 'skill_not_found';
@@ -44,19 +26,14 @@ export class SkillInvocationError extends Error {
   }
 }
 
-async function findSkill(session: SkillSession, name: string) {
-  const skills = session.getWorkspace().skills;
-  if (!skills) return undefined;
-  await skills.maybeRefresh();
-  const skill = await skills.get(name);
-  if (skill || !REVIEW_ONLY_FACTORY_SKILLS.has(name)) return skill;
-  // The cache may predate the review binding this run was just given.
-  try {
-    await rescanFactorySkills(skills);
-  } catch {
-    return undefined;
+async function requireSkill(harness: SkillHarness, input: SkillInvocationInput) {
+  const session = await harness.getSession(input.sessionId);
+  if (!session) throw new SkillInvocationError('session_not_found', 'Agent session not found.');
+  const skill = await harness.findSkill(session, input.name);
+  if (!skill || !skill.userInvocable) {
+    throw new SkillInvocationError('skill_not_found', `Skill not found: ${input.name}.`);
   }
-  return skills.get(name);
+  return { session, skill };
 }
 
 function escapeSkillBoundary(value: string): string {
@@ -65,28 +42,22 @@ function escapeSkillBoundary(value: string): string {
 
 /** Kicks a run off from a plain prompt, for runs that activate no skill. */
 export async function resolvePromptInvocation(
-  controller: Pick<AgentController<HarnessSessionState>, 'getSession'>,
+  harness: Pick<AgentHarness, 'getSession'>,
   input: { sessionId: string; prompt: string },
 ): Promise<{ session: SkillSession; message: string }> {
-  const session = (await controller.getSession(input.sessionId)) as SkillSession | undefined;
-  if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
+  const session = await harness.getSession(input.sessionId);
+  if (!session) throw new SkillInvocationError('session_not_found', 'Agent session not found.');
   return { session, message: input.prompt };
 }
 
 export async function resolveSkillInvocation(
-  controller: Pick<AgentController<HarnessSessionState>, 'getSession'>,
+  harness: SkillHarness,
   input: SkillInvocationInput,
 ): Promise<{ session: SkillSession; skillName: string; message: string }> {
-  const session = (await controller.getSession(input.sessionId)) as SkillSession | undefined;
-  if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
-
-  const skill = await findSkill(session, input.name);
-  if (!skill || skill['user-invocable'] === false) {
-    throw new SkillInvocationError('skill_not_found', `Skill not found: ${input.name}.`);
-  }
+  const { session, skill } = await requireSkill(harness, input);
 
   const args = input.arguments?.trim();
-  const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
+  const content = `${skill.activation}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
   return {
     session,
     skillName: skill.name,
@@ -102,16 +73,10 @@ export async function resolveSkillInvocation(
  * skill tool.
  */
 export async function resolveSkillResumeInvocation(
-  controller: Pick<AgentController<HarnessSessionState>, 'getSession'>,
+  harness: SkillHarness,
   input: SkillInvocationInput,
 ): Promise<{ session: SkillSession; skillName: string; message: string }> {
-  const session = (await controller.getSession(input.sessionId)) as SkillSession | undefined;
-  if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
-
-  const skill = await findSkill(session, input.name);
-  if (!skill || skill['user-invocable'] === false) {
-    throw new SkillInvocationError('skill_not_found', `Skill not found: ${input.name}.`);
-  }
+  const { session, skill } = await requireSkill(harness, input);
 
   const args = input.arguments?.trim();
   const content = [
@@ -127,11 +92,11 @@ export async function resolveSkillResumeInvocation(
 }
 
 export async function dispatchSkillInvocation(
-  controller: Pick<AgentController<HarnessSessionState>, 'getSession'>,
+  harness: SkillHarness,
   input: SkillInvocationInput,
-  requestContext?: RequestContext,
+  requestContext?: AgentRunContext,
 ): Promise<{ skillName: string; message: string }> {
-  const resolved = await resolveSkillInvocation(controller, input);
+  const resolved = await resolveSkillInvocation(harness, input);
   await resolved.session.sendMessage({ content: resolved.message, ...(requestContext ? { requestContext } : {}) });
   return { skillName: resolved.skillName, message: resolved.message };
 }

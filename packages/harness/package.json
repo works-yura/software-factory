@@ -1,0 +1,20 @@
+{
+  "name": "@factory/harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent harness contract: the sessions, runs, events and human gates the Factory runtime drives, independent of any agent framework.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

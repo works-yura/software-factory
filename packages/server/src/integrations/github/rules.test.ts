@@ -863,7 +863,7 @@ describe('GithubRules', () => {
       boards: createBoardRegistry(),
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: {} as never,
+      harness: {} as never,
       transitionService,
       storage: workItems,
       boards: createBoardRegistry(),
@@ -897,7 +897,7 @@ describe('GithubRules', () => {
       boards,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: {} as never,
+      harness: {} as never,
       transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards }),
       storage: workItems,
       boards,
@@ -1007,7 +1007,7 @@ describe('GithubRules', () => {
     const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage: workItems,
       boards: createBoardRegistry(),
@@ -1219,7 +1219,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSession: vi.fn(async () => undefined) } as never,
+      harness: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1298,7 +1298,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSession: vi.fn(async () => undefined) } as never,
+      harness: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1603,7 +1603,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSession: vi.fn(async () => undefined) } as never,
+      harness: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1694,7 +1694,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSession: vi.fn(async () => undefined) } as never,
+      harness: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1782,7 +1782,7 @@ describe('GithubRules', () => {
     });
     const configVersion = 'factory-config-v1';
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSession: vi.fn(async () => undefined) } as never,
+      harness: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -2487,7 +2487,7 @@ describe('GithubRules', () => {
       data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: prepared.workItemId },
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: controller as never,
       transitionService,
       storage: workItems,
       boards: createBoardRegistry(),
@@ -2885,7 +2885,7 @@ describe('GithubRules', () => {
       configVersion: 'factory-config-v1',
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSession: vi.fn(async () => undefined) } as never,
+      harness: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion: 'factory-config-v1',
@@ -3076,7 +3076,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSession: vi.fn(async () => undefined) } as never,
+      harness: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,

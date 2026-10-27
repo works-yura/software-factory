@@ -7,6 +7,7 @@ import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMastraHarness } from '@factory/harness-mastra';
 import { __clearSessionSandboxesForTests } from '@factory/sandbox';
 import { SourceControlStorageInMemory } from '@factory/store';
 import { SkillRoutes } from './skills.ts';
@@ -80,7 +81,7 @@ function createHarness(
     new SkillRoutes({
       auth: fakeRouteAuth(),
       controllerId: 'code',
-      controller: { getSession } as never,
+      harness: createMastraHarness({ getSession } as never),
       authorizeSessionAddress,
     }).routes(),
   );
@@ -323,7 +324,7 @@ describe('workspace skill invocation route', () => {
       new SkillRoutes({
         auth: fakeRouteAuth(),
         controllerId: 'code',
-        controller: { getSession } as never,
+        harness: createMastraHarness({ getSession } as never),
         sourceControlStorage,
       }).routes(),
     );
@@ -450,7 +451,7 @@ describe('factory skills catalog route', () => {
       new SkillRoutes({
         auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
         controllerId: 'code',
-        controller: { getSession: vi.fn(async () => undefined) } as never,
+        harness: createMastraHarness({ getSession: vi.fn(async () => undefined) } as never),
       }).routes(),
     );
     return app;
