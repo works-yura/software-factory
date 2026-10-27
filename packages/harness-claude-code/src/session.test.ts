@@ -172,6 +172,57 @@ describe('ClaudeCodeSession', () => {
       expect(transcript.some(entry => entry.kind === 'tool_result' && entry.toolCallId === 'toolu_03Gate')).toBe(false);
     });
 
+    it('queues a plan answer for the next turn without starting a run', async () => {
+      const { fake, session, events, transcript, signal } = await parkOnPlan([{ lines: fixture('turn-complete.jsonl') }]);
+
+      await session.queuePlanAnswer({ resumeData: { action: 'approved', feedback: 'Keep it short.' } });
+      expect(session.run.isRunning()).toBe(false);
+      expect(session.pendingPlan).toBeUndefined();
+      expect(session.mode).toBe('acceptEdits');
+      expect(fake.calls).toHaveLength(1);
+      expect(events.some(event => event.type === 'tool_suspension_cancelled')).toBe(false);
+
+      // The next input (the host's build kickoff) carries the verdict first, in the same Claude session.
+      const end = nextEnd(session);
+      await signal('build-1', 'Build it.');
+      expect(await end).toBe('complete');
+      const build = fake.calls[1]!;
+      expect(flagValue(build.args, '--resume')).toBe(CLAUDE_SESSION);
+      expect(flagValue(build.args, '--permission-mode')).toBe('acceptEdits');
+      expect(build.stdin).toBe('The plan was approved. Implement it.\n\nReviewer notes:\nKeep it short.\n\nBuild it.');
+      expect(transcript).toContainEqual({
+        kind: 'plan_decision',
+        toolCallId: 'toolu_03Gate',
+        decision: { action: 'approved', feedback: 'Keep it short.' },
+      });
+      expect(transcript.some(entry => entry.kind === 'input' && entry.text.startsWith('The plan was approved'))).toBe(false);
+    });
+
+    it('refuses to queue an answer for a plan it is not parked on', async () => {
+      const { session } = await parkOnPlan();
+      await expect(
+        session.queuePlanAnswer({ resumeData: { action: 'approved' }, toolCallId: 'toolu_other' }),
+      ).rejects.toThrow('waiting on toolu_03Gate');
+    });
+
+    it('uses the host planning prompt and asks for MCP servers per turn', async () => {
+      const seen: string[] = [];
+      const { fake, signal, session } = await setup([{ lines: fixture('turn-submit-plan.jsonl') }], {
+        mode: 'planning',
+        planningPrompt: '<custom-planning/>',
+        mcpConfig: async current => {
+          seen.push(current.id);
+          return { mcpServers: { factory: { type: 'http', url: `http://factory.test/${current.id}` } } };
+        },
+      });
+      const end = nextEnd(session);
+      await signal('plan-1', 'Plan it.');
+      await end;
+      expect(seen).toEqual(['card-1']);
+      expect(fake.calls[0]!.stdin).toBe('<custom-planning/>\n\nPlan it.');
+      expect(fake.calls[0]!.args.join(' ')).toContain('http://factory.test/card-1');
+    });
+
     it('keeps what the CLI prints while it is stopped out of the transcript', async () => {
       const gateFailed = JSON.stringify({
         type: 'user',
