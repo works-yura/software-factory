@@ -51,7 +51,7 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
         queryClient.fetchQuery({ ...providersQueryOptions(client), staleTime: 0 }),
         queryClient.fetchQuery({ ...availableModelsQueryOptions(baseUrl), staleTime: 0 }),
       ]);
-      if (!catalog.some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
+      if (!catalog.models.some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
         throw new Error(tk('setup.modelUnavailableCompany', { model: choice.modelId }));
       }
       const provider = providers.providers.find(item => item.provider === choice.providerId);

@@ -64,6 +64,7 @@ export function ModelCombobox({
   value,
   onValueChange,
   auto,
+  fallbackModelId,
   placeholder,
   disabled,
   className,
@@ -75,6 +76,8 @@ export function ModelCombobox({
   value: string;
   onValueChange: (value: string) => void;
   auto?: { effectiveModelId?: string | null };
+  /** What runs while nothing is chosen: named in the placeholder. */
+  fallbackModelId?: string;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -97,7 +100,11 @@ export function ModelCombobox({
       options={options}
       value={value}
       onValueChange={onValueChange}
-      placeholder={placeholder ?? tk('models.picker.placeholder')}
+      placeholder={
+        fallbackModelId
+          ? tk('models.picker.builtInDefault', { model: formatModelName(fallbackModelId) })
+          : (placeholder ?? tk('models.picker.placeholder'))
+      }
       searchPlaceholder={tk('models.picker.search')}
       emptyText={tk('models.picker.empty')}
       allowCustomValue

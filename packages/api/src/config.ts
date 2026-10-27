@@ -18,7 +18,13 @@ import type { MemorySettingsPatch, MemorySettingsRecord, MemorySettingsStorage }
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import { getAuthProviderId, listTenantCredentialsForRequest, resolveCredentialContext, tenantOrgId } from '@factory/credentials';
+import {
+  getAuthProviderId,
+  listTenantCredentialsForRequest,
+  resolveCredentialContext,
+  resolveTenantProviderDefaultModel,
+  tenantOrgId,
+} from '@factory/credentials';
 import { Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
 import { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, buildProviderAccess, buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
@@ -670,7 +676,22 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               deploymentProviders,
               listCustomProviders,
             });
-            return c.json({ ...sessionPolicy, models });
+            if (sessionPolicy || !tenant || !c.req.query('factoryId')) return c.json({ ...sessionPolicy, models });
+            // A Factory's own catalog, outside any session. Name the model a chat starts on when the
+            // Factory has no default, the same pick session hydration makes; null when no key runs it.
+            const modeModelId = controller.getDefaultMode?.().defaultModelId;
+            const candidate =
+              (await resolveTenantProviderDefaultModel(
+                { orgId: tenantOrgId(tenant), userId: tenant.userId, credentialScope: 'factory' },
+                modeModelId,
+              ).catch(error => {
+                console.warn('[Factory Config] Failed to resolve a provider default model', {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+                return undefined;
+              })) ?? modeModelId;
+            const fallbackModelId = models.find(model => model.id === candidate)?.id ?? null;
+            return c.json({ fallbackModelId, models });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

@@ -575,7 +575,8 @@
       "pickedForYou": "Picked for you",
       "placeholder": "Select model…",
       "search": "Search models…",
-      "empty": "No matching model."
+      "empty": "No matching model.",
+      "builtInDefault": "{{model}} · Built-in default"
     }
   },
   "memory": {

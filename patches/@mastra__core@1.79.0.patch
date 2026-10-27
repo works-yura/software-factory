@@ -69,6 +69,19 @@ index c3e3af9..41edcd1 100644
  	};
  }
  /**
+diff --git a/dist/agent-controller/agent-controller.d.ts b/dist/agent-controller/agent-controller.d.ts
+index 5e7c044..19d1b14 100644
+--- a/dist/agent-controller/agent-controller.d.ts
++++ b/dist/agent-controller/agent-controller.d.ts
+@@ -325,6 +325,8 @@ export declare class AgentController<TState = {}> {
+         requestContext?: RequestContext;
+     }): Promise<string | undefined>;
+     listModes(): AgentControllerMode[];
++    /** The mode new sessions start in. */
++    getDefaultMode(): AgentControllerMode;
+     private propagateRuntimeServicesToAgent;
+     /**
+      * Chat channels configured on this controller (from `config.channels`),
 diff --git a/dist/agent-controller/wire.d.ts b/dist/agent-controller/wire.d.ts
 index de26a13..a3bc6db 100644
 --- a/dist/agent-controller/wire.d.ts
@@ -84,6 +97,36 @@ index de26a13..a3bc6db 100644
  }
  /** `Object.fromEntries` stringifies keys, so the record is keyed by string whatever the Map was. */
  type MapToRecord<T> = T extends Map<unknown, infer V> ? Record<string, V> : T;
+diff --git a/dist/agent-controller-CTosUZsx.cjs b/dist/agent-controller-CTosUZsx.cjs
+index 7239576..93edea6 100644
+--- a/dist/agent-controller-CTosUZsx.cjs
++++ b/dist/agent-controller-CTosUZsx.cjs
+@@ -8093,6 +8093,10 @@ var AgentController = class {
+ 	listModes() {
+ 		return this.config.modes;
+ 	}
++	/** The mode new sessions start in. Factory patch, from upstream #28402. */
++	getDefaultMode() {
++		return this.#defaultMode;
++	}
+ 	propagateRuntimeServicesToAgent(agent, _session) {
+ 		if (this.config.memory && !agent.hasOwnMemory()) agent.__setMemory(this.config.memory);
+ 		if (this.config.pubsub && !agent.hasOwnPubSub()) agent.__setPubSub(this.config.pubsub);
+diff --git a/dist/agent-controller-DO6rGsQm.js b/dist/agent-controller-DO6rGsQm.js
+index 733eea0..df85381 100644
+--- a/dist/agent-controller-DO6rGsQm.js
++++ b/dist/agent-controller-DO6rGsQm.js
+@@ -8093,6 +8093,10 @@ var AgentController = class {
+ 	listModes() {
+ 		return this.config.modes;
+ 	}
++	/** The mode new sessions start in. Factory patch, from upstream #28402. */
++	getDefaultMode() {
++		return this.#defaultMode;
++	}
+ 	propagateRuntimeServicesToAgent(agent, _session) {
+ 		if (this.config.memory && !agent.hasOwnMemory()) agent.__setMemory(this.config.memory);
+ 		if (this.config.pubsub && !agent.hasOwnPubSub()) agent.__setPubSub(this.config.pubsub);
 diff --git a/dist/agent-tuAMgHe3.js b/dist/agent-tuAMgHe3.js
 index d45925b..ac09c80 100644
 --- a/dist/agent-tuAMgHe3.js

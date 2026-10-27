@@ -29,8 +29,8 @@
     "noAccessDescription": "The default model ({{modelId}}) needs a credential for {{provider}}. Add one under Factory defaults in Models settings.",
     "noAccessDescriptionOrg": "The default model ({{modelId}}) needs a credential for {{provider}}. Ask an org admin to add one under Factory defaults in Models settings.",
     "openModelsSettings": "Open Models settings",
-    "noDefaultModelTitle": "No default model configured for this Factory",
-    "noDefaultModelDescription": "Connect a model provider and choose a default model in Models settings before starting a chat."
+    "noModelTitle": "No model available",
+    "noModelDescription": "Chats in this Factory run on the organization's keys. Ask an org admin to connect a provider or choose a Factory default model in Models settings."
   },
   "threadPage": {
     "loadingSession": "Loading session",

@@ -127,6 +127,8 @@ describe('session-owner model catalog', () => {
     const body = await response.json();
     expect(body).not.toHaveProperty('modelScope');
     expect(body.defaultModelId).toBe('deepseek/deepseek-flash');
+    // A live session reads its own policy; the built-in pick is only for a Factory's catalog.
+    expect(body).not.toHaveProperty('fallbackModelId');
     expect(body.models).toEqual([
       expect.objectContaining({ id: 'deepseek/deepseek-flash', credentialLabel: 'Deepseek API key' }),
     ]);

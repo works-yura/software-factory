@@ -95,7 +95,7 @@ platform-auth-host.test.ts	auth/src/platform-auth-host.test.ts
 routes/apply-default-model.scenario.test.ts	api/src/apply-default-model.scenario.test.ts
 routes/attention.test.ts	api/src/attention.test.ts
 routes/automation-runs.test.ts	api/src/automation-runs.test.ts
-routes/config.test.ts	api/src/config.test.ts	-6	personal default-model routes removed (7 cases), one case checks they are gone
+routes/config.test.ts	api/src/config.test.ts	-1	personal default-model routes removed (7 cases), one case checks they are gone (-6); Factory fallback model cases ported from upstream a9f392e60e (+5)
 routes/contracts.test.ts	api/src/contracts.test.ts
 routes/custom-provider-source.test.ts	api/src/custom-provider-source.test.ts
 routes/fs.test.ts	api/src/fs.test.ts	-5	upstream 7573972d0c (#28274): /changes/diff and its truncation cases replaced by /changes/patches cases
@@ -285,7 +285,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/__tests__/ConnectionsRedirect.msw.test.tsx	../apps/ui/src/ui/__tests__/ConnectionsRedirect.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx	../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
-../../../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx
+../../../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	+1	Factory-routed built-in model start ported from upstream a9f392e60e
 ../../../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)

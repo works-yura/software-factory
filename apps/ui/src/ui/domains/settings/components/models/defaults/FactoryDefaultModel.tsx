@@ -3,7 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useAvailableModelsQuery } from '../../../../../../hooks/useAvailableModels';
+import { useAvailableModelsQuery, useFallbackModelQuery } from '../../../../../../hooks/useAvailableModels';
 import {
   useApplyFactoryDefaultModelMutation,
   useFactoryProjectQuery,
@@ -18,6 +18,7 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
   const { t } = useTranslation('settings');
   const projectQuery = useFactoryProjectQuery(factoryId);
   const modelsQuery = useAvailableModelsQuery({ factoryProjectId: factoryId });
+  const fallbackModelQuery = useFallbackModelQuery({ factoryProjectId: factoryId });
   const setDefaultModel = useSetFactoryDefaultModelMutation(factoryId);
   const applyToSessions = useApplyFactoryDefaultModelMutation(factoryId);
   const [confirmModelId, setConfirmModelId] = useState<string>();
@@ -43,6 +44,7 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
             models={modelsQuery.data ?? []}
             value={defaultModelId}
             onValueChange={saveDefaultModel}
+            fallbackModelId={fallbackModelQuery.data}
             placeholder={t('models.factoryDefault.placeholder')}
             aria-label={t('models.factoryDefault.pickerLabel')}
             size="sm"

@@ -38,14 +38,14 @@ const applyResult: ApplyFactoryDefaultModelResult = {
   skipped: [{ threadId: 'thread-3', reason: 'apply-failed' }],
 };
 
-function stubFactory(defaultModelId: string) {
+function stubFactory(defaultModelId: FactoryProjectPayload['defaultModelId']) {
   const patchedBodies: unknown[] = [];
   const applyRequests: string[] = [];
   let saved: FactoryProjectPayload['defaultModelId'] = defaultModelId;
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
       expect(new URL(request.url).searchParams.get('factoryId')).toBe('fp-1');
-      return HttpResponse.json({ models });
+      return HttpResponse.json({ models, fallbackModelId: 'openai/gpt-5' });
     }),
     http.get(FACTORY_URL, () => HttpResponse.json({ project: project(saved) })),
     http.patch<PathParams, Pick<FactoryProjectPayload, 'defaultModelId'>>(FACTORY_URL, async ({ request }) => {
@@ -80,6 +80,13 @@ describe('FactoryDefaultModel', () => {
       expect.stringContaining('anthropic/claude-sonnet-4-5'),
       expect.stringContaining('openai/gpt-5'),
     ]);
+  });
+
+  it("names the model the org's keys start chats on while no Factory default is chosen", async () => {
+    stubFactory(null);
+    renderInField();
+
+    expect(await screen.findByPlaceholderText('GPT-5 · Built-in default')).toBeInTheDocument();
   });
 
   it('saves the new default before asking whether to switch running sessions', async () => {

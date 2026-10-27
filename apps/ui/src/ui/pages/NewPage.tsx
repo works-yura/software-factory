@@ -9,6 +9,7 @@ import { Link, useLocation, useParams } from 'react-router';
 import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
+import { useFallbackModelQuery } from '../../hooks/useAvailableModels';
 import { useProvidersQuery } from '../../hooks/use-providers';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
@@ -33,15 +34,24 @@ export function NewPage() {
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
   const providersQuery = useProvidersQuery();
   const defaultModelId = projectQuery.data?.defaultModelId ?? undefined;
-  const missingDefaultModel = Boolean(activeFactory) && projectQuery.isSuccess && !defaultModelId;
-  const defaultModelProvider = defaultModelId
-    ? providersQuery.data?.find(entry => entry.provider === defaultModelId.split('/')[0])
+  // No Factory default: chats start on the built-in model the organization's keys can run, as the server picks.
+  const fallbackModelQuery = useFallbackModelQuery({
+    factoryProjectId: activeFactory?.id,
+    enabled: projectQuery.isSuccess && !defaultModelId,
+  });
+  const chatModelId = defaultModelId ?? fallbackModelQuery.data;
+  const chatModelSettled =
+    Boolean(activeFactory) && projectQuery.isSuccess && (Boolean(defaultModelId) || fallbackModelQuery.isSuccess);
+  const missingModel = chatModelSettled && !chatModelId;
+  const chatModelProvider = chatModelId
+    ? providersQuery.data?.find(entry => entry.provider === chatModelId.split('/')[0])
     : undefined;
   const missingCredential =
-    Boolean(activeFactory) && defaultModelId && defaultModelProvider?.source === 'none'
-      ? { modelId: defaultModelId, provider: defaultModelProvider.provider }
+    chatModelSettled && chatModelId && chatModelProvider?.source === 'none'
+      ? { modelId: chatModelId, provider: chatModelProvider.provider }
       : undefined;
-  const configurationError = projectQuery.error ?? providersQuery.error ?? undefined;
+  const configurationError =
+    projectQuery.error ?? (defaultModelId ? null : fallbackModelQuery.error) ?? providersQuery.error ?? undefined;
 
   return (
     <ChatPageLayout
@@ -58,7 +68,7 @@ export function NewPage() {
       <ChatSessionBoundary key={draftSessionId}>
         <NewPageContent
           activeFactory={activeFactory}
-          missingDefaultModel={missingDefaultModel}
+          missingModel={missingModel}
           missingCredential={missingCredential}
           configurationError={configurationError}
         />
@@ -80,12 +90,12 @@ function readRouteErrorNotice(state: unknown): string | undefined {
 
 function NewPageContent({
   activeFactory,
-  missingDefaultModel,
+  missingModel,
   missingCredential,
   configurationError,
 }: {
   activeFactory: FactoryProject | undefined;
-  missingDefaultModel: boolean;
+  missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
   configurationError: Error | undefined;
 }) {
@@ -102,7 +112,7 @@ function NewPageContent({
         <DraftStart
           activeFactory={activeFactory}
           configurationError={configurationError}
-          missingDefaultModel={missingDefaultModel}
+          missingModel={missingModel}
           missingCredential={missingCredential}
         />
         {hasNotices && (
@@ -119,19 +129,19 @@ function NewPageContent({
 function DraftStart({
   activeFactory,
   configurationError,
-  missingDefaultModel,
+  missingModel,
   missingCredential,
 }: {
   activeFactory: FactoryProject | undefined;
   configurationError: Error | undefined;
-  missingDefaultModel: boolean;
+  missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
 }) {
   const { t } = useTranslation('chat');
-  if (activeFactory && missingDefaultModel) {
+  if (activeFactory && missingModel) {
     return (
       <section className={draftStartClass} aria-label={t('newPage.modelSetupRequired')}>
-        <MissingDefaultModelState factoryId={activeFactory.id} />
+        <MissingModelState factoryId={activeFactory.id} />
       </section>
     );
   }
@@ -187,14 +197,14 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
   );
 }
 
-function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
+function MissingModelState({ factoryId }: { factoryId: string }) {
   const { t } = useTranslation('chat');
   return (
     <EmptyState
       as="h2"
       iconSlot={<Bot />}
-      titleSlot={t('newPage.noDefaultModelTitle')}
-      descriptionSlot={t('newPage.noDefaultModelDescription')}
+      titleSlot={t('newPage.noModelTitle')}
+      descriptionSlot={t('newPage.noModelDescription')}
       actionSlot={
         <Link to={settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.factory)} className={buttonVariants({ variant: 'primary' })}>
           {t('newPage.openModelsSettings')}

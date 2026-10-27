@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
+import { PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { getModelReasoningOptions } from '@mastra/core/llm';
@@ -12,6 +13,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { registerTenantCredentialResolver, resetTenantCredentialResolverForTests } from '@factory/credentials';
 import { factoryMemorySettingsUserId } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
 import type { FactoryStorageTestSeed } from '@factory/testing';
@@ -824,6 +826,93 @@ describe('GET /web/config/models', () => {
     for (const query of ['', '?scope=user', '?scope=org', '?scope=other', `?scope=user&factoryId=${orgFactory.id}`]) {
       expect(await ids(query)).toEqual(['deepseek/deepseek-flash']);
     }
+  });
+
+  describe('fallback model for a Factory with no chosen default', () => {
+    const modeDefault = PROVIDER_DEFAULT_MODELS.anthropic;
+    const openaiDefault = PROVIDER_DEFAULT_MODELS['openai-codex'];
+    let seed: FactoryStorageTestSeed;
+
+    const mount = (user: { workosId: string; organizationId: string }) => {
+      const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser', user);
+        await next();
+      });
+      mountApiRoutes(
+        app as any,
+        new ConfigRoutes({
+          auth: fakeRouteAuth(),
+          controller: {
+            listAvailableModels: async () => [
+              { id: modeDefault, modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
+              { id: openaiDefault, modelName: 'gpt-5.6-sol', provider: 'openai', hasApiKey: false },
+            ],
+            getDefaultMode: () => ({ defaultModelId: modeDefault }),
+          },
+          modelCredentials: seed.credentials,
+          factoryProjects: seed.projects,
+        }).routes(),
+      );
+      return async (query: string) => {
+        const res = await app.request(`/web/config/models${query}`);
+        expect(res.status).toBe(200);
+        return z.object({ fallbackModelId: z.string().nullable() }).parse(await res.json()).fallbackModelId;
+      };
+    };
+
+    let factoryQuery: string;
+
+    beforeEach(async () => {
+      seed = await createFactoryStorageForTests();
+      registerTenantCredentialResolver(seed.credentials);
+      const factory = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Shared' } });
+      factoryQuery = `?factoryId=${factory.id}`;
+    });
+
+    afterEach(() => resetTenantCredentialResolverForTests());
+
+    it("starts a chat on the default mode's model when the org credentials can run it", async () => {
+      await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', { type: 'api_key', key: 'sk-org' });
+      const fallback = mount({ workosId: 'user-a', organizationId: 'org1' });
+      expect(await fallback(factoryQuery)).toBe(modeDefault);
+    });
+
+    it("starts a chat on a connected provider's default when the org credentials cannot run the mode's model", async () => {
+      await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+      const fallback = mount({ workosId: 'user-a', organizationId: 'org1' });
+      expect(await fallback(factoryQuery)).toBe(openaiDefault);
+    });
+
+    it("follows the Factory's organization credentials, not the caller's personal login", async () => {
+      await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+        type: 'api_key',
+        key: 'sk-personal',
+      });
+      await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+      const fallback = mount({ workosId: 'user-a', organizationId: 'org1' });
+
+      expect(await fallback(factoryQuery)).toBe(openaiDefault);
+    });
+
+    it('offers no fallback when no organization credential can run any model', async () => {
+      const factory = await seed.projects.create({ orgId: 'org2', userId: 'user-b', input: { name: 'Empty' } });
+      const fallback = mount({ workosId: 'user-b', organizationId: 'org2' });
+      expect(await fallback(`?factoryId=${factory.id}`)).toBeNull();
+    });
+
+    it('leaves the field out of a catalog that names no Factory', async () => {
+      const app = new Hono();
+      mountApiRoutes(
+        app as any,
+        new ConfigRoutes({
+          auth: fakeRouteAuth(),
+          controller: { listAvailableModels: async () => [], getDefaultMode: () => ({ defaultModelId: modeDefault }) },
+          modelCredentials: seed.credentials,
+        }).routes(),
+      );
+      expect(await (await app.request('/web/config/models')).json()).not.toHaveProperty('fallbackModelId');
+    });
   });
 });
 

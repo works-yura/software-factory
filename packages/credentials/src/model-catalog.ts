@@ -65,6 +65,8 @@ export interface ModelCatalog {
     Array<{ id?: string; modelName: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
+  /** The mode new sessions start in; the built-in model pick starts from its model. */
+  getDefaultMode?: () => { defaultModelId?: string };
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
 }
 

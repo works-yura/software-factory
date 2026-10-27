@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { useChatModelCatalog } from './useChatModelCatalog';
+import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsContext } from './ChatModelsContext';
@@ -23,15 +24,18 @@ export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
 }
 
 function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { projectQuery: factoryProjectQuery } = useChatModelCatalog();
+  const { projectQuery: factoryProjectQuery, catalogTarget } = useChatModelCatalog();
   const [draftModelId, setDraftModelId] = useState<string>();
   const defaultModelId = factoryProjectQuery.data?.defaultModelId ?? undefined;
+  // No Factory default: the draft starts on the server's built-in pick, as the session will.
+  const usesFallback = factoryProjectQuery.isSuccess && !defaultModelId;
+  const fallbackModelQuery = useFallbackModelQuery({ ...catalogTarget, enabled: usesFallback });
   const value: ChatModelsApi = {
-    activeModelId: draftModelId ?? defaultModelId,
+    activeModelId: draftModelId ?? defaultModelId ?? fallbackModelQuery.data,
     defaultModelId,
     pendingModelId: undefined,
-    isLoading: factoryProjectQuery.isPending,
-    error: factoryProjectQuery.error ?? undefined,
+    isLoading: factoryProjectQuery.isPending || (usesFallback && fallbackModelQuery.isPending),
+    error: factoryProjectQuery.error ?? (usesFallback ? fallbackModelQuery.error : null) ?? undefined,
     setModel: modelId => {
       setDraftModelId(modelId);
       return Promise.resolve();
