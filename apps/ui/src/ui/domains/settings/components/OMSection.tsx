@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { InputGroupAddon, InputGroupText } from '@mastra/playground-ui/components/InputGroup';
 import {
   InputNumber,
@@ -8,8 +9,9 @@ import {
   InputNumberInput,
 } from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -38,21 +40,15 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   return 'auto';
 }
 
-/**
- * Token count field with steppers. It stays editable while a save is in flight, since
- * disabling it would drop focus mid-edit; each save returns the full config.
- */
+// Stays editable while saving: disabling would drop focus mid-edit.
 function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
   const [draft, setDraft] = useState<number | null>(value);
-  // The last value this field asked to save, so a draft is compared with what was sent,
-  // not with a saved value whose response may still be on its way.
+  // Compared with what was sent, not a saved value whose response may still be in flight.
   const [sent, setSent] = useState(value);
   const [editing, setEditing] = useState(false);
   const [syncedValue, setSyncedValue] = useState(value);
   const { t } = useTranslation('settings');
-  // Follow the saved value (e.g. after another surface changed it) without remounting, so
-  // focus stays put. While the person is still in the field, a save landing must not
-  // overwrite what they are typing; leaving the field saves the draft.
+  // Follows outside saves without remounting, and never overwrites a draft being typed.
   if (syncedValue !== value) {
     setSyncedValue(value);
     if (!editing) {
@@ -85,7 +81,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
         // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
         if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
       }}
-      className="sm:w-64 sm:shrink-0"
+      className="w-full"
     >
       <InputNumberGroup
         size="sm"
@@ -121,10 +117,6 @@ export function OMSection({
   const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId);
   const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId);
 
-  const config = omQuery.data?.config;
-  const modelsAvailable =
-    config?.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
-  const loading = omQuery.isPending;
   const busy =
     observerMutation.isPending ||
     reflectorMutation.isPending ||
@@ -144,25 +136,33 @@ export function OMSection({
     mutation.mutate({ modelId });
   };
 
-  if (loading) {
+  if (omQuery.isPending) {
+    return <SkeletonRows label={t('memory.loading')} rows={2} rowClassName="h-14 w-full" />;
+  }
+
+  if (omQuery.data === undefined) {
     return (
-      <div className="px-4 py-3">
-        <SkeletonRows label={t('memory.loading')} rows={4} rowClassName="h-10 w-full" />
-      </div>
+      <Txt as="p" variant="caption" className="text-destructive-foreground">
+        {omQuery.error.message}
+      </Txt>
     );
   }
 
-  const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
+  const { config } = omQuery.data;
+  const modelsAvailable =
+    config.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
+
+  const attachmentChoice = attachmentToChoice(config.observeAttachments);
   return (
-    <>
+    <div className="flex flex-col gap-4">
       {error && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground px-4 py-3">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
         </Txt>
       )}
 
-      {config && !modelsAvailable && (
-        <div className="flex items-center gap-2 px-4 py-3">
+      {!modelsAvailable && (
+        <div className="flex items-center gap-2">
           <Badge size="md" variant="warning">
             {t('memory.credentialsRequired')}
           </Badge>
@@ -172,64 +172,144 @@ export function OMSection({
         </div>
       )}
 
-      <SettingsRow label={t('memory.observer.label')} description={t('memory.observer.description')}>
-        <ModelCombobox
-          models={models}
-          value={config?.observer.model ?? ''}
-          auto={{ effectiveModelId: config?.observer.effectiveModelId }}
-          placeholder={t('memory.observer.placeholder')}
-          disabled={busy || !config}
-          onValueChange={modelId => switchModel('observer', modelId)}
-        />
-      </SettingsRow>
-
-      <SettingsRow label={t('memory.reflector.label')} description={t('memory.reflector.description')}>
-        <ModelCombobox
-          models={models}
-          value={config?.reflector.model ?? ''}
-          auto={{ effectiveModelId: config?.reflector.effectiveModelId }}
-          placeholder={t('memory.reflector.placeholder')}
-          disabled={busy || !config}
-          onValueChange={modelId => switchModel('reflector', modelId)}
-        />
-      </SettingsRow>
-
-      <SettingsRow
-        label={t('memory.observationThreshold.label')}
-        description={t('memory.observationThreshold.description')}
-      >
-        {config && (
-          <TokenThresholdInput
-            value={config.observationThreshold}
-            onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
-          />
-        )}
-      </SettingsRow>
-
-      <SettingsRow
-        label={t('memory.reflectionThreshold.label')}
-        description={t('memory.reflectionThreshold.description')}
-      >
-        {config && (
-          <TokenThresholdInput
-            value={config.reflectionThreshold}
-            onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
-          />
-        )}
-      </SettingsRow>
-
-      <SettingsRow label={t('memory.attachments.label')} description={t('memory.attachments.description')}>
-        <SegmentedControl
-          aria-label={t('memory.attachments.label')}
-          value={attachmentChoice}
-          disabled={busy || !config}
-          onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
+      <div className="@container flex flex-col gap-3">
+        <ol className="flex flex-col">
+          <OMRow as="li" rail="node" label={t('memory.messages')} />
+          <OMRow
+            as="li"
+            rail="edge"
+            label={t('memory.observationThreshold.label')}
+            info={t('memory.observationThreshold.description')}
+          >
+            <TokenThresholdInput
+              value={config.observationThreshold}
+              onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
+            />
+          </OMRow>
+          <OMRow as="li" rail="node" label={t('memory.observer.label')} info={t('memory.observer.description')}>
+            <ModelCombobox
+              models={models}
+              value={config.observer.model}
+              auto={{ effectiveModelId: config.observer.effectiveModelId }}
+              placeholder={t('memory.observer.placeholder')}
+              aria-label={t('memory.observer.ariaLabel')}
+              size="sm"
+              disabled={busy}
+              onValueChange={modelId => switchModel('observer', modelId)}
+            />
+          </OMRow>
+          <OMRow
+            as="li"
+            rail="edge"
+            label={t('memory.reflectionThreshold.label')}
+            info={t('memory.reflectionThreshold.description')}
+          >
+            <TokenThresholdInput
+              value={config.reflectionThreshold}
+              onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
+            />
+          </OMRow>
+          <OMRow as="li" rail="node" label={t('memory.reflector.label')} info={t('memory.reflector.description')}>
+            <ModelCombobox
+              models={models}
+              value={config.reflector.model}
+              auto={{ effectiveModelId: config.reflector.effectiveModelId }}
+              placeholder={t('memory.reflector.placeholder')}
+              aria-label={t('memory.reflector.ariaLabel')}
+              size="sm"
+              disabled={busy}
+              onValueChange={modelId => switchModel('reflector', modelId)}
+            />
+          </OMRow>
+        </ol>
+        <OMRow
+          rail="none"
+          label={t('memory.attachments.label')}
+          info={t('memory.attachments.description')}
+          controlNamesItself
         >
-          <SegmentedControlItem value="auto">{t('memory.attachments.auto')}</SegmentedControlItem>
-          <SegmentedControlItem value="on">{t('memory.attachments.on')}</SegmentedControlItem>
-          <SegmentedControlItem value="off">{t('memory.attachments.off')}</SegmentedControlItem>
-        </SegmentedControl>
-      </SettingsRow>
+          <SegmentedControl
+            aria-label={t('memory.attachments.ariaLabel')}
+            size="sm"
+            value={attachmentChoice}
+            disabled={busy}
+            onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
+          >
+            <SegmentedControlItem value="auto">{t('memory.attachments.auto')}</SegmentedControlItem>
+            <SegmentedControlItem value="on">{t('memory.attachments.on')}</SegmentedControlItem>
+            <SegmentedControlItem value="off">{t('memory.attachments.off')}</SegmentedControlItem>
+          </SegmentedControl>
+        </OMRow>
+      </div>
+    </div>
+  );
+}
+
+type RailMark = 'node' | 'edge' | 'none';
+
+const RAIL_MARKS: Record<RailMark, ReactNode> = {
+  node: (
+    <>
+      <span className="bg-border-strong h-1.5 w-px shrink-0 group-first/row:invisible @min-[30rem]:h-auto @min-[30rem]:flex-1" />
+      <span className="bg-muted-foreground size-2 shrink-0 rounded-full" />
+      <span className="bg-border-strong w-px flex-1 group-last/row:invisible" />
     </>
+  ),
+  edge: <span className="bg-border-strong w-px flex-1" />,
+  none: null,
+};
+
+type OMRowCellsProps = {
+  label: string;
+  info?: string;
+  controlNamesItself?: boolean;
+  children?: ReactNode;
+};
+
+function OMRow({ as: Row = 'div', rail, ...cells }: { as?: 'li' | 'div'; rail: RailMark } & OMRowCellsProps) {
+  return (
+    <Row className="group/row grid min-h-10 grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 @min-[30rem]:grid-cols-[2rem_6.5rem_minmax(0,20rem)]">
+      <span aria-hidden="true" className="row-span-2 flex flex-col items-center self-stretch @min-[30rem]:row-span-1">
+        {RAIL_MARKS[rail]}
+      </span>
+      <OMRowCells muted={rail !== 'node'} {...cells} />
+    </Row>
+  );
+}
+
+function OMRowCells({
+  label,
+  info,
+  muted,
+  controlNamesItself = false,
+  children,
+}: OMRowCellsProps & { muted: boolean }) {
+  const { t } = useTranslation('settings');
+  const plainLabel = (
+    <span className="flex w-fit items-center gap-1">
+      <Txt as="span" variant="column" tone={muted ? 'muted' : undefined}>
+        {label}
+      </Txt>
+      {info ? <InfoTooltip aria-label={t('memory.about', { label })}>{info}</InfoTooltip> : null}
+    </span>
+  );
+  if (!children) return plainLabel;
+
+  const control = <div className="col-start-2 pb-2 @min-[30rem]:col-start-auto @min-[30rem]:pb-0">{children}</div>;
+  if (controlNamesItself) {
+    return (
+      <>
+        {plainLabel}
+        {control}
+      </>
+    );
+  }
+  return (
+    <Field className="contents">
+      <FieldLabel size="smaller" info={info} className={muted ? 'text-muted-foreground' : undefined}>
+        {label}
+      </FieldLabel>
+      {control}
+    </Field>
   );
 }

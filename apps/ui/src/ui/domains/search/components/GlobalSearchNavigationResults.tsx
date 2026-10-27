@@ -108,16 +108,16 @@ export function GlobalSearchNavigationResults({
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.models}
-        subtitle={t('subtitles.factorySettings')}
-        value={searchValue(SETTINGS_SECTION_LABELS.models, t('subtitles.factorySettings'), `Factory Models Settings models ${settingsSectionPath(factoryId, 'models')}`)}
+        subtitle={t('subtitles.settings')}
+        value={searchValue(SETTINGS_SECTION_LABELS.models, t('subtitles.settings'), `Models Settings models factory defaults providers ${settingsSectionPath(factoryId, 'models')}`)}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'models'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
-        title={SETTINGS_SECTION_LABELS['factory-memory']}
-        subtitle={t('subtitles.factorySettings')}
-        value={searchValue(SETTINGS_SECTION_LABELS['factory-memory'], t('subtitles.factorySettings'), `Factory Memory Settings memory observational ${settingsSectionPath(factoryId, 'factory-memory')}`)}
-        onSelect={() => onSelect(settingsSectionPath(factoryId, 'factory-memory'), true)}
+        title={SETTINGS_SECTION_LABELS.memory}
+        subtitle={t('subtitles.settings')}
+        value={searchValue(SETTINGS_SECTION_LABELS.memory, t('subtitles.settings'), `Memory Settings memory factory shared observational ${settingsSectionPath(factoryId, 'memory')}`)}
+        onSelect={() => onSelect(settingsSectionPath(factoryId, 'memory'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}

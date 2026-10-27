@@ -25,8 +25,8 @@ const liveSession: ChatSessionContextApi = {
 };
 
 describe('ProviderLoginAction', () => {
-  it('links a session to the Factory models settings', async () => {
-    const href = '/factories/factory-1/settings/models';
+  it('links a session to the Factory defaults on the Models page', async () => {
+    const href = '/factories/factory-1/settings/models#factory-defaults';
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
         HttpResponse.json({ project: { id: 'factory-1' } }),

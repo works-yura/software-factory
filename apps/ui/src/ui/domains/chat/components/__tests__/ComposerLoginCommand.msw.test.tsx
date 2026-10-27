@@ -9,7 +9,7 @@ import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-te
 beforeEach(useOverlayControllerHandlers);
 
 describe('provider connection commands', () => {
-  it.each(['/connect', '/login'])('%s takes the user to provider settings', async command => {
+  it.each(['/connect', '/login'])('%s takes the user to the Factory defaults', async command => {
     const user = userEvent.setup();
     renderWithProviders(
       <OverlayTestProviders>
@@ -22,7 +22,7 @@ describe('provider connection commands', () => {
     await user.type(input, `${command}{Enter}`);
 
     const navigated = await screen.findByTestId('navigated-path');
-    expect(navigated).toHaveTextContent(/\/settings\/models$/);
+    expect(navigated).toHaveTextContent(/\/settings\/models#factory-defaults$/);
     expect(navigated).toHaveAttribute('data-return-to', expect.stringContaining('/threads/thread-test'));
   });
 });

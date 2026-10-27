@@ -1,7 +1,6 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
-import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import { translator } from '../../../i18n/t';
 import { toast } from '@mastra/playground-ui/components/Toaster';
@@ -10,7 +9,6 @@ import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
-import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import {
   SettingsUpdateVerificationError,
   useUpdateAgentControllerSettingsMutation,
@@ -26,8 +24,8 @@ import { McpClientsSection } from './McpClientsSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
-import { FactoryModelsSettings } from './FactoryModelsSettings';
 import { MemorySettings } from './MemorySettings';
+import { ModelsSettings } from './models/ModelsSettings';
 
 const tk = translator('settings');
 
@@ -40,13 +38,7 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 export function SettingsPanel() {
   const { t } = useTranslation('settings');
   const section = useSettingsSection();
-  const { hash } = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
-
-  useEffect(() => {
-    if (!hash) return;
-    document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
-  }, [hash, section]);
   const { sessionId: chatSessionId, resourceEnabled, baseUrl } = useChatSessionContext();
   const { permissions, setPermissionForCategory } = useChatPermissions();
   const hookArgs = {
@@ -56,11 +48,8 @@ export function SettingsPanel() {
     enabled: resourceEnabled,
   };
 
-  // Factory-level pickers only offer what the Factory's organization credentials can run.
-  const modelsQuery = useAvailableModelsQuery({ factoryProjectId: factoryId });
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
-  const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
@@ -91,8 +80,8 @@ export function SettingsPanel() {
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
-      {section === 'models' && <FactoryModelsSettings models={models} />}
-      {section === 'factory-memory' && <MemorySettings factoryId={factoryId} models={models} />}
+      {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
+      {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} />}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
       {section === 'behavior' && (
         <BehaviorSettings

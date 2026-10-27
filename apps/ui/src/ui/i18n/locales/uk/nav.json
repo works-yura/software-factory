@@ -2,7 +2,6 @@
   "mainSidebar": "Головна бічна панель",
   "main": "Головне",
   "settingsSections": "Розділи налаштувань",
-  "factorySwitcher": "Перемикач Factory",
   "navigation": "Навігація",
   "footer": "Активність, акаунт і налаштування",
   "factory": "Factory",
@@ -19,7 +18,6 @@
   "activityUnread_other": "Активність, {{count}} непрочитаних",
   "sessions": {
     "title": "Сесії",
-    "new": "Нова сесія користувача",
     "properties": "Властивості сесій",
     "sort": "Сортування",
     "owner": "Власник",
@@ -28,7 +26,6 @@
     "empty": {
       "allHidden": "Усі групи із сесіями приховано",
       "noneYet": "Сесій поки нема",
-      "noneOwn": "Ваших сесій нема.",
       "noneMatch": "Немає сесій за цими фільтрами"
     },
     "sortOptions": {
@@ -71,5 +68,6 @@
     "settingsMenu": "Меню налаштувань",
     "logOut": "Вийти"
   },
+  "newSession": "Нова сесія",
   "searchAndNavigate": "Пошук і навігація"
 }

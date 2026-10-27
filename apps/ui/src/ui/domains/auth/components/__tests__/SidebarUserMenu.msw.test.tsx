@@ -57,7 +57,7 @@ function stubSignedIn() {
 }
 
 describe('SidebarUserMenu', () => {
-  it('opens a menu without navigating and exposes personal settings, Factory settings, theme, and logout', async () => {
+  it('opens a menu without navigating and exposes account settings, all settings, theme, and logout', async () => {
     const user = userEvent.setup();
     stubSignedIn();
     renderUserMenu();
@@ -125,7 +125,7 @@ describe('SidebarUserMenu', () => {
     expect(screen.getByRole('menuitemradio', { name: 'Dark' })).toBeChecked();
   });
 
-  it('opens a personal section directly and closes the dropdown', async () => {
+  it('opens an account section directly and closes the dropdown', async () => {
     const user = userEvent.setup();
     stubSignedIn();
     renderUserMenu();

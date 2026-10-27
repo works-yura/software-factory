@@ -2,8 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router';
+import { ArrowUpDown, CircleDashed, Clock, UserRound } from 'lucide-react';
+import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
@@ -40,7 +40,6 @@ export function SessionsSection() {
   const { t } = useTranslation('nav');
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
-  const navigate = useNavigate();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
   const {
@@ -54,7 +53,7 @@ export function SessionsSection() {
     resetView,
   } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
-  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
+  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
   const deletion = useSessionDeletion(factoryId);
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
@@ -74,8 +73,6 @@ export function SessionsSection() {
     rowCount: rows.length,
     filteredCount: filteredRows.length,
     groupCount: groups.length,
-    activeFilterCount,
-    viewerKnown: Boolean(viewerUserId),
   });
 
   const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
@@ -86,64 +83,51 @@ export function SessionsSection() {
       <Sidebar.NavHeader
         className="mt-0"
         action={
-          <div className="flex items-center gap-0.5">
-            {hasRepositories && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t('sessions.new')}
-                onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-                disabled={deletion.deleting}
-              >
-                <Plus size={15} />
-              </Button>
-            )}
-            <PropertiesMenu
-              label={t('sessions.properties')}
-              changedCount={changedSettingCount + activeFilterCount}
-              onReset={() => {
-                resetView();
-                resetFilters();
-              }}
-            >
-              <DropdownMenu.RadioSub
-                label={t('sessions.sort')}
-                icon={<ArrowUpDown aria-hidden />}
-                options={SESSION_SORT_OPTIONS}
-                value={view.sort}
-                onValueChange={sort => updateView({ sort })}
-              />
-              <DropdownMenu.RadioSub
-                label={t('sessions.owner')}
-                icon={<UserRound aria-hidden />}
-                options={sessionOwnerOptions(rows, viewerUserId)}
-                value={filters.owner}
-                onValueChange={owner => changeFilters({ owner })}
-              />
-              <DropdownMenu.RadioSub
-                label={t('sessions.status')}
-                icon={<CircleDashed aria-hidden />}
-                options={SESSION_STATUS_OPTIONS}
-                value={filters.status}
-                onValueChange={status => changeFilters({ status })}
-              />
-              <DropdownMenu.RadioSub
-                label={t('sessions.updated')}
-                icon={<Clock aria-hidden />}
-                options={SESSION_UPDATED_OPTIONS}
-                value={filters.updated}
-                onValueChange={updated => changeFilters({ updated })}
-              />
-              <SessionGroupMenu
-                groupBy={view.groupBy}
-                onGroupByChange={groupBy => updateView({ groupBy })}
-                groups={menuGroups}
-                hiddenKeys={hiddenGroupKeys}
-                onVisibilityChange={changeGroupVisibility}
-                onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
-              />
-            </PropertiesMenu>
-          </div>
+          <PropertiesMenu
+            label={t('sessions.properties')}
+            changedCount={changedSettingCount + activeFilterCount}
+            onReset={() => {
+              resetView();
+              resetFilters();
+            }}
+          >
+            <DropdownMenu.RadioSub
+              label={t('sessions.sort')}
+              icon={<ArrowUpDown aria-hidden />}
+              options={SESSION_SORT_OPTIONS}
+              value={view.sort}
+              onValueChange={sort => updateView({ sort })}
+            />
+            <DropdownMenu.RadioSub
+              label={t('sessions.owner')}
+              icon={<UserRound aria-hidden />}
+              options={sessionOwnerOptions(rows, viewerUserId)}
+              value={filters.owner}
+              onValueChange={owner => changeFilters({ owner })}
+            />
+            <DropdownMenu.RadioSub
+              label={t('sessions.status')}
+              icon={<CircleDashed aria-hidden />}
+              options={SESSION_STATUS_OPTIONS}
+              value={filters.status}
+              onValueChange={status => changeFilters({ status })}
+            />
+            <DropdownMenu.RadioSub
+              label={t('sessions.updated')}
+              icon={<Clock aria-hidden />}
+              options={SESSION_UPDATED_OPTIONS}
+              value={filters.updated}
+              onValueChange={updated => changeFilters({ updated })}
+            />
+            <SessionGroupMenu
+              groupBy={view.groupBy}
+              onGroupByChange={groupBy => updateView({ groupBy })}
+              groups={menuGroups}
+              hiddenKeys={hiddenGroupKeys}
+              onVisibilityChange={changeGroupVisibility}
+              onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
+            />
+          </PropertiesMenu>
         }
       >
         {t('sessions.title')}
@@ -200,17 +184,12 @@ function emptyListMessage({
   rowCount,
   filteredCount,
   groupCount,
-  activeFilterCount,
-  viewerKnown,
 }: {
   rowCount: number;
   filteredCount: number;
   groupCount: number;
-  activeFilterCount: number;
-  viewerKnown: boolean;
 }): string | undefined {
   if (filteredCount > 0) return groupCount === 0 ? i18n.t('sessions.empty.allHidden', { ns: 'nav' }) : undefined;
   if (rowCount === 0) return i18n.t('sessions.empty.noneYet', { ns: 'nav' });
-  if (activeFilterCount === 0 && viewerKnown) return i18n.t('sessions.empty.noneOwn', { ns: 'nav' });
   return i18n.t('sessions.empty.noneMatch', { ns: 'nav' });
 }

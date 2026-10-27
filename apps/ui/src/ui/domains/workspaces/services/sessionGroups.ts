@@ -14,7 +14,7 @@ const tk = translator('workspaces');
 export const SESSION_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
 export type SessionGroupBy = (typeof SESSION_GROUP_BYS)[number];
 
-export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'board';
+export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'none';
 
 export const SESSION_GROUP_BY_LABELS: Readonly<Record<SessionGroupBy, string>> = lazyLabels(
   SESSION_GROUP_BYS,

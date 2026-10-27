@@ -419,14 +419,6 @@
   },
   "changes": {
     "label": "Зміни в робочому просторі",
-    "diffLabel": "Диф зміни в робочому просторі",
-    "backToChanged": "Назад до змінених файлів",
-    "repositoryRoot": "Корінь репозиторію",
-    "refresh": "Оновити зміни",
-    "refreshing": "Оновлення змін",
-    "refreshDiff": "Оновити вибраний диф",
-    "refreshingDiff": "Оновлення вибраного дифу",
-    "diffTruncated": "Диф обрізано на 512 КБ.",
     "binary": "Бінарний",
     "fileCount_one": "{{count}} файл",
     "fileCount_few": "{{count}} файли",
@@ -452,6 +444,28 @@
       "copied": "Скопійовано",
       "untracked": "Не відстежується",
       "conflicted": "Конфлікт"
-    }
+    },
+    "noTextualChanges": "Текстових змін нема.",
+    "renamedFrom": "з",
+    "unreadableRepositories": "Не вдалося прочитати зміни в {{repositories}}",
+    "diffsUnavailable": "Дифи недоступні: {{error}}",
+    "omitted": {
+      "fileTooLarge": "Диф завеликий для показу",
+      "totalTooLarge": "Забагато змін для показу"
+    },
+    "diffUnavailable": "Диф недоступний",
+    "layout": {
+      "label": "Вигляд дифу",
+      "unified": "Суцільний",
+      "split": "Поруч"
+    },
+    "options": "Параметри змін",
+    "refreshShort": "Оновити",
+    "scopes": {
+      "branch": "Зміни гілки",
+      "uncommitted": "Незакомічені зміни"
+    },
+    "jumpToFile": "Перейти до файлу",
+    "jumpToFileCount": "Перейти до файлу, {{files}}"
   }
 }

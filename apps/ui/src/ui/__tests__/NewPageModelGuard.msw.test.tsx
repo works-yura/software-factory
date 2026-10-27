@@ -50,7 +50,7 @@ describe('NewPage default-model guard', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/models',
+      '/factories/fp-1/settings/models#factory-defaults',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
@@ -116,10 +116,10 @@ describe('NewPage credential guard', () => {
     renderNewPage();
 
     expect(await screen.findByRole('heading', { name: "You don't have access to Anthropic" })).toBeInTheDocument();
-    expect(screen.getByText(/ask an org admin to connect it/)).toBeInTheDocument();
+    expect(screen.getByText(/Ask an org admin to add one under Factory defaults in Models settings/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/models',
+      '/factories/fp-1/settings/models#factory-defaults',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });

@@ -26,8 +26,8 @@
     "heading": "What do you want to work on?",
     "configError": "Failed to load session configuration: {{message}}",
     "noAccessTitle": "You don't have access to {{provider}}",
-    "noAccessDescription": "The Factory default model ({{modelId}}) needs a {{provider}} credential. Connect it in Factory models settings.",
-    "noAccessDescriptionOrg": "The Factory default model ({{modelId}}) needs a {{provider}} credential. Connect it in Factory models settings, or ask an org admin to connect it.",
+    "noAccessDescription": "The default model ({{modelId}}) needs a credential for {{provider}}. Add one under Factory defaults in Models settings.",
+    "noAccessDescriptionOrg": "The default model ({{modelId}}) needs a credential for {{provider}}. Ask an org admin to add one under Factory defaults in Models settings.",
     "openModelsSettings": "Open Models settings",
     "noDefaultModelTitle": "No default model configured for this Factory",
     "noDefaultModelDescription": "Connect a model provider and choose a default model in Models settings before starting a chat."

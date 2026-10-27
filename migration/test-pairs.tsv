@@ -98,7 +98,7 @@ routes/automation-runs.test.ts	api/src/automation-runs.test.ts
 routes/config.test.ts	api/src/config.test.ts	-6	personal default-model routes removed (7 cases), one case checks they are gone
 routes/contracts.test.ts	api/src/contracts.test.ts
 routes/custom-provider-source.test.ts	api/src/custom-provider-source.test.ts
-routes/fs.test.ts	api/src/fs.test.ts
+routes/fs.test.ts	api/src/fs.test.ts	-5	upstream 7573972d0c (#28274): /changes/diff and its truncation cases replaced by /changes/patches cases
 routes/intake.test.ts	api/src/intake.test.ts
 routes/knowledge.test.ts	api/src/knowledge.test.ts
 routes/oauth.test.ts	api/src/oauth.test.ts
@@ -390,25 +390,22 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/factory/services/relationships.test.ts	../apps/ui/src/ui/domains/factory/services/relationships.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts	../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/workItems.test.ts	../apps/ui/src/ui/domains/factory/services/workItems.test.ts	1	added: a stored card from a dropped integration reads as manual
-../../../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx
+../../../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	+2	upstream 22084b780f (#28100): Memory found by its former page name (+1); 9173231506 (#28312): sidebar search button hands focus back (+1)
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/ConnectedAccountsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/ConnectedAccountsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentSection.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/FactoryDefaultModelSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactoryDefaultModelSection.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
-../../../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelsSettings.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelsSettings.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	-28	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
-../../../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/ProviderAccessSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/ProviderAccessSection.msw.test.tsx	-3	personal model scope removed (Your models, scope choice, personal keys)
+../../../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx	+1	upstream 22084b780f (#28100): clicking the Attachments label keeps the setting
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/RepositoriesSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/RepositoriesSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsFields.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsFields.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsNavigation.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsNavigation.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsSubsection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsSubsection.msw.test.tsx
+../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsNavigation.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsNavigation.msw.test.tsx	+1	upstream 22084b780f (#28100): former page names find Models and Memory
+../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsSubsection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsSubsection.msw.test.tsx	-6	upstream 22084b780f (#28100): scope switch removed, only the badge cases remain
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/UserGithubConnectionRow.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/UserGithubConnectionRow.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/environment/RepositoriesBlock.test.ts	../apps/ui/src/ui/domains/settings/components/environment/RepositoriesBlock.test.ts
 ../../../apps/ui/src/ui/domains/settings/services/channelAccounts.test.ts	../apps/ui/src/ui/domains/settings/services/channelAccounts.test.ts
@@ -421,8 +418,8 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceFeedPanel.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceFeedPanel.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceFiles.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceFiles.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceRecreateSandbox.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceRecreateSandbox.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceRepositoryGroups.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceRepositoryGroups.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceViewerPanel.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceViewerPanel.msw.test.tsx
+../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceRepositoryGroups.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceRepositoryGroups.msw.test.tsx	+1	upstream 7573972d0c (#28274): stacked diffs follow the grouped tree order
+../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceViewerPanel.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceViewerPanel.msw.test.tsx	+4	upstream 7573972d0c (#28274): stacked diffs, scope picker, diff layout, omitted patches
 ../../../apps/ui/src/ui/domains/workspaces/__tests__/FactoryLayout.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/__tests__/FactoryLayout.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryFlow.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryFlow.msw.test.tsx	-8	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryRepositoryRows.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryRepositoryRows.msw.test.tsx
@@ -439,8 +436,8 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionRunObserver.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionRunObserver.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionGroups.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionGroups.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOrder.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOrder.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOwner.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOwner.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionProperties.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionProperties.msw.test.tsx
+../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOwner.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOwner.msw.test.tsx	-2	upstream 74761d4c2e (#28245): no Mine default, the three default-owner cases become one Mine case
+../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionProperties.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionProperties.msw.test.tsx	-1	upstream 74761d4c2e (#28245): the Mine-default race case is gone with the default
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionShowMore.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionShowMore.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionSourceIcons.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionSourceIcons.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/UserSessionsActivity.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/UserSessionsActivity.msw.test.tsx
@@ -460,13 +457,13 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/workspaces/hooks/usePinnedSessions.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/hooks/usePinnedSessions.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/hooks/useSessionListView.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/hooks/useSessionListView.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/onboardingFlow.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/onboardingFlow.test.ts
-../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts
+../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	-2	upstream 74761d4c2e (#28245): defaultSessionFilters removed
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionPresentation.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionPresentation.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionStatus.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionStatus.test.ts
-../../../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx
+../../../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	+2	upstream c583bc9549 (#28271): New session opens a fresh draft (+1); f39f5d64d2 (#28300): New session and + close the mobile drawer (+1)
 ../../../apps/ui/src/ui/lib/readSSE.test.ts	../apps/ui/src/ui/lib/readSSE.test.ts
 ../../../apps/ui/src/ui/lib/overlays/__tests__/overlays.msw.test.tsx	../apps/ui/src/ui/lib/overlays/__tests__/overlays.msw.test.tsx
 ../../../apps/ui/src/ui/lib/pwa/PwaInstallBanner.msw.test.tsx	../apps/ui/src/ui/lib/pwa/PwaInstallBanner.msw.test.tsx
