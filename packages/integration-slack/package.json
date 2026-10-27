@@ -1,0 +1,34 @@
+{
+  "name": "@factory/integration-slack",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Slack integration: channel adapter, connect route, feed publisher, emoji.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "check:tests": "tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@factory/auth": "workspace:*",
+    "@factory/credentials": "workspace:*",
+    "@factory/feed": "workspace:*",
+    "@factory/harness-mastra": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@factory/integrations": "workspace:*",
+    "@factory/session": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/code-sdk": "1.15.0",
+    "@mastra/core": "1.79.0",
+    "@mastra/slack": "1.7.3",
+    "chat": "4.40.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

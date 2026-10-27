@@ -116,11 +116,11 @@ integrations/platform/linear/integration.test.ts	integration-linear/src/platform
 integrations/platform/linear/source-id.test.ts	integration-linear/src/platform/source-id.test.ts
 integrations/pull-request-head.test.ts	integrations/src/pull-request-head.test.ts
 integrations/reconciliation-config.test.ts	integrations/src/reconciliation-config.test.ts
-integrations/slack/connect-route.test.ts	platform/src/integrations/slack/connect-route.test.ts
-integrations/slack/emoji.test.ts	platform/src/integrations/slack/emoji.test.ts
-integrations/slack/feed-publisher.test.ts	platform/src/integrations/slack/feed-publisher.test.ts
-integrations/slack/integration.test.ts	platform/src/integrations/slack/integration.test.ts
-integrations/slack/slack.test.ts	platform/src/integrations/slack/slack.test.ts
+integrations/slack/connect-route.test.ts	integration-slack/src/connect-route.test.ts
+integrations/slack/emoji.test.ts	integration-slack/src/emoji.test.ts
+integrations/slack/feed-publisher.test.ts	integration-slack/src/feed-publisher.test.ts
+integrations/slack/integration.test.ts	integration-slack/src/integration.test.ts
+integrations/slack/slack.test.ts	integration-slack/src/slack.test.ts
 integrations/subscription-session.test.ts	integrations/src/subscription-session.test.ts
 integrations/workos/integration.test.ts	integration-workos/src/integration.test.ts
 mcp/routes.test.ts	harness-mastra/src/mcp/routes.test.ts
