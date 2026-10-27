@@ -1,4 +1,4 @@
-import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
@@ -14,15 +14,18 @@ export function ProviderLoginAction() {
   if (!factoryId) return null;
 
   return (
-    <Notice.Button
+    <Button
+      variant="ghost"
+      size="sm"
       render={
         <Link
           to={settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.factory)}
           state={{ from: location }}
         />
       }
+      iconEnd={<ArrowRight aria-hidden="true" />}
     >
-      {t('messages.login')} <ArrowRight aria-hidden="true" />
-    </Notice.Button>
+      {t('messages.reviewCredentials')}
+    </Button>
   );
 }

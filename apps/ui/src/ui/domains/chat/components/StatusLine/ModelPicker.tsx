@@ -15,6 +15,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { Check, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
@@ -51,22 +52,114 @@ function canSwitchModel({
   return sessionEnabled;
 }
 
-export function ModelPicker() {
+function useModelSwitch() {
   const { t } = useTranslation('chat');
   const chatSession = useChatSessionContext();
-  const { modelLockedReason } = chatSession;
-  const { status } = useChatConnection();
-  const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { activeModelId, defaultModelId, pendingModelId, setModel } = useChatModels();
   const { catalogTarget, catalogLoading } = useChatModelCatalog();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
-  const organizationScoped = useFactoryAuth().data?.authEnabled === true;
-  const [open, setOpen] = useState(false);
-  const [pendingModelId, setPendingModelId] = useState<string>();
 
   const selectedModelId = pendingModelId ?? activeModelId;
   const busy = Boolean(pendingModelId);
-  const providerGroups = groupByProvider(modelsQuery.data ?? []);
+
+  const pickModel = (modelId: string) => {
+    if (busy || modelId === activeModelId) return;
+    void setModel(modelId).catch((cause: unknown) => {
+      toast.error(cause instanceof Error ? cause.message : t('modelPicker.switchFailed'));
+    });
+  };
+
+  return {
+    modelsQuery,
+    activeModelId,
+    selectedModelId,
+    defaultModelId,
+    catalogLoading,
+    busy,
+    switchable: canSwitchModel(chatSession),
+    locked: busy || modelsQuery.isPending || catalogLoading,
+    pickModel,
+  };
+}
+
+type ModelSwitch = ReturnType<typeof useModelSwitch>;
+
+interface ModelMenuProps {
+  modelSwitch: ModelSwitch;
+  triggerClassName?: string;
+  triggerAriaLabel?: string;
+  children: ReactNode;
+}
+
+function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }: ModelMenuProps) {
+  const { t } = useTranslation('chat');
+  const { modelsQuery, selectedModelId, defaultModelId, locked, pickModel } = modelSwitch;
+  const [open, setOpen] = useState(false);
+
+  const choose = (modelId: string) => {
+    setOpen(false);
+    pickModel(modelId);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        type="button"
+        disabled={locked}
+        aria-label={triggerAriaLabel}
+        aria-busy={locked}
+        className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), triggerClassName ?? 'text-muted-foreground')}
+        title={selectedModelId}
+      >
+        {children}
+        <ChevronDown aria-hidden size={12} />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0">
+        <Command loop>
+          <CommandInput placeholder={t('modelPicker.search')} />
+          <CommandList className="max-h-80">
+            <CommandEmpty>{t('modelPicker.noMatch')}</CommandEmpty>
+            {groupByProvider(modelsQuery.data ?? []).map(([provider, models]) => (
+              <CommandGroup
+                key={provider}
+                heading={provider}
+                className="[&_[cmdk-group-heading]]:text-placeholder [&_[cmdk-group-heading]]:font-normal [&_[cmdk-group-heading]]:tracking-normal [&_[cmdk-group-heading]]:normal-case"
+              >
+                {models.map(model => (
+                  <CommandItem
+                    key={model.id}
+                    value={model.id}
+                    keywords={[model.provider, model.modelName, formatModelName(model.id)]}
+                    title={model.id}
+                    onSelect={() => choose(model.id)}
+                  >
+                    <span className="truncate">{model.modelName}</span>
+                    {model.id === defaultModelId ? (
+                      <Badge variant="blue" size="xs">
+                        {t('common.default')}
+                      </Badge>
+                    ) : null}
+                    {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export function ModelPicker() {
+  const { t } = useTranslation('chat');
+  const modelSwitch = useModelSwitch();
+  const { modelsQuery, activeModelId, selectedModelId, catalogLoading, switchable, busy } = modelSwitch;
+  const { modelLockedReason } = useChatSessionContext();
+  const { status } = useChatConnection();
+  const { isLoading, error } = useChatModels();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const organizationScoped = useFactoryAuth().data?.authEnabled === true;
 
   if (!selectedModelId && (isLoading || status === 'connecting')) {
     return <Skeleton aria-label={t('modelPicker.loading')} className="h-3.5 w-24" />;
@@ -93,7 +186,6 @@ export function ModelPicker() {
     Boolean(selectedModelId) &&
     modelsQuery.isSuccess &&
     !modelsQuery.data.some(model => model.id === selectedModelId);
-  const switchable = canSwitchModel(chatSession);
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
   if (modelsQuery.isError && noModelsToOffer) {
@@ -127,81 +219,28 @@ export function ModelPicker() {
     );
   }
 
-  const runAction = (action: Promise<void>, failure: string) => {
-    void action.then(
-      () => setPendingModelId(undefined),
-      (cause: unknown) => {
-        setPendingModelId(undefined);
-        toast.error(cause instanceof Error ? cause.message : failure);
-      },
-    );
-  };
-
-  const pickModel = (modelId: string) => {
-    if (busy) return;
-    setOpen(false);
-    if (modelId === activeModelId) return;
-    setPendingModelId(modelId);
-    runAction(setModel(modelId), t('modelPicker.switchFailed'));
-  };
-  const modelMenuLocked = busy || modelsQuery.isPending || catalogLoading;
-
   return (
     <ModelThinkingGroup modelId={activeModelId} switchingModel={busy}>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          type="button"
-          disabled={modelMenuLocked}
-          aria-label={
-            notConfigured ? t('modelPicker.sessionModelNotConfigured', { label }) : t('modelPicker.sessionModel')
-          }
-          aria-busy={modelMenuLocked}
-          className={cn(
-            buttonVariants({ variant: 'ghost', size: 'sm' }),
-            notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
-          )}
-          title={selectedModelId}
-        >
-          <span className="max-w-48 truncate">
-            {label}
-            {notConfigured ? ` · ${t('modelPicker.notConfigured')}` : null}
-          </span>
-          <ChevronDown aria-hidden size={12} />
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-80 p-0">
-          <Command loop>
-            <CommandInput placeholder={t('modelPicker.search')} />
-            <CommandList className="max-h-80">
-              <CommandEmpty>{t('modelPicker.noMatch')}</CommandEmpty>
-              {providerGroups.map(([provider, models]) => (
-                <CommandGroup
-                  key={provider}
-                  heading={provider}
-                  className="[&_[cmdk-group-heading]]:text-placeholder [&_[cmdk-group-heading]]:font-normal [&_[cmdk-group-heading]]:tracking-normal [&_[cmdk-group-heading]]:normal-case"
-                >
-                  {models.map(model => (
-                    <CommandItem
-                      key={model.id}
-                      value={model.id}
-                      keywords={[model.provider, model.modelName, formatModelName(model.id)]}
-                      title={model.id}
-                      onSelect={() => pickModel(model.id)}
-                    >
-                      <span className="truncate">{model.modelName}</span>
-                      {model.id === defaultModelId ? (
-                        <Badge variant="blue" size="xs">
-                          {t('common.default')}
-                        </Badge>
-                      ) : null}
-                      {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ))}
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
+      <ModelMenu
+        modelSwitch={modelSwitch}
+        triggerAriaLabel={
+          notConfigured ? t('modelPicker.sessionModelNotConfigured', { label }) : t('modelPicker.sessionModel')
+        }
+        triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
+      >
+        <span className="max-w-48 truncate">
+          {label}
+          {notConfigured ? ` · ${t('modelPicker.notConfigured')}` : null}
+        </span>
+      </ModelMenu>
     </ModelThinkingGroup>
   );
+}
+
+/** The session's own picker, offered on a run error card: only the session knows which models its credentials reach. */
+export function ChangeModelAction() {
+  const { t } = useTranslation('chat');
+  const modelSwitch = useModelSwitch();
+  if (!modelSwitch.switchable || !modelSwitch.modelsQuery.data?.length) return null;
+  return <ModelMenu modelSwitch={modelSwitch}>{t('modelPicker.changeModel')}</ModelMenu>;
 }

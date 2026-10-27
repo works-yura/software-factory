@@ -207,7 +207,8 @@
     "noMatch": "No matching model.",
     "lockedLabel": "Session model: {{label}}. {{reason}}",
     "lockedReason": "Only {{name}} can change this session’s model or thinking level.",
-    "lockedReasonOwnerUnknown": "Only the session owner can change this session’s model or thinking level."
+    "lockedReasonOwnerUnknown": "Only the session owner can change this session’s model or thinking level.",
+    "changeModel": "Change model"
   },
   "thinking": {
     "label": "Thinking",
@@ -281,14 +282,13 @@
     "steering": "Steering…",
     "notSent": "Not sent",
     "steered": "Steered message",
-    "error": "Error",
     "systemReminder": "System reminder",
     "sentFrom": "Sent from {{platform}}",
     "via": "via {{platform}}",
     "sentBy": "Sent by {{name}}",
     "thinking": "Thinking",
     "tool": "Tool: {{name}}",
-    "login": "Login"
+    "reviewCredentials": "Review credentials"
   },
   "notifications": {
     "openOnGitLab": "Open on GitLab",
@@ -317,5 +317,37 @@
     "controllerUnavailable": "Agent controller client is not available",
     "skillInvalidResponse": "Skill invocation returned an invalid response.",
     "skillFailed": "Skill invocation failed ({{status}})."
+  },
+  "runError": {
+    "details": "Error details",
+    "copyDetails": "Copy error details",
+    "model": "Model: {{model}}",
+    "titles": {
+      "signIn": "Provider sign-in required",
+      "quota": "Provider quota exhausted",
+      "auth": "Provider access failed",
+      "contextOverflow": "Conversation exceeds the model’s limit",
+      "modelRejected": "Model not available",
+      "toolHistoryRejected": "Conversation history rejected",
+      "invalidRequest": "Model request rejected",
+      "timeout": "Request timed out",
+      "rateLimited": "Provider rate limit reached",
+      "unavailable": "Model provider temporarily unavailable",
+      "modelRequestFailed": "Model request failed",
+      "runStopped": "Run stopped"
+    },
+    "messages": {
+      "quotaNext": "Check the provider account’s billing or usage allowance, or use another credential or model.",
+      "authNext": "Review the credentials and model access configured for this session.",
+      "contextOverflow": "Choose a model with a larger context window or start a new session with a shorter prompt.",
+      "modelRejectedNext": "Choose another model for this session.",
+      "modelRejectedFallback": "The provider rejected this model.",
+      "toolHistoryRejected": "The provider could not match a tool call with its result. Copy the error details so this session can be investigated.",
+      "timeout": "The request took too long to complete. Send a message to continue the run.",
+      "rateLimited": "Wait a moment, then send a message to continue the run.",
+      "unavailable": "The provider could not complete the request. Send a message to continue the run.",
+      "noReason": "The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.",
+      "unexpected": "An unexpected error stopped the run. Copy the error details to investigate."
+    }
   }
 }

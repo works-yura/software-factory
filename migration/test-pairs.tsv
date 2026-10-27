@@ -338,7 +338,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/transcript-notifications.test.ts	../apps/ui/src/ui/domains/chat/components/__tests__/transcript-notifications.test.ts
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ConnectionActivity.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ConnectionActivity.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelCredential.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelCredential.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	-7	personal model scope removed (Your models, scope choice, personal keys)
+../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	-6	personal model scope removed (Your models, scope choice, personal keys) (-7); error-card model switch case ported from upstream 38ff787998 (+1)
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPickerRoutedThread.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPickerRoutedThread.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/OperationalMemoryStatus.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/OperationalMemoryStatus.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/context/__tests__/ChatModelsProvider.msw.test.tsx	../apps/ui/src/ui/domains/chat/context/__tests__/ChatModelsProvider.msw.test.tsx
@@ -353,7 +353,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/handoffFiles.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/handoffFiles.test.ts
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/message-author.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/message-author.test.ts
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/runtime.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/runtime.test.ts
-../../../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts
+../../../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	+6	run error notice cases ported from upstream 38ff787998
 ../../../apps/ui/src/ui/domains/factory/activity.test.ts	../apps/ui/src/ui/domains/factory/activity.test.ts
 ../../../apps/ui/src/ui/domains/factory/auditPresentation.test.ts	../apps/ui/src/ui/domains/factory/auditPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardCardState.test.ts	../apps/ui/src/ui/domains/factory/boardCardState.test.ts

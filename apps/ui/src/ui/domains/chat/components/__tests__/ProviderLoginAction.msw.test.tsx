@@ -42,6 +42,6 @@ describe('ProviderLoginAction', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('link', { name: 'Login' })).toHaveAttribute('href', href);
+    expect(await screen.findByRole('link', { name: 'Review credentials' })).toHaveAttribute('href', href);
   });
 });
