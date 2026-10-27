@@ -30,7 +30,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 PACKAGES = os.path.join(ROOT, 'packages')
 SPEC = re.compile(r"""(?P<lead>(?:\bfrom|\bimport|vi\.mock|vi\.importActual(?:<[^>]*>)?|import)\s*\(?\s*)(?P<q>['"])(?P<spec>\.{1,2}/[^'"]+)(?P=q)""")
 # Bare specifiers in import/export-from statements and dynamic import(), shaped like package names.
-EXTERNAL = re.compile(r"""(?:^\s*(?:import|export)\b[^;'"]*?\bfrom\s*|^\s*import\s*|\bimport\(\s*|vi\.mock\(\s*)['"]((?:@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*(?:/[\w./-]*)?)['"]""", re.M)
+# vi.mock targets are not dependencies: a mock may stand in for a package that is never installed.
+EXTERNAL = re.compile(r"""(?:^\s*(?:import|export)\b[^;'"]*?\bfrom\s*|^\s*import\s*|\bimport\(\s*)['"]((?:@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*(?:/[\w./-]*)?)['"]""", re.M)
 
 
 def module_of(spec, from_dir, src_root):
