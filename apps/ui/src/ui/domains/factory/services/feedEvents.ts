@@ -1,6 +1,9 @@
 import { isRecord } from '../../../../lib/isRecord';
 import { readSSE } from '../../../lib/readSSE';
 import { RequestError } from './request';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export interface FeedEvent {
   /** Absent when the project's attention moved but no work item's comments did. */
@@ -19,7 +22,7 @@ export async function streamFeedEvents(
     signal,
   });
   if (!response.ok || !response.body) {
-    throw new RequestError(`Feed stream failed (${response.status})`, response.status);
+    throw new RequestError(tk('errors.feedFailed', { status: response.status }), response.status);
   }
   handlers.onConnected();
   await readSSE(response.body, (event, data) => {

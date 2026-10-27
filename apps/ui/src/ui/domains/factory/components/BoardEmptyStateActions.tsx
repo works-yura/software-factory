@@ -2,6 +2,9 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { Link } from 'react-router';
 
 import { settingsSectionPath } from '../../settings/settingsSections';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export function BoardEmptyStateActions({
   factoryId,
@@ -17,7 +20,7 @@ export function BoardEmptyStateActions({
   if (onClearFilters) {
     return (
       <Button size="sm" onClick={onClearFilters}>
-        Clear filters
+        {tk('emptyActions.clearFilters')}
       </Button>
     );
   }
@@ -26,12 +29,12 @@ export function BoardEmptyStateActions({
     <>
       {onCreate && (
         <Button size="sm" onClick={onCreate}>
-          Create card
+          {tk('emptyActions.createCard')}
         </Button>
       )}
       {connectSource && (
         <Link to={settingsSectionPath(factoryId, 'intake')} className={buttonVariants({ size: 'sm' })}>
-          Connect issue source
+          {tk('emptyActions.connectSource')}
         </Link>
       )}
     </>

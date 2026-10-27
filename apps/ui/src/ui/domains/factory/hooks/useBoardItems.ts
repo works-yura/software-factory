@@ -17,6 +17,9 @@ import { createWorkItemComment } from '../services/comments';
 import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 interface MoveOptions {
   /** What the server records as the reason for the move; a drag says so, a card button does not. */
@@ -78,7 +81,7 @@ export function useBoardItems({
       .then(result => {
         if (result.status === 'rejected') refused(result.reason);
       })
-      .catch(error => refused(error instanceof Error ? error.message : 'The transition could not be evaluated.'))
+      .catch(error => refused(error instanceof Error ? error.message : tk('errors.transitionFailed')))
       .finally(onSettled);
   };
 
@@ -108,7 +111,7 @@ export function useBoardItems({
       .then(patched => requestTransition(patched, toStage, options, release))
       .catch(error => {
         release();
-        onFailure?.(error instanceof Error ? error.message : 'The card could not be updated.');
+        onFailure?.(error instanceof Error ? error.message : tk('errors.updateFailed'));
       });
   };
 
@@ -144,7 +147,7 @@ export function useBoardItems({
       }
       if (!item.stages.includes(toStage)) requestTransition(item, toStage, { cause });
     })().catch(error => {
-      const failure = error instanceof Error ? error : new Error('The card could not be filed.');
+      const failure = error instanceof Error ? error : new Error(tk('errors.fileFailed'));
       setDropError(failure);
       onFailure?.(failure.message);
     });

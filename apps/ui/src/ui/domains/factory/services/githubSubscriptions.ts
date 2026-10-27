@@ -1,3 +1,7 @@
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
+
 /** Which source-control provider serves the subscriptions route. */
 export type ChangeRequestProvider = 'github' | 'gitlab';
 
@@ -50,11 +54,11 @@ export async function listPullRequestSubscriptions(
 ): Promise<PullRequestSubscription[]> {
   const params = new URLSearchParams({ sessionId, threadId });
   const response = await fetch(`${baseUrl}/web/${provider}/subscriptions?${params}`, { credentials: 'include' });
-  if (!response.ok) throw new Error(`Failed to load pull request subscriptions (${response.status}).`);
+  if (!response.ok) throw new Error(tk('errors.subscriptionsFailed', { status: response.status }));
 
   const body: unknown = await response.json();
   if (!isRecord(body) || !Array.isArray(body.subscriptions)) {
-    throw new Error('Pull request subscriptions returned an invalid response.');
+    throw new Error(tk('errors.subscriptionsInvalid'));
   }
   // one bad row must not hide every other pull request; warn so a widened server enum is not silent
   const subscriptions = body.subscriptions.filter(isPullRequestSubscription);

@@ -4,6 +4,9 @@ import type { CardMove } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem } from './services/workItems';
 import { phaseTitle } from '../../i18n/boardLabels';
+import { translator } from '../../i18n/t';
+
+const tk = translator('board');
 
 // The lane's own move first: clicking the button of the column a card sits in re-runs that lane.
 // Then the first lane whose seat is still free, so a card never leads with a run it has already had.
@@ -34,11 +37,11 @@ export function proposedCardRun(
     const phase = definition?.phases.find(phase => phase.role === proposal.role);
     // A proposal for a role this board never declares is a leftover from another board.
     if (!phase) return undefined;
-    return { decisionId: proposal.id, label: phaseTitle(definition!.id, phase.id, phase.title) };
+    return { decisionId: proposal.id, label: phaseTitle(definition!.id, phase.id, phase.title), action: undefined };
   }
   const proposedMove = moves.find(move => move.role === proposal.role);
-  const label = proposedMove?.label ?? primaryMove?.label ?? 'Start run';
-  return { decisionId: proposal.id, label };
+  const move = proposedMove ?? primaryMove;
+  return { decisionId: proposal.id, label: move?.label ?? tk('menu.startRun'), action: move?.action };
 }
 
 export function movingCardStatus(

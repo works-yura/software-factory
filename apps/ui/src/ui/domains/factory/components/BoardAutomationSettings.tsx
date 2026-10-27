@@ -5,6 +5,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Settings2 } from 'lucide-react';
 import type { UseMutationResult } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 
 import { useSetFactoryAutomationMutation } from '../../../../hooks/useFactoryAutomation';
 
@@ -48,6 +49,7 @@ export function BoardAutomationSettings({
   reviewTestChecksEnabled: boolean;
   selfReviewEnabled: boolean;
 }) {
+  const { t } = useTranslation('board');
   const autoRun = useSetFactoryAutomationMutation(factoryProjectId, 'autoRunEnabled');
   const autoApprove = useSetFactoryAutomationMutation(factoryProjectId, 'autoApprovePlans');
   const testChecks = useSetFactoryAutomationMutation(factoryProjectId, 'reviewTestChecksEnabled');
@@ -55,42 +57,45 @@ export function BoardAutomationSettings({
 
   return (
     <Popover>
-      <PopoverTrigger variant="default" size="icon-sm" aria-label="Automation settings" tooltip="Automation settings">
+      <PopoverTrigger variant="default" size="icon-sm" aria-label={t('automationSettings.title')}
+        tooltip={t('automationSettings.title')}
+      >
         <Settings2 aria-hidden />
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)]" aria-label="Automation settings">
+      <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)]" aria-label={t('automationSettings.title')}
+      >
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-1">
             <Txt as="h2" variant="subheading">
-              Automation
+              {t('automationSettings.heading')}
             </Txt>
             <Txt variant="caption" tone="muted">
-              All boards in this factory.
+              {t('automationSettings.scope')}
             </Txt>
           </div>
           <AutomationSwitch
-            label="Auto-start runs"
+            label={t('automationSettings.autoRun.label')}
             enabled={autoRunEnabled}
             mutation={autoRun}
-            description="Start incoming work automatically."
+            description={t('automationSettings.autoRun.description')}
           />
           <AutomationSwitch
-            label="Auto-approve plans"
+            label={t('automationSettings.autoApprove.label')}
             enabled={autoApprovePlans}
             mutation={autoApprove}
-            description="Continue without waiting for approval."
+            description={t('automationSettings.autoApprove.description')}
           />
           <AutomationSwitch
-            label="Self-review before pull requests"
+            label={t('automationSettings.selfReview.label')}
             enabled={selfReviewEnabled}
             mutation={selfReview}
-            description="An independent agent reviews and tests the branch before the pull request opens."
+            description={t('automationSettings.selfReview.description')}
           />
           <AutomationSwitch
-            label="Publish review test checks"
+            label={t('automationSettings.testChecks.label')}
             enabled={reviewTestChecksEnabled}
             mutation={testChecks}
-            description="Report review test results as a check on the pull request."
+            description={t('automationSettings.testChecks.description')}
           />
         </div>
       </PopoverContent>

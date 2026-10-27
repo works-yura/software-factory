@@ -5,6 +5,9 @@ import { useApiConfig } from '../../../../api/config';
 import type { IntakeFeed, IntakeSource } from '../boardCandidates';
 import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
 import { connectLinear, isLinearReauthError } from '../services/linear';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 /**
  * Why a column has no candidates when its feed failed. Without it the column
@@ -32,10 +35,10 @@ function LinearReauthNotice({ onConnect }: { onConnect: () => void }) {
   return (
     <div className="flex flex-col items-start gap-2 p-1">
       <Txt tone="muted" as="span" variant="meta">
-        Linear authorization expired. Reconnect to keep syncing issues.
+        {tk('intake.linearExpired')}
       </Txt>
       <Button size="sm" onClick={onConnect}>
-        Connect Linear
+        {tk('intake.connectLinear')}
       </Button>
     </div>
   );
@@ -48,7 +51,7 @@ function FeedFailureNotice({ message, onRetry }: { message: string; onRetry: () 
         {message}
       </Txt>
       <Button size="sm" onClick={onRetry}>
-        Retry
+        {tk('intake.retry')}
       </Button>
     </div>
   );

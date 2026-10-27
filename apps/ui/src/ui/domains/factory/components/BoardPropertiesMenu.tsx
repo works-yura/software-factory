@@ -1,5 +1,6 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ArrowUpDown, Funnel, LayersPlus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 import { boardFiltersActive, withBoardFilterValues } from '../boardFilters';
@@ -18,17 +19,23 @@ export function BoardPropertiesMenu({
   fields: readonly BoardFilterField[];
   currentUserId?: string;
 }) {
+  const { t } = useTranslation('board');
   const changes = [
-    ...(view.sort === DEFAULT_BOARD_SORT ? [] : [`Sort: ${BOARD_SORT_LABELS[view.sort]}`]),
+    ...(view.sort === DEFAULT_BOARD_SORT ? [] : [t('properties.sortChange', { sort: BOARD_SORT_LABELS[view.sort] })]),
     ...fields
       .filter(field => view.filters[field.id].size > 0)
-      .map(field => `${field.label}: ${boardFilterSummary(field, [...view.filters[field.id]])}`),
+      .map(field =>
+        t('properties.filterChange', {
+          field: field.label,
+          value: boardFilterSummary(field, [...view.filters[field.id]]),
+        }),
+      ),
   ];
   const canSaveAsView = !view.savedViews.applied && boardFiltersActive(view.filters);
 
   return (
     <PropertiesMenu
-      label="Board properties"
+      label={t('properties.label')}
       variant="default"
       icon={<Funnel size={15} aria-hidden />}
       changedCount={changes.length}
@@ -36,7 +43,7 @@ export function BoardPropertiesMenu({
       onReset={view.resetProperties}
     >
       <DropdownMenu.RadioSub
-        label="Sort"
+        label={t('properties.sort')}
         icon={<ArrowUpDown aria-hidden />}
         options={boardSortOptions(currentUserId)}
         value={view.sort}
@@ -57,7 +64,7 @@ export function BoardPropertiesMenu({
           <DropdownMenu.Separator />
           <DropdownMenu.Item onClick={view.saveAsView}>
             <LayersPlus aria-hidden />
-            <span>Save as view</span>
+            <span>{t('properties.saveAsView')}</span>
           </DropdownMenu.Item>
         </>
       )}

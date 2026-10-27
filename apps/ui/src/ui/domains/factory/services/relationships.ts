@@ -2,6 +2,9 @@ import { gitlabIdentifierForItem, githubNumberForItem } from '../boardItems';
 import { rememberedBoardPath } from './boardViews';
 import type { WorkItem } from './workItems';
 import { isPullRequestSource } from './workItems';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 /** Intake candidates carry a source and metadata but no card, so identifiers work on both. */
 type IdentifiableItem = Pick<WorkItem, 'source' | 'metadata' | 'sourceKey'>;
@@ -98,7 +101,9 @@ export function relationshipPath(item: Pick<WorkItem, 'source'>, factoryId: stri
 
 export function relationshipLabel(item: WorkItem): string {
   const reference = workItemReferenceLabel(item) ?? item.title;
-  return isPullRequestSource(item.source) ? `Review: ${reference}` : `Work item: ${reference}`;
+  return isPullRequestSource(item.source)
+    ? tk('relationship.review', { reference })
+    : tk('relationship.workItem', { reference });
 }
 
 function linearIdentifier(item: IdentifiableItem): string | undefined {
@@ -122,6 +127,6 @@ export function workItemReferenceLabel(item: IdentifiableItem): string | undefin
   if (identifier === undefined) return;
   if (item.source === 'github-pr') return `PR ${identifier}`;
   if (item.source === 'gitlab-pr') return `MR ${identifier}`;
-  if (item.source === 'github-issue') return `Issue ${identifier}`;
+  if (item.source === 'github-issue') return tk('relationship.issue', { identifier });
   return identifier;
 }

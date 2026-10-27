@@ -34,7 +34,7 @@ import {
 } from '../../domains/factory/boardPeople';
 import { boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
-import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
+import { busyCardMoveRefusal, canMoveTo } from '../../domains/factory/boardCardState';
 import { candidatePayload } from '../../domains/factory/boardDrag';
 import type { DragPayload } from '../../domains/factory/boardDrag';
 import { cardMatchesSearch, isPersistedCandidate } from '../../domains/factory/boardItems';
@@ -51,6 +51,9 @@ import { BoardStageCandidates } from '../../domains/factory/components/BoardStag
 import { BoardStages } from './BoardStages';
 import { cardProjectRepositoryId } from '../../domains/factory/boardRepository';
 import { phaseTitle } from '../../i18n/boardLabels';
+import { translator } from '../../i18n/t';
+
+const tk = translator('board');
 
 /** Count all available candidates before source filters so empty states can explain excluded cards. */
 function countUnfilteredCandidates({
@@ -110,7 +113,7 @@ export function BoardContent({
       if (payload.fromStage === stage) return;
       const toPhaseKind = definition.phases.find(phase => phase.id === stage)?.kind;
       if (!canMoveTo(payload.ownerKind, toPhaseKind)) {
-        toast.error(BUSY_CARD_MOVE_REFUSAL);
+        toast.error(busyCardMoveRefusal());
         return;
       }
     }
@@ -214,7 +217,7 @@ export function BoardContent({
     return (
       <div className="p-4">
         <Notice variant="destructive" className="max-w-xl">
-          {items.error instanceof Error ? items.error.message : 'Failed to load the board'}
+          {items.error instanceof Error ? items.error.message : tk('page.loadFailed')}
         </Notice>
       </div>
     );
@@ -389,7 +392,7 @@ export function BoardContent({
       {mutationError !== undefined && (
         <div className="shrink-0 p-4 pb-0">
           <Notice variant="destructive">
-            {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
+            {mutationError instanceof Error ? mutationError.message : tk('page.actionFailed')}
           </Notice>
         </div>
       )}

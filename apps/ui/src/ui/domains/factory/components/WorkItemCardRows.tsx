@@ -20,6 +20,9 @@ import {
 } from './BoardCardParts';
 import { WorkItemActivity } from './WorkItemActivity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 // The card and its open copy render these same rows, so opening moves none of them.
 export function WorkItemCardRows({
@@ -115,7 +118,14 @@ export function reviewVerdict(metadata: Record<string, unknown>): ReviewVerdict 
   const reviewed = typeof metadata.reviewedHeadSha === 'string' ? metadata.reviewedHeadSha : undefined;
   const head = typeof metadata.pullRequestHeadSha === 'string' ? metadata.pullRequestHeadSha : undefined;
   const outdated = reviewed !== undefined && head !== undefined && reviewed.toLowerCase() !== head.toLowerCase();
-  const label = `${verdict === 'approve' ? 'Approved' : 'Changes requested'}${outdated ? ' (outdated)' : ''}`;
+  const label =
+    verdict === 'approve'
+      ? outdated
+        ? tk('verdict.approvedOutdated')
+        : tk('verdict.approved')
+      : outdated
+        ? tk('verdict.changesRequestedOutdated')
+        : tk('verdict.changesRequested');
   return { approved: verdict === 'approve' && !outdated, outdated, label };
 }
 
@@ -129,7 +139,14 @@ export function selfReviewVerdict(
   const verdict = metadata.selfReviewVerdict;
   if (verdict !== 'approve' && verdict !== 'request changes') return undefined;
   const rounds = typeof metadata.selfReviewRounds === 'number' ? metadata.selfReviewRounds : 0;
-  const label = `Self-review: ${verdict === 'approve' ? 'approved' : 'changes requested'}${rounds > 0 ? ` (round ${rounds})` : ''}`;
+  const label =
+    verdict === 'approve'
+      ? rounds > 0
+        ? tk('verdict.selfApprovedRound', { rounds })
+        : tk('verdict.selfApproved')
+      : rounds > 0
+        ? tk('verdict.selfChangesRequestedRound', { rounds })
+        : tk('verdict.selfChangesRequested');
   return { approved: verdict === 'approve', outdated: false, label };
 }
 

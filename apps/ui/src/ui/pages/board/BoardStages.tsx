@@ -12,6 +12,9 @@ import { BoardOpenCardContext } from '../../domains/factory/context/BoardOpenCar
 import { BoardScrollContext } from '../../domains/factory/context/BoardScrollContext';
 import { useOpenCardState } from '../../domains/factory/hooks/useOpenCardState';
 import type { LinkedComment } from '../../domains/factory/hooks/useOpenCardState';
+import { translator } from '../../i18n/t';
+
+const tk = translator('board');
 
 export interface BoardStageView {
   stage: { id: string; label: string };
@@ -76,7 +79,7 @@ export function BoardStages({
                 {layout === 'board' ? (
                   <div
                     role="group"
-                    aria-label="Board columns"
+                    aria-label={tk('page.columns')}
                     className="flex flex-1 items-stretch gap-2 px-4 pb-4 lg:gap-3"
                   >
                     {stageViews.map(stageView => (

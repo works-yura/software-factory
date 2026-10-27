@@ -16,6 +16,9 @@ import {
 } from '../boardItems';
 import type { WorkItem } from '../services/workItems';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
 type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'metadata'>;
@@ -109,7 +112,7 @@ export function CardSourceDescription({
   if (query.isError) {
     return (
       <Txt variant="meta" tone="muted" className="m-0">
-        The description could not be loaded.
+        {tk('card.descriptionFailed')}
       </Txt>
     );
   }

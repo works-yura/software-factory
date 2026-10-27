@@ -1,3 +1,7 @@
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
+
 /**
  * Browser-side helpers for the Jira intake source.
  *
@@ -102,7 +106,7 @@ async function getJiraResource<T>(baseUrl: string, path: string): Promise<T> {
     credentials: 'include',
   });
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+    let message = tk('errors.requestFailed', { status: res.status });
     let code: string | undefined;
     try {
       const body = (await res.json()) as { error?: string; message?: string };

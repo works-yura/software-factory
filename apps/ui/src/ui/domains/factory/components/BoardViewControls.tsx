@@ -4,6 +4,7 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Kanban, List } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { BoardLayout } from '../boardLayout';
 import type { BoardParticipant } from '../boardPeople';
@@ -15,8 +16,12 @@ import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, boardFilterFields } from './boardFilterFields';
 import { BoardPropertiesMenu } from './BoardPropertiesMenu';
 import { BoardViewControlsLayout } from './BoardViewControlsLayout';
+import { lazyLabels } from '../../../i18n/lazy';
 
-const LAYOUT_LABELS: Record<BoardLayout, string> = { board: 'Board', list: 'List' };
+const LAYOUT_LABELS: Readonly<Record<BoardLayout, string>> = lazyLabels(
+  ['board', 'list'],
+  layout => `board:viewControls.layouts.${layout}`,
+);
 
 function ViewSettingsSummary({ settings }: { settings: BoardViewSettings }) {
   return (
@@ -41,6 +46,7 @@ export function BoardViewControls({
   currentUserId?: string;
   aside?: ReactNode;
 }) {
+  const { t } = useTranslation('board');
   const { savedViews } = view;
   const { connectedSources, linearProjects } = useBoardFilterSources();
   const fields = boardFilterFields({
@@ -58,17 +64,23 @@ export function BoardViewControls({
       views={
         <>
           <SavedViewTabs
-            aria-label="Board views"
+            aria-label={t('viewControls.views')}
             className="max-sm:w-full"
             views={savedViews}
             fields={fields}
             operators={BOARD_FILTER_OPERATORS}
-            defaultLabel="All cards"
+            defaultLabel={t('viewControls.allCards')}
             newViewSettings={view.newViewSettings}
             describeSettings={settings => <ViewSettingsSummary settings={settings} />}
           />
           <div className="flex shrink-0 items-center gap-2">
-            <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
+            <SegmentedControl
+              aria-label={t('viewControls.layout')}
+              size="sm"
+              iconOnly
+              value={view.layout}
+              onValueChange={view.setLayout}
+            >
               <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
                 <List aria-hidden />
               </SegmentedControlItem>
@@ -82,8 +94,8 @@ export function BoardViewControls({
       }
       search={
         <SearchInput
-          label="Search cards"
-          placeholder={savedViews.applied ? 'Search this view…' : 'Search cards…'}
+          label={t('viewControls.searchLabel')}
+          placeholder={savedViews.applied ? t('viewControls.searchView') : t('viewControls.searchCards')}
           value={view.search}
           onValueChange={view.setSearch}
           size="sm"

@@ -1,16 +1,15 @@
 import { BOARD_SORTS } from './boardOrder';
 import type { BoardSort } from './boardOrder';
+import { lazyLabels } from '../../i18n/lazy';
 
 export const BOARD_SORT_QUERY = 'sort';
 
 export const DEFAULT_BOARD_SORT: BoardSort = 'recent';
 
-export const BOARD_SORT_LABELS: Record<BoardSort, string> = {
-  recent: 'Recently moved',
-  'recent-mine': 'Recently moved by me',
-  'created-newest': 'Newest on board',
-  'created-oldest': 'Oldest on board',
-};
+export const BOARD_SORT_LABELS: Readonly<Record<BoardSort, string>> = lazyLabels(
+  BOARD_SORTS,
+  sort => `board:sort.${sort}`,
+);
 
 export function boardSortOptions(currentUserId?: string): { value: BoardSort; label: string }[] {
   return BOARD_SORTS.filter(sort => sort !== 'recent-mine' || currentUserId).map(sort => ({

@@ -2,6 +2,8 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import { translator } from '../../../i18n/t';
+
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import { useCardRepositorySlug } from './useCardRepositorySlug';
 import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
@@ -10,7 +12,9 @@ import { repositoryMatchesCardSource } from '../boardRepository';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
-const PREPARING_SESSION_LABEL = 'Preparing session…';
+const tk = translator('board');
+
+const preparingSessionLabel = () => tk('runs.preparingSession');
 
 /** Opening the chat session a card carries, and minting one when it has none yet. */
 export function useBoardRuns({
@@ -66,19 +70,19 @@ export function useBoardRuns({
     const refreshedItems = await refetchItems();
     if (!refreshedItems.isSuccess) {
       const cause = refreshedItems.error;
-      toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board — try reloading the page');
+      toast.error(cause instanceof Error ? cause.message : tk('runs.refreshFailed'));
       return;
     }
     const item = refreshedItems.data.find(candidate => candidate.id === itemId);
     if (!item) {
-      toast.error('This card no longer exists — the board may be out of date');
+      toast.error(tk('runs.cardGone'));
       return;
     }
     return item;
   };
 
   const openOrCreateSession = async (item: WorkItem) => {
-    if (!beginPreparingItem(item.id, PREPARING_SESSION_LABEL)) return;
+    if (!beginPreparingItem(item.id, preparingSessionLabel())) return;
     try {
       const refreshed = await refreshItem(item.id);
       if (!refreshed) return;
@@ -92,7 +96,7 @@ export function useBoardRuns({
         repositoryMatchesCardSource(repository, refreshed.source),
       );
       if (compatibleRepositories.length === 0) {
-        toast.error("No repository matching this card's provider is linked to this Factory.");
+        toast.error(tk('runs.noMatchingRepository'));
         return;
       }
       const targetSlug = await repositorySlugFor(refreshed.source, refreshed.metadata);
@@ -102,7 +106,7 @@ export function useBoardRuns({
         return 'repository-selection-required' as const;
       }
       if (targetSlug && !hasLinkedTarget) {
-        toast.error(`Repository ${targetSlug} is not linked to this Factory with a provider matching this card`);
+        toast.error(tk('runs.repositoryNotLinked', { repository: targetSlug }));
         return;
       }
       await start.mutateAsync({
@@ -142,7 +146,7 @@ export function useBoardRuns({
         },
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to start the run');
+      toast.error(error instanceof Error ? error.message : tk('runs.startFailed'));
     }
   };
 
@@ -154,7 +158,7 @@ export function useBoardRuns({
     selectRepository,
     closeRepositorySelection: () => setRepositorySelection(undefined),
     preparingFor: (itemId: string): string | undefined =>
-      preparingItems[itemId] ?? (startingItemIds.includes(itemId) ? PREPARING_SESSION_LABEL : undefined),
+      preparingItems[itemId] ?? (startingItemIds.includes(itemId) ? preparingSessionLabel() : undefined),
     openThread,
     refreshItem,
     openOrCreateSession,

@@ -3,12 +3,19 @@ import type { ReactNode } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
 import type { BoardKind } from '../boardStages';
+import { translator } from '../../../i18n/t';
 import { stageLabel } from '../stages';
 import type { BoardStageId } from '../stages';
 
 interface BoardColumnEmptyCopy {
   title: string;
   description: string;
+}
+
+const tk = translator('board');
+
+function emptyCopy(key: string): BoardColumnEmptyCopy {
+  return { title: tk(`emptyColumn.${key}.title`), description: tk(`emptyColumn.${key}.description`) };
 }
 
 function boardColumnEmptyCopy(
@@ -18,67 +25,27 @@ function boardColumnEmptyCopy(
   isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (isInitialPhase) {
-    if (kind === 'review')
-      return {
-        title: 'No change requests waiting',
-        description: 'Open change requests from connected repositories appear here.',
-      };
-    if (!hasIntakeSource) {
-      return {
-        title: 'No intake sources',
-        description: 'Create a card or connect an issue source in Work Intake settings.',
-      };
-    }
-    return {
-      title: 'Intake is clear',
-      description: 'New issues from your connected sources appear here.',
-    };
+    if (kind === 'review') return emptyCopy('reviewIntake');
+    if (!hasIntakeSource) return emptyCopy('noSources');
+    return emptyCopy('intake');
   }
   switch (stage) {
     case 'triage':
-      return {
-        title: 'Nothing to triage',
-        description: 'Drag an intake item here when it needs investigation.',
-      };
+      return emptyCopy('triage');
     case 'planning':
-      return {
-        title: 'Nothing in planning',
-        description: 'Drag triaged work here when it is ready to plan.',
-      };
+      return emptyCopy('planning');
     case 'execute':
-      return {
-        title: 'Nothing being built',
-        description: 'Drag planned work here when implementation starts.',
-      };
+      return emptyCopy('execute');
     case 'review':
-      if (kind === 'review')
-        return {
-          title: 'No active reviews',
-          description: 'Drag a change request here when review starts.',
-        };
-      return {
-        title: 'Nothing awaiting review',
-        description: 'Drag built work here when it is ready for review.',
-      };
+      return emptyCopy(kind === 'review' ? 'reviewActive' : 'review');
     case 'done':
-      if (kind === 'review')
-        return {
-          title: 'No completed reviews',
-          description: 'Drag a reviewed pull request here when it is complete.',
-        };
-      return {
-        title: 'Nothing completed yet',
-        description: 'Drag finished work here to close it out.',
-      };
+      return emptyCopy(kind === 'review' ? 'reviewDone' : 'done');
     case 'canceled':
-      return {
-        title: 'Nothing canceled',
-        description: 'Drag work here when it should leave the active flow.',
-      };
+      return emptyCopy('canceled');
     default:
       return {
-        title: `Nothing in ${stageLabel(stage)}`,
-        description: 'Drag work here when it reaches this stage.',
+        title: tk('emptyColumn.other.title', { stage: stageLabel(stage) }),
+        description: tk('emptyColumn.other.description'),
       };
   }
 }
@@ -93,17 +60,15 @@ function boardEmptyCopy(
 ): BoardColumnEmptyCopy {
   if (filtersExcludeAll) {
     return {
-      title: kind === 'review' ? 'No change requests match filters' : 'No work items match filters',
-      description: 'Try adjusting or clearing your filters.',
+      title: kind === 'review' ? tk('emptyColumn.filteredReview') : tk('emptyColumn.filteredWork'),
+      description: tk('emptyColumn.filteredDescription'),
     };
   }
   const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource, isInitialPhase);
   if (alreadyMaterialized <= 0) return copy;
-  const itemsLabel =
-    alreadyMaterialized === 1 ? 'item from this source already has' : 'items from this source already have';
   return {
     title: copy.title,
-    description: `${alreadyMaterialized} ${itemsLabel} a card on another board, so the feed only offers new ones.`,
+    description: tk('emptyColumn.alreadyMaterialized', { count: alreadyMaterialized }),
   };
 }
 

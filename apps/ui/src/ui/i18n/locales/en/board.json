@@ -1,1 +1,373 @@
-{}
+{
+  "sources": {
+    "github-issue": "Issue",
+    "github-pr": "PR Review",
+    "gitlab-issue": "GitLab",
+    "gitlab-pr": "MR Review",
+    "linear-issue": "Linear",
+    "jira-issue": "Jira",
+    "incidentio-follow-up": "incident.io",
+    "slack-thread": "Slack",
+    "manual": "Manual"
+  },
+  "pullRequestStatus": {
+    "draft": "Draft pull request",
+    "open": "Open pull request",
+    "closed": "Closed pull request",
+    "merged": "Merged pull request"
+  },
+  "externalLink": {
+    "github": "Open in GitHub",
+    "gitlab": "Open in GitLab",
+    "linear": "Open in Linear",
+    "jira": "Open in Jira",
+    "incidentio": "Open in incident.io",
+    "slack": "Open in Slack",
+    "manual": "Open link"
+  },
+  "emptyColumn": {
+    "reviewIntake": {
+      "title": "No change requests waiting",
+      "description": "Open change requests from connected repositories appear here."
+    },
+    "noSources": {
+      "title": "No intake sources",
+      "description": "Create a card or connect an issue source in Work Intake settings."
+    },
+    "intake": {
+      "title": "Intake is clear",
+      "description": "New issues from your connected sources appear here."
+    },
+    "triage": {
+      "title": "Nothing to triage",
+      "description": "Drag an intake item here when it needs investigation."
+    },
+    "planning": {
+      "title": "Nothing in planning",
+      "description": "Drag triaged work here when it is ready to plan."
+    },
+    "execute": {
+      "title": "Nothing being built",
+      "description": "Drag planned work here when implementation starts."
+    },
+    "reviewActive": {
+      "title": "No active reviews",
+      "description": "Drag a change request here when review starts."
+    },
+    "review": {
+      "title": "Nothing awaiting review",
+      "description": "Drag built work here when it is ready for review."
+    },
+    "reviewDone": {
+      "title": "No completed reviews",
+      "description": "Drag a reviewed pull request here when it is complete."
+    },
+    "done": {
+      "title": "Nothing completed yet",
+      "description": "Drag finished work here to close it out."
+    },
+    "canceled": {
+      "title": "Nothing canceled",
+      "description": "Drag work here when it should leave the active flow."
+    },
+    "other": {
+      "title": "Nothing in {{stage}}",
+      "description": "Drag work here when it reaches this stage."
+    },
+    "filteredReview": "No change requests match filters",
+    "filteredWork": "No work items match filters",
+    "filteredDescription": "Try adjusting or clearing your filters.",
+    "alreadyMaterialized_one": "{{count}} item from this source already has a card on another board, so the feed only offers new ones.",
+    "alreadyMaterialized_other": "{{count}} items from this source already have a card on another board, so the feed only offers new ones."
+  },
+  "moves": {
+    "investigate": "Investigate",
+    "build": "Build",
+    "prepareApproval": "Prepare approval",
+    "review": "Review",
+    "reReview": "Re-review"
+  },
+  "triageDecisions": {
+    "acceptAndPlan": "Accept and plan",
+    "acceptAndBuild": "Accept and build",
+    "close": "Close"
+  },
+  "primaryAction": {
+    "accept": "Accept",
+    "resume": "Resume",
+    "moveTo": "Move to {{phase}}",
+    "startSession": "Start session",
+    "openSession": "Open session",
+    "retry": "Retry",
+    "startSuggestedRun": "Start suggested run: {{label}}"
+  },
+  "cardState": {
+    "busyMoveRefusal": "Another run can't start while this card is busy.",
+    "markingDone": "Marking done…",
+    "movingTo": "Moving to {{stage}}…",
+    "moving": "Moving…",
+    "starting": "Starting…",
+    "retrying": "Retrying…",
+    "failedRetrying": "{{failed}} — retrying…",
+    "heldNeedsApproval": "{{kind}} · needs your approval"
+  },
+  "linkedSource": {
+    "githubIssue": "GitHub issue",
+    "githubPr": "GitHub pull request",
+    "gitlabIssue": "GitLab issue",
+    "gitlabPr": "GitLab merge request",
+    "linearIssue": "Linear issue",
+    "card": "card"
+  },
+  "automation": {
+    "invokeSkill": {
+      "busy": "Starting an automated run…",
+      "failed": "Automated run could not start"
+    },
+    "transition": {
+      "busy": "Moving this card automatically…",
+      "failed": "Automatic move failed"
+    },
+    "sync": {
+      "busy": "Syncing {{source}}…",
+      "failed": "Couldn't sync {{source}}",
+      "progress": "Syncing…"
+    },
+    "notify": {
+      "busy": "Notifying the session…",
+      "failed": "Session could not be notified",
+      "progress": "Notifying…"
+    },
+    "other": {
+      "busy": "Automation is working on this card…",
+      "failed": "Automation failed",
+      "progress": "Working…"
+    }
+  },
+  "auditCategories": {
+    "workItem": "Work items",
+    "run": "Runs",
+    "git": "Git",
+    "agent": "Agent",
+    "intake": "Intake"
+  },
+  "sort": {
+    "recent": "Recently moved",
+    "recent-mine": "Recently moved by me",
+    "created-newest": "Newest on board",
+    "created-oldest": "Oldest on board"
+  },
+  "sourceFilter": {
+    "manual": "Manual"
+  },
+  "relatedSessions": {
+    "issueTitle": "Issue #{{number}}: {{title}}",
+    "pullRequest": "Pull request",
+    "mergeRequest": "Merge request",
+    "issueNumber": "Issue #{{number}}",
+    "issue": "Issue",
+    "linearIssue": "Linear issue",
+    "workItem": "Work item",
+    "userSessions": "User sessions",
+    "sessions": "Sessions",
+    "open": "Open {{label}}",
+    "openRelated": "Open {{label}}: {{title}}"
+  },
+  "automationSettings": {
+    "title": "Automation settings",
+    "heading": "Automation",
+    "scope": "All boards in this factory.",
+    "autoRun": {
+      "label": "Auto-start runs",
+      "description": "Start incoming work automatically."
+    },
+    "autoApprove": {
+      "label": "Auto-approve plans",
+      "description": "Continue without waiting for approval."
+    },
+    "selfReview": {
+      "label": "Self-review before pull requests",
+      "description": "An independent agent reviews and tests the branch before the pull request opens."
+    },
+    "testChecks": {
+      "label": "Publish review test checks",
+      "description": "Report review test results as a check on the pull request."
+    }
+  },
+  "filters": {
+    "isAnyOf": "is any of",
+    "fields": {
+      "source": "Intake source",
+      "linearProject": "Linear project",
+      "teammate": "Involves",
+      "author": "Author",
+      "assignee": "Assignee",
+      "reviewer": "Review requested",
+      "worked": "Worked on by",
+      "label": "Label"
+    },
+    "you": "You",
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "searchPlaceholder": "Search…",
+    "searchField": "Search {{field}}",
+    "noMatches": "No matches"
+  },
+  "composer": {
+    "createFailed": "Failed to create work item",
+    "formLabel": "New work item in {{stage}}",
+    "meta": "Manual · new",
+    "titleLabel": "Work item title",
+    "placeholder": "Type a name…",
+    "cancel": "Cancel new work item",
+    "submit": "Add work item to {{stage}}"
+  },
+  "viewControls": {
+    "layouts": {
+      "board": "Board",
+      "list": "List"
+    },
+    "views": "Board views",
+    "allCards": "All cards",
+    "layout": "Layout",
+    "searchLabel": "Search cards",
+    "searchView": "Search this view…",
+    "searchCards": "Search cards…"
+  },
+  "properties": {
+    "sortChange": "Sort: {{sort}}",
+    "filterChange": "{{field}}: {{value}}",
+    "label": "Board properties",
+    "sort": "Sort",
+    "saveAsView": "Save as view"
+  },
+  "phaseKind": {
+    "resting": "resting phase",
+    "working": "working phase",
+    "terminal": "terminal phase"
+  },
+  "menu": {
+    "startRun": "Start run",
+    "starting": "Starting…",
+    "startSuggestedRun": "Start suggested run",
+    "dismissSuggestedRun": "Dismiss suggested run",
+    "askSupervisor": "Ask supervisor",
+    "markDone": "Mark done",
+    "moveTo": "Move to {{stage}}",
+    "remove": "Remove"
+  },
+  "card": {
+    "detailsFor": "Details for {{title}}",
+    "actionsFor": "Actions for {{title}}",
+    "allActionsFor": "All actions for {{title}}",
+    "collapse": "Collapse {{title}}",
+    "comments_one": "{{count}} comment",
+    "comments_other": "{{count}} comments",
+    "labels": "Labels",
+    "descriptionFailed": "The description could not be loaded."
+  },
+  "candidate": {
+    "customPrompt": "Custom prompt…",
+    "customPromptFor": "Custom prompt for {{title}}",
+    "promptPlaceholder": "What should the agent do with this?",
+    "promptFor": "Prompt for {{title}}",
+    "cancel": "Cancel",
+    "run": "Run",
+    "divider": "New candidates"
+  },
+  "runs": {
+    "preparingSession": "Preparing session…",
+    "refreshFailed": "Failed to refresh the board — try reloading the page",
+    "cardGone": "This card no longer exists — the board may be out of date",
+    "noMatchingRepository": "No repository matching this card's provider is linked to this Factory.",
+    "repositoryNotLinked": "Repository {{repository}} is not linked to this Factory with a provider matching this card",
+    "startFailed": "Unable to start the run"
+  },
+  "repositoryPicker": {
+    "label": "Choose repository",
+    "title": "Choose a repository",
+    "description": "Choose a linked repository for this task.",
+    "search": "Search repositories",
+    "defaultBranch": "Default branch: {{branch}}",
+    "noLinked": "No linked repositories",
+    "noMatching": "No matching repositories"
+  },
+  "errors": {
+    "requestFailed": "Request failed ({{status}})",
+    "invalidAuditEvents": "Invalid audit event response",
+    "invalidAuditPortal": "Invalid audit portal response",
+    "feedFailed": "Feed stream failed ({{status}})",
+    "incidentioStatusFailed": "incident.io status request failed ({{status}})",
+    "gitlabNoInstallation": "GitLab project registration returned no installation",
+    "subscriptionsFailed": "Failed to load pull request subscriptions ({{status}}).",
+    "subscriptionsInvalid": "Pull request subscriptions returned an invalid response.",
+    "network": "Network request failed",
+    "popupBlocked": "Popup was blocked. Allow popups for this site and try again.",
+    "authWindowClosed": "Authorization window was closed before the connection finished.",
+    "authFailed": "Authorization failed.",
+    "transitionFailed": "The transition could not be evaluated.",
+    "updateFailed": "The card could not be updated.",
+    "fileFailed": "The card could not be filed."
+  },
+  "relationship": {
+    "review": "Review: {{reference}}",
+    "workItem": "Work item: {{reference}}",
+    "issue": "Issue {{identifier}}"
+  },
+  "emptyActions": {
+    "clearFilters": "Clear filters",
+    "createCard": "Create card",
+    "connectSource": "Connect issue source"
+  },
+  "column": {
+    "taskCountIn": "{{count}} of {{total}} visible board tasks in {{stage}}",
+    "taskCount": "{{count}} of {{total}} visible board tasks",
+    "empty": "{{stage}}, empty",
+    "loading": "Loading {{stage}} column",
+    "create": "Create work item in {{stage}}"
+  },
+  "list": {
+    "stages": "Board stages"
+  },
+  "connectRepository": {
+    "reviewTitle": "Connect a repository to start reviewing",
+    "workTitle": "Connect a repository to start intake",
+    "reviewDescription": "Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.",
+    "workDescription": "Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.",
+    "openSettings": "Open Repository settings"
+  },
+  "landing": {
+    "loading": "Loading boards…",
+    "loadFailed": "Unable to load boards.",
+    "noBoards": "No boards installed.",
+    "notInstalled": "Board unavailable: this board is not installed."
+  },
+  "intake": {
+    "loadMore": "Load more candidates",
+    "loadingMore": "Loading more candidates",
+    "loadingMoreShort": "Loading more",
+    "linearExpired": "Linear authorization expired. Reconnect to keep syncing issues.",
+    "connectLinear": "Connect Linear",
+    "retry": "Retry"
+  },
+  "relatedLink": {
+    "open": "Open {{relation}}{{suffix}}",
+    "openLive": "Open live session for {{relation}}{{suffix}}",
+    "liveSession": "Live session"
+  },
+  "verdict": {
+    "approved": "Approved",
+    "approvedOutdated": "Approved (outdated)",
+    "changesRequested": "Changes requested",
+    "changesRequestedOutdated": "Changes requested (outdated)",
+    "selfApproved": "Self-review: approved",
+    "selfApprovedRound": "Self-review: approved (round {{rounds}})",
+    "selfChangesRequested": "Self-review: changes requested",
+    "selfChangesRequestedRound": "Self-review: changes requested (round {{rounds}})"
+  },
+  "page": {
+    "loadFailed": "Failed to load the board",
+    "actionFailed": "Board action failed",
+    "columns": "Board columns"
+  }
+}

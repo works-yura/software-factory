@@ -2,6 +2,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Plus } from 'lucide-react';
 
 import type { BoardStageId } from '../stages';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export function BoardStageCreateButton({
   stage,
@@ -20,8 +23,8 @@ export function BoardStageCreateButton({
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label={`Create work item in ${stage.label}`}
-      title={`Create work item in ${stage.label}`}
+      aria-label={tk('column.create', { stage: stage.label })}
+      title={tk('column.create', { stage: stage.label })}
       aria-expanded={expanded}
       aria-controls={`new-work-item-${stage.id}`}
       onClick={onOpen}

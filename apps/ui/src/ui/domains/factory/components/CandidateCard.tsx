@@ -4,6 +4,7 @@ import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { ArrowUpRight, EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useId } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { BoardCandidate } from '../boardCandidates';
 import { boardCardState } from '../boardCardState';
@@ -36,6 +37,7 @@ export function CandidateCard({
   onRun: (move: CardMove, prompt?: string) => void;
   layout: BoardLayout;
 }) {
+  const { t } = useTranslation('board');
   const detailsTitleId = useId();
   const morph = useCardMorph();
 
@@ -46,13 +48,13 @@ export function CandidateCard({
   const menuItems: ReactElement[] = [
     ...moves.map(move => (
       <DropdownMenu.Item
-        key={move.label}
+        key={move.action}
         onClick={() => {
           morph.closeDetails();
           onRun(move);
         }}
       >
-        {actionIcon(move.label)}
+        {actionIcon(move.action)}
         <span>{move.label}</span>
       </DropdownMenu.Item>
     )),
@@ -105,7 +107,7 @@ export function CandidateCard({
         <button
           type="button"
           draggable={false}
-          aria-label={`Details for ${candidate.title}`}
+          aria-label={t('card.detailsFor', { title: candidate.title })}
           aria-expanded={morph.open}
           className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
           onClick={morph.openDetails}
@@ -124,7 +126,7 @@ export function CandidateCard({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={`Actions for ${candidate.title}`}
+                      aria-label={t('card.actionsFor', { title: candidate.title })}
                       className={REVEAL_ON_CARD_HOVER}
                     >
                       <EllipsisVertical size={13} aria-hidden />

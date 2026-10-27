@@ -6,6 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
@@ -95,6 +96,7 @@ export function WorkItemCard({
   onRemove: () => void;
   layout: BoardLayout;
 }) {
+  const { t } = useTranslation('board');
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const morph = useCardMorph();
   const catalog = useBoardCatalog(item.githubProjectId);
@@ -102,7 +104,7 @@ export function WorkItemCard({
   const custom = boardId !== 'work' && boardId !== 'review';
   const definition = catalog.data?.find(board => board.id === boardId);
 
-  const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
+  const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? t('menu.starting') : preparing;
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
   const primaryMove = primaryCardMove(moves, columnStage, sessions);
@@ -114,6 +116,7 @@ export function WorkItemCard({
       : `/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`;
   const proposedRun = proposedCardRun(proposal, custom, definition, moves, primaryMove);
   const proposedRunLabel = proposedRun?.label;
+  const proposedRunAction = proposedRun?.action;
 
   const activity = workItemActivity(item, activityPage);
   const state = boardCardState({
@@ -152,6 +155,7 @@ export function WorkItemCard({
     moves,
     proposal,
     proposedRunLabel,
+    proposedRunAction,
     approvingDecisionId,
     owner,
     onApproveProposal,
@@ -277,7 +281,7 @@ export function WorkItemCard({
           ref={deepLinkRef}
           type="button"
           draggable={false}
-          aria-label={`Details for ${item.title}`}
+          aria-label={t('card.detailsFor', { title: item.title })}
           aria-expanded={morph.open}
           className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
           onClick={morph.openDetails}
@@ -302,7 +306,7 @@ export function WorkItemCard({
                       variant="ghost"
                       size="icon-sm"
                       disabled={lockedByYou}
-                      aria-label={`Actions for ${item.title}`}
+                      aria-label={t('card.actionsFor', { title: item.title })}
                       className={REVEAL_ON_CARD_HOVER}
                     >
                       <EllipsisVertical size={13} aria-hidden />

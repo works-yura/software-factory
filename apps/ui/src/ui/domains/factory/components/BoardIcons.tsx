@@ -22,6 +22,9 @@ import { boardStage, stageTone } from '../stages';
 import type { BuiltinStageId, StageTone } from '../stages';
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import { IntakeIcon } from './IntakeIcon';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 // GitHub keeps issue vs PR distinct — card meta shows #N for both
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
@@ -41,17 +44,28 @@ export function SourceIcon({ source, className }: { source: WorkItemSource; clas
   return <Icon data-source={source} className={cn('size-4 shrink-0', sourceClassName, className)} aria-hidden />;
 }
 
-/** Icon for each known run-action label; `Play` is the fallback for anything else. */
+/** Icon for each known run action (`CardMove['action']`); `Play` is the fallback for anything else. */
 const ACTION_ICONS: Record<string, ComponentType> = {
-  Investigate: Search,
-  Build: Hammer,
-  'Prepare approval': ClipboardCheck,
-  Review: Eye,
+  investigate: Search,
+  build: Hammer,
+  prepareApproval: ClipboardCheck,
+  review: Eye,
 };
 
-export function actionIcon(label: string) {
-  const Icon = ACTION_ICONS[label] ?? Play;
+export function actionIcon(action: string | undefined) {
+  const Icon = (action === undefined ? undefined : ACTION_ICONS[action]) ?? Play;
   return <Icon aria-hidden />;
+}
+
+function phaseKindLabel(kind: BoardPhaseKind): string {
+  switch (kind) {
+    case 'resting':
+      return tk('phaseKind.resting');
+    case 'working':
+      return tk('phaseKind.working');
+    case 'terminal':
+      return tk('phaseKind.terminal');
+  }
 }
 
 type BoardTone = StageTone | 'success';
@@ -154,7 +168,7 @@ export function BoardStageIcon({
   const icon = <StageArt stage={stage} kind={kind} className={TONE_CLASSES[stageToneFor(stage, kind)].icon} />;
   if (decorative || !kind) return icon;
   return (
-    <span role="img" aria-label={`${kind} phase`} className="inline-flex shrink-0">
+    <span role="img" aria-label={phaseKindLabel(kind)} className="inline-flex shrink-0">
       {icon}
     </span>
   );

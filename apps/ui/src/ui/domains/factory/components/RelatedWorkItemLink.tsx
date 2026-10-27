@@ -11,6 +11,9 @@ import type { WorkItem } from '../services/workItems';
 import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 const RELATED_ITEM_LINK_CLASS = `hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
 
@@ -30,8 +33,8 @@ export function RelatedWorkItemLink({
   const titleSuffix = reference === undefined ? '' : ` — ${item.title}`;
   const pullRequestStatus = isPullRequestSource(item.source) ? pullRequestStatusForItem(item) : undefined;
   const statusLabel = pullRequestStatus === undefined ? undefined : PULL_REQUEST_STATUS_LABELS[pullRequestStatus];
-  let ariaLabel = `Open ${relation}${titleSuffix}`;
-  if (live) ariaLabel = `Open live session for ${relation}${titleSuffix}`;
+  let ariaLabel = tk('relatedLink.open', { relation, suffix: titleSuffix });
+  if (live) ariaLabel = tk('relatedLink.openLive', { relation, suffix: titleSuffix });
   if (external) ariaLabel = `${externalLinkLabel(item.source)}: ${relation}${titleSuffix}`;
   if (statusLabel !== undefined) ariaLabel = `${ariaLabel}, ${statusLabel}`;
 
@@ -57,7 +60,7 @@ export function RelatedWorkItemLink({
   );
   let tooltip = reference === undefined ? relation : `${relation} · ${item.title}`;
   if (statusLabel !== undefined) tooltip = `${tooltip} · ${statusLabel}`;
-  if (live) tooltip = `${tooltip} · Live session`;
+  if (live) tooltip = `${tooltip} · ${tk('relatedLink.liveSession')}`;
   const link = external ? (
     <a
       href={href}

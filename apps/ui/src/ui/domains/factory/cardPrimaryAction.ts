@@ -3,6 +3,7 @@ import type { FactoryRole, FactoryRuleStage } from '@factory/core/rules/types';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
+import { translator } from '../../i18n/t';
 import { isTerminalStage } from './stages';
 import type { BoardStageId } from './stages';
 
@@ -14,8 +15,13 @@ export interface CardPrimaryAction {
 }
 
 /** A lane the card can be moved into, named by what the lane's rule then runs. */
+export type CardMoveAction = 'investigate' | 'build' | 'prepareApproval' | 'review' | 'reReview';
+
 export interface CardMove {
-  label: 'Investigate' | 'Build' | 'Prepare approval' | 'Review' | 'Re-review';
+  /** Stable id of the lane's verb; picks the icon whatever language the label is in. */
+  action: CardMoveAction;
+  /** Translated when read: the lane's verb, e.g. "Investigate" or "Build". */
+  readonly label: string;
   /** Session slot the lane's run fills on the card, e.g. `plan` or `work`. */
   role: FactoryRole;
   stage: FactoryRuleStage;
@@ -27,16 +33,49 @@ export interface CardMove {
 export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> &
   Partial<Pick<WorkItem, 'board' | 'stages' | 'acceptedAt'>>;
 
-const INVESTIGATE: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
-const BUILD: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
+const tk = translator('board');
+
+const INVESTIGATE: CardMove = {
+  action: 'investigate',
+  get label() {
+    return tk('moves.investigate');
+  },
+  role: 'triage',
+  stage: 'triage',
+};
+const BUILD: CardMove = {
+  action: 'build',
+  get label() {
+    return tk('moves.build');
+  },
+  role: 'work',
+  stage: 'execute',
+};
 const PREPARE_APPROVAL: CardMove = {
-  label: 'Prepare approval',
+  action: 'prepareApproval',
+  get label() {
+    return tk('moves.prepareApproval');
+  },
   role: 'triage',
   stage: 'triage',
   awaitsHumanDecision: true,
 };
-const REVIEW: CardMove = { label: 'Review', role: 'review', stage: 'review' };
-const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review' };
+const REVIEW: CardMove = {
+  action: 'review',
+  get label() {
+    return tk('moves.review');
+  },
+  role: 'review',
+  stage: 'review',
+};
+const RE_REVIEW: CardMove = {
+  action: 'reReview',
+  get label() {
+    return tk('moves.reReview');
+  },
+  role: 'review',
+  stage: 'review',
+};
 
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
@@ -99,15 +138,30 @@ export function awaitsTriageDecision(
 }
 
 export interface TriageDecision {
-  label: string;
+  readonly label: string;
   stage: 'planning' | 'execute' | 'canceled';
 }
 
 /** The maintainer's choices for a held card, the likeliest first. */
 export const TRIAGE_DECISIONS: readonly TriageDecision[] = [
-  { label: 'Accept and plan', stage: 'planning' },
-  { label: 'Accept and build', stage: 'execute' },
-  { label: 'Close', stage: 'canceled' },
+  {
+    get label() {
+      return tk('triageDecisions.acceptAndPlan');
+    },
+    stage: 'planning',
+  },
+  {
+    get label() {
+      return tk('triageDecisions.acceptAndBuild');
+    },
+    stage: 'execute',
+  },
+  {
+    get label() {
+      return tk('triageDecisions.close');
+    },
+    stage: 'canceled',
+  },
 ];
 
 /**
@@ -147,25 +201,25 @@ export function cardPrimaryAction({
   if (columnStage !== undefined && awaitsTriageDecision(item, columnStage)) {
     // One word on the pill so it sits beside "Open session"; the menu spells out the alternatives.
     const [accept] = TRIAGE_DECISIONS;
-    return { label: 'Accept', ariaLabel: accept.label, start: () => onMove(accept.stage) };
+    return { label: tk('primaryAction.accept'), ariaLabel: accept.label, start: () => onMove(accept.stage) };
   }
   if (waiting !== undefined) {
     return { label: waiting.label, start: () => onApproveProposal(waiting.decisionId) };
   }
   if (resumeStage !== undefined) {
-    return { label: 'Resume', start: () => onMove(resumeStage) };
+    return { label: tk('primaryAction.resume'), start: () => onMove(resumeStage) };
   }
   if (move !== undefined) {
     return { label: move.label, start: () => onMove(move.stage) };
   }
   // A custom board's phases carry their own runs, so the button advances the card rather than starting one.
   if (nextPhase !== undefined) {
-    return { label: `Move to ${nextPhase.label}`, start: () => onMove(nextPhase.id) };
+    return { label: tk('primaryAction.moveTo', { phase: nextPhase.label }), start: () => onMove(nextPhase.id) };
   }
   // Every lane this card offers is already its own, so opening its session is the action.
   if (hasSession) return undefined;
   return {
-    label: 'Start session',
+    label: tk('primaryAction.startSession'),
     start: () => onCreateSession(itemSessionSpec(item)),
   };
 }
@@ -176,7 +230,7 @@ export type CardAction = { label: string; ariaLabel?: string; disabled?: boolean
 );
 
 export function sessionLink(href: string | undefined): CardAction | undefined {
-  return href === undefined ? undefined : { label: 'Open session', href };
+  return href === undefined ? undefined : { label: tk('primaryAction.openSession'), href };
 }
 
 export function retryButton({
@@ -187,7 +241,7 @@ export function retryButton({
   onRetry: (decisionId: string) => void;
 }): CardPrimaryAction | undefined {
   if (decisionId === undefined) return undefined;
-  return { label: 'Retry', start: () => onRetry(decisionId) };
+  return { label: tk('primaryAction.retry'), start: () => onRetry(decisionId) };
 }
 
 /** The card's buttons, the likeliest next click first; `urgent` marks the one the card waits on a person for. */
@@ -215,7 +269,7 @@ function freeCardActions(
 ): CardAction[] {
   const namedRun =
     run !== undefined && status.kind === 'waiting'
-      ? { ...run, ariaLabel: `Start suggested run: ${status.label}` }
+      ? { ...run, ariaLabel: tk('primaryAction.startSuggestedRun', { label: status.label }) }
       : run;
   const main = retry ?? namedRun ?? session;
   if (main === undefined) return [];

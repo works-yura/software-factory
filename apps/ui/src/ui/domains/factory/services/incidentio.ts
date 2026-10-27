@@ -1,3 +1,7 @@
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
+
 /**
  * Browser-side helpers for the incident.io intake source.
  *
@@ -61,7 +65,7 @@ interface IntakeSourceResponse {
 async function requestJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
   if (!response.ok) {
-    let message = `Request failed (${response.status})`;
+    let message = tk('errors.requestFailed', { status: response.status });
     try {
       const body = (await response.json()) as { error?: string; message?: string };
       if (body.message) message = body.message;
@@ -87,7 +91,7 @@ export async function fetchIncidentioStatus(baseUrl: string): Promise<Incidentio
     credentials: 'include',
   });
   if (res.status === 401) return { enabled: false, configured: false, reason: 'auth_required' };
-  if (!res.ok) throw new Error(`incident.io status request failed (${res.status})`);
+  if (!res.ok) throw new Error(tk('errors.incidentioStatusFailed', { status: res.status }));
   return (await res.json()) as IncidentioStatus;
 }
 

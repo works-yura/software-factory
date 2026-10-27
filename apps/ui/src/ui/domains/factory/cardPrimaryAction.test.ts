@@ -4,9 +4,9 @@ import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPr
 import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
-const investigate: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
-const build: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
-const review: CardMove = { label: 'Review', role: 'review', stage: 'review' };
+const investigate: CardMove = { action: 'investigate', label: 'Investigate', role: 'triage', stage: 'triage' };
+const build: CardMove = { action: 'build', label: 'Build', role: 'work', stage: 'execute' };
+const review: CardMove = { action: 'review', label: 'Review', role: 'review', stage: 'review' };
 
 function sessionRef(role: string): WorkItemSessionRef {
   return { sessionId: `session-${role}`, branch: 'factory/pr-1', threadId: `thread-${role}`, startedBy: 'user-1' };
@@ -49,7 +49,7 @@ describe('cardMoves', () => {
     const issue = { source: 'github-issue' as const, metadata: {} };
     expect(cardMoves(issue, 'intake')).toEqual([investigate, build]);
     expect(cardMoves({ ...issue, metadata: { labels: ['Status: Needs Approval'] } }, 'intake')).toEqual([
-      { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
+      { action: 'prepareApproval', label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
     ]);
     // Accepted, so the label is stale until the source catches up.
     expect(
@@ -69,10 +69,10 @@ describe('cardMoves', () => {
 
   it('re-reviews an open pull request sitting in Done, and reviews it in a working lane', () => {
     const pullRequest = { source: 'github-pr' as const, metadata: { state: 'open' }, stages: ['done'] };
-    expect(cardMoves(pullRequest, 'done')).toEqual([{ label: 'Re-review', role: 'review', stage: 'review' }]);
+    expect(cardMoves(pullRequest, 'done')).toEqual([{ action: 'reReview', label: 'Re-review', role: 'review', stage: 'review' }]);
     expect(cardMoves(pullRequest, 'review')).toEqual([review]);
     const mergeRequest = { ...pullRequest, source: 'gitlab-pr' as const };
-    expect(cardMoves(mergeRequest, 'done')).toEqual([{ label: 'Re-review', role: 'review', stage: 'review' }]);
+    expect(cardMoves(mergeRequest, 'done')).toEqual([{ action: 'reReview', label: 'Re-review', role: 'review', stage: 'review' }]);
     expect(cardMoves(mergeRequest, 'review')).toEqual([review]);
   });
 

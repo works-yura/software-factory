@@ -1,1 +1,379 @@
-{}
+{
+  "sources": {
+    "github-issue": "Задача",
+    "github-pr": "Рев'ю PR",
+    "gitlab-issue": "GitLab",
+    "gitlab-pr": "Рев'ю MR",
+    "linear-issue": "Linear",
+    "jira-issue": "Jira",
+    "incidentio-follow-up": "incident.io",
+    "slack-thread": "Slack",
+    "manual": "Вручну"
+  },
+  "pullRequestStatus": {
+    "draft": "Чернетка пул-реквесту",
+    "open": "Відкритий пул-реквест",
+    "closed": "Закритий пул-реквест",
+    "merged": "Злитий пул-реквест"
+  },
+  "externalLink": {
+    "github": "Відкрити в GitHub",
+    "gitlab": "Відкрити в GitLab",
+    "linear": "Відкрити в Linear",
+    "jira": "Відкрити в Jira",
+    "incidentio": "Відкрити в incident.io",
+    "slack": "Відкрити в Slack",
+    "manual": "Відкрити посилання"
+  },
+  "emptyColumn": {
+    "reviewIntake": {
+      "title": "Немає запитів на зміни в очікуванні",
+      "description": "Тут з'являються відкриті запити на зміни з підключених репозиторіїв."
+    },
+    "noSources": {
+      "title": "Немає джерел задач",
+      "description": "Створіть картку або підключіть джерело задач у налаштуваннях надходження задач."
+    },
+    "intake": {
+      "title": "Вхідних немає",
+      "description": "Тут з'являються нові задачі з підключених джерел."
+    },
+    "triage": {
+      "title": "Нічого розбирати",
+      "description": "Перетягніть сюди вхідну задачу, коли її треба дослідити."
+    },
+    "planning": {
+      "title": "Нічого на плануванні",
+      "description": "Перетягніть сюди розібрану задачу, коли її можна планувати."
+    },
+    "execute": {
+      "title": "Нічого не реалізується",
+      "description": "Перетягніть сюди сплановану задачу, коли почнеться реалізація."
+    },
+    "reviewActive": {
+      "title": "Немає активних рев'ю",
+      "description": "Перетягніть сюди запит на зміни, коли почнеться рев'ю."
+    },
+    "review": {
+      "title": "Нічого не чекає на перевірку",
+      "description": "Перетягніть сюди реалізовану задачу, коли вона готова до перевірки."
+    },
+    "reviewDone": {
+      "title": "Немає завершених рев'ю",
+      "description": "Перетягніть сюди перевірений пул-реквест, коли рев'ю завершено."
+    },
+    "done": {
+      "title": "Ще нічого не завершено",
+      "description": "Перетягніть сюди завершену задачу, щоб закрити її."
+    },
+    "canceled": {
+      "title": "Нічого не скасовано",
+      "description": "Перетягніть сюди задачу, яку треба прибрати з активної роботи."
+    },
+    "other": {
+      "title": "Порожньо: {{stage}}",
+      "description": "Перетягніть сюди задачу, коли вона дійде до цього етапу."
+    },
+    "filteredReview": "Немає запитів на зміни, що відповідають фільтрам",
+    "filteredWork": "Немає карток, що відповідають фільтрам",
+    "filteredDescription": "Змініть або скиньте фільтри.",
+    "alreadyMaterialized_one": "{{count}} задача з цього джерела вже має картку на іншій дошці, тому стрічка пропонує лише нові.",
+    "alreadyMaterialized_few": "{{count}} задачі з цього джерела вже мають картки на іншій дошці, тому стрічка пропонує лише нові.",
+    "alreadyMaterialized_many": "{{count}} задач з цього джерела вже мають картки на іншій дошці, тому стрічка пропонує лише нові.",
+    "alreadyMaterialized_other": "{{count}} задачі з цього джерела вже мають картки на іншій дошці, тому стрічка пропонує лише нові."
+  },
+  "moves": {
+    "investigate": "Дослідити",
+    "build": "Реалізувати",
+    "prepareApproval": "Підготувати до затвердження",
+    "review": "Перевірити",
+    "reReview": "Перевірити ще раз"
+  },
+  "triageDecisions": {
+    "acceptAndPlan": "Прийняти й спланувати",
+    "acceptAndBuild": "Прийняти й реалізувати",
+    "close": "Закрити"
+  },
+  "primaryAction": {
+    "accept": "Прийняти",
+    "resume": "Продовжити",
+    "moveTo": "Перемістити: {{phase}}",
+    "startSession": "Почати сесію",
+    "openSession": "Відкрити сесію",
+    "retry": "Повторити",
+    "startSuggestedRun": "Запустити запропоноване: {{label}}"
+  },
+  "cardState": {
+    "busyMoveRefusal": "Поки картка зайнята, інший запуск неможливий.",
+    "markingDone": "Позначаємо як готове…",
+    "movingTo": "Переміщуємо: {{stage}}…",
+    "moving": "Переміщуємо…",
+    "starting": "Запускаємо…",
+    "retrying": "Повторюємо…",
+    "failedRetrying": "{{failed}} — повторюємо…",
+    "heldNeedsApproval": "{{kind}} · потребує вашого затвердження"
+  },
+  "linkedSource": {
+    "githubIssue": "задача GitHub",
+    "githubPr": "пул-реквест GitHub",
+    "gitlabIssue": "задача GitLab",
+    "gitlabPr": "мерж-реквест GitLab",
+    "linearIssue": "задача Linear",
+    "card": "картка"
+  },
+  "automation": {
+    "invokeSkill": {
+      "busy": "Починаємо автоматичний запуск…",
+      "failed": "Не вдалося почати автоматичний запуск"
+    },
+    "transition": {
+      "busy": "Автоматично переміщуємо картку…",
+      "failed": "Не вдалося автоматично перемістити"
+    },
+    "sync": {
+      "busy": "Синхронізуємо: {{source}}…",
+      "failed": "Не вдалося синхронізувати: {{source}}",
+      "progress": "Синхронізуємо…"
+    },
+    "notify": {
+      "busy": "Сповіщаємо сесію…",
+      "failed": "Не вдалося сповістити сесію",
+      "progress": "Сповіщаємо…"
+    },
+    "other": {
+      "busy": "Автоматизація працює з карткою…",
+      "failed": "Помилка автоматизації",
+      "progress": "Працює…"
+    }
+  },
+  "auditCategories": {
+    "workItem": "Картки",
+    "run": "Запуски",
+    "git": "Git",
+    "agent": "Агент",
+    "intake": "Вхідні"
+  },
+  "sort": {
+    "recent": "Нещодавно переміщені",
+    "recent-mine": "Нещодавно переміщені мною",
+    "created-newest": "Найновіші на дошці",
+    "created-oldest": "Найстаріші на дошці"
+  },
+  "sourceFilter": {
+    "manual": "Вручну"
+  },
+  "relatedSessions": {
+    "issueTitle": "Задача #{{number}}: {{title}}",
+    "pullRequest": "Пул-реквест",
+    "mergeRequest": "Мерж-реквест",
+    "issueNumber": "Задача #{{number}}",
+    "issue": "Задача",
+    "linearIssue": "Задача Linear",
+    "workItem": "Картка",
+    "userSessions": "Сесії користувачів",
+    "sessions": "Сесії",
+    "open": "Відкрити: {{label}}",
+    "openRelated": "Відкрити {{label}}: {{title}}"
+  },
+  "automationSettings": {
+    "title": "Налаштування автоматизації",
+    "heading": "Автоматизація",
+    "scope": "Усі дошки цієї фабрики.",
+    "autoRun": {
+      "label": "Автоматично запускати",
+      "description": "Автоматично починати роботу над новими задачами."
+    },
+    "autoApprove": {
+      "label": "Автоматично затверджувати плани",
+      "description": "Продовжувати, не чекаючи затвердження."
+    },
+    "selfReview": {
+      "label": "Самоперевірка перед пул-реквестом",
+      "description": "Незалежний агент перевіряє й тестує гілку до відкриття пул-реквесту."
+    },
+    "testChecks": {
+      "label": "Публікувати перевірки тестів рев'ю",
+      "description": "Показувати результати тестів рев'ю як перевірку (check) у пул-реквесті."
+    }
+  },
+  "filters": {
+    "isAnyOf": "будь-що з",
+    "fields": {
+      "source": "Джерело задач",
+      "linearProject": "Проєкт Linear",
+      "teammate": "За участю",
+      "author": "Автор",
+      "assignee": "Виконавець",
+      "reviewer": "Запитано рев'ю",
+      "worked": "Хто працював",
+      "label": "Мітка"
+    },
+    "you": "Ви",
+    "selected_one": "Вибрано: {{count}}",
+    "selected_few": "Вибрано: {{count}}",
+    "selected_many": "Вибрано: {{count}}",
+    "selected_other": "Вибрано: {{count}}",
+    "searchPlaceholder": "Пошук…",
+    "searchField": "Пошук: {{field}}",
+    "noMatches": "Нічого не знайдено"
+  },
+  "composer": {
+    "createFailed": "Не вдалося створити картку",
+    "formLabel": "Нова картка: {{stage}}",
+    "meta": "Вручну · нова",
+    "titleLabel": "Назва картки",
+    "placeholder": "Введіть назву…",
+    "cancel": "Скасувати нову картку",
+    "submit": "Додати картку: {{stage}}"
+  },
+  "viewControls": {
+    "layouts": {
+      "board": "Дошка",
+      "list": "Список"
+    },
+    "views": "Подання дошки",
+    "allCards": "Усі картки",
+    "layout": "Вигляд",
+    "searchLabel": "Пошук карток",
+    "searchView": "Пошук у цьому поданні…",
+    "searchCards": "Пошук карток…"
+  },
+  "properties": {
+    "sortChange": "Сортування: {{sort}}",
+    "filterChange": "{{field}}: {{value}}",
+    "label": "Параметри дошки",
+    "sort": "Сортування",
+    "saveAsView": "Зберегти як подання"
+  },
+  "phaseKind": {
+    "resting": "етап очікування",
+    "working": "робочий етап",
+    "terminal": "завершальний етап"
+  },
+  "menu": {
+    "startRun": "Запустити",
+    "starting": "Запускаємо…",
+    "startSuggestedRun": "Запустити запропоноване",
+    "dismissSuggestedRun": "Відхилити пропозицію запуску",
+    "askSupervisor": "Запитати Наглядача",
+    "markDone": "Позначити як готове",
+    "moveTo": "Перемістити: {{stage}}",
+    "remove": "Видалити"
+  },
+  "card": {
+    "detailsFor": "Подробиці: {{title}}",
+    "actionsFor": "Дії: {{title}}",
+    "allActionsFor": "Усі дії: {{title}}",
+    "collapse": "Згорнути: {{title}}",
+    "comments_one": "{{count}} коментар",
+    "comments_few": "{{count}} коментарі",
+    "comments_many": "{{count}} коментарів",
+    "comments_other": "{{count}} коментаря",
+    "labels": "Мітки",
+    "descriptionFailed": "Не вдалося завантажити опис."
+  },
+  "candidate": {
+    "customPrompt": "Свій промпт…",
+    "customPromptFor": "Свій промпт: {{title}}",
+    "promptPlaceholder": "Що агентові з цим зробити?",
+    "promptFor": "Промпт: {{title}}",
+    "cancel": "Скасувати",
+    "run": "Запустити",
+    "divider": "Нові кандидати"
+  },
+  "runs": {
+    "preparingSession": "Готуємо сесію…",
+    "refreshFailed": "Не вдалося оновити дошку — спробуйте перезавантажити сторінку",
+    "cardGone": "Цієї картки вже немає — можливо, дошка застаріла",
+    "noMatchingRepository": "До цієї Factory не підключено репозиторію з провайдером цієї картки.",
+    "repositoryNotLinked": "Репозиторій {{repository}} не підключено до цієї Factory з провайдером цієї картки",
+    "startFailed": "Не вдалося запустити"
+  },
+  "repositoryPicker": {
+    "label": "Вибір репозиторію",
+    "title": "Виберіть репозиторій",
+    "description": "Виберіть підключений репозиторій для цієї задачі.",
+    "search": "Пошук репозиторіїв",
+    "defaultBranch": "Основна гілка: {{branch}}",
+    "noLinked": "Немає підключених репозиторіїв",
+    "noMatching": "Немає відповідних репозиторіїв"
+  },
+  "errors": {
+    "requestFailed": "Помилка запиту ({{status}})",
+    "invalidAuditEvents": "Некоректна відповідь із подіями аудиту",
+    "invalidAuditPortal": "Некоректна відповідь порталу аудиту",
+    "feedFailed": "Помилка потоку стрічки ({{status}})",
+    "incidentioStatusFailed": "Не вдалося отримати статус incident.io ({{status}})",
+    "gitlabNoInstallation": "Реєстрація проєкту GitLab не повернула встановлення",
+    "subscriptionsFailed": "Не вдалося завантажити підписки на пул-реквести ({{status}}).",
+    "subscriptionsInvalid": "Підписки на пул-реквести повернули некоректну відповідь.",
+    "network": "Помилка мережевого запиту",
+    "popupBlocked": "Спливне вікно заблоковано. Дозвольте спливні вікна для цього сайту й спробуйте ще раз.",
+    "authWindowClosed": "Вікно авторизації закрили до завершення підключення.",
+    "authFailed": "Помилка авторизації.",
+    "transitionFailed": "Не вдалося обробити переміщення.",
+    "updateFailed": "Не вдалося оновити картку.",
+    "fileFailed": "Не вдалося створити картку."
+  },
+  "relationship": {
+    "review": "Рев'ю: {{reference}}",
+    "workItem": "Картка: {{reference}}",
+    "issue": "Задача {{identifier}}"
+  },
+  "emptyActions": {
+    "clearFilters": "Скинути фільтри",
+    "createCard": "Створити картку",
+    "connectSource": "Підключити джерело задач"
+  },
+  "column": {
+    "taskCountIn": "Показано {{count}} з {{total}} задач дошки на етапі «{{stage}}»",
+    "taskCount": "Показано {{count}} з {{total}} задач дошки",
+    "empty": "{{stage}}, порожньо",
+    "loading": "Завантаження стовпця «{{stage}}»",
+    "create": "Створити картку: {{stage}}"
+  },
+  "list": {
+    "stages": "Етапи дошки"
+  },
+  "connectRepository": {
+    "reviewTitle": "Підключіть репозиторій, щоб почати рев'ю",
+    "workTitle": "Підключіть репозиторій, щоб почати отримувати задачі",
+    "reviewDescription": "Підключіть репозиторій у налаштуваннях репозиторіїв. Його запити на зміни з'являться у «Вхідних», готові до рев'ю.",
+    "workDescription": "Підключіть репозиторій у налаштуваннях репозиторіїв. Його задачі з'являться у «Вхідних», готові до планування й реалізації.",
+    "openSettings": "Відкрити налаштування репозиторіїв"
+  },
+  "landing": {
+    "loading": "Завантаження дошок…",
+    "loadFailed": "Не вдалося завантажити дошки.",
+    "noBoards": "Немає встановлених дошок.",
+    "notInstalled": "Дошка недоступна: її не встановлено."
+  },
+  "intake": {
+    "loadMore": "Завантажити ще кандидатів",
+    "loadingMore": "Завантаження інших кандидатів",
+    "loadingMoreShort": "Завантаження",
+    "linearExpired": "Авторизація Linear закінчилася. Підключіться знову, щоб і далі синхронізувати задачі.",
+    "connectLinear": "Підключити Linear",
+    "retry": "Повторити"
+  },
+  "relatedLink": {
+    "open": "Відкрити {{relation}}{{suffix}}",
+    "openLive": "Відкрити активну сесію: {{relation}}{{suffix}}",
+    "liveSession": "Активна сесія"
+  },
+  "verdict": {
+    "approved": "Схвалено",
+    "approvedOutdated": "Схвалено (застаріло)",
+    "changesRequested": "Запитано зміни",
+    "changesRequestedOutdated": "Запитано зміни (застаріло)",
+    "selfApproved": "Самоперевірка: схвалено",
+    "selfApprovedRound": "Самоперевірка: схвалено (раунд {{rounds}})",
+    "selfChangesRequested": "Самоперевірка: запитано зміни",
+    "selfChangesRequestedRound": "Самоперевірка: запитано зміни (раунд {{rounds}})"
+  },
+  "page": {
+    "loadFailed": "Не вдалося завантажити дошку",
+    "actionFailed": "Не вдалося виконати дію на дошці",
+    "columns": "Стовпці дошки"
+  }
+}

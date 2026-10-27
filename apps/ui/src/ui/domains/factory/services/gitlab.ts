@@ -1,3 +1,7 @@
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
+
 /** Browser-side helpers for the GitLab intake source. */
 
 export const MASTRA_PROJECTS_URL = 'https://projects.mastra.ai';
@@ -152,7 +156,7 @@ async function getGitLabResource<T>(baseUrl: string, path: string, init?: Reques
     credentials: 'include',
   });
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+    let message = tk('errors.requestFailed', { status: res.status });
     let code: string | undefined;
     try {
       const body = (await res.json()) as { error?: string; message?: string };
@@ -218,7 +222,7 @@ export async function registerGitLabRepository(
     { method: 'POST', body: JSON.stringify({ sourceId }) },
   );
   const repository = gitLabProjectRepository(project);
-  if (!repository?.installationStorageId) throw new Error('GitLab project registration returned no installation');
+  if (!repository?.installationStorageId) throw new Error(tk('errors.gitlabNoInstallation'));
   return repository as GitLabRepository & { installationStorageId: string };
 }
 

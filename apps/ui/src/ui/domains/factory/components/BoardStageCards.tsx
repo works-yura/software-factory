@@ -9,6 +9,9 @@ import type { BoardStageId } from '../stages';
 import { BoardColumnEmptyState } from './BoardColumnEmptyState';
 import { IntakeColumnExtras } from './IntakeColumnExtras';
 import { IntakeFeedNotice } from './IntakeFeedNotice';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export function BoardStageCards({
   stage,
@@ -47,7 +50,11 @@ export function BoardStageCards({
       {composer}
       {children}
       {loading && (
-        <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName={SKELETON_ROW_CLASS[layout]} />
+        <SkeletonRows
+          label={tk('column.loading', { stage: stage.label })}
+          rows={3}
+          rowClassName={SKELETON_ROW_CLASS[layout]}
+        />
       )}
       {showEmptyState && (
         <BoardColumnEmptyState

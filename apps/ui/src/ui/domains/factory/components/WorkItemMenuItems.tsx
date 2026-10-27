@@ -16,6 +16,7 @@ import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon, actionIcon } from './BoardIcons';
 import { phaseTitle } from '../../../i18n/boardLabels';
+import { useTranslation } from 'react-i18next';
 
 export interface WorkItemMenuProps {
   item: WorkItem;
@@ -23,6 +24,8 @@ export interface WorkItemMenuProps {
   moves: CardMove[];
   proposal?: FactoryDecisionSummary;
   proposedRunLabel?: string;
+  /** Lane verb of the suggested run, for its icon; undefined on a custom board's phase. */
+  proposedRunAction?: string;
   approvingDecisionId?: string;
   owner: BoardCardOwner;
   onApproveProposal: (decisionId: string) => void;
@@ -44,8 +47,8 @@ export function askSupervisorPath(
 /** A lane's available move. Plan approval remains a separate human decision. */
 function moveItem(move: CardMove, onMove: WorkItemMenuProps['onMove'], disabled: boolean): ReactElement {
   return (
-    <DropdownMenu.Item key={move.label} disabled={disabled} onClick={() => onMove(move.stage)}>
-      {actionIcon(move.label)}
+    <DropdownMenu.Item key={move.action} disabled={disabled} onClick={() => onMove(move.stage)}>
+      {actionIcon(move.action)}
       <span>{move.label}</span>
     </DropdownMenu.Item>
   );
@@ -57,6 +60,7 @@ export function WorkItemMenuItems({
   moves,
   proposal,
   proposedRunLabel,
+  proposedRunAction,
   approvingDecisionId,
   owner,
   onApproveProposal,
@@ -64,6 +68,7 @@ export function WorkItemMenuItems({
   onMove,
   onRemove,
 }: WorkItemMenuProps): ReactElement {
+  const { t } = useTranslation('board');
   const { factoryId } = useParams<{ factoryId: string }>();
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
@@ -97,14 +102,16 @@ export function WorkItemMenuItems({
       {!awaitsTriage && moves.map(move => moveItem(move, onMove, runsBlocked))}
       {suggestionForThisBoard !== undefined && !awaitsTriage && (
         <DropdownMenu.Item disabled={runsBlocked} onClick={() => onApproveProposal(suggestionForThisBoard.id)}>
-          {actionIcon(proposedRunLabel ?? 'Start run')}
-          <span>{approvingDecisionId === suggestionForThisBoard.id ? 'Starting…' : 'Start suggested run'}</span>
+          {actionIcon(proposedRunAction)}
+          <span>
+            {approvingDecisionId === suggestionForThisBoard.id ? t('menu.starting') : t('menu.startSuggestedRun')}
+          </span>
         </DropdownMenu.Item>
       )}
       {suggestionForThisBoard !== undefined && (
         <DropdownMenu.Item disabled={yourRequestInFlight} onClick={() => onDismissProposal(suggestionForThisBoard.id)}>
           <CircleSlash aria-hidden />
-          <span>Dismiss suggested run</span>
+          <span>{t('menu.dismissSuggestedRun')}</span>
         </DropdownMenu.Item>
       )}
       {item.url !== null && (
@@ -115,7 +122,7 @@ export function WorkItemMenuItems({
       )}
       <DropdownMenu.Item render={<Link to={askSupervisorPath(factoryId, item)} />}>
         <ShieldCheck aria-hidden />
-        <span>Ask supervisor</span>
+        <span>{t('menu.askSupervisor')}</span>
       </DropdownMenu.Item>
       {stages
         .filter(stage => stage.id !== columnStage)
@@ -127,12 +134,12 @@ export function WorkItemMenuItems({
             onClick={() => onMove(stage.id)}
           >
             <BoardStageIcon stage={stage.id} kind={stage.kind} decorative />
-            <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
+            <span>{stage.id === 'done' ? t('menu.markDone') : t('menu.moveTo', { stage: stage.label })}</span>
           </DropdownMenu.Item>
         ))}
       <DropdownMenu.Item disabled={yourRequestInFlight} onClick={onRemove}>
         <Trash2 aria-hidden />
-        <span>Remove</span>
+        <span>{t('menu.remove')}</span>
       </DropdownMenu.Item>
     </>
   );

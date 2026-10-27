@@ -4,6 +4,9 @@ import { GitBranch } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { settingsSectionPath } from '../../settings/settingsSections';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export function ConnectRepositoryEmptyState({ factoryId, review }: { factoryId: string; review: boolean }) {
   return (
@@ -11,15 +14,15 @@ export function ConnectRepositoryEmptyState({ factoryId, review }: { factoryId: 
       variant="fill"
       as="h2"
       iconSlot={<GitBranch />}
-      titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
+      titleSlot={review ? tk('connectRepository.reviewTitle') : tk('connectRepository.workTitle')}
       descriptionSlot={
         review
-          ? 'Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.'
-          : 'Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
+          ? tk('connectRepository.reviewDescription')
+          : tk('connectRepository.workDescription')
       }
       actionSlot={
         <Link to={settingsSectionPath(factoryId, 'repositories')} className={buttonVariants({ variant: 'primary' })}>
-          Open Repository settings
+          {tk('connectRepository.openSettings')}
         </Link>
       }
     />

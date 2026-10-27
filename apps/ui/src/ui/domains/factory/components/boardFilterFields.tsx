@@ -19,23 +19,55 @@ import type { BoardParticipant } from '../boardPeople';
 import type { BoardKind } from '../boardStages';
 import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
 import type { LinearProject } from '../services/linear';
+import { translator } from '../../../i18n/t';
 
-export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [{ id: 'in', label: 'is any of', arity: 'many' }];
+const tk = translator('board');
+
+export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [
+  {
+    id: 'in',
+    get label() {
+      return tk('filters.isAnyOf');
+    },
+    arity: 'many',
+  },
+];
 
 export type BoardFilterOption = FilterBarOption & { alsoMatches?: string };
 
 export type BoardFilterField = FilterBarField & { id: BoardFilterFieldId; suggestions: BoardFilterOption[] };
 
-const FIELD_PRESENTATION: Record<BoardFilterFieldId, { label: string; icon: LucideIcon }> = {
-  source: { label: 'Intake source', icon: Inbox },
-  linearProject: { label: 'Linear project', icon: FolderKanban },
-  teammate: { label: 'Involves', icon: UsersRound },
-  author: { label: 'Author', icon: UserRoundPen },
-  assignee: { label: 'Assignee', icon: UserRoundCheck },
-  reviewer: { label: 'Review requested', icon: UserRoundSearch },
-  worked: { label: 'Worked on by', icon: Activity },
-  label: { label: 'Label', icon: Tag },
+const FIELD_ICONS: Record<BoardFilterFieldId, LucideIcon> = {
+  source: Inbox,
+  linearProject: FolderKanban,
+  teammate: UsersRound,
+  author: UserRoundPen,
+  assignee: UserRoundCheck,
+  reviewer: UserRoundSearch,
+  worked: Activity,
+  label: Tag,
 };
+
+function fieldLabel(fieldId: BoardFilterFieldId): string {
+  switch (fieldId) {
+    case 'source':
+      return tk('filters.fields.source');
+    case 'linearProject':
+      return tk('filters.fields.linearProject');
+    case 'teammate':
+      return tk('filters.fields.teammate');
+    case 'author':
+      return tk('filters.fields.author');
+    case 'assignee':
+      return tk('filters.fields.assignee');
+    case 'reviewer':
+      return tk('filters.fields.reviewer');
+    case 'worked':
+      return tk('filters.fields.worked');
+    case 'label':
+      return tk('filters.fields.label');
+  }
+}
 
 function peopleOptions(
   participants: readonly BoardParticipant[],
@@ -44,7 +76,7 @@ function peopleOptions(
   const you = currentUserId ? factoryParticipantId(currentUserId) : undefined;
   const option = (participant: BoardParticipant): BoardFilterOption => ({
     value: participant.id,
-    label: participant.id === you ? 'You' : participant.name,
+    label: participant.id === you ? tk('filters.you') : participant.name,
     alsoMatches: participant.id === you ? participant.name : undefined,
     start: <Avatar src={participant.avatarUrl} name={participant.name} size="sm" />,
   });
@@ -91,7 +123,8 @@ export function boardFilterFields({
 
   return boardFilterFieldIds(kind).map(fieldId => ({
     id: fieldId,
-    ...FIELD_PRESENTATION[fieldId],
+    label: fieldLabel(fieldId),
+    icon: FIELD_ICONS[fieldId],
     operators: ['in'],
     strict: true,
     hidden: fieldId === 'linearProject' && !linearProjectOffered,
@@ -107,7 +140,7 @@ export function boardFilterOptions(field: BoardFilterField, selected: readonly s
 }
 
 export function boardFilterSummary(field: BoardFilterField, selected: readonly string[]): string {
-  if (selected.length > 1) return `${selected.length} selected`;
+  if (selected.length > 1) return tk('filters.selected', { count: selected.length });
   const only = boardFilterOptions(field, selected).find(option => option.value === selected[0]);
   return only?.label ?? selected[0];
 }

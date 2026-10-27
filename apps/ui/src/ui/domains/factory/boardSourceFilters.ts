@@ -1,6 +1,7 @@
 import type { BoardCandidate } from './boardCandidates';
 import type { BoardFilterState } from './boardFilters';
 import type { WorkItem, WorkItemSource } from './services/workItems';
+import { lazyOption } from '../../i18n/lazy';
 
 export const BOARD_SOURCE_OPTIONS = [
   { value: 'github', label: 'GitHub' },
@@ -8,7 +9,7 @@ export const BOARD_SOURCE_OPTIONS = [
   { value: 'linear', label: 'Linear' },
   { value: 'jira', label: 'Jira' },
   { value: 'incidentio', label: 'incident.io' },
-  { value: 'manual', label: 'Manual' },
+  lazyOption('manual', 'board:sourceFilter.manual'),
 ];
 
 type BoardSourceFilters = Pick<BoardFilterState, 'source' | 'linearProject'>;

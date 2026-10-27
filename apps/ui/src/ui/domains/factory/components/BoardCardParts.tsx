@@ -22,6 +22,9 @@ import type { CardAction } from '../cardPrimaryAction';
 import type { WorkItem, WorkItemSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
   return (
@@ -74,7 +77,7 @@ export function CommentCount({ count }: { count: number }) {
       variant="meta"
       tone="faint"
       className="flex shrink-0 items-center gap-1"
-      aria-label={`${count} ${count === 1 ? 'comment' : 'comments'}`}
+      aria-label={tk('card.comments', { count })}
     >
       <MessageSquare size={11} aria-hidden />
       {count}
@@ -162,7 +165,7 @@ export function MetadataLabels({ metadata }: { metadata: Record<string, unknown>
   if (displayLabels.length === 0) return null;
   const colors = metadataLabelColors(metadata);
   return (
-    <ScrollArea orientation="horizontal" revealScrollbarOnHover={false} aria-label="Labels">
+    <ScrollArea orientation="horizontal" revealScrollbarOnHover={false} aria-label={tk('card.labels')}>
       <div className="flex items-center gap-1.5">
         {displayLabels.map(label => (
           <Txt

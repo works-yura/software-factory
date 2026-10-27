@@ -5,6 +5,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, X } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { BoardStageId } from '../stages';
 import { IntakeIcon } from './IntakeIcon';
@@ -18,6 +19,7 @@ interface InlineWorkItemComposerProps {
 }
 
 export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }: InlineWorkItemComposerProps) {
+  const { t } = useTranslation('board');
   const [title, setTitle] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
@@ -36,7 +38,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       onClose();
     } catch (caught) {
       setSubmitting(false);
-      setError(caught instanceof Error ? caught.message : 'Failed to create work item');
+      setError(caught instanceof Error ? caught.message : t('composer.createFailed'));
       inputRef.current?.focus();
     }
   };
@@ -48,7 +50,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
   return (
     <form
       id={`new-work-item-${stage}`}
-      aria-label={`New work item in ${stageLabel}`}
+      aria-label={t('composer.formLabel', { stage: stageLabel })}
       aria-busy={submitting}
       className={cn(
         'relative flex flex-col gap-3 rounded-card border border-surface-rim bg-fill-subtle p-2 outline-none transition-colors focus-within:border-border-focus motion-reduce:transition-none',
@@ -57,7 +59,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       onSubmit={event => void submit(event)}
     >
       <Txt as="span" variant="meta" tone="faint" className="truncate pr-14">
-        Manual · new
+        {t('composer.meta')}
       </Txt>
       <div className="flex min-w-0 items-center gap-1.5">
         <IntakeIcon className="text-muted-foreground shrink-0" />
@@ -65,7 +67,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
           ref={inputRef}
           variant="unstyled"
           autoFocus
-          aria-label="Work item title"
+          aria-label={t('composer.titleLabel')}
           autoComplete="off"
           className="text-foreground placeholder:text-muted-foreground text-card-title-strong h-auto min-w-0 flex-1 p-0"
           value={title}
@@ -78,7 +80,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
             event.preventDefault();
             close();
           }}
-          placeholder="Type a name…"
+          placeholder={t('composer.placeholder')}
           readOnly={submitting}
           aria-invalid={error !== undefined || undefined}
         />
@@ -88,7 +90,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="Cancel new work item"
+          aria-label={t('composer.cancel')}
           onClick={close}
           disabled={submitting}
         >
@@ -98,7 +100,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
           type="submit"
           variant="ghost"
           size="icon-sm"
-          aria-label={`Add work item to ${stageLabel}`}
+          aria-label={t('composer.submit', { stage: stageLabel })}
           disabled={!trimmedTitle || submitting}
         >
           {submitting ? <Spinner size="sm" aria-hidden className="size-3" /> : <Check aria-hidden />}

@@ -3,6 +3,9 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import type { ReactNode } from 'react';
 import { useEffect, useEffectEvent } from 'react';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 interface LoadMoreSentinelProps {
   hasNextPage: boolean;
@@ -41,7 +44,7 @@ export function LoadMoreSentinel({
       {isFetchingNextPage ? (
         loadingIndicator === undefined ? (
           <div className="flex justify-center">
-            <Spinner size="sm" aria-label="Loading more" />
+            <Spinner size="sm" aria-label={tk('intake.loadingMoreShort')} />
           </div>
         ) : (
           loadingIndicator

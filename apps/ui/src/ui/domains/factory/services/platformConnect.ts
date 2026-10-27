@@ -12,6 +12,9 @@
 
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab';
 
@@ -55,13 +58,13 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
       ...init,
     });
   } catch (cause) {
-    const err = new Error('Network request failed');
+    const err = new Error(tk('errors.network'));
     (err as { transient?: boolean }).transient = true;
     (err as { cause?: unknown }).cause = cause;
     throw err;
   }
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+    let message = tk('errors.requestFailed', { status: res.status });
     let code: string | undefined;
     try {
       const body = (await res.json()) as { error?: string; message?: string };
@@ -171,13 +174,13 @@ export async function runHeadlessAuth(input: {
 
 function toHeadlessAuthError(error: unknown): HeadlessAuthError {
   if (error instanceof AuthError && error.type === 'blocked_by_browser') {
-    return new HeadlessAuthError('Popup was blocked. Allow popups for this site and try again.', 'popup_blocked');
+    return new HeadlessAuthError(tk('errors.popupBlocked'), 'popup_blocked');
   }
   if (error instanceof AuthError && error.type === 'window_closed') {
-    return new HeadlessAuthError('Authorization window was closed before the connection finished.', 'window_closed');
+    return new HeadlessAuthError(tk('errors.authWindowClosed'), 'window_closed');
   }
   return new HeadlessAuthError(
-    error instanceof Error && error.message ? error.message : 'Authorization failed.',
+    error instanceof Error && error.message ? error.message : tk('errors.authFailed'),
     'failed',
   );
 }

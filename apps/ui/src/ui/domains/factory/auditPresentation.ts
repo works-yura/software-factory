@@ -3,29 +3,50 @@ import type { AuditNamespace } from '@factory/store/audit/actions';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 
 import type { AuditEvent } from './services/audit';
+import { translator } from '../../i18n/t';
 import { stageLabel } from './stages';
 
 export type { AuditNamespace };
 
+const tk = translator('board');
+
 interface AuditCategoryStyle {
   tone: BadgeVariant;
-  label: string;
   dotClass: string;
 }
 
 const AUDIT_CATEGORY_STYLES: Record<AuditNamespace, AuditCategoryStyle> = {
-  work_item: { tone: 'purple', label: 'Work items', dotClass: 'bg-chart-blue' },
-  run: { tone: 'green', label: 'Runs', dotClass: 'bg-chart-green' },
-  git: { tone: 'orange', label: 'Git', dotClass: 'bg-chart-orange' },
-  agent: { tone: 'blue', label: 'Agent', dotClass: 'bg-chart-amber' },
-  intake: { tone: 'cyan', label: 'Intake', dotClass: 'bg-placeholder' },
+  work_item: { tone: 'purple', dotClass: 'bg-chart-blue' },
+  run: { tone: 'green', dotClass: 'bg-chart-green' },
+  git: { tone: 'orange', dotClass: 'bg-chart-orange' },
+  agent: { tone: 'blue', dotClass: 'bg-chart-amber' },
+  intake: { tone: 'cyan', dotClass: 'bg-placeholder' },
 };
 
-/** The server's namespaces, in its order, dressed for the page. */
-export const AUDIT_CATEGORIES = auditNamespaces().map(namespace => ({
-  namespace,
-  ...AUDIT_CATEGORY_STYLES[namespace],
-}));
+function auditCategoryLabel(namespace: AuditNamespace): string {
+  switch (namespace) {
+    case 'work_item':
+      return tk('auditCategories.workItem');
+    case 'run':
+      return tk('auditCategories.run');
+    case 'git':
+      return tk('auditCategories.git');
+    case 'agent':
+      return tk('auditCategories.agent');
+    case 'intake':
+      return tk('auditCategories.intake');
+  }
+}
+
+/** The server's namespaces, in its order, dressed for the page; labels are translated when read. */
+export const AUDIT_CATEGORIES: readonly (AuditCategoryStyle & { namespace: AuditNamespace; readonly label: string })[] =
+  auditNamespaces().map(namespace => ({
+    namespace,
+    ...AUDIT_CATEGORY_STYLES[namespace],
+    get label() {
+      return auditCategoryLabel(namespace);
+    },
+  }));
 
 /** The server owns which actions a namespace holds; the page only names the namespaces. */
 export function auditNamespacesForCategories(selected: ReadonlySet<AuditNamespace>): AuditNamespace[] | undefined {

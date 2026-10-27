@@ -9,6 +9,9 @@
 import type { FactoryRuleStage, FactoryTriageType } from '@factory/core/rules/types';
 
 import { requestJson } from './request';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export type WorkItemSource =
   | 'github-issue'
@@ -278,7 +281,7 @@ export async function transitionWorkItem(
   );
   const body = (await res.json()) as { result?: FactoryTransitionResult; error?: string };
   if (body.result) return body.result;
-  throw new Error(body.error ?? `Request failed (${res.status})`);
+  throw new Error(body.error ?? tk('errors.requestFailed', { status: res.status }));
 }
 
 /** Patch a work item's non-stage metadata, session refs, or title. */

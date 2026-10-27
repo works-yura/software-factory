@@ -3,21 +3,30 @@ import { workItemBranch, workItemThreadTitle } from '@factory/pipelines/shared/w
 import { isValid } from 'date-fns';
 
 import { relativeTime } from '../../../lib/date/relativeTime';
+import { lazyLabels } from '../../i18n/lazy';
+import { translator } from '../../i18n/t';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
 export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
-export const SOURCE_LABELS: Record<WorkItemSource, string> = {
-  'github-issue': 'Issue',
-  'github-pr': 'PR Review',
-  'gitlab-issue': 'GitLab',
-  'gitlab-pr': 'MR Review',
-  'linear-issue': 'Linear',
-  'jira-issue': 'Jira',
-  'incidentio-follow-up': 'incident.io',
-  'slack-thread': 'Slack',
-  manual: 'Manual',
-};
+const tk = translator('board');
+
+const WORK_ITEM_SOURCES = [
+  'github-issue',
+  'github-pr',
+  'gitlab-issue',
+  'gitlab-pr',
+  'linear-issue',
+  'jira-issue',
+  'incidentio-follow-up',
+  'slack-thread',
+  'manual',
+] as const satisfies readonly WorkItemSource[];
+
+export const SOURCE_LABELS: Readonly<Record<WorkItemSource, string>> = lazyLabels(
+  WORK_ITEM_SOURCES,
+  source => `board:sources.${source}`,
+);
 
 export function hasLabel(labels: readonly string[], label: string): boolean {
   return labels.some(item => item.toLowerCase() === label);
@@ -103,12 +112,10 @@ function nonEmptyString(value: unknown): string | undefined {
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
 
-export const PULL_REQUEST_STATUS_LABELS: Record<PullRequestStatus, string> = {
-  draft: 'Draft pull request',
-  open: 'Open pull request',
-  closed: 'Closed pull request',
-  merged: 'Merged pull request',
-};
+export const PULL_REQUEST_STATUS_LABELS: Readonly<Record<PullRequestStatus, string>> = lazyLabels(
+  ['draft', 'open', 'closed', 'merged'],
+  status => `board:pullRequestStatus.${status}`,
+);
 
 export function pullRequestStatusForItem(item: Pick<WorkItem, 'metadata' | 'stages'>): PullRequestStatus {
   if (item.metadata.merged === true) return 'merged';
@@ -146,13 +153,13 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
 
 /** Aria label for the icon-only external link next to a card title. */
 export function externalLinkLabel(source: WorkItemSource): string {
-  if (source === 'gitlab-issue' || source === 'gitlab-pr') return 'Open in GitLab';
-  if (source === 'linear-issue') return 'Open in Linear';
-  if (source === 'jira-issue') return 'Open in Jira';
-  if (source === 'incidentio-follow-up') return 'Open in incident.io';
-  if (source === 'slack-thread') return 'Open in Slack';
-  if (source === 'manual') return 'Open link';
-  return 'Open in GitHub';
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return tk('externalLink.gitlab');
+  if (source === 'linear-issue') return tk('externalLink.linear');
+  if (source === 'jira-issue') return tk('externalLink.jira');
+  if (source === 'incidentio-follow-up') return tk('externalLink.incidentio');
+  if (source === 'slack-thread') return tk('externalLink.slack');
+  if (source === 'manual') return tk('externalLink.manual');
+  return tk('externalLink.github');
 }
 
 /** When the issue/PR was opened upstream; `createdAt` is only when the factory first saw it, "just now" for every backfilled card. */

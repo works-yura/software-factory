@@ -8,6 +8,7 @@ import { EllipsisVertical, Minimize2, PencilLine } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { BoardCandidate } from '../boardCandidates';
 import type { BoardCardStatus } from '../boardCardState';
 import type { BoardLayout } from '../boardLayout';
@@ -42,6 +43,7 @@ export function CandidateDetailsPanel({
   onRun: (move: CardMove, prompt?: string) => void;
   layout: BoardLayout;
 }) {
+  const { t } = useTranslation('board');
   const promptAnchorRef = useRef<HTMLButtonElement>(null);
   const [promptOpen, setPromptOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -76,7 +78,7 @@ export function CandidateDetailsPanel({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label={`Collapse ${candidate.title}`}
+                aria-label={t('card.collapse', { title: candidate.title })}
                 onClick={morph.closeDetails}
               >
                 <Minimize2 size={13} aria-hidden />
@@ -88,7 +90,7 @@ export function CandidateDetailsPanel({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={`All actions for ${candidate.title}`}
+                      aria-label={t('card.allActionsFor', { title: candidate.title })}
                     >
                       <EllipsisVertical size={13} aria-hidden />
                     </Button>
@@ -111,7 +113,7 @@ export function CandidateDetailsPanel({
                   onClick={() => setPromptOpen(true)}
                 >
                   <PencilLine size={13} aria-hidden />
-                  Custom prompt…
+                  {t('candidate.customPrompt')}
                 </Button>
               </CardActions>
             )
@@ -136,7 +138,7 @@ export function CandidateDetailsPanel({
       <Popover open={promptOpen} onOpenChange={open => (open ? setPromptOpen(true) : closePrompt())}>
         <PopoverContent anchor={promptAnchorRef} align="end" className="w-80 p-3">
           <form
-            aria-label={`Custom prompt for ${candidate.title}`}
+            aria-label={t('candidate.customPromptFor', { title: candidate.title })}
             className="flex flex-col gap-2"
             onSubmit={event => {
               event.preventDefault();
@@ -148,8 +150,8 @@ export function CandidateDetailsPanel({
               rows={3}
               size="sm"
               value={prompt}
-              placeholder="What should the agent do with this?"
-              aria-label={`Prompt for ${candidate.title}`}
+              placeholder={t('candidate.promptPlaceholder')}
+              aria-label={t('candidate.promptFor', { title: candidate.title })}
               onChange={event => setPrompt(event.target.value)}
               onKeyDown={event => {
                 if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -160,10 +162,10 @@ export function CandidateDetailsPanel({
             />
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" size="sm" onClick={closePrompt}>
-                Cancel
+                {t('candidate.cancel')}
               </Button>
               <Button type="submit" size="sm" disabled={!prompt.trim()}>
-                Run
+                {t('candidate.run')}
               </Button>
             </div>
           </form>

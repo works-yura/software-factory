@@ -1,3 +1,7 @@
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
+
 /** Shared JSON fetch for the Factory endpoints: cookie auth, server error message. */
 
 export class RequestError extends Error {
@@ -16,7 +20,7 @@ export async function requestJson<T>(url: string, init?: RequestInit): Promise<T
   if (init?.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
   const res = await fetch(url, { ...init, headers, credentials: 'include' });
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+    let message = tk('errors.requestFailed', { status: res.status });
     try {
       const body = (await res.json()) as { error?: string; message?: string };
       if (body.message) message = body.message;

@@ -1,6 +1,9 @@
 import type { InstalledPhaseInfo } from '../../../api/types';
 import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
+import { translator } from '../../i18n/t';
 import type { FactoryDecisionSummary } from './services/decisions';
+
+const tk = translator('board');
 
 /** A card has one status row, so every announcement it could make resolves to one of these. */
 export type BoardCardStatus =
@@ -71,7 +74,12 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
   };
 }
 
+/** @deprecated English only; use `busyCardMoveRefusal()`, which follows the UI language. */
 export const BUSY_CARD_MOVE_REFUSAL = "Another run can't start while this card is busy.";
+
+export function busyCardMoveRefusal(): string {
+  return tk('cardState.busyMoveRefusal');
+}
 
 export function canStartRun(ownerKind: BoardCardOwner['kind']): boolean {
   return ownerKind === 'free';
@@ -96,11 +104,12 @@ function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {
 function yourRequest(input: BoardCardStateInput): { statusLabel: string; progressLabel: string } | undefined {
   const { moving } = input;
   if (moving) {
-    const statusLabel = moving.stage === 'done' ? 'Marking done…' : `Moving to ${moving.label}…`;
-    return { statusLabel, progressLabel: 'Moving…' };
+    const statusLabel =
+      moving.stage === 'done' ? tk('cardState.markingDone') : tk('cardState.movingTo', { stage: moving.label });
+    return { statusLabel, progressLabel: tk('cardState.moving') };
   }
-  if (input.preparing !== undefined) return { statusLabel: input.preparing, progressLabel: 'Starting…' };
-  if (input.retryRequested) return { statusLabel: 'Retrying…', progressLabel: 'Retrying…' };
+  if (input.preparing !== undefined) return { statusLabel: input.preparing, progressLabel: tk('cardState.starting') };
+  if (input.retryRequested) return { statusLabel: tk('cardState.retrying'), progressLabel: tk('cardState.retrying') };
   return undefined;
 }
 
@@ -124,8 +133,8 @@ function automationOnCard(
   // The server retries a failure on its own, so it offers no button.
   if (retriesAfterFailure(decision)) {
     return {
-      status: { kind: 'error', label: `${copy.failed} — retrying…`, detail },
-      owner: { kind: 'automation', progressLabel: 'Retrying…' },
+      status: { kind: 'error', label: tk('cardState.failedRetrying', { failed: copy.failed }), detail },
+      owner: { kind: 'automation', progressLabel: tk('cardState.retrying') },
     };
   }
   const owner: BoardCardOwner = { kind: 'automation', progressLabel: copy.progressLabel };
@@ -138,7 +147,7 @@ function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus 
   // A held card's live question is the maintainer's decision, even when a run
   // has been suggested for it: the card cannot start that run until it is accepted.
   if (input.heldAs !== undefined) {
-    return { kind: 'held', label: `${capitalize(input.heldAs)} · needs your approval` };
+    return { kind: 'held', label: tk('cardState.heldNeedsApproval', { kind: capitalize(input.heldAs) }) };
   }
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
@@ -164,18 +173,18 @@ export function itemAwaitsPerson(
 function linkedSourceName(source: FactoryDecisionSummary['source']): string {
   switch (source) {
     case 'github-issue':
-      return 'GitHub issue';
+      return tk('linkedSource.githubIssue');
     case 'github-pr':
-      return 'GitHub pull request';
+      return tk('linkedSource.githubPr');
     case 'gitlab-issue':
-      return 'GitLab issue';
+      return tk('linkedSource.gitlabIssue');
     case 'gitlab-pr':
-      return 'GitLab merge request';
+      return tk('linkedSource.gitlabPr');
     case 'linear-issue':
-      return 'Linear issue';
+      return tk('linkedSource.linearIssue');
     default:
       // Every linked-card decision carries its source; only a manual card would land here.
-      return 'card';
+      return tk('linkedSource.card');
   }
 }
 
@@ -187,25 +196,37 @@ function automationCopy(decision: Pick<FactoryDecisionSummary, 'type' | 'source'
   switch (decision.type) {
     case 'invokeSkill':
       return {
-        busy: 'Starting an automated run…',
-        failed: 'Automated run could not start',
-        progressLabel: 'Starting…',
+        busy: tk('automation.invokeSkill.busy'),
+        failed: tk('automation.invokeSkill.failed'),
+        progressLabel: tk('cardState.starting'),
       };
     case 'transition':
-      return { busy: 'Moving this card automatically…', failed: 'Automatic move failed', progressLabel: 'Moving…' };
+      return {
+        busy: tk('automation.transition.busy'),
+        failed: tk('automation.transition.failed'),
+        progressLabel: tk('cardState.moving'),
+      };
     case 'upsertLinkedWorkItem': {
       const source = linkedSourceName(decision.source);
-      return { busy: `Syncing ${source}…`, failed: `Couldn't sync ${source}`, progressLabel: 'Syncing…' };
+      return {
+        busy: tk('automation.sync.busy', { source }),
+        failed: tk('automation.sync.failed', { source }),
+        progressLabel: tk('automation.sync.progress'),
+      };
     }
     case 'sendMessage':
     case 'notify':
       return {
-        busy: 'Notifying the session…',
-        failed: 'Session could not be notified',
-        progressLabel: 'Notifying…',
+        busy: tk('automation.notify.busy'),
+        failed: tk('automation.notify.failed'),
+        progressLabel: tk('automation.notify.progress'),
       };
     default:
-      return { busy: 'Automation is working on this card…', failed: 'Automation failed', progressLabel: 'Working…' };
+      return {
+        busy: tk('automation.other.busy'),
+        failed: tk('automation.other.failed'),
+        progressLabel: tk('automation.other.progress'),
+      };
   }
 }
 

@@ -1,6 +1,9 @@
 import { isAuditActorType } from '@factory/store/audit/actors';
 import type { AuditTarget } from '@factory/store/audit/base';
 import type { WireAuditActor, WireAuditEvent, WireAuditPage } from '@factory/feed/audit/wire';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export type { AuditTarget };
 export type AuditActorProfile = WireAuditActor;
@@ -72,7 +75,7 @@ function isAuditEventPage(value: unknown): value is AuditEventPage {
 }
 
 async function throwRequestError(res: Response): Promise<never> {
-  let message = `Request failed (${res.status})`;
+  let message = tk('errors.requestFailed', { status: res.status });
   try {
     const body: unknown = await res.json();
     if (typeof body === 'object' && body !== null) {
@@ -102,7 +105,7 @@ export async function fetchAuditEvents(
   if (!res.ok) return throwRequestError(res);
 
   const data: unknown = await res.json();
-  if (!isAuditEventPage(data)) throw new Error('Invalid audit event response');
+  if (!isAuditEventPage(data)) throw new Error(tk('errors.invalidAuditEvents'));
   return data;
 }
 
@@ -116,7 +119,7 @@ export async function fetchAuditPortalLink(baseUrl: string): Promise<string | nu
 
   const data: unknown = await res.json();
   if (typeof data !== 'object' || data === null || !('url' in data) || typeof data.url !== 'string') {
-    throw new Error('Invalid audit portal response');
+    throw new Error(tk('errors.invalidAuditPortal'));
   }
   return data.url;
 }

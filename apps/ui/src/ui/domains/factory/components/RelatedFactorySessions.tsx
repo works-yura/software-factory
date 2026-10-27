@@ -3,10 +3,13 @@ import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useMatch, useNavigate, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { boardTitle } from '../../../i18n/boardLabels';
+import { translator } from '../../../i18n/t';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
@@ -19,6 +22,8 @@ import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
 
+const tk = translator('board');
+
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
   return Object.values(item.sessions)
     .filter(session => livePaths.has(session.sessionId))
@@ -29,19 +34,22 @@ function sessionTitle(item: WorkItem): string {
   const number = workItemNumber(item);
   if (item.source === 'github-pr' && number) return `PR #${number}: ${item.title}`;
   if (item.source === 'gitlab-pr' && number) return `MR !${number}: ${item.title}`;
-  if (item.source === 'github-issue' && number) return `Issue #${number}: ${item.title}`;
+  if (item.source === 'github-issue' && number) return tk('relatedSessions.issueTitle', { number, title: item.title });
   return item.title;
 }
 
 function externalWorkItemLabel(item: WorkItem): string {
   const number = workItemNumber(item);
-  if (item.source === 'github-pr') return number ? `PR #${number}` : 'Pull request';
-  if (item.source === 'gitlab-pr') return number ? `MR !${number}` : 'Merge request';
-  if (item.source === 'github-issue') return number ? `Issue #${number}` : 'Issue';
+  if (item.source === 'github-pr') return number ? `PR #${number}` : tk('relatedSessions.pullRequest');
+  if (item.source === 'gitlab-pr') return number ? `MR !${number}` : tk('relatedSessions.mergeRequest');
+  if (item.source === 'github-issue')
+    return number ? tk('relatedSessions.issueNumber', { number }) : tk('relatedSessions.issue');
   if (item.source === 'linear-issue') {
-    return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : (number ?? 'Linear issue');
+    return typeof item.metadata.identifier === 'string'
+      ? item.metadata.identifier
+      : (number ?? tk('relatedSessions.linearIssue'));
   }
-  return 'Work item';
+  return tk('relatedSessions.workItem');
 }
 
 function activeWorkItem(
@@ -58,6 +66,7 @@ function activeWorkItem(
 
 /** Chat page frame for a factory thread: breadcrumb of the work item or session, plus its actions. */
 export function FactorySessionPage({ children }: { children: ReactNode }) {
+  const { t } = useTranslation('board');
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
   // User threads carry the session id as `threadId` (see ChatSessionProvider).
   const isUserThread = Boolean(useMatch('/factories/:factoryId/user/threads/:threadId'));
@@ -79,7 +88,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
     currentItem && factoryId ? (
       <>
         <Crumb as={Link} to={rememberedBoardPath(factoryId, isReview ? 'review' : 'work')}>
-          {isReview ? 'Review' : 'Work'}
+          {isReview ? boardTitle('review', 'Review') : boardTitle('work', 'Work')}
         </Crumb>
         <Crumb as="span" isCurrent>
           {sessionTitle(currentItem)}
@@ -87,14 +96,14 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
       </>
     ) : isUserThread && session ? (
       <>
-        <Crumb as="span">User sessions</Crumb>
+        <Crumb as="span">{t('relatedSessions.userSessions')}</Crumb>
         <Crumb as="span" isCurrent>
           {getUserSessionLabel(session)}
         </Crumb>
       </>
     ) : workspaceTitle ? (
       <>
-        <Crumb as="span">Sessions</Crumb>
+        <Crumb as="span">{t('relatedSessions.sessions')}</Crumb>
         <Crumb as="span" isCurrent>
           {workspaceTitle}
         </Crumb>
@@ -141,6 +150,7 @@ function WorkItemActions({
   threadId: string;
   projectRepositoryId?: string;
 }) {
+  const { t } = useTranslation('board');
   const navigate = useNavigate();
   const externalItemUrl = genericExternalWorkItemUrl(item);
   const externalItemLabel = externalWorkItemLabel(item);
@@ -159,7 +169,7 @@ function WorkItemActions({
           href={externalItemUrl}
           target="_blank"
           rel="noreferrer"
-          aria-label={`Open ${externalItemLabel}`}
+          aria-label={t('relatedSessions.open', { label: externalItemLabel })}
         >
           <SourceIcon source={item.source} className="size-3.5" />
           {externalItemLabel}
@@ -173,7 +183,7 @@ function WorkItemActions({
           return (
             <Link
               to={relationshipPath(related, factoryId)}
-              aria-label={`Open ${label}: ${related.title}`}
+              aria-label={t('relatedSessions.openRelated', { label, title: related.title })}
               key={related.id}
               className="text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
             >
@@ -191,7 +201,7 @@ function WorkItemActions({
             type="button"
             variant="ghost"
             size="sm"
-            aria-label={`Open ${label}: ${related.title}`}
+            aria-label={t('relatedSessions.openRelated', { label, title: related.title })}
             onClick={() => openSession(session)}
           >
             <Link2 size={13} aria-hidden />

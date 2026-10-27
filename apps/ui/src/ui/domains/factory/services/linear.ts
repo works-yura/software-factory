@@ -8,6 +8,9 @@
  */
 
 import { RequestError } from './request';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export type LinearStatusReason =
   | 'missing_config'
@@ -108,7 +111,7 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
     credentials: 'include',
   });
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+    let message = tk('errors.requestFailed', { status: res.status });
     let code: string | undefined;
     try {
       const body = (await res.json()) as { error?: string; message?: string };

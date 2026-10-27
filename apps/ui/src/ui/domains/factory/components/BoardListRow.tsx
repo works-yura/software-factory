@@ -12,6 +12,9 @@ import type { MouseEvent, ReactNode, RefCallback } from 'react';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 const stopRowClick = (event: MouseEvent) => event.stopPropagation();
 
@@ -140,7 +143,7 @@ export function BoardListRow({
             variant="ghost"
             size="icon-sm"
             draggable={false}
-            aria-label={`Details for ${title}`}
+            aria-label={tk('card.detailsFor', { title })}
             aria-expanded={expanded}
             onClick={event => {
               stopRowClick(event);
@@ -159,7 +162,7 @@ export function BoardListRow({
                   size="icon-sm"
                   draggable={false}
                   disabled={locked}
-                  aria-label={`Actions for ${title}`}
+                  aria-label={tk('card.actionsFor', { title })}
                   onClick={stopRowClick}
                   className={REVEAL_ROW_CONTROLS}
                 >

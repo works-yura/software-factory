@@ -4,6 +4,7 @@ import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/pas
 import { SearchIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { boardFilterOptions, boardFilterSummary } from './boardFilterFields';
 import type { BoardFilterField, BoardFilterOption } from './boardFilterFields';
@@ -33,6 +34,7 @@ function OptionItems({ options, selected, onChange }: OptionListProps) {
 }
 
 function SearchableOptionItems({ label, options, selected, onChange }: OptionListProps & { label: string }) {
+  const { t } = useTranslation('board');
   const [query, setQuery] = useState('');
   const [pickedOnOpen] = useState(() => new Set(selected));
   const searchRef = useRef<HTMLInputElement>(null);
@@ -70,15 +72,15 @@ function SearchableOptionItems({ label, options, selected, onChange }: OptionLis
           type="text"
           value={query}
           onChange={event => setQuery(event.target.value)}
-          placeholder="Search…"
-          aria-label={`Search ${label.toLowerCase()}`}
+          placeholder={t('filters.searchPlaceholder')}
+          aria-label={t('filters.searchField', { field: label.toLowerCase() })}
           className={menuSearchClasses.input}
           autoFocus
           {...passwordManagerOptOutProps}
         />
       </div>
       {ordered.length === 0 ? (
-        <div className={menuEmptyClass}>No matches</div>
+        <div className={menuEmptyClass}>{t('filters.noMatches')}</div>
       ) : (
         <OptionItems options={ordered} selected={selected} onChange={onChange} />
       )}

@@ -20,6 +20,9 @@ import { SourceIcon } from './BoardIcons';
 import { CardDetailsPanel } from './CardDetailsPanel';
 import { WorkItemCardRows } from './WorkItemCardRows';
 import { WorkItemTray } from './WorkItemTray';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export function WorkItemDetailsPanel({
   item,
@@ -91,7 +94,7 @@ export function WorkItemDetailsPanel({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label={`Collapse ${item.title}`}
+                aria-label={tk('card.collapse', { title: item.title })}
                 onClick={morph.closeDetails}
               >
                 <Minimize2 size={13} aria-hidden />
@@ -99,7 +102,12 @@ export function WorkItemDetailsPanel({
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
-                    <Button type="button" variant="ghost" size="icon-sm" aria-label={`All actions for ${item.title}`}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={tk('card.allActionsFor', { title: item.title })}
+                    >
                       <EllipsisVertical size={13} aria-hidden />
                     </Button>
                   }

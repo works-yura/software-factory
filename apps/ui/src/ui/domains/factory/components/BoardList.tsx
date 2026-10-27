@@ -11,6 +11,9 @@ import type { DragPayload } from '../boardDrag';
 import { useBoardDropZone } from '../hooks/useBoardDropZone';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon, stageTintClass } from './BoardIcons';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export const SPANS_LIST_GRID = 'col-span-full grid grid-cols-subgrid';
 
@@ -22,7 +25,7 @@ export function BoardList({ children }: { children: ReactNode }) {
       variant="light"
       fit="container"
       scrollable={false}
-      aria-label="Board stages"
+      aria-label={tk('list.stages')}
       className="p-0"
     >
       {children}

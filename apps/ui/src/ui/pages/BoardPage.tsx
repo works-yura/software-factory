@@ -9,6 +9,9 @@ import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout
 import type { BoardKind } from '../domains/factory/boardStages';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { BoardContent } from './board/BoardContent';
+import { translator } from '../i18n/t';
+
+const tk = translator('board');
 
 /**
  * Factory › Board: an org-wide grouped list of the repository's work items. The
@@ -47,19 +50,19 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
   if (catalog.isPending) {
     return (
       <p role="status" className="p-4">
-        Loading boards…
+        {tk('landing.loading')}
       </p>
     );
   }
   if (catalog.isError) {
-    return <EmptyState variant="fill" titleSlot={<span role="alert">Unable to load boards.</span>} />;
+    return <EmptyState variant="fill" titleSlot={<span role="alert">{tk('landing.loadFailed')}</span>} />;
   }
   const definition = catalog.data.find(board => board.id === kind);
   if (!definition) {
     return (
       <EmptyState
         variant="fill"
-        titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>}
+        titleSlot={<span role="alert">{tk('landing.notInstalled')}</span>}
       />
     );
   }

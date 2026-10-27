@@ -7,6 +7,9 @@ import type { DragPayload } from '../boardDrag';
 import { useBoardDropZone } from '../hooks/useBoardDropZone';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon } from './BoardIcons';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 /** Header cells and card lanes share this so the two rows stay column-aligned. */
 function columnWidthClass(collapsed: boolean): string {
@@ -23,8 +26,8 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
       as="span"
       variant="meta"
       tone="muted"
-      aria-label={`${count} of ${total} visible board tasks in ${label}`}
-      title={`${count} of ${total} visible board tasks`}
+      aria-label={tk('column.taskCountIn', { count, total, stage: label })}
+      title={tk('column.taskCount', { count, total })}
       className="bg-fill flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 tabular-nums"
     >
       <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90" aria-hidden>
@@ -153,7 +156,7 @@ export function BoardColumn({
 
   return (
     <section
-      aria-label={collapsed ? `${label}, empty` : label}
+      aria-label={collapsed ? tk('column.empty', { stage: label }) : label}
       data-testid={`board-column-${stage}`}
       className={cn(
         columnWidthClass(collapsed),

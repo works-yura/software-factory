@@ -11,6 +11,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { GitLabIcon } from '../../../ui/icons';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
@@ -24,6 +25,7 @@ export function RepositoryPickerDialog({
   onClose: () => void;
   onSelect: (repository: LinkedRepositoryPayload) => void;
 }) {
+  const { t } = useTranslation('board');
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
   const visibleRepositories = normalizedQuery
@@ -32,13 +34,13 @@ export function RepositoryPickerDialog({
 
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
-      <DialogContent aria-label="Choose repository">
+      <DialogContent aria-label={t('repositoryPicker.label')}>
         <DialogHeader>
-          <DialogTitle>Choose a repository</DialogTitle>
-          <DialogDescription>Choose a linked repository for this task.</DialogDescription>
+          <DialogTitle>{t('repositoryPicker.title')}</DialogTitle>
+          <DialogDescription>{t('repositoryPicker.description')}</DialogDescription>
           <SearchInput
-            label="Search repositories"
-            placeholder="Search…"
+            label={t('repositoryPicker.search')}
+            placeholder={t('filters.searchPlaceholder')}
             size="sm"
             value={query}
             onValueChange={setQuery}
@@ -65,7 +67,7 @@ export function RepositoryPickerDialog({
                   </Txt>
                   {repository.gitBranch && (
                     <Txt as="span" variant="caption" tone="muted" className="block truncate">
-                      Default branch: {repository.gitBranch}
+                      {t('repositoryPicker.defaultBranch', { branch: repository.gitBranch })}
                     </Txt>
                   )}
                 </span>
@@ -73,7 +75,7 @@ export function RepositoryPickerDialog({
             ))}
             {visibleRepositories.length === 0 && (
               <Txt as="p" variant="caption" tone="muted" className="px-2 py-2">
-                {repositories.length === 0 ? 'No linked repositories' : 'No matching repositories'}
+                {repositories.length === 0 ? t('repositoryPicker.noLinked') : t('repositoryPicker.noMatching')}
               </Txt>
             )}
           </div>

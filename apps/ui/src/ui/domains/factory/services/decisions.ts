@@ -1,4 +1,7 @@
 import type { FactoryDispatchFailureCode } from '@factory/store/work-items/base';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 /** `dismissed` is human rejection; `superseded` means newer Factory state made a proposal obsolete. */
 export type FactoryDecisionStatus =
@@ -40,7 +43,7 @@ export interface FactoryDecisionPage {
 }
 
 async function throwRequestError(response: Response): Promise<never> {
-  let message = `Request failed (${response.status})`;
+  let message = tk('errors.requestFailed', { status: response.status });
   try {
     const body = (await response.json()) as { error?: string; message?: string };
     message = body.message ?? body.error ?? message;

@@ -6,6 +6,9 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useSidebarHeaderSlots } from '../../chat/components/useSidebarHeaderSlots';
 import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export function FactoryBoardLanding({ factoryId }: { factoryId: string | undefined }) {
   const catalog = useBoardCatalog(factoryId);
@@ -26,7 +29,7 @@ function BoardLandingLayout({ children }: { children: ReactNode }) {
 }
 
 function BoardLandingMessage({ isPending, isError }: { isPending: boolean; isError: boolean }) {
-  if (isPending) return <p role="status">Loading boards…</p>;
-  if (isError) return <p role="alert">Unable to load boards.</p>;
-  return <p>No boards installed.</p>;
+  if (isPending) return <p role="status">{tk('landing.loading')}</p>;
+  if (isError) return <p role="alert">{tk('landing.loadFailed')}</p>;
+  return <p>{tk('landing.noBoards')}</p>;
 }

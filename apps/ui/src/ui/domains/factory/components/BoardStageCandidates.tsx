@@ -4,6 +4,9 @@ import type { BoardLayout } from '../boardLayout';
 import type { CardMove } from '../cardPrimaryAction';
 import { CandidateCard } from './CandidateCard';
 import { VirtualBoardItems } from './VirtualBoardItems';
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
 
 export function BoardStageCandidates({
   candidates,
@@ -25,10 +28,10 @@ export function BoardStageCandidates({
   return (
     <>
       {showDivider && (
-        <div role="separator" aria-label="New candidates" className="flex items-center gap-2 py-1">
+        <div role="separator" aria-label={tk('candidate.divider')} className="flex items-center gap-2 py-1">
           <span aria-hidden className="bg-border h-px flex-1" />
           <Txt as="span" variant="meta" tone="muted">
-            New candidates
+            {tk('candidate.divider')}
           </Txt>
           <span aria-hidden className="bg-border h-px flex-1" />
         </div>

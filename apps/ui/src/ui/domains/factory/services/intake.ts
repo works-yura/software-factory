@@ -1,3 +1,7 @@
+import { translator } from '../../../i18n/t';
+
+const tk = translator('board');
+
 /**
  * Browser-side helpers for the intake source configuration (Settings › Intake).
  *
@@ -57,7 +61,7 @@ async function requestIntakeConfig(baseUrl: string, init?: RequestInit): Promise
     ...init,
   });
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+    let message = tk('errors.requestFailed', { status: res.status });
     try {
       const body = (await res.json()) as { error?: string; message?: string };
       if (body.message) message = body.message;
@@ -97,7 +101,7 @@ async function requestIntakeBindings(baseUrl: string, init?: RequestInit): Promi
     ...init,
   });
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+    let message = tk('errors.requestFailed', { status: res.status });
     try {
       const body = (await res.json()) as { error?: string; message?: string };
       if (body.message) message = body.message;
@@ -136,7 +140,7 @@ async function requestIntakeLabelRoutes(
     ...init,
   });
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+    let message = tk('errors.requestFailed', { status: res.status });
     try {
       const body = (await res.json()) as { error?: string; message?: string };
       if (body.message) message = body.message;
