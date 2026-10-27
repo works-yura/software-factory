@@ -8,6 +8,9 @@ import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/co
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import { LanguageSwitcher } from '../../../i18n/LanguageSwitcher';
 
 import { loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
@@ -17,6 +20,7 @@ import { SettingsSubsection } from './SettingsSubsection';
 import { SoundPicker } from './SettingsFields';
 
 export function GeneralSettings() {
+  const { t } = useTranslation();
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
   const changeDoneSound = (next: DoneSound) => {
     setDoneSound(next);
@@ -25,12 +29,15 @@ export function GeneralSettings() {
     playDoneSound(next);
   };
   return (
-    <SettingsSubsection scope="personal" title="General" description="Stored in this browser.">
+    <SettingsSubsection scope="personal" title={t('general')} description={t('storedInBrowser')}>
       <SettingsContainer>
-        <SettingsRow label="Theme" description="Color scheme for the interface">
+        <SettingsRow label={t('language.label')} description={t('language.description')}>
+          <LanguageSwitcher />
+        </SettingsRow>
+        <SettingsRow label={t('theme.label')} description={t('theme.description')}>
           <ThemeToggle />
         </SettingsRow>
-        <SettingsRow label="Completion sound" description="Played when an agent run finishes in a workspace">
+        <SettingsRow label={t('completionSound.label')} description={t('completionSound.description')}>
           <SoundPicker value={doneSound} onChange={changeDoneSound} />
         </SettingsRow>
       </SettingsContainer>

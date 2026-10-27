@@ -40,10 +40,10 @@
 | v3 | v4 | Шви |
 | --- | --- | --- |
 | `apps/server` | `apps/server` (`@factory/app-server`) | імпорти на `@factory/server` і пакети інтеграцій; Linear, Jira, incident.io, Slack прибрано з проводки й тестів хоста (`index.test` −14); дошка Acceptance — з `@factory/pipelines`; скрипти через `corepack`; база `factory-v4`; скіли з `harness-mastra/factory-skills` |
-| `apps/ui` | `apps/ui` (`@factory/app-ui`) | глибокі імпорти `@eclipt/factory/*` → підшляхи пакетів (`./*` у `exports`); TypeScript 6 з каталогу `ts6` (конфіг Vite бере JS API TypeScript); `allowImportingTsExtensions`; тести з `--retry=2` |
+| `apps/ui` | `apps/ui` (`@factory/app-ui`) | глибокі імпорти `@eclipt/factory/*` → підшляхи пакетів (`./*` у `exports`); TypeScript 6 з каталогу `ts6` (конфіг Vite бере JS API TypeScript); `allowImportingTsExtensions`; тести через `scripts/vitest-isolate-failures.mjs` |
 
 - `pipelines`: повернуто `WorkItemBranchSource` (= `WorkItemSource | 'slack-thread'`), бо UI показує картки з тредів Slack; перше злиття типів цю гілку загубило.
-- Тести UI з MSW нестабільні під навантаженням і у v3 (окремо проходять, у повному прогоні щоразу падають інші); повтор лише повторює тест, що впав.
+- Тести UI з MSW нестабільні під навантаженням і у v3 (окремо проходять, у повному прогоні щоразу падають інші). `scripts/vitest-isolate-failures.mjs` після повного прогону запускає кожен файл, що впав, окремо; прогін падає, лише якщо файл падає й сам. Повтори в тому ж воркері (`--retry`) не допомагали.
 
 ## Прибрані інтеграції
 

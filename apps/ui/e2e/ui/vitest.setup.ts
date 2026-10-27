@@ -9,6 +9,7 @@ import { expect, afterAll, afterEach, beforeAll } from 'vitest';
 // path and fails to resolve it.
 expect.extend(matchers);
 
+import '../../src/ui/i18n';
 import { server } from './msw-server';
 
 // Start MSW once for the whole suite. Unhandled requests are an error so a

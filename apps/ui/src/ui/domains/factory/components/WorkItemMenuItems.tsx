@@ -15,6 +15,7 @@ import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon, actionIcon } from './BoardIcons';
+import { phaseTitle } from '../../../i18n/boardLabels';
 
 export interface WorkItemMenuProps {
   item: WorkItem;
@@ -72,7 +73,7 @@ export function WorkItemMenuItems({
   const stages = custom
     ? (board?.phases
         .filter(phase => targets.some(target => target.to === phase.id))
-        .map(phase => ({ id: phase.id, label: phase.title, kind: phase.kind })) ?? [])
+        .map(phase => ({ id: phase.id, label: phaseTitle(board.id, phase.id, phase.title), kind: phase.kind })) ?? [])
     : itemStageOptions(item).map(stage => ({ ...stage, kind: undefined }));
   const suggestionForThisBoard = custom && proposedRunLabel === undefined ? undefined : proposal;
   // Every run-starting action would accept a held card as a side effect, so triage choices replace them.

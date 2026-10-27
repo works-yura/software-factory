@@ -1,0 +1,32 @@
+{
+  "work": {
+    "title": "Робота",
+    "phases": {
+      "intake": "Вхідні",
+      "triage": "Тріаж",
+      "planning": "Планування",
+      "execute": "Розробка",
+      "review": "Перевірка",
+      "done": "Готово",
+      "canceled": "Скасовано"
+    }
+  },
+  "review": {
+    "title": "Рев’ю",
+    "phases": {
+      "intake": "Вхідні",
+      "review": "Рев’ю триває",
+      "done": "Готово",
+      "canceled": "Скасовано"
+    }
+  },
+  "acceptance": {
+    "title": "Приймання",
+    "phases": {
+      "queued": "Очікує доказів",
+      "verifying": "Перевірка критеріїв",
+      "decision": "Рішення продукту",
+      "accepted": "Прийнято"
+    }
+  }
+}

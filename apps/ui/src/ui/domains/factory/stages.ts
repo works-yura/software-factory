@@ -2,6 +2,8 @@ import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import type { FactoryRuleStage } from '@factory/core/rules/types';
 import { FACTORY_RULE_STAGES } from '@factory/core/rules/types';
 
+import { phaseTitle } from '../../i18n/boardLabels';
+
 const BOARD_STAGE_LABELS = {
   intake: 'Intake',
   triage: 'Triage',
@@ -21,9 +23,12 @@ export interface BoardStage {
   label: string;
 }
 
+// `label` is read at use time so it follows the interface language.
 export const BOARD_STAGES: ReadonlyArray<BoardStage> = FACTORY_RULE_STAGES.map(id => ({
   id,
-  label: BOARD_STAGE_LABELS[id],
+  get label() {
+    return phaseTitle('work', id, BOARD_STAGE_LABELS[id]);
+  },
 }));
 
 /**

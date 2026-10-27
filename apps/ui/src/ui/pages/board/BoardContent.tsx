@@ -50,6 +50,7 @@ import { InlineWorkItemComposer } from '../../domains/factory/components/InlineW
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
 import { BoardStages } from './BoardStages';
 import { cardProjectRepositoryId } from '../../domains/factory/boardRepository';
+import { phaseTitle } from '../../i18n/boardLabels';
 
 /** Count all available candidates before source filters so empty states can explain excluded cards. */
 function countUnfilteredCandidates({
@@ -84,7 +85,7 @@ export function BoardContent({
   const factoryProjectId = factory.id;
   const review = kind === 'review';
   const builtin = kind === 'work' || review;
-  const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
+  const stages = definition.phases.map(phase => ({ ...phase, label: phaseTitle(definition.id, phase.id, phase.title) }));
   const auth = useFactoryAuth();
   const currentUserId = auth.data?.user?.userId;
   const githubStatus = useGithubStatusQuery();

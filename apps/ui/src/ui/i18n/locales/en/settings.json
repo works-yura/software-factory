@@ -1,0 +1,17 @@
+{
+  "sections": {
+    "account": "My account",
+    "preferences": "Preferences",
+    "factory": "Manage Factory",
+    "connections": "Connections",
+    "repositories": "Repositories",
+    "environment": "Environment",
+    "intake": "Work Intake",
+    "models": "Factory models",
+    "personal-models": "Your models",
+    "memory": "Your memory",
+    "factory-memory": "Factory memory",
+    "skills": "Skills",
+    "behavior": "Behavior"
+  }
+}

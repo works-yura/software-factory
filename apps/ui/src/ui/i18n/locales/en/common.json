@@ -1,0 +1,17 @@
+{
+  "language": {
+    "label": "Language",
+    "description": "Interface language"
+  },
+  "beta": "Beta",
+  "general": "General",
+  "storedInBrowser": "Stored in this browser.",
+  "theme": {
+    "label": "Theme",
+    "description": "Color scheme for the interface"
+  },
+  "completionSound": {
+    "label": "Completion sound",
+    "description": "Played when an agent run finishes in a workspace"
+  }
+}

@@ -7,6 +7,8 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router/dom';
 
 import { ApiConfigProvider } from '../api/config';
+import './i18n';
+import { LanguageBoundary } from './i18n/LanguageBoundary';
 import { createQueryClient } from '../query-client';
 import { PwaInstallBanner } from './lib/pwa';
 import { createAppRouter } from './router';
@@ -34,7 +36,9 @@ createRoot(document.getElementById('root')!).render(
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider baseUrl="">
-            <RouterProvider router={router} />
+            <LanguageBoundary>
+              <RouterProvider router={router} />
+            </LanguageBoundary>
             <PwaInstallBanner />
             <Toaster position="bottom-right" />
           </ApiConfigProvider>

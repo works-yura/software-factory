@@ -8,6 +8,7 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
+import { boardTitle } from '../../../i18n/boardLabels';
 
 export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -36,7 +37,7 @@ export function FactorySection() {
                 key={board.id}
                 to={rememberedBoardPath(factoryId, board.id)}
                 icon={board.id === 'review' ? GitPullRequest : SquareKanban}
-                label={board.title}
+                label={boardTitle(board.id, board.title)}
               />
             ))
           )}

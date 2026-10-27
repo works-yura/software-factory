@@ -1,6 +1,7 @@
 import type { FACTORY_RULE_STAGES, FactoryRuleBoard, FactoryRuleStage } from '@factory/core/rules/types';
 
 import type { WorkItem } from './services/workItems';
+import { phaseTitle } from '../../i18n/boardLabels';
 import { BOARD_STAGES, stageLabel, stageOrder } from './stages';
 import type { BoardStage, BoardStageId } from './stages';
 
@@ -18,7 +19,16 @@ const REVIEW_BOARD_STAGE_VISIBILITY: Partial<Record<FactoryRuleStage, boolean>> 
 
 const REVIEW_BOARD_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.flatMap(stage => {
   if (!REVIEW_BOARD_STAGE_VISIBILITY[stage.id]) return [];
-  return [stage.id === 'review' ? { ...stage, label: 'Reviewing' } : stage];
+  const id = stage.id;
+  // Read at use time so the title follows the interface language.
+  return [
+    {
+      id,
+      get label() {
+        return phaseTitle('review', id, id === 'review' ? 'Reviewing' : stage.label);
+      },
+    },
+  ];
 });
 
 export function boardStages(kind: BoardKind): ReadonlyArray<BoardStage> {

@@ -5,6 +5,7 @@ import { orderedBoards } from '../../factory/boardCatalog';
 import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS, sessionOwners } from './sessionRows';
 import type { SessionActivityStatus, SessionListRow } from './sessionRows';
 import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
+import { boardTitle } from '../../../i18n/boardLabels';
 
 export const SESSION_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
 export type SessionGroupBy = (typeof SESSION_GROUP_BYS)[number];
@@ -98,7 +99,7 @@ function boardGroupHeadings(
   const catalogIds = new Set(catalog.map(board => board.id));
   const uncatalogedBoards = orderedBoards(uncatalogedBoardIds(rows, catalogIds).map(id => ({ id })));
   return [
-    ...catalog.map(board => boardHeading(board.id, board.title)),
+    ...catalog.map(board => boardHeading(board.id, boardTitle(board.id, board.title))),
     ...uncatalogedBoards.map(({ id }) => boardHeading(id, id.charAt(0).toUpperCase() + id.slice(1))),
     USER_GROUP,
     SLACK_GROUP,

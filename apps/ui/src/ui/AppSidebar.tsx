@@ -1,6 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { useTranslation } from 'react-i18next';
 
 import { SidebarUserMenu } from './domains/auth/components/SidebarUserMenu';
 import { FactorySection } from './domains/factory/components/FactorySection';
@@ -12,13 +13,14 @@ import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher
 import { SessionsSection } from './domains/workspaces/components/SessionsSection';
 
 function BetaBadge() {
+  const { t } = useTranslation();
   return (
     <Txt
       as="span"
       variant="meta"
       className="bg-badge-green-subtle text-brand-green-indicator relative m-[0.1875rem] inline-block px-[0.1875rem] align-middle uppercase"
     >
-      Beta
+      {t('beta')}
       <span className="text-badge-green-edge absolute inset-x-[-0.1875rem] -top-px block transform-gpu">
         <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
           <line x1="0" x2="100%" y1="0.5" y2="0.5" />
@@ -50,9 +52,10 @@ function BetaBadge() {
 export function AppSidebar() {
   const settingsOpen = useSettingsOpen();
   const { desktopState } = useSidebar();
+  const { t } = useTranslation('nav');
 
   return (
-    <Sidebar aria-label="Main sidebar" className="h-full">
+    <Sidebar aria-label={t('mainSidebar')} className="h-full">
       <Sidebar.CommandHeader>
         <Sidebar.Brand
           logo={<LogoWithoutText aria-label="Mastra" role="img" className="text-foreground h-4 w-auto" />}
@@ -62,22 +65,22 @@ export function AppSidebar() {
         {/* Collapsed, the sidebar is hidden and the page header carries the toggle (useSidebarHeaderSlots) */}
         {desktopState !== 'collapsed' && <Sidebar.Trigger />}
       </Sidebar.CommandHeader>
-      <Sidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
+      <Sidebar.Nav aria-label={settingsOpen ? t('settingsSections') : t('main')}>
         {settingsOpen ? (
           <SettingsNavigation />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-4">
-            <section aria-label="Factory switcher">
+            <section aria-label={t('factorySwitcher')}>
               <FactorySwitcher />
             </section>
-            <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
+            <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label={t('navigation')}>
               <FactorySection />
               <SessionsSection />
             </section>
           </div>
         )}
       </Sidebar.Nav>
-      <Sidebar.Footer aria-label="Activity, account, and settings">
+      <Sidebar.Footer aria-label={t('footer')}>
         <Sidebar.NavList>
           <SidebarActivityLink />
           <SidebarUserMenu />

@@ -1,0 +1,17 @@
+{
+  "sections": {
+    "account": "Мій акаунт",
+    "preferences": "Налаштування",
+    "factory": "Керування Factory",
+    "connections": "Підключення",
+    "repositories": "Репозиторії",
+    "environment": "Середовище",
+    "intake": "Надходження задач",
+    "models": "Моделі Factory",
+    "personal-models": "Ваші моделі",
+    "memory": "Ваша пам’ять",
+    "factory-memory": "Пам’ять Factory",
+    "skills": "Навички",
+    "behavior": "Поведінка"
+  }
+}

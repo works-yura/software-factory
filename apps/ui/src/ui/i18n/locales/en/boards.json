@@ -1,0 +1,32 @@
+{
+  "work": {
+    "title": "Work",
+    "phases": {
+      "intake": "Intake",
+      "triage": "Triage",
+      "planning": "Planning",
+      "execute": "Building",
+      "review": "Review",
+      "done": "Done",
+      "canceled": "Canceled"
+    }
+  },
+  "review": {
+    "title": "Review",
+    "phases": {
+      "intake": "Intake",
+      "review": "Reviewing",
+      "done": "Done",
+      "canceled": "Canceled"
+    }
+  },
+  "acceptance": {
+    "title": "Acceptance",
+    "phases": {
+      "queued": "Awaiting evidence",
+      "verifying": "Verifying criteria",
+      "decision": "Product decision",
+      "accepted": "Accepted"
+    }
+  }
+}
