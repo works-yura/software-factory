@@ -3,7 +3,7 @@ import type { WorkerDeps } from '@mastra/core/worker';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IssueReconciler } from '@factory/integrations';
-import type { LinearRulesIngress } from '../../linear/rules.ts';
+import type { LinearRulesIngress } from '../rules.ts';
 import { PlatformApiClient } from '@factory/integrations';
 import { PlatformLinearEventWorker } from './event-worker.ts';
 import type {

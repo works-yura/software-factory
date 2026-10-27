@@ -9,22 +9,22 @@ import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } f
 import type { RouteAuth } from '@factory/http';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
-import { buildLinearAgentTools } from '../../linear/agent-tools.ts';
-import type { LinearEventRules, LinearRuleOverrides } from '../../linear/default-rules.ts';
-import { resolveLinearRules } from '../../linear/default-rules.ts';
+import { buildLinearAgentTools } from '../agent-tools.ts';
+import type { LinearEventRules, LinearRuleOverrides } from '../default-rules.ts';
+import { resolveLinearRules } from '../default-rules.ts';
 import type {
   LinearConnectionCheck,
   LinearIntegration,
   LinearIssueDetail as LinearRouteIssueDetail,
-} from '../../linear/integration.ts';
-import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.ts';
+} from '../integration.ts';
+import { attachLinearIssueReconciler } from '../issue-reconciler.ts';
 import {
   linearIssueReconciliationEnabled,
   linearIssueReconciliationInterval,
-} from '../../linear/reconciliation-config.ts';
-import { buildLinearRoutes } from '../../linear/routes.ts';
-import { attachLinearRules } from '../../linear/rules.ts';
-import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.ts';
+} from '../reconciliation-config.ts';
+import { buildLinearRoutes } from '../routes.ts';
+import { attachLinearRules } from '../rules.ts';
+import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../storage.ts';
 import {
   logPlatformInfo,
   logPlatformWarn,

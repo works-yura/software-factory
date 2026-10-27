@@ -71,7 +71,7 @@ import { PlatformGithubIntegration } from '@factory/integration-github';
 import { PlatformGitLabIntegration } from '@factory/integration-gitlab';
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.ts';
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.ts';
-import { PlatformLinearIntegration } from './integrations/platform/linear/integration.ts';
+import { PlatformLinearIntegration } from '@factory/integration-linear';
 import { createSessionAsRowOwner, prepareSessionRunContext } from '@factory/integrations';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.ts';
 import type { FactoryMcpConfig } from './mcp/routes.ts';

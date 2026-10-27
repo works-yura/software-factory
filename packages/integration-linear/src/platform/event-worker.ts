@@ -7,7 +7,7 @@ import type { IntegrationStorageHandle } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import type { IssueReconciler } from '@factory/integrations';
-import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.ts';
+import type { LinearIssueIngress, LinearRulesIngress } from '../rules.ts';
 import type { PlatformApiClient} from '@factory/integrations';
 import { PlatformApiError } from '@factory/integrations';
 

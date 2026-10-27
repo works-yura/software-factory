@@ -8,7 +8,7 @@ import { defaultGithubRules } from '@factory/integration-github';
 import { defaultGitLabRules } from '@factory/integration-gitlab';
 import { defaultIncidentioRules } from '../integrations/incidentio/default-rules.ts';
 import { defaultJiraRules } from '../integrations/jira/default-rules.ts';
-import { defaultLinearRules } from '../integrations/linear/default-rules.ts';
+import { defaultLinearRules } from '@factory/integration-linear';
 import type {
   FactoryGithubRuleContext,
   FactoryGitLabRuleContext,

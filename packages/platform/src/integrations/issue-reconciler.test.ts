@@ -14,8 +14,8 @@ import { createGithubIssueReconciler } from '@factory/integration-github';
 import { reconciledIssueRelabeledEvent } from '@factory/integration-github';
 import type { GithubIssueFetcher, GithubOpenIssueLister, ReconcileIssueState } from '@factory/integration-github';
 import { createIssueReconciler, EXTERNAL_SOURCE_MISSING_KEY } from '@factory/integrations';
-import { resolveLinearRules } from './linear/default-rules.ts';
-import { attachLinearIssueReconciler } from './linear/issue-reconciler.ts';
+import { resolveLinearRules } from '@factory/integration-linear';
+import { attachLinearIssueReconciler } from '@factory/integration-linear';
 
 function issue(overrides: Partial<IntakeIssueDetail> = {}): IntakeIssueDetail {
   return {
