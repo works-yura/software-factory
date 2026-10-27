@@ -113,7 +113,7 @@ integrations/platform/jira/integration.test.ts	integration-jira/src/platform/int
 integrations/platform/jira/routes.test.ts	integration-jira/src/platform/routes.test.ts
 integrations/platform/linear/event-worker.test.ts	integration-linear/src/platform/event-worker.test.ts
 integrations/platform/linear/integration.test.ts	integration-linear/src/platform/integration.test.ts
-integrations/platform/linear/source-id.test.ts	platform/src/integrations/platform/linear/source-id.test.ts
+integrations/platform/linear/source-id.test.ts	integration-linear/src/platform/source-id.test.ts
 integrations/pull-request-head.test.ts	integrations/src/pull-request-head.test.ts
 integrations/reconciliation-config.test.ts	integrations/src/reconciliation-config.test.ts
 integrations/slack/connect-route.test.ts	platform/src/integrations/slack/connect-route.test.ts
