@@ -123,7 +123,8 @@ describe('Factory root route', () => {
   });
 
   it('resumes a mid-flow onboarding from the root route after an OAuth round-trip', async () => {
-    seedOnboarding('model-setup', null);
+    // The account-setup step is gone (one model scope), so the flow resumes at the review.
+    seedOnboarding('review', null);
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -135,7 +136,7 @@ describe('Factory root route', () => {
     const router = renderFactoryRoute('/?github=connected');
 
     try {
-      await screen.findByRole('heading', { name: 'Choose your setup.' });
+      await screen.findByRole('heading', { name: 'Ready to create.' });
       expect(router.state.location.pathname).toBe('/onboarding');
     } finally {
       clearOnboarding();
