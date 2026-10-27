@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Mastra harness: start coordinator, phase-state processor, agent tools, workspace and skills, MCP, environment builds.",
+  "description": "Mastra harness: start coordinator, phase-state processor, agent tools, workspace and skills, environment builds.",
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts"
@@ -32,8 +32,6 @@
     "@factory/work-items": "workspace:*",
     "@mastra/code-sdk": "1.15.0",
     "@mastra/core": "1.79.0",
-    "@mastra/mcp": "2.5.0",
-    "fetch-to-node": "2.1.0",
     "hono": "4.13.13",
     "zod": "catalog:"
   },

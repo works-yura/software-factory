@@ -13,13 +13,18 @@ import { getFactoryAuthUser } from '@factory/auth';
 import { PLATFORM_AUTH_PROVIDER } from '@factory/auth';
 import type { RouteAuth } from '@factory/http';
 import { ensureFactorySourceSession, FactorySourceSessionResolutionError } from '@factory/session';
+import type { SourceControlSessionLookup } from '@factory/session';
 import { auditActorProfile } from '@factory/store';
-import type { FactoryProjectsStorage } from '@factory/store';
-import type { SourceControlStorageHandle } from '@factory/store';
-import { FACTORY_TOOL_ANNOTATIONS } from '../tools/annotations.ts';
-import { createFactoryTools } from '../tools/index.ts';
-import type { FactoryToolDependencies, FactoryToolScope } from '../tools/index.ts';
+import type {
+  AuditActorProfileInput,
+  AuditStorage,
+  FactoryProjectsStorage,
+  SourceControlStorageHandle,
+  WorkItemsStorage,
+} from '@factory/store';
+import { FACTORY_TOOL_ANNOTATIONS } from './annotations.ts';
 import { propagateClientDisconnect } from './disconnect.ts';
+import { factoryActivityEvent } from './events.ts';
 
 export const FACTORY_MCP_PATH = '/web/factory/projects/:projectId/mcp';
 const PROTECTED_RESOURCE_PREFIX = '/.well-known/oauth-protected-resource';
@@ -41,7 +46,27 @@ export interface FactoryMcpConfig {
    * without one, since clients would have nowhere to sign in.
    */
   authorizationServers?: string[];
+  /**
+   * Serve without an OAuth authorization server. Only for auth providers that
+   * identify callers without a token, like the loopback-only local dev auth;
+   * any other caller gets a 401 with nowhere to sign in.
+   */
+  tokenless?: boolean;
 }
+
+/**
+ * MCP requires a server version. The Factory doesn't expose its package
+ * version at runtime, so this versions the endpoint's interface instead.
+ */
+const FACTORY_MCP_SERVER_VERSION = '1.0.0';
+
+/** What a connected client is told the server is for and where to start. */
+const FACTORY_MCP_INSTRUCTIONS = [
+  'A Mastra Factory tracks software work as work items on a board; agent sessions plan and build them.',
+  'Start with `factory_list_attention` for what needs a person, or `search` and `fetch` to find a work item.',
+  'Work item tools file, update, move and follow items; session tools start, message and follow the agent sessions working on them.',
+  'Every call runs as the signed-in user. When the Factory has a repository, session tools act from a private connector session of theirs.',
+].join(' ');
 
 /** Mastra Platform's WorkOS AuthKit, which issues tokens Platform's `/auth/verify` accepts. */
 export const PLATFORM_MCP_AUTHORIZATION_SERVER = 'https://auth-kit.mastra.ai';
@@ -65,8 +90,35 @@ export interface FactoryMcpRoutesDeps {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   /** Source-control handles a connector session can be filed under, tried in order. */
   sourceControls: readonly SourceControlStorageHandle[];
-  tools: FactoryToolDependencies;
-  version?: string;
+  tools: FactoryMcpToolDependencies;
+}
+
+/**
+ * Who an MCP client acts as: a signed-in person in one Factory, with the reach
+ * of a web UI turn. Matches the agent tools' scope for a user session.
+ */
+export interface FactoryMcpToolScope {
+  orgId: string;
+  factoryProjectId: string;
+  userId: string;
+  sessionId: string;
+  resourceId: string;
+  threadId: string;
+  kind: 'user';
+  interactive: true;
+  actorProfile?: AuditActorProfileInput;
+}
+
+/**
+ * The Factory's agent tools, built by the harness for one scope, and the
+ * storage the MCP-only tools and events read. The endpoint only chooses which
+ * tools a client sees; the tools themselves are the ones agent sessions get.
+ */
+export interface FactoryMcpToolDependencies {
+  create: (scope: FactoryMcpToolScope) => Record<string, Tool<any, any, any, any>>;
+  workItems: Pick<WorkItemsStorage, 'list' | 'getForProject'>;
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
+  audit: Pick<AuditStorage, 'list'>;
 }
 
 /** The connector session a user's MCP client acts from: one per user and Factory, stable across requests. */
@@ -115,7 +167,7 @@ function workItemUrl(publicOrigin: string, factoryProjectId: string, workItemId:
  * look for, answered from the Factory's work items.
  */
 function createSearchFetchTools(
-  scope: FactoryToolScope,
+  scope: FactoryMcpToolScope,
   deps: FactoryMcpRoutesDeps,
   inspect: Tool<any, any, any, any> | undefined,
 ): Record<string, Tool<any, any, any, any>> {
@@ -164,11 +216,11 @@ function createSearchFetchTools(
 
 /** The tools a signed-in person's MCP client sees for one Factory. */
 export function createFactoryMcpTools(
-  scope: FactoryToolScope,
+  scope: FactoryMcpToolScope,
   deps: FactoryMcpRoutesDeps,
   options: { persistedSession?: boolean } = {},
 ): Record<string, Tool<any, any, any, any>> {
-  const factoryTools = createFactoryTools({ scope, deps: deps.tools }) as Record<string, Tool<any, any, any, any>>;
+  const factoryTools = deps.tools.create(scope);
   const tools: Record<string, Tool<any, any, any, any>> = {};
   for (const [name, tool] of Object.entries(factoryTools)) {
     if (EXCLUDED_TOOLS.has(name)) continue;
@@ -216,7 +268,7 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
     factoryProjectId,
   });
   const actorProfile = auditActorProfile(getFactoryAuthUser(c));
-  const scope: FactoryToolScope = {
+  const scope: FactoryMcpToolScope = {
     orgId: tenant.orgId,
     factoryProjectId,
     userId: tenant.userId,
@@ -233,15 +285,29 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
   const server = new MCPServer({
     id: `factory-${factoryProjectId}`,
     name: `${project.name ?? 'Mastra'} Factory`,
-    version: deps.version ?? '1.0.0',
+    version: FACTORY_MCP_SERVER_VERSION,
     description: 'Manage work items, sessions and decisions in a Mastra Factory.',
+    instructions: FACTORY_MCP_INSTRUCTIONS,
+    // VS Code, Cursor and Claude Code still open with 2025-era `initialize`; serve them statelessly.
+    legacy: 'stateless',
     tools: createFactoryMcpTools(scope, deps, { persistedSession: persisted }),
+    events: {
+      'factory.activity': factoryActivityEvent({
+        orgId: tenant.orgId,
+        factoryProjectId,
+        audit: deps.tools.audit,
+        workItems: deps.tools.workItems,
+        sessions: deps.tools.sessions,
+        viewer: { orgId: tenant.orgId, userId: tenant.userId },
+      }),
+    },
   });
 
   const { req, res } = toReqRes(c.req.raw);
   const done = server
     .startHTTP({ url: new URL(c.req.url), httpPath: mcpPath, req, res })
-    .catch(() => {
+    .catch(error => {
+      console.warn('[factory] MCP request failed:', error);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(

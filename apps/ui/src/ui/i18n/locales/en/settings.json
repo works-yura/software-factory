@@ -718,5 +718,14 @@
     "searchLabel": "Search settings",
     "searchPlaceholder": "Search settings…",
     "noResults": "No settings found."
+  },
+  "mcp": {
+    "title": "MCP clients",
+    "description": "Use this Factory from Claude, ChatGPT and other MCP clients. They sign in as you.",
+    "url": "MCP URL",
+    "copy": "Copy MCP URL",
+    "claude": "Settings → Connectors → Add custom connector, paste the URL",
+    "claudeCode": "Run claude mcp add --transport http factory <URL>, then /mcp to sign in",
+    "chatgpt": "Plugins → + → Add custom MCP server, paste the URL, choose OAuth"
   }
 }

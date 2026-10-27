@@ -22,6 +22,7 @@ import { AccountSettingsSection } from './AccountSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
+import { McpClientsSection } from './McpClientsSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
@@ -80,13 +81,16 @@ export function SettingsPanel() {
       {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && (
-        <SettingsSubsection
-          scope="personal"
-          title={t('panel.connections.title')}
-          description={t('panel.connections.description')}
-        >
-          <ConnectedAccountsSection />
-        </SettingsSubsection>
+        <div className="flex flex-col gap-8">
+          <SettingsSubsection
+            scope="personal"
+            title={t('panel.connections.title')}
+            description={t('panel.connections.description')}
+          >
+            <ConnectedAccountsSection />
+          </SettingsSubsection>
+          <McpClientsSection />
+        </div>
       )}
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}

@@ -26,6 +26,7 @@
     "@factory/integration-github": "workspace:*",
     "@factory/integration-gitlab": "workspace:*",
     "@factory/integrations": "workspace:*",
+    "@factory/mcp": "workspace:*",
     "@factory/observability": "workspace:*",
     "@factory/pipelines": "workspace:*",
     "@factory/runtime": "workspace:*",

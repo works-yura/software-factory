@@ -84,7 +84,7 @@ export const PERSONAL_SETTINGS_GROUP = {
         return SETTINGS_SECTION_LABELS.connections;
       },
       icon: Cable,
-      searchText: 'your personal connections connected accounts slack communication integrations',
+      searchText: 'your personal connections connected accounts slack communication integrations mcp claude chatgpt',
     },
   ],
 } satisfies SettingsNavGroup;

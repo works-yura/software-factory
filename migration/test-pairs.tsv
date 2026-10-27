@@ -13,7 +13,7 @@ boards/work-transition-policy.test.ts	pipelines/src/work/transition-policy.test.
 work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts
 storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts
 storage/domains/work-items/attention-events.test.ts	store/src/work-items/attention-events.test.ts
-storage/domains/audit/base.test.ts	store/src/audit/base.test.ts
+storage/domains/audit/base.test.ts	store/src/audit/base.test.ts	+3	forward paging (`after`) ported from upstream f3bc1caddb
 storage/domains/audit/actions.test.ts	store/src/audit/actions.test.ts
 rules/dispatch-errors.test.ts	store/src/dispatch-errors.test.ts
 storage/domains/comments/base.test.ts	store/src/comments/base.test.ts
@@ -91,7 +91,7 @@ integrations/platform/gitlab/event-worker.test.ts	integration-gitlab/src/platfor
 integrations/pull-request-head.test.ts	integrations/src/pull-request-head.test.ts
 integrations/reconciliation-config.test.ts	integrations/src/reconciliation-config.test.ts
 integrations/subscription-session.test.ts	integrations/src/subscription-session.test.ts
-mcp/routes.test.ts	harness-mastra/src/mcp/routes.test.ts
+mcp/routes.test.ts	mcp/src/routes.test.ts	+13	connector support and factory.activity events ported from upstream f3bc1caddb
 platform-auth-host.test.ts	auth/src/platform-auth-host.test.ts
 routes/apply-default-model.scenario.test.ts	api/src/apply-default-model.scenario.test.ts
 routes/attention.test.ts	api/src/attention.test.ts
@@ -257,7 +257,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/hooks/__tests__/useJiraData.msw.test.tsx	../apps/ui/src/hooks/__tests__/useJiraData.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useLinearData.msw.test.tsx	../apps/ui/src/hooks/__tests__/useLinearData.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useRouteThreadSync.msw.test.tsx	../apps/ui/src/hooks/__tests__/useRouteThreadSync.msw.test.tsx
-../../../apps/ui/src/hooks/__tests__/useServerFeatures.msw.test.tsx	../apps/ui/src/hooks/__tests__/useServerFeatures.msw.test.tsx
+../../../apps/ui/src/hooks/__tests__/useServerFeatures.msw.test.tsx	../apps/ui/src/hooks/__tests__/useServerFeatures.msw.test.tsx	+1	MCP flag case ported from upstream f3bc1caddb
 ../../../apps/ui/src/hooks/__tests__/useStartFactoryRun.msw.test.tsx	../apps/ui/src/hooks/__tests__/useStartFactoryRun.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useThreadWorkItem.msw.test.tsx	../apps/ui/src/hooks/__tests__/useThreadWorkItem.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useWorkItemComments.msw.test.tsx	../apps/ui/src/hooks/__tests__/useWorkItemComments.msw.test.tsx

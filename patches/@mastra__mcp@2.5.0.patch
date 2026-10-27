@@ -1,0 +1,85 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index f2d8d04..8dcd676 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -20285,6 +20285,7 @@ var MCPServer = class extends _mastra_core_mcp.MCPServerBase {
+ 		this.loadAppResources(config.appResources);
+ 		this.requestStateCodec = this.createRequestStateCodec(config.requestState);
+ 		this.eventsOptions = config.eventsOptions ?? {};
++		this.legacy = config.legacy ?? "reject";
+ 		const webhook = this.eventsOptions.webhook;
+ 		this.eventRegistry = new ServerEventRegistry(config.events, { webhook: webhook !== void 0 });
+ 		if (webhook && this.eventRegistry.size > 0) this.webhooks = new WebhookDispatcher({
+@@ -20814,7 +20815,7 @@ var MCPServer = class extends _mastra_core_mcp.MCPServerBase {
+ 						resumeSchema: execution.resumeSchema
+ 					});
+ 				}
+-				const result = this.toCallToolResult(name, tool, execution.output);
++				const result = server.projectCallToolResult(this.toCallToolResult(name, tool, execution.output), this.toolInfo(name, tool).outputSchema);
+ 				this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
+ 				return result;
+ 			} catch (error) {
+@@ -21080,7 +21081,7 @@ var MCPServer = class extends _mastra_core_mcp.MCPServerBase {
+ 	getNodeHandler() {
+ 		if (!this.nodeHandler) {
+ 			this.httpHandler = (0, _modelcontextprotocol_server.createMcpHandler)(() => this.createServerInstance(), {
+-				legacy: "reject",
++				legacy: this.legacy,
+ 				onerror: (error) => this.logger.error("MCP handler error", { error: error.toString() })
+ 			});
+ 			this.nodeHandler = (0, _modelcontextprotocol_node.toNodeHandler)(this.httpHandler, { onerror: (error) => this.logger.error("MCP Node handler adapter error", { error: error.toString() }) });
+diff --git a/dist/index.js b/dist/index.js
+index 6bbb7b3..03ee3fc 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -20258,6 +20258,7 @@ var MCPServer = class extends MCPServerBase {
+ 		this.loadAppResources(config.appResources);
+ 		this.requestStateCodec = this.createRequestStateCodec(config.requestState);
+ 		this.eventsOptions = config.eventsOptions ?? {};
++		this.legacy = config.legacy ?? "reject";
+ 		const webhook = this.eventsOptions.webhook;
+ 		this.eventRegistry = new ServerEventRegistry(config.events, { webhook: webhook !== void 0 });
+ 		if (webhook && this.eventRegistry.size > 0) this.webhooks = new WebhookDispatcher({
+@@ -20787,7 +20788,7 @@ var MCPServer = class extends MCPServerBase {
+ 						resumeSchema: execution.resumeSchema
+ 					});
+ 				}
+-				const result = this.toCallToolResult(name, tool, execution.output);
++				const result = server.projectCallToolResult(this.toCallToolResult(name, tool, execution.output), this.toolInfo(name, tool).outputSchema);
+ 				this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
+ 				return result;
+ 			} catch (error) {
+@@ -21053,7 +21054,7 @@ var MCPServer = class extends MCPServerBase {
+ 	getNodeHandler() {
+ 		if (!this.nodeHandler) {
+ 			this.httpHandler = createMcpHandler(() => this.createServerInstance(), {
+-				legacy: "reject",
++				legacy: this.legacy,
+ 				onerror: (error) => this.logger.error("MCP handler error", { error: error.toString() })
+ 			});
+ 			this.nodeHandler = toNodeHandler(this.httpHandler, { onerror: (error) => this.logger.error("MCP Node handler adapter error", { error: error.toString() }) });
+diff --git a/dist/server/server.d.ts b/dist/server/server.d.ts
+index c445aa1..b188dca 100644
+--- a/dist/server/server.d.ts
++++ b/dist/server/server.d.ts
+@@ -33,6 +33,12 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
+      * @experimental SEP-3415 is a draft; this API may change.
+      */
+     eventsOptions?: MCPServerEventsOptions;
++    /**
++     * How requests from 2025-era clients (those that open with `initialize`) are served
++     * over HTTP. `'reject'` (default) answers them with the unsupported-protocol-version
++     * error; `'stateless'` answers each with a fresh server instance and no session.
++     */
++    legacy?: 'reject' | 'stateless';
+ }
+ export interface MCPServerHTTPOptions {
+     url: URL;
+@@ -102,6 +108,7 @@ export declare class MCPServer extends MCPServerBase {
+     private readonly requestStateCodec;
+     private readonly eventRegistry;
+     private readonly eventsOptions;
++    private readonly legacy;
+     private eventsInspector;
+     private readonly webhooks?;
+     private httpHandler?;

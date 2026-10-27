@@ -337,6 +337,9 @@ export const factory = new MastraFactory({
   // Providers every signed-in account may run on this server's own credentials,
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
+  // Local dev auth signs in every loopback caller, so MCP clients on this
+  // machine (Claude Code, Cursor) connect without an OAuth server.
+  ...(localDevAuthEnabled ? { mcp: { tokenless: true } } : {}),
   sandbox,
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.

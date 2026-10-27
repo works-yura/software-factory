@@ -33,6 +33,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
+import type { Tool } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
@@ -70,8 +71,8 @@ import { buildPlatformConnectRoutes } from '@factory/integrations';
 import { PlatformGithubIntegration } from '@factory/integration-github';
 import { PlatformGitLabIntegration } from '@factory/integration-gitlab';
 import { createSessionAsRowOwner, prepareSessionRunContext } from '@factory/integrations';
-import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/harness-mastra';
-import type { FactoryMcpConfig } from '@factory/harness-mastra';
+import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/mcp';
+import type { FactoryMcpConfig } from '@factory/mcp';
 import { resolveDeploymentModelProviders } from '@factory/api';
 import {
   createCustomProvidersPrimer,
@@ -557,6 +558,14 @@ export class MastraFactory {
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
       mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
+    // The MCP endpoint authenticates callers itself, so it needs an auth
+    // provider and somewhere for clients to get tokens, unless the provider
+    // needs no token (loopback dev auth).
+    const mcpEnabled =
+      Boolean(auth) &&
+      mcpConfig !== false &&
+      mcpConfig?.enabled !== false &&
+      (mcpAuthorizationServers.length > 0 || mcpConfig?.tokenless === true);
 
     // Explicit integrations win. Platform credentials fill only missing
     // provider slots so callers can override each integration independently.
@@ -1712,14 +1721,19 @@ export class MastraFactory {
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
-          ...(auth && mcpAuthorizationServers.length > 0
+          ...(mcpEnabled
             ? buildFactoryMcpRoutes({
                 auth: routeAuth,
                 publicOrigin,
                 authorizationServers: mcpAuthorizationServers,
                 projects: factoryProjectsStorage,
                 sourceControls: sourceControlHandles,
-                tools: factoryToolDeps,
+                tools: {
+                  ...factoryToolDeps,
+                  // The harness types its tools loosely (`ToolLike`); they are Mastra tools.
+                  create: scope =>
+                    createFactoryTools({ scope, deps: factoryToolDeps }) as Record<string, Tool<any, any, any, any>>,
+                },
               })
             : []),
           ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
@@ -1755,6 +1769,7 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
+            mcpEnabled,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
@@ -1835,7 +1850,16 @@ export class MastraFactory {
             : []),
         ],
         buildServerConfig: () => {
-          const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
+          // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
+          // read the OAuth challenge from `WWW-Authenticate`; the deployer
+          // merges these into its default allow/expose lists.
+          const mcpCors = {
+            allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name'],
+            exposeHeaders: ['WWW-Authenticate'],
+          };
+          const cors = {
+            cors: allowedOrigins.length ? { origin: allowedOrigins, credentials: true, ...mcpCors } : mcpCors,
+          };
           // Log route errors with method/path/stack and answer with structured
           // JSON instead of an opaque `Internal Server Error`. Applied by the
           // deployer to both the top-level app and the custom-route sub-app.
