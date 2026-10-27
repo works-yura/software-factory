@@ -1306,6 +1306,12 @@ importers:
       '@factory/feed':
         specifier: workspace:*
         version: link:../feed
+      '@factory/harness':
+        specifier: workspace:*
+        version: link:../harness
+      '@factory/harness-claude-code':
+        specifier: workspace:*
+        version: link:../harness-claude-code
       '@factory/harness-mastra':
         specifier: workspace:*
         version: link:../harness-mastra
