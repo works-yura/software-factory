@@ -8,7 +8,7 @@ import { hydrateFactorySession, resolveFactorySessionModel } from '@factory/sess
 import { resolveWorkItemRepository } from '@factory/session';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession, SourceControlStorageHandle } from '@factory/store';
-import type { CreateWorkItemInput, WorkItemsStorage } from '@factory/store';
+import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { FactoryTransitionService } from '@factory/runtime';
 import { externallyAuthoredWorkItem } from '@factory/core';
 import type { FactoryRuleStage, FactoryTransitionResult } from '@factory/core';
@@ -104,9 +104,10 @@ export interface FactoryStartPreparedResult {
 type FactoryController = AgentController<MastraCodeState>;
 type FactorySession = Awaited<ReturnType<FactoryController['createSession']>>;
 
-async function resolveSourceSession(
+/** The source-control session a start runs in, checked against the request's org, user and factory. */
+export async function resolveSourceSession(
   storage: SourceControlStorageHandle,
-  request: FactoryStartRequest,
+  request: Pick<FactoryStartRequest, 'orgId' | 'userId' | 'factoryProjectId' | 'sessionId'>,
 ): Promise<SourceControlSession & { projectRepositoryId: string }> {
   const session = await storage.sessions.getBySessionId(request.sessionId);
   if (!session || session.orgId !== request.orgId || session.userId !== request.userId) {
@@ -130,6 +131,144 @@ async function configureThread(session: FactorySession, request: FactoryStartReq
   await session.thread.rename({ title: request.threadTitle, pin: false });
   await session.thread.setSetting({ key: 'factorySessionId', value: request.sessionId });
   return threadId;
+}
+
+/**
+ * The repository a start works in: the card's, which must be the source
+ * session's. A card linked to several repositories keeps the one an earlier
+ * run of the same role already chose; a fresh session never chooses for it.
+ */
+export async function resolveStartRepository({
+  sourceControl,
+  request,
+  sourceSession,
+  storedItem,
+}: {
+  sourceControl: SourceControlStorageHandle;
+  request: Pick<FactoryStartRequest, 'orgId' | 'factoryProjectId' | 'workItem'>;
+  sourceSession: SourceControlSession & { projectRepositoryId: string };
+  storedItem: WorkItemRow | null;
+}): Promise<{ slug: string; projectRepositoryId: string }> {
+  let repository = await resolveWorkItemRepository({
+    sourceControl,
+    orgId: request.orgId,
+    factoryProjectId: request.factoryProjectId,
+    item: storedItem ?? { metadata: request.workItem.input.metadata ?? null },
+  });
+  if (repository.status === 'ambiguous') {
+    // A retry of this role's existing session keeps its already-chosen
+    // repository; a newly minted session must not choose for the card.
+    if (storedItem?.sessions[request.workItem.role]?.sessionId !== sourceSession.sessionId) {
+      throw new WorkItemRepositoryError(
+        'repository_ambiguous',
+        `Choose a repository for this work item: ${repository.candidates.join(', ')}.`,
+        repository.candidates,
+      );
+    }
+    const link = await sourceControl.projectRepositories.get({
+      orgId: request.orgId,
+      id: sourceSession.projectRepositoryId,
+    });
+    const linked = link && (await sourceControl.repositories.get({ orgId: request.orgId, id: link.repositoryId }));
+    const currentLinks = link
+      ? await sourceControl.projectRepositories.list({ orgId: request.orgId, connectionId: link.connectionId })
+      : [];
+    if (
+      !linked ||
+      !repository.candidates.includes(linked.slug) ||
+      !currentLinks.some(candidate => candidate.id === sourceSession.projectRepositoryId)
+    ) {
+      throw new WorkItemRepositoryError(
+        'repository_unlinked',
+        'The existing session repository is not linked to this Factory.',
+      );
+    }
+    repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: sourceSession.projectRepositoryId };
+  }
+  if (repository.status === 'unlinked') {
+    throw new WorkItemRepositoryError('repository_unlinked', repository.hint);
+  }
+  if (repository.projectRepositoryId !== sourceSession.projectRepositoryId) {
+    throw new WorkItemRepositoryError(
+      'repository_mismatch',
+      `This run session is bound to a different repository than ${repository.slug}.`,
+    );
+  }
+  return repository;
+}
+
+/**
+ * Records a prepared start: binds the card's role to the session's thread,
+ * moves the card to the arrival lane and marks the kickoff sent. Shared by
+ * every harness's start path, so a binding means the same thing whichever
+ * engine runs the session.
+ */
+export async function commitRunStart({
+  storage,
+  transitionService,
+  request,
+  sourceSession,
+  threadId,
+  resourceId,
+  onPrepared,
+}: {
+  storage: Pick<WorkItemsStorage, 'prepareRunStart' | 'markPendingStart'>;
+  transitionService?: Pick<FactoryTransitionService, 'transition'>;
+  request: FactoryStartRequest;
+  sourceSession: Pick<SourceControlSession, 'sessionId' | 'branch'>;
+  threadId: string;
+  resourceId: string;
+  onPrepared?: (item: WorkItemRow) => Promise<void>;
+}): Promise<FactoryStartPreparedResult> {
+  const prepared = await storage.prepareRunStart({
+    orgId: request.orgId,
+    userId: request.userId,
+    factoryProjectId: request.factoryProjectId,
+    workItem: { id: request.workItem.id, input: request.workItem.input },
+    role: request.workItem.role,
+    session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId },
+    resourceId,
+    kickoffKey: request.kickoffKey,
+    kickoffMessage: null,
+  });
+  await onPrepared?.(prepared.item);
+
+  let revision = prepared.item.revision;
+  const destinationStage = request.destinationStage;
+  if (destinationStage && (prepared.item.stages.length !== 1 || prepared.item.stages[0] !== destinationStage)) {
+    if (!transitionService) throw new Error('Factory transition service is unavailable.');
+    const transition = await transitionService.transition({
+      orgId: request.orgId,
+      factoryProjectId: request.factoryProjectId,
+      workItemId: prepared.item.id,
+      board: boardForWorkItem(prepared.item),
+      stage: destinationStage,
+      expectedRevision: prepared.item.revision,
+      actor: { type: 'human', id: request.userId },
+      ingress: { type: 'human', identity: `start:${request.kickoffKey}:transition` },
+      cause: 'run_start',
+    });
+    if (transition.status === 'rejected') {
+      await storage.markPendingStart(prepared.binding.id, 'failed', transition.reason);
+      throw new FactoryStartTransitionError(transition);
+    }
+    revision = transition.revision;
+  }
+
+  await storage.markPendingStart(prepared.binding.id, 'sent');
+  prepared.pendingStart.status = 'sent';
+
+  return {
+    workItemId: prepared.item.id,
+    bindingId: prepared.binding.id,
+    threadId,
+    resourceId,
+    sessionId: sourceSession.sessionId,
+    branch: sourceSession.branch,
+    revision,
+    kickoffStatus: prepared.pendingStart.status,
+    replayed: prepared.replayed,
+  };
 }
 
 export class FactoryStartCoordinator {
@@ -177,51 +316,7 @@ export class FactoryStartCoordinator {
     const storedItem = request.workItem.id
       ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
       : null;
-    let repository = await resolveWorkItemRepository({
-      sourceControl,
-      orgId: request.orgId,
-      factoryProjectId: request.factoryProjectId,
-      item: storedItem ?? { metadata: request.workItem.input.metadata ?? null },
-    });
-    if (repository.status === 'ambiguous') {
-      // A retry of this role's existing session keeps its already-chosen
-      // repository; a newly minted session must not choose for the card.
-      if (storedItem?.sessions[request.workItem.role]?.sessionId !== sourceSession.sessionId) {
-        throw new WorkItemRepositoryError(
-          'repository_ambiguous',
-          `Choose a repository for this work item: ${repository.candidates.join(', ')}.`,
-          repository.candidates,
-        );
-      }
-      const link = await sourceControl.projectRepositories.get({
-        orgId: request.orgId,
-        id: sourceSession.projectRepositoryId,
-      });
-      const linked = link && (await sourceControl.repositories.get({ orgId: request.orgId, id: link.repositoryId }));
-      const currentLinks = link
-        ? await sourceControl.projectRepositories.list({ orgId: request.orgId, connectionId: link.connectionId })
-        : [];
-      if (
-        !linked ||
-        !repository.candidates.includes(linked.slug) ||
-        !currentLinks.some(candidate => candidate.id === sourceSession.projectRepositoryId)
-      ) {
-        throw new WorkItemRepositoryError(
-          'repository_unlinked',
-          'The existing session repository is not linked to this Factory.',
-        );
-      }
-      repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: sourceSession.projectRepositoryId };
-    }
-    if (repository.status === 'unlinked') {
-      throw new WorkItemRepositoryError('repository_unlinked', repository.hint);
-    }
-    if (repository.projectRepositoryId !== sourceSession.projectRepositoryId) {
-      throw new WorkItemRepositoryError(
-        'repository_mismatch',
-        `This run session is bound to a different repository than ${repository.slug}.`,
-      );
-    }
+    const repository = await resolveStartRepository({ sourceControl, request, sourceSession, storedItem });
     const requestContext = request.requestContext ?? new RequestContext();
     // Preserve an authenticated caller when present. Autonomous starts still
     // need a principal so deployed credential resolution can authenticate the
@@ -311,54 +406,15 @@ export class FactoryStartCoordinator {
     // Starting the run was already the say-so; the rules engine still governs.
     await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
     const threadId = await configureThread(session, request);
-    const prepared = await storage.prepareRunStart({
-      orgId: request.orgId,
-      userId: request.userId,
-      factoryProjectId: request.factoryProjectId,
-      workItem: { id: request.workItem.id, input: request.workItem.input },
-      role: request.workItem.role,
-      session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId },
-      resourceId: memoryResourceId,
-      kickoffKey: request.kickoffKey,
-      kickoffMessage: null,
-    });
-    await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
-
-    let revision = prepared.item.revision;
-    const destinationStage = request.destinationStage;
-    if (destinationStage && (prepared.item.stages.length !== 1 || prepared.item.stages[0] !== destinationStage)) {
-      if (!this.#transitionService) throw new Error('Factory transition service is unavailable.');
-      const transition = await this.#transitionService.transition({
-        orgId: request.orgId,
-        factoryProjectId: request.factoryProjectId,
-        workItemId: prepared.item.id,
-        board: boardForWorkItem(prepared.item),
-        stage: destinationStage,
-        expectedRevision: prepared.item.revision,
-        actor: { type: 'human', id: request.userId },
-        ingress: { type: 'human', identity: `start:${request.kickoffKey}:transition` },
-        cause: 'run_start',
-      });
-      if (transition.status === 'rejected') {
-        await storage.markPendingStart(prepared.binding.id, 'failed', transition.reason);
-        throw new FactoryStartTransitionError(transition);
-      }
-      revision = transition.revision;
-    }
-
-    await storage.markPendingStart(prepared.binding.id, 'sent');
-    prepared.pendingStart.status = 'sent';
-
-    return {
-      workItemId: prepared.item.id,
-      bindingId: prepared.binding.id,
+    return commitRunStart({
+      storage,
+      transitionService: this.#transitionService,
+      request,
+      sourceSession,
       threadId,
       resourceId: memoryResourceId,
-      sessionId: sourceSession.sessionId,
-      branch: sourceSession.branch,
-      revision,
-      kickoffStatus: prepared.pendingStart.status,
-      replayed: prepared.replayed,
-    };
+      // The thread learns its card as soon as the binding exists.
+      onPrepared: item => session.thread.setSetting({ key: 'factoryWorkItemId', value: item.id }),
+    });
   }
 }
