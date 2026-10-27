@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { FactoryStartCoordinator } from '@factory/harness-mastra';
+import { createMastraHarness, FactoryStartCoordinator } from '@factory/harness-mastra';
 import { GithubRules, resolveGithubRules } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
 import { bugBoard } from '@factory/pipelines';
@@ -188,7 +188,7 @@ describe('Bug board runtime', () => {
     });
     const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
+      harness: createMastraHarness(controller as never),
       transitionService,
       storage: workItems,
       boards,
