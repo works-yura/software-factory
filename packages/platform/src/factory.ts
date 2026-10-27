@@ -69,7 +69,7 @@ import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/inte
 import { buildPlatformConnectRoutes } from '@factory/integrations';
 import { PlatformGithubIntegration } from '@factory/integration-github';
 import { PlatformGitLabIntegration } from '@factory/integration-gitlab';
-import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.ts';
+import { PlatformIncidentioIntegration } from '@factory/integration-incidentio';
 import { PlatformJiraIntegration } from '@factory/integration-jira';
 import { PlatformLinearIntegration } from '@factory/integration-linear';
 import { createSessionAsRowOwner, prepareSessionRunContext } from '@factory/integrations';

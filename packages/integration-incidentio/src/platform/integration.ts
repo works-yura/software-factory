@@ -22,22 +22,22 @@ import type { RouteAuth } from '@factory/http';
 import type { IntakeStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
-import { buildIncidentioAgentTools } from '../../incidentio/agent-tools.ts';
-import { IncidentioApiClient, IncidentioApiError } from '../../incidentio/api.ts';
-import { resolveIncidentioRules } from '../../incidentio/default-rules.ts';
-import type { IncidentioEventRules, IncidentioRuleOverrides } from '../../incidentio/default-rules.ts';
+import { buildIncidentioAgentTools } from '../agent-tools.ts';
+import { IncidentioApiClient, IncidentioApiError } from '../api.ts';
+import { resolveIncidentioRules } from '../default-rules.ts';
+import type { IncidentioEventRules, IncidentioRuleOverrides } from '../default-rules.ts';
 import {
   createIncidentioIntake,
   INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
   INCIDENTIO_INCIDENTS_SOURCE_ID,
-} from '../../incidentio/intake.ts';
-import { attachIncidentioIssueReconciler } from '../../incidentio/issue-reconciler.ts';
+} from '../intake.ts';
+import { attachIncidentioIssueReconciler } from '../issue-reconciler.ts';
 import {
   incidentioReconciliationEnabled,
   incidentioReconciliationInterval,
-} from '../../incidentio/reconciliation-config.ts';
-import { buildIncidentioRoutes } from '../../incidentio/routes.ts';
-import { attachIncidentioRules } from '../../incidentio/rules.ts';
+} from '../reconciliation-config.ts';
+import { buildIncidentioRoutes } from '../routes.ts';
+import { attachIncidentioRules } from '../rules.ts';
 import { IssueReconcileWorker } from '@factory/integrations';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/integrations';
 import type { PlatformApiClientConfig } from '@factory/integrations';

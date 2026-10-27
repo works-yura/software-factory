@@ -6,7 +6,7 @@ import { withBoardClosure } from '@factory/core';
 import { workBoard } from '@factory/pipelines';
 import { defaultGithubRules } from '@factory/integration-github';
 import { defaultGitLabRules } from '@factory/integration-gitlab';
-import { defaultIncidentioRules } from '../integrations/incidentio/default-rules.ts';
+import { defaultIncidentioRules } from '@factory/integration-incidentio';
 import { defaultJiraRules } from '@factory/integration-jira';
 import { defaultLinearRules } from '@factory/integration-linear';
 import type {

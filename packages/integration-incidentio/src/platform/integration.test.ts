@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '@factory/testing';
-import { INCIDENTIO_INCIDENTS_SOURCE_ID } from '../../incidentio/intake.ts';
+import { INCIDENTIO_INCIDENTS_SOURCE_ID } from '../intake.ts';
 import { decodeScopedSourceId, encodeScopedSourceId, PlatformIncidentioIntegration } from './integration.ts';
 
 const incident = {

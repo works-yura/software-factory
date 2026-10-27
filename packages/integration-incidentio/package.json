@@ -1,0 +1,32 @@
+{
+  "name": "@factory/integration-incidentio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "incident.io integration: follow-ups, intake, rules, reconcilers, routes, platform-mode adapter.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "check:tests": "tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@factory/capabilities": "workspace:*",
+    "@factory/core": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@factory/integrations": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/core": "1.79.0",
+    "hono": "4.13.13",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@factory/pipelines": "workspace:*",
+    "@factory/testing": "workspace:*",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
