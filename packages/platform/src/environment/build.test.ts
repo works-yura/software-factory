@@ -16,12 +16,16 @@ const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
 
 const heads = vi.hoisted(() => ({ byBranch: new Map<string, string>() }));
-vi.mock('../integrations/github/commits.ts', () => ({
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/integration-github', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/integration-github')>()),
+  ...(await (() => ({
   getBranchHead: vi.fn(async (_github: unknown, input: { repository: { slug: string }; branch: string }) => {
     const sha = heads.byBranch.get(`${input.repository.slug}@${input.branch}`);
     if (!sha) throw new Error(`no head for ${input.repository.slug}@${input.branch}`);
     return sha;
   }),
+}))()),
 }));
 
 type Settings = Record<string, unknown>;

@@ -7,7 +7,7 @@
  */
 
 import type { VersionControl } from '@factory/capabilities';
-import { getBranchHead } from '../integrations/github/commits.ts';
+import { getBranchHead } from '@factory/integration-github';
 
 export type EnvironmentHeads = Record<string, string>;
 

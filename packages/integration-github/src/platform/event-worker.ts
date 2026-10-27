@@ -5,17 +5,17 @@ import { MastraWorker } from '@mastra/core/worker';
 import type { WorkerDeps } from '@mastra/core/worker';
 
 import type { IntegrationStorageHandle } from '@factory/store';
-import type { GithubRepositoryPermission } from '../../github/integration.ts';
-import type { GithubIssueReconciler } from '../../github/issue-reconciler.ts';
-import type { GithubReconcileRepositorySource } from '../../github/reconcile-worker.ts';
-import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.ts';
-import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.ts';
-import { dispatchGithubWebhook, isFactoryAppSender, resolveAuthorizedBots } from '../../github/webhook.ts';
+import type { GithubRepositoryPermission } from '../integration.ts';
+import type { GithubIssueReconciler } from '../issue-reconciler.ts';
+import type { GithubReconcileRepositorySource } from '../reconcile-worker.ts';
+import type { GithubPullRequestReconciler, ReconcileRepository } from '../rules.ts';
+import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../subscriptions.ts';
+import { dispatchGithubWebhook, isFactoryAppSender, resolveAuthorizedBots } from '../webhook.ts';
 import type {
   GithubWebhookDispatchIntegration,
   GithubWebhookNotification,
   ParsedGithubWebhook,
-} from '../../github/webhook.ts';
+} from '../webhook.ts';
 import type { PlatformApiClient } from '@factory/integrations';
 import { PlatformApiError } from '@factory/integrations';
 

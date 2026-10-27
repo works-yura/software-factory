@@ -29,7 +29,7 @@ import { createTestBoard } from '@factory/pipelines/testing';
 import type { VersionControl } from '@factory/capabilities';
 import { MastraFactory } from './factory.ts';
 import type { FactoryIntegration, IntegrationContext } from '@factory/integrations';
-import type * as platformGithubModule from './integrations/platform/github/integration.ts';
+import type * as platformGithubModule from '@factory/integration-github';
 import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-source.ts';
 import type * as projectRoutesModule from './routes/projects.ts';
 import type * as surfaceModule from './routes/surface.ts';
@@ -179,7 +179,10 @@ vi.mock('@mastra/auth-studio', async importOriginal => {
 const platformGithubOptions = vi.hoisted(
   () => [] as Array<ConstructorParameters<typeof platformGithubModule.PlatformGithubIntegration>[0]>,
 );
-vi.mock('./integrations/platform/github/integration', async importOriginal => {
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/integration-github', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/integration-github')>()),
+  ...(await (async importOriginal => {
   const actual = await importOriginal<typeof platformGithubModule>();
   class TrackedPlatformGithubIntegration extends actual.PlatformGithubIntegration {
     constructor(options: ConstructorParameters<typeof actual.PlatformGithubIntegration>[0]) {
@@ -188,7 +191,8 @@ vi.mock('./integrations/platform/github/integration', async importOriginal => {
     }
   }
   return { ...actual, PlatformGithubIntegration: TrackedPlatformGithubIntegration };
-});
+})(importOriginal)),
+}));
 
 /** The default `MastraAuthStudio` provider minted by the last `prepare()`. */
 function lastStudioProvider():

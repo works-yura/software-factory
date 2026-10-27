@@ -47,29 +47,29 @@ import type {
   SourceControlStorageHandle,
 } from '@factory/store';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
-import { GithubAppIdentity } from '../../github/app-identity.ts';
-import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.ts';
-import { resolveGithubRules } from '../../github/default-rules.ts';
+import { GithubAppIdentity } from '../app-identity.ts';
+import type { GithubEventRules, GithubRuleOverrides } from '../default-rules.ts';
+import { resolveGithubRules } from '../default-rules.ts';
 import type {
   GithubIntegration,
   GithubRepositoryPermission,
   GithubTriageCommentUpsertInput,
   GithubTriageCommentUpsertResult,
   RepoSummary,
-} from '../../github/integration.ts';
-import { attachGithubIssueReconciler } from '../../github/issue-reconciler.ts';
-import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.ts';
-import { buildGithubRoutes } from '../../github/routes.ts';
-import { attachGithubReconciler, attachGithubRules } from '../../github/rules.ts';
-import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.ts';
+} from '../integration.ts';
+import { attachGithubIssueReconciler } from '../issue-reconciler.ts';
+import { reconcileInterval, reconciliationEnabled } from '../reconciliation-config.ts';
+import { buildGithubRoutes } from '../routes.ts';
+import { attachGithubReconciler, attachGithubRules } from '../rules.ts';
+import type { ReconcileIssueState, ReconcilePullRequestState } from '../rules.ts';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
-} from '../../github/session-subscriptions.ts';
-import { settleOrAbort } from '../../github/settle-or-abort.ts';
-import type { GithubSubscriptionStorage } from '../../github/subscriptions.ts';
-import { parseAuthorizedBotsEnv } from '../../github/webhook.ts';
+} from '../session-subscriptions.ts';
+import { settleOrAbort } from '../settle-or-abort.ts';
+import type { GithubSubscriptionStorage } from '../subscriptions.ts';
+import { parseAuthorizedBotsEnv } from '../webhook.ts';
 import {
   logPlatformInfo,
   logPlatformWarn,

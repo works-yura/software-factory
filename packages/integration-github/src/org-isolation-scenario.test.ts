@@ -250,7 +250,7 @@ vi.mock('@factory/sandbox', async importOriginal => ({
 }));
 
 let featureEnabled = true;
-vi.mock('./config', () => ({
+vi.mock('./config.ts', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
   getGithubFeatureDiagnostics: () => ({}),
 }));

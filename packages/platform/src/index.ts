@@ -27,7 +27,7 @@ export type {
 export { LocalFactorySandbox, type LocalFactorySandboxOptions } from '@factory/sandbox';
 // The option type for `MastraFactoryConfig.github.rules`, so callers can
 // annotate a custom handler without importing the deep integration subpath.
-export type { GithubRuleOverrides } from './integrations/github/default-rules.ts';
+export type { GithubRuleOverrides } from '@factory/integration-github';
 export type { FactorySandboxContext, SessionSetupGate, SessionSetupRun } from '@factory/sandbox';
 export { ChannelIdentityStorage } from '@factory/store';
 export type {

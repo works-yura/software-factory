@@ -1271,7 +1271,11 @@ describe('ProjectRoutes', () => {
 
     describe('builds', () => {
       const SHA = 'f'.repeat(40);
-      vi.mock('../integrations/github/commits.ts', () => ({ getBranchHead: vi.fn(async () => 'f'.repeat(40)) }));
+      // widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/integration-github', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/integration-github')>()),
+  ...(await (() => ({ getBranchHead: vi.fn(async () => 'f'.repeat(40)) }))()),
+}));
 
       type Settings = Record<string, unknown>;
       class BuildingSandbox extends FactorySandbox<Settings> {

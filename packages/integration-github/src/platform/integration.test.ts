@@ -6,7 +6,7 @@ import { createBoardRegistry } from '@factory/testing';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { IntegrationContext } from '@factory/integrations';
 
-import { registerGithubRefreshTarget } from '../../github/token-refresh.ts';
+import { registerGithubRefreshTarget } from '../token-refresh.ts';
 import { createPlatformStorageForTests, mountApiRoutes } from '@factory/integrations/testing';
 import { PlatformGithubIntegration } from './integration.ts';
 

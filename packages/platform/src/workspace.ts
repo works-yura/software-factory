@@ -19,9 +19,9 @@ import type {
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '@factory/auth';
 import type { RepositoryAccess, VersionControl } from '@factory/capabilities';
 import { redactCredentials } from './environment/build.ts';
-import type { GithubIntegration } from './integrations/github/integration.ts';
-import { getGithubPat } from './integrations/github/pat.ts';
-import type { GithubPatKind } from './integrations/github/pat.ts';
+import type { GithubIntegration } from '@factory/integration-github';
+import { getGithubPat } from '@factory/integration-github';
+import type { GithubPatKind } from '@factory/integration-github';
 import {
   checkoutSessionBranch,
   DEFAULT_COMMAND_TIMEOUT_MS,
@@ -36,7 +36,7 @@ import {
   registerGithubRefreshTarget,
   registerGithubTokenInjector,
   registerGithubTokenInjectorResolver,
-} from './integrations/github/token-refresh.ts';
+} from '@factory/integration-github';
 import { requireExec } from '@factory/sandbox';
 import type { ExecutableSandbox } from '@factory/sandbox';
 import {

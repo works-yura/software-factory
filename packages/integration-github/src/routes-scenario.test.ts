@@ -201,7 +201,7 @@ let mintCount = 0;
 let repositoryAccessCount = 0;
 
 const subscribeToPullRequest = vi.fn(async (_input: unknown) => ({ created: true }));
-vi.mock('./subscriptions', () => ({
+vi.mock('./subscriptions.ts', () => ({
   subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
 }));
 
@@ -248,7 +248,7 @@ vi.mock('@factory/sandbox', async importOriginal => ({
 }));
 
 let featureEnabled = true;
-vi.mock('./config', () => ({
+vi.mock('./config.ts', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
   getGithubFeatureDiagnostics: () => ({}),
 }));

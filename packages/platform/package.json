@@ -11,7 +11,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "check:tests": "tsc --noEmit -p tsconfig.test.json | grep -c 'error TS' || true"
+    "check:tests": "tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
     "@factory/auth": "workspace:*",
@@ -21,6 +21,7 @@
     "@factory/credentials": "workspace:*",
     "@factory/feed": "workspace:*",
     "@factory/http": "workspace:*",
+    "@factory/integration-github": "workspace:*",
     "@factory/integrations": "workspace:*",
     "@factory/observability": "workspace:*",
     "@factory/pipelines": "workspace:*",

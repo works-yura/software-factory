@@ -18,8 +18,12 @@ import type { EnvironmentBuildDeps } from './build.ts';
 
 const SHA_A = 'a'.repeat(40);
 
-vi.mock('../integrations/github/commits.ts', () => ({
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/integration-github', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/integration-github')>()),
+  ...(await (() => ({
   getBranchHead: vi.fn(async () => SHA_A),
+}))()),
 }));
 
 type Settings = Record<string, unknown>;

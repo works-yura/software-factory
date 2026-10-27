@@ -138,8 +138,8 @@ vi.mock('@factory/sandbox', async importOriginal => ({
 }));
 
 import { MaterializeError, SetupCommandError } from '@factory/sandbox';
-import { createGithubSubscriptionTools } from './integrations/github/session-subscriptions.ts';
-import { requireGithubTokenInjector } from './integrations/github/token-refresh.ts';
+import { createGithubSubscriptionTools } from '@factory/integration-github';
+import { requireGithubTokenInjector } from '@factory/integration-github';
 import { CallbackFactorySandbox } from '@factory/sandbox';
 import {
   __clearSessionSandboxesForTests,

@@ -500,8 +500,8 @@ let sandboxEnabled = true;
 const sandboxCallback = vi.fn((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
 // In v3 session retirement imported the mocked git module too. It now lives inside
 // @factory/sandbox and imports that file relatively, so mock the file as well.
-vi.mock('../../../../sandbox/src/github/sandbox.ts', async importOriginal => ({
-  ...(await importOriginal<typeof import('../../../../sandbox/src/github/sandbox.ts')>()),
+vi.mock('../../sandbox/src/github/sandbox.ts', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../sandbox/src/github/sandbox.ts')>()),
   runTeardownCommand: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
     runTeardownCommand(sb, worktreePath, command, options),
 }));

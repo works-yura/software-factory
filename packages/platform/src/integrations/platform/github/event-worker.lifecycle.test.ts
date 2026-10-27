@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraFactory } from '../../../factory.ts';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
-import { subscribeToPullRequest } from '../../github/subscriptions.ts';
+import { subscribeToPullRequest } from '@factory/integration-github';
 
-import { PlatformGithubIntegration } from './integration.ts';
+import { PlatformGithubIntegration } from '@factory/integration-github';
 
 const harness = vi.hoisted(() => {
   let mastra: Mastra | undefined;

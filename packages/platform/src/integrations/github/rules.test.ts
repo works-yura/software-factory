@@ -7,17 +7,17 @@ import { FactoryStartCoordinator } from '../../rules/start-coordinator.ts';
 import { FactoryTransitionService } from '@factory/testing';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
-import { GithubAppIdentity } from './app-identity.ts';
-import { defaultGithubRules, resolveGithubRules } from './default-rules.ts';
-import type { GithubRuleOverrides } from './default-rules.ts';
+import { GithubAppIdentity } from '@factory/integration-github';
+import { defaultGithubRules, resolveGithubRules } from '@factory/integration-github';
+import type { GithubRuleOverrides } from '@factory/integration-github';
 import {
   createGithubPullRequestReconciler,
   GithubRules,
   polledPullRequestEvent,
   reconciledClosedEvent,
-} from './rules.ts';
-import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.ts';
-import { changeRequestTargetKey } from './subscriptions.ts';
+} from '@factory/integration-github';
+import type { ReconcileIssueState, ReconcilePullRequestState } from '@factory/integration-github';
+import { changeRequestTargetKey } from '@factory/integration-github';
 
 async function setup(permission: string | undefined, rules?: GithubRuleOverrides) {
   const seeded = await createFactoryStorageForTests();

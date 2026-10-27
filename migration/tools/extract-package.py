@@ -363,6 +363,15 @@ def finish(args, moved, files, target_of, consumers, deps):
             lines[i] = '\t'.join(cols)
     open(pairs, 'w').write('\n'.join(lines))
 
+    # Tests whose directory lost all its sources are usually scenario suites of the moved code.
+    src_root = os.path.join(PACKAGES, args.source, 'src')
+    for directory in sorted({os.path.dirname(os.path.join(src_root, m)) for m in moved}):
+        if not os.path.isdir(directory):
+            continue
+        names = os.listdir(directory)
+        if not any(n.endswith('.ts') and not n.endswith('.test.ts') for n in names):
+            for n in sorted(n for n in names if n.endswith('.test.ts')):
+                print(f'LEFT BEHIND (no sources remain): {os.path.relpath(os.path.join(directory, n), ROOT)}')
     print(f'{args.name}: moved {sum(len(f) for f in files.values())} files; consumers: {sorted(consumers) or "none"}')
     print('dependencies:', deps)
 

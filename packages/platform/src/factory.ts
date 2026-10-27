@@ -55,19 +55,19 @@ import { EnvironmentBuildRunner } from './environment/build-runner.ts';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.ts';
 import { touchFeed } from '@factory/feed';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from '@factory/integrations';
-import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.ts';
-import type { GithubRuleOverrides } from './integrations/github/default-rules.ts';
-import type { GithubIntegration } from './integrations/github/integration.ts';
+import { reconcileGithubAcceptanceLabels } from '@factory/integration-github';
+import type { GithubRuleOverrides } from '@factory/integration-github';
+import type { GithubIntegration } from '@factory/integration-github';
 import {
   recordFactoryPullRequestProvenance,
   resolveFactoryPullRequestParentWorkItemId,
-} from './integrations/github/provenance.ts';
-import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.ts';
-import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.ts';
-import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.ts';
+} from '@factory/integration-github';
+import type { FactoryPullRequestProvenanceData } from '@factory/integration-github';
+import { isFactoryGithubLogin, trustedCollaborator } from '@factory/integration-github';
+import { dismissStaleFactoryReviews } from '@factory/integration-github';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/integrations';
 import { buildPlatformConnectRoutes } from '@factory/integrations';
-import { PlatformGithubIntegration } from './integrations/platform/github/integration.ts';
+import { PlatformGithubIntegration } from '@factory/integration-github';
 import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integration.ts';
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.ts';
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.ts';

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '@factory/testing';
 import { createTestBoard } from '@factory/pipelines/testing';
-import type { GithubIntegration } from '../integrations/github/integration.ts';
+import type { GithubIntegration } from '@factory/integration-github';
 import { FactoryDispatchError } from '@factory/store';
 import type { FactoryBindingPreparationInput } from '@factory/testing';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.ts';

@@ -4,7 +4,7 @@ import { createBoardRegistry } from '@factory/testing';
 import { reviewBoard } from '@factory/pipelines';
 import { withBoardClosure } from '@factory/core';
 import { workBoard } from '@factory/pipelines';
-import { defaultGithubRules } from '../integrations/github/default-rules.ts';
+import { defaultGithubRules } from '@factory/integration-github';
 import { defaultGitLabRules } from '../integrations/gitlab/default-rules.ts';
 import { defaultIncidentioRules } from '../integrations/incidentio/default-rules.ts';
 import { defaultJiraRules } from '../integrations/jira/default-rules.ts';
