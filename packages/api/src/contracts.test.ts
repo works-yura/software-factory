@@ -81,7 +81,12 @@ describe('Factory route contracts', () => {
     expect(createProjectBodySchema.parse({ name: ' Factory ', description: '  ' })).toEqual({
       name: 'Factory',
       description: null,
+      harness: 'mastra',
     });
+    expect(createProjectBodySchema.parse({ name: 'Claude', harness: 'claude-code' })).toMatchObject({
+      harness: 'claude-code',
+    });
+    expect(createProjectBodySchema.safeParse({ name: 'Other', harness: 'codex' }).success).toBe(false);
     expect(updateProjectBodySchema.safeParse({}).success).toBe(false);
     expect(updateProjectBodySchema.parse({ defaultModelId: '  ', autoRunEnabled: true })).toEqual({
       defaultModelId: null,

@@ -6,6 +6,15 @@ import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
 export const DEFAULT_FACTORY_THINKING_LEVEL: ThinkingLevelSetting = 'medium';
 
+/** The engines a Factory can run its agents on. */
+export const FACTORY_HARNESSES = ['mastra', 'claude-code'] as const;
+export type FactoryHarnessKind = (typeof FACTORY_HARNESSES)[number];
+export const DEFAULT_FACTORY_HARNESS: FactoryHarnessKind = 'mastra';
+
+export function isFactoryHarnessKind(value: unknown): value is FactoryHarnessKind {
+  return typeof value === 'string' && (FACTORY_HARNESSES as readonly string[]).includes(value);
+}
+
 export interface FactoryProject {
   id: string;
   orgId: string;
@@ -19,6 +28,12 @@ export interface FactoryProject {
   defaultModelId: string | null;
   /** Thinking level for this Factory's sessions and runs that have not picked their own. */
   defaultThinkingLevel: ThinkingLevelSetting;
+  /**
+   * The engine every agent session of this Factory runs on. Chosen at creation
+   * and fixed: a session's memory, thread and events belong to its harness, so
+   * a card cannot move between harnesses mid-flight.
+   */
+  harness: FactoryHarnessKind;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
   autoRunEnabled: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
@@ -64,6 +79,8 @@ export interface CreateFactoryProjectInput {
   name: string;
   description?: string | null;
   defaultModelId?: string | null;
+  /** `mastra` when omitted. */
+  harness?: FactoryHarnessKind;
 }
 
 export interface UpdateFactoryProjectInput {
@@ -101,6 +118,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     // its own default model. Kept so existing databases need no migration.
     model_scope: { type: 'text', default: 'hybrid' },
     default_thinking_level: { type: 'text', default: DEFAULT_FACTORY_THINKING_LEVEL },
+    harness: { type: 'text', default: DEFAULT_FACTORY_HARNESS },
     // Deprecated: no longer read or written. Kept so existing databases need no
     // migration. Old rows may still hold `true`, so never read it to bring Slack
     // work items back. Drop it in a later migration.
@@ -141,6 +159,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   default_model_id: string | null;
   model_scope: string;
   default_thinking_level: string | null;
+  harness: string | null;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
   sandbox_working_directory: string | null;
@@ -176,6 +195,8 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     defaultThinkingLevel: isThinkingLevelSetting(row.default_thinking_level)
       ? row.default_thinking_level
       : DEFAULT_FACTORY_THINKING_LEVEL,
+    // Rows from before the column, or with a value this build does not know, run on Mastra.
+    harness: isFactoryHarnessKind(row.harness) ? row.harness : DEFAULT_FACTORY_HARNESS,
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
@@ -231,6 +252,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       name: input.name,
       description: input.description ?? null,
       default_model_id: input.defaultModelId ?? null,
+      harness: input.harness ?? DEFAULT_FACTORY_HARNESS,
       auto_run_enabled: false,
       auto_approve_plans: false,
       created_at: now,

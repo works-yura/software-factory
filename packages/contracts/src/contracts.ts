@@ -48,9 +48,13 @@ const projectResponseSchema = z.object({ project: projectSchema });
 const workItemResponseSchema = z.object({ workItem: entitySchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
 
+/** The engines a Factory can run its agents on; fixed once the Factory exists. */
+export const FACTORY_HARNESS_KINDS = ['mastra', 'claude-code'] as const;
+
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
+  harness: z.enum(FACTORY_HARNESS_KINDS).optional().default('mastra'),
 });
 
 export const updateProjectBodySchema = z
