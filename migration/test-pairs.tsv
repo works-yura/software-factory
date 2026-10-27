@@ -33,8 +33,7 @@ storage/domains/intake/base.test.ts	store/src/intake/base.test.ts
 storage/domains/integrations/base.test.ts	store/src/integrations/base.test.ts
 storage/domains/memory-settings/base.test.ts	store/src/memory-settings/base.test.ts
 storage/domains/model-defaults/base.test.ts	store/src/model-defaults/base.test.ts
-storage/domains/projects/base.test.ts	store/src/projects/base.test.ts
-storage/domains/projects/model-scope.test.ts	store/src/projects/model-scope.test.ts
+storage/domains/projects/base.test.ts	store/src/projects/base.test.ts	-1	one model scope: the scope round-trip cases become one "no scope" case
 storage/domains/queue-health/base.test.ts	store/src/queue-health/base.test.ts
 secret-encryption.test.ts	store/src/secret-encryption.test.ts
 storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts
@@ -96,7 +95,7 @@ platform-auth-host.test.ts	auth/src/platform-auth-host.test.ts
 routes/apply-default-model.scenario.test.ts	api/src/apply-default-model.scenario.test.ts
 routes/attention.test.ts	api/src/attention.test.ts
 routes/automation-runs.test.ts	api/src/automation-runs.test.ts
-routes/config.test.ts	api/src/config.test.ts
+routes/config.test.ts	api/src/config.test.ts	-6	personal default-model routes removed (7 cases), one case checks they are gone
 routes/contracts.test.ts	api/src/contracts.test.ts
 routes/custom-provider-source.test.ts	api/src/custom-provider-source.test.ts
 routes/fs.test.ts	api/src/fs.test.ts
@@ -106,7 +105,7 @@ routes/oauth.test.ts	api/src/oauth.test.ts
 routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts
 routes/projects.test.ts	api/src/projects.test.ts
 routes/session-access.test.ts	session/src/session-access.test.ts
-routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts
+routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts	-1	user and hybrid scope catalogs removed; one Factory-catalog case remains
 routes/skills.test.ts	api/src/skills.test.ts
 routes/source-control-sessions.test.ts	api/src/source-control-sessions.test.ts
 routes/source-control-settings.test.ts	api/src/source-control-settings.test.ts
@@ -124,7 +123,7 @@ rules/default-handlers.test.ts	server/src/rules/default-handlers.test.ts	-5	Line
 rules/processor.test.ts	harness-mastra/src/rules/processor.test.ts
 rules/review-source-tool.test.ts	harness-mastra/src/rules/review-source-tool.test.ts
 rules/start-coordinator.scenario.test.ts	harness-mastra/src/rules/start-coordinator.scenario.test.ts
-rules/start-coordinator.test.ts	harness-mastra/src/rules/start-coordinator.test.ts
+rules/start-coordinator.test.ts	harness-mastra/src/rules/start-coordinator.test.ts	-1	owner-default (user scope) case removed with the personal model scope
 rules/tools.test.ts	harness-mastra/src/rules/tools.test.ts
 sandbox/callback-factory-sandbox.test.ts	sandbox/src/callback-factory-sandbox.test.ts
 sandbox/local-factory-sandbox.test.ts	sandbox/src/local-factory-sandbox.test.ts
@@ -134,17 +133,17 @@ sandbox/workdir.test.ts	sandbox/src/workdir.test.ts
 server-error.test.ts	http/src/server-error.test.ts
 session/channel-reply-processor.test.ts	session/src/channel-reply-processor.test.ts
 session/channel-session-link-processor.test.ts	session/src/channel-session-link-processor.test.ts
-session/credential-policy.test.ts	server/src/session/credential-policy.test.ts
+session/credential-policy.test.ts	server/src/session/credential-policy.test.ts	-6	scope-change and hybrid/user scope cases removed with the personal model scope
 session/default-model-hydration.scenario.test.ts	session/src/default-model-hydration.scenario.test.ts
-session/default-model-hydration.test.ts	session/src/default-model-hydration.test.ts
+session/default-model-hydration.test.ts	session/src/default-model-hydration.test.ts	-3	user and hybrid scope cases removed with the personal model scope
 session/environment-repositories.test.ts	session/src/environment-repositories.test.ts
 session/environment-state-processor.test.ts	sandbox/src/environment-state-processor.test.ts
-session/factory-session.test.ts	session/src/factory-session.test.ts
+session/factory-session.test.ts	session/src/factory-session.test.ts	-3	owner-default and hybrid scope cases removed with the personal model scope
 session/filesystem-capture.test.ts	session/src/filesystem-capture.test.ts
 session/first-exec-capture.test.ts	session/src/first-exec-capture.test.ts
 session/first-message-capture.test.ts	session/src/first-message-capture.test.ts
 session/live-sessions.test.ts	session/src/live-sessions.test.ts
-session/memory-settings-hydration.test.ts	session/src/memory-settings-hydration.test.ts
+session/memory-settings-hydration.test.ts	session/src/memory-settings-hydration.test.ts	-2	layerPersonalMemorySettings removed with personal memory settings
 session/org-seed-fail-open.test.ts	server/src/session/org-seed-fail-open.test.ts
 session/reply-credential-processor.test.ts	session/src/reply-credential-processor.test.ts
 session/resource-migration.test.ts	session/src/resource-migration.test.ts
@@ -175,7 +174,7 @@ tools/read-tools.test.ts	harness-mastra/src/tools/read-tools.test.ts
 tools/reports.test.ts	harness-mastra/src/tools/reports.test.ts
 tools/run-watch.test.ts	harness-mastra/src/tools/run-watch.test.ts
 tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
-tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts
+tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	-2	hybrid scope cases removed with the personal model scope
 tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts
 tools/work-item-tools.test.ts	harness-mastra/src/tools/work-item-tools.test.ts
 workspace.test.ts	harness-mastra/src/workspace.test.ts
@@ -236,7 +235,6 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/hooks/useWorkspaces.test.ts	../apps/ui/src/hooks/useWorkspaces.test.ts
 ../../../apps/ui/src/hooks/__tests__/removeCachedSession.msw.test.tsx	../apps/ui/src/hooks/__tests__/removeCachedSession.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/use-custom-providers.msw.test.tsx	../apps/ui/src/hooks/__tests__/use-custom-providers.msw.test.tsx
-../../../apps/ui/src/hooks/__tests__/use-default-model.msw.test.tsx	../apps/ui/src/hooks/__tests__/use-default-model.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/use-fs.msw.test.tsx	../apps/ui/src/hooks/__tests__/use-fs.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/use-om.msw.test.tsx	../apps/ui/src/hooks/__tests__/use-om.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/use-providers.msw.test.tsx	../apps/ui/src/hooks/__tests__/use-providers.msw.test.tsx
@@ -290,7 +288,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx
-../../../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx
+../../../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/SidebarUserMenu.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/SidebarUserMenu.msw.test.tsx
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx
@@ -340,7 +338,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/transcript-notifications.test.ts	../apps/ui/src/ui/domains/chat/components/__tests__/transcript-notifications.test.ts
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ConnectionActivity.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ConnectionActivity.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelCredential.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelCredential.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	-7	personal model scope removed (Your models, scope choice, personal keys)
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPickerRoutedThread.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPickerRoutedThread.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/OperationalMemoryStatus.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/OperationalMemoryStatus.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/context/__tests__/ChatModelsProvider.msw.test.tsx	../apps/ui/src/ui/domains/chat/context/__tests__/ChatModelsProvider.msw.test.tsx
@@ -397,19 +395,16 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/ConnectedAccountsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/ConnectedAccountsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/DefaultModelSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/DefaultModelSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentSection.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/FactoryDefaultModelSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactoryDefaultModelSection.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelScopeNotice.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelScopeNotice.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelScopeSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelScopeSection.msw.test.tsx
+../../../apps/ui/src/ui/domains/settings/components/__tests__/FactoryDefaultModelSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactoryDefaultModelSection.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelsSettings.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelsSettings.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	-28	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/ProviderAccessSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/ProviderAccessSection.msw.test.tsx
+../../../apps/ui/src/ui/domains/settings/components/__tests__/ProviderAccessSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/ProviderAccessSection.msw.test.tsx	-3	personal model scope removed (Your models, scope choice, personal keys)
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/RepositoriesSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/RepositoriesSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsFields.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsFields.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsNavigation.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsNavigation.msw.test.tsx
@@ -431,14 +426,14 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/__tests__/FactoryLayout.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/__tests__/FactoryLayout.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryFlow.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryFlow.msw.test.tsx	-8	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryRepositoryRows.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/CreateFactoryRepositoryRows.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/EmptyFactoryState.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/EmptyFactoryState.msw.test.tsx
+../../../apps/ui/src/ui/domains/workspaces/components/__tests__/EmptyFactoryState.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/EmptyFactoryState.msw.test.tsx	-6	personal model scope removed (Your models, scope choice, personal keys)
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/FactoryCreateRefresh.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/FactoryCreateRefresh.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/FactorySwitcherNavigation.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/FactorySwitcherNavigation.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/GitHubAppCallbackHandler.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/GitHubAppCallbackHandler.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/ModelProviderFactoryStep.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/ModelProviderFactoryStep.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/OnboardingPreview.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/OnboardingPreview.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionMethods.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionMethods.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionRecovery.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionRecovery.msw.test.tsx
+../../../apps/ui/src/ui/domains/workspaces/components/__tests__/OnboardingPreview.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/OnboardingPreview.msw.test.tsx	-2	Linear/Jira/incident.io case dropped with the vocabulary; personal model scope removed
+../../../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionMethods.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionMethods.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
+../../../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionRecovery.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/ProviderConnectionRecovery.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionHoverDetails.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionHoverDetails.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionRowOpenPending.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionRowOpenPending.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionRunObserver.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionRunObserver.msw.test.tsx

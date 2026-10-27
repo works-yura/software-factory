@@ -4,7 +4,6 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { UUID_PATTERN } from '@factory/contracts';
-import { effectiveModelScope } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import { supervisorProjectIdFromContext } from './supervisor-session.ts';
@@ -31,8 +30,10 @@ export async function resolveFactoryModelPolicy(
   requestContext: RequestContext,
   deps: FactoryModelPolicyDependencies,
 ): Promise<{ tenant: CredentialTenant; factoryProjectId?: string; factoryDefaultModelId?: string | null } | undefined> {
-  const principal = resolveAuthenticatedCredentialTenant(requestContext);
-  if (!principal) return undefined;
+  const authenticated = resolveAuthenticatedCredentialTenant(requestContext);
+  if (!authenticated) return undefined;
+  // There are no personal model credentials: every request bills its organization.
+  const principal: CredentialTenant = { ...authenticated, credentialScope: 'factory' };
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
   if (!controller?.sessionId || !controller.resourceId) return { tenant: principal };
   const { sessionId, resourceId } = controller;
@@ -41,14 +42,14 @@ export async function resolveFactoryModelPolicy(
   if (supervisorProjectId) {
     const project = await deps.projects.getById({ id: supervisorProjectId });
     if (!project || project.orgId !== principal.orgId) throw new Error('Factory model policy is unavailable.');
-    // Supervisor turns are Factory-owned automation, so a hybrid Factory bills them as runs.
+    // Supervisor turns are Factory-owned automation and bill the organization like every run.
     return {
       factoryProjectId: project.id,
       factoryDefaultModelId: project.defaultModelId,
       tenant: {
         orgId: project.orgId,
         userId: project.createdBy,
-        credentialScope: effectiveModelScope(project.modelScope, 'run'),
+        credentialScope: 'factory',
       },
     };
   }
@@ -77,7 +78,7 @@ export async function resolveFactoryModelPolicy(
       return {
         factoryProjectId: factoryProject.id,
         factoryDefaultModelId: factoryProject.defaultModelId,
-        tenant: { ...principal, credentialScope: effectiveModelScope(factoryProject.modelScope, 'session') },
+        tenant: principal,
       };
     }
     throw new Error('Factory session ownership is unavailable.');
@@ -92,14 +93,14 @@ export async function resolveFactoryModelPolicy(
   const projectId = binding?.factoryProjectId ?? sourceSession.factoryProjectId;
   const project = await deps.projects.getById({ id: projectId });
   if (!project || project.orgId !== sourceSession.orgId) throw new Error('Factory model policy is unavailable.');
-  // Work-item threads keep their billing scope after revocation; history never restores run authority.
+  // Every session and run under a Factory bills the organization's credentials.
   return {
     factoryProjectId: project.id,
     factoryDefaultModelId: project.defaultModelId,
     tenant: {
       orgId: project.orgId,
       userId: sourceSession.userId,
-      credentialScope: effectiveModelScope(project.modelScope, binding ? 'run' : 'session'),
+      credentialScope: 'factory',
     },
   };
 }

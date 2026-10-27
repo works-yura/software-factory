@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 import { FACTORY_ROLE_STAGES } from '@factory/core';
 import { IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@factory/core';
-import { FACTORY_MODEL_SCOPES } from '@factory/store';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
@@ -52,7 +51,6 @@ const decisionResponseSchema = z.object({ decision: entitySchema });
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
-  modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
 });
 
 export const updateProjectBodySchema = z
@@ -60,7 +58,6 @@ export const updateProjectBodySchema = z
     name: nonEmptyTrimmed(200).optional(),
     description: nullableTrimmed(2_000).optional(),
     defaultModelId: nullableTrimmed(200).optional(),
-    modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),

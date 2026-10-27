@@ -144,7 +144,7 @@ describe('paste-code flow (anthropic)', () => {
     expect(JSON.stringify(json)).not.toContain('v-1');
   });
 
-  it('complete exchanges the code and stores a user-scoped credential', async () => {
+  it("complete exchanges the code and stores the organization's credential", async () => {
     const app = buildApp(userA);
     const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
 
@@ -153,19 +153,21 @@ describe('paste-code flow (anthropic)', () => {
     expect(await res.json()).toMatchObject({ status: 'complete' });
     expect(completeAnthropicLogin).toHaveBeenCalledWith('code#state', 'v-1');
 
-    const cred = await seed.credentials.getCredential(TENANT_A, 'anthropic');
+    const cred = await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic');
     expect(cred).toMatchObject({ type: 'oauth', access: 'a-1' });
+    expect(await seed.credentials.getCredential(TENANT_A, 'anthropic')).toBeUndefined();
     // Server-side only: never written to the local auth.json in tenant mode.
     expect(authStorage.addAccount).not.toHaveBeenCalled();
   });
 
-  it("keeps user A's credential invisible to user B", async () => {
+  it('never stores a personal credential for any member', async () => {
     const app = buildApp(userA);
     const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
     await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
 
-    expect(await seed.credentials.listCredentials('org1', 'user-b')).toEqual([]);
+    expect(await seed.credentials.resolveCredential('org1', 'user-a', 'anthropic', 'user')).toBeUndefined();
     expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'user')).toBeUndefined();
+    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'org')).toBeDefined();
   });
 
   it('deletes the session after completion (replay returns 404)', async () => {
@@ -260,7 +262,7 @@ describe('device-code flow (openai)', () => {
 
     const res = await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
     expect(await res.json()).toMatchObject({ status: 'complete' });
-    expect(await seed.credentials.getCredential(TENANT_A, 'openai-codex')).toMatchObject({
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'openai-codex')).toMatchObject({
       type: 'oauth',
       access: 'a-2',
     });
@@ -343,7 +345,7 @@ describe('session cancel and sign-out', () => {
     expect((await post(app, '/web/config/providers/openai/oauth/poll', { sessionId })).status).toBe(404);
   });
 
-  it("sign-out removes only the caller's user-scoped credential", async () => {
+  it("sign-out removes the organization's sign-in and leaves personal rows older builds stored", async () => {
     await seed.credentials.setCredential(TENANT_A, 'anthropic', { type: 'oauth', ...ANTHROPIC_CREDS });
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-b' }, 'anthropic', {
       type: 'oauth',
@@ -354,9 +356,9 @@ describe('session cancel and sign-out', () => {
     const res = await buildApp(userA).request('/web/config/providers/anthropic/oauth', { method: 'DELETE' });
     expect(res.status).toBe(200);
 
-    expect(await seed.credentials.getCredential(TENANT_A, 'anthropic')).toBeUndefined();
+    expect(await seed.credentials.getCredential(TENANT_A, 'anthropic')).toBeDefined();
     expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-b' }, 'anthropic')).toBeDefined();
-    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeDefined();
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeUndefined();
     expect(authStorage.logout).not.toHaveBeenCalled();
   });
 });

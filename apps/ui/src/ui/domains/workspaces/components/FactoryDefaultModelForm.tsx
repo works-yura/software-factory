@@ -13,7 +13,6 @@ import { useProviderModels } from '../hooks/useProviderModels';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 
 export interface FactoryDefaultModelFormProps {
-  scope?: 'org' | 'user';
   initialModelId?: string;
   provider: ProviderInfo;
   onContinue: (modelId: string) => void;
@@ -23,7 +22,6 @@ export interface FactoryDefaultModelFormProps {
 }
 
 export function FactoryDefaultModelForm({
-  scope = 'org',
   initialModelId,
   provider,
   onContinue,
@@ -32,7 +30,7 @@ export function FactoryDefaultModelForm({
   submitLabel,
 }: FactoryDefaultModelFormProps) {
   const { t } = useTranslation('workspaces');
-  const choice = useProviderModels(provider.provider, scope);
+  const choice = useProviderModels(provider.provider);
   const [selectedModelId, setModelId] = useState(initialModelId);
   const modelId = selectedModelId
     ? (choice.models.find(model => model.id === selectedModelId)?.id ?? '')
@@ -65,7 +63,7 @@ export function FactoryDefaultModelForm({
         <Button onClick={onChangeProvider}>{t('models.changeProvider')}</Button>
       </div>
       <Field>
-        <FieldLabel>{scope === 'user' ? t('models.yourDefault') : t('models.factoryDefault')}</FieldLabel>
+        <FieldLabel>{t('models.factoryDefault')}</FieldLabel>
         <ModelCombobox
           models={choice.models}
           value={modelId}
@@ -81,12 +79,7 @@ export function FactoryDefaultModelForm({
           {t('models.previousUnavailable')}
         </Txt>
       )}
-      {scope === 'user' && (
-        <Txt variant="meta" tone="muted">
-          {t('models.updatesPersonalDefault')}
-        </Txt>
-      )}
-      {scope === 'org' && <SharedCredentialNotice modelId={modelId || undefined} />}
+      <SharedCredentialNotice modelId={modelId || undefined} />
       <Button variant="primary" className="w-full" disabled={!modelId} onClick={() => onContinue(modelId)}>
         {submitLabel ?? t('actions.continue')}
       </Button>

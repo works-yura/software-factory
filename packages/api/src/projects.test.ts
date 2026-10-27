@@ -47,9 +47,10 @@ describe('ProjectRoutes', () => {
     });
     expect(createdResponse.status).toBe(201);
     const created = (await createdResponse.json()) as {
-      project: { id: string; name: string; description: string; modelScope: string };
+      project: { id: string; name: string; description: string };
     };
-    expect(created.project).toMatchObject({ name: 'Platform', description: 'Core services', modelScope: 'hybrid' });
+    expect(created.project).toMatchObject({ name: 'Platform', description: 'Core services' });
+    expect(created.project).not.toHaveProperty('modelScope');
 
     const listed = (await (await app.request('/web/factory/projects')).json()) as { projects: Array<{ id: string }> };
     expect(listed.projects.map(project => project.id)).toEqual([created.project.id]);
@@ -61,12 +62,11 @@ describe('ProjectRoutes', () => {
       body: JSON.stringify({
         name: 'Platform engineering',
         description: null,
-        modelScope: 'user',
       }),
     });
     expect(updatedResponse.status).toBe(200);
     expect((await updatedResponse.json()) as unknown).toMatchObject({
-      project: { name: 'Platform engineering', description: null, modelScope: 'user' },
+      project: { name: 'Platform engineering', description: null },
     });
 
     expect((await app.request(`/web/factory/projects/${created.project.id}`, { method: 'DELETE' })).status).toBe(204);
@@ -122,13 +122,13 @@ describe('ProjectRoutes', () => {
         await otherOrg.request(`/web/factory/projects/${project.id}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ modelScope: 'factory' }),
+          body: JSON.stringify({ name: 'Taken over' }),
         })
       ).status,
     ).toBe(404);
   });
 
-  it('requires an organization admin to change the model scope', async () => {
+  it('ignores a model scope sent by an old client, admin or not', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
     const isOrganizationAdmin = vi.fn(async () => false);
@@ -148,25 +148,16 @@ describe('ProjectRoutes', () => {
         body: JSON.stringify(body),
       });
 
-    const denied = await patch({ modelScope: 'user' });
-    expect(denied.status).toBe(403);
-    expect(await denied.json()).toMatchObject({ error: 'forbidden' });
-    expect(isOrganizationAdmin).toHaveBeenCalledWith('org-1', 'member');
-    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
+    // There is no model scope to change: alone it is an empty update, with other fields it is ignored.
+    const ignored = await patch({ modelScope: 'user' });
+    expect(ignored.status).toBe(400);
+    expect(await ignored.json()).toEqual({ error: 'invalid_project' });
+    expect(isOrganizationAdmin).not.toHaveBeenCalled();
 
-    expect((await patch({ name: 'Renamed' })).status).toBe(200);
-
-    isOrganizationAdmin.mockResolvedValue(true);
-    expect((await patch({ modelScope: 'user' })).status).toBe(200);
-    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
-
-    isOrganizationAdmin.mockResolvedValue(false);
-    expect((await patch({ modelScope: 'hybrid' })).status).toBe(403);
-    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
-
-    isOrganizationAdmin.mockResolvedValue(true);
-    expect((await patch({ modelScope: 'hybrid' })).status).toBe(200);
-    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
+    const renamed = await patch({ name: 'Renamed', modelScope: 'user' });
+    expect(renamed.status).toBe(200);
+    expect(((await renamed.json()) as { project: Record<string, unknown> }).project).not.toHaveProperty('modelScope');
+    expect(await seed.projects.getById({ id: project.id })).not.toHaveProperty('modelScope');
   });
 
   it('requires an organization admin to change the thinking default and rejects unknown levels', async () => {
@@ -206,7 +197,7 @@ describe('ProjectRoutes', () => {
     expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('high');
   });
 
-  it('creates a project in the requested model scope and rejects unknown scopes', async () => {
+  it('creates a project without a model scope, ignoring one an old client sends', async () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
     app.use('*', async (context, next) => {
@@ -223,11 +214,11 @@ describe('ProjectRoutes', () => {
 
     const created = await create({ name: 'Personal', modelScope: 'user' });
     expect(created.status).toBe(201);
-    const { project } = (await created.json()) as { project: { id: string; modelScope: string } };
-    expect(project.modelScope).toBe('user');
-    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+    const { project } = (await created.json()) as { project: Record<string, unknown> & { id: string } };
+    expect(project).not.toHaveProperty('modelScope');
+    expect(await seed.projects.getById({ id: project.id })).not.toHaveProperty('modelScope');
 
-    expect((await create({ name: 'Bad', modelScope: 'org' })).status).toBe(400);
+    expect((await create({ name: 'Other', modelScope: 'org' })).status).toBe(201);
   });
 
   describe('apply default model', () => {

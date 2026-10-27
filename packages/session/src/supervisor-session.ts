@@ -12,7 +12,6 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '@factory/auth';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { hydrateFactorySession, resolveFactorySessionModel } from './factory-session.ts';
-import type { ModelDefaultsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 
 const RESOURCE_PREFIX = 'factory-supervisor:';
@@ -82,7 +81,6 @@ export async function hydrateSupervisorSession(
   session: FactorySession,
   deps: {
     projects: FactoryProjectsStorage;
-    modelDefaults: ModelDefaultsStorage;
   },
 ): Promise<void> {
   const factoryProjectId =
@@ -93,26 +91,22 @@ export async function hydrateSupervisorSession(
   if (!project) return;
   const sessionModel = await resolveFactorySessionModel({
     projects: deps.projects,
-    modelDefaults: deps.modelDefaults,
     factoryProjectId,
     orgId: project.orgId,
-    ownerUserId: project.createdBy,
-    context: 'run',
   });
   await session.state.set({
     factoryProjectId,
     factoryOrgId: project.orgId,
-    factoryModelScope: sessionModel.modelScope,
+    factoryModelScope: 'factory',
     factoryOwnerUserId: project.createdBy,
   });
   await primeTenantCredentialsForTenant({
     orgId: project.orgId,
     userId: project.createdBy,
-    credentialScope: sessionModel.modelScope,
+    credentialScope: 'factory',
   });
   await hydrateFactorySession(session, {
     orgId: project.orgId,
-    modelScope: sessionModel.modelScope,
     ownerUserId: project.createdBy,
     defaultModelId: sessionModel.modelId,
   });

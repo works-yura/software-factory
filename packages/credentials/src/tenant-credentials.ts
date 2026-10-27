@@ -298,9 +298,9 @@ export function invalidateTenantCredentialSnapshots(tenant: { orgId: string; use
 }
 
 /**
- * Middleware mounted after the web auth gate: primes both exclusive credential
- * scopes because the HTTP principal is known before the controller session is.
- * Cheap when fresh because each store has a TTL.
+ * Middleware mounted after the web auth gate: primes the organization's
+ * credential snapshot, the only scope a Factory resolves (there are no
+ * personal model credentials). Cheap when fresh because each store has a TTL.
  */
 export async function primeTenantCredentials({
   tenant,
@@ -309,10 +309,7 @@ export async function primeTenantCredentials({
   tenant: Pick<SdkCredentialTenant, 'orgId' | 'userId'> & Partial<Pick<SdkCredentialTenant, 'credentialScope'>>;
   credentials: ModelCredentialsStorage;
 }): Promise<void> {
-  await Promise.all([
-    storeFor({ ...tenant, credentialScope: 'user' }, credentials).ensureFresh(),
-    storeFor({ ...tenant, credentialScope: 'factory' }, credentials).ensureFresh(),
-  ]);
+  await storeFor({ ...tenant, credentialScope: 'factory' }, credentials).ensureFresh();
 }
 
 export function createTenantCredentialPrimer({

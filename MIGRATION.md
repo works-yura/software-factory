@@ -70,6 +70,21 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 
 Тести: пакети −7 (`default-handlers` −2, `factory.test` −3, `work-item-branch` −1, `platform-connect-routes` −1); UI −121 (4 файли видалено: −34, решта −88, +1 тест на стару картку). Тести, що перевіряли спільну логіку через Linear, переведено на GitLab/GitHub. `Slack-thread` лишився: UI показує такі картки.
 
+## Прибрано: особисті моделі й пам'ять
+
+Фабрика належить організації (рішення власника). Кожна інтерактивна сесія, запуск картки й хід Supervisor беруть ключі організації, модель за замовчуванням Фабрики й її налаштування пам'яті. Вибору області нема.
+
+- `modelScope` (`factory | user | hybrid`) прибрано з `FactoryProject`, контрактів створення й PATCH проєкту, `effectiveModelScope` видалено. Колонку `model_scope` не читають і не пишуть.
+- Політика ключів (`credential-policy`) завжди дає область організації, зокрема для чатів поза Фабрикою. Middleware підготовки ключів готує лише її. Каталоги моделей і список провайдерів показують лише ключі організації. Новим відповідям `credentialOwnerId` не ставиться.
+- Ключі провайдерів і OAuth-входи: лише рядки організації й лише для адміністраторів організації. Параметр `scope` ігнорується.
+- Особиста модель за замовчуванням: маршрути `/web/config/default-model` (GET, PUT, DELETE, `apply`) видалено. Домен `model-defaults` більше не реєструється й не передається інтеграціям. Модель сесії — `defaultModelId` Фабрики, без нього — модель режиму сервера.
+- Особиста пам'ять: маршрути `/web/config/om*` вимагають `factoryId` (інакше 400 `factory_id_required`) і пишуть лише рядок Фабрики. `layerPersonalMemorySettings` прибрано. Сесія поза Фабрикою працює на типових порогах, назви тредів беруть рядок Фабрики сесії.
+- Базу не чіпали. Таблиці `user_default_models`, особисті рядки `model_credentials` і `memory_settings` лишаються як були, їх просто не читають.
+- Без змін лишились `TenantCredentialStore` з двома областями SDK (Фабрика ніколи не просить `user`), поля `userCredential` і `stored-user` у `ProviderInfo` (тепер завжди порожні) та показ старих підписів «Ваш …» на давніх відповідях.
+
+Тести (дельти в `test-pairs.tsv`): `projects/model-scope.test.ts` видалено (тестував `effectiveModelScope`), `projects/base` −1, `credential-policy` −6, `default-model-hydration` −3, `factory-session` −3, `memory-settings-hydration` −2, `session-tools` −2, `start-coordinator` −1, `config` −6, `session-model-catalog` −1. UI: прибрано «Ваші моделі», «Ваша пам'ять», вибір області (налаштування, онбординг), футер області в пікері, особисту модель за замовчуванням; вхід у провайдера веде в моделі Фабрики. Видалено тести `use-default-model`, `DefaultModelSection`, `FactoryModelScopeNotice`, `FactoryModelScopeSection`; `ModelPicker` −7, `EmptyFactoryState` −6, `ProviderAccessSection` −3, `SettingsScopesPage`, `FactoryDefaultModelSection`, `OnboardingPreview`, `ProviderConnectionMethods`, `ProviderConnectionRecovery` по −1.
+Решту кейсів переписано на одну область.
+
 ## Не перенесено
 
 | Що | Чому |

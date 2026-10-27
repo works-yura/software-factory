@@ -45,7 +45,6 @@ interface DraftRoute {
 
 interface DraftRouteOptions {
   factoryProjectGate?: Promise<void>;
-  defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
 }
@@ -57,7 +56,6 @@ function readSentMessage(body: unknown): string {
 
 function stubDraftRoute({
   factoryProjectGate,
-  defaultModelId = null,
   persistedMessages = [],
 }: DraftRouteOptions = {}): DraftRoute {
   let releaseWorkspace = () => {};
@@ -121,7 +119,6 @@ function stubDraftRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
         models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }],
@@ -220,7 +217,8 @@ describe('a user session draft on the real thread route', () => {
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
     );
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
-    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini']);
+    // The draft starts on the Factory default, which the server applies itself.
+    expect(route.bindingsBeforePrompt).toEqual([]);
     const thread = within(screen.getByRole('main'));
     // The title lands in the header breadcrumb as well; the transcript renders the message as a paragraph.
     await waitFor(() => expect(thread.getByText('fix the login bug', { selector: 'p' })).toBeInTheDocument());
@@ -259,8 +257,8 @@ describe('a user session draft on the real thread route', () => {
     expect(screen.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
   });
 
-  it('does not switch models when the draft already uses the personal default', async () => {
-    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
+  it('does not switch models when the draft already uses the Factory default', async () => {
+    const route = stubDraftRoute();
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
@@ -280,7 +278,7 @@ describe('a user session draft on the real thread route', () => {
   });
 
   it('hands a thinking level picked in the draft to the new session with its model', async () => {
-    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
+    const route = stubDraftRoute();
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
@@ -304,7 +302,7 @@ describe('a user session draft on the real thread route', () => {
   });
 
   it('starts the session on the defaults when the draft level is reset before the first message', async () => {
-    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
+    const route = stubDraftRoute();
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],

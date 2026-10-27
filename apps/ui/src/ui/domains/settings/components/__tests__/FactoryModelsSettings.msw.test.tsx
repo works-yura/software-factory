@@ -8,12 +8,12 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/ren
 import { FactoryModelsSettings } from '../FactoryModelsSettings';
 
 describe('FactoryModelsSettings', () => {
-  it('keeps the model scope available when no provider is connected', async () => {
+  it('keeps Factory defaults visible without a default-model picker when no provider is connected', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),
       http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
-        HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope: 'factory' } }),
+        HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra' } }),
       ),
     );
 
@@ -25,9 +25,11 @@ describe('FactoryModelsSettings', () => {
       </MemoryRouter>,
     );
 
+    expect(await screen.findByText('Factory defaults')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Model scope' })).not.toBeInTheDocument();
+    expect(await screen.findByText('No providers support sign in.')).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Model scope' })).toHaveTextContent('Factory model and credentials'),
+      expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument(),
     );
-    expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
   });
 });

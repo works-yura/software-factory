@@ -360,27 +360,24 @@ describe('createTenantCredentialPrimer', () => {
     return app;
   }
 
-  it('primes snapshots for both exclusive credential scopes', async () => {
+  it("primes the organization's snapshot, never a personal one", async () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
     await seed.credentials.setCredential(ORG_TENANT, 'openai', { type: 'api_key', key: 'org-key' });
     registerTenantCredentialResolver(seed.credentials, new Set(), async context => ({
       ...resolveAuthenticatedCredentialTenant(context)!,
-      credentialScope: context.get('controller') ? 'factory' : 'user',
+      credentialScope: 'factory',
     }));
 
     const res = await buildApp({ workosId: USER, organizationId: ORG }).request('/ok');
     expect(res.status).toBe(200);
 
-    const userContext = new RequestContext();
-    userContext.set('user', { workosId: USER, organizationId: ORG });
-    await prepareCredentialTenant(userContext);
-    expect(resolveCredentialStore(userContext)!.getStoredApiKey('openai')).toBe('user-key');
-
-    const factoryContext = new RequestContext();
-    factoryContext.set('user', { workosId: USER, organizationId: ORG });
-    factoryContext.set('controller', { resourceId: 'factory-session' });
-    await prepareCredentialTenant(factoryContext);
-    expect(resolveCredentialStore(factoryContext)!.getStoredApiKey('openai')).toBe('org-key');
+    for (const controller of [undefined, { resourceId: 'factory-session' }]) {
+      const context = new RequestContext();
+      context.set('user', { workosId: USER, organizationId: ORG });
+      if (controller) context.set('controller', controller);
+      await prepareCredentialTenant(context);
+      expect(resolveCredentialStore(context)!.getStoredApiKey('openai')).toBe('org-key');
+    }
   });
 
   it('passes unauthenticated requests through untouched', async () => {

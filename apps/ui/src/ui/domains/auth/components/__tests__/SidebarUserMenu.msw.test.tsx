@@ -77,8 +77,6 @@ describe('SidebarUserMenu', () => {
     ).toEqual([
       'My account',
       'Preferences',
-      'Your models',
-      'Your memory',
       'Connections',
       'Settings',
       'ThemeSystem',
@@ -133,10 +131,10 @@ describe('SidebarUserMenu', () => {
     renderUserMenu();
 
     await user.click(await screen.findByRole('button', { name: 'User menu' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Your models' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Connections' }));
 
     expect(screen.getByRole('status', { name: 'Current path' })).toHaveTextContent(
-      '/factories/fp-1/settings/personal-models',
+      '/factories/fp-1/settings/connections',
     );
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
   });

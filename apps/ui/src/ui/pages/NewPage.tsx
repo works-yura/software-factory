@@ -179,7 +179,7 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
           : t('newPage.noAccessDescription', descriptionValues)
       }
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'personal-models')} className={buttonVariants({ variant: 'primary' })}>
+        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
           {t('newPage.openModelsSettings')}
         </Link>
       }

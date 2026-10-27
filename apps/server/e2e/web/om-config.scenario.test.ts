@@ -16,7 +16,7 @@ import type { RouteAuth } from '@factory/http/route';
  * asserted end to end.
  */
 
-/** Auth-disabled host: memory settings address the `(local, local)` sentinel row. */
+/** Auth-disabled host: a Factory's memory settings live under the `local` sentinel org. */
 const localAuth: RouteAuth = {
   enabled: () => false,
   ensureUser: async () => undefined,
@@ -25,6 +25,9 @@ const localAuth: RouteAuth = {
 };
 
 /** A catalog whose only mode carries a provider that has a built-in low-cost OM pack. */
+const FACTORY_ID = 'factory-1';
+const FACTORY_ROW = { orgId: 'local', userId: `factory-project:${FACTORY_ID}` };
+
 const controller = {
   listAvailableModels: async () => [{ provider: 'anthropic', hasApiKey: true }],
   listModes: () => [{ id: 'build', defaultModelId: 'anthropic/claude-opus-5' }],
@@ -50,11 +53,19 @@ describe('web OM config routes', () => {
     await storage.close();
   });
 
-  const put = (path: string, body: unknown) =>
-    app.request(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  // Memory settings belong to a Factory, so every request names one.
+  const put = (path: string, body: Record<string, unknown>) =>
+    app.request(path, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...body, factoryId: FACTORY_ID }),
+    });
+  const read = () => app.request(`/web/config/om?factoryId=${FACTORY_ID}`);
 
   it('reports an empty row as auto intent with a resolved effective model', async () => {
-    const res = await app.request('/web/config/om');
+    // There are no personal memory settings: a request that names no Factory is refused.
+    expect((await app.request('/web/config/om')).status).toBe(400);
+    const res = await read();
     expect(res.status).toBe(200);
     const { config } = await res.json();
 
@@ -77,11 +88,11 @@ describe('web OM config routes', () => {
       effectiveModelId: 'anthropic/claude-fable-5',
     });
 
-    const stored = await memorySettings.get({ orgId: 'local', userId: 'local' });
+    const stored = await memorySettings.get(FACTORY_ROW);
     expect(stored).toMatchObject({ observerModelId: 'anthropic/claude-fable-5', reflectorModelId: null });
 
-    const read = await (await app.request('/web/config/om')).json();
-    expect(read.config.reflector).toMatchObject({ model: 'auto' });
+    const reread = await (await read()).json();
+    expect(reread.config.reflector).toMatchObject({ model: 'auto' });
   });
 
   it('round-trips a role back to auto as a null column', async () => {
@@ -90,7 +101,7 @@ describe('web OM config routes', () => {
     expect(autoRes.status).toBe(200);
     expect((await autoRes.json()).config.observer).toMatchObject({ model: 'auto' });
 
-    const stored = await memorySettings.get({ orgId: 'local', userId: 'local' });
+    const stored = await memorySettings.get(FACTORY_ROW);
     expect(stored?.observerModelId).toBeNull();
   });
 });

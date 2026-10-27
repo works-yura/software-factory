@@ -12,11 +12,9 @@
   "setup": {
     "loading": "Loading Factory setup",
     "accountError": "Unable to load your account.",
-    "incomplete": "Choose your setup and its required models before creating your factory.",
+    "incomplete": "Choose a model before creating your factory.",
     "modelUnavailableCompany": "{{model}} is no longer available for the company account. Choose another model.",
-    "modelUnavailableYours": "{{model}} is no longer available for your account. Choose another model.",
-    "connectionChangedCompany": "The connection for the company account has changed. Review your provider connection.",
-    "connectionChangedYours": "The connection for your account has changed. Review your provider connection."
+    "connectionChangedCompany": "The connection for the company account has changed. Review your provider connection."
   },
   "initialStep": {
     "repository": "Connect your repository",
@@ -26,10 +24,6 @@
   },
   "providers": {
     "setupLabel": "Model provider setup",
-    "personalSetupLabel": "Personal provider setup",
-    "reviewSetup": "Review setup",
-    "adminNeeded": "An admin needs to connect the company account first. Choose personal accounts to continue now.",
-    "changeSetup": "Change setup",
     "loading": "Loading model providers",
     "searchLabel": "Search model providers",
     "searchPlaceholder": "Search providers…",
@@ -48,8 +42,7 @@
       "oauth": "Provider sign-in"
     },
     "scopeNotice": {
-      "org": "Everyone in your organization can use this provider connection.",
-      "user": "This provider connection is only for you. Shared organization access stays unchanged."
+      "org": "Everyone in your organization can use this provider connection."
     }
   },
   "createFactory": {
@@ -165,31 +158,17 @@
     "loading": "Loading models",
     "noneForConnection": "No models are available for this connection yet.",
     "changeProvider": "Change provider",
-    "yourDefault": "Your default model",
     "factoryDefault": "Factory default model",
     "selectDefault": "Select a default model…",
-    "previousUnavailable": "Your previous model is no longer available. Choose another model.",
-    "updatesPersonalDefault": "Creating this Factory also updates your personal default model."
+    "previousUnavailable": "Your previous model is no longer available. Choose another model."
   },
   "onboarding": {
     "backLabel": "Go back to previous step",
-    "loadingAccountOptions": "Loading account options",
     "progress": "Factory setup progress",
-    "setupLabel": "Factory account setup",
-    "setupAccounts": "Accounts for this Factory",
     "adminNeeded": "An admin needs to connect the company account first.",
     "setups": {
       "factory": {
-        "label": "Company account",
-        "detail": "A shared account and model for Factory work and sessions."
-      },
-      "hybrid": {
-        "label": "Company work · personal sessions",
-        "detail": "Factory work uses the company account. Each person uses their own account for sessions."
-      },
-      "user": {
-        "label": "Personal accounts",
-        "detail": "Each person uses their own account and default model, for Factory work and sessions."
+        "label": "Company account"
       }
     },
     "steps": {
@@ -201,16 +180,7 @@
         "label": "Codebase",
         "title": "Choose your codebase."
       },
-      "model-setup": {
-        "label": "Setup",
-        "title": "Choose your setup.",
-        "description": "Choose whose accounts power this Factory."
-      },
       "model-provider": {
-        "label": "Model",
-        "title": "Choose your model."
-      },
-      "personal-provider": {
         "label": "Model",
         "title": "Choose your model."
       },
@@ -220,15 +190,8 @@
         "description": "Review your Factory settings. Connected accounts are already saved."
       }
     },
-    "personalStep": {
-      "title": "Choose your model.",
-      "hybridTitle": "Set up your sessions.",
-      "description": "Your account · your default model for Factory work and sessions.",
-      "hybridDescription": "Your account · your default model for sessions."
-    },
     "companyModel": {
       "local": "Connect a provider and choose the model for your Factory.",
-      "hybrid": "Company account · model for Factory work.",
       "factory": "Company account · model for Factory work and sessions."
     }
   },
@@ -246,11 +209,8 @@
   },
   "accountsPreview": {
     "label": "Account setup preview",
-    "workOwnerAccount": "Work owner’s account",
-    "workOwner": "Work owner",
     "localAccount": "Local account",
     "company": "Company",
-    "personal": "Personal",
     "team": "Team",
     "you": "You",
     "factoryWork": "Factory work",
@@ -258,32 +218,20 @@
     "yourSessions": "Your sessions",
     "workModel": "Factory work model",
     "sessionModel": "Session model",
-    "sameModel": "Same model for sessions",
-    "yourSessionModel": "Your session model",
-    "connectedYours": "Connected · your account",
-    "connectYours": "Connect your account"
+    "sameModel": "Same model for sessions"
   },
   "review": {
     "label": "Review factory setup",
     "edit": "Edit",
     "editLabel": "Edit {{label}}",
     "codebase": "Codebase",
-    "setup": "Setup",
-    "chooseSetup": "Choose a setup",
-    "setupDetail": "Applies to this Factory",
     "model": "Model",
     "chooseModel": "Choose a model",
-    "personalModel": "Personal model",
-    "chooseSessionModel": "Choose your session model",
-    "personalDefaultAll": "{{method}} · your default for work and sessions",
-    "personalDefaultSessions": "{{method}} · your default for sessions",
-    "personalDefaultNote": "Your personal default is used wherever your account powers a session or Factory work. Teammates keep their own defaults.",
     "creatingLabel": "Creating factory",
     "creating": "Creating your factory…",
     "create": "Create factory",
     "sharedModel": {
       "local": "Factory default · local connection",
-      "hybrid": "Company account · Factory work",
       "factory": "Company account · Factory work and sessions"
     }
   },
@@ -329,7 +277,6 @@
     "loadFactory": "Failed to load Factory",
     "updateDefaultModel": "Failed to update Factory default model",
     "updateName": "Failed to update Factory name",
-    "updateModelScope": "Failed to update Factory model scope",
     "updateThinkingLevel": "Failed to update Factory thinking level",
     "switchSessions": "Failed to switch running sessions",
     "updateAutomation": "Failed to update automation",

@@ -5,7 +5,6 @@ import type { AvailableModelOption } from '../../../../hooks/useAvailableModels'
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
-import { FactoryModelScopeSection } from './FactoryModelScopeSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 
@@ -15,7 +14,7 @@ export function FactoryModelsSettings({ models }: { models: AvailableModelOption
 
   const providerSubsections = (
     <>
-      <ProviderAccessSection fixedScope="org" description={anyConnected ? undefined : t('models.connectToUnlock')} />
+      <ProviderAccessSection description={anyConnected ? undefined : t('models.connectToUnlock')} />
       <SettingsSubsection scope="org" title={t('models.customProviders')}>
         <SettingsContainer className="p-4">
           <CustomProvidersSection />
@@ -30,7 +29,6 @@ export function FactoryModelsSettings({ models }: { models: AvailableModelOption
       description={t('models.factoryDefaults.description')}
     >
       <SettingsContainer>
-        <FactoryModelScopeSection />
         {(!providersKnown || anyConnected) && <FactoryDefaultModelSection models={models} />}
       </SettingsContainer>
     </SettingsSubsection>

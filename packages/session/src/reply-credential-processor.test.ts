@@ -52,15 +52,13 @@ const oauth: AuthCredential = { type: 'oauth', access: 'a', refresh: 'r', expire
 describe('FactoryReplyCredentialProcessor', () => {
   afterEach(() => setCredentialStoreProvider(undefined));
 
-  it('stamps a personal subscription with the user whose credential answered', async () => {
-    const [message] = await stamp({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' }, { anthropic: oauth }, [
+  it('stamps a subscription without an owner: every credential belongs to the organization', async () => {
+    const [message] = await stamp({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' }, { anthropic: oauth }, [
       reply('m1', { provider: 'anthropic.messages', modelId: 'claude-opus-4-6' }),
     ]);
 
-    expect(message?.content.metadata).toMatchObject({
-      credentialLabel: 'Claude Pro/Max',
-      credentialOwnerId: 'user-1',
-    });
+    expect(message?.content.metadata).toMatchObject({ credentialLabel: 'Claude Pro/Max' });
+    expect(message?.content.metadata).not.toHaveProperty('credentialOwnerId');
   });
 
   it('stamps an organization API key without an owner', async () => {
@@ -75,7 +73,7 @@ describe('FactoryReplyCredentialProcessor', () => {
   });
 
   it('leaves a reply unlabeled when no stored credential answered it', async () => {
-    const [message] = await stamp({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' }, {}, [
+    const [message] = await stamp({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' }, {}, [
       reply('m1', { provider: 'anthropic.messages', modelId: 'claude-opus-4-6' }),
     ]);
 
@@ -83,7 +81,7 @@ describe('FactoryReplyCredentialProcessor', () => {
   });
 
   it('keeps the label a reply was stamped with', async () => {
-    const [message] = await stamp({ orgId: 'org-1', userId: 'user-2', credentialScope: 'user' }, { anthropic: oauth }, [
+    const [message] = await stamp({ orgId: 'org-1', userId: 'user-2', credentialScope: 'factory' }, { anthropic: oauth }, [
       reply('m1', { provider: 'anthropic.messages', credentialLabel: 'Anthropic API key' }),
     ]);
 

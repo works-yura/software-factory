@@ -234,21 +234,12 @@ export async function listGithubRepos(
 /** The GitHub source-control integration id registered on the server. */
 const GITHUB_INTEGRATION_ID = 'github';
 
-/**
- * Where a Factory's sessions and runs get their model and credentials: `factory` uses the organization's for both,
- * `user` the session owner's for both, and `hybrid` the owner's for interactive sessions and the organization's for
- * work-item runs.
- */
-export type FactoryModelScope = 'factory' | 'user' | 'hybrid';
-
 /** A Factory project row from `/web/factory/projects`. */
 export interface FactoryProjectPayload {
   id: string;
   name: string;
   /** Org-wide default model for factory runs; null when unset. */
   defaultModelId?: string | null;
-  /** Where sessions and runs get their model and credentials. */
-  modelScope?: FactoryModelScope;
   /** Thinking level every session and run uses until it picks its own. */
   defaultThinkingLevel?: ThinkingLevelSetting;
   /** Whether Factory rules may start agent runs without someone asking for them. */
@@ -353,7 +344,6 @@ export async function createFactoryProject(
   baseUrl: string,
   name: string,
   description?: string,
-  modelScope?: FactoryModelScope,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
     method: 'POST',
@@ -362,7 +352,6 @@ export async function createFactoryProject(
     body: JSON.stringify({
       name,
       ...(description ? { description } : {}),
-      ...(modelScope ? { modelScope } : {}),
     }),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.createFactory'));
@@ -410,25 +399,6 @@ export async function renameFactoryProject(
     body: JSON.stringify({ name }),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.updateName'));
-  return project;
-}
-
-/** Set where the Factory's sessions and runs get their model and credentials. */
-export async function updateFactoryModelScope(
-  baseUrl: string,
-  factoryProjectId: string,
-  modelScope: FactoryModelScope,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ modelScope }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    tk('errors.updateModelScope'),
-  );
   return project;
 }
 

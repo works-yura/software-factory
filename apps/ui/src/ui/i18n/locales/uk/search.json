@@ -33,8 +33,7 @@
   "subtitles": {
     "factory": "Навігація Factory",
     "settings": "Налаштування",
-    "factorySettings": "Налаштування Factory",
-    "yourSettings": "Ваші налаштування"
+    "factorySettings": "Налаштування Factory"
   },
   "factories": {
     "noRepositories": "Репозиторії не під’єднано",

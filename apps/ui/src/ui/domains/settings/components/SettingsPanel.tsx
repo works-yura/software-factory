@@ -27,7 +27,6 @@ import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
 import { FactoryModelsSettings } from './FactoryModelsSettings';
-import { PersonalModelsSettings } from './PersonalModelsSettings';
 import { MemorySettings } from './MemorySettings';
 
 const tk = translator('settings');
@@ -57,15 +56,12 @@ export function SettingsPanel() {
     enabled: resourceEnabled,
   };
 
-  // Factory-level pickers only offer what the Factory's model scope can run;
-  // personal pickers keep the caller's full catalog.
-  const factoryScoped = section === 'models' || section === 'factory-memory';
-  const modelsQuery = useAvailableModelsQuery(factoryScoped ? { factoryProjectId: factoryId } : undefined);
+  // Factory-level pickers only offer what the Factory's organization credentials can run.
+  const modelsQuery = useAvailableModelsQuery({ factoryProjectId: factoryId });
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  const sessionId = resourceEnabled ? chatSessionId : undefined;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
     if (!settings) return Promise.resolve();
@@ -96,16 +92,7 @@ export function SettingsPanel() {
       {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
       {section === 'models' && <FactoryModelsSettings models={models} />}
-      {section === 'personal-models' && <PersonalModelsSettings />}
-      {(section === 'memory' || section === 'factory-memory') && (
-        <MemorySettings
-          key={section}
-          scope={section === 'factory-memory' ? 'factory' : 'personal'}
-          factoryId={factoryId}
-          models={models}
-          sessionId={sessionId}
-        />
-      )}
+      {section === 'factory-memory' && <MemorySettings factoryId={factoryId} models={models} />}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
       {section === 'behavior' && (
         <BehaviorSettings

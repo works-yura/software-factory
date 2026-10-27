@@ -13,7 +13,7 @@ import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
 import { useChatModels } from '../../context/useChatModels';
-import { useChatModelScope } from '../../context/useChatModelScope';
+import { useChatModelCatalog } from '../../context/useChatModelCatalog';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import type { ThreadOwner } from '../../services/reply-credential';
 import type { FactoryAuthState } from '../../../auth/services/auth';
@@ -98,7 +98,7 @@ export function ModelCredential() {
   const authQuery = useFactoryAuth();
   const { owner, draftSessionId } = useChatSessionContext();
   const { activeModelId } = useChatModels();
-  const { catalogTarget } = useChatModelScope();
+  const { catalogTarget } = useChatModelCatalog();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
   const model = modelsQuery.data?.find(candidate => candidate.id === activeModelId);
 

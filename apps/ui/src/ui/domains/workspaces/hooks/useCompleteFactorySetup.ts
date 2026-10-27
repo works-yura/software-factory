@@ -7,10 +7,8 @@ import { queryKeys } from '../../../../api/keys';
 import { availableModelsQueryOptions } from '../../../../hooks/useAvailableModels';
 import { providersQueryOptions } from '../../../../hooks/use-providers';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
-import { useSetDefaultModel } from '../../../../hooks/use-default-model';
 import {
   createFactoryProject,
-  deleteFactoryProject,
   fetchFactoryProject,
   renameFactoryProject,
   unlinkRepository,
@@ -19,7 +17,6 @@ import {
 import {
   clearOnboardingFlow,
   completeOnboardingSchema,
-  onboardingModelPlan,
   persistOnboardingFactory,
   persistOnboardingLinkedRepositories,
   readOnboardingFactory,
@@ -43,49 +40,28 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const link = useLinkRepositoryMutation();
-  const setPersonalDefault = useSetDefaultModel();
   return useMutation({
     mutationFn: async (draft: OnboardingDraft) => {
       const parsed = completeOnboardingSchema.safeParse(draft);
       if (!parsed.success) throw new Error(tk('setup.incomplete'));
       const setup = parsed.data;
       const repo = setup.repository;
-      const modelScope = setup.modelScope;
-      const plan = onboardingModelPlan(setup);
-      const [providers, catalogs] = await Promise.all([
+      const choice = setup.model;
+      const [providers, catalog] = await Promise.all([
         queryClient.fetchQuery({ ...providersQueryOptions(client), staleTime: 0 }),
-        Promise.all(
-          plan.checks.map(({ scope }) =>
-            queryClient.fetchQuery({
-              ...availableModelsQueryOptions(baseUrl, { scope }),
-              staleTime: 0,
-            }),
-          ),
-        ),
+        queryClient.fetchQuery({ ...availableModelsQueryOptions(baseUrl), staleTime: 0 }),
       ]);
-      for (const [index, { scope, choice }] of plan.checks.entries()) {
-        const company = scope === 'org';
-        if (!catalogs[index].some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
-          throw new Error(
-            company
-              ? tk('setup.modelUnavailableCompany', { model: choice.modelId })
-              : tk('setup.modelUnavailableYours', { model: choice.modelId }),
-          );
-        }
-        const provider = providers.providers.find(item => item.provider === choice.providerId);
-        if (!provider || !isProviderConnected(provider, local ? undefined : scope, choice.method)) {
-          throw new Error(company ? tk('setup.connectionChangedCompany') : tk('setup.connectionChangedYours'));
-        }
+      if (!catalog.some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
+        throw new Error(tk('setup.modelUnavailableCompany', { model: choice.modelId }));
+      }
+      const provider = providers.providers.find(item => item.provider === choice.providerId);
+      if (!provider || !isProviderConnected(provider, local ? undefined : 'org', choice.method)) {
+        throw new Error(tk('setup.connectionChangedCompany'));
       }
 
       const pendingId = readOnboardingFactory();
-      let existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
-      if (existing && existing.modelScope !== modelScope) {
-        // Recreate the unfinished project rather than bypassing the admin gate on scope changes.
-        await deleteFactoryProject(baseUrl, existing.id);
-        existing = undefined;
-      }
-      const factory = existing ?? (await createFactoryProject(baseUrl, repo.name, undefined, modelScope));
+      const existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
+      const factory = existing ?? (await createFactoryProject(baseUrl, repo.name));
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);
       if (existing && existing.name !== repo.name) await renameFactoryProject(baseUrl, factory.id, repo.name);
@@ -103,10 +79,7 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
           persistOnboardingLinkedRepositories([linked.projectRepositoryId]);
         },
       });
-      await Promise.all([
-        updateFactoryDefaultModel(baseUrl, factory.id, plan.factoryModelId),
-        plan.personalModelId ? setPersonalDefault.mutateAsync(plan.personalModelId) : undefined,
-      ]);
+      await updateFactoryDefaultModel(baseUrl, factory.id, choice.modelId);
       return factory.id;
     },
     onSuccess: async factoryId => {

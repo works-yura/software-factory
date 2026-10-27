@@ -62,23 +62,6 @@ export const PERSONAL_SETTINGS_GROUP = {
       searchText: 'preferences general theme appearance color scheme completion sound',
     },
     {
-      id: 'personal-models',
-      get label() {
-        return SETTINGS_SECTION_LABELS['personal-models'];
-      },
-      icon: Bot,
-      searchText: 'your personal models default model api keys providers credentials sign in oauth',
-    },
-    {
-      id: 'memory',
-      get label() {
-        return SETTINGS_SECTION_LABELS.memory;
-      },
-      icon: Brain,
-      searchText:
-        'your personal memory observational recall observer reflector thresholds attachments summarize context',
-    },
-    {
       id: 'connections',
       get label() {
         return SETTINGS_SECTION_LABELS.connections;

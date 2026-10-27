@@ -43,9 +43,7 @@ const prime = vi.mocked(primeTenantCredentialsForTenant);
 async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'org') {
   const seed = await createFactoryStorageForTests();
   const sourceControl = seed.sourceControl.forIntegration('github');
-  const created = await seed.projects.create({ orgId: 'org-1', userId: 'owner', input: { name: 'Mastra' } });
-  // Personal credentials, so billing the wrong person would show up as a different tenant.
-  const project = (await seed.projects.update({ orgId: 'org-1', id: created.id, input: { modelScope: 'user' } }))!;
+  const project = await seed.projects.create({ orgId: 'org-1', userId: 'owner', input: { name: 'Mastra' } });
   const installation = await sourceControl.installations.upsert({
     orgId: 'org-1',
     connectedByUserId: 'owner',
@@ -242,7 +240,7 @@ async function setup(
     seeded.seed.workItems,
     { transition },
     seeded.sourceControl,
-    { projects: seeded.seed.projects, modelDefaults: seeded.seed.modelDefaults },
+    { projects: seeded.seed.projects },
   );
   const realPrepare: Prepare = request => realCoordinator.prepare(request);
   const prepare = vi.fn<Prepare>(wrapPrepare ? wrapPrepare(realPrepare) : realPrepare);
@@ -294,7 +292,6 @@ async function setup(
     sessions: seeded.sessions,
     sessionModel: {
       projects: seeded.seed.projects,
-      modelDefaults: seeded.seed.modelDefaults,
       ...(tenantCredentials
         ? {
             tenantCatalog: {
@@ -410,11 +407,10 @@ describe('factory_switch_session_model with stored credentials', () => {
     { id: 'amazon-bedrock/claude-sonnet', provider: 'amazon-bedrock', modelName: 'claude-sonnet', hasApiKey: true },
   ];
 
-  async function tenantSetup(modelScope: 'user' | 'factory' | 'hybrid', deploymentProviders?: ReadonlySet<string>) {
+  async function tenantSetup(deploymentProviders?: ReadonlySet<string>) {
     const env = await setup('org', { tenantCredentials: true, deploymentProviders });
     env.controller.listAvailableModels.mockResolvedValue(serverModels);
-    await env.seed.projects.update({ orgId: 'org-1', id: env.project.id, input: { modelScope } });
-    // The session owner's personal Anthropic key, the Factory's DeepSeek key, and someone else's personal key.
+    // A personal Anthropic key an older build stored for the session owner, and the Factory's DeepSeek key.
     await env.seed.credentials.setCredential({ orgId: 'org-1', userId: 'user-1' }, 'anthropic', {
       type: 'api_key',
       key: 'user-secret',
@@ -424,33 +420,33 @@ describe('factory_switch_session_model with stored credentials', () => {
     return { ...env, sessionId: started.sessionId };
   }
 
-  it('lets a user-scoped session switch to a model its owner holds a credential for, and nothing else', async () => {
-    const env = await tenantSetup('user');
+  it('lets a session switch to a model the organization holds a credential for, and nothing else', async () => {
+    const env = await tenantSetup();
 
-    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).resolves.toEqual({
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' })).resolves.toEqual({
       sessionId: env.sessionId,
       threadId: env.sessionId,
-      modelId: 'anthropic/claude-opus-5-5',
+      modelId: 'deepseek/deepseek-flash',
       live: true,
     });
-    expect(env.created[0]!.session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5-5');
+    expect(env.created[0]!.session.model.switch).toHaveBeenCalledWith('deepseek/deepseek-flash');
 
-    // The Factory's org credential belongs to the other scope.
-    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' })).rejects.toThrow(
-      "Model deepseek/deepseek-flash exists, but this session's credential scope (session owner) has no credential for its provider. Models available to it: anthropic/claude-opus-5-5.",
+    // The owner's personal key is never offered.
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).rejects.toThrow(
+      "Model anthropic/claude-opus-5-5 exists, but this session's credential scope (Factory) has no credential for its provider. Models available to it: deepseek/deepseek-flash.",
     );
     // A server key alone does not open a deployment provider the operator never opted in to.
     await expect(
       env.switchModel({ sessionId: env.sessionId, modelId: 'amazon-bedrock/claude-sonnet' }),
     ).rejects.toThrow('exists, but');
     await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-made-up' })).rejects.toThrow(
-      'Unknown model anthropic/claude-made-up. Models available to it: anthropic/claude-opus-5-5.',
+      'Unknown model anthropic/claude-made-up. Models available to it: deepseek/deepseek-flash.',
     );
     expect(env.controller.setThreadModel).toHaveBeenCalledTimes(1);
   });
 
   it('lets a Factory-scoped session use the Factory credentials and its custom providers, not the owner credentials', async () => {
-    const env = await tenantSetup('factory');
+    const env = await tenantSetup();
     await env.seed.customProviders.upsert({
       orgId: 'org-1',
       userId: 'owner',
@@ -469,42 +465,8 @@ describe('factory_switch_session_model with stored credentials', () => {
     );
   });
 
-  it('resolves the credential scope from the target session, not from a calling work-item run', async () => {
-    const env = await tenantSetup('hybrid');
-    // The caller is a work-item run, which a hybrid Factory bills to the Factory credentials.
-    await env.seed.workItems.prepareRunStart({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: env.project.id,
-      workItem: {
-        input: {
-          title: 'Task',
-          stages: ['intake'],
-          sessions: {},
-          metadata: {},
-          externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
-        },
-      },
-      role: 'work',
-      session: { sessionId: env.scope.sessionId, branch: 'user/session-parent-session', threadId: env.scope.threadId },
-      resourceId: env.scope.sessionId,
-      kickoffKey: 'run-1',
-      kickoffMessage: null,
-    });
-
-    // The target is an unbound side session, so it runs on its owner credentials.
-    await expect(
-      env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' }),
-    ).resolves.toMatchObject({
-      modelId: 'anthropic/claude-opus-5-5',
-    });
-    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' })).rejects.toThrow(
-      "this session's credential scope (session owner) has no credential for its provider",
-    );
-  });
-
   it('opens a deployment provider only when the operator opted in and the server holds its credentials', async () => {
-    const env = await tenantSetup('user', new Set(['amazon-bedrock']));
+    const env = await tenantSetup(new Set(['amazon-bedrock']));
 
     await expect(
       env.switchModel({ sessionId: env.sessionId, modelId: 'amazon-bedrock/claude-sonnet' }),
@@ -579,20 +541,12 @@ describe('factory_start_session in side mode', () => {
     expect([...kickoff.keys()]).toEqual(['user']);
   });
 
-  it("primes the caller's tenant credentials with the project's model scope before the kickoff", async () => {
+  it("primes the organization's credentials for the caller before the kickoff", async () => {
     const { start, calls } = await setup();
     await start({ prompt: 'Go.' });
 
-    expect(prime).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' });
+    expect(prime).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' });
     expect(calls).toEqual(['prime', 'kickoff']);
-  });
-
-  it('bills a side session in a hybrid Factory as an interactive session, on the caller', async () => {
-    const env = await setup();
-    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
-    await env.start({ prompt: 'Go.' });
-
-    expect(prime).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' });
   });
 
   it("bills the side session to the caller's credential tenant", async () => {
@@ -610,7 +564,7 @@ describe('factory_start_session in side mode', () => {
       });
     };
     const parent = await tenantFor('parent-session', 'parent-thread');
-    expect(parent).toEqual({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' });
+    expect(parent).toEqual({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' });
     await expect(tenantFor(result.sessionId, result.sessionId)).resolves.toEqual(parent);
   });
 
@@ -986,7 +940,7 @@ describe('factory_start_session in work-item mode', () => {
     expect(teammateSees.map(row => row.sessionId)).toContain(result.sessionId);
   });
 
-  it("calls the coordinator with no destination stage and the project's model scope", async () => {
+  it("calls the coordinator with no destination stage and the project's default model", async () => {
     const { start, item, prepare, scope } = await withItem();
     const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
 
@@ -998,19 +952,22 @@ describe('factory_start_session in work-item mode', () => {
       factoryProjectId: scope.factoryProjectId,
       sessionId: result.sessionId,
       threadTitle: '"Speed up the nightly build" work',
-      modelScope: 'user',
       workItem: { id: item.id, role: 'work', input: { title: item.title } },
     });
     expect(request).not.toHaveProperty('destinationStage');
     expect(request.requestContext).toBeUndefined();
   });
 
-  it("starts a work-item role in a hybrid Factory on the Factory's scope, like the Start route", async () => {
+  it("starts a work-item role on the Factory's default model, like the Start route", async () => {
     const env = await withItem();
-    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
+    await env.seed.projects.update({
+      orgId: 'org-1',
+      id: env.scope.factoryProjectId,
+      input: { defaultModelId: 'deepseek/deepseek-flash' },
+    });
     await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' });
 
-    expect(env.prepare.mock.calls[0]![0]).toMatchObject({ modelScope: 'factory' });
+    expect(env.prepare.mock.calls[0]![0]).toMatchObject({ defaultModelId: 'deepseek/deepseek-flash' });
   });
 
   it("bills the work-item session to the caller's credential tenant", async () => {
@@ -1028,7 +985,7 @@ describe('factory_start_session in work-item mode', () => {
       });
     };
     const parent = await tenantFor('parent-session', 'parent-thread');
-    expect(parent).toEqual({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' });
+    expect(parent).toEqual({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' });
     await expect(tenantFor(result.sessionId, result.threadId)).resolves.toEqual(parent);
   });
 

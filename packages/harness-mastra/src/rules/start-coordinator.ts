@@ -6,8 +6,7 @@ import { boardForWorkItem } from '@factory/core';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { hydrateFactorySession, resolveFactorySessionModel } from '@factory/session';
 import { resolveWorkItemRepository } from '@factory/session';
-import type { ModelDefaultsStorage } from '@factory/store';
-import type { EffectiveModelScope, FactoryProjectsStorage } from '@factory/store';
+import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession, SourceControlStorageHandle } from '@factory/store';
 import type { CreateWorkItemInput, WorkItemsStorage } from '@factory/store';
 import type { FactoryTransitionService } from '@factory/runtime';
@@ -23,8 +22,7 @@ export interface FactoryStartRequest {
   kickoffKey: string;
   /** Where the arrival path lands the card; a session opened on an existing card names none. */
   destinationStage?: FactoryRuleStage;
-  /** The run's effective scope; a hybrid Factory's runs use the Factory's model and credentials. */
-  modelScope: EffectiveModelScope;
+  /** The Factory's default model; runs bill the organization's credentials. */
   defaultModelId?: string;
   workItem: {
     id?: string;
@@ -144,7 +142,6 @@ export class FactoryStartCoordinator {
         request: FactoryStartRequest,
       ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>);
   readonly #projects?: FactoryProjectsStorage;
-  readonly #modelDefaults?: ModelDefaultsStorage;
 
   constructor(
     controller: FactoryController,
@@ -155,14 +152,13 @@ export class FactoryStartCoordinator {
       | ((
           request: FactoryStartRequest,
         ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>),
-    sessionModel?: { projects: FactoryProjectsStorage; modelDefaults: ModelDefaultsStorage },
+    sessionModel?: { projects: FactoryProjectsStorage },
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#projects = sessionModel?.projects;
-    this.#modelDefaults = sessionModel?.modelDefaults;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -171,17 +167,13 @@ export class FactoryStartCoordinator {
       typeof this.#sourceControl === 'function' ? await this.#sourceControl(request) : this.#sourceControl;
     if (!sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(sourceControl, request);
-    const sessionModel =
-      this.#projects && this.#modelDefaults
-        ? await resolveFactorySessionModel({
-            projects: this.#projects,
-            modelDefaults: this.#modelDefaults,
-            factoryProjectId: request.factoryProjectId,
-            orgId: request.orgId,
-            ownerUserId: sourceSession.userId,
-            context: 'run',
-          })
-        : { modelScope: request.modelScope, modelId: request.defaultModelId };
+    const sessionModel = this.#projects
+      ? await resolveFactorySessionModel({
+          projects: this.#projects,
+          factoryProjectId: request.factoryProjectId,
+          orgId: request.orgId,
+        })
+      : { modelId: request.defaultModelId };
     const storedItem = request.workItem.id
       ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
       : null;
@@ -294,7 +286,7 @@ export class FactoryStartCoordinator {
       // memory seam's organizationId): the session owner is a USER id, not an
       // org, so it must never be improvised from ownerId.
       factoryOrgId: request.orgId,
-      factoryModelScope: sessionModel.modelScope,
+      factoryModelScope: 'factory',
       factoryOwnerUserId: sourceSession.userId,
       pluginInstructions: [
         ...existingPluginInstructions.filter(instruction => instruction !== targetRepositoryInstruction),
@@ -305,13 +297,12 @@ export class FactoryStartCoordinator {
     await primeTenantCredentialsForTenant({
       orgId: request.orgId,
       userId: sourceSession.userId,
-      credentialScope: sessionModel.modelScope,
+      credentialScope: 'factory',
     });
     // Apply the factory's main model before any model-dependent run work.
     // Observational-memory settings are loaded per invocation by the input processor.
     await hydrateFactorySession(session, {
       orgId: request.orgId,
-      modelScope: sessionModel.modelScope,
       ownerUserId: sourceSession.userId,
       defaultModelId: sessionModel.modelId,
     });

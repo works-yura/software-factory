@@ -42,7 +42,7 @@ describe('SettingsNavigation', () => {
       within(personal)
         .getAllByRole('link')
         .map(link => link.textContent),
-    ).toEqual(['My account', 'Preferences', 'Your models', 'Your memory', 'Connections']);
+    ).toEqual(['My account', 'Preferences', 'Connections']);
     expect(
       within(factory)
         .getAllByRole('link')
@@ -57,14 +57,6 @@ describe('SettingsNavigation', () => {
       'Work Intake',
       'Manage Factory',
     ]);
-    expect(within(personal).getByRole('link', { name: 'Your models' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/personal-models',
-    );
-    expect(within(personal).getByRole('link', { name: 'Your memory' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/memory',
-    );
     expect(within(factory).getByRole('link', { name: 'Factory models' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/models',

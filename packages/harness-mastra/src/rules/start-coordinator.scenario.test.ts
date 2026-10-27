@@ -59,7 +59,6 @@ function runRequest(
     sessionId,
     threadTitle: `Run ${externalId}`,
     kickoffKey: `kickoff-${externalId}`,
-    modelScope: 'factory' as const,
     workItem: {
       role: 'work',
       input: {

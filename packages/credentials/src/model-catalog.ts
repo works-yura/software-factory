@@ -351,20 +351,17 @@ export async function buildModelCatalog({
 }
 
 /**
- * The tenant credentials a session's model policy allows: the Factory's (org
- * rows) for Factory-scoped sessions, the session owner's for user-scoped ones.
+ * The tenant credentials a session's model policy allows: the organization's
+ * rows only. Personal rows an older build stored are never offered.
  */
 export async function listSessionScopedCredentials({
   credentials,
   orgId,
   userId,
-  modelScope,
 }: {
   credentials: Pick<ModelCredentialsStorage, 'listCredentials'>;
   orgId: string;
   userId: string;
-  modelScope: 'factory' | 'user';
 }): Promise<CredentialRecord[]> {
-  const storageScope = modelScope === 'factory' ? 'org' : 'user';
-  return (await credentials.listCredentials(orgId, userId)).filter(record => record.scope === storageScope);
+  return (await credentials.listCredentials(orgId, userId)).filter(record => record.scope === 'org');
 }

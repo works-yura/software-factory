@@ -42,7 +42,7 @@ describe('Model provider onboarding', () => {
         http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })),
       );
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Provider catalog unavailable');
       expect(screen.queryByText(/No providers match/)).not.toBeInTheDocument();
@@ -63,7 +63,7 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
       expect(await screen.findByRole('tab', { name: 'Provider sign-in' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
@@ -105,7 +105,7 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
       await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
       await user.click(screen.getByRole('button', { name: 'Continue with Anthropic' }));
@@ -142,7 +142,7 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} />);
 
       await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
 
@@ -205,7 +205,7 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} />);
 
       // Unconnected providers are browseable without searching; picking the
       // badge opens the API key dialog directly.
@@ -253,7 +253,7 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
       const bedrock = await screen.findByRole('button', { name: 'Amazon Bedrock' });
       expect(bedrock).toBeEnabled();
@@ -287,7 +287,7 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
       expect(await screen.findByRole('button', { name: 'OpenAI' })).toBeEnabled();
       expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
@@ -300,7 +300,7 @@ describe('Model provider onboarding', () => {
       expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
 
-    it('sends members back to setup when no organization provider is connected', async () => {
+    it('tells members an admin must connect the company account when no organization provider is connected', async () => {
       registerAuthHandler();
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
@@ -312,24 +312,22 @@ describe('Model provider onboarding', () => {
       );
 
       const onComplete = vi.fn();
-      const onChangeSetup = vi.fn();
-      const user = userEvent.setup();
-      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={onChangeSetup} />);
-      await user.click(await screen.findByRole('button', { name: 'Change setup' }));
-      expect(onChangeSetup).toHaveBeenCalledOnce();
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} />);
+      expect(await screen.findByText('An admin needs to connect the company account first.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Change setup' })).not.toBeInTheDocument();
       expect(onComplete).not.toHaveBeenCalled();
       expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
     });
   });
 
   describe('when creating a later Factory', () => {
-    it('keeps personal credentials connected under the existing default semantics', async () => {
+    it('keeps organization credentials connected for a member', async () => {
       registerAuthHandler();
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
           HttpResponse.json({
             orgKeyAdmin: false,
-            providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
+            providers: [{ provider: 'openai', source: 'stored-org', orgCredential: 'api_key' }],
           }),
         ),
         http.get(`${TEST_BASE_URL}/web/config/models`, () =>
@@ -367,7 +365,7 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
       await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
       expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();

@@ -80,13 +80,7 @@ function StatusBadge({ provider, scope }: { provider: ProviderInfo; scope: Crede
   );
 }
 
-export function ProviderAccessSection({
-  description,
-  fixedScope,
-}: {
-  description?: string;
-  fixedScope?: CredentialScope;
-}) {
+export function ProviderAccessSection({ description }: { description?: string }) {
   const { t } = useTranslation('settings');
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
@@ -103,17 +97,11 @@ export function ProviderAccessSection({
   const providers = providersQuery.data ?? [];
   const authEnabled = authQuery.data?.authEnabled === true;
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
-  const pinnedScope: CredentialScope | undefined = fixedScope === 'org' && !authEnabled ? 'user' : fixedScope;
-  const fixedSettingsScope: SettingsScope | undefined =
-    pinnedScope === 'org' ? 'org' : pinnedScope ? 'personal' : undefined;
-  const scopeOptions: SettingsScope[] = fixedSettingsScope
-    ? [fixedSettingsScope]
-    : authEnabled
-      ? ['personal', 'org']
-      : ['personal'];
+  // Credentials belong to the organization; a local single-user server keeps them unscoped.
+  const scope: CredentialScope = authEnabled ? 'org' : 'user';
+  const scopeOptions: SettingsScope[] = [authEnabled ? 'org' : 'personal'];
   const scopeControl = useScopeControl(scopeOptions, canWriteOrgKey ? undefined : { org: orgScopeMemberReason() });
-  const scope: CredentialScope = pinnedScope ?? (scopeControl.shown === 'org' ? 'org' : 'user');
-  const orgScopeUnresolved = fixedScope === 'org' && authQuery.isPending;
+  const orgScopeUnresolved = authQuery.isPending;
   const readOnly = authEnabled && scope === 'org' && !canWriteOrgKey;
   const actionsDisabled = orgScopeUnresolved || readOnly;
   const scopeArg = authEnabled ? { scope } : {};
@@ -321,7 +309,6 @@ export function ProviderAccessSection({
             <AddApiKeyDialog
               provider={keyDialogProvider}
               authEnabled={authEnabled}
-              fixedScope={authEnabled ? scope : undefined}
               onClose={() => setKeyDialogProvider(undefined)}
             />
           )}

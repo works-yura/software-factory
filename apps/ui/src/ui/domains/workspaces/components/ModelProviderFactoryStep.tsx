@@ -1,4 +1,3 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTranslation } from 'react-i18next';
 
@@ -12,7 +11,6 @@ import { ProviderConnectionDialogs } from './ProviderConnectionDialogs';
 export interface ModelProviderFactoryStepProps {
   initialChoice?: OnboardingModelChoice;
   onComplete: (choice: OnboardingModelChoice) => void;
-  onChangeSetup: () => void;
   onPreviewProvider?: PreviewProvider;
   onPreviewModel?: (model: string | undefined) => void;
 }
@@ -20,7 +18,6 @@ export interface ModelProviderFactoryStepProps {
 export function ModelProviderFactoryStep({
   initialChoice,
   onComplete,
-  onChangeSetup,
   onPreviewModel,
   onPreviewProvider,
 }: ModelProviderFactoryStepProps) {
@@ -32,16 +29,9 @@ export function ModelProviderFactoryStep({
   return (
     <section aria-label={t('providers.setupLabel')} className="flex max-w-xl flex-col gap-5">
       {needsAdmin && (
-        <div className="flex flex-col gap-3">
-          <Txt variant="caption" tone="muted">
-            {t('providers.adminNeeded')}
-          </Txt>
-          <div>
-            <Button variant="primary" onClick={onChangeSetup}>
-              {t('providers.changeSetup')}
-            </Button>
-          </div>
-        </div>
+        <Txt variant="caption" tone="muted">
+          {t('onboarding.adminNeeded')}
+        </Txt>
       )}
       {!needsAdmin && connectedProvider && (
         <FactoryDefaultModelForm
@@ -74,7 +64,6 @@ export function ModelProviderFactoryStep({
         keyProvider={connection.keyDialogProvider}
         oauth={connection.activeOAuth}
         authEnabled={connection.authEnabled}
-        fixedScope="org"
         onCloseKeyDialog={connection.closeKeyDialog}
         onCloseOAuth={connection.closeOAuth}
         onCompleteOAuth={connection.completeOAuth}

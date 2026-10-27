@@ -58,7 +58,7 @@ function renderModelCredential({
         : HttpResponse.json({ error: 'not_found' }, { status: 404 }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
-      HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope: 'hybrid' } }),
+      HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json(catalog)),
   );

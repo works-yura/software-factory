@@ -5,12 +5,10 @@ import { queryKeys } from '../api/keys';
 import type { OMResponse, UpdateOMResponse } from '../api/types';
 
 /**
- * Observational Memory config (mirrors the TUI `/om` command). Settings are
- * persisted per user and can be managed without an active chat session. When a
- * session is available, its sessionId lets the server apply changes to it
- * immediately as well. When `factoryId` is set, the hooks address the factory
- * project's shared settings row (used by board runs and channel sessions)
- * instead of the caller's personal row.
+ * Observational Memory config (mirrors the TUI `/om` command). Settings belong
+ * to the Factory: `factoryId` addresses the project's shared settings row, which
+ * every session and run uses. When a session is available, its sessionId lets
+ * the server preview Auto against the session's live model.
  *
  * The update mutations return the full refreshed `{ config }`, so they write it
  * straight into the cache via `setQueryData` instead of triggering a refetch —

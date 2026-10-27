@@ -8,27 +8,26 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from '@mastra/playground-ui/components/Command';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
-import { Check, ChevronDown, RotateCcw } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
+import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { useChatConnection } from '../../context/useChatConnection';
-import { useChatModelScope } from '../../context/useChatModelScope';
+import { useChatModelCatalog } from '../../context/useChatModelCatalog';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { settingsSectionPath } from '../../../settings/settingsSections';
-import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { SessionThinkingControl } from './SessionThinkingControl';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
@@ -52,9 +51,9 @@ export function ModelPicker() {
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const { catalogTarget, modelScope, scopeLoading } = useChatModelScope();
+  const { catalogTarget, catalogLoading } = useChatModelCatalog();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
-  const organizationScoped = useOrganizationScopedFactory();
+  const organizationScoped = useFactoryAuth().data?.authEnabled === true;
   const [open, setOpen] = useState(false);
   const [pendingModelId, setPendingModelId] = useState<string>();
 
@@ -75,17 +74,11 @@ export function ModelPicker() {
 
   const label = selectedModelId ? formatModelName(selectedModelId) : t('modelPicker.noModel');
   const notConfigured =
-    !scopeLoading &&
+    !catalogLoading &&
     Boolean(selectedModelId) &&
     modelsQuery.isSuccess &&
     !modelsQuery.data.some(model => model.id === selectedModelId);
   const switchable = canSwitchModel(kind, Boolean(draftSessionId), sessionEnabled);
-  const canReset =
-    kind === 'user' &&
-    modelScope !== 'factory' &&
-    Boolean(defaultModelId) &&
-    selectedModelId !== defaultModelId &&
-    modelsQuery.data?.some(model => model.id === defaultModelId);
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
   if (modelsQuery.isError && noModelsToOffer) {
@@ -136,7 +129,7 @@ export function ModelPicker() {
     setPendingModelId(modelId);
     runAction(setModel(modelId), t('modelPicker.switchFailed'));
   };
-  const modelMenuLocked = busy || modelsQuery.isPending || scopeLoading;
+  const modelMenuLocked = busy || modelsQuery.isPending || catalogLoading;
 
   return (
     <ButtonsGroup size="sm" aria-label={t('modelPicker.group')}>
@@ -190,21 +183,7 @@ export function ModelPicker() {
                   ))}
                 </CommandGroup>
               ))}
-              {canReset ? <CommandSeparator /> : null}
-              {canReset && defaultModelId ? (
-                <CommandGroup>
-                  <CommandItem
-                    value="action:reset"
-                    keywords={['reset', 'default', 'model']}
-                    onSelect={() => pickModel(defaultModelId)}
-                  >
-                    <RotateCcw aria-hidden />
-                    <span>{t('modelPicker.resetToDefault')}</span>
-                  </CommandItem>
-                </CommandGroup>
-              ) : null}
             </CommandList>
-            {organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : null}
           </Command>
         </PopoverContent>
       </Popover>

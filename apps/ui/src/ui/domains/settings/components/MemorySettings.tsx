@@ -12,15 +12,12 @@ import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
 
 interface MemorySettingsProps {
-  scope: 'personal' | 'factory';
   factoryId: string | undefined;
   models: AvailableModelOption[];
-  sessionId: string | undefined;
 }
 
-export function MemorySettings({ scope, factoryId, models, sessionId }: MemorySettingsProps) {
+export function MemorySettings({ factoryId, models }: MemorySettingsProps) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
-  const factoryView = scope === 'factory' && factoryId;
   const { t } = useTranslation('settings');
 
   if (providersKnown && !anyConnected) {
@@ -33,7 +30,7 @@ export function MemorySettings({ scope, factoryId, models, sessionId }: MemorySe
         actionSlot={
           factoryId ? (
             <Link
-              to={settingsSectionPath(factoryId, scope === 'factory' ? 'models' : 'personal-models')}
+              to={settingsSectionPath(factoryId, 'models')}
               className={buttonVariants({ variant: 'primary' })}
             >
               {t('memory.empty.action')}
@@ -47,16 +44,10 @@ export function MemorySettings({ scope, factoryId, models, sessionId }: MemorySe
   return (
     <SettingsSubsection
       title={t('memory.title')}
-      description={factoryView ? t('memory.descriptionFactory') : t('memory.descriptionPersonal')}
-      scope={scope}
+      description={t('memory.descriptionFactory')}
+      scope="factory"
     >
-      <SettingsContainer>
-        {factoryView ? (
-          <OMSection key="factory" factoryId={factoryId} models={models} />
-        ) : (
-          <OMSection key="personal" sessionId={sessionId} models={models} />
-        )}
-      </SettingsContainer>
+      <SettingsContainer>{factoryId && <OMSection factoryId={factoryId} models={models} />}</SettingsContainer>
     </SettingsSubsection>
   );
 }

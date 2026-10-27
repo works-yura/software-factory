@@ -19,7 +19,6 @@ export interface AvailableModelsTarget extends AvailableModelsFilter {
 }
 
 function settingsModelsQuery(target?: AvailableModelsTarget) {
-  if (target?.scope) return `?scope=${target.scope}`;
   if (target?.factoryProjectId) return `?factoryId=${encodeURIComponent(target.factoryProjectId)}`;
   return '';
 }
@@ -35,10 +34,10 @@ async function fetchSettingsModels(baseUrl: string, target?: AvailableModelsTarg
   return data.models;
 }
 
-/** Settings catalogs use the Factory's scope or the caller's own personal credentials. */
+/** Settings catalogs use the Factory's organization credentials. */
 export function availableModelsQueryOptions(baseUrl: string, target?: AvailableModelsTarget) {
   return queryOptions({
-    queryKey: queryKeys.availableModels(target && { factoryProjectId: target.factoryProjectId, scope: target.scope }),
+    queryKey: queryKeys.availableModels(target && { factoryProjectId: target.factoryProjectId }),
     queryFn: () => fetchSettingsModels(baseUrl, target),
   });
 }
@@ -58,12 +57,6 @@ export function useAvailableModelsQuery(target?: AvailableModelsTarget) {
     enabled: target?.enabled !== false,
     select: data => (Array.isArray(data) ? data : data.models),
   });
-}
-
-/** Catalog reachable with the caller's own credentials, for personal defaults. */
-export function usePersonalAvailableModelsQuery() {
-  const { baseUrl } = useApiConfig();
-  return useQuery(availableModelsQueryOptions(baseUrl, { scope: 'user' }));
 }
 
 export function useModelReasoningOptions(

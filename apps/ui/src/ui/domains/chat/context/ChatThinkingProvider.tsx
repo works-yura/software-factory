@@ -1,7 +1,7 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { useChatModelScope } from './useChatModelScope';
+import { useChatModelCatalog } from './useChatModelCatalog';
 
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
@@ -26,7 +26,7 @@ export function ChatThinkingProvider({ children }: ChatThinkingProviderProps) {
 }
 
 function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
-  const { catalogTarget } = useChatModelScope();
+  const { catalogTarget } = useChatModelCatalog();
   const { activeModelId } = useChatModels();
   const [override, setOverride] = useState<ThinkingLevelSetting>();
   const { level, loadError } = useEffectiveThinkingLevel(activeModelId, override, catalogTarget);
@@ -47,7 +47,7 @@ function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
 
 function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
   const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { catalogTarget } = useChatModelScope();
+  const { catalogTarget } = useChatModelCatalog();
   const { activeModelId } = useChatModels();
   const sessionArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,

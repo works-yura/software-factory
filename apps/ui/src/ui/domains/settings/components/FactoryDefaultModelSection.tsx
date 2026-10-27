@@ -69,9 +69,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
         description={
           <>
             <span>
-              {projectQuery.data?.modelScope === 'hybrid'
-                ? t('models.factoryDefault.descriptionHybrid')
-                : t('models.factoryDefault.description')}
+              {t('models.factoryDefault.description')}
             </span>
             {errorText && (
               <Txt as="span" variant="meta" className="text-destructive-foreground">

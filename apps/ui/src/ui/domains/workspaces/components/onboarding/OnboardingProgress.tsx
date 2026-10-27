@@ -6,15 +6,13 @@ import { onboardingSteps, STEP_META } from '../../services/onboardingSteps';
 export function OnboardingProgress({
   step,
   editingReview,
-  local = false,
 }: {
   step: OnboardingStep;
   editingReview: boolean;
-  local?: boolean;
 }) {
   const { t } = useTranslation('workspaces');
-  const steps: OnboardingStep[] = onboardingSteps(undefined, local).filter(item => item !== 'initial');
-  const activeStep = step === 'personal-provider' ? 'model-provider' : step;
+  const steps: OnboardingStep[] = onboardingSteps().filter(item => item !== 'initial');
+  const activeStep = step;
   const progressIndex = editingReview ? steps.length - 1 : steps.indexOf(activeStep);
   return (
     <footer className="bg-background fixed inset-x-0 bottom-0 z-20 px-6 pt-4 pb-5 sm:px-10 lg:px-12 xl:px-16">

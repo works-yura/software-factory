@@ -2,11 +2,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProviderConnectionMethod } from '../../../hooks/useProviderConnection';
-import type { OnboardingModelScope, OnboardingStep } from '../../../services/onboardingFlow';
+import type { OnboardingStep } from '../../../services/onboardingFlow';
 import { OnboardingAccountsPreview } from './OnboardingAccountsPreview';
 import { SketchLabel } from './SketchLabel';
 import { OnboardingIllustration } from './OnboardingIllustration';
-import type { AccountsMode, DrawingScene } from './onboarding-drawing';
+import type { DrawingScene } from './onboarding-drawing';
 import '../onboarding-preview.css';
 import { translator } from '../../../../../i18n/t';
 
@@ -14,22 +14,12 @@ const tk = translator('workspaces');
 
 export interface OnboardingPreviewProps {
   step: OnboardingStep;
-  modelScope?: OnboardingModelScope;
   local?: boolean;
-  personalModel?: string;
   repository?: { name: string; fullName: string; defaultBranch: string };
   model?: string;
   providerId?: string;
-  personalProviderId?: string;
   connectionMethod?: ProviderConnectionMethod;
-  personalConnectionMethod?: ProviderConnectionMethod;
 }
-
-const ACCOUNT_MODES: Record<OnboardingModelScope, AccountsMode> = {
-  factory: 'shared',
-  user: 'individual',
-  hybrid: 'hybrid',
-};
 
 function sceneForStep(step: OnboardingStep): DrawingScene {
   if (step === 'initial') return 'factory';
@@ -92,22 +82,17 @@ function OnboardingCodebasePreview({ repository }: Pick<OnboardingPreviewProps, 
 
 export function OnboardingPreview({
   step,
-  modelScope = 'factory',
   local = false,
-  personalModel,
   repository,
   model,
   providerId,
-  personalProviderId,
   connectionMethod,
-  personalConnectionMethod,
 }: OnboardingPreviewProps) {
   const scene = sceneForStep(step);
-  const mode = ACCOUNT_MODES[modelScope];
   return (
     <aside className="onboarding-preview min-w-0 px-8 xl:px-12" aria-hidden="true">
       <div className="onboarding-diagram relative mx-auto w-full max-w-150">
-        <OnboardingIllustration scene={scene} mode={mode} />
+        <OnboardingIllustration scene={scene} mode="shared" />
         <OnboardingScene active={step === 'initial'}>
           <OnboardingWelcomePreview />
         </OnboardingScene>
@@ -117,14 +102,10 @@ export function OnboardingPreview({
         <OnboardingScene active={scene === 'accounts'}>
           <OnboardingAccountsPreview
             step={step}
-            modelScope={modelScope}
             local={local}
             model={model}
             providerId={providerId}
             connectionMethod={connectionMethod}
-            personalProviderId={personalProviderId}
-            personalConnectionMethod={personalConnectionMethod}
-            personalModel={personalModel}
           />
         </OnboardingScene>
       </div>

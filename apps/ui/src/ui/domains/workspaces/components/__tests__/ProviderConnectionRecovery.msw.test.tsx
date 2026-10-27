@@ -6,7 +6,6 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
 import { ModelProviderFactoryStep } from '../ModelProviderFactoryStep';
-import { PersonalProviderFactoryStep } from '../PersonalProviderFactoryStep';
 
 const base = `${TEST_BASE_URL}/web/config/providers`;
 const modelsUrl = `${TEST_BASE_URL}/web/config/models`;
@@ -39,7 +38,7 @@ beforeEach(() => {
 });
 
 describe('provider connection recovery', () => {
-  it.each(['org', 'user'] as const)(
+  it.each(['org'] as const)(
     'uses the real device flow and refreshes the %s credential before offering models',
     async scope => {
       let saved = false;
@@ -49,8 +48,8 @@ describe('provider connection recovery', () => {
         http.get(base, () => {
           const provider: ProviderInfo = {
             ...openai,
-            source: saved ? (scope === 'org' ? 'oauth-org' : 'oauth-user') : 'none',
-            ...(saved ? { [scope === 'org' ? 'orgCredential' : 'userCredential']: 'oauth' } : {}),
+            source: saved ? 'oauth-org' : 'none',
+            ...(saved ? { orgCredential: 'oauth' } : {}),
           };
           return HttpResponse.json({ providers: [provider], orgKeyAdmin: true });
         }),
@@ -67,19 +66,13 @@ describe('provider connection recovery', () => {
         }),
       );
       const user = userEvent.setup();
-      const { client } = renderWithProviders(
-        scope === 'org' ? (
-          <ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />
-        ) : (
-          <PersonalProviderFactoryStep onContinue={vi.fn()} />
-        ),
-      );
+      const { client } = renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
       await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
       await user.click(screen.getByRole('button', { name: 'Continue with OpenAI' }));
       const dialog = within(await screen.findByRole('dialog'));
       expect(dialog.getByText(session.userCode)).toBeVisible();
       expect(dialog.queryByRole('textbox', { name: 'Authorization code' })).not.toBeInTheDocument();
-      expect(dialog.getByText(scope === 'org' ? /Everyone in your organization/ : /only for you/)).toBeVisible();
+      expect(dialog.getByText(/Everyone in your organization/)).toBeVisible();
       expect(starts).toEqual([{ mode: 'device-code', scope }]);
       expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
       await waitForMutationsIdle(client);
@@ -100,7 +93,7 @@ describe('provider connection recovery', () => {
       }),
     );
     const user = userEvent.setup();
-    const { client } = renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+    const { client } = renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
     await user.click(screen.getByRole('button', { name: 'Continue with OpenAI' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Authorization expired');
@@ -124,7 +117,7 @@ describe('provider connection recovery', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
     const input = within(screen.getByRole('dialog')).getByLabelText('API key for OpenAI');
     await user.type(input, 'test-key{Enter}');
@@ -146,7 +139,7 @@ describe('provider connection recovery', () => {
       ),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Providers unavailable');
     failed = false;
     await user.click(screen.getByRole('button', { name: 'Retry' }));
@@ -165,24 +158,13 @@ describe('provider connection recovery', () => {
       http.get(modelsUrl, () => HttpResponse.json({ models: empty ? [] : models })),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('No models are available');
     expect(screen.getByRole('button', { name: 'Change provider' })).toBeEnabled();
     empty = false;
     await user.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
-  });
-
-  it('does not present deployment-managed access as a personal API key', async () => {
-    server.use(
-      http.get(base, () =>
-        HttpResponse.json({ providers: [{ provider: 'amazon-bedrock', source: 'deployment' }], orgKeyAdmin: false }),
-      ),
-    );
-    renderWithProviders(<PersonalProviderFactoryStep onContinue={vi.fn()} />);
-    expect(await screen.findByText('No API key providers available.')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Amazon Bedrock' })).not.toBeInTheDocument();
   });
 
   it('does not infer API-key support from an existing shared sign-in', async () => {
@@ -203,7 +185,7 @@ describe('provider connection recovery', () => {
       ),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     expect(await screen.findByText('No API key providers available.')).toBeVisible();
     await user.click(screen.getByRole('tab', { name: 'Provider sign-in' }));
     expect(screen.getByRole('button', { name: 'Use GitHub Copilot connection' })).toBeEnabled();

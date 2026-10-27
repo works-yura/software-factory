@@ -9,8 +9,6 @@ export type SettingsSection =
   | 'environment'
   | 'intake'
   | 'models'
-  | 'personal-models'
-  | 'memory'
   | 'factory-memory'
   | 'skills'
   | 'behavior';
@@ -24,8 +22,6 @@ const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'environment',
   'intake',
   'models',
-  'personal-models',
-  'memory',
   'factory-memory',
   'skills',
   'behavior',

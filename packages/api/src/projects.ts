@@ -568,16 +568,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
           const parsedBody = FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
-          // Scope decides whose credentials every session bills against, so only
-          // admins may switch a shared Factory onto owners' personal keys. The
-          // thinking default sets the reasoning spend of every run that has not
-          // picked its own, so it is admin-only too.
-          const adminField =
-            parsedBody.data.modelScope !== undefined
-              ? 'model scope'
-              : parsedBody.data.defaultThinkingLevel !== undefined
-                ? 'thinking default'
-                : undefined;
+          // The thinking default sets the reasoning spend of every run that has not
+          // picked its own, so it is admin-only.
+          const adminField = parsedBody.data.defaultThinkingLevel !== undefined ? 'thinking default' : undefined;
           if (
             adminField &&
             this.deps.auth.enabled() &&

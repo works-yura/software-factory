@@ -26,8 +26,8 @@
     "heading": "What do you want to work on?",
     "configError": "Failed to load session configuration: {{message}}",
     "noAccessTitle": "You don't have access to {{provider}}",
-    "noAccessDescription": "The Factory default model ({{modelId}}) needs a {{provider}} credential. Add your own key in Your models settings.",
-    "noAccessDescriptionOrg": "The Factory default model ({{modelId}}) needs a {{provider}} credential. Add your own key in Your models settings, or ask an org admin to share an org-wide key with your team.",
+    "noAccessDescription": "The Factory default model ({{modelId}}) needs a {{provider}} credential. Connect it in Factory models settings.",
+    "noAccessDescriptionOrg": "The Factory default model ({{modelId}}) needs a {{provider}} credential. Connect it in Factory models settings, or ask an org admin to connect it.",
     "openModelsSettings": "Open Models settings",
     "noDefaultModelTitle": "No default model configured for this Factory",
     "noDefaultModelDescription": "Connect a model provider and choose a default model in Models settings before starting a chat."
@@ -204,10 +204,7 @@
     "sessionModelNotConfigured": "Session model, {{label}} is not configured",
     "sessionModel": "Session model",
     "search": "Search models…",
-    "noMatch": "No matching model.",
-    "resetToDefault": "Reset to your default",
-    "scopeFooter": "Showing models this Factory's organization credentials can run.",
-    "manage": "Manage"
+    "noMatch": "No matching model."
   },
   "thinking": {
     "label": "Thinking",

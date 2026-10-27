@@ -394,13 +394,16 @@ describe('MastraFactory.prepare', () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage, auth: null });
     const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
+    // Memory settings belong to the Factory: its shared row, not a personal one.
     await memorySettings.patch({
       orgId: 'local',
-      userId: 'local',
+      userId: 'factory-project:fp-1',
       patch: { observerModelId: 'openai/observer-1' },
     });
+    await memorySettings.patch({ orgId: 'local', userId: 'local', patch: { observerModelId: 'openai/mine' } });
     const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
     const requestContext = new RequestContext();
+    requestContext.set('controller', { getState: () => ({ factoryProjectId: 'fp-1' }), emitEvent: vi.fn() });
 
     const first = await inputProcessors({ requestContext });
     expect(first).toHaveLength(4);
@@ -413,7 +416,7 @@ describe('MastraFactory.prepare', () => {
 
     await memorySettings.patch({
       orgId: 'local',
-      userId: 'local',
+      userId: 'factory-project:fp-1',
       patch: { observerModelId: 'openai/observer-2' },
     });
     await inputProcessors({ requestContext });
@@ -428,11 +431,12 @@ describe('MastraFactory.prepare', () => {
     const config = await prepareFactory({ storage, auth: null });
     await storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
       orgId: 'local',
-      userId: 'local',
+      userId: 'factory-project:fp-1',
       patch: { observerModelId: 'openai/observer-1' },
     });
     const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
     const requestContext = new RequestContext();
+    requestContext.set('controller', { getState: () => ({ factoryProjectId: 'fp-1' }), emitEvent: vi.fn() });
 
     const processors = await inputProcessors({ requestContext });
     expect(processors).toHaveLength(3);
@@ -455,7 +459,7 @@ describe('MastraFactory.prepare', () => {
     const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
     const requestContext = new RequestContext();
     const emitEvent = vi.fn();
-    requestContext.set('controller', { getState: () => ({}), emitEvent });
+    requestContext.set('controller', { getState: () => ({ factoryProjectId: 'fp-1' }), emitEvent });
 
     const processors = await inputProcessors({ requestContext });
     expect(processors).toHaveLength(3);
@@ -472,7 +476,7 @@ describe('MastraFactory.prepare', () => {
     warn.mockRestore();
   });
 
-  it("layers a channel sender's saved memory settings over the project's", async () => {
+  it("reads only the project's memory settings, never a channel sender's own", async () => {
     const storage = fakeStorage();
     vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
     const config = await prepareFactory({ storage, auth: null });
@@ -496,12 +500,13 @@ describe('MastraFactory.prepare', () => {
       return requestContext.get('mastra__factoryMemorySettings');
     };
 
-    await expect(run(true)).resolves.toMatchObject({
-      observerModelId: 'anthropic/project-observer',
-      reflectorModelId: 'openai/mine',
-    });
-    // Web runs of a project session share the project's row as-is.
-    await expect(run(false)).resolves.toMatchObject({ reflectorModelId: 'anthropic/project-reflector' });
+    // A personal row an older build stored is never read, for channel and web runs alike.
+    for (const channel of [true, false]) {
+      await expect(run(channel)).resolves.toMatchObject({
+        observerModelId: 'anthropic/project-observer',
+        reflectorModelId: 'anthropic/project-reflector',
+      });
+    }
   });
 
   it('uses the platform bot co-author identity', async () => {
@@ -782,7 +787,7 @@ describe('MastraFactory.prepare', () => {
       'audit',
       'work-items',
       'model-credentials',
-      'model-defaults',
+      // No 'model-defaults': personal default models are gone; the table stays untouched.
       'memory-settings',
       'custom-providers',
       'queue-health',
@@ -2395,9 +2400,8 @@ describe('MastraFactory.prepare integrations', () => {
       // storage domain only a channel integration needs.
       const ctx = channels.mock.calls[0]![0];
       expect(ctx.storage.channelIdentity).toBeDefined();
-      // A channel integration starts a new session on the linked sender's own
-      // default model, so it reads the same model-defaults handle the web routes use.
-      expect(ctx.storage.modelDefaults).toBeDefined();
+      // A channel session runs on the Factory's model; there is no personal default to read.
+      expect(ctx.storage).not.toHaveProperty('modelDefaults');
       expect(ctx.auth).toBeDefined();
     });
 

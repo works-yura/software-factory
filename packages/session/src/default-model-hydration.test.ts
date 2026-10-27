@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ModelDefaultRecord } from '@factory/store';
 import type { SourceControlSession } from '@factory/store';
 import { hydrateSessionDefaultModel } from './default-model-hydration.ts';
 import type { DefaultModelHydrationDependencies, DefaultModelHydrationSession } from './default-model-hydration.ts';
@@ -21,15 +20,6 @@ vi.mock('@factory/credentials', async importOriginal => ({
 }));
 
 const modelId = 'anthropic/claude-opus-5';
-
-function modelDefault(): ModelDefaultRecord {
-  return {
-    orgId: 'org-1',
-    userId: 'user-1',
-    modelId,
-    updatedAt: new Date(),
-  };
-}
 
 function sourceControlRow(): SourceControlSession {
   return {
@@ -69,10 +59,7 @@ function createSession(state: Record<string, unknown> = {}, resourceId = 'sessio
   };
 }
 
-function createDependencies(
-  record: ModelDefaultRecord | null = modelDefault(),
-  modelScope: 'factory' | 'user' | 'hybrid' = 'user',
-): DefaultModelHydrationDependencies {
+function createDependencies(defaultModelId: string | null = modelId): DefaultModelHydrationDependencies {
   const sourceSession = sourceControlRow();
   return {
     sourceControl: {
@@ -82,42 +69,25 @@ function createDependencies(
       getById: vi.fn().mockResolvedValue({
         id: 'factory-1',
         orgId: 'org-1',
-        modelScope,
-        defaultModelId: 'openai/factory-model',
+        defaultModelId,
       }),
     },
     workItems: { findRunBindingByThread: vi.fn().mockResolvedValue(null) },
-    modelDefaults: { get: vi.fn().mockResolvedValue(record) },
   };
 }
 
 describe('hydrateSessionDefaultModel', () => {
-  it('applies the user default model to a new interactive session', async () => {
+  it("applies the Factory's default model to a new interactive session", async () => {
     const session = createSession();
     const dependencies = createDependencies();
 
     await hydrateSessionDefaultModel(session, dependencies);
 
-    expect(dependencies.modelDefaults.get).toHaveBeenCalledExactlyOnceWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(dependencies.projects.getById).toHaveBeenCalledExactlyOnceWith({ id: 'factory-1' });
     expect(session.model.switch).toHaveBeenCalledExactlyOnceWith(modelId);
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'explore' });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'plan' });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'execute' });
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryOrgId: 'org-1',
-      factoryModelScope: 'user',
-      factoryOwnerUserId: 'user-1',
-    });
-  });
-
-  it('applies the Factory model and never reads the owner default under factory scope', async () => {
-    const session = createSession();
-    const dependencies = createDependencies(modelDefault(), 'factory');
-
-    await hydrateSessionDefaultModel(session, dependencies);
-
-    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
-    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('openai/factory-model');
     expect(session.state.set).toHaveBeenCalledWith({
       factoryOrgId: 'org-1',
       factoryModelScope: 'factory',
@@ -133,34 +103,11 @@ describe('hydrateSessionDefaultModel', () => {
     await hydrateSessionDefaultModel(session, dependencies);
 
     expect(providerDefault).toHaveBeenCalledExactlyOnceWith(
-      { orgId: 'org-1', userId: 'user-1', credentialScope: 'user' },
+      { orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' },
       'openai/mode-default',
     );
     expect(session.model.setDefault).toHaveBeenCalledExactlyOnceWith({ modelId: 'anthropic/claude-fable-5' });
     expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('anthropic/claude-fable-5');
-  });
-
-  it('checks the credentials the session is billed to: org credentials for Factory scope and hybrid runs', async () => {
-    providerDefault.mockClear();
-    const factoryScoped = createDependencies(null, 'factory');
-    vi.mocked(factoryScoped.projects.getById).mockResolvedValue({
-      id: 'factory-1',
-      orgId: 'org-1',
-      modelScope: 'factory',
-      defaultModelId: null,
-    } as never);
-    await hydrateSessionDefaultModel(createSession(), factoryScoped);
-    expect(providerDefault).toHaveBeenLastCalledWith(
-      { orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' },
-      'openai/mode-default',
-    );
-
-    // A hybrid Factory bills interactive sessions to the user.
-    await hydrateSessionDefaultModel(createSession(), createDependencies(null, 'hybrid'));
-    expect(providerDefault).toHaveBeenLastCalledWith(
-      { orgId: 'org-1', userId: 'user-1', credentialScope: 'user' },
-      'openai/mode-default',
-    );
   });
 
   it('keeps the session usable when the provider-default lookup fails', async () => {
@@ -171,7 +118,7 @@ describe('hydrateSessionDefaultModel', () => {
     await hydrateSessionDefaultModel(session, createDependencies(null));
 
     expect(session.model.switch).not.toHaveBeenCalled();
-    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryModelScope: 'user' }));
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryModelScope: 'factory' }));
     expect(warn).toHaveBeenCalledWith(
       '[Factory default-model hydration] Unable to resolve a provider default model.',
       expect.any(Error),
@@ -200,11 +147,10 @@ describe('hydrateSessionDefaultModel', () => {
 
     await hydrateSessionDefaultModel(session, dependencies);
 
-    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
     expect(session.model.switch).not.toHaveBeenCalled();
     expect(session.state.set).toHaveBeenCalledWith({
       factoryOrgId: 'org-1',
-      factoryModelScope: 'user',
+      factoryModelScope: 'factory',
       factoryOwnerUserId: 'user-1',
     });
   });
@@ -218,7 +164,7 @@ describe('hydrateSessionDefaultModel', () => {
     await hydrateSessionDefaultModel(session, dependencies);
 
     expect(dependencies.sourceControl.getBySessionId).not.toHaveBeenCalled();
-    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
+    expect(dependencies.projects.getById).not.toHaveBeenCalled();
   });
 
   it('clears stale Factory identity when the project is unresolvable', async () => {
@@ -278,8 +224,8 @@ describe('hydrateSessionDefaultModel', () => {
 
     await hydrateSessionDefaultModel(session, dependencies);
 
-    expect(session.state.set).toHaveBeenCalledWith({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
-    expect(state).toEqual({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
+    expect(session.state.set).toHaveBeenCalledWith({ factoryModelScope: 'factory', factoryOwnerUserId: undefined });
+    expect(state).toEqual({ factoryModelScope: 'factory', factoryOwnerUserId: undefined });
     expect(session.model.switch).not.toHaveBeenCalled();
     warn.mockRestore();
   });
@@ -293,22 +239,22 @@ describe('hydrateSessionDefaultModel', () => {
 
     await hydrateSessionDefaultModel(session, dependencies);
 
-    expect(session.state.set).toHaveBeenCalledWith({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
-    expect(state).toEqual({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
+    expect(session.state.set).toHaveBeenCalledWith({ factoryModelScope: 'factory', factoryOwnerUserId: undefined });
+    expect(state).toEqual({ factoryModelScope: 'factory', factoryOwnerUserId: undefined });
     warn.mockRestore();
   });
 
-  it('does not apply a user default to Factory work sessions', async () => {
+  it('leaves Factory work sessions to the start coordinator', async () => {
     const session = createSession({ factoryProjectId: 'factory-1' });
     const dependencies = createDependencies();
 
     await hydrateSessionDefaultModel(session, dependencies);
 
     expect(dependencies.sourceControl.getBySessionId).not.toHaveBeenCalled();
-    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
   });
 
-  it('does not apply a user default to active Factory run bindings before state is seeded', async () => {
+  it('does not apply a default to active Factory run bindings before state is seeded', async () => {
     const session = createSession({}, 'factory-1');
     const dependencies = createDependencies();
     vi.mocked(dependencies.workItems.findRunBindingByThread).mockResolvedValue({} as never);
@@ -324,29 +270,13 @@ describe('hydrateSessionDefaultModel', () => {
       sessionId: 'session-1',
       rejectAmbiguous: true,
     });
-    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
   });
 
-  it("primes the owner's scope and applies the owner default to an unbound session in hybrid scope", async () => {
+  it("primes the organization's scope and keeps the model of a run-bound thread", async () => {
     primeTenant.mockClear();
     const session = createSession();
-    const dependencies = createDependencies(modelDefault(), 'hybrid');
-
-    await hydrateSessionDefaultModel(session, dependencies);
-
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryOrgId: 'org-1',
-      factoryModelScope: 'user',
-      factoryOwnerUserId: 'user-1',
-    });
-    expect(primeTenant).toHaveBeenCalledExactlyOnceWith({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' });
-    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith(modelId);
-  });
-
-  it("primes the Factory's scope and keeps the model of a run-bound thread in hybrid scope", async () => {
-    primeTenant.mockClear();
-    const session = createSession();
-    const dependencies = createDependencies(modelDefault(), 'hybrid');
+    const dependencies = createDependencies();
     vi.mocked(dependencies.workItems.findRunBindingByThread).mockResolvedValue({} as never);
 
     await hydrateSessionDefaultModel(session, dependencies);
@@ -361,11 +291,10 @@ describe('hydrateSessionDefaultModel', () => {
       userId: 'user-1',
       credentialScope: 'factory',
     });
-    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
     expect(session.model.switch).not.toHaveBeenCalled();
   });
 
-  it('does nothing when the user has no default model', async () => {
+  it('does nothing when the Factory has no default model', async () => {
     const session = createSession();
     const dependencies = createDependencies(null);
 
@@ -377,18 +306,18 @@ describe('hydrateSessionDefaultModel', () => {
   it('swallows storage errors so session creation can continue', async () => {
     const session = createSession();
     const dependencies = createDependencies();
-    vi.mocked(dependencies.modelDefaults.get).mockRejectedValue(new Error('database unavailable'));
+    primeTenant.mockRejectedValueOnce(new Error('database unavailable'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(hydrateSessionDefaultModel(session, dependencies)).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalledWith(
-      '[Factory default-model hydration] Unable to apply the scoped default model.',
+      '[Factory default-model hydration] Unable to apply the Factory default model.',
       expect.any(Error),
     );
     expect(session.state.set).toHaveBeenCalledWith({
       factoryOrgId: 'org-1',
-      factoryModelScope: 'user',
+      factoryModelScope: 'factory',
       factoryOwnerUserId: 'user-1',
     });
     expect(session.model.switch).not.toHaveBeenCalled();

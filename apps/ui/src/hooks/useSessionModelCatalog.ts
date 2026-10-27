@@ -15,7 +15,6 @@ export interface SessionModelCatalogTarget extends AvailableModelsFilter {
 
 export interface SessionModelCatalog {
   models: AvailableModelOption[];
-  modelScope?: 'factory' | 'user';
   defaultModelId?: string | null;
 }
 

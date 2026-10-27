@@ -36,8 +36,6 @@ import type { FilesystemStorage } from '@factory/store';
 import type { IntakeStorage } from '@factory/store';
 import type { IntegrationStorage } from '@factory/store';
 import type { MemorySettingsStorage } from '@factory/store';
-import type { ModelDefaultsStorage } from '@factory/store';
-import { effectiveModelScope } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { QueueHealthStorage } from '@factory/store';
 import {
@@ -109,7 +107,6 @@ export interface FactoryApiRoutesDeps {
     memorySettings: MemorySettingsStorage;
     customProviders: CustomProvidersStorage;
     filesystem: FilesystemStorage;
-    modelDefaults: ModelDefaultsStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
@@ -392,14 +389,12 @@ export async function prepareFactoryRuleBinding(
         );
       }));
 
-    const modelScope = effectiveModelScope(project.modelScope, 'run');
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
-      modelScope,
-      defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
+      defaultModelId: project.defaultModelId ?? undefined,
       threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
       kickoffKey: input.record.id,
       destinationStage,
@@ -461,7 +456,7 @@ export function buildIntegrationContext(
     feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
-      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings' | 'modelDefaults'
+      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings'
     >;
     /**
      * Stable id of the registered source-control-owning integration (today:
@@ -493,7 +488,6 @@ export function buildIntegrationContext(
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
-      modelDefaults: deps.domains.modelDefaults,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady
@@ -663,7 +657,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
             factoryProjectId: request.factoryProjectId,
             sessionId: request.sessionId,
           }),
-        { projects: deps.domains.projects, modelDefaults: deps.domains.modelDefaults },
+        { projects: deps.domains.projects },
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -710,7 +704,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       controller: deps.controller,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
-      modelDefaults: deps.domains.modelDefaults,
       sourceControlSessions,
       sourceControls,
       workItems: deps.domains.workItems,

@@ -130,7 +130,6 @@ function startRequest(
     sessionId: string;
     kickoffKey: string;
     role: string;
-    modelScope: 'factory' | 'user';
     defaultModelId: string;
     id: string;
   }> = {},
@@ -143,7 +142,6 @@ function startRequest(
     threadTitle: 'Investigate issue 1',
     kickoffKey: overrides.kickoffKey ?? 'kickoff-1',
     destinationStage: 'intake' as const,
-    modelScope: overrides.modelScope ?? ('factory' as const),
     defaultModelId: overrides.defaultModelId,
     workItem: {
       id: overrides.id,
@@ -328,41 +326,10 @@ describe('FactoryStartCoordinator', () => {
     });
   });
 
-  it("applies the owner's default model and stamps user scope", async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { controller, session } = makeController();
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      undefined,
-      makeSourceControl() as never,
-      {
-        projects: {
-          getById: vi.fn(async () => ({
-            orgId: 'org-1',
-            modelScope: 'user',
-            defaultModelId: 'anthropic/factory-model',
-          })),
-        } as never,
-        modelDefaults: {
-          get: vi.fn(async () => ({ modelId: 'openai/owner-model' })),
-        } as never,
-      },
-    );
-
-    await coordinator.prepare(startRequest());
-
-    expect(session.model.switch).toHaveBeenCalledWith('openai/owner-model');
-    expect(session.state.set).toHaveBeenCalledWith(
-      expect.objectContaining({ factoryModelScope: 'user', factoryOwnerUserId: 'user-1' }),
-    );
-  });
-
-  it("runs a hybrid Factory's work item on the Factory default and organization scope", async () => {
+  it('runs a work item on the Factory default and organization scope', async () => {
     primeTenant.mockClear();
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();
-    const modelDefaults = { get: vi.fn(async () => ({ modelId: 'openai/owner-model' })) };
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
@@ -372,18 +339,15 @@ describe('FactoryStartCoordinator', () => {
         projects: {
           getById: vi.fn(async () => ({
             orgId: 'org-1',
-            modelScope: 'hybrid',
             defaultModelId: 'anthropic/factory-model',
           })),
         } as never,
-        modelDefaults: modelDefaults as never,
       },
     );
 
     await coordinator.prepare(startRequest());
 
     expect(session.model.switch).toHaveBeenCalledWith('anthropic/factory-model');
-    expect(modelDefaults.get).not.toHaveBeenCalled();
     expect(session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({ factoryModelScope: 'factory', factoryOwnerUserId: 'user-1' }),
     );

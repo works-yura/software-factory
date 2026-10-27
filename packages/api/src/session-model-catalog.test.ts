@@ -6,12 +6,12 @@ import { createFactoryStorageForTests } from '@factory/testing';
 import { ConfigRoutes } from './config.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
-async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visibility: 'org' | 'private' = 'org') {
+async function setup(visibility: 'org' | 'private' = 'org') {
   const seed = await createFactoryStorageForTests();
   const project = await seed.projects.create({
     orgId: 'org-1',
     userId: 'owner',
-    input: { name: 'Billing', modelScope, defaultModelId: 'deepseek/deepseek-flash' },
+    input: { name: 'Billing', defaultModelId: 'deepseek/deepseek-flash' },
   });
   const sourceControl = seed.sourceControl.forIntegration('github');
   const installation = await sourceControl.installations.upsert({
@@ -47,6 +47,7 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
     baseBranch: 'main',
     visibility,
   });
+  // Personal keys and defaults an older build stored; the catalog never offers them.
   for (const [userId, provider] of [
     ['owner', 'anthropic'],
     ['viewer', 'openai-codex'],
@@ -77,7 +78,6 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
         ],
       },
       modelCredentials: seed.credentials,
-      modelDefaults: seed.modelDefaults,
       factoryProjects: seed.projects,
       sourceControlSessions: createSourceControlSessionLookup([sourceControl]),
       workItems: seed.workItems,
@@ -117,27 +117,24 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
 afterEach(() => vi.restoreAllMocks());
 
 describe('session-owner model catalog', () => {
-  it.each(['user', 'hybrid'] as const)(
-    'uses the owner catalog and default for a collaborator in %s scope',
-    async scope => {
-      const { app, project } = await setup(scope);
-      // The session runs under its Factory's resource; it is found by its session id.
-      const response = await app.request(
-        `/web/config/models?sessionId=session-1&resourceId=${project.id}&threadId=chat-thread&scope=org&userId=viewer`,
-      );
-      expect(response.status).toBe(200);
-      const body = await response.json();
-      expect(body.modelScope).toBe('user');
-      expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
-      expect(body.models).toEqual([
-        expect.objectContaining({ id: 'anthropic/claude-opus-4-6', credentialLabel: 'Anthropic API key' }),
-      ]);
-      expect(JSON.stringify(body)).not.toContain('secret');
-    },
-  );
+  it("uses the Factory catalog and default for a collaborator's interactive session", async () => {
+    const { app, project } = await setup();
+    // The session runs under its Factory's resource; it is found by its session id.
+    const response = await app.request(
+      `/web/config/models?sessionId=session-1&resourceId=${project.id}&threadId=chat-thread&scope=user&userId=viewer`,
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).not.toHaveProperty('modelScope');
+    expect(body.defaultModelId).toBe('deepseek/deepseek-flash');
+    expect(body.models).toEqual([
+      expect.objectContaining({ id: 'deepseek/deepseek-flash', credentialLabel: 'Deepseek API key' }),
+    ]);
+    expect(JSON.stringify(body)).not.toContain('secret');
+  });
 
   it.each(['active', 'revoked'] as const)(
-    'uses only the Factory catalog and default for a hybrid %s work-item thread',
+    'uses only the Factory catalog and default for an %s work-item thread',
     async status => {
       const { app, seed, project, bind } = await setup();
       await bind();
@@ -156,7 +153,7 @@ describe('session-owner model catalog', () => {
       const response = await app.request('/web/config/models?resourceId=session-1&threadId=run-thread&scope=user');
       expect(response.status).toBe(200);
       const body = await response.json();
-      expect(body.modelScope).toBe('factory');
+      expect(body).not.toHaveProperty('modelScope');
       expect(body.defaultModelId).toBe('deepseek/deepseek-flash');
       expect(body.models).toEqual([
         expect.objectContaining({ id: 'deepseek/deepseek-flash', credentialLabel: 'Deepseek API key' }),
@@ -164,18 +161,8 @@ describe('session-owner model catalog', () => {
     },
   );
 
-  it('keeps user-scoped work items on the owner catalog', async () => {
-    const { app, bind } = await setup('user');
-    await bind();
-    const response = await app.request('/web/config/models?resourceId=session-1&threadId=run-thread');
-    const body = await response.json();
-    expect(body.modelScope).toBe('user');
-    expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
-    expect(body.models.map((m: { id: string }) => m.id)).toEqual(['anthropic/claude-opus-4-6']);
-  });
-
   it('denies collaborators on private sessions and foreign organizations', async () => {
-    const privateSession = await setup('hybrid', 'private');
+    const privateSession = await setup('private');
     expect(
       (await privateSession.app.request('/web/config/models?resourceId=session-1&threadId=chat-thread')).status,
     ).toBe(403);

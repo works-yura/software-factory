@@ -83,35 +83,14 @@ async function pickModel(user: UserEvent, modelId: string) {
 }
 
 describe('FactoryDefaultModelSection model', () => {
-  it('stays available in a hybrid Factory and says it drives work items', async () => {
-    server.use(
-      http.get(FACTORY_URL, () =>
-        HttpResponse.json({
-          project: { id: 'fp-1', name: 'Mastra', defaultModelId: 'openai/gpt-5', modelScope: 'hybrid' },
-        }),
-      ),
-    );
-
-    renderSection();
-
-    expect(
-      await screen.findByText(
-        "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead.",
-      ),
-    ).toBeInTheDocument();
-    const trigger = modelTrigger();
-    await waitFor(() => expect(trigger).toBeEnabled());
-    expect(trigger).toHaveTextContent('GPT-5');
-  });
-
-  it('keeps the Factory-run copy outside hybrid scope', async () => {
+  it('says the Factory model drives its sessions and runs', async () => {
     stubProject('openai/gpt-5');
 
     renderSection();
 
     expect(
       await screen.findByText(
-        "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them.",
+        'Factory sessions and runs (triage, board work items) start on this model and use the Factory memory settings.',
       ),
     ).toBeInTheDocument();
   });

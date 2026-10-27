@@ -111,7 +111,7 @@ export function OMSection({
   models,
 }: {
   sessionId?: string;
-  factoryId?: string;
+  factoryId: string;
   models: AvailableModelOption[];
 }) {
   const { t } = useTranslation('settings');

@@ -33,8 +33,7 @@
   "subtitles": {
     "factory": "Factory navigation",
     "settings": "Settings",
-    "factorySettings": "Factory settings",
-    "yourSettings": "Your settings"
+    "factorySettings": "Factory settings"
   },
   "factories": {
     "noRepositories": "No repositories linked",

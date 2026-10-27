@@ -117,7 +117,7 @@ import { observeSessionFilesystem } from '@factory/session';
 import { observeSessionFirstExec } from '@factory/session';
 import { observeSessionFirstMessage } from '@factory/session';
 import { LiveSessions } from '@factory/session';
-import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from '@factory/session';
+import { hydrateSessionMemorySettings } from '@factory/session';
 import { hasResolvedOrg } from '@factory/session';
 import { FactoryReplyCredentialProcessor } from '@factory/session';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from '@factory/session';
@@ -144,7 +144,6 @@ import { IntakeStorage } from '@factory/store';
 import { IntegrationStorage } from '@factory/store';
 import { factoryMemorySettingsUserId, MemorySettingsStorage } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
-import { ModelDefaultsStorage } from '@factory/store';
 import { FactoryProjectsStorage } from '@factory/store';
 import { QueueHealthStorage } from '@factory/store';
 import { SourceControlStorage } from '@factory/store';
@@ -633,7 +632,6 @@ export class MastraFactory {
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
     workItemsStorage.useTerminalPhasePredicate(item => isTerminalWorkItem(this.#boards, item));
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
-    const modelDefaultsStorage = storage.registerDomain(new ModelDefaultsStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
@@ -652,7 +650,6 @@ export class MastraFactory {
     const domains = {
       intake: intakeStorage,
       modelCredentials: modelCredentialsStorage,
-      modelDefaults: modelDefaultsStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
       filesystem: filesystemStorage,
@@ -1022,7 +1019,6 @@ export class MastraFactory {
       sessions: sourceControlSessions,
       sessionModel: {
         projects: factoryProjectsStorage,
-        modelDefaults: modelDefaultsStorage,
         ...(auth
           ? {
               tenantCatalog: {
@@ -1157,40 +1153,19 @@ export class MastraFactory {
     }) => {
       if (!requestContext) return;
       const scope = readFactorySessionScope(requestContext);
-      const user = getFactoryAuthUserFromContext(requestContext);
-      const callerUserId = getFactoryAuthUserId(user);
-      const callerOrgId = factoryUserOrgId(user);
+      const callerOrgId = factoryUserOrgId(getFactoryAuthUserFromContext(requestContext));
       const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
-      // Project-scoped sessions share one row per project, addressed by the
-      // sentinel user id the settings UI picks when it passes a `factoryId`;
-      // unscoped sessions read the caller's own row. Both are rows the
-      // settings UI writes, so intent and the run agree without any session
-      // mutation.
-      const target = factoryProjectId
-        ? {
+      // Memory settings belong to the Factory: one shared row per project,
+      // addressed by the sentinel user id the settings UI writes. There are no
+      // personal memory settings; a session outside any Factory runs on the
+      // built-in defaults. Rows older builds stored per user are never read.
+      const record = factoryProjectId
+        ? await memorySettingsStorage.get({
             orgId: binding?.orgId ?? scope?.factoryOrgId ?? callerOrgId ?? 'local',
             userId: factoryMemorySettingsUserId(factoryProjectId),
-          }
-        : callerUserId && callerOrgId
-          ? { orgId: callerOrgId, userId: callerUserId }
-          : { orgId: 'local', userId: 'local' };
-      const record = await memorySettingsStorage.get(target);
-      // A channel sender's own settings beat the project's for every knob they
-      // saved. Best-effort: a failed personal read keeps the project's row.
-      let personal: MemorySettingsRecord | null = null;
-      if (factoryProjectId && requestContext.get('channel') && callerUserId && callerOrgId) {
-        try {
-          personal = await memorySettingsStorage.get({ orgId: callerOrgId, userId: callerUserId });
-        } catch (error) {
-          console.warn("[Factory Memory Settings] Unable to read the sender's memory settings", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-      requestContext.set(
-        'mastra__factoryMemorySettings',
-        layerPersonalMemorySettings(record, personal) satisfies MemorySettingsRecord | null,
-      );
+          })
+        : null;
+      requestContext.set('mastra__factoryMemorySettings', record satisfies MemorySettingsRecord | null);
     };
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
@@ -1999,7 +1974,6 @@ export class MastraFactory {
       session =>
         hydrateSupervisorSession(session, {
           projects: factoryProjectsStorage,
-          modelDefaults: modelDefaultsStorage,
         }).catch(error => {
           console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
             error: error instanceof Error ? error.message : String(error),
@@ -2018,15 +1992,14 @@ export class MastraFactory {
       { blocking: true },
     );
 
-    // Personal default models seed interactive user sessions only. Active Factory
-    // run bindings are excluded and continue to use the project default model.
+    // New chats start on their Factory's default model. Active Factory run
+    // bindings are excluded and keep the model their run chose.
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionDefaultModel(session, {
           sourceControl: sourceControlSessions,
           projects: factoryProjectsStorage,
           workItems: workItemsStorage,
-          modelDefaults: modelDefaultsStorage,
         }),
       { blocking: true },
     );

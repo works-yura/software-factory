@@ -31,7 +31,7 @@ import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { factoryThinkingSourceLabel, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
-import { useChatModelScope } from './useChatModelScope';
+import { useChatModelCatalog } from './useChatModelCatalog';
 import { useChatPermissions } from './useChatPermissions';
 import { useChatSessionContext } from './useChatSessionContext';
 import { useChatRuntime } from './useChatRuntime';
@@ -54,7 +54,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
-  const { catalogTarget } = useChatModelScope();
+  const { catalogTarget } = useChatModelCatalog();
   const activeModelReasoningOptions = useModelReasoningOptions(activeModelId, catalogTarget);
   const availableThinkingLevels = getAvailableThinkingLevelsForModel(activeModelId ?? '', activeModelReasoningOptions);
 
@@ -266,7 +266,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       description: tk('commands.connect'),
       requiresSession: false,
       execute: async () => {
-        if (factoryId) void navigate(settingsSectionPath(factoryId, 'personal-models'), { state: { from: location } });
+        if (factoryId) void navigate(settingsSectionPath(factoryId, 'models'), { state: { from: location } });
       },
     },
     {
@@ -274,7 +274,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       description: tk('commands.login'),
       requiresSession: false,
       execute: async () => {
-        if (factoryId) void navigate(settingsSectionPath(factoryId, 'personal-models'), { state: { from: location } });
+        if (factoryId) void navigate(settingsSectionPath(factoryId, 'models'), { state: { from: location } });
       },
     },
     {

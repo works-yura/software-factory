@@ -28,8 +28,7 @@ import type { LiveSessions } from '@factory/session';
 import { auditRequestOrigin } from '@factory/feed';
 import type { AuditEmitter } from '@factory/feed';
 import type { WorkItemCommentsStorage } from '@factory/store';
-import { effectiveModelScope } from '@factory/store';
-import type { EffectiveModelScope, FactoryProjectsStorage } from '@factory/store';
+import type { FactoryProjectsStorage } from '@factory/store';
 import type { QueueHealthStorage } from '@factory/store';
 import { thresholdsOrDefault } from '@factory/store';
 import type {
@@ -151,10 +150,9 @@ function parseStartBody(
   body: unknown,
   tenant: { orgId: string; userId: string },
   factoryProjectId: string,
-  modelScope: EffectiveModelScope,
 ): FactoryStartRequest | null {
   const parsed = FACTORY_ROUTE_CONTRACTS.workItemStart.bodySchema.safeParse(body);
-  return parsed.success ? { ...tenant, factoryProjectId, modelScope, ...parsed.data } : null;
+  return parsed.success ? { ...tenant, factoryProjectId, ...parsed.data } : null;
 }
 
 function encodeDecisionCursor(decision: FactoryDeferredDecisionRecord): string {
@@ -236,7 +234,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         orgId: string;
         userId: string;
         factoryProjectId: string;
-        modelScope: EffectiveModelScope;
         defaultModelId: string | null;
       }
     | { response: Response }
@@ -255,14 +252,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     if (!project) {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
-    // Work-item starts are runs, so a hybrid Factory resolves the Factory's scope here.
-    const modelScope = effectiveModelScope(project.modelScope, 'run');
-    return {
-      ...tenant,
-      factoryProjectId: projectId,
-      modelScope,
-      defaultModelId: modelScope === 'factory' ? project.defaultModelId : null,
-    };
+    return { ...tenant, factoryProjectId: projectId, defaultModelId: project.defaultModelId };
   }
 
   async #auditWorkItemPatch({
@@ -596,7 +586,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             await readJson(loose(c)),
             resolved,
             resolved.factoryProjectId,
-            resolved.modelScope,
           );
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');

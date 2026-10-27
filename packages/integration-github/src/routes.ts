@@ -33,6 +33,7 @@ import { normalizeSessionTitle } from '@factory/session';
 import type { StateSigner } from '@factory/auth';
 import type { AuditEmitter } from '@factory/feed';
 import type { MemorySettingsStorage } from '@factory/store';
+import { factoryMemorySettingsUserId } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type {
   ProjectRepository,
@@ -1542,7 +1543,10 @@ function buildProjectGitRoutes({
 
         // A session that is not live carries neither the observer model that names
         // its threads nor the identity whose provider credentials pay for it.
-        const stored = await memorySettings.get({ orgId: row.orgId, userId: row.userId });
+        // Memory settings belong to the Factory; a session outside any Factory titles on the defaults.
+        const stored = row.factoryProjectId
+          ? await memorySettings.get({ orgId: row.orgId, userId: factoryMemorySettingsUserId(row.factoryProjectId) })
+          : null;
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
         requestContext.set('mastra__factoryMemorySettings', stored);

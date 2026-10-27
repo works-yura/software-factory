@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTranslation } from 'react-i18next';
 
 import { translator } from '../../../../i18n/t';
-import { useChatModelScope } from '../../context/useChatModelScope';
+import { useChatModelCatalog } from '../../context/useChatModelCatalog';
 
 import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
@@ -49,7 +49,7 @@ function originLabel(origin: ThinkingLevelOrigin) {
 export function SessionThinkingControl({ modelId, switchingModel }: SessionThinkingControlProps) {
   const { t } = useTranslation('chat');
   const thinking = useChatThinking();
-  const { catalogTarget } = useChatModelScope();
+  const { catalogTarget } = useChatModelCatalog();
   const catalog = useAvailableModelsQuery(catalogTarget);
   const reasoningOptions = useModelReasoningOptions(modelId, catalogTarget);
   const options = thinkingLevelOptionsForModel(modelId, reasoningOptions);

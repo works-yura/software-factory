@@ -8,8 +8,6 @@
     "environment": "Environment",
     "intake": "Work Intake",
     "models": "Factory models",
-    "personal-models": "Your models",
-    "memory": "Your memory",
     "factory-memory": "Factory memory",
     "skills": "Skills",
     "behavior": "Behavior"
@@ -327,17 +325,10 @@
     "title": "API key for {{name}}",
     "storedSecurely": "The key is stored securely and never displayed again.",
     "access": {
-      "org": "Everyone in your organization can use this key.",
-      "user": "Only you can use this key. Shared organization access stays unchanged."
+      "org": "Everyone in your organization can use this key."
     },
     "replacesSignIn": "Saving replaces the provider sign-in at this scope.",
     "placeholder": "Paste API key",
-    "whoCanUse": "Who can use this key",
-    "accessLabel": "API key access",
-    "justMe": "Just me",
-    "everyoneInOrg": "Everyone in org",
-    "orgAdminsOnly": "Only org admins can share a key with everyone",
-    "personalOnlyWarning": "Only you will be able to use this key. Ask an org admin to add a shared {{name}} key so teammates can use it too.",
     "cancel": "Cancel",
     "saving": "Saving…",
     "save": "Save"
@@ -546,25 +537,9 @@
       "title": "Factory defaults",
       "description": "Where this Factory's sessions and work-item runs get their model, credentials, and thinking level."
     },
-    "personal": {
-      "title": "Your defaults",
-      "description": "The model new chats start on.",
-      "providersDescription": "Connect your own provider account for interactive chats. Organization credentials are managed in Factory settings."
-    },
-    "default": {
-      "loading": "Loading default model",
-      "label": "Default model",
-      "unavailable": "None of your connected accounts can run {{model}}. Choose another model or connect its provider.",
-      "save": "Save",
-      "clear": "Clear",
-      "apply": "Apply to running sessions",
-      "applied_one": "Updated {{count}} running session(s); skipped {{skipped}}.",
-      "applied_other": "Updated {{count}} running session(s); skipped {{skipped}}."
-    },
     "factoryDefault": {
       "label": "Model and thinking",
-      "descriptionHybrid": "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead.",
-      "description": "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them.",
+      "description": "Factory sessions and runs (triage, board work items) start on this model and use the Factory memory settings.",
       "saving": "Saving default model",
       "placeholder": "Select a model",
       "pickerLabel": "Factory default model",
@@ -577,20 +552,6 @@
       "confirmDescription": "New Factory runs will use this model. Running work and review sessions keep their current model unless you switch them. Switched sessions keep their work and pick up the new model on their next step.",
       "keep": "Keep them as-is",
       "switch": "Switch running sessions"
-    },
-    "scopeNotice": {
-      "title": "This Factory uses organization credentials only",
-      "body": "Sessions in this Factory don't use your personal provider sign-ins or default model. Manage organization credentials and the model scope in <link>Factory models settings</link>."
-    },
-    "scope": {
-      "label": "Model scope",
-      "description": "Hybrid: sessions use their owner's credentials and default model, while work items use organization credentials and the Factory default. Factory and User apply one of those to both. Changing the scope never replaces a model a thread already selected.",
-      "saving": "Saving model scope",
-      "options": {
-        "hybrid": "Personal for sessions, Factory for work items",
-        "factory": "Factory model and credentials",
-        "user": "Each user's model and credentials"
-      }
     },
     "thinking": {
       "label": "Thinking",
@@ -612,8 +573,7 @@
   },
   "memory": {
     "title": "Observational memory",
-    "descriptionFactory": "Models and token thresholds used to summarize and retain context in Factory runs.",
-    "descriptionPersonal": "Models and token thresholds used to summarize and retain context in your interactive chats.",
+    "descriptionFactory": "Models and token thresholds used to summarize and retain context in Factory sessions and runs.",
     "empty": {
       "title": "No models configured",
       "description": "Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first.",

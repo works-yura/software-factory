@@ -2,9 +2,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
 import { resolveTenantProviderDefaultModel } from '@factory/credentials';
-import type { ModelDefaultsStorage } from '@factory/store';
-import { effectiveModelScope } from '@factory/store';
-import type { EffectiveModelScope, FactoryProjectsStorage } from '@factory/store';
+import type { FactoryProjectsStorage } from '@factory/store';
 import { SourceControlConnectionNotFoundError } from '@factory/store';
 import type {
   SourceControlSession,
@@ -19,35 +17,20 @@ type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['creat
 
 export class FactorySourceControlConflictError extends Error {}
 
-/** Resolve the model and exclusive credential scope for a Factory session. */
+/**
+ * Resolve the model for a Factory session, run or Supervisor turn: the Factory's default model.
+ * Every one of them bills the organization's credentials; there is no personal scope.
+ */
 export async function resolveFactorySessionModel(args: {
   projects: FactoryProjectsStorage | undefined;
-  modelDefaults: ModelDefaultsStorage | undefined;
   factoryProjectId: string | undefined;
   orgId: string;
-  ownerUserId: string;
-  /** A work-item run or an interactive session; a hybrid Factory resolves a different scope for each. */
-  context: 'run' | 'session';
-}): Promise<{ modelScope: EffectiveModelScope; modelId?: string }> {
+}): Promise<{ modelId?: string }> {
   if (!args.projects || !args.factoryProjectId) throw new Error('Factory model policy is unavailable.');
 
   const project = await args.projects.getById({ id: args.factoryProjectId });
   if (!project || project.orgId !== args.orgId) throw new Error('Factory model policy is unavailable.');
-  if (effectiveModelScope(project.modelScope, args.context) === 'factory') {
-    return { modelScope: 'factory', ...(project.defaultModelId ? { modelId: project.defaultModelId } : {}) };
-  }
-
-  try {
-    const userDefault = await args.modelDefaults?.get({ orgId: args.orgId, userId: args.ownerUserId });
-    return { modelScope: 'user', ...(userDefault?.modelId ? { modelId: userDefault.modelId } : {}) };
-  } catch (error) {
-    console.warn('[Factory] Owner default model lookup failed; using the mode default model', {
-      orgId: args.orgId,
-      ownerUserId: args.ownerUserId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return { modelScope: 'user' };
-  }
+  return project.defaultModelId ? { modelId: project.defaultModelId } : {};
 }
 
 export interface SourceControlSessionLookup {
@@ -320,10 +303,9 @@ export async function ensureFactorySourceSession(
 
 export interface HydrateFactorySessionArgs {
   orgId: string;
-  modelScope: EffectiveModelScope;
   ownerUserId: string;
   /**
-   * The model selected by the Factory scope. Without it the provider default of a connected
+   * The Factory's default model. Without it the provider default of a connected
    * provider is applied when the SDK mode default has no credential, else the mode default.
    */
   defaultModelId?: string;
@@ -344,7 +326,7 @@ export async function hydrateFactorySession(
   // a later best-effort step fails; an empty org marks the session unresolved.
   await seedSessionOrg(session, args.orgId);
   await session.state.set({
-    factoryModelScope: args.modelScope,
+    factoryModelScope: 'factory',
     factoryOwnerUserId: args.ownerUserId,
   });
 
@@ -352,7 +334,7 @@ export async function hydrateFactorySession(
   if (!selectedModelId) {
     const modeModelId = session.mode.resolve().defaultModelId;
     const providerModelId = await resolveTenantProviderDefaultModel(
-      { orgId: args.orgId, userId: args.ownerUserId, credentialScope: args.modelScope },
+      { orgId: args.orgId, userId: args.ownerUserId, credentialScope: 'factory' },
       modeModelId,
     ).catch(error => {
       console.warn('[Factory Start] Failed to resolve a provider default model', {

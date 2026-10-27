@@ -17,7 +17,6 @@ export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
 export interface AvailableModelsFilter {
   factoryProjectId?: string;
-  scope?: 'org' | 'user';
   sessionId?: string;
   resourceId?: string;
   threadId?: string;
@@ -120,7 +119,6 @@ export const queryKeys = {
   availableModels: (filter?: AvailableModelsFilter) =>
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
-  defaultModel: () => ['default-model'] as const,
   om: (sessionId: string | undefined, factoryId?: string) => ['om', sessionId ?? null, factoryId ?? null] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,

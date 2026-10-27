@@ -6,7 +6,6 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
 import { ModelProviderFactoryStep } from '../ModelProviderFactoryStep';
-import { PersonalProviderFactoryStep } from '../PersonalProviderFactoryStep';
 
 const base = `${TEST_BASE_URL}/web/config/providers`;
 beforeEach(() => {
@@ -54,7 +53,7 @@ describe('provider method and scope are independent choices', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     const dialog = within(screen.getByRole('dialog'));
     expect(dialog.getByText(/Everyone in your organization can use this key\./)).toBeInTheDocument();
@@ -68,7 +67,7 @@ describe('provider method and scope are independent choices', () => {
     server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => new HttpResponse(null, { status: 404 })));
     registerProvider(() => ({ ...anthropic, source: 'oauth' }));
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     expect(await screen.findByRole('combobox')).toHaveValue('Claude Fable 5');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -90,7 +89,7 @@ describe('provider method and scope are independent choices', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
     await user.click(screen.getByRole('button', { name: 'Continue with Anthropic' }));
     const dialog = within(await screen.findByRole('dialog'));
@@ -99,52 +98,12 @@ describe('provider method and scope are independent choices', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  it('connects personal sign-in without reusing or replacing the organization connection', async () => {
+  it('warns that an organization API key replaces the organization sign-in', async () => {
     let saved = false;
     registerProvider(() => ({
       ...anthropic,
-      source: 'oauth-org',
-      orgCredential: 'oauth',
-      ...(saved ? { userCredential: 'oauth' } : {}),
-    }));
-    const starts: unknown[] = [];
-    server.use(
-      http.post(`${base}/anthropic/oauth/start`, async ({ request }) => {
-        starts.push(await request.json());
-        return HttpResponse.json({
-          sessionId: 'sign-in-1',
-          kind: 'paste-code',
-          url: 'https://example.com/authorize',
-          instructions: 'Paste code',
-          expiresAt: Date.now() + 600_000,
-        });
-      }),
-      http.post(`${base}/anthropic/oauth/complete`, () => {
-        saved = true;
-        return HttpResponse.json({ status: 'complete' });
-      }),
-    );
-    const user = userEvent.setup();
-    renderWithProviders(<PersonalProviderFactoryStep onContinue={vi.fn()} />);
-    await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
-    await user.click(screen.getByRole('button', { name: 'Continue with Anthropic' }));
-    const dialog = within(await screen.findByRole('dialog'));
-    expect(
-      dialog.getByText('This provider connection is only for you. Shared organization access stays unchanged.'),
-    ).toBeInTheDocument();
-    expect(starts).toEqual([{ mode: 'paste-code', scope: 'user' }]);
-    await user.type(dialog.getByLabelText('Authorization code'), 'demo-code');
-    await user.click(dialog.getByRole('button', { name: 'Complete sign in' }));
-    expect(await screen.findByRole('combobox')).toHaveValue('Claude Fable 5');
-  });
-
-  it('warns that a personal API key replaces personal sign-in and saves only at user scope', async () => {
-    let saved = false;
-    registerProvider(() => ({
-      ...anthropic,
-      source: saved ? 'stored-user' : 'oauth-user',
-      orgCredential: 'api_key',
-      userCredential: saved ? 'api_key' : 'oauth',
+      source: saved ? 'stored-org' : 'oauth-org',
+      orgCredential: saved ? 'api_key' : 'oauth',
     }));
     const writes: unknown[] = [];
     server.use(
@@ -155,14 +114,14 @@ describe('provider method and scope are independent choices', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<PersonalProviderFactoryStep onContinue={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     const dialog = within(screen.getByRole('dialog'));
-    expect(dialog.getByText(/Only you can use this key.*replaces the provider sign-in/)).toBeInTheDocument();
+    expect(dialog.getByText(/Everyone in your organization can use this key.*replaces the provider sign-in/)).toBeInTheDocument();
     await user.type(dialog.getByLabelText('API key for Anthropic'), 'test-key');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(writes).toEqual([{ key: 'test-key', envVar: 'ANTHROPIC_API_KEY', scope: 'user' }]);
+    expect(writes).toEqual([{ key: 'test-key', envVar: 'ANTHROPIC_API_KEY', scope: 'org' }]);
     expect(await screen.findByRole('combobox')).toHaveValue('Claude Fable 5');
   });
 });

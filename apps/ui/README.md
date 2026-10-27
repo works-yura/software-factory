@@ -16,19 +16,11 @@ Keep policy, validation, and persistence in [`@mastra/factory`](../factory/READM
 
 ## Onboarding
 
-The onboarding Setup step offers three equal choices, one per existing `modelScope` creation value:
+A Factory belongs to its organization: every session and work-item run uses the organization's credentials and the Factory's default model. Onboarding asks for one company connection and the Factory model; there is no account-scope choice. Only organization key admins can add shared credentials; members can use connections already configured by an admin. Local servers without web authentication use their single local connection.
 
-| Choice                           | Scope     | Factory work                                  | Interactive sessions                             |
-| -------------------------------- | --------- | --------------------------------------------- | ------------------------------------------------ |
-| Company account                  | `factory` | Organization credentials and Factory default  | Organization credentials and Factory default     |
-| Company work · personal sessions | `hybrid`  | Organization credentials and Factory default  | Session owner's personal credentials and default |
-| Personal accounts                | `user`    | Work owner's personal credentials and default | Session owner's personal credentials and default |
+Model pickers and final confirmation use `/web/config/models` (organization credentials); live session catalogs still resolve the session's policy. Credentials are saved when connected. Factory creation and the default-model write happen on final confirmation.
 
-There is no fallback between account scopes. Each teammate configures their own personal account. Onboarding asks for one connection in `factory` or `user`, and a separate connection for each scope in `hybrid`. Existing scoped connections can be reused. Only organization key admins can add shared credentials; members can use connections already configured by an admin. When no company connection exists and the member cannot add one, Setup only offers personal accounts. Scope changes happen only in Setup, never as a side effect of a later step. Local servers without web authentication skip Setup and create a `factory` Factory, so sessions and Factory work share the model chosen in their single connection step.
-
-Model pickers and final confirmation use `/web/config/models?scope=org` or `?scope=user`; live session catalogs still resolve the session owner and policy before considering settings filters. Credentials are saved when connected. Factory creation and the applicable default-model writes happen on final confirmation; setting a personal default also affects other work using that person's default.
-
-The session-storage draft contains choices, never credentials. Legacy drafts without `modelScope` return to Setup with their repository and model preserved. Failed creation resumes the pending Factory; changing its scope recreates that unfinished Factory rather than bypassing the admin-only scope update. Preview fixtures and screenshot tooling stay outside this package.
+The session-storage draft contains choices, never credentials. Legacy drafts with a `modelScope` or personal model keep their repository and Factory model; the rest is dropped. Failed creation resumes the pending Factory.
 
 ## Board views
 
@@ -71,7 +63,7 @@ Owners can choose **Regenerate title** from a web or Slack session's sidebar men
 
 ## User menu and settings
 
-The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, **Your models**, **Your memory**, and **Connections**. **Settings** opens the shared Factory model settings, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
+The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, and **Connections**. **Settings** opens the shared Factory model settings, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
 
 Settings pages keep their existing URLs and searchable navigation. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections through the user menu.
 

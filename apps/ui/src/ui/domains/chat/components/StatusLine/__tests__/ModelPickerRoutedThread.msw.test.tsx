@@ -70,14 +70,12 @@ function renderRoute(initialThreadId: string) {
         project: {
           id: 'fp-1',
           name: 'Mastra',
-          modelScope: 'hybrid',
           defaultModelId: 'openai/gpt-5',
           defaultThinkingLevel: 'medium',
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5' })),
-    // The server resolves the thread's owner and billing scope; a work-item thread is Factory-billed.
+    // The server resolves each thread's model policy, so the displayed thread picks the catalog.
     http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
       const params = new URL(request.url).searchParams;
       expect(params.get('sessionId')).toBe(SESSION_ID);
@@ -86,7 +84,6 @@ function renderRoute(initialThreadId: string) {
       requestedThreads.push(threadId);
       const factoryBilled = threadId === WORK_THREAD_ID;
       return HttpResponse.json({
-        modelScope: factoryBilled ? 'factory' : 'user',
         defaultModelId: factoryBilled ? 'openai/gpt-5' : 'anthropic/claude-sonnet-4-6',
         models: models.filter(model => model.provider === (factoryBilled ? 'openai' : 'anthropic')),
       });
@@ -144,9 +141,6 @@ async function expectWorkItemCatalog(user: ReturnType<typeof userEvent.setup>) {
   const option = await screen.findByRole('option', { name: /gpt-5/ });
   expect(within(option).getByText('Default')).toBeVisible();
   expect(screen.queryByRole('option', { name: /claude-sonnet-4-6/ })).not.toBeInTheDocument();
-  expect(await screen.findByRole('note')).toHaveTextContent(
-    "Showing models this Factory's organization credentials can run.",
-  );
   await user.keyboard('{Escape}');
 }
 
@@ -155,7 +149,6 @@ async function expectInteractiveCatalog(user: ReturnType<typeof userEvent.setup>
   const option = await screen.findByRole('option', { name: /claude-sonnet-4-6/ });
   expect(within(option).getByText('Default')).toBeVisible();
   expect(screen.queryByRole('option', { name: /gpt-5/ })).not.toBeInTheDocument();
-  expect(screen.queryByText(/Showing models this Factory/)).not.toBeInTheDocument();
   await user.keyboard('{Escape}');
 }
 

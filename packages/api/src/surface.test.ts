@@ -10,18 +10,15 @@ import { FactoryTransitionService } from '@factory/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { prepareFactoryRuleBinding } from './surface.ts';
 
-async function seedFactoryWithRepository(options?: { defaultModelId?: string; modelScope?: 'factory' | 'user' }) {
+async function seedFactoryWithRepository(options?: { defaultModelId?: string }) {
   const seeded = await createFactoryStorageForTests();
   const sourceControl = seeded.sourceControl.forIntegration('github');
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
-  if (options?.defaultModelId || options?.modelScope) {
+  if (options?.defaultModelId) {
     await seeded.projects.update({
       orgId: 'org-1',
       id: project.id,
-      input: {
-        ...(options.defaultModelId ? { defaultModelId: options.defaultModelId } : {}),
-        ...(options.modelScope ? { modelScope: options.modelScope } : {}),
-      },
+      input: { defaultModelId: options.defaultModelId },
     });
   }
   const installation = await sourceControl.installations.upsert({
@@ -90,7 +87,6 @@ describe('prepareFactoryRuleBinding', () => {
 
     expect(prepare).toHaveBeenCalledWith(
       expect.objectContaining({
-        modelScope: 'factory',
         defaultModelId: 'anthropic/claude-opus-5',
         destinationStage: 'triage',
       }),
@@ -112,10 +108,9 @@ describe('prepareFactoryRuleBinding', () => {
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: undefined }));
   });
 
-  it('forwards user scope without a Factory model fallback', async () => {
+  it('forwards no model scope: every run bills the organization', async () => {
     const { seeded, project, github } = await seedFactoryWithRepository({
       defaultModelId: 'anthropic/claude-opus-5',
-      modelScope: 'user',
     });
     const prepare = vi.fn(async () => ({}) as never);
 
@@ -127,7 +122,8 @@ describe('prepareFactoryRuleBinding', () => {
       bindingInput(project.id),
     );
 
-    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ modelScope: 'user', defaultModelId: undefined }));
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: 'anthropic/claude-opus-5' }));
+    expect(prepare.mock.calls[0]).toEqual([expect.not.objectContaining({ modelScope: expect.anything() })]);
   });
 
   it('refuses to start a run when the project policy is unavailable', async () => {

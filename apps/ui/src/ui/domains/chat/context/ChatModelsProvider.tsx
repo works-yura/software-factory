@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
-import { useChatModelScope } from './useChatModelScope';
+import { useChatModelCatalog } from './useChatModelCatalog';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsContext } from './ChatModelsContext';
@@ -24,17 +23,14 @@ export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
 }
 
 function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { projectQuery: factoryProjectQuery, modelScope } = useChatModelScope();
-  const defaultModelQuery = useDefaultModelQuery();
+  const { projectQuery: factoryProjectQuery } = useChatModelCatalog();
   const [draftModelId, setDraftModelId] = useState<string>();
-  const defaultModelId =
-    (modelScope === 'factory' ? factoryProjectQuery.data?.defaultModelId : defaultModelQuery.data?.modelId) ??
-    undefined;
+  const defaultModelId = factoryProjectQuery.data?.defaultModelId ?? undefined;
   const value: ChatModelsApi = {
-    activeModelId: draftModelId ?? defaultModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined,
+    activeModelId: draftModelId ?? defaultModelId,
     defaultModelId,
-    isLoading: factoryProjectQuery.isPending || defaultModelQuery.isPending,
-    error: defaultModelQuery.error ?? factoryProjectQuery.error ?? undefined,
+    isLoading: factoryProjectQuery.isPending,
+    error: factoryProjectQuery.error ?? undefined,
     setModel: modelId => {
       setDraftModelId(modelId);
       return Promise.resolve();
@@ -47,10 +43,8 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
 function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
   const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
-  const { projectQuery, modelScope, sessionModelsQuery } = useChatModelScope();
-  const defaultModelQuery = useDefaultModelQuery();
-  const localDefaultModelId =
-    modelScope === 'factory' ? projectQuery.data?.defaultModelId : defaultModelQuery.data?.modelId;
+  const { projectQuery, sessionModelsQuery } = useChatModelCatalog();
+  const localDefaultModelId = projectQuery.data?.defaultModelId;
   const defaultModelId = sessionModelsQuery.isSuccess
     ? (('defaultModelId' in sessionModelsQuery.data ? sessionModelsQuery.data.defaultModelId : localDefaultModelId) ??
       undefined)

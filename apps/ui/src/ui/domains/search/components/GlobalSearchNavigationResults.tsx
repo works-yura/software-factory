@@ -114,20 +114,6 @@ export function GlobalSearchNavigationResults({
       />
       <CommandPaletteItem
         icon={<Settings />}
-        title={SETTINGS_SECTION_LABELS['personal-models']}
-        subtitle={t('subtitles.yourSettings')}
-        value={searchValue(SETTINGS_SECTION_LABELS['personal-models'], t('subtitles.yourSettings'), `Your personal Models Settings ${settingsSectionPath(factoryId, 'personal-models')}`)}
-        onSelect={() => onSelect(settingsSectionPath(factoryId, 'personal-models'), true)}
-      />
-      <CommandPaletteItem
-        icon={<Settings />}
-        title={SETTINGS_SECTION_LABELS.memory}
-        subtitle={t('subtitles.yourSettings')}
-        value={searchValue(SETTINGS_SECTION_LABELS.memory, t('subtitles.yourSettings'), `Your personal Memory Settings memory observational ${settingsSectionPath(factoryId, 'memory')}`)}
-        onSelect={() => onSelect(settingsSectionPath(factoryId, 'memory'), true)}
-      />
-      <CommandPaletteItem
-        icon={<Settings />}
         title={SETTINGS_SECTION_LABELS['factory-memory']}
         subtitle={t('subtitles.factorySettings')}
         value={searchValue(SETTINGS_SECTION_LABELS['factory-memory'], t('subtitles.factorySettings'), `Factory Memory Settings memory observational ${settingsSectionPath(factoryId, 'factory-memory')}`)}

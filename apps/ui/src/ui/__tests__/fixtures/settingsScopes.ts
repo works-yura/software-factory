@@ -1,5 +1,5 @@
 import type { AgentControllerSessionState } from '@mastra/client-js';
-import type { DefaultModelResponse, OMConfigInfo, ProvidersResponse } from '../../../api/types';
+import type { OMConfigInfo, ProvidersResponse } from '../../../api/types';
 import type { FactoryProjectPayload } from '../../domains/workspaces/services/github';
 
 export const settingsFactory: FactoryProjectPayload = {
@@ -21,10 +21,6 @@ export const settingsSession: AgentControllerSessionState = {
 export const settingsProviders: ProvidersResponse = {
   orgKeyAdmin: true,
   providers: [{ provider: 'openai', source: 'stored-org', orgCredential: 'api_key', orgKey: true }],
-};
-
-export const settingsDefaultModel: DefaultModelResponse = {
-  modelId: null,
 };
 
 export const settingsMemory: OMConfigInfo = {

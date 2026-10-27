@@ -6,8 +6,9 @@
  * - **Local** (no web auth adapter): credentials live in the server-global
  *   file-backed `AuthStorage` (`auth.json`) — unchanged TUI behavior.
  * - **Tenant** (auth adapter active): credentials live in the
- *   `model-credentials` factory storage domain, scoped per `(orgId, userId)`
- *   with optional org-wide rows (`userId` absent).
+ *   `model-credentials` factory storage domain. The Factory reads and writes
+ *   org-wide rows only (`userId` absent); per-user rows an older build stored
+ *   stay in the table untouched and are never read.
  *
  * `resolveCredentialContext` decides which shape a request is in: an
  * authenticated user always gets the tenant path; an unauthenticated request
@@ -130,8 +131,10 @@ export async function resolveCredentialContext({
 }
 
 /**
- * List the caller's tenant credential records for provider listing, or
+ * List the caller's organization credential records for provider listing, or
  * `undefined` in local mode (caller should fall back to `AuthStorage`).
+ * Personal rows an older build stored are never listed: model credentials
+ * belong to the organization.
  * Read-only and degradation-friendly: an authenticated caller with the domain
  * unavailable gets an empty list (sources show `env`/`none`) instead of a 503
  * so the settings page still renders.
@@ -151,5 +154,5 @@ export async function listTenantCredentialsForRequest({
   if (!tenant) return auth.enabled() ? [] : undefined;
   const storage = await getTenantCredentialsStorage(credentials);
   if (!storage) return [];
-  return storage.listCredentials(tenantOrgId(tenant), tenant.userId);
+  return (await storage.listCredentials(tenantOrgId(tenant), tenant.userId)).filter(record => record.scope === 'org');
 }

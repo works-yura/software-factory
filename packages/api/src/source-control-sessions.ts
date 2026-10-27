@@ -20,6 +20,7 @@ import {
 import { normalizeSessionTitle } from '@factory/session';
 import type { FilesystemStorage } from '@factory/store';
 import type { MemorySettingsStorage } from '@factory/store';
+import { factoryMemorySettingsUserId } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type {
   ProjectRepository,
@@ -748,7 +749,13 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const threads = await listFactorySessionThreads(options.controller, row, options.workItems);
         const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
-        const stored = await options.memorySettings.get({ orgId: row.orgId, userId: row.userId });
+        // Memory settings belong to the Factory; a session outside any Factory titles on the defaults.
+        const stored = row.factoryProjectId
+          ? await options.memorySettings.get({
+              orgId: row.orgId,
+              userId: factoryMemorySettingsUserId(row.factoryProjectId),
+            })
+          : null;
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
         try {

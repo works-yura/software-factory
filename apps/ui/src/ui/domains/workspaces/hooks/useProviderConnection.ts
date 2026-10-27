@@ -15,7 +15,7 @@ import { translator } from '../../../i18n/t';
 
 const tk = translator('workspaces');
 
-export type ProviderCredentialScope = 'org' | 'user';
+export type ProviderCredentialScope = 'org';
 export type ProviderConnectionMethod = 'api_key' | 'oauth';
 export type PreviewProvider = (providerId: string | undefined, method?: ProviderConnectionMethod) => void;
 
@@ -60,7 +60,6 @@ export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
-  if (scope === 'user') return credentialAt(provider, 'user');
   if (provider.source === 'deployment') return 'api_key';
   if (scope === 'org') return credentialAt(provider, 'org');
   if (provider.source === 'none') return undefined;
@@ -123,7 +122,6 @@ export function useProviderConnection({
   const authEnabled = authQuery.data?.authEnabled === true;
   const orgKeyAdmin = !authEnabled || (orgKeyAdminQuery.data ?? true);
   const credentialScope = authEnabled ? scope : undefined;
-  const hidesDeploymentKeys = authEnabled && scope === 'user';
   const isConfigured = (provider: ProviderInfo, method?: ProviderConnectionMethod) =>
     isProviderConnected(provider, credentialScope, method);
   const byConfiguredThenName = (left: ProviderInfo, right: ProviderInfo): number => {
@@ -169,9 +167,7 @@ export function useProviderConnection({
     authEnabled,
     orgKeyAdmin,
     signInProviders: providers.filter(candidate => candidate.oauth?.supported === true),
-    keyProviders: providers.filter(
-      candidate => !(hidesDeploymentKeys && candidate.source === 'deployment') && offersApiKey(candidate),
-    ),
+    keyProviders: providers.filter(candidate => offersApiKey(candidate)),
     provider,
     connected: provider ? isConfigured(provider, selection?.method) : false,
     method: selection?.method,

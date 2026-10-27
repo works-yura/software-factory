@@ -26,7 +26,6 @@ const draft = {
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/hello',
   },
-  modelScope: 'factory',
   model: { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' },
 };
 

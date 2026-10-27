@@ -22,8 +22,6 @@ import { resolveWorkItemRepository } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
 import type { CustomProvidersStorage } from '@factory/store';
-import type { ModelDefaultsStorage } from '@factory/store';
-import { effectiveModelScope } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
@@ -43,7 +41,6 @@ export interface FactorySessionToolDependencies {
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'>;
   sessionModel: {
     projects: FactoryProjectsStorage;
-    modelDefaults: ModelDefaultsStorage;
     /**
      * Tenant credential stores, present when auth is on. Model switches then
      * check the target session's credential scope, like the Settings picker;
@@ -128,7 +125,6 @@ export function createFactorySessionTools(
       workItems: deps.workItems,
     });
     if (!policy) throw new Error('Session model policy is unavailable.');
-    const modelScope = policy.tenant.credentialScope ?? 'user';
     const orgId = policy.tenant.orgId ?? scope.orgId;
     const customProviders = tenantCatalog.customProviders;
     const usable = (
@@ -138,7 +134,6 @@ export function createFactorySessionTools(
           credentials: tenantCatalog.credentials,
           orgId,
           userId: policy.tenant.userId,
-          modelScope,
         }),
         deploymentProviders: tenantCatalog.deploymentProviders,
         listCustomProviders: customProviders
@@ -150,7 +145,7 @@ export function createFactorySessionTools(
       })
     ).map(model => model.id);
     for (const id of usable) known.add(id);
-    return { usable, known, scopeLabel: modelScope === 'factory' ? 'Factory' : 'session owner' };
+    return { usable, known, scopeLabel: 'Factory' };
   }
 
   function unrunnableModelError(
@@ -296,12 +291,9 @@ export function createFactorySessionTools(
         origin: { sessionId: scope.sessionId, threadId: scope.threadId },
       });
       const resolvedModel = await resolveFactorySessionModel({
-        ...deps.sessionModel,
+        projects: deps.sessionModel.projects,
         factoryProjectId: scope.factoryProjectId,
         orgId: scope.orgId,
-        ownerUserId: scope.userId,
-        // No work item, so an interactive session: a hybrid Factory bills it as one.
-        context: 'session',
       });
 
       // Only the new row's owner as `user`. The tool call's context carries the
@@ -323,7 +315,6 @@ export function createFactorySessionTools(
       await session.state.set(tags);
       await hydrateFactorySession(session, {
         orgId: scope.orgId,
-        modelScope: resolvedModel.modelScope,
         ownerUserId: scope.userId,
         defaultModelId: requestedModel ?? resolvedModel.modelId,
       });
@@ -338,7 +329,7 @@ export function createFactorySessionTools(
       await primeTenantCredentialsForTenant({
         orgId: scope.orgId,
         userId: scope.userId,
-        credentialScope: resolvedModel.modelScope,
+        credentialScope: 'factory',
       });
       // How its runs end reaches this session through the listener every Factory
       // session gets (`observeSessionRunReports`), which follows the row's origin.
@@ -385,8 +376,6 @@ export function createFactorySessionTools(
     if (!messaging) throw new Error('Starting sessions is not available on this server.');
     const project = await deps.sessionModel.projects.get({ orgId: scope.orgId, id: scope.factoryProjectId });
     if (!project) throw new Error('This Factory no longer exists.');
-    // A work-item start is a run, so a hybrid Factory uses the Factory's scope (as the Start route does).
-    const modelScope = effectiveModelScope(project.modelScope, 'run');
     const projectRepositoryId = await resolveRepository(sourceControl, item);
 
     const sessionId = globalThis.crypto.randomUUID();
@@ -428,8 +417,7 @@ export function createFactorySessionTools(
         sessionId: ensured.sessionId,
         threadTitle: title ?? `${label} ${role}`,
         kickoffKey: globalThis.crypto.randomUUID(),
-        modelScope,
-        defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
+        defaultModelId: project.defaultModelId ?? undefined,
         workItem: {
           id: item.id,
           role,

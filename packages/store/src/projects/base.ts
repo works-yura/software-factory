@@ -5,19 +5,6 @@ import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
 export const DEFAULT_FACTORY_THINKING_LEVEL: ThinkingLevelSetting = 'medium';
-export const FACTORY_MODEL_SCOPES = ['factory', 'user', 'hybrid'] as const;
-export type FactoryModelScope = (typeof FACTORY_MODEL_SCOPES)[number];
-/** The single credential scope one session or run resolves from; `hybrid` is never effective. */
-export type EffectiveModelScope = Exclude<FactoryModelScope, 'hybrid'>;
-
-/**
- * Resolve the scope one context runs under. `hybrid` splits by context: work-item runs use the
- * Factory's model and credentials, interactive sessions use the session owner's.
- */
-export function effectiveModelScope(scope: FactoryModelScope, context: 'run' | 'session'): EffectiveModelScope {
-  if (scope === 'hybrid') return context === 'run' ? 'factory' : 'user';
-  return scope;
-}
 
 export interface FactoryProject {
   id: string;
@@ -25,13 +12,11 @@ export interface FactoryProject {
   createdBy: string;
   name: string;
   description: string | null;
-  /** Default model for sessions/runs started under this Factory (null = harness default). */
-  defaultModelId: string | null;
   /**
-   * Whose model and credentials sessions and runs use: the Factory's, the session owner's, or
-   * `hybrid` (owner's for interactive sessions, the Factory's for work-item runs).
+   * Default model for every session, run and Supervisor turn under this Factory (null = harness
+   * default). They all bill the organization's credentials; there is no personal model scope.
    */
-  modelScope: FactoryModelScope;
+  defaultModelId: string | null;
   /** Thinking level for this Factory's sessions and runs that have not picked their own. */
   defaultThinkingLevel: ThinkingLevelSetting;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
@@ -79,14 +64,12 @@ export interface CreateFactoryProjectInput {
   name: string;
   description?: string | null;
   defaultModelId?: string | null;
-  modelScope?: FactoryModelScope;
 }
 
 export interface UpdateFactoryProjectInput {
   name?: string;
   description?: string | null;
   defaultModelId?: string | null;
-  modelScope?: FactoryModelScope;
   defaultThinkingLevel?: ThinkingLevelSetting;
   autoRunEnabled?: boolean;
   autoApprovePlans?: boolean;
@@ -114,6 +97,8 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     name: { type: 'text' },
     description: { type: 'text', nullable: true },
     default_model_id: { type: 'text', nullable: true },
+    // Deprecated: no longer read or written; every Factory uses the organization's credentials and
+    // its own default model. Kept so existing databases need no migration.
     model_scope: { type: 'text', default: 'hybrid' },
     default_thinking_level: { type: 'text', default: DEFAULT_FACTORY_THINKING_LEVEL },
     // Deprecated: no longer read or written. Kept so existing databases need no
@@ -188,7 +173,6 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     name: row.name,
     description: row.description,
     defaultModelId: row.default_model_id,
-    modelScope: row.model_scope === 'factory' || row.model_scope === 'user' ? row.model_scope : 'hybrid',
     defaultThinkingLevel: isThinkingLevelSetting(row.default_thinking_level)
       ? row.default_thinking_level
       : DEFAULT_FACTORY_THINKING_LEVEL,
@@ -247,7 +231,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       name: input.name,
       description: input.description ?? null,
       default_model_id: input.defaultModelId ?? null,
-      model_scope: input.modelScope ?? 'hybrid',
       auto_run_enabled: false,
       auto_approve_plans: false,
       created_at: now,
@@ -304,7 +287,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.name !== undefined ? { name: changes.name } : {}),
           ...(changes.description !== undefined ? { description: changes.description } : {}),
           ...(changes.defaultModelId !== undefined ? { default_model_id: changes.defaultModelId } : {}),
-          ...(changes.modelScope !== undefined ? { model_scope: changes.modelScope } : {}),
           ...(changes.defaultThinkingLevel !== undefined
             ? { default_thinking_level: changes.defaultThinkingLevel }
             : {}),

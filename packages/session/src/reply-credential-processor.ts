@@ -6,11 +6,11 @@ import { credentialLabel, getAuthProviderId } from '@factory/credentials';
 
 /**
  * Stamps each assistant reply with the credential that answered it, as
- * `content.metadata.credentialLabel` ("Claude Pro/Max", "Anthropic API key")
- * and, for a personal credential, `content.metadata.credentialOwnerId`. A
- * reply without an owner id was answered by the organization's credential.
- * Stamped at send time so a reply keeps its label after the thread's
- * credential scope changes.
+ * `content.metadata.credentialLabel` ("Claude Pro/Max", "Anthropic API key").
+ * Every credential belongs to the organization, so no owner is stamped;
+ * `credentialOwnerId` survives only on replies older builds answered with a
+ * personal credential. Stamped at send time so a reply keeps its label after
+ * the organization's credentials change.
  */
 export class FactoryReplyCredentialProcessor implements Processor {
   readonly id = 'factory-reply-credential';
@@ -30,7 +30,6 @@ export class FactoryReplyCredentialProcessor implements Processor {
       const label = credential && credentialLabel(provider, credential.type);
       if (!label) continue;
       metadata.credentialLabel = label;
-      if (tenant.credentialScope === 'user') metadata.credentialOwnerId = tenant.userId;
     }
     return messageList;
   }

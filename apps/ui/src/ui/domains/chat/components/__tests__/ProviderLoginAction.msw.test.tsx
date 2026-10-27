@@ -25,17 +25,13 @@ const liveSession: ChatSessionContextApi = {
 };
 
 describe('ProviderLoginAction', () => {
-  it.each([
-    { modelScope: 'factory', href: '/factories/factory-1/settings/models' },
-    { modelScope: 'user', href: '/factories/factory-1/settings/personal-models' },
-  ] as const)('links a $modelScope-scoped session to $href', async ({ modelScope, href }) => {
+  it('links a session to the Factory models settings', async () => {
+    const href = '/factories/factory-1/settings/models';
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
-        HttpResponse.json({ project: { id: 'factory-1', modelScope: 'hybrid' } }),
+        HttpResponse.json({ project: { id: 'factory-1' } }),
       ),
-      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-        HttpResponse.json({ models: [], modelScope, defaultModelId: null }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [], defaultModelId: null })),
     );
 
     renderWithProviders(

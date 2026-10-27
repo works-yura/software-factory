@@ -39,7 +39,6 @@ import type { WorkItemFeedPublisher } from '@factory/feed';
 import type { IntakeStorage } from '@factory/store';
 import type { IntegrationStorageHandle } from '@factory/store';
 import type { MemorySettingsStorage } from '@factory/store';
-import type { ModelDefaultsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
@@ -133,12 +132,6 @@ export interface IntegrationContext {
      * adopts the same memory configuration the web kickoff applies.
      */
     memorySettings: MemorySettingsStorage;
-    /**
-     * Per-user default model. A channel integration reads the linked sender's
-     * default to start a session on the model that user chose rather than the
-     * factory's shared default.
-     */
-    modelDefaults: ModelDefaultsStorage;
     /** Cross-integration intake selection (which sources are synced). */
     intake: IntakeStorage;
     /**

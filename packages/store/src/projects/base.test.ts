@@ -17,45 +17,23 @@ describe('FactoryProjectsStorage', () => {
       createdBy: 'user-1',
       name: 'Platform',
       description: 'Internal platform work',
-      modelScope: 'hybrid',
     });
     expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toEqual(project);
     expect(await seed.projects.get({ orgId: 'other-org', id: project.id })).toBeNull();
   });
 
-  it('stores an explicit model scope at creation', async () => {
-    const seed = await createFactoryStorageForTests();
-    const factory = await seed.projects.create({
-      orgId: 'org-1',
-      userId: 'user-1',
-      input: { name: 'Org', modelScope: 'factory' },
-    });
-    const user = await seed.projects.create({
-      orgId: 'org-1',
-      userId: 'user-1',
-      input: { name: 'Mine', modelScope: 'user' },
-    });
-
-    expect((await seed.projects.get({ orgId: 'org-1', id: factory.id }))?.modelScope).toBe('factory');
-    expect((await seed.projects.get({ orgId: 'org-1', id: user.id }))?.modelScope).toBe('user');
-  });
-
-  it('round-trips the hybrid scope and reads unknown stored scopes as hybrid', async () => {
+  it('has no model scope: a legacy scope in the input is neither stored nor read back', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({
       orgId: 'org-1',
       userId: 'user-1',
-      input: { name: 'Split', modelScope: 'user' },
+      input: { name: 'Mine', modelScope: 'user' } as never,
     });
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'hybrid' } as never });
 
-    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'hybrid' } });
-    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.modelScope).toBe('hybrid');
-    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
-
-    // A value written by an older or newer build must not leak through as an unknown scope.
-    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'factory' } });
-    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'org' as never } });
-    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.modelScope).toBe('hybrid');
+    expect(project).not.toHaveProperty('modelScope');
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).not.toHaveProperty('modelScope');
+    expect(await seed.projects.getById({ id: project.id })).not.toHaveProperty('modelScope');
   });
 
   it('lists, updates, and deletes projects within their organization', async () => {
@@ -74,16 +52,9 @@ describe('FactoryProjectsStorage', () => {
     expect(updated).toMatchObject({ name: 'Renamed', description: 'Now documented' });
     expect(await seed.projects.update({ orgId: 'org-2', id: first.id, input: { name: 'Nope' } })).toBeNull();
 
-    const scoped = await seed.projects.update({
-      orgId: 'org-1',
-      id: first.id,
-      input: { modelScope: 'user' },
-    });
-    expect(scoped?.modelScope).toBe('user');
-
     const renamedAgain = await seed.projects.update({ orgId: 'org-1', id: first.id, input: { name: 'Final name' } });
-    expect(renamedAgain?.modelScope).toBe('user');
-    expect((await seed.projects.get({ orgId: 'org-1', id: first.id }))?.modelScope).toBe('user');
+    expect(renamedAgain?.name).toBe('Final name');
+    expect((await seed.projects.get({ orgId: 'org-1', id: first.id }))?.name).toBe('Final name');
 
     expect(await seed.projects.delete({ orgId: 'org-2', id: first.id })).toBeNull();
     expect(await seed.projects.delete({ orgId: 'org-1', id: first.id })).toMatchObject({ id: first.id });

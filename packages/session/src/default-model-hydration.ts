@@ -1,6 +1,4 @@
 import { primeTenantCredentialsForTenant, resolveTenantProviderDefaultModel } from '@factory/credentials';
-import type { ModelDefaultsStorage } from '@factory/store';
-import { effectiveModelScope } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import type { SourceControlSessionLookup } from './factory-session.ts';
@@ -35,23 +33,22 @@ export interface DefaultModelHydrationDependencies {
   sourceControl: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   projects: Pick<FactoryProjectsStorage, 'getById'>;
   workItems: Pick<WorkItemsStorage, 'findRunBindingByThread'>;
-  modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
 }
 
-/** Seed a new chat's scoped default model; a chat with a user message keeps its model. */
+/** Seed a new chat with its Factory's default model; a chat with a user message keeps its model. */
 export async function hydrateSessionDefaultModel(
   session: DefaultModelHydrationSession,
-  { sourceControl, projects, workItems, modelDefaults }: DefaultModelHydrationDependencies,
+  { sourceControl, projects, workItems }: DefaultModelHydrationDependencies,
 ): Promise<void> {
   const sessionId = session.identity.getId();
   const resourceId = session.identity.getResourceId();
   const initialState = session.state.get() ?? {};
   if (initialState.factoryProjectId || typeof session.thread.firstUserMessage !== 'function') return;
-  const hadFactoryIdentity = initialState.factoryModelScope === 'factory' || initialState.factoryModelScope === 'user';
+  const hadFactoryIdentity = initialState.factoryModelScope === 'factory';
   const clearFactoryIdentity = () =>
     session.state.set({ factoryOrgId: undefined, factoryModelScope: undefined, factoryOwnerUserId: undefined });
   const failClosedWithoutIdentity = () =>
-    session.state.set({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
+    session.state.set({ factoryModelScope: 'factory', factoryOwnerUserId: undefined });
   let identityResolved = false;
   try {
     const sourceSession = await sourceControl.getBySessionId(sessionId);
@@ -63,7 +60,7 @@ export async function hydrateSessionDefaultModel(
       await clearFactoryIdentity();
       return;
     }
-    // Historical thread membership keeps completed work items on Factory billing in hybrid scope.
+    // A work-item thread, active or completed, keeps the model its run chose.
     const threadId = session.thread.getId();
     const binding = threadId
       ? await workItems.findRunBindingByThread({
@@ -79,29 +76,26 @@ export async function hydrateSessionDefaultModel(
       await clearFactoryIdentity();
       return;
     }
-    const modelScope = effectiveModelScope(project.modelScope, binding ? 'run' : 'session');
     await session.state.set({
       factoryOrgId: sourceSession.orgId,
-      factoryModelScope: modelScope,
+      factoryModelScope: 'factory',
       factoryOwnerUserId: sourceSession.userId,
     });
     identityResolved = true;
     await primeTenantCredentialsForTenant({
       orgId: sourceSession.orgId,
       userId: sourceSession.userId,
-      credentialScope: modelScope,
+      credentialScope: 'factory',
     });
 
     if (binding) return;
     if (threadId && (await session.thread.firstUserMessage({ threadId }))) return;
 
     const scopedModelId =
-      (modelScope === 'factory'
-        ? project.defaultModelId
-        : (await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId }))?.modelId) ??
+      project.defaultModelId ??
       // No chosen default: a connected provider's default, unless the current model is usable.
       (await resolveTenantProviderDefaultModel(
-        { orgId: sourceSession.orgId, userId: sourceSession.userId, credentialScope: modelScope },
+        { orgId: sourceSession.orgId, userId: sourceSession.userId, credentialScope: 'factory' },
         session.model.get() || undefined,
       ).catch(error => {
         console.warn('[Factory default-model hydration] Unable to resolve a provider default model.', error);
@@ -119,6 +113,6 @@ export async function hydrateSessionDefaultModel(
         await failClosedWithoutIdentity();
       } catch {}
     }
-    console.warn('[Factory default-model hydration] Unable to apply the scoped default model.', error);
+    console.warn('[Factory default-model hydration] Unable to apply the Factory default model.', error);
   }
 }

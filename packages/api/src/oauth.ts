@@ -6,9 +6,9 @@
  * HTTP routes. Flow state lives in login sessions — the `model-credentials`
  * domain's `oauth_login_sessions` table in tenant mode (any replica can
  * complete/poll), an in-memory store in local mode — so a flow can span
- * requests. Completed credentials are **user-scoped by default**; org admins
- * can start a flow with `{ scope: 'org' }` to share the credential with the
- * whole org. Local mode writes to the file-backed `AuthStorage`.
+ * requests. Completed credentials belong to the organization: only org admins
+ * may sign in, and there are no personal sign-ins. Local mode writes to the
+ * file-backed `AuthStorage`.
  *
  * Tokens never leave the server; responses only carry flow metadata (URLs,
  * user codes, poll delays).
@@ -33,7 +33,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import { ModelCredentialsStorage } from '@factory/store';
-import type { LoginCredentialScope, LoginSessionKind, LoginSessionRow } from '@factory/store';
+import type { LoginSessionKind, LoginSessionRow } from '@factory/store';
 import { getAuthProviderId, resolveCredentialContext } from '@factory/credentials';
 import type { CredentialContext } from '@factory/credentials';
 import { Route } from '@factory/http';
@@ -200,25 +200,23 @@ async function loadOwnedSession({
   return session;
 }
 
-/** Persist completed OAuth credentials — user-scoped unless the flow was started org-wide. */
+/** Persist completed OAuth credentials on the organization. */
 async function persistOAuthCredential({
   ctx,
   provider,
-  scope,
   credentials,
   authStorage,
   onCredentialsChanged,
 }: {
   ctx: CredentialContext;
   provider: string;
-  scope: LoginCredentialScope | undefined;
   credentials: OAuthCredentials;
   authStorage: AuthStorage | undefined;
   onCredentialsChanged: (tenant: { orgId: string; userId?: string }) => void;
 }): Promise<void> {
   const authProviderId = getAuthProviderId(provider);
   if (ctx.mode === 'tenant') {
-    const tenant = { orgId: ctx.orgId, ...(scope === 'org' ? {} : { userId: ctx.userId }) };
+    const tenant = { orgId: ctx.orgId };
     await ctx.storage.setCredential(tenant, authProviderId, {
       type: 'oauth',
       ...credentials,
@@ -254,7 +252,7 @@ export interface OAuthRoutesDeps extends RouteDependencies {
  *   - `POST   /web/config/providers/:provider/oauth/complete`           — paste-code exchange
  *   - `POST   /web/config/providers/:provider/oauth/poll`               — one device-code poll
  *   - `DELETE /web/config/providers/:provider/oauth/session/:sessionId` — cancel a flow
- *   - `DELETE /web/config/providers/:provider/oauth`                    — sign out (caller only)
+ *   - `DELETE /web/config/providers/:provider/oauth`                    — sign the organization out (admins only)
  */
 export class OAuthRoutes extends Route<OAuthRoutesDeps> {
   routes(): ApiRoute[] {
@@ -281,10 +279,8 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             return c.json({ error: 'invalid_mode', message: `Unsupported mode for ${provider}: ${body.mode}` }, 400);
           }
 
-          // Optional `{ scope: 'org' }` shares the completed credential with
-          // the whole org (admin-only, tenant mode). Anything else is personal.
-          const scope: LoginCredentialScope = body.scope === 'org' ? 'org' : 'user';
-          if (scope === 'org' && ctx.mode === 'tenant' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+          // The completed credential belongs to the whole org, so only admins sign in (tenant mode).
+          if (ctx.mode === 'tenant' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
             return c.json({ error: 'forbidden', message: 'Only org admins can sign in for the whole org' }, 403);
           }
 
@@ -305,7 +301,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             userId: tenant.userId,
             provider,
             kind: flow.kind,
-            ...(scope === 'org' && ctx.mode === 'tenant' ? { credentialScope: scope } : {}),
+            ...(ctx.mode === 'tenant' ? { credentialScope: 'org' as const } : {}),
             pending: started.pending,
             expiresAt: new Date(started.expiresAt),
             nextPollAt: started.nextPollMs != null ? new Date(Date.now() + started.nextPollMs) : null,
@@ -342,13 +338,9 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           const session = await loadOwnedSession({ ctx, provider, sessionId });
           if (!session) return c.json({ error: 'session_not_found' }, 404);
           if (session.kind !== 'paste-code') return c.json({ error: 'wrong_session_kind' }, 400);
-          // Org-scoped flows recheck admin access at completion time — the
-          // caller may have lost admin since the flow was started.
-          if (
-            session.credentialScope === 'org' &&
-            ctx.mode === 'tenant' &&
-            !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))
-          ) {
+          // Recheck admin access at completion time — the caller may have lost
+          // admin since the flow was started.
+          if (ctx.mode === 'tenant' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
             return c.json({ error: 'forbidden', message: 'Only org admins can sign in for the whole org' }, 403);
           }
 
@@ -373,7 +365,6 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           await persistOAuthCredential({
             ctx,
             provider,
-            scope: session.credentialScope,
             credentials,
             authStorage,
             onCredentialsChanged,
@@ -401,13 +392,9 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           const session = await loadOwnedSession({ ctx, provider, sessionId });
           if (!session) return c.json({ error: 'session_not_found' }, 404);
           if (session.kind !== 'device-code') return c.json({ error: 'wrong_session_kind' }, 400);
-          // Org-scoped flows recheck admin access before the credential write —
-          // the caller may have lost admin since the flow was started.
-          if (
-            session.credentialScope === 'org' &&
-            ctx.mode === 'tenant' &&
-            !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))
-          ) {
+          // Recheck admin access before the credential write — the caller may
+          // have lost admin since the flow was started.
+          if (ctx.mode === 'tenant' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
             return c.json({ error: 'forbidden', message: 'Only org admins can sign in for the whole org' }, 403);
           }
 
@@ -445,8 +432,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             await persistOAuthCredential({
               ctx,
               provider,
-              scope: session.credentialScope,
-              credentials: result.credentials,
+                credentials: result.credentials,
               authStorage,
               onCredentialsChanged,
             });
@@ -493,15 +479,13 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
 
           const provider = c.req.param('provider');
           const authProviderId = getAuthProviderId(provider);
-          // `?scope=org` removes the shared org credential (admin-only);
-          // default removes the caller's personal credential only.
-          const scope = c.req.query('scope') === 'org' ? 'org' : 'user';
           try {
             if (ctx.mode === 'tenant') {
-              if (scope === 'org' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+              // The sign-in belongs to the organization, so only admins remove it.
+              if (!(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
                 return c.json({ error: 'forbidden', message: 'Only org admins can remove an org-wide sign-in' }, 403);
               }
-              const tenant = { orgId: ctx.orgId, ...(scope === 'org' ? {} : { userId: ctx.userId }) };
+              const tenant = { orgId: ctx.orgId };
               await ctx.storage.removeCredential(tenant, authProviderId);
               onCredentialsChanged(tenant);
             } else {

@@ -67,7 +67,6 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
     ),

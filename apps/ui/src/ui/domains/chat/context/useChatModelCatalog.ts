@@ -7,12 +7,12 @@ import { useSessionModelCatalogQuery } from '../../../../hooks/useSessionModelCa
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import { useChatSessionContext } from './useChatSessionContext';
 
-/** Live threads use the same server-resolved owner and billing policy as model invocations. */
-export function useChatModelScope() {
+/** Live threads use the same server-resolved policy as model invocations; drafts use the Factory's. */
+export function useChatModelCatalog() {
   const { factoryId: routeFactoryId } = useParams<{ factoryId: string }>();
-  const { kind, factorySessionState, draftSessionId, sessionId, resourceId, sessionThreadId, resourceReady } =
+  const { factorySessionState, draftSessionId, sessionId, resourceId, sessionThreadId, resourceReady } =
     useChatSessionContext();
-  // The displayed thread decides billing; the session-primary thread is only a fallback.
+  // The displayed thread decides the policy; the session-primary thread is only a fallback.
   const displayedThreadId = useContext(ChatThreadMessagesContext)?.threadId;
   const factoryId = factorySessionState?.factoryProjectId ?? routeFactoryId;
   const projectQuery = useFactoryProjectQuery(factoryId);
@@ -26,17 +26,8 @@ export function useChatModelScope() {
         enabled: resourceReady,
       };
   const sessionModelsQuery = useSessionModelCatalogQuery(sessionTarget);
-  const storedScope = projectQuery.data?.modelScope;
-  const draftScope = storedScope === 'hybrid' ? kind : storedScope;
-  const modelScope = sessionTarget
-    ? (sessionModelsQuery.data?.modelScope ?? (sessionModelsQuery.isSuccess ? draftScope : undefined))
-    : draftScope;
-  const scopeLoading = sessionTarget ? sessionModelsQuery.isPending : Boolean(factoryId && !projectQuery.isSuccess);
-  const draftCatalogTarget: AvailableModelsTarget = {
-    ...(draftScope === 'user' ? { scope: 'user' } : { factoryProjectId: factoryId }),
-    enabled: !scopeLoading,
-  };
-  const catalogTarget: AvailableModelsTarget = sessionTarget ?? draftCatalogTarget;
+  const catalogLoading = sessionTarget ? sessionModelsQuery.isPending : Boolean(factoryId && !projectQuery.isSuccess);
+  const catalogTarget: AvailableModelsTarget = sessionTarget ?? { factoryProjectId: factoryId, enabled: !catalogLoading };
 
-  return { factoryId, projectQuery, modelScope, catalogTarget, scopeLoading, sessionModelsQuery };
+  return { factoryId, projectQuery, catalogTarget, catalogLoading, sessionModelsQuery };
 }

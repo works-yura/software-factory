@@ -59,11 +59,11 @@ describe('Factory onboarding flow', () => {
     expect(readOnboardingStep()).toBe('initial');
   });
 
-  it('round-trips the personal provider step', () => {
-    persistOnboardingStep('personal-provider');
+  it('round-trips the model provider step', () => {
+    persistOnboardingStep('model-provider');
 
-    expect(readOnboardingStep()).toBe('personal-provider');
-    expect(sessionStorage.getItem(ONBOARDING_STEP_KEY)).toBe('personal-provider');
+    expect(readOnboardingStep()).toBe('model-provider');
+    expect(sessionStorage.getItem(ONBOARDING_STEP_KEY)).toBe('model-provider');
     expect(sessionStorage.getItem(ONBOARDING_UPDATED_AT_KEY)).not.toBeNull();
   });
 
@@ -74,9 +74,9 @@ describe('Factory onboarding flow', () => {
     expect(hasResumableFactoryOnboarding([{ id: 'factory-1' }])).toBe(true);
   });
 
-  it('resumes the personal provider step for its pending Factory', () => {
+  it('resumes the model provider step for its pending Factory', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
-    persistOnboardingStep('personal-provider');
+    persistOnboardingStep('model-provider');
     persistOnboardingFactory('factory-1');
 
     expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('factory-1');

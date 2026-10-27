@@ -45,17 +45,17 @@ const baseConfig: OMConfigInfo = {
 };
 
 describe('OMSection', () => {
-  it('loads persisted settings without an active chat session', async () => {
+  it('loads persisted Factory settings without an active chat session', async () => {
     let requested = false;
     server.use(
       http.get(OM_URL, ({ request }) => {
         requested = true;
-        expect(new URL(request.url).search).toBe('');
+        expect(new URL(request.url).search).toBe('?factoryId=fp-1');
         return HttpResponse.json({ config: baseConfig });
       }),
     );
 
-    renderWithProviders(<OMSection models={models} />);
+    renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
     expect(await screen.findByDisplayValue('1,000')).toBeInTheDocument();
     expect(screen.queryByText('Model credentials required')).not.toBeInTheDocument();
@@ -80,7 +80,7 @@ describe('OMSection', () => {
       ),
     );
 
-    renderWithProviders(<OMSection models={models} />);
+    renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
     expect(await screen.findByText('Model credentials required')).toBeInTheDocument();
     expect(screen.getByText(/model calls may fail until credentials are configured/)).toBeInTheDocument();
@@ -123,7 +123,7 @@ describe('OMSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<OMSection models={models} />);
+    renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
     await screen.findByDisplayValue('1,000');
     const observerTrigger = screen.getByRole('combobox', { name: 'Observer model' });
@@ -133,7 +133,7 @@ describe('OMSection', () => {
 
     await pickOption(user, reflectorTrigger, /^Auto/);
 
-    await waitFor(() => expect(requestBody).toEqual({ modelId: 'auto' }));
+    await waitFor(() => expect(requestBody).toEqual({ modelId: 'auto', factoryId: 'fp-1' }));
     await waitFor(() => expect(reflectorTrigger).toHaveValue('Auto · GPT-5.4 Mini'));
     expect(observerTrigger).toHaveValue('Auto · GPT-5.4 Mini');
   });
@@ -144,6 +144,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(
       <OMSection
+        factoryId="fp-1"
         models={[
           ...models,
           { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
@@ -176,7 +177,7 @@ describe('OMSection', () => {
       }),
     );
 
-    renderWithProviders(<OMSection models={models} />);
+    renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
     expect(await screen.findByRole('status', { name: 'Loading observational-memory settings' })).toBeInTheDocument();
     expect(await screen.findByDisplayValue('1,000')).toBeInTheDocument();
@@ -197,7 +198,7 @@ describe('OMSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<OMSection models={models} />);
+    renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
     const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
     expect(input).toHaveValue('1,000');
@@ -205,7 +206,7 @@ describe('OMSection', () => {
     await user.type(input, '5000');
     await user.tab();
 
-    await waitFor(() => expect(requestBody).toEqual({ observationThreshold: 5000 }));
+    await waitFor(() => expect(requestBody).toEqual({ factoryId: 'fp-1', observationThreshold: 5000 }));
     expect(await screen.findByDisplayValue('5,000')).toBeInTheDocument();
   });
 
@@ -221,7 +222,7 @@ describe('OMSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<OMSection models={models} />);
+    renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
     const input = await screen.findByRole('textbox', { name: 'Observations before reflection' });
     expect(input).toHaveValue('2,000');
@@ -229,7 +230,7 @@ describe('OMSection', () => {
     if (!row) throw new Error('Expected the threshold stepper group');
     await user.click(within(row).getByRole('button', { name: 'Increase' }));
 
-    await waitFor(() => expect(requests).toEqual([{ reflectionThreshold: 3000 }]));
+    await waitFor(() => expect(requests).toEqual([{ factoryId: 'fp-1', reflectionThreshold: 3000 }]));
     await waitFor(() => expect(input).toHaveValue('3,000'));
   });
 
@@ -250,13 +251,13 @@ describe('OMSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<OMSection models={models} />);
+    renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
     const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
     await user.clear(input);
     await user.type(input, '2000');
     await user.tab();
-    await waitFor(() => expect(requests).toEqual([{ observationThreshold: 2000 }]));
+    await waitFor(() => expect(requests).toEqual([{ factoryId: 'fp-1', observationThreshold: 2000 }]));
 
     // Back in the field before the first save has answered.
     await user.clear(input);
@@ -268,7 +269,7 @@ describe('OMSection', () => {
     expect(input).toHaveValue('3000');
 
     await user.click(document.body);
-    await waitFor(() => expect(requests).toEqual([{ observationThreshold: 2000 }, { observationThreshold: 3000 }]));
+    await waitFor(() => expect(requests).toEqual([{ factoryId: 'fp-1', observationThreshold: 2000 }, { factoryId: 'fp-1', observationThreshold: 3000 }]));
     await waitFor(() => expect(input).toHaveValue('3,000'));
   });
 
@@ -283,7 +284,7 @@ describe('OMSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<OMSection models={models} />);
+    renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
     const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
     await user.clear(input);
@@ -315,13 +316,13 @@ describe('OMSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<OMSection models={models} />);
+    renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
     const observerTrigger = await screen.findByRole('combobox', { name: 'Observer model' });
     expect(observerTrigger).toHaveValue('Observer X');
     await pickOption(user, observerTrigger, /openai\/reflector-x/);
 
-    await waitFor(() => expect(requestBody).toEqual({ modelId: 'openai/reflector-x' }));
+    await waitFor(() => expect(requestBody).toEqual({ modelId: 'openai/reflector-x', factoryId: 'fp-1' }));
   });
 
   it('updates attachment observation', async () => {
@@ -335,12 +336,12 @@ describe('OMSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<OMSection models={models} />);
+    renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
     await screen.findByDisplayValue('1,000');
     await user.click(screen.getByRole('radio', { name: 'On' }));
 
-    await waitFor(() => expect(requestBody).toEqual({ value: true }));
+    await waitFor(() => expect(requestBody).toEqual({ value: true, factoryId: 'fp-1' }));
     await waitFor(() => expect(screen.getByRole('radio', { name: 'On' })).toHaveAttribute('aria-checked', 'true'));
   });
 });

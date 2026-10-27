@@ -10,7 +10,7 @@ import { AddApiKeyDialog } from '../AddApiKeyDialog';
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
 
 describe('AddApiKeyDialog', () => {
-  it('saves a personal key when org access resolves after the dialog opens', async () => {
+  it('saves an organization key without offering a personal scope', async () => {
     const saved: unknown[] = [];
     server.use(
       http.get(PROVIDERS_URL, () => HttpResponse.json({ orgKeyAdmin: false, providers: [] })),
@@ -24,15 +24,15 @@ describe('AddApiKeyDialog', () => {
       <AddApiKeyDialog
         provider={{ provider: 'openai', source: 'none' }}
         authEnabled
-        defaultScope="org"
         onClose={() => {}}
       />,
     );
 
-    await waitFor(() => expect(screen.getByRole('radio', { name: 'Just me' })).toBeChecked());
-    await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-personal');
+    expect(screen.getByText(/Everyone in your organization can use this key/)).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Just me' })).not.toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-org');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(saved).toEqual([{ key: 'sk-personal', scope: 'user' }]));
+    await waitFor(() => expect(saved).toEqual([{ key: 'sk-org', scope: 'org' }]));
   });
 });

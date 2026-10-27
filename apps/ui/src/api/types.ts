@@ -69,10 +69,6 @@ export interface CustomProvidersResponse {
   providers: CustomProviderInfo[];
 }
 
-export interface DefaultModelResponse {
-  modelId: string | null;
-}
-
 export interface OMResponse {
   config: OMConfigInfo;
 }

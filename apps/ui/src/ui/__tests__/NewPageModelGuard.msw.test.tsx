@@ -116,10 +116,10 @@ describe('NewPage credential guard', () => {
     renderNewPage();
 
     expect(await screen.findByRole('heading', { name: "You don't have access to Anthropic" })).toBeInTheDocument();
-    expect(screen.getByText(/ask an org admin to share an org-wide key/)).toBeInTheDocument();
+    expect(screen.getByText(/ask an org admin to connect it/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/personal-models',
+      '/factories/fp-1/settings/models',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });

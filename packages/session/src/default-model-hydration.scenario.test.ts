@@ -11,7 +11,6 @@ import { hydrateSessionDefaultModel } from './default-model-hydration.ts';
 async function mountController(
   storage = new InMemoryStore({ id: 'default-model-hydration' }),
   existingSeed?: FactoryStorageTestSeed,
-  modelScope: 'factory' | 'user' | 'hybrid' = 'user',
 ) {
   const seed = existingSeed ?? (await createFactoryStorageForTests());
   const controller = new AgentController({
@@ -37,8 +36,7 @@ async function mountController(
   await controller.init();
   const project =
     (await seed.projects.list({ orgId: 'org-1' }))[0] ??
-    (await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Personal models' } }));
-  await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope } });
+    (await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory models' } }));
   controller.onSessionCreated(
     session =>
       hydrateSessionDefaultModel(session, {
@@ -48,26 +46,27 @@ async function mountController(
         },
         projects: seed.projects,
         workItems: seed.workItems,
-        modelDefaults: seed.modelDefaults,
       }),
     { blocking: true },
   );
-  return { seed, storage, controller, project };
+  const setDefaultModel = (defaultModelId: string) =>
+    seed.projects.update({ orgId: 'org-1', id: project.id, input: { defaultModelId } });
+  return { seed, storage, controller, project, setDefaultModel };
 }
 
-describe('scenario: a new user session starts on its owner default model', () => {
-  it('runs the personal default model, not the mode default', async () => {
-    const { seed, controller } = await mountController();
-    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'anthropic/claude-opus-4-6' });
+describe("scenario: a new user session starts on its Factory's default model", () => {
+  it("runs the Factory's default model, not the mode default", async () => {
+    const { controller, setDefaultModel } = await mountController();
+    await setDefaultModel('anthropic/claude-opus-4-6');
 
     const session = await controller.createSession({ resourceId: 'session-1', ownerId: 'user-1' });
 
     expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
-  it('given a thread-agnostic request opens the session first, when the UI binds the conventional thread, then that thread runs the personal default', async () => {
-    const { seed, controller } = await mountController();
-    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'anthropic/claude-opus-4-6' });
+  it('given a thread-agnostic request opens the session first, when the UI binds the conventional thread, then that thread runs the Factory default', async () => {
+    const { controller, setDefaultModel } = await mountController();
+    await setDefaultModel('anthropic/claude-opus-4-6');
 
     // Server read routes (SSE, messages) get-or-create the session without a thread id.
     await controller.createSession({ resourceId: 'session-1', id: 'session-1', ownerId: 'code' });
@@ -84,8 +83,8 @@ describe('scenario: a new user session starts on its owner default model', () =>
   });
 
   it('given a chat holding only coordinator signals, when the server restarts, then it starts on the current default', async () => {
-    const { seed, storage, controller } = await mountController();
-    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'anthropic/claude-opus-4-6' });
+    const { seed, storage, controller, setDefaultModel } = await mountController();
+    await setDefaultModel('anthropic/claude-opus-4-6');
     const first = await controller.createSession({ resourceId: 'session-1', ownerId: 'user-1' });
     const threadId = first.thread.requireId();
     const memory = await storage.getStore('memory');
@@ -102,7 +101,7 @@ describe('scenario: a new user session starts on its owner default model', () =>
       ],
     });
 
-    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'openai/gpt-5.6' });
+    await setDefaultModel('openai/gpt-5.6');
     const restarted = await mountController(storage, seed);
     const reopened = await restarted.controller.createSession({ resourceId: 'session-1', ownerId: 'user-1', threadId });
 
@@ -110,20 +109,21 @@ describe('scenario: a new user session starts on its owner default model', () =>
   });
 });
 
-describe('scenario: a hybrid Factory splits sessions from work-item runs', () => {
-  it("starts an interactive session on the owner's default and personal scope", async () => {
-    const { seed, controller } = await mountController(undefined, undefined, 'hybrid');
-    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'anthropic/claude-opus-4-6' });
+describe('scenario: Factory sessions and work-item runs bill the organization', () => {
+  it("starts an interactive session on the Factory's default and the organization's scope", async () => {
+    const { seed, controller, setDefaultModel } = await mountController();
+    // A personal default left in the database by an older build is never read.
+    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'openai/gpt-5.6' });
+    await setDefaultModel('anthropic/claude-opus-4-6');
 
     const session = await controller.createSession({ resourceId: 'session-1', ownerId: 'user-1' });
 
     expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
-    expect(session.state.get()).toMatchObject({ factoryModelScope: 'user', factoryOwnerUserId: 'user-1' });
+    expect(session.state.get()).toMatchObject({ factoryModelScope: 'factory', factoryOwnerUserId: 'user-1' });
   });
 
   it('stamps organization scope on a run-bound thread and leaves its model to the run', async () => {
-    const { seed, controller, project } = await mountController(undefined, undefined, 'hybrid');
-    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'anthropic/claude-opus-4-6' });
+    const { seed, controller, project } = await mountController();
     await seed.workItems.prepareRunStart({
       orgId: 'org-1',
       userId: 'user-1',
