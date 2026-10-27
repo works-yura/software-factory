@@ -526,8 +526,10 @@ export class FactoryTransitionService {
                 'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
             };
           }
+          // Self-review sits between a board's build and its change request, so only boards that
+          // ship change requests (Work, Bug) read the project switch.
           const selfReviewEnabled =
-            request.board === 'work' && this.#selfReviewEnabled
+            board.changeRequests !== undefined && this.#selfReviewEnabled
               ? await this.#selfReviewEnabled({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
               : false;
           const decisions: FactoryCommitDecision[] = [];

@@ -5,8 +5,8 @@
 | Пакет | Тека | Що це |
 | --- | --- | --- |
 | **Рушій** | | |
-| `@factory/core` | `packages/core` | Factory engine: define a pipeline, move a card, resolve the decision. Work, Review, and Acceptance live in @factory/pipelines. |
-| `@factory/pipelines` | `packages/pipelines` | Work, Review, and Acceptance pipelines for the conveyor. |
+| `@factory/core` | `packages/core` | Factory engine: define a pipeline, move a card, resolve the decision. Work, Review, Acceptance, and Bug live in @factory/pipelines. |
+| `@factory/pipelines` | `packages/pipelines` | Work, Review, Acceptance, and Bug pipelines for the conveyor. |
 | **Сховище і рантайм** | | |
 | `@factory/store` | `packages/store` | Card, decision, and run-binding storage on Mastra storage domains (libsql, pg). |
 | `@factory/runtime` | `packages/runtime` | Moves cards: transition service, decision dispatcher, run audit, terminal cleanup. |
@@ -54,11 +54,33 @@ const boards = createPipelines();
   board.ts               фази, переходи, підключення правил
   phase-rules.ts         onEnter: яку сесію агента запустити
   transition-policy.ts   хто і куди може перенести картку
-  tool-rules.ts          реакція на результат інструмента агента (лише Work)
+  tool-rules.ts          реакція на результат інструмента агента (лише Work; Bug бере правила Work)
 shared/work-item-branch.ts   назви гілок і номери PR/MR для Work і Review
 ```
 
-Нова дошка — нова тека й один рядок у `createPipelines`.
+Нова дошка — нова тека й один рядок у `createPipelines` (вбудовані) або в `boards: [...]` хоста (`apps/server/src/mastra/index.ts`: `[acceptanceBoard, bugBoard]`).
+
+### Дошка Bug
+
+`bugBoard` (`packages/pipelines/src/bug`) — окремий конвеєр для багів; Work лишається як є.
+
+| Фаза | Вид, роль | Що робить |
+| --- | --- | --- |
+| `intake` | resting | сюди потрапляє картка; нічого не запускає |
+| `triage` | working, `triage` | скіл `bug-triage`: чи це баг, severity. Не баг — `canceled` з причиною й назвою потрібної дошки (картка не міняє дошку) або `intake` для людини |
+| `planning` | working, `plan` | скіл `bug-plan`: як відтворити (кроки, який падаючий тест і де) і як виправити. Далі — `tests`; агент не пройде туди без затвердженого плану, якщо не ввімкнено `autoApprovePlans` |
+| `tests` (Reproduction test) | working, `tester` | скіл `bug-test`, окреме місце: лише падаючий тест за планом, окремий коміт, `factory_record_reproduction_test` записує в картку `bugReproTestSha` і `bugReproTestPaths`. Не відтворився — звіт і `intake`. У `execute` агент потрапляє лише звідси із записаним тестом (або назад з `review`) |
+| `execute` (Fix) | working, `work` | скіл `bug-build`: фікс до зеленого тесту й перевірок з `AGENTS.md`, тестові файли не чіпає. Виходить лише через `review` |
+| `review` | working, `work` | self-review (`factory-self-review`), якщо ввімкнено; далі PR (без self-review білдер відкриває PR уже з `review`) |
+| `done` / `canceled` | terminal | `done` — після merge PR або закриття issue |
+
+Перевірка тесту детермінована: `factory_transition_work_item` (`harness-mastra/src/rules/reproduction-test.ts`) відхиляє перехід місця `work` з `execute` у робочу фазу, якщо `git diff --name-only --no-renames <bugReproTestSha>` у чекауті сесії зачіпає записані шляхи; якщо чекаут не прочитати — теж відмова. Політика дошки тут не підходить: вона чиста, без пісочниці й з таймаутом 5 с. Перехід у `intake` (віддати людині) не перевіряється.
+
+Скіли не знають стека: як збирати, запускати, тестувати й відтворювати на конкретній платформі (admin, mobile Flutter, server), вони читають з `AGENTS.md` і скілів репозиторію (`.agents/skills`, `.claude/skills`).
+
+Як направити issue на Bug: Settings › Intake › GitHub routing, мітка `bug` → дошка `bug` (`PUT /web/intake/label-routes`). Мітки без урахування регістру; issue без маршруту йдуть у Work. Додавання чи зняття мітки переносить картку між Bug і Work, поки її не взяв агент.
+
+Поведінку Work, що раніше трималася на id `work`, винесено в оголошення дошки: `changeRequests: { build, review, merged }` (PR відкрито → картка в `review` і картка Review; merge → `done`; фідбек на PR будить білдера; self-review і `selfReviewEnabled`), `triageClassification: true` (triage звітує `triageType`) і `reproductionTest: { record, protect }` (запис і захист тесту). Досі лише для Work: повторний triage після редагування issue чи коментаря (`factory-triage`), утримання класифікованого не-бага в Supervisor, мітки `needs approval` на вході, скіли дошки в Settings › Skills (для Bug видно лише ролі), метрики Overview. Захист тесту не покриває пуші після переходу в `review` (відповіді на фідбек PR): там тест перевіряє self-review і рев'ю PR.
 
 ## Запуск
 

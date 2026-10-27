@@ -1,10 +1,12 @@
 export { BoardDefinitionError, defineBoard } from './boards/define-board.ts';
 export type {
+  BoardChangeRequests,
   BoardDefinition,
   BoardEventIntegration,
   BoardEventRules,
   BoardPhaseDefinition,
   BoardPhaseKind,
+  BoardReproductionTest,
   BoardSourceClosed,
   BoardToolResultRuleHandler,
   BoardToolRule,
@@ -15,16 +17,19 @@ export { createBoardRegistry } from './boards/registry.ts';
 export type { BoardRegistry, InstalledBoard } from './boards/registry.ts';
 export { cardLabels, moveCardToBoard } from './boards/relocate.ts';
 export {
+  boardClassifiesTriage,
   boardEventHandlers,
   boardForWorkItem,
   eventBoardId,
   isTerminalWorkItem,
+  resolveBoardChangeRequests,
   resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
   rulePhaseContext,
   rulePhaseField,
   withBoardClosure,
+  withChangeRequests,
   workItemPhaseSemantics,
 } from './boards/semantics.ts';
 export type { PhaseSemantics } from './boards/semantics.ts';
@@ -48,6 +53,7 @@ export {
   AUTO_TRIAGED_LABEL,
   externallyAuthored,
   externallyAuthoredWorkItem,
+  changeRequestFlow,
   externalSourceForWorkItem,
   FACTORY_GITHUB_EVENTS,
   FACTORY_GITLAB_EVENTS,
@@ -67,6 +73,9 @@ export {
   isWorkingFactoryRuleStage,
   needsApproval,
   NEEDS_APPROVAL_LABEL,
+  REPRODUCTION_TEST_PATHS_KEY,
+  REPRODUCTION_TEST_SHA_KEY,
+  WORK_CHANGE_REQUESTS,
   WORK_ITEM_SOURCES,
   workItemSource,
 } from './rules/types.ts';
@@ -85,6 +94,7 @@ export type {
   FactoryRuleActor,
   FactoryRuleBoard,
   FactoryRuleBoardClosure,
+  FactoryRuleChangeRequests,
   FactoryRuleCausalEntry,
   FactoryRuleContextBase,
   FactoryRuleDecision,

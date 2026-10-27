@@ -1,7 +1,7 @@
 import { hasRecordedVerdict } from '@factory/pipelines';
 import { requestsChangesVerdict } from '@factory/session';
 import { recordExplicitRuleOverrides } from '@factory/core';
-import { isTerminalFactoryRuleStage } from '@factory/core';
+import { changeRequestFlow, isTerminalFactoryRuleStage } from '@factory/core';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '@factory/core';
 import { isFactoryApproveVerdict } from './stale-reviews.ts';
 
@@ -175,16 +175,18 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // yet", Review means one is open. The card rests there through every round of
   // feedback — the builder is woken in place — until the merge closes it.
   if (context.item && context.pullRequestIntake !== true) {
-    if (context.board !== 'work' || context.pullRequest.state !== 'open') return;
-    if (!context.item.stages.includes('execute')) return;
+    // Boards that ship change requests (Work, Bug) declare where the card waits while one is out.
+    const flow = changeRequestFlow(context);
+    if (!flow || !context.board || context.pullRequest.state !== 'open') return;
+    if (!context.item.stages.includes(flow.build.phase)) return;
     // Resolution can match a Work item by branch alone, so a fork's pull
     // request must not be able to move it: same bar as auto-starting a review.
     if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
     return {
       type: 'transition',
       idempotencyKey: `${context.ingress.id}:out-for-review`,
-      board: 'work',
-      stage: 'review',
+      board: context.board,
+      stage: flow.review.phase,
     } as const;
   }
   // A GitHub App bot is never a collaborator, so Factory's own PRs score
@@ -217,9 +219,10 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
       },
     } as const;
   }
-  // Custom boards define their own lifecycle and cannot accept a transition
-  // targeting the built-in Work board. Let their custom rules handle the merge.
-  if (context.board !== 'work') return;
+  // Only boards that declare a change-request flow (Work, Bug) close on merge;
+  // other custom boards handle the merge with their own rules.
+  const flow = changeRequestFlow(context);
+  if (!flow || !context.board) return;
   // Provenance bound the event to the originating Work item instead: the merge
   // is what finishes the work, so it closes the Work card alongside its Review card —
   // unless the card has since opened another pull request, which is still out.
@@ -228,18 +231,20 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
     return {
       type: 'sendMessage',
       idempotencyKey: `${context.ingress.id}:work-merged`,
-      role: 'work',
+      role: flow.builderRole,
       message:
         `Pull request #${context.pullRequest.number} merged. Pull request #${openPullRequestNumber} is still open, ` +
-        'so this Work card stays in Review until it merges.',
+        `so this ${flow.boardTitle} card stays in ${flow.review.title} until it merges.`,
     } as const;
   }
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:work-merged`,
-    board: 'work',
-    stage: 'done',
-    message: { text: `Pull request #${context.pullRequest.number} merged; this Work card was moved to Done.` },
+    board: context.board,
+    stage: flow.merged.phase,
+    message: {
+      text: `Pull request #${context.pullRequest.number} merged; this ${flow.boardTitle} card was moved to ${flow.merged.title}.`,
+    },
   } as const;
 }
 
@@ -247,8 +252,10 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest || !context.review) return;
   // Only the Work item that authored the PR can act on the feedback. Provenance
   // binds the event there; a Review card seeing its own posted review must not
-  // react to it (that would loop the reviewer against itself).
-  if (context.board !== 'work') return;
+  // react to it (that would loop the reviewer against itself). Authoring cards sit
+  // on boards that ship change requests (Work, Bug).
+  const flow = changeRequestFlow(context);
+  if (!flow) return;
   // A closed or merged pull request has no branch left to push fixes to.
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // `approved` needs no work, and `commented` (a review body with no verdict)
@@ -262,7 +269,7 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:address-review-feedback`,
-    role: 'work',
+    role: flow.builderRole,
     priority: 'high',
     message:
       `Changes were requested on pull request #${context.pullRequest.number} (${context.review.url}). ` +
@@ -305,7 +312,8 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
   // Provenance binds the comment to the Work item that authored the PR — the
   // only session that can act on it. A Review card must not react to comments
   // on the PR it is reviewing.
-  if (context.board !== 'work') return;
+  const flow = changeRequestFlow(context);
+  if (!flow) return;
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // `factoryAuthored` is one bit for the whole Factory, so Factory's own
   // comments are indistinguishable between roles — waking on all of them would
@@ -323,7 +331,7 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:address-pull-request-comment`,
-    role: 'work',
+    role: flow.builderRole,
     priority: 'high',
     message:
       `${context.issueComment.author ?? 'Someone'} commented on pull request #${context.pullRequest.number} ` +

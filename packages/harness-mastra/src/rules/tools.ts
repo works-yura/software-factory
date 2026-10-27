@@ -2,7 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem, workItemPhaseSemantics } from '@factory/core';
+import { boardClassifiesTriage, boardForWorkItem, workItemPhaseSemantics } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import { SELF_REVIEW_ROUND_LIMIT } from '@factory/pipelines';
 import type { IntegrationTools } from '@factory/integrations';
@@ -13,6 +13,9 @@ import { resolveFactorySessionAddress } from '@factory/session';
 import type { FactoryTransitionService } from '@factory/runtime';
 import { FACTORY_TRIAGE_TYPES } from '@factory/core';
 import { IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@factory/core';
+
+import { createReproductionTestTool, recordsReproductionTest, reproductionTestGuard } from './reproduction-test.ts';
+import type { SessionGitResolver } from './reproduction-test.ts';
 
 const MAX_RATIONALE_LENGTH = 1_000;
 
@@ -40,12 +43,40 @@ const triageTransitionInputSchema = transitionInputSchema.extend({
   triageType: z.enum(FACTORY_TRIAGE_TYPES),
 });
 
+/**
+ * Whether the card's board has its triage seat report a classification. Without an installed
+ * registry (older hosts and unit tests) only Work classifies, as before boards declared it.
+ */
+function classifiesTriage(boards: BoardRegistry | undefined, item: WorkItemRow): boolean {
+  return boards ? boardClassifiesTriage(boards, item) : boardForWorkItem(item) === 'work';
+}
+
+type SelfReviewFlow = { board: string; build: string; review: string; parked: string };
+
+/**
+ * Where self-review runs for the card: its board's declared change-request flow, parking at the
+ * board's initial phase. Without an installed registry only Work self-reviews.
+ */
+function selfReviewFlow(boards: BoardRegistry | undefined, item: WorkItemRow): SelfReviewFlow | undefined {
+  const boardId = boardForWorkItem(item);
+  if (!boards) {
+    return boardId === 'work' ? { board: 'work', build: 'execute', review: 'review', parked: 'intake' } : undefined;
+  }
+  const board = boards.get(boardId);
+  const flow = board?.changeRequests;
+  return board && flow
+    ? { board: boardId, build: flow.build, review: flow.review, parked: board.initialPhase }
+    : undefined;
+}
+
 export async function createFactoryTransitionTools(options: {
   requestContext: RequestContext;
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   sessions?: FactorySessionSourceLookup;
   boards?: BoardRegistry;
+  /** Git in the session checkout, for boards that declare a reproduction test. */
+  sessionGit?: SessionGitResolver;
 }): Promise<IntegrationTools> {
   const resolution = await resolveFactorySessionAddress({
     requestContext: options.requestContext,
@@ -72,14 +103,19 @@ export async function createFactoryTransitionTools(options: {
     return {};
   }
   let isTriage = false;
-  if (availableBinding.role === 'triage') {
+  let recordsTest = false;
+  if (availableBinding.role === 'triage' || options.boards) {
     const item = await options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
-    if (!item) return {};
-    isTriage = boardForWorkItem(item) === 'work';
+    if (!item && availableBinding.role === 'triage') return {};
+    if (item) {
+      isTriage = availableBinding.role === 'triage' && classifiesTriage(options.boards, item);
+      recordsTest = recordsReproductionTest(options.boards, item, availableBinding.role);
+    }
   }
 
   return {
     ...(availableBinding.role === 'review' ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
+    ...(recordsTest ? createReproductionTestTool(options, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: isTriage
@@ -111,8 +147,25 @@ export async function createFactoryTransitionTools(options: {
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
         const board = boardForWorkItem(item);
-        // Only a Work triage binding may classify; other roles can echo the key from history.
-        const triageType = board === 'work' && binding.role === 'triage' ? requestedTriageType : undefined;
+        // A board with a reproduction test keeps its fix seat from moving on while the checkout
+        // changes the recorded test files. Checked here because it needs the session's sandbox;
+        // board policies are pure.
+        const guarded = await reproductionTestGuard({
+          boards: options.boards,
+          item,
+          role: binding.role,
+          stage,
+          git: async () =>
+            options.sessionGit?.({
+              requestContext: execution.requestContext,
+              workspace: (execution as { workspace?: unknown }).workspace,
+            }),
+        });
+        if (guarded) return guarded;
+        // Only a triage binding on a classifying board (Work, Bug) may classify; other roles can
+        // echo the key from history.
+        const triageType =
+          binding.role === 'triage' && classifiesTriage(options.boards, item) ? requestedTriageType : undefined;
 
         const result = await options.transitionService.transition({
           orgId: binding.orgId,
@@ -168,6 +221,7 @@ function createReviewVerdictTool(
     storage: WorkItemsStorage;
     transitionService: Pick<FactoryTransitionService, 'transition'>;
     sessions?: FactorySessionSourceLookup;
+    boards?: BoardRegistry;
   },
   boundWorkItemId: string,
 ): IntegrationTools {
@@ -175,7 +229,7 @@ function createReviewVerdictTool(
     factory_record_review_verdict: createTool({
       id: 'factory_record_review_verdict',
       description:
-        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On a Review card it records the published PR verdict and the card stays in Reviewing. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
+        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On a Review card it records the published PR verdict and the card stays in Reviewing. On a Work or Bug card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
       inputSchema: reviewVerdictInputSchema,
       requireApproval: false,
       execute: async ({ verdict, reviewedHeadSha, findings }, execution) => {
@@ -190,9 +244,10 @@ function createReviewVerdictTool(
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        const selfReview = selfReviewFlow(options.boards, item);
         if (
-          boardForWorkItem(item) === 'work' &&
-          item.stages[0] === 'review' &&
+          selfReview &&
+          item.stages[0] === selfReview.review &&
           typeof item.metadata?.openPullRequestNumber !== 'number'
         ) {
           return recordSelfReviewVerdict({
@@ -200,6 +255,7 @@ function createReviewVerdictTool(
             transitionService: options.transitionService,
             binding,
             item,
+            flow: selfReview,
             verdict,
             reviewedHeadSha: reviewedHeadSha.toLowerCase(),
             findings,
@@ -238,7 +294,7 @@ function createReviewVerdictTool(
         const parent = item.parentWorkItemId
           ? await options.storage.get({ orgId: binding.orgId, id: item.parentWorkItemId })
           : null;
-        if (parent && boardForWorkItem(parent) === 'work') {
+        if (parent && selfReviewFlow(options.boards, parent)) {
           await options.storage.update({
             orgId: binding.orgId,
             id: parent.id,
@@ -264,6 +320,7 @@ async function recordSelfReviewVerdict(input: {
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   binding: { id: string; orgId: string; factoryProjectId: string; workItemId: string; role: string };
   item: WorkItemRow;
+  flow: SelfReviewFlow;
   verdict: (typeof REVIEW_VERDICTS)[number];
   reviewedHeadSha: string;
   findings: string | undefined;
@@ -297,7 +354,7 @@ async function recordSelfReviewVerdict(input: {
     });
   } catch (error) {
     if (!(error instanceof WorkItemUpdateConflictError)) throw error;
-    throw new Error('The Work card changed while recording the verdict; call again to record it on the current card.');
+    throw new Error('The card changed while recording the verdict; call again to record it on the current card.');
   }
   if (!updated) throw new Error('Bound Factory work item not found.');
   if (verdict === 'approve')
@@ -306,8 +363,8 @@ async function recordSelfReviewVerdict(input: {
     orgId: binding.orgId,
     factoryProjectId: binding.factoryProjectId,
     workItemId: binding.workItemId,
-    board: 'work',
-    stage: parked ? 'intake' : 'execute',
+    board: input.flow.board,
+    stage: parked ? input.flow.parked : input.flow.build,
     expectedRevision: updated.item.revision,
     actor: { type: 'agent', bindingId: binding.id, role: binding.role },
     ingress: { type: 'agent', identity: `${binding.id}:${input.toolCallId}` },

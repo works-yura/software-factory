@@ -14,6 +14,8 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
     title: 'Work lifecycle fixture',
     initialPhase: 'intake',
     sourceClosed: workBoard.sourceClosed,
+    changeRequests: workBoard.changeRequests,
+    triageClassification: workBoard.triageClassification,
     phases: Object.fromEntries(
       Object.entries(workBoard.phases).map(([stage, phase]) => {
         const leaves = Object.entries(handlers[stage] ?? {});
@@ -53,6 +55,8 @@ export function createToolRuleTestRegistry(tools: BoardDefinition<string, string
     phases: workBoard.phases,
     transitionPolicy: workBoard.transitionPolicy,
     sourceClosed: workBoard.sourceClosed,
+    changeRequests: workBoard.changeRequests,
+    triageClassification: workBoard.triageClassification,
     tools: { ...tools },
   });
   return new Map<string, BoardDefinition<string, string>>([

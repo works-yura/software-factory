@@ -1,6 +1,6 @@
 import type { ExternalWorkItemSource } from '../card.ts';
 import { factoryRuleStage, isTerminalFactoryRuleStage } from '../rules/types.ts';
-import type { FactoryRuleBoardClosure, FactoryRulePhaseContext } from '../rules/types.ts';
+import type { FactoryRuleBoardClosure, FactoryRuleChangeRequests, FactoryRulePhaseContext } from '../rules/types.ts';
 import type {
   BoardEventIntegration,
   BoardEventRules,
@@ -136,6 +136,41 @@ export function resolveBoardClosure(boards: BoardLookup, item: PhaseCard): Facto
 export function withBoardClosure(boards: BoardLookup, item: PhaseCard): { boardClosure?: FactoryRuleBoardClosure } {
   const boardClosure = resolveBoardClosure(boards, item);
   return boardClosure ? { boardClosure } : {};
+}
+
+/**
+ * The `changeRequests` flow the card's installed board declares, resolved to phase titles and the
+ * builder seat. Undefined when the board is not installed or ships no change requests.
+ */
+export function resolveBoardChangeRequests(
+  boards: BoardLookup,
+  item: Pick<PhaseCard, 'board' | 'externalSource'>,
+): FactoryRuleChangeRequests | undefined {
+  const board = boards.get(boardForWorkItem(item));
+  const flow = board?.changeRequests;
+  if (!board || !flow) return undefined;
+  const phase = (id: string) => ({ phase: id, title: board.phases[id]!.title });
+  return {
+    boardTitle: board.title,
+    build: phase(flow.build),
+    review: phase(flow.review),
+    merged: phase(flow.merged),
+    builderRole: board.roleForPhase(flow.build)!,
+  };
+}
+
+/** Rule-context fragment carrying the card's `changeRequests`, empty when its board declares none. */
+export function withChangeRequests(
+  boards: BoardLookup,
+  item: Pick<PhaseCard, 'board' | 'externalSource'>,
+): { changeRequests?: FactoryRuleChangeRequests } {
+  const changeRequests = resolveBoardChangeRequests(boards, item);
+  return changeRequests ? { changeRequests } : {};
+}
+
+/** Whether the card's installed board has its `triage` seat report a structured classification. */
+export function boardClassifiesTriage(boards: BoardLookup, item: Pick<PhaseCard, 'board' | 'externalSource'>): boolean {
+  return boards.get(boardForWorkItem(item))?.triageClassification === true;
 }
 
 /** `{ phase }` for spreading into an integration rule context, or `{}` when the phase is unknown. */

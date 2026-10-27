@@ -4,6 +4,7 @@ import {
   eventBoardId,
   rulePhaseField,
   withBoardClosure,
+  withChangeRequests,
 } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import { hasExplicitRuleOverride, selectEventRule } from '@factory/core';
@@ -588,6 +589,7 @@ export class GitLabRules {
             board: boardForWorkItem(input.item),
             itemRevision: input.item.revision,
             ...withBoardClosure(this.options.boards, input.item),
+            ...withChangeRequests(this.options.boards, input.item),
             ...rulePhaseField(this.options.boards, input.item),
           }
         : {}),

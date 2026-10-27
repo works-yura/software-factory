@@ -9,26 +9,34 @@ function resultContent(value: unknown): string | undefined {
   return typeof content === 'string' ? content : undefined;
 }
 
-// Interactive-session path only: factory-plan never calls submit_plan — it
-// advances planning → execute via factory_transition_work_item directly.
-export function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
-  if (
-    context.result.status !== 'success' ||
-    context.item.stages.length !== 1 ||
-    context.item.stages[0] !== 'planning' ||
-    context.actor.type !== 'agent' ||
-    context.actor.role !== 'plan' ||
-    !resultContent(context.result.value)?.startsWith('Plan approved.')
-  ) {
-    return;
-  }
-  return {
-    type: 'transition',
-    idempotencyKey: `${context.ingress.id}:approved-plan`,
-    board: 'work',
-    stage: 'execute',
-  } as const;
+/**
+ * A `submit_plan` rule that moves an approved Planning card to `stage` on the card's own board.
+ * Interactive-session path only: the plan skills never call submit_plan — they request the move
+ * with factory_transition_work_item directly.
+ */
+export function advanceApprovedPlanTo(stage: string) {
+  return (context: FactoryToolResultRuleContext) => {
+    if (
+      context.result.status !== 'success' ||
+      context.item.stages.length !== 1 ||
+      context.item.stages[0] !== 'planning' ||
+      context.actor.type !== 'agent' ||
+      context.actor.role !== 'plan' ||
+      !resultContent(context.result.value)?.startsWith('Plan approved.')
+    ) {
+      return;
+    }
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:approved-plan`,
+      board: context.board,
+      stage,
+    } as const;
+  };
 }
+
+/** Work: an approved plan goes straight to Building. */
+export const advanceApprovedPlan = advanceApprovedPlanTo('execute');
 
 /**
  * Self-review approves in place: the card stays in Review and the builder, woken

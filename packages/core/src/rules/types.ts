@@ -243,7 +243,7 @@ export interface FactoryStageRuleContext extends FactoryBoundRuleContext {
   stage: FactoryRuleStage;
   fromStage: FactoryRuleStage;
   toStage: FactoryRuleStage;
-  /** Project switch: Work items get an independent self-review before the change request opens. Unset means off. */
+  /** Project switch: cards on boards that declare `changeRequests` (Work, Bug) get an independent self-review before the change request opens. Unset means off. */
   selfReviewEnabled?: boolean;
 }
 
@@ -264,6 +264,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   itemRevision?: number;
   /** Where the card's board sends it when its tracked source closes. */
   boardClosure?: FactoryRuleBoardClosure;
+  /** How the card's board ships code through change requests; absent when it ships none. */
+  changeRequests?: FactoryRuleChangeRequests;
   /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
   phase?: FactoryRulePhaseContext;
   /**
@@ -364,12 +366,57 @@ export interface FactoryRuleBoardClosurePhase {
   title: string;
 }
 
+/**
+ * The `changeRequests` flow the card's installed board declares: where the builder writes the
+ * change, where the card waits while it is out, and where the merge sends it. Absent when the
+ * card's board is not installed or ships no change requests.
+ */
+export interface FactoryRuleChangeRequests {
+  /** Title of the card's board, for messages. */
+  boardTitle: string;
+  build: FactoryRuleBoardClosurePhase;
+  review: FactoryRuleBoardClosurePhase;
+  merged: FactoryRuleBoardClosurePhase;
+  /** Seat carrying the build phase: it opens the change request and answers feedback on it. */
+  builderRole: string;
+}
+
+/**
+ * Work's flow, for rule contexts built without `changeRequests` (hand-built contexts in
+ * deployment overrides and tests). Contexts the runtime builds always carry the installed
+ * board's own declaration.
+ */
+export const WORK_CHANGE_REQUESTS: FactoryRuleChangeRequests = Object.freeze({
+  boardTitle: 'Work',
+  build: Object.freeze({ phase: 'execute', title: 'Building' }),
+  review: Object.freeze({ phase: 'review', title: 'Review' }),
+  merged: Object.freeze({ phase: 'done', title: 'Done' }),
+  builderRole: 'work',
+});
+
+/**
+ * Card metadata a board's `reproductionTest` seat records: the commit that added the failing
+ * test and the test files it wrote. Written only by `factory_record_reproduction_test`.
+ */
+export const REPRODUCTION_TEST_SHA_KEY = 'bugReproTestSha';
+export const REPRODUCTION_TEST_PATHS_KEY = 'bugReproTestPaths';
+
+/** The change-request flow a rule context's card follows: its board's declaration, else Work's for a Work card. */
+export function changeRequestFlow(context: {
+  readonly board?: string;
+  readonly changeRequests?: FactoryRuleChangeRequests;
+}): FactoryRuleChangeRequests | undefined {
+  return context.changeRequests ?? (context.board === 'work' ? WORK_CHANGE_REQUESTS : undefined);
+}
+
 export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
   /** Where the card's board sends it when its tracked source closes. */
   boardClosure?: FactoryRuleBoardClosure;
+  /** How the card's board ships code through change requests; absent when it ships none. */
+  changeRequests?: FactoryRuleChangeRequests;
   /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
   phase?: FactoryRulePhaseContext;
   intake?: FactoryRuleIntakeTarget;

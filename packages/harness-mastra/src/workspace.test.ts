@@ -385,6 +385,10 @@ describe('bundled Factory skill assets', () => {
     const assetNames = (await fs.readdir(assetRoot)).sort();
 
     expect(assetNames).toEqual([
+      'bug-build',
+      'bug-plan',
+      'bug-test',
+      'bug-triage',
       'configure-factory-rules',
       'factory-complete-issue',
       'factory-gitlab-rereview',
@@ -398,6 +402,25 @@ describe('bundled Factory skill assets', () => {
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
+  });
+
+  it('keeps the Bug skills generic and defers the stack to the target repository', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    for (const name of ['bug-triage', 'bug-plan', 'bug-test', 'bug-build']) {
+      const instructions = await fs.readFile(path.join(assetRoot, name, 'SKILL.md'), 'utf8');
+      expect(instructions).toContain('AGENTS.md');
+      expect(instructions).toContain('.agents/skills/');
+      expect(instructions).toContain('.claude/skills/');
+      expect(instructions).not.toMatch(/weather-agent|mastra-ai\/mastra|@mastra\//);
+    }
+    const test = await fs.readFile(path.join(assetRoot, 'bug-test', 'SKILL.md'), 'utf8');
+    expect(test).toContain('factory_record_reproduction_test');
+    expect(test).toContain('request `stage: "intake"`');
+    expect(test).toContain('never production code');
+    const build = await fs.readFile(path.join(assetRoot, 'bug-build', 'SKILL.md'), 'utf8');
+    expect(build).toContain('do **not** modify, move, rename, or delete the recorded test files');
+    const triage = await fs.readFile(path.join(assetRoot, 'bug-triage', 'SKILL.md'), 'utf8');
+    expect(triage).toContain('request `stage: "canceled"`');
   });
 
   it('bundles GitLab review instructions that use the scoped provider tools', async () => {
@@ -451,7 +474,16 @@ describe('bundled Factory skill assets', () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
 
-    for (const skillName of ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview']) {
+    for (const skillName of [
+      'factory-triage',
+      'factory-plan',
+      'factory-review',
+      'factory-rereview',
+      'bug-triage',
+      'bug-plan',
+      'bug-test',
+      'bug-build',
+    ]) {
       const prose = await read(skillName);
       // Terminal batched handoff + governed terminal call, never a mid-run human gate.
       // Review passes end by recording the verdict; the card stays in Reviewing.
@@ -3253,6 +3285,10 @@ describe('FactorySkillSource layering', () => {
     const source = new FactorySkillSource(fallbackStub, [], undefined);
     const names = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(names).toEqual([
+      'bug-build',
+      'bug-plan',
+      'bug-test',
+      'bug-triage',
       'configure-factory-rules',
       'factory-complete-issue',
       'factory-gitlab-rereview',
@@ -3274,6 +3310,10 @@ describe('FactorySkillSource layering', () => {
 
     const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(hiddenNames).toEqual([
+      'bug-build',
+      'bug-plan',
+      'bug-test',
+      'bug-triage',
       'configure-factory-rules',
       'factory-complete-issue',
       'factory-plan',

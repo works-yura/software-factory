@@ -1,5 +1,5 @@
 import { recordExplicitRuleOverrides } from '@factory/core';
-import { factoryRuleStage, isTerminalFactoryRuleStage } from '@factory/core';
+import { changeRequestFlow, factoryRuleStage, isTerminalFactoryRuleStage } from '@factory/core';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '@factory/core';
 
 export type GitLabRuleOverrides = Partial<
@@ -146,13 +146,15 @@ function mergeRequestUpdated(context: FactoryGitLabRuleContext) {
 }
 
 function mergeRequestCommented(context: FactoryGitLabRuleContext) {
-  if (!context.item || !context.mergeRequest || !context.note || context.board !== 'work') return;
+  // The authoring card answers comments; it sits on a board that ships change requests (Work, Bug).
+  const flow = changeRequestFlow(context);
+  if (!context.item || !context.mergeRequest || !context.note || !flow) return;
   if (context.mergeRequest.state !== 'open' || context.mergeRequest.merged) return;
   if (context.actor.type === 'gitlab' && context.actor.factoryAuthored) return;
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:address-merge-request-comment`,
-    role: 'work',
+    role: flow.builderRole,
     priority: 'high',
     message:
       `${context.note.author ?? 'Someone'} commented on GitLab merge request !${context.mergeRequest.number} ` +
@@ -174,13 +176,14 @@ function mergeRequestMerged(context: FactoryGitLabRuleContext) {
       },
     } as const;
   }
-  if (context.board !== 'work') return;
+  const flow = changeRequestFlow(context);
+  if (!flow) return;
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:assess-work-completion`,
-    role: 'work',
+    role: flow.builderRole,
     message:
-      `GitLab merge request !${context.mergeRequest.number} merged. Assess whether the linked Work item is complete. ` +
+      `GitLab merge request !${context.mergeRequest.number} merged. Assess whether the linked ${flow.boardTitle} item is complete. ` +
       'Do not mark it Done solely because this merge request merged.',
   } as const;
 }

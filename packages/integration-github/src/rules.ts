@@ -6,6 +6,7 @@ import {
   eventBoardId,
   rulePhaseField,
   withBoardClosure,
+  withChangeRequests,
   workItemPhaseSemantics,
 } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
@@ -725,6 +726,7 @@ export class GithubRules {
               board: boardForWorkItem(item),
               itemRevision: item.revision,
               ...withBoardClosure(this.options.boards, item),
+              ...withChangeRequests(this.options.boards, item),
               ...rulePhaseField(this.options.boards, item),
             }
           : {}),

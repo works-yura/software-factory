@@ -40,6 +40,8 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
   initialPhase: 'intake',
   transitionPolicy: workTransitionPolicy,
   sourceClosed: { completed: 'done', canceled: 'canceled' },
+  changeRequests: { build: 'execute', review: 'review', merged: 'done' },
+  triageClassification: true,
   tools: {
     submit_plan: { onResult: advanceApprovedPlan },
     factory_record_review_verdict: { onResult: openApprovedChangeRequest },

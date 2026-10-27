@@ -212,6 +212,28 @@ function executableSandbox(value: unknown): WorkspaceSandbox & ExecutableSandbox
   return sandbox as WorkspaceSandbox & ExecutableSandbox;
 }
 
+/**
+ * Git in the active session's own checkout, for the reproduction-test guard and recorder. Resolves
+ * the session's repository the way the source-control tools do and runs `git -C <workdir>` in the
+ * workspace sandbox; undefined when the session has no repository or no executable sandbox.
+ */
+export async function resolveSessionGit(input: {
+  requestContext?: RequestContext;
+  workspace?: unknown;
+  providers: readonly SourceControlToolProvider[];
+}): Promise<((args: readonly string[]) => Promise<{ exitCode: number; stdout: string; stderr?: string }>) | undefined> {
+  if (!input.requestContext || input.providers.length === 0) return undefined;
+  const sandboxValue = (input.workspace as { sandbox?: unknown } | undefined)?.sandbox;
+  if (!(sandboxValue as Partial<ExecutableSandbox> | undefined)?.executeCommand) return undefined;
+  const target = await resolveSessionTarget(input.requestContext, input.providers);
+  const sandbox = executableSandbox(sandboxValue);
+  const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
+  return async args => {
+    const result = await sandbox.executeCommand('git', ['-C', workdir, ...args], { timeout: 30_000 });
+    return { exitCode: result.exitCode, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  };
+}
+
 async function emitAgentAudit(
   audit: AuditAgentEmitter,
   requestContext: RequestContext,

@@ -97,6 +97,25 @@ export interface BoardTransition<PhaseId extends string> {
  */
 export type BoardSourceClosed<PhaseId extends string> = Readonly<{ completed: PhaseId; canceled: PhaseId }>;
 
+/**
+ * How a board's cards ship code through change requests (pull or merge requests), the way Work
+ * does. The builder seated in `build` opens the change request; the card waits in `review` while
+ * it is out (with self-review on, an independent `review` seat approves the branch there first);
+ * the merge moves the card to `merged`. Declaring it opts the board into the change-request
+ * behaviour the runtime and integration defaults otherwise keep for Work: the authoring card moves
+ * out for review when its change request opens and closes on merge, review feedback wakes the
+ * builder, and self-review records its verdict on the card.
+ */
+export type BoardChangeRequests<PhaseId extends string> = Readonly<{ build: PhaseId; review: PhaseId; merged: PhaseId }>;
+
+/**
+ * A reproduction test written in its own phase and protected in a later one. The seat in `record`
+ * commits a failing test and records the commit and test paths on the card
+ * (`factory_record_reproduction_test`); the seat in `protect` fixes the code and cannot move the
+ * card on to a working phase while its checkout changes those paths since the recorded commit.
+ */
+export type BoardReproductionTest<PhaseId extends string> = Readonly<{ record: PhaseId; protect: PhaseId }>;
+
 export interface BoardDefinition<BoardId extends string, PhaseId extends string> {
   readonly id: BoardId;
   readonly title: string;
@@ -111,6 +130,15 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly transitionPolicy?: BoardTransitionPolicy;
   /** Where source-closed rules move a card; absent when the board opts out of auto-closing. */
   readonly sourceClosed?: BoardSourceClosed<PhaseId>;
+  /** How the board's cards ship code; absent when they never open change requests. */
+  readonly changeRequests?: BoardChangeRequests<PhaseId>;
+  /** Where a reproduction test is recorded and where it is protected; absent when the board has none. */
+  readonly reproductionTest?: BoardReproductionTest<PhaseId>;
+  /**
+   * Whether the board's `triage` seat reports a structured classification with every transition
+   * it requests. The board's transition policy decides what each classification may do.
+   */
+  readonly triageClassification?: true;
   allowsTransition(from: PhaseId, to: PhaseId): boolean;
   /** Declared kind of a phase, or undefined when the board has no such phase. */
   phaseKind(phase: string): BoardPhaseKind | undefined;
@@ -131,6 +159,9 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   events?: BoardEventRules;
   transitionPolicy?: BoardTransitionPolicy;
   sourceClosed?: { completed: keyof Phases & string; canceled: keyof Phases & string };
+  changeRequests?: { build: keyof Phases & string; review: keyof Phases & string; merged: keyof Phases & string };
+  triageClassification?: boolean;
+  reproductionTest?: { record: keyof Phases & string; protect: keyof Phases & string };
 };
 
 export class BoardDefinitionError extends Error {
@@ -196,6 +227,52 @@ function validateSourceClosed(
   return Object.freeze({ completed: sourceClosed.completed as string, canceled: sourceClosed.canceled as string });
 }
 
+function validateChangeRequests(
+  changeRequests: unknown,
+  phases: Readonly<Record<string, BoardPhaseDefinition<string>>>,
+): BoardChangeRequests<string> | undefined {
+  if (changeRequests === undefined) return undefined;
+  if (!isPlainObject(changeRequests)) throw new BoardDefinitionError('Board changeRequests must be a plain object.');
+  const keys = Object.keys(changeRequests);
+  const expected = { build: 'working', review: 'working', merged: 'terminal' } as const;
+  if (keys.length !== 3 || !keys.every(key => Object.hasOwn(expected, key))) {
+    throw new BoardDefinitionError('Board changeRequests must declare exactly build, review, and merged.');
+  }
+  for (const [key, kind] of Object.entries(expected)) {
+    const phase = changeRequests[key];
+    if (typeof phase !== 'string' || !Object.hasOwn(phases, phase) || phases[phase]!.kind !== kind) {
+      throw new BoardDefinitionError(`Board changeRequests.${key} "${String(phase)}" must name a ${kind} phase.`);
+    }
+  }
+  return Object.freeze({
+    build: changeRequests.build as string,
+    review: changeRequests.review as string,
+    merged: changeRequests.merged as string,
+  });
+}
+
+function validateReproductionTest(
+  reproductionTest: unknown,
+  phases: Readonly<Record<string, BoardPhaseDefinition<string>>>,
+): BoardReproductionTest<string> | undefined {
+  if (reproductionTest === undefined) return undefined;
+  if (!isPlainObject(reproductionTest)) throw new BoardDefinitionError('Board reproductionTest must be a plain object.');
+  const keys = Object.keys(reproductionTest);
+  if (keys.length !== 2 || !keys.includes('record') || !keys.includes('protect')) {
+    throw new BoardDefinitionError('Board reproductionTest must declare exactly record and protect.');
+  }
+  for (const key of ['record', 'protect'] as const) {
+    const phase = reproductionTest[key];
+    if (typeof phase !== 'string' || !Object.hasOwn(phases, phase) || phases[phase]!.kind !== 'working') {
+      throw new BoardDefinitionError(`Board reproductionTest.${key} "${String(phase)}" must name a working phase.`);
+    }
+  }
+  if (reproductionTest.record === reproductionTest.protect) {
+    throw new BoardDefinitionError('Board reproductionTest must record and protect in different phases.');
+  }
+  return Object.freeze({ record: reproductionTest.record as string, protect: reproductionTest.protect as string });
+}
+
 function validateEventRules(events: unknown): BoardEventRules {
   if (events === undefined) return Object.freeze({});
   if (!isPlainObject(events)) throw new BoardDefinitionError('Board events must be a plain object.');
@@ -251,6 +328,15 @@ export function defineBoard<
   const sourceClosed = validateSourceClosed(config.sourceClosed, config.phases) as
     | BoardSourceClosed<PhaseId>
     | undefined;
+  const changeRequests = validateChangeRequests(config.changeRequests, config.phases) as
+    | BoardChangeRequests<PhaseId>
+    | undefined;
+  const reproductionTest = validateReproductionTest(config.reproductionTest, config.phases) as
+    | BoardReproductionTest<PhaseId>
+    | undefined;
+  if (config.triageClassification !== undefined && typeof config.triageClassification !== 'boolean') {
+    throw new BoardDefinitionError('Board triageClassification must be a boolean.');
+  }
 
   const transitions = Object.fromEntries(
     Object.entries(config.phases).map(([phaseId, phase]) => {
@@ -336,6 +422,9 @@ export function defineBoard<
     events,
     ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
     ...(sourceClosed ? { sourceClosed } : {}),
+    ...(changeRequests ? { changeRequests } : {}),
+    ...(reproductionTest ? { reproductionTest } : {}),
+    ...(config.triageClassification === true ? { triageClassification: true as const } : {}),
     allowsTransition(from: PhaseId, to: PhaseId) {
       return from === to || transitions[from]?.some(transition => transition.to === to) === true;
     },

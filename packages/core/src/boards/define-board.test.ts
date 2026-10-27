@@ -297,3 +297,67 @@ describe('defineBoard sourceClosed', () => {
   });
 
 });
+
+describe('defineBoard changeRequests and triageClassification', () => {
+  const phases = {
+    queued: { title: 'Queued', kind: 'resting', next: 'building' },
+    building: { title: 'Building', kind: 'working', role: 'work', next: 'reviewing' },
+    reviewing: { title: 'Reviewing', kind: 'working', role: 'work', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  } as const;
+  const define = (extra: Record<string, unknown>) =>
+    defineBoard({ id: 'release', title: 'Release', initialPhase: 'queued', phases, ...(extra as object) } as never);
+
+  it('exposes a frozen change-request flow and omits both declarations when undeclared', () => {
+    const board = define({
+      changeRequests: { build: 'building', review: 'reviewing', merged: 'shipped' },
+      triageClassification: true,
+    });
+    expect(board.changeRequests).toEqual({ build: 'building', review: 'reviewing', merged: 'shipped' });
+    expect(Object.isFrozen(board.changeRequests)).toBe(true);
+    expect(board.triageClassification).toBe(true);
+    const plain = define({});
+    expect('changeRequests' in plain).toBe(false);
+    expect(plain.triageClassification).toBeUndefined();
+    expect(define({ triageClassification: false }).triageClassification).toBeUndefined();
+  });
+
+  it('rejects flows naming phases of the wrong kind and malformed shapes', () => {
+    expect(() => define({ changeRequests: { build: 'queued', review: 'reviewing', merged: 'shipped' } })).toThrow(
+      /changeRequests.build "queued" must name a working phase/,
+    );
+    expect(() => define({ changeRequests: { build: 'building', review: 'reviewing', merged: 'reviewing' } })).toThrow(
+      /changeRequests.merged "reviewing" must name a terminal phase/,
+    );
+    expect(() => define({ changeRequests: { build: 'building', review: 'missing', merged: 'shipped' } })).toThrow(
+      BoardDefinitionError,
+    );
+    expect(() => define({ changeRequests: { build: 'building', review: 'reviewing' } })).toThrow(
+      /exactly build, review, and merged/,
+    );
+    expect(() => define({ changeRequests: 'building' })).toThrow(/plain object/);
+    expect(() => define({ triageClassification: 'yes' })).toThrow(/triageClassification must be a boolean/);
+  });
+});
+
+describe('defineBoard reproductionTest', () => {
+  const phases = {
+    queued: { title: 'Queued', kind: 'resting', next: 'testing' },
+    testing: { title: 'Testing', kind: 'working', role: 'tester', next: 'fixing' },
+    fixing: { title: 'Fixing', kind: 'working', role: 'work', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  } as const;
+  const define = (reproductionTest: unknown) =>
+    defineBoard({ id: 'bugfix', title: 'Bugfix', initialPhase: 'queued', phases, reproductionTest } as never);
+
+  it('exposes a frozen record/protect pair and rejects phases that are not working or are the same', () => {
+    const board = define({ record: 'testing', protect: 'fixing' });
+    expect(board.reproductionTest).toEqual({ record: 'testing', protect: 'fixing' });
+    expect(Object.isFrozen(board.reproductionTest)).toBe(true);
+    expect('reproductionTest' in define(undefined)).toBe(false);
+    expect(() => define({ record: 'queued', protect: 'fixing' })).toThrow(/reproductionTest.record "queued"/);
+    expect(() => define({ record: 'testing', protect: 'shipped' })).toThrow(/reproductionTest.protect "shipped"/);
+    expect(() => define({ record: 'testing', protect: 'testing' })).toThrow(/different phases/);
+    expect(() => define({ record: 'testing' })).toThrow(/exactly record and protect/);
+  });
+});

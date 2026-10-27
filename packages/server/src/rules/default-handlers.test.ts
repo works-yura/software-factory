@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { defineBoard } from '@factory/core';
 import { createBoardRegistry } from '@factory/testing';
 import { reviewBoard } from '@factory/pipelines';
-import { withBoardClosure } from '@factory/core';
+import { withBoardClosure, withChangeRequests } from '@factory/core';
+import { bugBoard } from '@factory/pipelines';
 import { workBoard } from '@factory/pipelines';
 import { defaultGithubRules } from '@factory/integration-github';
 import { defaultGitLabRules } from '@factory/integration-gitlab';
@@ -1232,6 +1233,86 @@ describe('built-in board and integration handlers', () => {
     context.actor = { type: 'github', login: 'forker', trusted: false, factoryAuthored: false };
     context.pullRequest = { ...context.pullRequest!, state: 'open', factoryAuthored: false };
     expect(await defaultGithubRules.pullRequestOpened?.(context)).toBeUndefined();
+  });
+
+  describe('boards that declare a change-request flow (Bug)', () => {
+    const boards = createBoardRegistry({ boards: [bugBoard] });
+    const onBug = (stages: string[], metadata: Record<string, unknown> = {}) => ({
+      item: { ...item, stages, metadata },
+      board: 'bug',
+      itemRevision: 3,
+      ...withChangeRequests(boards, { board: 'bug', externalSource: null }),
+    });
+
+    it('moves the authoring Bug card out for review when its pull request opens', async () => {
+      const context = { ...githubContext('pullRequestOpened'), ...onBug(['execute']) };
+      expect(await defaultGithubRules.pullRequestOpened?.(context)).toMatchObject({
+        type: 'transition',
+        board: 'bug',
+        stage: 'review',
+      });
+      expect(
+        await defaultGithubRules.pullRequestOpened?.({ ...context, ...onBug(['planning']) }),
+      ).toBeUndefined();
+    });
+
+    it('moves the Bug card to Done when its pull request merges, or waits on a newer one', async () => {
+      const merged = { ...githubContext('pullRequestMerged'), ...onBug(['review']) };
+      merged.pullRequest = { ...merged.pullRequest!, state: 'closed', merged: true };
+      expect(await defaultGithubRules.pullRequestMerged?.(merged)).toMatchObject({
+        type: 'transition',
+        board: 'bug',
+        stage: 'done',
+        message: { text: 'Pull request #17 merged; this Bug card was moved to Done.' },
+      });
+      expect(
+        await defaultGithubRules.pullRequestMerged?.({ ...merged, ...onBug(['review'], { openPullRequestNumber: 18 }) }),
+      ).toMatchObject({
+        type: 'sendMessage',
+        role: 'work',
+        message: expect.stringContaining('this Bug card stays in Review'),
+      });
+    });
+
+    it('wakes the Bug builder on requested changes and pull request comments', async () => {
+      const review = {
+        ...githubContext('pullRequestReviewSubmitted'),
+        ...onBug(['review']),
+        review: { id: 1, state: 'CHANGES_REQUESTED', url: 'https://github.test/acme/repo/pull/17#review-1' },
+      };
+      expect(await defaultGithubRules.pullRequestReviewSubmitted?.(review)).toMatchObject({
+        type: 'sendMessage',
+        role: 'work',
+      });
+      const comment = {
+        ...githubContext('pullRequestCommentCreated'),
+        ...onBug(['review']),
+        issueComment: { id: 2, body: 'Please also cover the empty case.', author: 'maintainer' },
+      };
+      expect(await defaultGithubRules.pullRequestCommentCreated?.(comment)).toMatchObject({
+        type: 'sendMessage',
+        role: 'work',
+      });
+    });
+
+    it('asks the GitLab Bug builder to assess completion when its merge request merges', async () => {
+      const context = {
+        ...base,
+        actor: { type: 'gitlab' as const, login: 'author', trusted: true, factoryAuthored: false },
+        ingress: { type: 'gitlab' as const, id: 'delivery-1' },
+        event: 'mergeRequestMerged' as const,
+        deliveryId: 'delivery-1',
+        factory: { createdAt: '2026-06-01T00:00:00Z' },
+        repository: { id: 10, fullName: 'acme/repo', host: 'gitlab.com' },
+        ...onBug(['review']),
+        mergeRequest: { number: 5, title: 'MR 5', url: 'https://gitlab.com/acme/repo/-/merge_requests/5', state: 'merged', merged: true },
+      } as unknown as FactoryGitLabRuleContext;
+      expect(await defaultGitLabRules.mergeRequestMerged?.(context)).toMatchObject({
+        type: 'sendMessage',
+        role: 'work',
+        message: expect.stringContaining('linked Bug item'),
+      });
+    });
   });
 
   it('cancels the Review card when the PR is closed without merging', async () => {

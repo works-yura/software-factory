@@ -148,6 +148,14 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | `4ea5bca058` (#28497) | правило в скілах review, re-review, self-review, GitLab review, triage, plan: вміст одного репозиторію не потрапляє в коміти, PR чи коментарі іншого | `harness-mastra/factory-skills/*/SKILL.md` | у `factory-plan` і `factory-triage` речення дописано до нашого «GitHub or GitLab» (в upstream «GitHub or Linear»). |
 | `85fbbbebdf` (#28512) | коментар triage читається згори вниз: рядок оцінок із точковими шкалами, підсумок, наступний крок, згорнуті розділи; поки triage триває — «Triage in progress» | `harness-mastra/factory-skills/factory-triage/SKILL.md`, `harness-mastra/src/workspace.test.ts` | без відхилень; від upstream SKILL.md відрізняється лише словником GitLab замість Linear. |
 
+## Нові дошки
+
+Дошки, яких нема ні у v3, ні в upstream.
+
+| Дошка | Де | Що |
+| --- | --- | --- |
+| `bug` | `pipelines/src/bug`, скіли `bug-triage`, `bug-plan`, `bug-test`, `bug-build`; `harness-mastra/src/rules/reproduction-test.ts` | баги окремо від Work: intake → triage (чи це баг, severity; не баг — у `canceled` з причиною й назвою потрібної дошки) → planning (як відтворити тестом і як виправити; затвердження плану як у Work, тепер воно відкриває `tests`) → tests (окрема роль `tester`: лише падаючий тест, коміт, `factory_record_reproduction_test` пише `bugReproTestSha` і `bugReproTestPaths`; не відтворився — у `intake` для людини) → execute (роль `work`: фікс без змін тестових файлів) → review (self-review як у Work) → PR → `done` після merge. Потрапляє з issue за міткою (Settings › Intake, `bug` → `bug`). Поведінку Work, прив'язану до id `work`, узагальнено до оголошень дошки: `changeRequests` (PR відкрито → `review` + картка Review, merge → `done`, фідбек будить білдера, self-review, `selfReviewEnabled`), `triageClassification` (triage звітує `triageType`) і нове `reproductionTest: { record, protect }`. Перевірка тесту — у `factory_transition_work_item` (harness-mastra, бо політика дошки чиста й без пісочниці): вихід з `execute` у робочу фазу відхиляється, якщо `git diff --name-only --no-renames <sha>` у чекауті сесії зачіпає записані шляхи; без чекауту — відмова. |
+
 ## Далі
 
 Порядок і обсяг — у `README.md`, розділ «Що далі».
