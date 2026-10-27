@@ -18,7 +18,12 @@ import { createSourceControlSessionLookup } from '@factory/session';
 import { createFactoryStorageForTests } from '@factory/store/testing';
 import { createBoardRegistry } from '@factory/testing';
 import type { Tool } from '@mastra/core/tools';
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
 import { ACTIVITY_SETTLE_MS } from './events.ts';
+import { createFactorySessionTokenSigner, FACTORY_SESSION_TOKEN_HEADER } from './session-token.ts';
+import type { FactoryMcpRoutesDeps } from './routes.ts';
 import {
   buildFactoryMcpRoutes,
   connectorSessionId,
@@ -86,7 +91,11 @@ function tokenAuth(): RouteAuth {
   };
 }
 
-async function setup() {
+async function setup(
+  options: Pick<FactoryMcpRoutesDeps, 'sessionTokens' | 'allowUsers'> & {
+    createBound?: FactoryMcpRoutesDeps['tools']['createBound'];
+  } = {},
+) {
   const seed = await createFactoryStorageForTests();
   const auth = tokenAuth();
   const boards = createBoardRegistry();
@@ -145,7 +154,10 @@ async function setup() {
     tools: {
       ...tools,
       create: scope => createFactoryTools({ scope, deps: tools }) as Record<string, Tool<any, any, any, any>>,
+      ...(options.createBound ? { createBound: options.createBound } : {}),
     },
+    ...(options.sessionTokens ? { sessionTokens: options.sessionTokens } : {}),
+    ...(options.allowUsers !== undefined ? { allowUsers: options.allowUsers } : {}),
   });
   for (const route of routes) {
     app.on([route.method], route.path, c =>
@@ -806,5 +818,193 @@ describe('Factory activity over MCP events', () => {
       },
       { ...activity('factory.work_item.updated'), workItemId: item.id, summary: 'updated: Fix the sign-in page' },
     ]);
+  });
+});
+
+describe('Factory MCP for a bound agent session (session tokens)', () => {
+  const signer = createFactorySessionTokenSigner('test-secret');
+
+  /** A card run bound to `session-claude`, the way the start path binds one. */
+  async function boundSession(seed: Awaited<ReturnType<typeof setup>>) {
+    await seed.createSessions([{ sessionId: 'session-claude', userId: 'alice', visibility: 'org' }]);
+    await seed.workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'alice',
+      factoryProjectId: seed.project.id,
+      workItem: {
+        id: seed.item.id,
+        input: { title: seed.item.title, stages: ['intake'] },
+      },
+      role: 'triage',
+      session: {
+        sessionId: 'session-claude',
+        branch: 'user/session-claude',
+        threadId: 'session-claude',
+      },
+      resourceId: seed.project.id,
+      kickoffKey: 'kickoff-1',
+      kickoffMessage: null,
+    });
+    return signer.sign({
+      orgId: 'org-1',
+      factoryProjectId: seed.project.id,
+      sessionId: 'session-claude',
+      threadId: 'session-claude',
+      resourceId: seed.project.id,
+    });
+  }
+
+  async function sessionRequest(url: string, method: string, params: Record<string, unknown>, token: string) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        'Mcp-Protocol-Version': PROTOCOL_VERSION,
+        'Mcp-Method': method,
+        ...(method === 'tools/call' ? { 'Mcp-Name': params.name as string } : {}),
+        [FACTORY_SESSION_TOKEN_HEADER]: token,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method,
+        params: {
+          ...params,
+          _meta: {
+            'io.modelcontextprotocol/protocolVersion': PROTOCOL_VERSION,
+            'io.modelcontextprotocol/clientInfo': {
+              name: 'claude-code',
+              version: '2.1.0',
+            },
+            'io.modelcontextprotocol/clientCapabilities': {},
+          },
+        },
+      }),
+    });
+    return { status: response.status, body: await readJsonRpc(response) };
+  }
+
+  it('signs, verifies and refuses tampered, expired or foreign tokens', () => {
+    let now = 1_000;
+    const clocked = createFactorySessionTokenSigner('secret-a', {
+      now: () => now,
+    });
+    const claims = {
+      orgId: 'o',
+      factoryProjectId: 'p',
+      sessionId: 's',
+      threadId: 't',
+      resourceId: 'r',
+    };
+    const token = clocked.sign(claims, { ttlMs: 500 });
+    expect(clocked.verify(token)).toEqual(claims);
+
+    const [prefix, body, mac] = token.split('.');
+    const forged = Buffer.from(JSON.stringify({ ...claims, sessionId: 'other', exp: now + 500 })).toString('base64url');
+    expect(clocked.verify(`${prefix}.${forged}.${mac}`)).toBeNull();
+    expect(clocked.verify(`${prefix}.${body}.${mac}x`)).toBeNull();
+    expect(createFactorySessionTokenSigner('secret-b').verify(token)).toBeNull();
+    expect(clocked.verify('s')).toBeNull();
+    expect(clocked.verify(undefined)).toBeNull();
+
+    now = 1_500;
+    expect(clocked.verify(token)).toBeNull();
+  });
+
+  it('serves a bound session its worker-scoped tools, plus the bound-only ones', async () => {
+    const createBound = vi.fn(() => ({
+      factory_transition_work_item: createTool({
+        id: 'factory_transition_work_item',
+        description: 'Bound move.',
+        inputSchema: z.object({ stage: z.string() }),
+        execute: async ({ stage }) => ({ moved: stage }),
+      }),
+    }));
+    const seed = await setup({ sessionTokens: signer, createBound });
+    const token = await boundSession(seed);
+
+    const list = await sessionRequest(seed.url, 'tools/list', {}, token);
+    expect(list.status).toBe(200);
+    const names = (list.body?.result.tools as Array<{ name: string }>).map(tool => tool.name);
+    // A worker gets what a bound Mastra run gets: messaging plus its bound tools, never the person's.
+    expect(names).toEqual(expect.arrayContaining(['factory_transition_work_item']));
+    expect(names).not.toEqual(expect.arrayContaining(['factory_create_work_item']));
+    expect(names).not.toContain('search');
+    expect(createBound).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-claude',
+        threadId: 'session-claude',
+        userId: 'alice',
+        kind: 'worker',
+        interactive: false,
+      }),
+    );
+
+    const call = await sessionRequest(
+      seed.url,
+      'tools/call',
+      {
+        name: 'factory_transition_work_item',
+        arguments: { stage: 'planning' },
+      },
+      token,
+    );
+    expect(toolText(call.body?.result)).toEqual({ moved: 'planning' });
+  });
+
+  it('refuses a session id without a valid token, and never falls back to the person path', async () => {
+    const seed = await setup({ sessionTokens: signer });
+    await boundSession(seed);
+    for (const token of [
+      'session-claude',
+      `${signer.sign({ orgId: 'org-1', factoryProjectId: seed.project.id, sessionId: 'session-claude', threadId: 't', resourceId: 'r' })}x`,
+    ]) {
+      const response = await sessionRequest(seed.url, 'tools/list', {}, token);
+      expect(response.status).toBe(401);
+    }
+  });
+
+  it('refuses a token for a session with no run binding, another Factory, or another org', async () => {
+    const seed = await setup({ sessionTokens: signer });
+    await seed.createSessions([{ sessionId: 'session-unbound', userId: 'alice', visibility: 'org' }]);
+    const unbound = signer.sign({
+      orgId: 'org-1',
+      factoryProjectId: seed.project.id,
+      sessionId: 'session-unbound',
+      threadId: 'session-unbound',
+      resourceId: seed.project.id,
+    });
+    expect((await sessionRequest(seed.url, 'tools/list', {}, unbound)).status).toBe(401);
+
+    const bound = await boundSession(seed);
+    const other = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'alice',
+      input: { name: 'Other' },
+    });
+    expect((await sessionRequest(mcpUrl(seed.base, other.id), 'tools/list', {}, bound)).status).toBe(401);
+
+    const foreignOrg = signer.sign({
+      orgId: 'org-2',
+      factoryProjectId: seed.project.id,
+      sessionId: 'session-claude',
+      threadId: 'session-claude',
+      resourceId: seed.project.id,
+    });
+    expect((await sessionRequest(seed.url, 'tools/list', {}, foreignOrg)).status).toBe(401);
+  });
+
+  it('refuses session tokens when the endpoint has no verifier', async () => {
+    const seed = await setup();
+    const token = await boundSession(seed);
+    expect((await sessionRequest(seed.url, 'tools/list', {}, token)).status).toBe(401);
+  });
+
+  it('serves session tokens only, when people are not let in', async () => {
+    const seed = await setup({ sessionTokens: signer, allowUsers: false });
+    const token = await boundSession(seed);
+    expect((await sessionRequest(seed.url, 'tools/list', {}, token)).status).toBe(200);
+    expect((await claudeRequest(seed.url, 'tools/list', {}, 'token-alice')).status).toBe(401);
   });
 });

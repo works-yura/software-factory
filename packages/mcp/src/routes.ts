@@ -25,6 +25,8 @@ import type {
 import { FACTORY_TOOL_ANNOTATIONS } from './annotations.ts';
 import { propagateClientDisconnect } from './disconnect.ts';
 import { factoryActivityEvent } from './events.ts';
+import { FACTORY_SESSION_TOKEN_HEADER } from './session-token.ts';
+import type { FactorySessionTokenSigner } from './session-token.ts';
 
 export const FACTORY_MCP_PATH = '/web/factory/projects/:projectId/mcp';
 const PROTECTED_RESOURCE_PREFIX = '/.well-known/oauth-protected-resource';
@@ -91,11 +93,20 @@ export interface FactoryMcpRoutesDeps {
   /** Source-control handles a connector session can be filed under, tried in order. */
   sourceControls: readonly SourceControlStorageHandle[];
   tools: FactoryMcpToolDependencies;
+  /**
+   * Verifies session tokens (see `session-token.ts`), so agent sessions the
+   * Factory runs outside Mastra reach the endpoint as their own bound session.
+   * Unset → session tokens are refused.
+   */
+  sessionTokens?: Pick<FactorySessionTokenSigner, 'verify'>;
+  /** Serve signed-in people (the connector path). `false` serves session tokens only. Default `true`. */
+  allowUsers?: boolean;
 }
 
 /**
- * Who an MCP client acts as: a signed-in person in one Factory, with the reach
- * of a web UI turn. Matches the agent tools' scope for a user session.
+ * Who an MCP client acts as. A signed-in person gets a `user` scope with the
+ * reach of a web UI turn; an agent session holding a session token gets the
+ * `worker` scope its bound run would get in Mastra. Matches the agent tools' scope.
  */
 export interface FactoryMcpToolScope {
   orgId: string;
@@ -104,8 +115,9 @@ export interface FactoryMcpToolScope {
   sessionId: string;
   resourceId: string;
   threadId: string;
-  kind: 'user';
-  interactive: true;
+  kind: 'user' | 'worker';
+  /** True only for a signed-in person; a worker's turns were started by rules. */
+  interactive: boolean;
   actorProfile?: AuditActorProfileInput;
 }
 
@@ -116,7 +128,14 @@ export interface FactoryMcpToolScope {
  */
 export interface FactoryMcpToolDependencies {
   create: (scope: FactoryMcpToolScope) => Record<string, Tool<any, any, any, any>>;
-  workItems: Pick<WorkItemsStorage, 'list' | 'getForProject'>;
+  /**
+   * Tools only a bound worker session has (the governed card move, review
+   * verdicts), built for its binding. They take precedence over `create`'s.
+   */
+  createBound?: (
+    scope: FactoryMcpToolScope,
+  ) => Record<string, Tool<any, any, any, any>> | Promise<Record<string, Tool<any, any, any, any>>>;
+  workItems: Pick<WorkItemsStorage, 'list' | 'getForProject' | 'hasRunBindingForSession'>;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   audit: Pick<AuditStorage, 'list'>;
 }
@@ -228,7 +247,10 @@ export function createFactoryMcpTools(
     if (name === 'factory_start_session' && options.persistedSession === false) continue;
     tools[name] = tool;
   }
-  Object.assign(tools, createSearchFetchTools(scope, deps, factoryTools.factory_inspect_work_item));
+  // A worker reads its own card through its bound tools; searching the whole Factory is a person's tool.
+  if (scope.kind === 'user') {
+    Object.assign(tools, createSearchFetchTools(scope, deps, factoryTools.factory_inspect_work_item));
+  }
   for (const [name, tool] of Object.entries(tools)) {
     const annotations = FACTORY_TOOL_ANNOTATIONS[name];
     if (annotations) tool.mcp = { ...tool.mcp, annotations };
@@ -250,9 +272,108 @@ function unauthorized(deps: FactoryMcpRoutesDeps, mcpPath: string, error = 'unau
   });
 }
 
+/**
+ * The worker scope a session token grants, or `null`. The token only names
+ * coordinates; the session row and its run binding are what make them real,
+ * so a token for a session that never ran a card, or one in another Factory,
+ * buys nothing.
+ */
+export async function resolveSessionTokenScope(
+  deps: Pick<FactoryMcpRoutesDeps, 'sessionTokens' | 'projects' | 'tools'>,
+  token: string | undefined,
+  factoryProjectId: string,
+): Promise<{ scope: FactoryMcpToolScope; projectName: string } | null> {
+  const claims = deps.sessionTokens?.verify(token);
+  if (!claims || claims.factoryProjectId !== factoryProjectId) return null;
+  const row = await deps.tools.sessions.getBySessionId(claims.sessionId);
+  if (!row || row.orgId !== claims.orgId || row.factoryProjectId !== factoryProjectId) return null;
+  const project = await deps.projects.get({ orgId: claims.orgId, id: factoryProjectId });
+  if (!project) return null;
+  const bound = await deps.tools.workItems.hasRunBindingForSession({
+    orgId: claims.orgId,
+    factoryProjectId,
+    sessionId: claims.sessionId,
+  });
+  if (!bound) return null;
+  return {
+    projectName: project.name,
+    scope: {
+      orgId: claims.orgId,
+      factoryProjectId,
+      // A worker acts as its session row, like a dispatcher-driven Mastra run.
+      userId: row.userId,
+      sessionId: claims.sessionId,
+      resourceId: claims.resourceId,
+      threadId: claims.threadId,
+      kind: 'worker',
+      interactive: false,
+    },
+  };
+}
+
+async function serveTools(
+  c: Context,
+  mcpPath: string,
+  options: {
+    factoryProjectId: string;
+    projectName: string | undefined;
+    tools: Record<string, Tool<any, any, any, any>>;
+    events?: ConstructorParameters<typeof MCPServer>[0]['events'];
+  },
+): Promise<Response> {
+  const server = new MCPServer({
+    id: `factory-${options.factoryProjectId}`,
+    name: `${options.projectName ?? 'Mastra'} Factory`,
+    version: FACTORY_MCP_SERVER_VERSION,
+    description: 'Manage work items, sessions and decisions in a Mastra Factory.',
+    instructions: FACTORY_MCP_INSTRUCTIONS,
+    // VS Code, Cursor and Claude Code still open with 2025-era `initialize`; serve them statelessly.
+    legacy: 'stateless',
+    tools: options.tools,
+    ...(options.events ? { events: options.events } : {}),
+  });
+
+  const { req, res } = toReqRes(c.req.raw);
+  const done = server
+    .startHTTP({ url: new URL(c.req.url), httpPath: mcpPath, req, res })
+    .catch(error => {
+      console.warn('[factory] MCP request failed:', error);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null }),
+        );
+      }
+    })
+    .finally(() => void server.close());
+  const response = propagateClientDisconnect(await toFetchResponse(res), res);
+  if (res.writableEnded) await done;
+  return response;
+}
+
+/** A bound agent session's request: its tools, scoped to its own binding. */
+async function handleSessionMcp(
+  deps: FactoryMcpRoutesDeps,
+  c: Context,
+  mcpPath: string,
+  factoryProjectId: string,
+  token: string,
+): Promise<Response> {
+  const resolved = await resolveSessionTokenScope(deps, token, factoryProjectId);
+  // Never fall through to the person path: a request that brought a session token stands or falls by it.
+  if (!resolved) return c.json({ error: 'invalid_session_token' }, 401);
+  const tools = createFactoryMcpTools(resolved.scope, deps, { persistedSession: true });
+  Object.assign(tools, (await deps.tools.createBound?.(resolved.scope)) ?? {});
+  return serveTools(c, mcpPath, { factoryProjectId, projectName: resolved.projectName, tools });
+}
+
 async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Response> {
   const factoryProjectId = c.req.param('projectId') ?? '';
   const mcpPath = new URL(c.req.url).pathname;
+
+  const sessionToken = c.req.header(FACTORY_SESSION_TOKEN_HEADER);
+  if (sessionToken !== undefined) return handleSessionMcp(deps, c, mcpPath, factoryProjectId, sessionToken);
+  if (deps.allowUsers === false) return unauthorized(deps, mcpPath);
 
   await deps.auth.ensureUser(c);
   const tenant = deps.auth.tenant(c);
@@ -282,14 +403,9 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
     ...(actorProfile ? { actorProfile } : {}),
   };
 
-  const server = new MCPServer({
-    id: `factory-${factoryProjectId}`,
-    name: `${project.name ?? 'Mastra'} Factory`,
-    version: FACTORY_MCP_SERVER_VERSION,
-    description: 'Manage work items, sessions and decisions in a Mastra Factory.',
-    instructions: FACTORY_MCP_INSTRUCTIONS,
-    // VS Code, Cursor and Claude Code still open with 2025-era `initialize`; serve them statelessly.
-    legacy: 'stateless',
+  return serveTools(c, mcpPath, {
+    factoryProjectId,
+    projectName: project.name,
     tools: createFactoryMcpTools(scope, deps, { persistedSession: persisted }),
     events: {
       'factory.activity': factoryActivityEvent({
@@ -302,23 +418,6 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
       }),
     },
   });
-
-  const { req, res } = toReqRes(c.req.raw);
-  const done = server
-    .startHTTP({ url: new URL(c.req.url), httpPath: mcpPath, req, res })
-    .catch(error => {
-      console.warn('[factory] MCP request failed:', error);
-      if (!res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null }),
-        );
-      }
-    })
-    .finally(() => void server.close());
-  const response = propagateClientDisconnect(await toFetchResponse(res), res);
-  if (res.writableEnded) await done;
-  return response;
 }
 
 /**
