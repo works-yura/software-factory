@@ -53,6 +53,16 @@ import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { boardForWorkItem } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
+import { createRoutingHarness } from '@factory/harness';
+import { createFactorySessionTokenSigner } from '@factory/mcp';
+import {
+  ClaudeStartCoordinator,
+  createClaudeBoundTools,
+  createClaudeCheckoutResolver,
+  createClaudeCodeCredentialsHook,
+  createClaudeFactoryHarness,
+} from './claude/index.ts';
+import type { ClaudeCodeCredentialsHook, ClaudeFactoryHarness, ClaudeFactoryHarnessOptions } from './claude/index.ts';
 import type { ClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import { EnvironmentBuildRunner } from '@factory/harness-mastra';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '@factory/harness-mastra';
@@ -271,6 +281,11 @@ export interface MastraFactoryConfig {
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
+   * The Claude Code harness, for factories created with `harness: 'claude-code'`.
+   * Omitted → such factories cannot start runs; Mastra factories are unaffected.
+   */
+  claudeCode?: MastraFactoryClaudeCodeConfig;
+  /**
    * Deployment-stable secret for signing integration OAuth `state` values.
    * Omitted → a per-process random secret, which is fine for single-process
    * local development but rejected for integrations that declare
@@ -339,6 +354,27 @@ export interface MastraFactoryConfig {
       slug?: string;
     };
   };
+}
+
+/** How this server runs Claude Code sessions (see `createClaudeFactoryHarness`). */
+export interface MastraFactoryClaudeCodeConfig
+  extends Pick<
+    ClaudeFactoryHarnessOptions,
+    'configDir' | 'allowedTools' | 'approvedPermissionMode' | 'turnTimeoutMs' | 'skillsDir' | 'command' | 'spawn' | 'env'
+  > {
+  /** Where session records live; required unless `store` is given. */
+  storeDir?: string;
+  store?: ClaudeFactoryHarnessOptions['store'];
+  /** Local development: turns run on the person's own `claude` login, with no credentials passed. */
+  localDevelopment?: boolean;
+  /** Replaces the default credentials hook (`createClaudeCodeCredentialsHook`), e.g. with a credential pool. */
+  credentials?: ClaudeCodeCredentialsHook;
+  /** Replaces the default checkout (`createClaudeCheckoutResolver`). */
+  cwdFor?: (sessionId: string) => string | Promise<string>;
+  /** The origin the CLI reaches this server's MCP endpoint at; `publicUrl` by default. */
+  mcpOrigin?: string;
+  /** Secret for MCP session tokens; `stateSecret` by default, else a per-process key. */
+  sessionTokenSecret?: string;
 }
 
 export type { MastraFactorySandboxConfig, MastraFactorySandboxOption } from '@factory/sandbox';
@@ -1259,6 +1295,47 @@ export class MastraFactory {
         : [],
     );
 
+    // Claude Code factories: their sessions live in the Claude harness, reach the
+    // Factory's tools over MCP with per-turn session tokens, and show in the chat
+    // through `claudeSessionUi`. Everything else stays on Mastra.
+    const claudeCodeConfig = this.#config.claudeCode;
+    const sessionTokens = claudeCodeConfig
+      ? createFactorySessionTokenSigner(claudeCodeConfig.sessionTokenSecret ?? this.#config.stateSecret)
+      : undefined;
+    const claudeCode: ClaudeFactoryHarness | undefined = claudeCodeConfig
+      ? createClaudeFactoryHarness({
+          ...claudeCodeConfig,
+          sessions: sourceControlSessions,
+          credentials:
+            claudeCodeConfig.credentials ??
+            createClaudeCodeCredentialsHook({
+              localDevelopment: claudeCodeConfig.localDevelopment === true,
+              credentials: modelCredentialsStorage,
+            }),
+          cwdFor:
+            claudeCodeConfig.cwdFor ??
+            createClaudeCheckoutResolver({
+              sandbox: sandboxConfig,
+              sourceControls: () => sourceControlToolProviders,
+              projects: factoryProjectsStorage,
+            }),
+          mcp: {
+            url: factoryProjectId =>
+              `${(claudeCodeConfig.mcpOrigin ?? publicOrigin).replace(/\/+$/, '')}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/mcp`,
+            tokens: sessionTokens!,
+          },
+          onSession: session => {
+            this.#claudeSessionUi.attach(session);
+            // The same run bookkeeping a Mastra session gets when it is created.
+            observeSessionRunEnd(session, { audit: auditDomain });
+            observeSessionRunReports(session as never, (outcome, since) =>
+              reportSessionRunEnd({ sessionId: session.id, threadId: session.thread.getId() ?? null, outcome, since }),
+            );
+          },
+        })
+      : undefined;
+    if (claudeCode) this.#claudeSessionUi.setSessionResolver(sessionId => claudeCode.harness.getSession(sessionId));
+
     // Build the real production controller (agents, tools, memory, OM, MCP,
     // providers) — the terminal app's, minus modes. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
@@ -1743,7 +1820,7 @@ export class MastraFactory {
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
-          ...(mcpEnabled
+          ...(mcpEnabled || sessionTokens
             ? buildFactoryMcpRoutes({
                 auth: routeAuth,
                 publicOrigin,
@@ -1755,7 +1832,21 @@ export class MastraFactory {
                   // The harness types its tools loosely (`ToolLike`); they are Mastra tools.
                   create: scope =>
                     createFactoryTools({ scope, deps: factoryToolDeps }) as Record<string, Tool<any, any, any, any>>,
+                  ...(transitionService
+                    ? {
+                        createBound: scope =>
+                          createClaudeBoundTools(scope, {
+                            storage: workItemsStorage,
+                            transitionService,
+                            boards: this.#boards,
+                            sessions: sourceControlSessions,
+                          }),
+                      }
+                    : {}),
                 },
+                // Only Claude Code sessions present session tokens; people still need the endpoint enabled.
+                ...(sessionTokens ? { sessionTokens } : {}),
+                allowUsers: mcpEnabled,
               })
             : []),
           ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
@@ -1797,10 +1888,30 @@ export class MastraFactory {
             configVersion,
             boardRegistry: this.#boards,
             factoryTransitionService: transitionService,
+            ...(claudeCode && transitionService
+              ? {
+                  harnessStartCoordinators: {
+                    'claude-code': new ClaudeStartCoordinator({
+                      harness: claudeCode.harness,
+                      storage: workItemsStorage,
+                      transitionService,
+                      sourceControl: request =>
+                        sourceControlSessions.getSourceControlBySessionId(request.sessionId).then(handle => handle ?? undefined),
+                      projects: factoryProjectsStorage,
+                      ...(claudeCodeConfig?.approvedPermissionMode
+                        ? { approvedPermissionMode: claudeCodeConfig.approvedPermissionMode }
+                        : {}),
+                    }),
+                  },
+                }
+              : {}),
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;
               this.#dispatcher ??= new FactoryDecisionDispatcher({
-                harness: createMastraHarness(controller),
+                // Each session runs on the harness that owns it: Claude Code sessions are in its store.
+                harness: claudeCode
+                  ? createRoutingHarness({ routes: [claudeCode.route], fallback: createMastraHarness(controller) })
+                  : createMastraHarness(controller),
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,

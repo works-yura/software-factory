@@ -353,6 +353,14 @@ export const factory = new MastraFactory({
   // machine (Claude Code, Cursor) connect without an OAuth server.
   ...(localDevAuthEnabled ? { mcp: { tokenless: true } } : {}),
   sandbox,
+  // Factories created with `harness: 'claude-code'` run their agents on the
+  // `claude` CLI. Under local dev auth it uses the person's own `claude` login.
+  claudeCode: {
+    storeDir:
+      process.env.FACTORY_CLAUDE_CODE_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'claude-code-sessions'),
+    localDevelopment: localDevAuthEnabled,
+    ...(process.env.FACTORY_CLAUDE_CODE_COMMAND?.trim() ? { command: process.env.FACTORY_CLAUDE_CODE_COMMAND.trim() } : {}),
+  },
   ...(browser ? { browser } : {}),
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
