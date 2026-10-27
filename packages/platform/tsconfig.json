@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.node.json",
+  "include": ["src/**/*.ts", "vitest.config.ts"],
+  // v3 never typechecked these suites; their debt is counted by `check:tests` and
+  // paid down as packages leave platform (see MIGRATION.md).
+  "exclude": ["src/**/*.test.ts"]
+}

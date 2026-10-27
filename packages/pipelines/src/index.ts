@@ -7,12 +7,14 @@ import { isWorkBoardPhase, workBoard } from './work/board.ts';
 
 export { acceptanceBoard } from './acceptance/board.ts';
 export { isReviewBoardPhase, reviewBoard } from './review/board.ts';
+export { hasRecordedVerdict } from './review/phase-rules.ts';
 export type { ReviewBoardPhase } from './review/board.ts';
 export {
   mergeRequestNumberFromBranch,
   pullRequestNumberFromBranch,
   workItemBranch,
   workItemNumber,
+  workItemThreadTitle,
 } from './shared/work-item-branch.ts';
 export type { WorkItemBranchInput } from './shared/work-item-branch.ts';
 export { isWorkBoardPhase, workBoard } from './work/board.ts';

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "check": "corepack pnpm -r --if-present check",
-    "test": "corepack pnpm -r --if-present test",
+    "test": "corepack pnpm -r --workspace-concurrency=1 --if-present test",
     "compare-tests": "./scripts/compare-tests.sh",
     "verify": "corepack pnpm check && corepack pnpm test && ./scripts/compare-tests.sh"
   }

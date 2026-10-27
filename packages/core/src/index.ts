@@ -45,6 +45,7 @@ export {
 export { resolveFactoryStageRules } from './rules/resolve.ts';
 export type { ResolvedFactoryStageRule } from './rules/resolve.ts';
 export {
+  AUTO_TRIAGED_LABEL,
   externallyAuthored,
   externallyAuthoredWorkItem,
   externalSourceForWorkItem,
@@ -76,6 +77,7 @@ export type {
   FactoryBoardRuleLeaf,
   FactoryBoundRuleContext,
   FactoryCommitDecision,
+  FactoryDismissStaleReviewsDecision,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryGitLabEventName,
@@ -127,6 +129,7 @@ export {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   MAX_ROLE_LENGTH,
   MAX_TOOL_NAME_LENGTH,
+  normalizeFactoryRuleJsonValue,
   validateFactoryRuleDecision,
   validateFactoryRuleDecisions,
 } from './rules/validation.ts';

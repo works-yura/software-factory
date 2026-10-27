@@ -1,6 +1,8 @@
 import { defineBoard } from '@factory/core';
 import type { BoardDefinition, BoardRegistry } from '@factory/core';
 
+export { createTestBoard } from '@factory/core/testing';
+
 import { reviewBoard } from './review/board.ts';
 import { workBoard } from './work/board.ts';
 

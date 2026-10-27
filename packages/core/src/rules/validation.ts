@@ -94,7 +94,7 @@ function enumValue<T extends string>(value: unknown, allowed: readonly T[], labe
   return value as T;
 }
 
-function normalizeFactoryRuleJsonValue(
+export function normalizeFactoryRuleJsonValue(
   value: unknown,
   depth = 0,
   seen = new Set<object>(),

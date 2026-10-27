@@ -1,0 +1,825 @@
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
+import type { AgentController } from '@mastra/core/agent-controller';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
+import type { FactoryStorage } from '@mastra/core/storage';
+import type { FactorySandbox } from '@mastra/core/workspace';
+
+import { boardForWorkItem } from '@factory/core';
+import type { BoardRegistry } from '@factory/core';
+import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.ts';
+import { getGithubFeatureDiagnostics } from '../integrations/github/config.ts';
+import type { GithubIntegration } from '../integrations/github/integration.ts';
+import { MaterializeError } from '../integrations/github/sandbox.ts';
+import { FactoryDispatchError } from '@factory/store';
+import type { FactoryBindingPreparationInput } from '@factory/runtime';
+import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
+import { FactoryTransitionService } from '@factory/runtime';
+import {
+  createSourceControlSessionLookup,
+  ensureFactorySourceSession,
+  FactorySourceSessionResolutionError,
+  resolveFactorySourceControl,
+} from '../session/factory-session.ts';
+import type { EnsuredFactorySourceSession } from '../session/factory-session.ts';
+import type { LiveSessions } from '../session/live-sessions.ts';
+import { resolveWorkItemRepository } from '../session/work-item-repository.ts';
+import type { StateSigner } from '../state-signing.ts';
+import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.ts';
+import type { ChannelIdentityStorage } from '@factory/store';
+import type { WorkItemCommentsStorage } from '@factory/store';
+import type { CommentsDomain } from '../storage/domains/comments/domain.ts';
+import type { ModelCredentialsStorage } from '@factory/store';
+import type { CustomProvidersStorage } from '@factory/store';
+import type { FilesystemStorage } from '@factory/store';
+import type { IntakeStorage } from '@factory/store';
+import type { IntegrationStorage } from '@factory/store';
+import type { MemorySettingsStorage } from '@factory/store';
+import type { ModelDefaultsStorage } from '@factory/store';
+import { effectiveModelScope } from '@factory/store';
+import type { FactoryProjectsStorage } from '@factory/store';
+import type { QueueHealthStorage } from '@factory/store';
+import {
+  SessionOwnershipMismatchError,
+  SourceControlConnectionNotFoundError,
+} from '@factory/store';
+import type { SourceControlStorage, SourceControlStorageHandle } from '@factory/store';
+import { isAgentActor } from '@factory/store';
+import type { FactoryDispatchFailureCode, WorkItemsStorage } from '@factory/store';
+import { workItemSource } from '@factory/core';
+import { workItemBranch, workItemThreadTitle } from '@factory/pipelines';
+import { buildAutomationRunRoutes } from './automation-runs.ts';
+import { ConfigRoutes } from './config.ts';
+import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
+import { buildFsRoutes } from './fs.ts';
+import { IntakeRoutes } from './intake.ts';
+import { KnowledgeRoutes } from './knowledge.ts';
+import { OAuthRoutes } from './oauth.ts';
+import type { RouteAuth } from './route.ts';
+import { SkillRoutes } from './skills.ts';
+import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
+import { buildSourceControlSettingsRoutes } from './source-control-settings.ts';
+import { invalidateTenantCredentialSnapshots } from './tenant-credentials.ts';
+import { WorkItemRoutes } from './work-items.ts';
+
+const MATERIALIZE_FAILURE_CODE = {
+  'git-missing': 'repository_git_missing',
+  'egress-blocked': 'repository_egress_blocked',
+  'clone-failed': 'repository_clone_failed',
+  'pull-failed': 'repository_pull_failed',
+  'push-failed': 'repository_push_failed',
+  'commit-failed': 'repository_commit_failed',
+  'gh-missing': 'repository_cli_missing',
+  'pr-failed': 'repository_pr_failed',
+} satisfies Record<MaterializeError['code'], FactoryDispatchFailureCode>;
+export interface IntegrationRegistration {
+  integration: FactoryIntegration;
+  ready: boolean;
+  ensureReady: () => Promise<void>;
+}
+
+export interface FactoryApiRoutesDeps {
+  controllerId: string;
+  controller: AgentController<MastraCodeState>;
+  /** Registry of the sessions this process holds, owned by the host so it can watch them too. */
+  liveSessions: LiveSessions;
+  /** Request-auth seam threaded from the host (no service locator). */
+  auth: RouteAuth;
+  /** Optional user directory for resolving persisted owners to display profiles. */
+  users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
+  authStorage: AuthStorage;
+  audit: AuditEmitter & AuditRecorder;
+  fsRoot?: string;
+  publicOrigin: string;
+  stateSigner?: StateSigner;
+  /** Sandbox surface (enablement, provider label, create callback). */
+  sandbox?: FactorySandbox;
+  /** Push hand-off for environment builds, present when the sandbox can build templates. */
+  onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
+  /** Root factory storage backend (distributed locks, app-db diagnostics). */
+  factoryStorage?: FactoryStorage;
+  integrationStorage: IntegrationStorage;
+  sourceControlStorage: SourceControlStorage;
+  /** App-table domain handles, registered and owned by `MastraFactory.prepare()`. */
+  domains: {
+    intake: IntakeStorage;
+    modelCredentials: ModelCredentialsStorage;
+    memorySettings: MemorySettingsStorage;
+    customProviders: CustomProvidersStorage;
+    filesystem: FilesystemStorage;
+    modelDefaults: ModelDefaultsStorage;
+    projects: FactoryProjectsStorage;
+    queueHealth: QueueHealthStorage;
+    workItems: WorkItemsStorage;
+    channelIdentity: ChannelIdentityStorage;
+    comments: WorkItemCommentsStorage;
+  };
+  integrations?: IntegrationRegistration[];
+  intakeReady: boolean;
+  factoryReady: boolean;
+  knowledgeEnabled: boolean;
+  /** Providers the operator opted in to run on the server process's own credentials. */
+  deploymentModelProviders?: ReadonlySet<string>;
+  knowledgeKey?: string;
+  /** Resolved Factory rule set, threaded from the host (no service locator). */
+  configVersion: string;
+  /** Boards installed for this Factory instance. */
+  boardRegistry: BoardRegistry;
+  /** Work-item feed service, handed to integrations that ingest platform messages. */
+  feed: CommentsDomain;
+  factoryTransitionService?: FactoryTransitionService;
+  sessionRetirement?: import('../sandbox/session-retirement.ts').SessionRetirementCoordinator;
+  /** Moves a thread with its observation vectors onto another memory resource. */
+  moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  onFactoryRuntime?: (runtime: {
+    transitionService: FactoryTransitionService;
+    startCoordinator: FactoryStartCoordinator;
+    prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
+  }) => void;
+}
+
+function guardIntegrationRoutes({
+  integration,
+  ready,
+  ensureReady,
+  routes,
+}: IntegrationRegistration & { routes: ApiRoute[] }): ApiRoute[] {
+  if (ready) return routes;
+  return routes.map(route => {
+    if ('handler' in route) {
+      const handler = route.handler;
+      return {
+        ...route,
+        handler: async (context: Parameters<typeof handler>[0]) => {
+          try {
+            await ensureReady();
+          } catch {
+            return context.json(
+              { error: 'integration_unavailable', message: `${integration.id} integration is unavailable.` },
+              503,
+            );
+          }
+          return handler(context, async () => {});
+        },
+      };
+    }
+
+    const createHandler = route.createHandler;
+    return {
+      ...route,
+      createHandler: async (args: Parameters<typeof createHandler>[0]) => {
+        const handler = await createHandler(args);
+        return async (context: Parameters<typeof handler>[0]) => {
+          try {
+            await ensureReady();
+          } catch {
+            return context.json(
+              { error: 'integration_unavailable', message: `${integration.id} integration is unavailable.` },
+              503,
+            );
+          }
+          return handler(context);
+        };
+      },
+    };
+  });
+}
+
+/**
+ * Resolve the source-control session the work item already holds for this role,
+ * when it still resolves to the item's org and factory project. Returns
+ * `undefined` when there is no ref or the ref no longer resolves, so the caller
+ * falls back to minting one.
+ */
+async function reuseBoundSession(
+  sourceControl: SourceControlStorageHandle,
+  input: FactoryBindingPreparationInput,
+  role: string = input.role,
+): Promise<EnsuredFactorySourceSession | undefined> {
+  const ref = input.item.sessions[role];
+  if (!ref) return undefined;
+  // At least as strict as the coordinator's resolveSourceSession: a ref it
+  // would reject must fall through to minting, not hard-fail the run.
+  const session = await sourceControl.sessions.getBySessionId(ref.sessionId);
+  if (
+    !session?.projectRepositoryId ||
+    session.orgId !== input.record.orgId ||
+    session.factoryProjectId !== input.record.factoryProjectId
+  ) {
+    return undefined;
+  }
+  return {
+    sessionId: session.sessionId,
+    userId: session.userId,
+    projectRepositoryId: session.projectRepositoryId,
+    branch: session.branch,
+    baseBranch: session.baseBranch,
+  };
+}
+
+/** Roles whose sessions a later role may continue in, newest stage first. */
+const INHERITABLE_ROLE_FALLBACK = ['plan', 'triage'];
+
+/**
+ * A role running for the first time continues in the card's latest earlier
+ * session on the same branch, so a build approved by someone other than the
+ * plan's owner keeps the plan's context instead of starting empty. Review is
+ * independent by design and never inherits.
+ */
+async function inheritEarlierSession(
+  sourceControl: SourceControlStorageHandle,
+  input: FactoryBindingPreparationInput,
+  board: { roleForPhase(phase: string): string | undefined } | undefined,
+  branch: string,
+  projectRepositoryId: string,
+): Promise<EnsuredFactorySourceSession | undefined> {
+  if (input.role === 'review') return undefined;
+  // The card's linked repository can change after an earlier role ran; only
+  // continue in a session on the repository a fresh session would use.
+  const candidates: string[] = [];
+  for (const entry of [...(input.item.stageHistory ?? [])].reverse()) {
+    const role = board?.roleForPhase(entry.stage);
+    if (role && role !== input.role && role !== 'review' && !candidates.includes(role)) candidates.push(role);
+  }
+  for (const role of INHERITABLE_ROLE_FALLBACK) {
+    if (role !== input.role && !candidates.includes(role)) candidates.push(role);
+  }
+  for (const role of candidates) {
+    const session = await reuseBoundSession(sourceControl, input, role);
+    if (session && session.branch === branch && session.projectRepositoryId === projectRepositoryId) {
+      return session;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Start a factory run for a rule binding: ensure the source-control session the
+ * coordinator requires, then hand it to `prepare` along with the factory's
+ * default model. Exported for tests — this is the autonomous entry point with no
+ * browser and no interactive user, so nothing else would catch a regression in
+ * what it forwards.
+ */
+export async function prepareFactoryRuleBinding(
+  sourceControlProvider: SourceControlStorageHandle | Pick<GithubIntegration, 'sourceControlStorage'>,
+  coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
+  projects: FactoryProjectsStorage,
+  boards: BoardRegistry,
+  input: FactoryBindingPreparationInput,
+  intake?: Pick<IntakeStorage, 'getConfig'>,
+): Promise<void> {
+  try {
+    const sourceControl =
+      'sourceControlStorage' in sourceControlProvider
+        ? sourceControlProvider.sourceControlStorage
+        : sourceControlProvider;
+    const source = workItemSource(input.item.externalSource);
+    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
+    // Only leaving a resting phase derives a lane from the role: roles don't own lanes,
+    // and the Done close-out running in the triage seat must not drag the card back.
+    // Both the current phase and the role's lane come from the installed board; an
+    // unknown board or phase yields no destination rather than a guessed one.
+    const board = boards.get(boardForWorkItem(input.item));
+    const currentStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
+    const currentKind = currentStage === undefined ? undefined : board?.phaseKind(currentStage);
+    const destinationStage =
+      currentKind === undefined
+        ? undefined
+        : currentKind === 'resting'
+          ? board?.phaseForRole(input.role)
+          : currentStage;
+    if (!destinationStage) {
+      throw new FactoryDispatchError(
+        'unsupported_provider_item',
+        `Factory skill invocation has no destination lane (role "${input.role}", stages [${input.item.stages.join(', ')}]).`,
+      );
+    }
+    const connections = await sourceControl.connections.list({
+      orgId: input.record.orgId,
+      factoryProjectId: input.record.factoryProjectId,
+    });
+    if (!connections.some(connection => connection.integrationId === sourceControl.integrationId)) {
+      throw new FactoryDispatchError('source_control_missing', 'Factory source-control connection not found.');
+    }
+    const project = await projects.getById({ id: input.record.factoryProjectId });
+    if (!project || project.orgId !== input.record.orgId) {
+      throw new FactoryDispatchError(
+        'session_unavailable',
+        `Factory model policy is unavailable for project ${input.record.factoryProjectId}.`,
+      );
+    }
+    // A retry may already own a role session. Check it before treating a
+    // repository-less card as ambiguous, but never override an explicit signal.
+    const boundSession = await reuseBoundSession(sourceControl, input);
+    const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
+    let repository = await resolveWorkItemRepository({
+      sourceControl,
+      orgId: input.record.orgId,
+      factoryProjectId: input.record.factoryProjectId,
+      item: input.item,
+      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
+    });
+    if (repository.status === 'ambiguous' && boundSession) {
+      const link = await sourceControl.projectRepositories.get({
+        orgId: input.record.orgId,
+        id: boundSession.projectRepositoryId,
+      });
+      const linked =
+        link && (await sourceControl.repositories.get({ orgId: input.record.orgId, id: link.repositoryId }));
+      if (linked && repository.candidates.includes(linked.slug)) {
+        repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: link.id };
+      }
+    }
+    if (repository.status !== 'resolved') {
+      const detail =
+        repository.status === 'ambiguous'
+          ? `Choose one of the linked repositories: ${repository.candidates.join(', ')}.`
+          : repository.hint;
+      throw new FactoryDispatchError('source_repository_ambiguous', detail);
+    }
+    // Re-preparing a binding (server restart, retired controller session) must
+    // land in the role's existing session: minting a replacement would repoint
+    // the work item, flip the session's owner to the approver, and orphan the
+    // previous sandbox.
+    const approver = input.record.approvedBy ?? undefined;
+    if (boundSession && boundSession.projectRepositoryId !== repository.projectRepositoryId) {
+      throw new FactoryDispatchError(
+        'source_repository_ambiguous',
+        `The existing session is bound to a different repository than ${repository.slug}. Choose the correct repository and retry.`,
+      );
+    }
+    // The session is filed under the card's repository: the sandbox holds
+    // every environment repository, but the coordinator, the PR tools and the
+    // subscriptions follow the session's link, and the card names which one.
+    const preparedSession =
+      boundSession ??
+      (await inheritEarlierSession(sourceControl, input, board, branch, repository.projectRepositoryId)) ??
+      (await ensureFactorySourceSession({
+        sourceControl,
+        orgId: input.record.orgId,
+        factoryProjectId: input.record.factoryProjectId,
+        projectRepositoryId: repository.projectRepositoryId,
+        branch,
+        // A person who approved the run is its interactive user: attribute it to
+        // them, not the repo connector. An agent's pre-approval names no person.
+        attributeToUserId: isAgentActor(approver) ? undefined : approver,
+      }).catch(error => {
+        if (error instanceof FactorySourceSessionResolutionError && error.reason === 'repository') {
+          // The card resolved to a linked repository the sandbox will not check out.
+          throw new FactoryDispatchError(
+            'source_repository_missing',
+            `Repository ${repository.slug} is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.`,
+            { cause: error },
+          );
+        }
+        if (!(error instanceof SessionOwnershipMismatchError)) throw error;
+        throw new FactoryDispatchError(
+          'session_unavailable',
+          `Session ${error.sessionId} on branch ${branch} predates factory ownership and cannot be reused. Delete that session, then retry.`,
+          { cause: error },
+        );
+      }));
+
+    const modelScope = effectiveModelScope(project.modelScope, 'run');
+    await coordinator.prepare({
+      orgId: input.record.orgId,
+      userId: preparedSession.userId,
+      factoryProjectId: input.record.factoryProjectId,
+      sessionId: preparedSession.sessionId,
+      modelScope,
+      defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
+      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
+      kickoffKey: input.record.id,
+      destinationStage,
+      workItem: {
+        id: input.item.id,
+        role: input.role,
+        input: {
+          externalSource: input.item.externalSource,
+          parentWorkItemId: input.item.parentWorkItemId,
+          title: input.item.title,
+          stages: ['intake'],
+          sessions: input.item.sessions,
+          metadata: input.item.metadata,
+        },
+      },
+    });
+  } catch (error) {
+    if (error instanceof FactoryDispatchError) throw error;
+    if (error instanceof FactorySourceSessionResolutionError) {
+      const code = error.reason === 'connection' ? 'source_control_missing' : 'source_repository_missing';
+      throw new FactoryDispatchError(code, error.message, { cause: error });
+    }
+    if (error instanceof SourceControlConnectionNotFoundError) {
+      throw new FactoryDispatchError('source_control_missing', error.message, { cause: error });
+    }
+    if (error instanceof MaterializeError) {
+      throw new FactoryDispatchError(MATERIALIZE_FAILURE_CODE[error.code], error.message, { cause: error });
+    }
+    throw error;
+  }
+}
+
+/**
+ * Build the {@link IntegrationContext} handed to an integration when the
+ * factory collects its capabilities (routes, workers). One shape everywhere:
+ * `assembleFactoryApiRoutes` uses it per registration, and `MastraFactory` uses it
+ * when collecting integration workers at finalize.
+ */
+export function buildIntegrationContext(
+  deps: Pick<
+    FactoryApiRoutesDeps,
+    | 'controller'
+    | 'publicOrigin'
+    | 'auth'
+    | 'sandbox'
+    | 'users'
+    | 'factoryStorage'
+    | 'integrationStorage'
+    | 'sourceControlStorage'
+    | 'integrations'
+  > & {
+    stateSigner: StateSigner;
+    emitAudit?: AuditEmitter['emit'];
+    onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
+    configVersion: string;
+    boardRegistry: BoardRegistry;
+    factoryReady: boolean;
+    /** Work-item feed service, so a channel integration can ingest platform messages. */
+    feed: CommentsDomain;
+    domains: Pick<
+      FactoryApiRoutesDeps['domains'],
+      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings' | 'modelDefaults'
+    >;
+    /**
+     * Stable id of the registered source-control-owning integration (today:
+     * `'github'` when registered). Every call site must derive and pass it so
+     * `routes()`, `channels()`, and `workers()` all see the same context shape.
+     */
+    sourceControlOwnerId?: string;
+  },
+  integrationId: string,
+): IntegrationContext {
+  return {
+    auth: deps.auth,
+    sandbox: deps.sandbox,
+    ...(deps.users ? { users: deps.users } : {}),
+    factoryStorage: deps.factoryStorage,
+    baseUrl: deps.publicOrigin,
+    controller: deps.controller,
+    stateSigner: deps.stateSigner,
+    storage: {
+      generic: deps.integrationStorage.forIntegration(integrationId),
+      sourceControl: deps.sourceControlStorage.forIntegration(integrationId),
+      ...(deps.sourceControlOwnerId
+        ? { sourceControlOwner: deps.sourceControlStorage.forIntegration(deps.sourceControlOwnerId) }
+        : {}),
+      sourceControls: (deps.integrations ?? [])
+        .filter(({ integration }) => integration.versionControl)
+        .map(({ integration }) => deps.sourceControlStorage.forIntegration(integration.id)),
+      projects: deps.domains.projects,
+      intake: deps.domains.intake,
+      channelIdentity: deps.domains.channelIdentity,
+      memorySettings: deps.domains.memorySettings,
+      modelDefaults: deps.domains.modelDefaults,
+    },
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
+    ...(deps.factoryReady
+      ? {
+          runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
+        }
+      : {}),
+    ...(deps.emitAudit || deps.onRepositoryPush
+      ? {
+          hooks: {
+            ...(deps.emitAudit ? { emitAudit: deps.emitAudit } : {}),
+            ...(deps.onRepositoryPush ? { onRepositoryPush: deps.onRepositoryPush } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * Disabled-status stub for the well-known integration ids. The SPA polls
+ * `/web/github/status`, `/web/linear/status`, and `/web/jira/status`
+ * unconditionally, so when an integration is absent (or not ready) the status
+ * contract must still hold. Unknown custom ids get no stub — the SPA doesn't
+ * poll them.
+ */
+function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string, configured = false): ApiRoute[] {
+  if (id === 'github') {
+    return [
+      registerApiRoute('/web/github/status', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: c =>
+          c.json({
+            enabled: false,
+            connected: false,
+            installations: [],
+            reason: 'missing_config',
+            diagnostics: getGithubFeatureDiagnostics({
+              github: undefined,
+              auth: deps.auth,
+              appDbConfigured: deps.factoryStorage !== undefined,
+              stateSigner: deps.stateSigner,
+              sandbox: deps.sandbox,
+            }),
+          }),
+      }),
+    ];
+  }
+  if (id === 'linear') {
+    return [
+      registerApiRoute('/web/linear/status', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: c =>
+          c.json({
+            enabled: false,
+            connected: false,
+            workspace: null,
+            reason: 'missing_config',
+            diagnostics: {
+              linearAppConfigured: configured,
+              factoryAuthEnabled: deps.auth.enabled(),
+              appDbConfigured: true,
+            },
+          }),
+      }),
+    ];
+  }
+  if (id === 'jira') {
+    return [
+      registerApiRoute('/web/jira/status', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: c =>
+          c.json({
+            enabled: false,
+            configured,
+            site: null,
+            reason: 'missing_config',
+            diagnostics: {
+              jiraConfigured: configured,
+              factoryAuthEnabled: deps.auth.enabled(),
+              appDbConfigured: deps.factoryStorage !== undefined,
+            },
+          }),
+      }),
+    ];
+  }
+  return [];
+}
+
+/**
+ * Stub for `GET /web/channel-accounts` when NO Slack integration is
+ * registered. The SPA's Connections section polls the path unconditionally;
+ * without a stub the SPA fallback serves HTML, which the UI can only read as
+ * "old server / unknown". The machine-readable reason lets it say the truth:
+ * the integration isn't registered.
+ *
+ * Mounted only for ABSENT slack — a registered integration owns the path via
+ * its connect routes (or, when the state signer is unstable, gets no routes
+ * at all and the UI falls back to the generic copy). Static payload, leaks
+ * nothing → no auth needed, same posture as the github/linear stubs.
+ */
+function absentSlackChannelAccountsRoutes(): ApiRoute[] {
+  return [
+    registerApiRoute('/web/channel-accounts', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => c.json({ accounts: [], canConnect: false, reason: 'not_registered' }),
+    }),
+  ];
+}
+
+/**
+ * Assemble the custom `/web/*` API routes as Mastra `server.apiRoutes`:
+ *   - fs browser routes (project picker), confined to `fsRoot`
+ *   - config routes (provider/API-key/default-model/OM management)
+ *   - every registered integration's `routes()` surface (full set when ready,
+ *     disabled-status stub otherwise), plus stubs for absent known ids
+ */
+export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[] {
+  const emitAudit: AuditEmitter['emit'] = args => deps.audit.emit(args);
+  const registrations = deps.integrations ?? [];
+  const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
+  const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
+  const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
+  const sourceControlRegistrations = registrations.filter(({ integration }) => integration.versionControl);
+  const sourceControlIntegrationIds = [
+    ...new Set(['github', ...sourceControlRegistrations.map(({ integration }) => integration.id)]),
+  ];
+  const sourceControls = sourceControlIntegrationIds.map(id => deps.sourceControlStorage.forIntegration(id));
+  const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
+
+  const integrationRoutes = registrations.flatMap(registration => {
+    const { integration } = registration;
+    if (!deps.stateSigner) return disabledIntegrationStatusRoutes(deps, integration.id, true);
+    const context = buildIntegrationContext(
+      {
+        ...deps,
+        stateSigner: deps.stateSigner,
+        emitAudit,
+        ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),
+      },
+      integration.id,
+    );
+    return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
+  });
+  // Session persistence belongs to the linked source-control provider, not to
+  // GitHub. Replace legacy GitHub-owned handlers with one resolver spanning
+  // the legacy GitHub partition and every registered source-control partition.
+  const sharedSessionRouteKeys = new Set([
+    'GET /web/github/projects/:id/sessions',
+    'POST /web/github/projects/:id/sessions',
+    'GET /web/user-sessions/:sessionId',
+    'DELETE /web/user-sessions/:sessionId',
+    'POST /web/user-sessions/:sessionId/title',
+  ]);
+  const providerRoutes = integrationRoutes.filter(
+    route => !sharedSessionRouteKeys.has(route.method + ' ' + route.path),
+  );
+  const sourceControlSessionRoutes =
+    sourceControls.length === 0
+      ? []
+      : buildSourceControlSessionRoutes({
+          auth: deps.auth,
+          sourceControls,
+          projects: deps.domains.projects,
+          ...(deps.users ? { users: deps.users } : {}),
+          controller: deps.controller,
+          memorySettings: deps.domains.memorySettings,
+          sessionRetirement: deps.sessionRetirement,
+          // A local sandbox's destroy keeps the session directory, so recreate
+          // couldn't deliver the fresh checkout it promises there.
+          sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',
+          filesystem: deps.domains.filesystem,
+          ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+          ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
+          ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
+        });
+  // Absent known integrations still get their disabled-status stub.
+  const absentStubs = ['github', 'linear', 'jira']
+    .filter(id => !registrations.some(({ integration }) => integration.id === id))
+    .flatMap(id => disabledIntegrationStatusRoutes(deps, id));
+  // Absent slack gets the channel-accounts not-registered stub (registered
+  // slack owns the path via its own connect routes).
+  const slackAbsentStubs = registrations.some(({ integration }) => integration.id === 'slack')
+    ? []
+    : absentSlackChannelAccountsRoutes();
+
+  const transitionService = deps.factoryReady
+    ? (deps.factoryTransitionService ??
+      new FactoryTransitionService({
+        configVersion: deps.configVersion,
+        boards: deps.boardRegistry,
+        storage: deps.domains.workItems,
+        audit: deps.audit,
+      }))
+    : undefined;
+  const startCoordinator = transitionService
+    ? new FactoryStartCoordinator(
+        deps.controller,
+        deps.domains.workItems,
+        transitionService,
+        request =>
+          resolveFactorySourceControl({
+            sourceControls,
+            orgId: request.orgId,
+            factoryProjectId: request.factoryProjectId,
+            sessionId: request.sessionId,
+          }),
+        deps.domains.intake,
+        { projects: deps.domains.projects, modelDefaults: deps.domains.modelDefaults },
+      )
+    : undefined;
+  if (transitionService && startCoordinator) {
+    deps.onFactoryRuntime?.({
+      transitionService,
+      startCoordinator,
+      ...(sourceControlRegistrations.length > 0
+        ? {
+            prepareBinding: async (input: FactoryBindingPreparationInput) => {
+              const sourceControl = await resolveFactorySourceControl({
+                sourceControls,
+                orgId: input.record.orgId,
+                factoryProjectId: input.record.factoryProjectId,
+              });
+              if (!sourceControl) {
+                throw new FactoryDispatchError(
+                  'source_control_missing',
+                  'Factory project has no linked source-control repository.',
+                );
+              }
+              return prepareFactoryRuleBinding(
+                sourceControl,
+                startCoordinator,
+                deps.domains.projects,
+                deps.boardRegistry,
+                input,
+                deps.domains.intake,
+              );
+            },
+          }
+        : {}),
+    });
+  }
+
+  return [
+    ...buildFsRoutes({
+      root: deps.fsRoot,
+      sessionFs: {
+        auth: deps.auth,
+        sessions: sourceControlSessions,
+      },
+    }),
+    ...new ConfigRoutes({
+      auth: deps.auth,
+      controller: deps.controller,
+      authStorage: deps.authStorage,
+      modelCredentials: deps.domains.modelCredentials,
+      modelDefaults: deps.domains.modelDefaults,
+      sourceControlSessions,
+      sourceControls,
+      workItems: deps.domains.workItems,
+      memorySettings: deps.domains.memorySettings,
+      factoryProjects: deps.domains.projects,
+      customProviders: deps.domains.customProviders,
+      features: { knowledge: deps.knowledgeEnabled },
+      deploymentProviders: deps.deploymentModelProviders,
+      onCredentialsChanged: invalidateTenantCredentialSnapshots,
+      onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
+    }).routes(),
+    ...new OAuthRoutes({
+      auth: deps.auth,
+      authStorage: deps.authStorage,
+      modelCredentials: deps.domains.modelCredentials,
+      onCredentialsChanged: invalidateTenantCredentialSnapshots,
+    }).routes(),
+    ...new SkillRoutes({
+      auth: deps.auth,
+      controllerId: deps.controllerId,
+      controller: deps.controller,
+      sourceControlStorage: githubStorage,
+      ensureSourceControlReady: githubRegistration?.ensureReady,
+    }).routes(),
+    ...sourceControlSessionRoutes,
+    ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
+    ...providerRoutes,
+    ...absentStubs,
+    ...slackAbsentStubs,
+    ...(deps.intakeReady
+      ? new IntakeRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          intake: deps.domains.intake,
+          projects: deps.domains.projects,
+          boardRegistry: deps.boardRegistry,
+          // Relocation reads and writes work items, which init fail-soft separately from intake.
+          ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+          integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
+            integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
+          ),
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.knowledgeEnabled
+      ? new KnowledgeRoutes({
+          auth: deps.auth,
+          projects: deps.domains.projects,
+          knowledge: async key => deps.controller.getMastra()?.getKnowledge(key),
+          defaultKnowledgeKey: deps.knowledgeKey,
+          threadTitle: async threadId => {
+            const memory = await deps.controller.getMastra()?.getStorage()?.getStore('memory');
+            return (await memory?.getThreadById({ threadId }))?.title;
+          },
+        }).routes()
+      : []),
+    ...(deps.factoryReady
+      ? new WorkItemRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
+          workItems: deps.domains.workItems,
+          boardRegistry: deps.boardRegistry,
+          comments: deps.domains.comments,
+          queueHealth: deps.domains.queueHealth,
+          transitionService,
+          startCoordinator,
+          liveSessions: deps.liveSessions,
+        }).routes()
+      : []),
+    ...(deps.factoryReady
+      ? buildAutomationRunRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
+          workItems: deps.domains.workItems,
+          configVersion: deps.configVersion,
+        })
+      : []),
+  ];
+}

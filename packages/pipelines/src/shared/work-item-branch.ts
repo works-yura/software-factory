@@ -27,6 +27,14 @@ export function workItemNumber(item: Pick<WorkItemBranchInput, 'source' | 'metad
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
+/** How a card names its thread: a Linear title already opens with its identifier, a GitHub card gets its number here. */
+export function workItemThreadTitle(item: Pick<WorkItemBranchInput, 'source' | 'metadata'> & { title: string }): string {
+  const number = workItemNumber(item);
+  if (number === undefined) return item.title;
+  const kind = item.source === 'github-pr' ? 'PR' : item.source === 'gitlab-pr' ? 'MR' : 'Issue';
+  return `${kind} #${number}: ${item.title}`;
+}
+
 /** Last 12 alphanumerics of the card id: keeps provider-named branches unique across projects. */
 function idSuffix(id: string): string {
   return id

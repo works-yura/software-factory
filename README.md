@@ -7,6 +7,8 @@
 | `@factory/core` | `packages/core` | Рушій дошок: `defineBoard`, `createBoardRegistry`, семантика фаз, перевірка рішення, перенесення картки |
 | `@factory/pipelines` | `packages/pipelines` | Дошки Work, Review і Acceptance. Залежить від `@factory/core`; рушій їх не імпортує |
 | `@factory/store` | `packages/store` | Сховища карток, аудиту й коментарів з v3 на сховищі Mastra (libsql або pg). `@factory/store/testing` — libsql `:memory:` для тестів |
+| `@factory/platform` | `packages/platform` | Решта v3 одним пакетом: інтеграції, маршрути, сесії, інструменти, пісочниці, Supervisor, `MastraFactory`. Пакети виносяться з нього по одному |
+| `@internal/workspace` | `packages/internal-workspace` | Файлові команди, клонування репо, маркер setup (з v3) |
 | `@factory/runtime` | `packages/runtime` | Сервіс переходів, диспетчер рішень, аудит запусків, термінальне прибирання з v3. Mastra лише в типах сесії та `RequestContext` |
 
 Хост ставить дошки так:
@@ -43,8 +45,13 @@ pnpm test    # vitest
 
 ## Що далі
 
-Код переноситься з v3 копією, тести — 1:1. Нове пишеться лише там, де треба розрізати залежність.
+Код переноситься з v3 копією, тести — 1:1 (`pnpm verify` звіряє кількість). Нове пишеться лише на швах. Журнал — `MIGRATION.md`.
 
-1. Винести з диспетчера сесію Mastra в порт харнесу: `FactoryController`, `DispatcherSession`, `RequestContext`, `skills/service.ts`.
-2. `@factory/harness-mastra`: перший харнес, код з v3 (координатор старту, `AgentController`, процесор, інструменти).
-3. Звузити `WorkItemsStorage` до портів (`CardStore`, `DecisionQueue`, `RunBindings`), прибрати з нього Supervisor, увагу й підписки. Потім адаптер Firestore.
+Уся функціональність v3 уже у v4. Далі пакети виносяться з `@factory/platform`, знизу вгору:
+
+1. `capabilities`, `sandbox`, `environment`.
+2. Порт харнесу і `@factory/harness-mastra` (координатор старту, процесор, `session/*`, `workspace.ts`, `tools`, `mcp`).
+3. `integrations` (`base`, потім GitLab, GitHub, решта).
+4. `supervisor`, `auth`, `api` (`routes`), складання `MastraFactory` → `apps/server`.
+5. `apps/ui`.
+6. Звузити сховище до портів, потім адаптер Firestore.

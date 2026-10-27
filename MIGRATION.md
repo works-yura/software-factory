@@ -19,6 +19,19 @@
 | `rules/{transition-service,dispatcher,decision-applicability,terminal-cleanup}.ts` | `runtime/src` |
 | `session/run-audit.ts`, `skills/service.ts`, `routes/attention-providers.ts` | `runtime/src` |
 
+| решта `v3/packages/factory/src` (383 файли: integrations, routes, session, tools, sandbox, environment, supervisor, mcp, auth, workspace, `factory.ts`, …) | `platform/src`, та сама структура |
+| `v3/packages/internal-workspace/src` | `internal-workspace/src` (`@internal/workspace`) |
+| `factory-skills/`, `scripts/generate-api-cli-route-metadata.ts` | `platform/factory-skills`, `platform/scripts` |
+
+`@factory/platform` — проміжний пакет («душитель»): уся решта v3 одним шматком, підключена до вже винесених пакетів. Пакети виносяться з нього по одному, кожен крок перевіряє `pnpm verify`.
+
+## Не перенесено
+
+| Що | Чому |
+| --- | --- |
+| `build/rewrite-specifiers.test.ts` | тестує скрипт пакування v3 (tsdown); у v4 збірки нема |
+| `internal-workspace/src/files-api-filesystem.test.ts` | потребує `@internal/workspace-test-utils` з монорепо Mastra; у v3 файл теж падає на імпорті й не запускався |
+
 ## Шви
 
 | Де | Що змінено | Чому |
@@ -34,9 +47,25 @@
 | `runtime/src/skills/rescan.ts` | дві речі з `workspace.ts` | `workspace.ts` тягне GitHub і пісочниці; синхронізація з резолвером переїде в харнес |
 | `runtime/src/run-end-report.ts` | лише типи звіту | доставка звіту йде через нотифікації Mastra, переїде в харнес |
 | `store/src/supervisor-finding.ts` | копія типу знахідки | `WorkItemsStorage` зберігає знахідки; Supervisor ще не перенесено |
-| класи помилок | поля замість параметрів-властивостей | `erasableSyntaxOnly`, щоб Node запускав `.ts` напряму |
+| класи помилок і сервіси | поля замість параметрів-властивостей (`migration/tools/erase-parameter-properties.py`) | `erasableSyntaxOnly`, щоб Node запускав `.ts` напряму |
+| `platform/src/boards.ts` | `defaultBoards` і `createDefaultBoardRegistry` з семантикою v3 | хост v3 ставив Work і Review за замовчуванням; рушій v4 цього не робить |
+| `platform/src/test-support.ts` | обгортки з дошками за замовчуванням, `createBoardRegistry` з семантикою v3 для тестів | скопійовані тести лишаються без змін |
+| `platform/src/factory.test.ts` | три `vi.mock` модулів runtime злиті в один `vi.mock('@factory/runtime')` | у v4 це один пакет |
+| `platform/src/rules/processor.ts` | тип опцій винесено в `FactoryPhaseStateProcessorOptions` | був продубльований полем і параметром |
+| `platform/src/routes/surface.ts` | `workItemSource` з core замість `workItemBranchSource` | дві однакові функції |
+| `routes/contracts.ts`, `rules/tools.ts`, `supervisor/write-tools.ts` | `IDENTIFIER_RE` замість `BOARD_IDENTIFIER_RE` | один регекс, два імені |
+| `core`, `pipelines` | повернуто `AUTO_TRIAGED_LABEL`, `normalizeFactoryRuleJsonValue`, `workItemThreadTitle`, `hasRecordedVerdict`, тип `FactoryDismissStaleReviewsDecision` | у першому розрізі їх прибрали як мертві; решта v3 їх використовує |
+| кореневий `test` | пакети по черзі (`--workspace-concurrency=1`) | тести зі справжнім git у `platform` вилітають за таймаут, коли пакети йдуть паралельно |
 
-## Борг тестів v3, знайдений тайпчеком
+## Борг типів у тестах
+
+`core`, `pipelines`, `store`, `runtime`, `internal-workspace`: тести тайпчекаються, борг нуль.
+
+`platform`: `check` перевіряє лише код, як у v3. `pnpm --filter @factory/platform check:tests` рахує помилки типів у тестах: зараз 794. Борг закривається, коли пакет виходить із `platform`.
+
+Відомо нестабільний: `platform/src/session/source-control-tools.test.ts` (справжній git, 89 тестів ≈ 70 с) вилітає за 5 с під паралельним навантаженням.
+
+### Виправлено при перенесенні
 
 У v3 тести не тайпчекались. Виправлено, поведінку тестів не змінено:
 
