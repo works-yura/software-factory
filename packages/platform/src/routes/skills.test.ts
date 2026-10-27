@@ -10,8 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __clearSessionSandboxesForTests } from '@factory/sandbox';
 import { SourceControlStorageInMemory } from '@factory/store';
 import { SkillRoutes } from './skills.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
-import type { TestAuthUser } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
+import type { TestAuthUser } from '@factory/http/testing';
 
 const skill: Skill = {
   name: 'understand-pr',

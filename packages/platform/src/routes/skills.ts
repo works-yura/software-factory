@@ -8,8 +8,8 @@ import type { Context } from 'hono';
 import { listFactorySkills } from '../skills/catalog.ts';
 import { resolveSkillInvocation, SkillInvocationError } from '@factory/runtime';
 import type { SourceControlStorageHandle } from '@factory/store';
-import type { RouteDependencies } from './route.ts';
-import { Route } from './route.ts';
+import type { RouteDependencies } from '@factory/http';
+import { Route } from '@factory/http';
 
 const MAX_SESSION_ID_LENGTH = 512;
 const MAX_ARGUMENTS_LENGTH = 16_384;

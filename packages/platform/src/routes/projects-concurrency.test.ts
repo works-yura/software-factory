@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FactoryProjectsStorage } from '@factory/store';
 import { SourceControlStorage } from '@factory/store';
 import { ProjectRoutes } from './projects.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 class SettingsSandbox extends FactorySandbox<{ cpuCount?: number; memoryMb?: number }> {
   readonly provider = 'test';

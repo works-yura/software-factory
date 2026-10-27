@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.ts';
-import type { TestAuthUser } from '../../../routes/test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
+import type { TestAuthUser } from '@factory/http/testing';
 import { PlatformApiClient } from '../api-client.ts';
 import { buildPlatformConnectRoutes } from './routes.ts';
 

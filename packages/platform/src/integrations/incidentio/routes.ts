@@ -18,7 +18,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { Intake } from '@factory/capabilities';
-import type { RouteAuth } from '../../routes/route.ts';
+import type { RouteAuth } from '@factory/http';
 import type { IntakeStorage } from '@factory/store';
 import { IncidentioApiError } from './api.ts';
 import type { IncidentioRulesIngress } from './rules.ts';

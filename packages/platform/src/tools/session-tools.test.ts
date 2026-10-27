@@ -5,8 +5,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../test-support.ts';
-import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.ts';
-import { fakeRouteAuth } from '../routes/test-utils.ts';
+import { primeTenantCredentialsForTenant } from '@factory/credentials';
+import { fakeRouteAuth } from '@factory/http/testing';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.ts';
 import { createSourceControlSessionLookup } from '../session/factory-session.ts';
@@ -29,8 +29,8 @@ import { FACTORY_TOOLS_OWNER_ID, createFactorySessionTools } from './session-too
 import { createFactoryTools } from './index.ts';
 import type { FactoryToolDependencies } from './index.ts';
 
-vi.mock('../routes/tenant-credentials.ts', async importOriginal => ({
-  ...(await importOriginal<typeof import('../routes/tenant-credentials.ts')>()),
+vi.mock('@factory/credentials', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/credentials')>()),
   primeTenantCredentialsForTenant: vi.fn(async () => undefined),
 }));
 

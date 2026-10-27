@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fakeRouteAuth } from '../../routes/test-utils.ts';
+import { fakeRouteAuth } from '@factory/http/testing';
 import { getGithubFeatureDiagnostics } from './config.ts';
 import { GithubIntegration } from './integration.ts';
 

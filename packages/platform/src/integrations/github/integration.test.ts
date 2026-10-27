@@ -1,8 +1,8 @@
 import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 
-import { fakeRouteAuth } from '../../routes/test-utils.ts';
-import { createStateSigner } from '../../state-signing.ts';
+import { fakeRouteAuth } from '@factory/http/testing';
+import { createStateSigner } from '@factory/auth';
 import { createFactoryStorageForTests } from '../../test-support.ts';
 import { GithubIntegration, normalizePrivateKey } from './integration.ts';
 

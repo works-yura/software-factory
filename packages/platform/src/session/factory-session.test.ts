@@ -7,7 +7,7 @@ import {
   invalidateTenantCredentialSnapshots,
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
-} from '../routes/tenant-credentials.ts';
+} from '@factory/credentials';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import {
   createSourceControlSessionLookup,

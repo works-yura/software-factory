@@ -14,11 +14,11 @@ import { createSlackAdapter } from '@mastra/slack';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
-import { FACTORY_INTERACTIVE_KEY } from '../../auth.ts';
+import { FACTORY_INTERACTIVE_KEY } from '@factory/auth';
 import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
-} from '../../routes/tenant-credentials.ts';
+} from '@factory/credentials';
 import { markNewChannelSession } from '../../session/channel-session-link-processor.ts';
 import {
   createSourceControlSessionLookup,

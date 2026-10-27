@@ -25,9 +25,9 @@ import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domai
 import { auditRequestContext } from '../storage/domains/audit/domain.ts';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import { FACTORY_ROUTE_CONTRACTS } from './contracts.ts';
-import { Route } from './route.ts';
-import type { RouteDependencies } from './route.ts';
+import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
+import { Route } from '@factory/http';
+import type { RouteDependencies } from '@factory/http';
 
 function loose(c: unknown): Context {
   return c as Context;

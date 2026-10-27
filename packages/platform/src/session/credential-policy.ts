@@ -3,7 +3,7 @@ import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolv
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import { UUID_PATTERN } from '../routes/contracts.ts';
+import { UUID_PATTERN } from '@factory/contracts';
 import { effectiveModelScope } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';

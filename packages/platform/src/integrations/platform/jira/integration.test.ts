@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../../test-support.ts';
-import { fakeRouteAuth } from '../../../routes/test-utils.ts';
+import { fakeRouteAuth } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '../../../test-support.ts';
 import type { JiraApiError } from '../../jira/api.ts';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.ts';

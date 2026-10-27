@@ -2,7 +2,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.ts';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '@factory/auth';
 import { findEnvironmentRepository, resolveSessionRepositories } from '../../session/environment-repositories.ts';
 import type { EnvironmentRepository } from '../../session/environment-repositories.ts';
 import { runsPullRequestCreate } from '../../session/shell-commands.ts';

@@ -1,0 +1,27 @@
+{
+  "name": "@factory/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Factory auth: WorkOS/Studio providers, platform auth host, signed OAuth state.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/http": "workspace:*",
+    "@factory/observability": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/auth-workos": "1.6.7",
+    "@mastra/core": "1.79.0",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

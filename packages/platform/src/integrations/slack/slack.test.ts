@@ -2,7 +2,7 @@ import { ChannelSessionRejectedError, AgentChannels } from '@mastra/core/channel
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { FACTORY_INTERACTIVE_KEY } from '../../auth.ts';
+import { FACTORY_INTERACTIVE_KEY } from '@factory/auth';
 import { NEW_CHANNEL_SESSION_KEY } from '../../session/channel-session-link-processor.ts';
 import type { ExternalWorkItemSource } from '@factory/store';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.ts';
@@ -17,7 +17,7 @@ const primeTenant = vi.fn(async (_tenant: unknown) => undefined);
 const providerDefault = vi.fn(
   async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> => undefined,
 );
-vi.mock('../../routes/tenant-credentials.ts', () => ({
+vi.mock('@factory/credentials', () => ({
   primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
   primeTenantCredentialsForTenant: (tenant: unknown) => primeTenant(tenant),
   resolveTenantProviderDefaultModel: (tenant: unknown, current: string | undefined) => providerDefault(tenant, current),

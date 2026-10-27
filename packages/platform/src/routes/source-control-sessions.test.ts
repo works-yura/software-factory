@@ -21,7 +21,7 @@ import {
 import type { SourceControlStorageHandle } from '@factory/store';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 vi.mock('../session/filesystem-capture.ts', async importOriginal => {
   const actual = await importOriginal<typeof import('../session/filesystem-capture.ts')>();

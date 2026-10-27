@@ -39,7 +39,7 @@ storage/domains/queue-health/base.test.ts	store/src/queue-health/base.test.ts
 secret-encryption.test.ts	store/src/secret-encryption.test.ts
 storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts
 auth-seam.test.ts	platform/src/auth-seam.test.ts
-auth.test.ts	platform/src/auth.test.ts
+auth.test.ts	auth/src/auth.test.ts
 environment/build-schedule.test.ts	platform/src/environment/build-schedule.test.ts
 environment/build.test.ts	platform/src/environment/build.test.ts
 environment/heads.test.ts	platform/src/environment/heads.test.ts
@@ -124,7 +124,7 @@ integrations/slack/slack.test.ts	platform/src/integrations/slack/slack.test.ts
 integrations/subscription-session.test.ts	platform/src/integrations/subscription-session.test.ts
 integrations/workos/integration.test.ts	platform/src/integrations/workos/integration.test.ts
 mcp/routes.test.ts	platform/src/mcp/routes.test.ts
-platform-auth-host.test.ts	platform/src/platform-auth-host.test.ts
+platform-auth-host.test.ts	auth/src/platform-auth-host.test.ts
 routes/apply-default-model.scenario.test.ts	platform/src/routes/apply-default-model.scenario.test.ts
 routes/attention.test.ts	platform/src/routes/attention.test.ts
 routes/automation-runs.test.ts	platform/src/routes/automation-runs.test.ts
@@ -145,7 +145,7 @@ routes/source-control-settings.test.ts	platform/src/routes/source-control-settin
 routes/supervisor.test.ts	platform/src/routes/supervisor.test.ts
 routes/surface.test.ts	platform/src/routes/surface.test.ts
 routes/telemetry.test.ts	platform/src/routes/telemetry.test.ts
-routes/tenant-credentials.test.ts	platform/src/routes/tenant-credentials.test.ts
+routes/tenant-credentials.test.ts	credentials/src/tenant-credentials.test.ts
 routes/work-items.test.ts	platform/src/routes/work-items.test.ts
 rules/automation-stamping.test.ts	platform/src/rules/automation-stamping.test.ts
 rules/binding-context.test.ts	platform/src/rules/binding-context.test.ts
@@ -163,7 +163,7 @@ sandbox/local-factory-sandbox.test.ts	sandbox/src/local-factory-sandbox.test.ts
 sandbox/session-retirement.test.ts	platform/src/sandbox/session-retirement.test.ts
 sandbox/session-sandbox.test.ts	sandbox/src/session-sandbox.test.ts
 sandbox/workdir.test.ts	sandbox/src/workdir.test.ts
-server-error.test.ts	platform/src/server-error.test.ts
+server-error.test.ts	http/src/server-error.test.ts
 session/channel-reply-processor.test.ts	platform/src/session/channel-reply-processor.test.ts
 session/channel-session-link-processor.test.ts	platform/src/session/channel-session-link-processor.test.ts
 session/credential-policy.test.ts	platform/src/session/credential-policy.test.ts
@@ -186,8 +186,8 @@ session/thinking-default.test.ts	platform/src/session/thinking-default.test.ts
 session/thread-title-mirror.test.ts	platform/src/session/thread-title-mirror.test.ts
 session/work-item-repository.test.ts	platform/src/session/work-item-repository.test.ts
 skills/review-skill-publish.test.ts	platform/src/skills/review-skill-publish.test.ts
-spa-static.test.ts	platform/src/spa-static.test.ts
-state-signing.test.ts	platform/src/state-signing.test.ts
+spa-static.test.ts	http/src/spa-static.test.ts
+state-signing.test.ts	auth/src/state-signing.test.ts
 storage/domains/audit/agent-audit.test.ts	platform/src/storage/domains/audit/agent-audit.test.ts
 storage/domains/audit/domain.test.ts	platform/src/storage/domains/audit/domain.test.ts
 storage/domains/comments/domain.test.ts	platform/src/storage/domains/comments/domain.test.ts

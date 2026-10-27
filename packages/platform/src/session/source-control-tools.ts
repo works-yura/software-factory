@@ -4,7 +4,7 @@ import { createTool } from '@mastra/core/tools';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { z } from 'zod';
 
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../auth.ts';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '@factory/auth';
 import type { VersionControl } from '@factory/capabilities';
 import type { IntegrationTools } from '../integrations/base.ts';
 import {

@@ -16,7 +16,7 @@ import { factoryMemorySettingsUserId } from '@factory/store';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import type { FactoryStorageTestSeed } from '../test-support.ts';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 vi.mock('@mastra/core/llm', async importOriginal => ({
   ...(await importOriginal<typeof CoreLlm>()),

@@ -8,7 +8,7 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.ts';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import type { FactoryStorageTestSeed } from '../test-support.ts';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 const auditEvents: Array<Record<string, unknown>> = [];
 const audit: AuditEmitter = {

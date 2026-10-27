@@ -32,7 +32,7 @@ import type {
   ListIntakeIssuesInput,
   UpdateIntakeIssueInput,
 } from '@factory/capabilities';
-import type { RouteAuth } from '../../routes/route.ts';
+import type { RouteAuth } from '@factory/http';
 import type { IntegrationStorageHandle } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.ts';

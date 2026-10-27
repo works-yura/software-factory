@@ -16,14 +16,14 @@
 
 import type { Context } from 'hono';
 
-import { factoryUserOrgId } from '../auth.ts';
-import { providerDisplayName } from '../provider-display-name.ts';
+import { factoryUserOrgId } from '@factory/auth';
+import { providerDisplayName } from './provider-display-name.ts';
 import type {
   CredentialRecord,
   LoginSessionKind,
   ModelCredentialsStorage,
 } from '@factory/store';
-import type { RouteAuth } from './route.ts';
+import type { RouteAuth } from '@factory/http';
 
 /**
  * OAuth credentials are stored under the credential id, which differs from the

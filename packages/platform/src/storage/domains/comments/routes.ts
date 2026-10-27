@@ -11,9 +11,9 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
-import { getFactoryAuthUser } from '../../../auth.ts';
+import { getFactoryAuthUser } from '@factory/auth';
 import { feedTopic } from '../../../feed-events.ts';
-import type { RouteAuth } from '../../../routes/route.ts';
+import type { RouteAuth } from '@factory/http';
 import type { AuditEmitter } from '../audit/domain.ts';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';

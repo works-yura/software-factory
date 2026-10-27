@@ -3,11 +3,11 @@ import { Hono } from 'hono';
 import type { PostHog } from 'posthog-node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildAuthRoutes } from '../auth.ts';
-import type { FactoryAuthUser } from '../auth.ts';
+import { buildAuthRoutes } from '@factory/auth';
+import type { FactoryAuthUser } from '@factory/auth';
 import { TelemetryRoutes } from './telemetry.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
-import type { TestAuthUser } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
+import type { TestAuthUser } from '@factory/http/testing';
 
 const { capture } = vi.hoisted(() => ({ capture: vi.fn<PostHog['capture']>() }));
 vi.mock('posthog-node', () => ({

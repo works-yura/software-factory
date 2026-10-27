@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSourceControlSessionLookup } from '../session/factory-session.ts';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import { ConfigRoutes } from './config.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visibility: 'org' | 'private' = 'org') {
   const seed = await createFactoryStorageForTests();

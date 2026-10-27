@@ -8,8 +8,8 @@ import type { Context } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../test-support.ts';
-import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.ts';
-import type { RouteAuth } from '../routes/route.ts';
+import { PLATFORM_AUTH_PROVIDER } from '@factory/auth';
+import type { RouteAuth } from '@factory/http';
 import type { WorkItemRow } from '@factory/store';
 import type { FactoryToolDependencies } from '../tools/index.ts';
 import {

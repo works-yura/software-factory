@@ -12,7 +12,7 @@ import {
   registerCustomProvidersSource,
   resetCustomProvidersSourceForTests,
 } from './custom-provider-source.ts';
-import { fakeRouteAuth } from './test-utils.ts';
+import { fakeRouteAuth } from '@factory/http/testing';
 
 let seed: FactoryStorageTestSeed;
 

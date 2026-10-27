@@ -3,7 +3,7 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
 import { boardForWorkItem } from '@factory/core';
-import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.ts';
+import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.ts';
 import { resolveWorkItemRepository } from '../session/work-item-repository.ts';
 import type { IntakeStorage } from '@factory/store';

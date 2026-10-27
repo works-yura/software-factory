@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '../../../test-support.ts';
 import type { AuditDomainOptions } from './domain.ts';
 import { AuditDomain } from './domain.ts';

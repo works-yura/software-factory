@@ -1,7 +1,7 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.ts';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '@factory/auth';
 import type {
   FactoryRunBindingAddress,
   FactoryRunBindingRecord,

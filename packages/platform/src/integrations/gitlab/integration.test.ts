@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth } from '../../routes/test-utils.ts';
+import { fakeRouteAuth } from '@factory/http/testing';
 import { SourceControlStorageInMemory } from '@factory/store';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.ts';
 import {

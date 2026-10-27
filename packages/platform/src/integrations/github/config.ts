@@ -16,8 +16,8 @@
  */
 
 import type { FactorySandbox } from '@mastra/core/workspace';
-import type { RouteAuth } from '../../routes/route.ts';
-import type { StateSigner } from '../../state-signing.ts';
+import type { RouteAuth } from '@factory/http';
+import type { StateSigner } from '@factory/auth';
 import type { GithubIntegration } from './integration.ts';
 
 /**

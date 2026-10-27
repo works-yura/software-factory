@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createFactoryAuthGate } from '../../auth.ts';
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.ts';
-import type { TestAuthUser } from '../../routes/test-utils.ts';
+import { createFactoryAuthGate } from '@factory/auth';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
+import type { TestAuthUser } from '@factory/http/testing';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.ts';
 import { GitLabApiError } from './api.ts';
 import { decodeIssueReference, encodeIssueReference, encodeSourceId, GitLabIntegration } from './integration.ts';

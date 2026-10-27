@@ -40,8 +40,8 @@ export { FactoryProjectsStorage } from '@factory/store';
 export type { FactoryProject } from '@factory/store';
 export { WorkItemsStorage } from '@factory/store';
 export type { CreateWorkItemInput, WorkItemRow } from '@factory/store';
-export { createStateSigner } from './state-signing.ts';
-export type { StateSigner, StateTenant } from './state-signing.ts';
+export { createStateSigner } from '@factory/auth';
+export type { StateSigner, StateTenant } from '@factory/auth';
 export { createFactorySecretEncryption, createPlaintextFactorySecretEncryption } from '@factory/store';
 export type {
   DecryptedFactorySecret,
@@ -49,8 +49,8 @@ export type {
   FactorySecretEncryptionConfig,
   FactorySecretEncryptionKey,
 } from '@factory/store';
-export { createFactoryRouteAuth } from './auth.ts';
-export type { RouteAuth } from './routes/route.ts';
+export { createFactoryRouteAuth } from '@factory/auth';
+export type { RouteAuth } from '@factory/http';
 // The integration seam, so a host can implement `FactoryIntegration` from
 // outside this package — the contract's stated design for third parties.
 // Built-ins (GitHub, Linear, Slack) implement the same interface from inside.

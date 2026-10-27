@@ -9,8 +9,8 @@ import { FactoryStartCoordinator } from './start-coordinator.ts';
 import { FactoryTransitionService } from '../test-support.ts';
 
 const { primeTenant } = vi.hoisted(() => ({ primeTenant: vi.fn() }));
-vi.mock('../routes/tenant-credentials.ts', async importOriginal => {
-  const actual = await importOriginal<typeof import('../routes/tenant-credentials.ts')>();
+vi.mock('@factory/credentials', async importOriginal => {
+  const actual = await importOriginal<typeof import('@factory/credentials')>();
   return {
     ...actual,
     primeTenantCredentialsForTenant: (...args: Parameters<typeof actual.primeTenantCredentialsForTenant>) => {

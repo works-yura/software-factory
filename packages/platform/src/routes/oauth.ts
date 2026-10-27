@@ -34,10 +34,10 @@ import type { Context } from 'hono';
 
 import { ModelCredentialsStorage } from '@factory/store';
 import type { LoginCredentialScope, LoginSessionKind, LoginSessionRow } from '@factory/store';
-import { getAuthProviderId, resolveCredentialContext } from './provider-credentials.ts';
-import type { CredentialContext } from './provider-credentials.ts';
-import { Route } from './route.ts';
-import type { RouteDependencies } from './route.ts';
+import { getAuthProviderId, resolveCredentialContext } from '@factory/credentials';
+import type { CredentialContext } from '@factory/credentials';
+import { Route } from '@factory/http';
+import type { RouteDependencies } from '@factory/http';
 
 /** Lifetime of a paste-code session (Anthropic gives no explicit expiry). */
 const PASTE_CODE_TTL_MS = 10 * 60 * 1000;

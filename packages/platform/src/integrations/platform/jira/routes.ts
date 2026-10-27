@@ -16,7 +16,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { RouteAuth } from '../../../routes/route.ts';
+import type { RouteAuth } from '@factory/http';
 import type { IntakeStorage } from '@factory/store';
 import { JiraApiError } from '../../jira/api.ts';
 import type { JiraRulesIngress } from '../../jira/rules.ts';

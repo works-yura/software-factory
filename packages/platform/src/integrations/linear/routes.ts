@@ -17,9 +17,9 @@ import type { Context } from 'hono';
 
 import { isTerminalWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import type { RouteAuth } from '../../routes/route.ts';
+import type { RouteAuth } from '@factory/http';
 import { isTerminalFactoryRuleStage } from '@factory/core';
-import type { StateSigner } from '../../state-signing.ts';
+import type { StateSigner } from '@factory/auth';
 import type { IntakeStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import { linearClaimKey } from './claim.ts';

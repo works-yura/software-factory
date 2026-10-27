@@ -22,7 +22,7 @@ import {
   FACTORY_ROUTE_CONTRACTS,
   transitionBodySchema,
   updateProjectBodySchema,
-} from './contracts.ts';
+} from '@factory/contracts';
 import { ProjectRoutes } from './projects.ts';
 import { buildSupervisorRoutes } from './supervisor.ts';
 import { WorkItemRoutes } from './work-items.ts';

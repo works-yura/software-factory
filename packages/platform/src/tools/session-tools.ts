@@ -7,7 +7,7 @@ import type { BoardRegistry } from '@factory/core';
 import type { IntegrationTools } from '../integrations/base.ts';
 import { buildModelCatalog, listSessionScopedCredentials } from '../routes/config.ts';
 import { USER_SESSION_BRANCH_PREFIX } from '../routes/source-control-sessions.ts';
-import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.ts';
+import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.ts';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
 import { resolveFactoryModelPolicy } from '../session/credential-policy.ts';

@@ -18,7 +18,7 @@ import type {
   ResolvedIntakeDispatch,
   UpdateIntakeIssueInput,
 } from '@factory/capabilities';
-import type { RouteAuth } from '../../routes/route.ts';
+import type { RouteAuth } from '@factory/http';
 import type { IntegrationStorageHandle } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';

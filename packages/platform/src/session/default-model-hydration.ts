@@ -1,4 +1,4 @@
-import { primeTenantCredentialsForTenant, resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.ts';
+import { primeTenantCredentialsForTenant, resolveTenantProviderDefaultModel } from '@factory/credentials';
 import type { ModelDefaultsStorage } from '@factory/store';
 import { effectiveModelScope } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';

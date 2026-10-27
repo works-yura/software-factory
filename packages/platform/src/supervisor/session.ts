@@ -9,8 +9,8 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.ts';
-import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.ts';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '@factory/auth';
+import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.ts';
 import type { ModelDefaultsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';

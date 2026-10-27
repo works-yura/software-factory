@@ -24,8 +24,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
 import type { CustomProvidersStorage } from '@factory/store';
-import { tenantOrgId } from './provider-credentials.ts';
-import type { RouteAuth } from './route.ts';
+import { tenantOrgId } from '@factory/credentials';
+import type { RouteAuth } from '@factory/http';
 
 /** How long a hydrated snapshot is considered fresh. */
 const SNAPSHOT_TTL_MS = 15_000;

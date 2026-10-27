@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { SourceControlSession } from '@factory/store';
 import { canViewSourceControlSession, createSessionAccessGuard } from './session-access.ts';
 import type { SessionResourceLookup } from './session-access.ts';
-import { fakeRouteAuth } from './test-utils.ts';
+import { fakeRouteAuth } from '@factory/http/testing';
 
 const PRIVATE_ID = '00000000-0000-4000-8000-0000000000a1';
 const SHARED_ID = '00000000-0000-4000-8000-0000000000a2';

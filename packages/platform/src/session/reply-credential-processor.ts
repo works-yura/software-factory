@@ -2,7 +2,7 @@ import { resolveCredentialStore, resolveTenantFromRequestContext } from '@mastra
 import { normalizeLegacyProviderId } from '@mastra/code-sdk/providers/model-ids';
 import type { Processor, ProcessOutputStepArgs } from '@mastra/core/processors';
 
-import { credentialLabel, getAuthProviderId } from '../routes/provider-credentials.ts';
+import { credentialLabel, getAuthProviderId } from '@factory/credentials';
 
 /**
  * Stamps each assistant reply with the credential that answered it, as

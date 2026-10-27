@@ -5,7 +5,7 @@ import { AuditDomain } from '../storage/domains/audit/domain.ts';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import type { FactoryStorageTestSeed } from '../test-support.ts';
 import { AutomationRunRoutes } from './automation-runs.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 let seed: FactoryStorageTestSeed;
 let PROJECT_ID = '';

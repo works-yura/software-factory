@@ -9,9 +9,9 @@ import { toFetchResponse, toReqRes } from 'fetch-to-node';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
-import { getFactoryAuthUser } from '../auth.ts';
-import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.ts';
-import type { RouteAuth } from '../routes/route.ts';
+import { getFactoryAuthUser } from '@factory/auth';
+import { PLATFORM_AUTH_PROVIDER } from '@factory/auth';
+import type { RouteAuth } from '@factory/http';
 import { ensureFactorySourceSession, FactorySourceSessionResolutionError } from '../session/factory-session.ts';
 import { auditActorProfile } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';

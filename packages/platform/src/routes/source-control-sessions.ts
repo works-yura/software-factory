@@ -27,7 +27,7 @@ import type {
   SourceControlStorageHandle,
 } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import type { RouteAuth } from './route.ts';
+import type { RouteAuth } from '@factory/http';
 import { canReadSessionResource, canViewSourceControlSession } from './session-access.ts';
 
 type RouteContext = Context;

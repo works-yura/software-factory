@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { SourceControlStorageHandle } from '@factory/store';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 const route = (id: string) => `/web/source-control/projects/${id}/settings`;
 

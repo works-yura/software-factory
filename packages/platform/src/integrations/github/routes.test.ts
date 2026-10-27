@@ -3,8 +3,8 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ListIntakeIssuesInput } from '@factory/capabilities';
 import type { CreatePullRequestInput, ListPullRequestsInput } from '@factory/capabilities';
-import type { RouteAuth } from '../../routes/route.ts';
-import { mountApiRoutes } from '../../routes/test-utils.ts';
+import type { RouteAuth } from '@factory/http';
+import { mountApiRoutes } from '@factory/http/testing';
 
 import { SessionRetirementCoordinator } from '../../sandbox/session-retirement.ts';
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '@factory/sandbox';

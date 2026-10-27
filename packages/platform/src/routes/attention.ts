@@ -31,7 +31,7 @@ import {
   MentionAttentionProvider,
   SupervisorFindingAttentionProvider,
 } from '@factory/runtime';
-import { FACTORY_ROUTE_CONTRACTS } from './contracts.ts';
+import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 
 export { factoryDecisionType } from '@factory/runtime';
 

@@ -11,8 +11,8 @@ import {
   isWorkOSAuth,
   mountFactoryAuth,
   factoryAuthTenant,
-} from './auth.ts';
-import { handleServerError } from './server-error.ts';
+} from '@factory/auth';
+import { handleServerError } from '@factory/http';
 
 /**
  * Provider-seam behavior: the auth module operates on an explicitly-passed

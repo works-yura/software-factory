@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../test-support.ts';
 import { feedTopic } from '../feed-events.ts';
-import { fakeRouteAuth } from '../routes/test-utils.ts';
+import { fakeRouteAuth } from '@factory/http/testing';
 import type { FactoryTransitionService } from '../test-support.ts';
 import { CommentsDomain } from '../storage/domains/comments/domain.ts';
 import type { SourceControlStorageHandle } from '@factory/store';

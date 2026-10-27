@@ -3,7 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { ProjectRepository, SourceControlStorageHandle } from '@factory/store';
-import type { RouteAuth } from './route.ts';
+import type { RouteAuth } from '@factory/http';
 
 interface SourceControlSettingsRoutesOptions {
   auth: RouteAuth;

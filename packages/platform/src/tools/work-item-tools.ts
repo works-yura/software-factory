@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import type { IntegrationTools } from '../integrations/base.ts';
-import { transitionBodySchema } from '../routes/contracts.ts';
+import { transitionBodySchema } from '@factory/contracts';
 import type { FactoryTransitionService } from '@factory/runtime';
 import type { SourceControlSessionLookup } from '../session/factory-session.ts';
 import { resolveWorkItemRepository } from '../session/work-item-repository.ts';

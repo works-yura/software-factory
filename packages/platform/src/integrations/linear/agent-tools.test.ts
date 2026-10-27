@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth } from '../../routes/test-utils.ts';
+import { fakeRouteAuth } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '../../test-support.ts';
 import type { FactoryStorageTestSeed } from '../../test-support.ts';
 import { buildLinearAgentTools } from './agent-tools.ts';

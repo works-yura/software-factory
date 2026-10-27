@@ -24,9 +24,9 @@ import type {
 } from '@factory/store';
 import { ACTIVE_RUN_BINDING_STAGES } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import { FACTORY_ROUTE_CONTRACTS } from './contracts.ts';
-import type { RouteDependencies } from './route.ts';
-import { Route } from './route.ts';
+import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
+import type { RouteDependencies } from '@factory/http';
+import { Route } from '@factory/http';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;

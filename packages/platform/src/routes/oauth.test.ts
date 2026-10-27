@@ -40,7 +40,7 @@ vi.mock('@mastra/code-sdk/auth/providers/github-copilot', async importOriginal =
 import { createFactoryStorageForTests } from '../test-support.ts';
 import type { FactoryStorageTestSeed } from '../test-support.ts';
 import { OAuthRoutes } from './oauth.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 // ── Test harness ─────────────────────────────────────────────────────────
 

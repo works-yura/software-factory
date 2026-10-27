@@ -20,7 +20,7 @@ import { prepareSessionRunContext } from '../integrations/subscription-session.t
 import {
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
-} from '../routes/tenant-credentials.ts';
+} from '@factory/credentials';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import { resolveFactoryCredentialTenant } from './credential-policy.ts';

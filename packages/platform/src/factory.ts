@@ -46,7 +46,7 @@ import {
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
-} from './auth.ts';
+} from '@factory/auth';
 import { createBoardRegistry, isTerminalWorkItem } from '@factory/core';
 import { createDefaultBoardRegistry } from './boards.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
@@ -90,7 +90,7 @@ import {
   createTenantCredentialPrimer,
   primeTenantCredentials,
   registerTenantCredentialResolver,
-} from './routes/tenant-credentials.ts';
+} from '@factory/credentials';
 import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.ts';
 import { FactoryDecisionDispatcher } from '@factory/runtime';
 import type { FactoryRuleActor } from './rules/index.ts';
@@ -107,7 +107,7 @@ import { SessionRetirementCoordinator } from './sandbox/session-retirement.ts';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
-import { handleServerError } from './server-error.ts';
+import { handleServerError } from '@factory/http';
 import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.ts';
 import { FactoryChannelSessionLinkProcessor } from './session/channel-session-link-processor.ts';
 import { resolveFactoryCredentialTenant } from './session/credential-policy.ts';
@@ -129,8 +129,8 @@ import { createSourceControlTools } from './session/source-control-tools.ts';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.ts';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.ts';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.ts';
-import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.ts';
-import { createStateSigner } from './state-signing.ts';
+import { createSpaStaticMiddleware, resolveUiDistDir } from '@factory/http';
+import { createStateSigner } from '@factory/auth';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.ts';
 import { AuditStorage } from '@factory/store';
 import { AuditDomain } from './storage/domains/audit/domain.ts';

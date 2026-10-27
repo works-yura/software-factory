@@ -37,8 +37,8 @@ import {
 import type { Context } from 'hono';
 
 import type { FactoryProjectsStorage } from '@factory/store';
-import type { RouteDependencies } from './route.ts';
-import { Route } from './route.ts';
+import type { RouteDependencies } from '@factory/http';
+import { Route } from '@factory/http';
 
 /** Reserved node that anchors pinned records (see subconscious/pinned.ts). */
 const PINNED_NODE_NAME = 'pinned';

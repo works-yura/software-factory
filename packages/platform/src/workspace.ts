@@ -16,7 +16,7 @@ import type {
   SkillSourceStat,
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.ts';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '@factory/auth';
 import type { RepositoryAccess, VersionControl } from '@factory/capabilities';
 import { redactCredentials } from './environment/build.ts';
 import type { GithubIntegration } from './integrations/github/integration.ts';

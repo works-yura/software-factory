@@ -12,8 +12,8 @@ import type { ParkedRun } from '../session/live-sessions.ts';
 import type { FactoryDeferredDecisionRecord, WorkItemRow } from '@factory/store';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import type { FactoryStorageTestSeed } from '../test-support.ts';
-import { FACTORY_ROUTE_CONTRACTS } from './contracts.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { WorkItemRoutes } from './work-items.ts';
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CreatePullRequestInput } from '@factory/capabilities';
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '@factory/sandbox';
 
 import { SourceControlStorageInMemory } from '@factory/store';

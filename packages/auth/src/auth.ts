@@ -18,7 +18,7 @@ import {
   PLATFORM_AUTH_PROVIDER,
   isPlatformAuthSupportedHost,
 } from './platform-auth-host.ts';
-import type { RouteAuth } from './routes/route.ts';
+import type { RouteAuth } from '@factory/http';
 import { actorFromAuthUser } from '@factory/store';
 import { isFactoryTelemetryEnabled } from '@factory/observability';
 import { timedAboveThreshold } from '@factory/observability';

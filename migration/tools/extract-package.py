@@ -29,7 +29,8 @@ import sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 PACKAGES = os.path.join(ROOT, 'packages')
 SPEC = re.compile(r"""(?P<lead>(?:\bfrom|\bimport|vi\.mock|vi\.importActual(?:<[^>]*>)?|import)\s*\(?\s*)(?P<q>['"])(?P<spec>\.{1,2}/[^'"]+)(?P=q)""")
-EXTERNAL = re.compile(r"""(?:from|import)\s*\(?\s*['"]([^'".][^'"]*)['"]""")
+# Bare specifiers in import/export-from statements and dynamic import(), shaped like package names.
+EXTERNAL = re.compile(r"""(?:^\s*(?:import|export)\b[^;'"]*?\bfrom\s*|^\s*import\s*|\bimport\(\s*|vi\.mock\(\s*)['"]((?:@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*(?:/[\w./-]*)?)['"]""", re.M)
 
 
 def module_of(spec, from_dir, src_root):
@@ -63,13 +64,15 @@ def main():
     parser.add_argument('--dir', required=True)
     parser.add_argument('--strip', default='')
     parser.add_argument('--description', default='')
+    parser.add_argument('--leave-tests', default='', help='comma-separated modules whose tests stay behind (they test the layer above)')
     parser.add_argument('modules', nargs='+')
     args = parser.parse_args()
 
     src_root = os.path.join(PACKAGES, args.source, 'src')
     moved = set(args.modules)
     target_of = {m: m[len(args.strip):] if m.startswith(args.strip) else m for m in moved}
-    files = {m: files_of(src_root, m) for m in moved}
+    leave = set(filter(None, args.leave_tests.split(',')))
+    files = {m: [f for f in files_of(src_root, m) if not (m in leave and f.endswith('.test.ts'))] for m in moved}
     missing = [m for m, f in files.items() if not any(x == m + '.ts' for x in f)]
     if missing:
         sys.exit(f'no such module: {missing}')
@@ -87,6 +90,23 @@ def main():
         sys.exit('moved modules import modules that stay behind:\n  ' + '\n  '.join(sorted(set(violations))))
 
     dest_root = os.path.join(PACKAGES, args.dir, 'src')
+
+    # Resolve every dependency version before changing anything.
+    with open(os.path.join(PACKAGES, args.source, 'package.json')) as handle:
+        source_pkg = json.load(handle)
+    versions = {**source_pkg.get('devDependencies', {}), **source_pkg.get('dependencies', {})}
+    workspace = {package_name_of(d): d for d in os.listdir(PACKAGES) if os.path.exists(os.path.join(PACKAGES, d, 'package.json'))}
+    unknown = set()
+    for fs in files.values():
+        for f in fs:
+            for spec in EXTERNAL.findall(open(os.path.join(src_root, f)).read()):
+                if spec.startswith('node:'):
+                    continue
+                name = '/'.join(spec.split('/')[:2]) if spec.startswith('@') else spec.split('/')[0]
+                if name not in workspace and name not in versions and name != 'vitest':
+                    unknown.add(name)
+    if unknown:
+        sys.exit(f'no version in {args.source}/package.json for: {sorted(unknown)}')
     os.makedirs(dest_root, exist_ok=True)
 
     # Rewrite imports inside the moved files before moving them.
@@ -147,10 +167,6 @@ def main():
                     open(path, 'w').write(new)
 
     # Package files.
-    with open(os.path.join(PACKAGES, args.source, 'package.json')) as handle:
-        source_pkg = json.load(handle)
-    versions = {**source_pkg.get('devDependencies', {}), **source_pkg.get('dependencies', {})}
-    workspace = {package_name_of(d): d for d in os.listdir(PACKAGES) if os.path.exists(os.path.join(PACKAGES, d, 'package.json'))}
 
     def version(name):
         if name in workspace:

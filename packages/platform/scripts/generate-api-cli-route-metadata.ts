@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { z } from 'zod';
 
-import { FACTORY_ROUTE_CONTRACTS } from '../src/routes/contracts.ts';
+import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 export const DEFAULT_FACTORY_CLI_METADATA_PATH = resolve(

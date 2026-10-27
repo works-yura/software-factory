@@ -40,9 +40,9 @@ import {
   resolveCredentialContext,
   tenantOrgId,
   WEB_OAUTH_PROVIDERS,
-} from './provider-credentials.ts';
-import { Route } from './route.ts';
-import type { RouteAuth, RouteDependencies } from './route.ts';
+} from '@factory/credentials';
+import { Route } from '@factory/http';
+import type { RouteAuth, RouteDependencies } from '@factory/http';
 
 /** Absolute observation buffer @mastra/code-sdk reserves before a threshold can trigger. */
 const MIN_OBSERVATION_BUFFER_TOKENS = 2000;

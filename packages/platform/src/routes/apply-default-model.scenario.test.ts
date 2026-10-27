@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../test-support.ts';
 import { ProjectRoutes } from './projects.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 const testAgent = () =>
   new Agent({

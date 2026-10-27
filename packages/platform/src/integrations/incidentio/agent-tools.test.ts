@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth } from '../../routes/test-utils.ts';
+import { fakeRouteAuth } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '../../test-support.ts';
 import type { FactoryStorageTestSeed } from '../../test-support.ts';
 import { buildIncidentioAgentTools, INCIDENTIO_UNTRUSTED_CONTENT_NOTICE } from './agent-tools.ts';

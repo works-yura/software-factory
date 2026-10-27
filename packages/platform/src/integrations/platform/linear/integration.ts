@@ -6,7 +6,7 @@ import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '@factory/capabilities';
 import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } from '@factory/capabilities';
-import type { RouteAuth } from '../../../routes/route.ts';
+import type { RouteAuth } from '@factory/http';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.ts';
 import { buildLinearAgentTools } from '../../linear/agent-tools.ts';

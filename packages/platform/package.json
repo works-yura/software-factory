@@ -14,8 +14,12 @@
     "check:tests": "tsc --noEmit -p tsconfig.test.json | grep -c 'error TS' || true"
   },
   "dependencies": {
+    "@factory/auth": "workspace:*",
     "@factory/capabilities": "workspace:*",
+    "@factory/contracts": "workspace:*",
     "@factory/core": "workspace:*",
+    "@factory/credentials": "workspace:*",
+    "@factory/http": "workspace:*",
     "@factory/observability": "workspace:*",
     "@factory/pipelines": "workspace:*",
     "@factory/runtime": "workspace:*",

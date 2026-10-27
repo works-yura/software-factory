@@ -2,7 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
-import type { RouteAuth } from '../../routes/route.ts';
+import type { RouteAuth } from '@factory/http';
 import type { IntakeStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.ts';

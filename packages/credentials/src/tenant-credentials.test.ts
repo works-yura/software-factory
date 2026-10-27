@@ -33,8 +33,8 @@ vi.mock('@mastra/code-sdk/auth/storage', () => ({
       : undefined,
 }));
 
-import { createFactoryStorageForTests } from '../test-support.ts';
-import type { FactoryStorageTestSeed } from '../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/store/testing';
+import type { FactoryStorageTestSeed } from '@factory/store/testing';
 import {
   TenantCredentialStore,
   createTenantCredentialPrimer,
@@ -45,7 +45,7 @@ import {
   resetTenantCredentialResolverForTests,
   resolveTenantProviderDefaultModel,
 } from './tenant-credentials.ts';
-import { fakeRouteAuth } from './test-utils.ts';
+import { fakeRouteAuth } from '@factory/http/testing';
 
 let seed: FactoryStorageTestSeed;
 

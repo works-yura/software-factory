@@ -33,7 +33,7 @@ import type * as platformGithubModule from './integrations/platform/github/integ
 import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-source.ts';
 import type * as projectRoutesModule from './routes/projects.ts';
 import type * as surfaceModule from './routes/surface.ts';
-import type * as tenantCredentialsModule from './routes/tenant-credentials.ts';
+import type * as tenantCredentialsModule from '@factory/credentials';
 import { FactoryPhaseStateProcessor } from './rules/processor.ts';
 import type * as runtimeModule from '@factory/runtime';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
@@ -204,7 +204,7 @@ function lastStudioProvider():
 // in local/auth-disabled mode would force model calls through an empty tenant
 // store and break chat with "Not logged in", so the factory must gate it.
 const registerTenantCredentialResolverMock = vi.fn();
-vi.mock('./routes/tenant-credentials', async importOriginal => {
+vi.mock('@factory/credentials', async importOriginal => {
   const actual = await importOriginal<typeof tenantCredentialsModule>();
   return {
     ...actual,
@@ -1597,7 +1597,7 @@ describe('MastraFactory.prepare', () => {
       invalidateCustomProvidersSnapshots({ orgId: 'org-1' });
       // Install the resolver the factory registered, so tenant resolution needs
       // the policy token prepareSessionRunContext sets, as in a deployment.
-      const actual = await vi.importActual<typeof tenantCredentialsModule>('./routes/tenant-credentials');
+      const actual = await vi.importActual<typeof tenantCredentialsModule>('@factory/credentials');
       const [credentials, deploymentProviders, resolveTenant] = registerTenantCredentialResolverMock.mock.calls[0]!;
       actual.registerTenantCredentialResolver(credentials, deploymentProviders, resolveTenant);
       try {

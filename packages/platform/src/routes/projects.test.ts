@@ -11,7 +11,7 @@ import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '../environment/build-workflow.ts'
 import type { FactoryStorageTestSeed } from '../test-support.ts';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import { ProjectRoutes } from './projects.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 const projectRoutes = (
   seed: FactoryStorageTestSeed,

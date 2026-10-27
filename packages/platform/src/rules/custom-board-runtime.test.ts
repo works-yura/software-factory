@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defineBoard } from '@factory/core';
 import { MastraFactory } from '../factory.ts';
 import { GithubIntegration } from '../integrations/github/integration.ts';
-import { mountApiRoutes } from '../routes/test-utils.ts';
+import { mountApiRoutes } from '@factory/http/testing';
 import { createFactorySecretEncryption } from '@factory/store';
 import type { AuditStorage } from '@factory/store';
 import type { ModelCredentialsStorage } from '@factory/store';

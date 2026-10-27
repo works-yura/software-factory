@@ -6,7 +6,7 @@ import {
   factoryUserOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
-} from '../auth.ts';
+} from '@factory/auth';
 import type { SourceControlSessionLookup } from '../session/factory-session.ts';
 import { auditActorProfile } from '@factory/store';
 import type { AuditActorProfileInput } from '@factory/store';

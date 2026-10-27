@@ -8,7 +8,7 @@ import { Workspace } from '@mastra/core/workspace';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 const prime = vi.fn<(context: unknown) => Promise<void>>().mockResolvedValue(undefined);
-vi.mock('../routes/tenant-credentials.ts', () => ({
+vi.mock('@factory/credentials', () => ({
   primeTenantCredentialsForRequestContext: (context: unknown) => prime(context),
 }));
 

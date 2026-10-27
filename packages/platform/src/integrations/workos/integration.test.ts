@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import type { AuditEventRow } from '@factory/store';
 import type { IntegrationContext } from '../base.ts';
 import { toWorkOSEvent, WorkOSAuditIntegration } from './integration.ts';

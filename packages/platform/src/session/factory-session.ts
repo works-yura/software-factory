@@ -1,7 +1,7 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
-import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.ts';
+import { resolveTenantProviderDefaultModel } from '@factory/credentials';
 import type { ModelDefaultsStorage } from '@factory/store';
 import { effectiveModelScope } from '@factory/store';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '@factory/store';

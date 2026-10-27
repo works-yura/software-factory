@@ -1,7 +1,7 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { primeTenantCredentialsForRequestContext } from '../routes/tenant-credentials.ts';
+import { primeTenantCredentialsForRequestContext } from '@factory/credentials';
 import { hasResolvedOrg, seedSessionOrg } from '../session/org-seed.ts';
 import type { IntegrationSubscription } from '@factory/store';
 

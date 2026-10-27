@@ -49,9 +49,9 @@ import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/wor
 import { createFactoryWorkItem } from '../work-items/create-work-item.ts';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.ts';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.ts';
-import { FACTORY_ROUTE_CONTRACTS } from './contracts.ts';
-import type { RouteDependencies } from './route.ts';
-import { Route } from './route.ts';
+import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
+import type { RouteDependencies } from '@factory/http';
+import { Route } from '@factory/http';
 import { buildSupervisorRoutes } from './supervisor.ts';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {

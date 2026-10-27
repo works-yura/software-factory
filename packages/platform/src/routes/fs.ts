@@ -15,7 +15,7 @@ import { peekSessionSandbox, sessionLayout } from '@factory/sandbox';
 import type { SessionLayout, SessionLayoutRepository } from '@factory/sandbox';
 import { peekSessionEnvironment } from '../session/environment-state-processor.ts';
 import type { SourceControlSession } from '@factory/store';
-import type { RouteAuth } from './route.ts';
+import type { RouteAuth } from '@factory/http';
 
 /**
  * Server-side directory browser for the web project picker.

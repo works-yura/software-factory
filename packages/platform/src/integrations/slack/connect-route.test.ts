@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createStateSigner } from '../../state-signing.ts';
+import { createStateSigner } from '@factory/auth';
 
 import { createSlackConnectRoutes } from './connect-route.ts';
 

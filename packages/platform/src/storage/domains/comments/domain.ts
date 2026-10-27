@@ -10,7 +10,7 @@ import type { PubSub } from '@mastra/core/events';
 import type { ApiRoute } from '@mastra/core/server';
 
 import { touchFeed } from '../../../feed-events.ts';
-import type { RouteAuth } from '../../../routes/route.ts';
+import type { RouteAuth } from '@factory/http';
 import type { AuditEmitter } from '../audit/domain.ts';
 import type { ChannelIdentityStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';

@@ -19,7 +19,7 @@ import type {
   KnowledgeScopeTreePayload,
 } from './knowledge.ts';
 import { KnowledgeRoutes } from './knowledge.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 const ORG = 'org-1';
 const OTHER_ORG = 'org-2';

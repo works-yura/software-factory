@@ -1,0 +1,23 @@
+{
+  "name": "@factory/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Wire contracts of the Factory HTTP API, shared by server and UI.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@factory/core": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/code-sdk": "1.15.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:"
+  }
+}

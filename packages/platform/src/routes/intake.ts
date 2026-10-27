@@ -11,8 +11,8 @@ import { normalizeIntakeLabel, resolveIntakeLabelRoute } from '@factory/store';
 import type { IntakeConfig, IntakeLabelRoute, IntakeStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import type { RouteDependencies } from './route.ts';
-import { Route } from './route.ts';
+import type { RouteDependencies } from '@factory/http';
+import { Route } from '@factory/http';
 
 export interface IntakeIntegration {
   id: string;

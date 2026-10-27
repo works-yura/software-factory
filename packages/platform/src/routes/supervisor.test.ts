@@ -10,7 +10,7 @@ import { FactoryTransitionService } from '../test-support.ts';
 import type { WorkItemRow } from '@factory/store';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import type { FactoryStorageTestSeed } from '../test-support.ts';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { WorkItemRoutes } from './work-items.ts';
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };

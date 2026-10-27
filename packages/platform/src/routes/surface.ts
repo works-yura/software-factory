@@ -25,7 +25,7 @@ import {
 import type { EnsuredFactorySourceSession } from '../session/factory-session.ts';
 import type { LiveSessions } from '../session/live-sessions.ts';
 import { resolveWorkItemRepository } from '../session/work-item-repository.ts';
-import type { StateSigner } from '../state-signing.ts';
+import type { StateSigner } from '@factory/auth';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.ts';
 import type { ChannelIdentityStorage } from '@factory/store';
 import type { WorkItemCommentsStorage } from '@factory/store';
@@ -56,11 +56,11 @@ import { buildFsRoutes } from './fs.ts';
 import { IntakeRoutes } from './intake.ts';
 import { KnowledgeRoutes } from './knowledge.ts';
 import { OAuthRoutes } from './oauth.ts';
-import type { RouteAuth } from './route.ts';
+import type { RouteAuth } from '@factory/http';
 import { SkillRoutes } from './skills.ts';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.ts';
-import { invalidateTenantCredentialSnapshots } from './tenant-credentials.ts';
+import { invalidateTenantCredentialSnapshots } from '@factory/credentials';
 import { WorkItemRoutes } from './work-items.ts';
 
 const MATERIALIZE_FAILURE_CODE = {

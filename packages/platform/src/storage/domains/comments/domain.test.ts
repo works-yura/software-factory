@@ -7,8 +7,8 @@ import { EventEmitterPubSub } from '@mastra/core/events';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.ts';
-import type { TestAuthUser } from '../../../routes/test-utils.ts';
+import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
+import type { TestAuthUser } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '../../../test-support.ts';
 import type { AuditEmitter } from '../audit/domain.ts';
 import type { CommentsDomainOptions } from './domain.ts';

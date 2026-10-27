@@ -11,7 +11,7 @@ const { primeTenant, providerDefault } = vi.hoisted(() => ({
     async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> => undefined,
   ),
 }));
-vi.mock('../routes/tenant-credentials.ts', () => ({
+vi.mock('@factory/credentials', () => ({
   primeTenantCredentialsForTenant: primeTenant,
   resolveTenantProviderDefaultModel: providerDefault,
 }));

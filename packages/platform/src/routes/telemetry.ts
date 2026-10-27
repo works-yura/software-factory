@@ -5,8 +5,8 @@ import { z } from 'zod';
 
 import { FACTORY_WEB_PAGES } from '@factory/observability';
 import { captureFactoryWebActivity, isFactoryTelemetryEnabled } from '@factory/observability';
-import { Route } from './route.ts';
-import type { RouteDependencies } from './route.ts';
+import { Route } from '@factory/http';
+import type { RouteDependencies } from '@factory/http';
 
 const activitySchema = z
   .object({

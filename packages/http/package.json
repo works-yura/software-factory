@@ -1,0 +1,24 @@
+{
+  "name": "@factory/http",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HTTP route helpers, server errors, SPA static serving.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mastra/core": "1.79.0",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

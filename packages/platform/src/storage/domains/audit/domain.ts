@@ -4,8 +4,8 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { getFactoryAuthUser } from '../../../auth.ts';
-import type { RouteAuth } from '../../../routes/route.ts';
+import { getFactoryAuthUser } from '@factory/auth';
+import type { RouteAuth } from '@factory/http';
 import type { FactoryProjectsStorage } from '@factory/store';
 import { auditActionsInNamespaces, isAuditNamespace } from '@factory/store';
 import type { AuditAction } from '@factory/store';

@@ -33,7 +33,7 @@ import type { MiddlewareHandler } from 'hono';
 import { isOAuthCredentialExpired } from '@factory/store';
 import type { ModelCredentialsStorage } from '@factory/store';
 import { getAuthProviderId, getTenantCredentialsStorage, tenantOrgId } from './provider-credentials.ts';
-import type { RouteAuth } from './route.ts';
+import type { RouteAuth } from '@factory/http';
 
 /** How long a hydrated snapshot is considered fresh. */
 const SNAPSHOT_TTL_MS = 15_000;

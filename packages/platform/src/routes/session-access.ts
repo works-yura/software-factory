@@ -5,7 +5,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type { SourceControlSessionLookup } from '../session/factory-session.ts';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession } from '@factory/store';
-import type { RouteAuth } from './route.ts';
+import type { RouteAuth } from '@factory/http';
 import { parseSupervisorResourceId } from '../supervisor/session.ts';
 
 /**
