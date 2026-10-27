@@ -193,11 +193,11 @@ storage/domains/audit/domain.test.ts	feed/src/audit/domain.test.ts
 storage/domains/comments/domain.test.ts	feed/src/comments/domain.test.ts
 storage/domains/comments/feed-events.test.ts	platform/src/storage/domains/comments/feed-events.test.ts
 storage/domains/work-items/metrics.test.ts	platform/src/storage/domains/work-items/metrics.test.ts
-supervisor/health.test.ts	platform/src/supervisor/health.test.ts
-supervisor/read-tools.test.ts	platform/src/supervisor/read-tools.test.ts
-supervisor/session-messaging.test.ts	platform/src/supervisor/session-messaging.test.ts
+supervisor/health.test.ts	supervisor/src/health.test.ts
+supervisor/read-tools.test.ts	supervisor/src/read-tools.test.ts
+supervisor/session-messaging.test.ts	supervisor/src/session-messaging.test.ts
 supervisor/session.test.ts	session/src/supervisor-session.test.ts
-supervisor/write-tools.test.ts	platform/src/supervisor/write-tools.test.ts
+supervisor/write-tools.test.ts	supervisor/src/write-tools.test.ts
 timing.test.ts	observability/src/timing.test.ts
 tools/approval-tools.test.ts	platform/src/tools/approval-tools.test.ts
 tools/deliver.test.ts	platform/src/tools/deliver.test.ts

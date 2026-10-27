@@ -141,7 +141,7 @@ describe('createFactorySupervisorWriteTools', () => {
       audit: seed.audit,
       transitionService,
     });
-    expect(tools.factory_transition_work_item.requireApproval).toBe(true);
+    expect(tools.factory_transition_work_item?.requireApproval).toBe(true);
     await expect(
       execute(tools.factory_transition_work_item, { workItemId: item.id, stage: 'planning' }),
     ).rejects.toThrow(/rejected/);
@@ -265,14 +265,15 @@ describe('createFactorySupervisorWriteTools', () => {
     const item = await createItem(context.workItems, 6);
     vi.spyOn(context.transitionService, 'transition').mockResolvedValue({
       status: 'rejected',
-      code: 'stale_revision',
+      code: 'stale',
       reason: 'The work item changed before the transition was applied.',
       transitionId: 'transition-rejected',
+      itemId: item.id,
     });
 
     await expect(
       execute(context.tools.factory_transition_work_item, { workItemId: item.id, stage: 'planning' }),
-    ).rejects.toThrow('The transition was rejected (stale_revision)');
+    ).rejects.toThrow('The transition was rejected (stale)');
   });
 
   it('moves a held card as a human so acceptance is remembered', async () => {
@@ -288,7 +289,7 @@ describe('createFactorySupervisorWriteTools', () => {
       configVersion: 'rules-v1',
       causalChain: [],
       evaluation: { outcome: 'accepted', decisions: [] },
-      triageType: 'feature-request',
+      triageType: 'feature request',
     });
 
     await expect(

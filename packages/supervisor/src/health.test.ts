@@ -40,7 +40,7 @@ function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
     createdAt: ago(3 * HOUR),
     updatedAt: ago(HOUR),
     ...overrides,
-  };
+  } as WorkItemRow;
 }
 
 function decision(

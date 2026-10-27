@@ -1,0 +1,31 @@
+{
+  "name": "@factory/supervisor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Supervisor: health checks and worker, read and write tools, session messaging, instructions.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/core": "workspace:*",
+    "@factory/feed": "workspace:*",
+    "@factory/integrations": "workspace:*",
+    "@factory/runtime": "workspace:*",
+    "@factory/session": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/core": "1.79.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@factory/pipelines": "workspace:*",
+    "@factory/testing": "workspace:*",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

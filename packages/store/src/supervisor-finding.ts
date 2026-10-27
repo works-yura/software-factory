@@ -1,4 +1,5 @@
-// Shape of a Supervisor health finding as WorkItemsStorage persists it. Copied from v3 supervisor/health.ts.
+// Shape of a Supervisor health finding as WorkItemsStorage persists it (from v3 supervisor/health.ts).
+// @factory/supervisor re-exports these.
 
 export type FactoryHealthFindingKind =
   | 'decision-stuck'
