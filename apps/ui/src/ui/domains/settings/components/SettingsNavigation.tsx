@@ -34,15 +34,14 @@ type SettingsNavItem = {
 
 type SettingsNavGroup = {
   id: string;
-  label?: string;
-  ariaLabel?: string;
+  label: string;
   items: SettingsNavItem[];
 };
 
-export const PERSONAL_SETTINGS_GROUP = {
-  id: 'personal',
+export const ACCOUNT_SETTINGS_GROUP = {
+  id: 'account',
   get label() {
-    return i18n.t('groups.personal', { ns: 'settings' });
+    return i18n.t('groups.account', { ns: 'settings' });
   },
   items: [
     {
@@ -73,7 +72,49 @@ export const PERSONAL_SETTINGS_GROUP = {
 } satisfies SettingsNavGroup;
 
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
-  PERSONAL_SETTINGS_GROUP,
+  ACCOUNT_SETTINGS_GROUP,
+  {
+    id: 'agent',
+    get label() {
+      return i18n.t('groups.agent', { ns: 'settings' });
+    },
+    items: [
+      {
+        id: 'models',
+        get label() {
+          return SETTINGS_SECTION_LABELS.models;
+        },
+        icon: Bot,
+        searchText:
+          'models default model factory models routing factory defaults thinking level api keys providers credentials sign in oauth custom endpoints',
+      },
+      {
+        id: 'memory',
+        get label() {
+          return SETTINGS_SECTION_LABELS.memory;
+        },
+        icon: Brain,
+        searchText:
+          'memory factory memory shared memory observational recall observer reflector thresholds attachments summarize context',
+      },
+      {
+        id: 'skills',
+        get label() {
+          return SETTINGS_SECTION_LABELS.skills;
+        },
+        icon: BookOpen,
+        searchText: 'skills factory triage plan review agent instructions prompts stages',
+      },
+      {
+        id: 'behavior',
+        get label() {
+          return SETTINGS_SECTION_LABELS.behavior;
+        },
+        icon: SlidersHorizontal,
+        searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
+      },
+    ],
+  },
   {
     id: 'factory',
     get label() {
@@ -81,68 +122,34 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
     },
     items: [
       {
-        id: 'models',
-        get label() {
-        return SETTINGS_SECTION_LABELS.models;
-      },
-        icon: Bot,
-        searchText:
-          'factory shared models thinking level default api keys providers credentials sign in oauth custom endpoints',
-      },
-      {
-        id: 'factory-memory',
-        get label() {
-        return SETTINGS_SECTION_LABELS['factory-memory'];
-      },
-        icon: Brain,
-        searchText:
-          'factory shared memory observational recall observer reflector thresholds attachments summarize context',
-      },
-      {
-        id: 'skills',
-        get label() {
-        return SETTINGS_SECTION_LABELS.skills;
-      },
-        icon: BookOpen,
-        searchText: 'skills factory triage plan review agent instructions prompts stages',
-      },
-      {
-        id: 'behavior',
-        get label() {
-        return SETTINGS_SECTION_LABELS.behavior;
-      },
-        icon: SlidersHorizontal,
-        searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
-      },
-      {
         id: 'repositories',
         get label() {
-        return SETTINGS_SECTION_LABELS.repositories;
-      },
+          return SETTINGS_SECTION_LABELS.repositories;
+        },
         icon: GitBranch,
         searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
       },
       {
         id: 'environment',
         get label() {
-        return SETTINGS_SECTION_LABELS.environment;
-      },
+          return SETTINGS_SECTION_LABELS.environment;
+        },
         icon: Box,
         searchText: 'environment sandbox resources cpu memory workdir repositories order setup teardown build triggers',
       },
       {
         id: 'intake',
         get label() {
-        return SETTINGS_SECTION_LABELS.intake;
-      },
+          return SETTINGS_SECTION_LABELS.intake;
+        },
         icon: Inbox,
         searchText: 'work intake sources tasks issues pull requests github feed sync',
       },
       {
         id: 'factory',
         get label() {
-        return SETTINGS_SECTION_LABELS.factory;
-      },
+          return SETTINGS_SECTION_LABELS.factory;
+        },
         icon: Building2,
         searchText: 'factory project organization manage remove delete danger',
       },
@@ -186,14 +193,10 @@ export function SettingsNavigation() {
       )}
       {filteredGroups.length > 0 ? (
         filteredGroups.map(group => {
-          const headerId = group.label ? `settings-${group.id}` : undefined;
+          const headerId = `settings-${group.id}`;
           return (
-            <Sidebar.NavSection
-              key={group.id}
-              aria-labelledby={headerId}
-              aria-label={headerId ? undefined : (group.ariaLabel ?? group.id)}
-            >
-              {group.label && <Sidebar.NavHeader id={headerId}>{group.label}</Sidebar.NavHeader>}
+            <Sidebar.NavSection key={group.id} aria-labelledby={headerId}>
+              <Sidebar.NavHeader id={headerId}>{group.label}</Sidebar.NavHeader>
               <Sidebar.NavList>
                 {group.items.map(({ id, label, icon: Icon }) => {
                   const isActive = section === id;

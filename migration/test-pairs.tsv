@@ -390,25 +390,22 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/factory/services/relationships.test.ts	../apps/ui/src/ui/domains/factory/services/relationships.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts	../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/workItems.test.ts	../apps/ui/src/ui/domains/factory/services/workItems.test.ts	1	added: a stored card from a dropped integration reads as manual
-../../../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx
+../../../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	+1	upstream 22084b780f (#28100): Memory found by its former page name
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/ConnectedAccountsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/ConnectedAccountsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentSection.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/FactoryDefaultModelSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactoryDefaultModelSection.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
-../../../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelsSettings.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactoryModelsSettings.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	-28	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
-../../../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/ProviderAccessSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/ProviderAccessSection.msw.test.tsx	-3	personal model scope removed (Your models, scope choice, personal keys)
+../../../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx	+1	upstream 22084b780f (#28100): clicking the Attachments label keeps the setting
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/RepositoriesSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/RepositoriesSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsFields.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsFields.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsNavigation.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsNavigation.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsSubsection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsSubsection.msw.test.tsx
+../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsNavigation.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsNavigation.msw.test.tsx	+1	upstream 22084b780f (#28100): former page names find Models and Memory
+../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsSubsection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsSubsection.msw.test.tsx	-6	upstream 22084b780f (#28100): scope switch removed, only the badge cases remain
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/UserGithubConnectionRow.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/UserGithubConnectionRow.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/environment/RepositoriesBlock.test.ts	../apps/ui/src/ui/domains/settings/components/environment/RepositoriesBlock.test.ts
 ../../../apps/ui/src/ui/domains/settings/services/channelAccounts.test.ts	../apps/ui/src/ui/domains/settings/services/channelAccounts.test.ts

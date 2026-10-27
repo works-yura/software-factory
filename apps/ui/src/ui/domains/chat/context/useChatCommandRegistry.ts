@@ -25,7 +25,7 @@ import { useFactoryThinkingDefaultQuery } from '../../../../hooks/use-thinking';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
-import { settingsSectionPath } from '../../settings/settingsSections';
+import { MODEL_DEFAULTS_ANCHORS, settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -74,6 +74,13 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const factoryThinkingQuery = useFactoryThinkingDefaultQuery(factoryId, { enabled: false });
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
+
+  const openSessionDefaults = () => {
+    if (factoryId)
+      void navigate(settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.factory), {
+        state: { from: location },
+      });
+  };
 
   const currentThinkingLevel = settingsQuery.data?.thinkingLevel;
   const runningThinkingLevel =
@@ -265,17 +272,13 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       name: 'connect',
       description: tk('commands.connect'),
       requiresSession: false,
-      execute: async () => {
-        if (factoryId) void navigate(settingsSectionPath(factoryId, 'models'), { state: { from: location } });
-      },
+      execute: async () => openSessionDefaults(),
     },
     {
       name: 'login',
       description: tk('commands.login'),
       requiresSession: false,
-      execute: async () => {
-        if (factoryId) void navigate(settingsSectionPath(factoryId, 'models'), { state: { from: location } });
-      },
+      execute: async () => openSessionDefaults(),
     },
     {
       name: 'follow-up',

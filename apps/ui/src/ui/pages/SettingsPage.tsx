@@ -9,7 +9,12 @@ import { ChatHeaderSidebarTrigger } from '../domains/chat/components/ChatHeaderS
 import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
-import { SETTINGS_SECTION_LABELS, isSettingsSection } from '../domains/settings/settingsSections';
+import {
+  SETTINGS_SECTION_LABELS,
+  isSettingsSection,
+  retiredSettingsTarget,
+  settingsSectionPath,
+} from '../domains/settings/settingsSections';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;
@@ -17,9 +22,23 @@ import { SETTINGS_SECTION_LABELS, isSettingsSection } from '../domains/settings/
  * section navigation) is rendered by `AppLayout`.
  */
 export function SettingsPage() {
-  const { section } = useParams();
+  const { section, factoryId } = useParams();
   const location = useLocation();
 
+  const retired = retiredSettingsTarget(section, location.hash);
+  if (factoryId && retired) {
+    return (
+      <Navigate
+        to={{
+          pathname: settingsSectionPath(factoryId, retired.section),
+          search: location.search,
+          hash: retired.anchor ?? location.hash,
+        }}
+        replace
+        state={location.state}
+      />
+    );
+  }
   if (!isSettingsSection(section)) {
     return <Navigate to="../preferences" replace state={location.state} />;
   }

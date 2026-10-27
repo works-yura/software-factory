@@ -7,14 +7,15 @@
     "repositories": "Repositories",
     "environment": "Environment",
     "intake": "Work Intake",
-    "models": "Factory models",
-    "factory-memory": "Factory memory",
+    "models": "Models",
     "skills": "Skills",
-    "behavior": "Behavior"
+    "behavior": "Behavior",
+    "memory": "Memory"
   },
   "groups": {
-    "personal": "Your settings",
-    "factory": "Factory settings"
+    "account": "Account",
+    "agent": "Agent",
+    "factory": "Factory"
   },
   "intake": {
     "retry": "Retry",
@@ -276,19 +277,15 @@
     "orgAdminsOnly": "Only organization admins can manage org-wide credentials.",
     "fromDeployment": "From deployment",
     "fromEnv": "From env",
-    "notSet": "Not set",
-    "personalOnly": "Personal {{name}} credential — teammates without their own can't run this model."
+    "personalOnly": "Personal {{name}} credential — teammates without their own can't run this model.",
+    "fromEnvDescription": "Read from the server environment",
+    "fromDeploymentDescription": "Provided by the deployment",
+    "oauthDescription": "Signed in with a provider account",
+    "apiKeyDescription": "An API key is saved",
+    "notSet": "Not set"
   },
   "providers": {
-    "title": "Provider access",
-    "tabs": {
-      "oauth": "Sign in with a provider",
-      "apiKey": "Connect with API key"
-    },
     "loading": "Loading providers",
-    "noOAuthProviders": "No providers support sign in.",
-    "signOutOf": "Sign out of {{name}}",
-    "signOutOfOrg": "Sign out of {{name}} for the org",
     "signingOut": "Signing out…",
     "signOut": "Sign out",
     "signInTo": "Sign in to {{name}}",
@@ -297,16 +294,30 @@
     "signOutFailed": "Failed to sign out",
     "removeKeyFailed": "Failed to remove API key",
     "search": "Search providers",
-    "searchPlaceholder": "Search providers to add an API key…",
     "noMatch": "No providers match “{{query}}”.",
-    "noApiKeyProviders": "No API key providers are available.",
     "updateKey": "Update key",
-    "addKey": "Add API key",
-    "updateKeyFor": "Update key for {{name}}",
     "addKeyFor": "Add API key for {{name}}",
-    "removeKeyFor": "Remove key for {{name}}",
     "removing": "Removing…",
-    "remove": "Remove"
+    "add": "Add provider",
+    "orgAudience": "Shared with every Factory in your organization.",
+    "signingOutDescription": "Ending the provider sign-in",
+    "removingDescription": "Deleting the saved API key",
+    "actionsFor": "{{name}} actions",
+    "removeKey": "Remove key",
+    "apiKey": "API key",
+    "drawer": {
+      "description": "Sign in with a subscription or paste an API key.",
+      "audience": {
+        "user": "Only you can use it.",
+        "org": "Everyone in your organization can use it."
+      },
+      "searchPlaceholder": "Search {{total}} providers…",
+      "matches": "{{shown}} of {{total}} providers",
+      "signInHeading": "Sign in with a subscription",
+      "noSignIn": "No providers offer sign-in.",
+      "keyOnly_one": "{{count}} more take an API key. Type to find one.",
+      "keyOnly_other": "{{count}} more take an API key. Type to find one."
+    }
   },
   "oauth": {
     "title": "Sign in to {{name}}",
@@ -457,8 +468,7 @@
     "personal": "Personal",
     "factory": "Factory-wide",
     "org": "Org-wide",
-    "deployment": "Deployment-wide",
-    "switchLabel": "Who these settings apply to"
+    "deployment": "Deployment-wide"
   },
   "sounds": {
     "play": "Play a sound",
@@ -531,15 +541,11 @@
     "deleteFailed": "Failed to delete Factory"
   },
   "models": {
-    "connectToUnlock": "Connect a provider to unlock model selection and observational-memory settings.",
     "customProviders": "Custom providers",
     "factoryDefaults": {
-      "title": "Factory defaults",
-      "description": "Where this Factory's sessions and work-item runs get their model, credentials, and thinking level."
+      "title": "Factory defaults"
     },
     "factoryDefault": {
-      "label": "Model and thinking",
-      "description": "Factory sessions and runs (triage, board work items) start on this model and use the Factory memory settings.",
       "saving": "Saving default model",
       "placeholder": "Select a model",
       "pickerLabel": "Factory default model",
@@ -549,9 +555,10 @@
       "skipped_one": ". {{count}} skipped: {{reasons}}",
       "skipped_other": ". {{count}} skipped: {{reasons}}",
       "confirmTitle": "Also switch running sessions to {{model}}?",
-      "confirmDescription": "New Factory runs will use this model. Running work and review sessions keep their current model unless you switch them. Switched sessions keep their work and pick up the new model on their next step.",
+      "confirmDescription": "New activity using the Factory defaults will use this model. Running work and review sessions keep their current model unless you switch them. Switched sessions keep their work and pick up the new model on their next step.",
       "keep": "Keep them as-is",
-      "switch": "Switch running sessions"
+      "switch": "Switch running sessions",
+      "switching": "Switching…"
     },
     "thinking": {
       "label": "Thinking",
@@ -573,7 +580,6 @@
   },
   "memory": {
     "title": "Observational memory",
-    "descriptionFactory": "Models and token thresholds used to summarize and retain context in Factory sessions and runs.",
     "empty": {
       "title": "No models configured",
       "description": "Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first.",
@@ -584,30 +590,38 @@
     "credentialsRequired": "Model credentials required",
     "credentialsHint": "Observational-memory model calls may fail until credentials are configured.",
     "observer": {
-      "label": "Observer model",
-      "description": "Summarizes the conversation into observations",
-      "placeholder": "Select observer model…"
+      "label": "Observer",
+      "description": "Summarizes the conversation into observations.",
+      "placeholder": "Select observer model…",
+      "ariaLabel": "Observer model"
     },
     "reflector": {
-      "label": "Reflector model",
-      "description": "Distills observations into longer-term memory",
-      "placeholder": "Select reflector model…"
+      "label": "Reflector",
+      "description": "Distills observations into longer-term memory.",
+      "placeholder": "Select reflector model…",
+      "ariaLabel": "Reflector model"
     },
     "observationThreshold": {
-      "label": "Messages before observation",
+      "label": "Observe after",
       "description": "Message tokens processed before the observer runs."
     },
     "reflectionThreshold": {
-      "label": "Observations before reflection",
+      "label": "Reflect after",
       "description": "Observation tokens accumulated before the reflector runs."
     },
     "attachments": {
-      "label": "Observe attachments",
-      "description": "Whether attached files are included in observations",
+      "label": "Attachments",
+      "description": "Whether attached files are included in observations.",
       "auto": "Auto",
       "on": "On",
-      "off": "Off"
-    }
+      "off": "Off",
+      "ariaLabel": "Observe attachments"
+    },
+    "description": "When a thread grows, the observer summarizes it and the reflector condenses those notes.",
+    "factoryCard": "Factory memory",
+    "usedBy": "Used by",
+    "messages": "Messages",
+    "about": "About {{label}}"
   },
   "nav": {
     "backToApp": "Back to app",
@@ -623,5 +637,20 @@
     "claude": "Settings → Connectors → Add custom connector, paste the URL",
     "claudeCode": "Run claude mcp add --transport http factory <URL>, then /mcp to sign in",
     "chatgpt": "Plugins → + → Add custom MCP server, paste the URL, choose OAuth"
+  },
+  "routing": {
+    "title": "Model routing",
+    "description": "Chats and work-item runs both use the Factory defaults. Running threads keep the model they already picked.",
+    "thinkingDescription": "Every chat and work-item run in this Factory starts at this level.",
+    "lanes": {
+      "chats": "Chats",
+      "runs": "Work-item runs"
+    },
+    "uses": "Uses {{defaults}}",
+    "sources": {
+      "webApp": "Web app"
+    },
+    "model": "Model",
+    "providers": "Providers"
   }
 }

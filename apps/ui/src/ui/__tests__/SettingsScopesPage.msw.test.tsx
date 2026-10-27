@@ -17,10 +17,15 @@ import {
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
 const OM_URL = `${TEST_BASE_URL}/web/config/om`;
 
-function renderSettings(section: string) {
+function renderSettings(section: string, { hash = '', search = '' } = {}) {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [
-      { pathname: `/factories/fp-1/settings/${section}`, state: { settingsReturnTo: '/factories/fp-1/work' } },
+      {
+        pathname: `/factories/fp-1/settings/${section}`,
+        hash,
+        search,
+        state: { settingsReturnTo: '/factories/fp-1/work' },
+      },
     ],
   });
   renderWithProviders(<RouterProvider router={router} />);
@@ -46,16 +51,7 @@ beforeEach(() => {
 });
 
 describe('Settings ownership', () => {
-  it.each(['personal-models', 'memory'])('has no personal %s page: an old link opens preferences', async section => {
-    const router = renderSettings(section);
-
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/settings/preferences'));
-    const personal = await screen.findByRole('region', { name: 'Your settings' });
-    expect(within(personal).queryByRole('link', { name: 'Your models' })).not.toBeInTheDocument();
-    expect(within(personal).queryByRole('link', { name: 'Your memory' })).not.toBeInTheDocument();
-  });
-
-  it('keeps shared defaults in Factory models and writes organization credentials', async () => {
+  it('writes organization credentials from Factory defaults', async () => {
     let keyBody: unknown;
     server.use(
       http.put(`${PROVIDERS_URL}/openai/key`, async ({ request }) => {
@@ -66,13 +62,10 @@ describe('Settings ownership', () => {
     const user = userEvent.setup();
     renderSettings('models');
 
-    expect(await screen.findByText('Factory defaults')).toBeInTheDocument();
-    expect(await screen.findByRole('group', { name: 'Model and thinking' })).toBeInTheDocument();
-    expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
-    expect(screen.queryByText('Thinking defaults')).not.toBeInTheDocument();
-    expect(screen.queryByText('Your defaults')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
-    await user.click(await screen.findByRole('button', { name: 'Update key for OpenAI' }));
+    const factoryDefaults = await screen.findByRole('region', { name: 'Factory defaults' });
+    expect(screen.queryByRole('region', { name: 'Personal defaults' })).not.toBeInTheDocument();
+    await user.click(await within(factoryDefaults).findByRole('button', { name: 'OpenAI actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Update key' }));
     await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-shared');
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(keyBody).toEqual({ key: 'sk-shared', scope: 'org' }));
@@ -80,14 +73,15 @@ describe('Settings ownership', () => {
 
   it('lets members inspect shared provider settings and explains why edits require an admin', async () => {
     server.use(http.get(PROVIDERS_URL, () => HttpResponse.json({ ...settingsProviders, orgKeyAdmin: false })));
-    const user = userEvent.setup();
     renderSettings('models');
 
-    expect(await screen.findByText('Only organization admins can manage org-wide credentials.')).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
-    expect(await screen.findByText('Key saved')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Update key for OpenAI' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Remove key for OpenAI' })).toBeDisabled();
+    const factoryDefaults = await screen.findByRole('region', { name: 'Factory defaults' });
+    expect(
+      await within(factoryDefaults).findByText('Only organization admins can manage org-wide credentials.'),
+    ).toBeInTheDocument();
+    expect(within(factoryDefaults).getByText('Key saved')).toBeInTheDocument();
+    expect(within(factoryDefaults).getByRole('button', { name: 'OpenAI actions' })).toBeDisabled();
+    expect(within(factoryDefaults).getByRole('button', { name: 'Add provider' })).toBeDisabled();
   });
 
   it('edits Factory memory under the Factory id', async () => {
@@ -104,35 +98,38 @@ describe('Settings ownership', () => {
       }),
     );
     const user = userEvent.setup();
-    renderSettings('factory-memory');
-    const input = await screen.findByDisplayValue('1,000');
+    renderSettings('memory');
+    const card = await screen.findByRole('region', { name: 'Factory memory' });
+    const input = await within(card).findByRole('textbox', { name: 'Observe after' });
     await waitFor(() => expect(requestedFactoryIds).toContain('fp-1'));
-    expect(screen.queryByRole('group', { name: 'Who these settings apply to' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Personal memory' })).not.toBeInTheDocument();
     await user.clear(input);
     await user.type(input, '4000');
     await user.tab();
     await waitFor(() => expect(body).toEqual({ factoryId: 'fp-1', observationThreshold: 4000 }));
   });
 
-  it('keeps legacy model settings deep links on Factory models with the return location', async () => {
-    const router = createMemoryRouter(createAppRoutes(), {
-      initialEntries: [
-        {
-          pathname: '/factories/fp-1/settings/models',
-          hash: '#model-packs',
-          search: '?from=chat',
-          state: { settingsReturnTo: '/factories/fp-1/work' },
-        },
-      ],
-    });
-    renderWithProviders(<RouterProvider router={router} />);
-    expect(await screen.findByText('Factory defaults')).toBeInTheDocument();
+  it.each([
+    { section: 'personal-models', hash: '' },
+    { section: 'models', hash: '#model-packs' },
+  ])('sends $section$hash to Models #factory-defaults, keeping search and return state', async ({ section, hash }) => {
+    const router = renderSettings(section, { hash, search: '?from=chat' });
+
+    expect(await screen.findByRole('region', { name: 'Factory defaults' })).toBeInTheDocument();
     expect(router.state.location).toMatchObject({
       pathname: '/factories/fp-1/settings/models',
+      hash: '#factory-defaults',
       search: '?from=chat',
       state: { settingsReturnTo: '/factories/fp-1/work' },
     });
-    const factory = screen.getByRole('region', { name: 'Factory settings' });
-    expect(within(factory).getByRole('link', { name: 'Factory models' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('sends retired Factory memory links to Memory', async () => {
+    const router = renderSettings('factory-memory');
+
+    expect(await screen.findByRole('region', { name: 'Factory memory' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/fp-1/settings/memory');
+    expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('aria-current', 'page');
   });
 });

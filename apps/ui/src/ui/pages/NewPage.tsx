@@ -13,7 +13,7 @@ import { useProvidersQuery } from '../../hooks/use-providers';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '@factory/credentials/provider-display-name';
-import { settingsSectionPath } from '../domains/settings/settingsSections';
+import { MODEL_DEFAULTS_ANCHORS, settingsSectionPath } from '../domains/settings/settingsSections';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
@@ -179,7 +179,7 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
           : t('newPage.noAccessDescription', descriptionValues)
       }
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+        <Link to={settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.factory)} className={buttonVariants({ variant: 'primary' })}>
           {t('newPage.openModelsSettings')}
         </Link>
       }
@@ -196,7 +196,7 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
       titleSlot={t('newPage.noDefaultModelTitle')}
       descriptionSlot={t('newPage.noDefaultModelDescription')}
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+        <Link to={settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.factory)} className={buttonVariants({ variant: 'primary' })}>
           {t('newPage.openModelsSettings')}
         </Link>
       }

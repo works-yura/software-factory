@@ -4,7 +4,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { OMConfigInfo } from '../../../../../api/types';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { OMSection } from '../OMSection';
@@ -182,8 +182,8 @@ describe('OMSection', () => {
     expect(await screen.findByRole('status', { name: 'Loading observational-memory settings' })).toBeInTheDocument();
     expect(await screen.findByDisplayValue('1,000')).toBeInTheDocument();
     expect(screen.getByDisplayValue('2,000')).toBeInTheDocument();
-    expect(screen.getByText('Observer model')).toBeInTheDocument();
-    expect(screen.getByText('Reflector model')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Observer model' })).toHaveValue('Observer X');
+    expect(screen.getByRole('combobox', { name: 'Reflector model' })).toHaveValue('Reflector X');
     expect(screen.getByRole('radio', { name: 'Auto' })).toHaveAttribute('aria-checked', 'true');
   });
 
@@ -200,7 +200,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
+    const input = await screen.findByRole('textbox', { name: 'Observe after' });
     expect(input).toHaveValue('1,000');
     await user.clear(input);
     await user.type(input, '5000');
@@ -224,7 +224,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Observations before reflection' });
+    const input = await screen.findByRole('textbox', { name: 'Reflect after' });
     expect(input).toHaveValue('2,000');
     const row = input.closest<HTMLElement>('[data-slot=input-number-group]');
     if (!row) throw new Error('Expected the threshold stepper group');
@@ -253,7 +253,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
+    const input = await screen.findByRole('textbox', { name: 'Observe after' });
     await user.clear(input);
     await user.type(input, '2000');
     await user.tab();
@@ -286,7 +286,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
+    const input = await screen.findByRole('textbox', { name: 'Observe after' });
     await user.clear(input);
     await user.tab();
 
@@ -343,5 +343,26 @@ describe('OMSection', () => {
 
     await waitFor(() => expect(requestBody).toEqual({ value: true, factoryId: 'fp-1' }));
     await waitFor(() => expect(screen.getByRole('radio', { name: 'On' })).toHaveAttribute('aria-checked', 'true'));
+  });
+
+  it('keeps the attachment setting when the Attachments label is clicked', async () => {
+    let attachmentWrites = 0;
+    server.use(
+      http.get(OM_URL, () => HttpResponse.json({ config: { ...baseConfig, observeAttachments: false } })),
+      http.put(`${OM_URL}/observe-attachments`, () => {
+        attachmentWrites += 1;
+        return HttpResponse.json({ ok: true, config: { ...baseConfig, observeAttachments: 'auto' } });
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<OMSection factoryId="fp-1" models={models} />);
+
+    await screen.findByDisplayValue('1,000');
+    await user.click(screen.getByText('Attachments'));
+    await waitForMutationsIdle(client);
+
+    expect(attachmentWrites).toBe(0);
+    expect(screen.getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true');
   });
 });

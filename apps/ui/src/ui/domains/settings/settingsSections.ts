@@ -9,7 +9,7 @@ export type SettingsSection =
   | 'environment'
   | 'intake'
   | 'models'
-  | 'factory-memory'
+  | 'memory'
   | 'skills'
   | 'behavior';
 
@@ -22,7 +22,7 @@ const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'environment',
   'intake',
   'models',
-  'factory-memory',
+  'memory',
   'skills',
   'behavior',
 ];
@@ -36,10 +36,32 @@ for (const section of SETTINGS_SECTIONS) {
   });
 }
 
+/** Every session and work-item run uses the Factory defaults, so they are the only defaults a link opens. */
+export const MODEL_DEFAULTS_ANCHORS = {
+  factory: 'factory-defaults',
+} as const;
+
+export type ModelDefaultsAnchor = (typeof MODEL_DEFAULTS_ANCHORS)[keyof typeof MODEL_DEFAULTS_ANCHORS];
+
+type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor };
+
+const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
+  ['personal-models', { section: 'models', anchor: MODEL_DEFAULTS_ANCHORS.factory }],
+  ['factory-memory', { section: 'memory' }],
+]);
+
+export function retiredSettingsTarget(section: string | undefined, hash: string): SettingsTarget | undefined {
+  if (section === 'models' && hash === '#model-packs')
+    return { section: 'models', anchor: MODEL_DEFAULTS_ANCHORS.factory };
+  if (!section) return undefined;
+  return RETIRED_SETTINGS_SECTIONS.get(section);
+}
+
 export function isSettingsSection(value: unknown): value is SettingsSection {
   return typeof value === 'string' && value in SETTINGS_SECTION_LABELS;
 }
 
-export function settingsSectionPath(factoryId: string, section: SettingsSection): string {
-  return `/factories/${factoryId}/settings/${section}`;
+export function settingsSectionPath(factoryId: string, section: SettingsSection, anchor?: ModelDefaultsAnchor): string {
+  const path = `/factories/${factoryId}/settings/${section}`;
+  return anchor ? `${path}#${anchor}` : path;
 }

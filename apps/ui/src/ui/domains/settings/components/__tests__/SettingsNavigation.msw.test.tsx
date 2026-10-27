@@ -33,42 +33,18 @@ describe('SettingsNavigation', () => {
     );
   });
 
-  it('separates personal destinations from shared Factory settings', () => {
+  it('groups destinations by topic: account, agent, Factory', () => {
     renderNavigation();
 
-    const personal = screen.getByRole('region', { name: 'Your settings' });
-    const factory = screen.getByRole('region', { name: 'Factory settings' });
-    expect(
-      within(personal)
+    const linksIn = (group: string) =>
+      within(screen.getByRole('region', { name: group }))
         .getAllByRole('link')
-        .map(link => link.textContent),
-    ).toEqual(['My account', 'Preferences', 'Connections']);
-    expect(
-      within(factory)
-        .getAllByRole('link')
-        .map(link => link.textContent),
-    ).toEqual([
-      'Factory models',
-      'Factory memory',
-      'Skills',
-      'Behavior',
-      'Repositories',
-      'Environment',
-      'Work Intake',
-      'Manage Factory',
-    ]);
-    expect(within(factory).getByRole('link', { name: 'Factory models' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/models',
-    );
-    expect(within(factory).getByRole('link', { name: 'Factory memory' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/factory-memory',
-    );
-    expect(within(factory).getByRole('link', { name: 'Environment' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/environment',
-    );
+        .map(link => link.textContent);
+    expect(linksIn('Account')).toEqual(['My account', 'Preferences', 'Connections']);
+    expect(linksIn('Agent')).toEqual(['Models', 'Memory', 'Skills', 'Behavior']);
+    expect(linksIn('Factory')).toEqual(['Repositories', 'Environment', 'Work Intake', 'Manage Factory']);
+    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
+    expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');
   });
 
   it('keeps legacy terms searchable while showing the clearer destination label', async () => {
@@ -79,6 +55,20 @@ describe('SettingsNavigation', () => {
 
     expect(screen.getByRole('link', { name: 'Repositories' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Work Intake' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Your settings' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Account' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { query: 'default model', destination: 'Models' },
+    { query: 'factory models', destination: 'Models' },
+    { query: 'factory memory', destination: 'Memory' },
+    { query: 'shared memory', destination: 'Memory' },
+  ])('finds $destination by the former page name "$query"', async ({ query, destination }) => {
+    const user = userEvent.setup();
+    renderNavigation();
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search settings' }), query);
+
+    expect(screen.getByRole('link', { name: destination })).toBeInTheDocument();
   });
 });
