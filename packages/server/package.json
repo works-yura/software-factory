@@ -1,12 +1,11 @@
 {
-  "name": "@factory/platform",
+  "name": "@factory/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The rest of v3 packages/factory, copied whole and wired to the v4 packages; split into packages from here.",
+  "description": "MastraFactory: assembles runtime, storage, harness, integrations (GitHub, GitLab), API, and Supervisor; holds the cross-layer system tests.",
   "exports": {
-    ".": "./src/index.ts",
-    "./*": "./src/*.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

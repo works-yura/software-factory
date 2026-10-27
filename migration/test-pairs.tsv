@@ -38,14 +38,14 @@ storage/domains/projects/model-scope.test.ts	store/src/projects/model-scope.test
 storage/domains/queue-health/base.test.ts	store/src/queue-health/base.test.ts
 secret-encryption.test.ts	store/src/secret-encryption.test.ts
 storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts
-auth-seam.test.ts	platform/src/auth-seam.test.ts
+auth-seam.test.ts	server/src/auth-seam.test.ts
 auth.test.ts	auth/src/auth.test.ts
 environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule.test.ts
 environment/build.test.ts	harness-mastra/src/environment/build.test.ts
 environment/heads.test.ts	harness-mastra/src/environment/heads.test.ts
-factory-disable-builtin-tools.test.ts	platform/src/factory-disable-builtin-tools.test.ts
-factory.test.ts	platform/src/factory.test.ts
-index.test.ts	platform/src/index.test.ts
+factory-disable-builtin-tools.test.ts	server/src/factory-disable-builtin-tools.test.ts
+factory.test.ts	server/src/factory.test.ts
+index.test.ts	server/src/index.test.ts
 integrations/github/acceptance-labels.test.ts	integration-github/src/acceptance-labels.test.ts
 integrations/github/app-identity.test.ts	integration-github/src/app-identity.test.ts
 integrations/github/commits.test.ts	integration-github/src/commits.test.ts
@@ -57,7 +57,7 @@ integrations/github/provenance.test.ts	integration-github/src/provenance.test.ts
 integrations/github/reconcile-worker.test.ts	integration-github/src/reconcile-worker.test.ts
 integrations/github/routes-scenario.test.ts	integration-github/src/routes-scenario.test.ts
 integrations/github/routes.test.ts	integration-github/src/routes.test.ts
-integrations/github/rules.test.ts	platform/src/integrations/github/rules.test.ts
+integrations/github/rules.test.ts	server/src/integrations/github/rules.test.ts
 integrations/github/sandbox-release.test.ts	sandbox/src/github/sandbox-release.test.ts
 integrations/github/sandbox-scenario.test.ts	sandbox/src/github/sandbox-scenario.test.ts
 integrations/github/sandbox.git.test.ts	sandbox/src/github/sandbox.git.test.ts
@@ -81,10 +81,10 @@ integrations/gitlab/version-control.test.ts	integration-gitlab/src/version-contr
 integrations/gitlab/webhook-dispatch.test.ts	integration-gitlab/src/webhook-dispatch.test.ts
 integrations/gitlab/webhook.test.ts	integration-gitlab/src/webhook.test.ts
 integrations/issue-reconcile-worker.test.ts	integrations/src/issue-reconcile-worker.test.ts
-integrations/issue-reconciler.test.ts	platform/src/integrations/issue-reconciler.test.ts	-1	Linear reconciler case dropped with the integration
+integrations/issue-reconciler.test.ts	server/src/integrations/issue-reconciler.test.ts	-1	Linear reconciler case dropped with the integration
 integrations/platform/api-client.test.ts	integrations/src/platform-api-client.test.ts
 integrations/platform/connect/routes.test.ts	integrations/src/platform-connect-routes.test.ts
-integrations/platform/github/event-worker.lifecycle.test.ts	platform/src/integrations/platform/github/event-worker.lifecycle.test.ts
+integrations/platform/github/event-worker.lifecycle.test.ts	server/src/integrations/platform/github/event-worker.lifecycle.test.ts
 integrations/platform/github/event-worker.test.ts	integration-github/src/platform/event-worker.test.ts
 integrations/platform/github/integration.test.ts	integration-github/src/platform/integration.test.ts
 integrations/platform/gitlab/event-worker.test.ts	integration-gitlab/src/platform/event-worker.test.ts
@@ -118,9 +118,9 @@ routes/work-items.test.ts	api/src/work-items.test.ts
 rules/automation-stamping.test.ts	runtime/src/automation-stamping.test.ts
 rules/binding-context.test.ts	session/src/binding-context.test.ts
 rules/bindings.test.ts	runtime/src/bindings.test.ts
-rules/custom-board-lifecycle.test.ts	platform/src/rules/custom-board-lifecycle.test.ts
-rules/custom-board-runtime.test.ts	platform/src/rules/custom-board-runtime.test.ts
-rules/default-handlers.test.ts	platform/src/rules/default-handlers.test.ts	-3	Linear integration cases dropped with the integration (Jira and incident.io were it.each rows)
+rules/custom-board-lifecycle.test.ts	server/src/rules/custom-board-lifecycle.test.ts
+rules/custom-board-runtime.test.ts	server/src/rules/custom-board-runtime.test.ts
+rules/default-handlers.test.ts	server/src/rules/default-handlers.test.ts	-3	Linear integration cases dropped with the integration (Jira and incident.io were it.each rows)
 rules/processor.test.ts	harness-mastra/src/rules/processor.test.ts
 rules/review-source-tool.test.ts	harness-mastra/src/rules/review-source-tool.test.ts
 rules/start-coordinator.scenario.test.ts	harness-mastra/src/rules/start-coordinator.scenario.test.ts
@@ -134,7 +134,7 @@ sandbox/workdir.test.ts	sandbox/src/workdir.test.ts
 server-error.test.ts	http/src/server-error.test.ts
 session/channel-reply-processor.test.ts	session/src/channel-reply-processor.test.ts
 session/channel-session-link-processor.test.ts	session/src/channel-session-link-processor.test.ts
-session/credential-policy.test.ts	platform/src/session/credential-policy.test.ts
+session/credential-policy.test.ts	server/src/session/credential-policy.test.ts
 session/default-model-hydration.scenario.test.ts	session/src/default-model-hydration.scenario.test.ts
 session/default-model-hydration.test.ts	session/src/default-model-hydration.test.ts
 session/environment-repositories.test.ts	session/src/environment-repositories.test.ts
@@ -145,7 +145,7 @@ session/first-exec-capture.test.ts	session/src/first-exec-capture.test.ts
 session/first-message-capture.test.ts	session/src/first-message-capture.test.ts
 session/live-sessions.test.ts	session/src/live-sessions.test.ts
 session/memory-settings-hydration.test.ts	session/src/memory-settings-hydration.test.ts
-session/org-seed-fail-open.test.ts	platform/src/session/org-seed-fail-open.test.ts
+session/org-seed-fail-open.test.ts	server/src/session/org-seed-fail-open.test.ts
 session/reply-credential-processor.test.ts	session/src/reply-credential-processor.test.ts
 session/resource-migration.test.ts	session/src/resource-migration.test.ts
 session/session-threads.test.ts	session/src/session-threads.test.ts

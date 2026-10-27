@@ -23,7 +23,7 @@
 | `v3/packages/internal-workspace/src` | `internal-workspace/src` (`@internal/workspace`) |
 | `factory-skills/`, `scripts/generate-api-cli-route-metadata.ts` | `platform/factory-skills`, `platform/scripts` |
 
-`@factory/platform` — проміжний пакет («душитель»): уся решта v3 одним шматком, підключена до вже винесених пакетів. Пакети виносяться з нього по одному, кожен крок перевіряє `pnpm verify`.
+`@factory/platform` (тепер `@factory/server`) — проміжний пакет («душитель»): уся решта v3 одним шматком, підключена до вже винесених пакетів. Пакети виносяться з нього по одному, кожен крок перевіряє `pnpm verify`.
 
 ## Винесено з platform
 

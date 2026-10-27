@@ -4,12 +4,37 @@
 
 | Пакет | Тека | Що це |
 | --- | --- | --- |
-| `@factory/core` | `packages/core` | Рушій дошок: `defineBoard`, `createBoardRegistry`, семантика фаз, перевірка рішення, перенесення картки |
-| `@factory/pipelines` | `packages/pipelines` | Дошки Work, Review і Acceptance. Залежить від `@factory/core`; рушій їх не імпортує |
-| `@factory/store` | `packages/store` | Сховища карток, аудиту й коментарів з v3 на сховищі Mastra (libsql або pg). `@factory/store/testing` — libsql `:memory:` для тестів |
-| `@factory/platform` | `packages/platform` | Решта v3 одним пакетом: інтеграції, маршрути, сесії, інструменти, пісочниці, Supervisor, `MastraFactory`. Пакети виносяться з нього по одному |
-| `@internal/workspace` | `packages/internal-workspace` | Файлові команди, клонування репо, маркер setup (з v3) |
-| `@factory/runtime` | `packages/runtime` | Сервіс переходів, диспетчер рішень, аудит запусків, термінальне прибирання з v3. Mastra лише в типах сесії та `RequestContext` |
+| **Рушій** | | |
+| `@factory/core` | `packages/core` | Factory engine: define a pipeline, move a card, resolve the decision. Work, Review, and Acceptance live in @factory/pipelines. |
+| `@factory/pipelines` | `packages/pipelines` | Work, Review, and Acceptance pipelines for the conveyor. |
+| **Сховище і рантайм** | | |
+| `@factory/store` | `packages/store` | Card, decision, and run-binding storage on Mastra storage domains (libsql, pg). |
+| `@factory/runtime` | `packages/runtime` | Moves cards: transition service, decision dispatcher, run audit, terminal cleanup. |
+| `@factory/work-items` | `packages/work-items` | Create work items through the transition service; act on deferred decisions. |
+| `@factory/testing` | `packages/testing` | Test seams for suites copied from v3: Work and Review installed by default, libsql storage. |
+| **Основа** | | |
+| `@factory/capabilities` | `packages/capabilities` | Capability contracts integrations implement: connection, intake, version control. |
+| `@factory/observability` | `packages/observability` | Request timing and product telemetry. |
+| `@factory/http` | `packages/http` | HTTP route helpers, server errors, SPA static serving. |
+| `@factory/auth` | `packages/auth` | Factory auth: WorkOS/Studio providers, platform auth host, signed OAuth state. |
+| `@factory/contracts` | `packages/contracts` | Wire contracts of the Factory HTTP API, shared by server and UI. |
+| `@factory/credentials` | `packages/credentials` | Provider and tenant model credentials, provider display names. |
+| `@factory/feed` | `packages/feed` | Work-item feed over HTTP: audit and comments domains, wire formats, feed events. |
+| `@factory/sandbox` | `packages/sandbox` | Session sandboxes: local and callback sandboxes, workdirs, setup gates, materialization, git in the sandbox, retirement. |
+| `@internal/workspace` | `packages/internal-workspace` | Workspace file commands, repo clone, setup marker (from v3 packages/internal-workspace). |
+| **Сесії й інтеграції** | | |
+| `@factory/session` | `packages/session` | Factory sessions: hydration, credential policy, threads, capture processors, session access, Supervisor session identity. |
+| `@factory/integrations` | `packages/integrations` | Integration contract (IntegrationContext, Integration), issue reconcilers, subscription sessions, platform API client and connect routes. |
+| `@factory/integration-github` | `packages/integration-github` | GitHub integration: app, PAT, webhooks, rules, reconcilers, routes, platform-mode adapter. |
+| `@factory/integration-gitlab` | `packages/integration-gitlab` | GitLab integration: API, webhooks, rules, reconcilers, merge requests, routes, platform-mode adapter. |
+| **Агент і нагляд** | | |
+| `@factory/harness-mastra` | `packages/harness-mastra` | Mastra harness: start coordinator, phase-state processor, agent tools, workspace and skills, MCP, environment builds. |
+| `@factory/supervisor` | `packages/supervisor` | Supervisor: health checks and worker, read and write tools, session messaging, instructions. |
+| **API і сервер** | | |
+| `@factory/api` | `packages/api` | Factory HTTP API: projects, work items, attention, config, intake, source control, supervisor, surface, telemetry routes; metrics. |
+| `@factory/server` | `packages/server` | MastraFactory: assembles runtime, storage, harness, integrations (GitHub, GitLab), API, and Supervisor; holds the cross-layer system tests. |
+
+Залежності йдуть лише згори вниз (таблиця — від нижчих шарів до вищих); циклів між пакетами нема. Інтеграції: GitHub і GitLab.
 
 Хост ставить дошки так:
 
@@ -45,13 +70,10 @@ pnpm test    # vitest
 
 ## Що далі
 
-Код переноситься з v3 копією, тести — 1:1 (`pnpm verify` звіряє кількість). Нове пишеться лише на швах. Журнал — `MIGRATION.md`.
+Код перенесено з v3 копією, тести — 1:1 (`pnpm verify` звіряє кількість). Журнал швів — `MIGRATION.md`.
 
-Уся функціональність v3 уже у v4. Далі пакети виносяться з `@factory/platform`, знизу вгору:
-
-1. `capabilities`, `sandbox`, `environment`.
-2. Порт харнесу і `@factory/harness-mastra` (координатор старту, процесор, `session/*`, `workspace.ts`, `tools`, `mcp`).
-3. `integrations` (`base`, потім GitLab, GitHub, решта).
-4. `supervisor`, `auth`, `api` (`routes`), складання `MastraFactory` → `apps/server`.
-5. `apps/ui`.
-6. Звузити сховище до портів, потім адаптер Firestore.
+1. Борг типів у тестах (`scripts/test-type-debt.sh`): закривати по пакетах.
+2. Прибрати словник Linear/Jira/incident.io з `core` і `pipelines`.
+3. Порт харнесу: відв'язати `harness-mastra` від GitHub (PAT у `workspace`) і від Mastra в `runtime` (`FactoryController`, `DispatcherSession`).
+4. Хост (`apps/server`) і UI (`apps/ui`) з v3.
+5. Порти сховища, потім Firestore.
