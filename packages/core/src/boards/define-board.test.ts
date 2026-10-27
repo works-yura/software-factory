@@ -1,0 +1,299 @@
+import { describe, expect, it } from 'vitest';
+import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.ts';
+import { BoardDefinitionError, defineBoard } from './define-board.ts';
+describe('defineBoard', () => {
+  it.each([
+    '',
+    ' queued',
+    'queued ',
+    'queued\n',
+    'bad phase',
+    'bad/phase',
+    '-phase',
+    '_phase',
+    'é',
+    'x'.repeat(MAX_BOARD_IDENTIFIER_LENGTH + 1),
+  ])('rejects malformed board and phase identifiers: %j', identifier => {
+    expect(() =>
+      defineBoard({
+        id: identifier,
+        title: 'Release',
+        initialPhase: 'queued',
+        phases: { queued: { title: 'Queued', kind: 'resting' } },
+      }),
+    ).toThrow(BoardDefinitionError);
+    expect(() =>
+      defineBoard({
+        id: 'release',
+        title: 'Release',
+        initialPhase: identifier,
+        phases: { [identifier]: { title: 'Queued', kind: 'resting' } },
+      }),
+    ).toThrow(BoardDefinitionError);
+  });
+
+  it.each(['Release_1-ready', 'x'.repeat(MAX_BOARD_IDENTIFIER_LENGTH)])(
+    'preserves valid board and phase identifiers: %s',
+    identifier => {
+      const board = defineBoard({
+        id: identifier,
+        title: 'Release',
+        initialPhase: identifier,
+        phases: { [identifier]: { title: 'Queued', kind: 'resting' } },
+      });
+      expect(board.id).toBe(identifier);
+      expect(board.initialPhase).toBe(identifier);
+      expect(Object.keys(board.phases)).toEqual([identifier]);
+    },
+  );
+
+  it('normalizes linear and outcome transitions', () => {
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'prepare',
+      phases: {
+        prepare: { title: 'Prepare', kind: 'resting', next: 'verify' },
+        verify: {
+          title: 'Verify',
+          kind: 'working',
+          role: 'verifier',
+          outcomes: { approved: 'done', rejected: 'prepare' },
+        },
+        done: { title: 'Done', kind: 'terminal' },
+      },
+    });
+
+    expect(board.transitions.prepare).toEqual([{ outcome: null, to: 'verify' }]);
+    expect(board.transitions.verify).toEqual([
+      { outcome: 'approved', to: 'done' },
+      { outcome: 'rejected', to: 'prepare' },
+    ]);
+    expect(board.rules).toEqual({});
+    expect(board.allowsTransition('prepare', 'verify')).toBe(true);
+    expect(board.allowsTransition('prepare', 'done')).toBe(false);
+    expect(board.allowsTransition('verify', 'verify')).toBe(true);
+
+    expect(Object.isFrozen(board.transitions.prepare[0])).toBe(true);
+    expect(Reflect.set(board.transitions.prepare[0]!, 'to', 'done')).toBe(false);
+    expect(board.allowsTransition('prepare', 'verify')).toBe(true);
+    expect(board.allowsTransition('prepare', 'done')).toBe(false);
+  });
+
+  it('clones and freezes the public phase and rule graphs', () => {
+    const originalHandler = () => undefined;
+    const replacementHandler = () => ({ type: 'notify', message: 'mutated' }) as const;
+    const phases = {
+      start: {
+        title: 'Start',
+        kind: 'resting',
+        outcomes: { approved: 'done' },
+        onEnter: { manual: originalHandler },
+      },
+      done: { title: 'Done', kind: 'terminal' },
+    } as const;
+    const board = defineBoard({ id: 'immutable', title: 'Immutable', initialPhase: 'start', phases });
+
+    expect(Object.isFrozen(board.phases.start)).toBe(true);
+    expect(Object.isFrozen(board.phases.start.outcomes)).toBe(true);
+    expect(Object.isFrozen(board.phases.start.onEnter)).toBe(true);
+    expect(Object.isFrozen(board.rules.start)).toBe(true);
+    expect(Object.isFrozen(board.rules.start?.manual)).toBe(true);
+
+    expect(Reflect.set(phases.start.outcomes, 'approved', 'start')).toBe(true);
+    expect(Reflect.set(phases.start.onEnter, 'manual', replacementHandler)).toBe(true);
+    expect(board.phases.start.outcomes?.approved).toBe('done');
+    expect(board.phases.start.onEnter?.manual).toBe(originalHandler);
+    expect(board.rules.start?.manual?.onEnter).toBe(originalHandler);
+
+    expect(Reflect.set(board.phases.start, 'title', 'Mutated')).toBe(false);
+    expect(Reflect.set(board.phases.start, 'kind', 'working')).toBe(false);
+    expect(Reflect.set(board.phases.start.outcomes!, 'approved', 'start')).toBe(false);
+    expect(Reflect.set(board.rules.start!, 'manual', {})).toBe(false);
+    expect(Reflect.set(board.rules.start!.manual!, 'onEnter', replacementHandler)).toBe(false);
+  });
+
+  it('rejects definitions whose transitions target missing phases', () => {
+    expect(() =>
+      defineBoard({
+        id: 'broken',
+        title: 'Broken',
+        initialPhase: 'start',
+        phases: {
+          start: { title: 'Start', kind: 'resting', next: 'missing' },
+        } as Record<string, { title: string; kind: 'resting'; next: string }>,
+      }),
+    ).toThrow(new BoardDefinitionError('Phase "start" targets undefined phase "missing".'));
+  });
+
+  it('validates an empty string next target instead of dropping it', () => {
+    expect(() =>
+      defineBoard({
+        id: 'broken',
+        title: 'Broken',
+        initialPhase: 'start',
+        phases: {
+          start: { title: 'Start', kind: 'resting', next: '' },
+        } as Record<string, { title: string; kind: 'resting'; next: string }>,
+      }),
+    ).toThrow(new BoardDefinitionError('Phase "start" targets undefined phase "".'));
+  });
+
+  describe('phase semantics', () => {
+    const base = { id: 'semantics', title: 'Semantics', initialPhase: 'queued' } as const;
+    const looseBoard = (phases: Record<string, unknown>) =>
+      defineBoard({ ...base, phases: phases as Record<string, { title: string; kind: 'resting' }> });
+
+    it('exposes declared kinds, roles, and role lookup in declaration order', () => {
+      const board = defineBoard({
+        ...base,
+        phases: {
+          queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
+          shipping: { title: 'Shipping', kind: 'working', role: 'release', next: 'verifying' },
+          verifying: { title: 'Verifying', kind: 'working', role: 'release', next: 'shipped' },
+          shipped: { title: 'Shipped', kind: 'terminal' },
+        },
+      });
+
+      expect(board.phaseKind('queued')).toBe('resting');
+      expect(board.phaseKind('shipping')).toBe('working');
+      expect(board.phaseKind('shipped')).toBe('terminal');
+      expect(board.phaseKind('unknown')).toBeUndefined();
+      expect(board.isWorking('shipping')).toBe(true);
+      expect(board.isWorking('queued')).toBe(false);
+      expect(board.isWorking('unknown')).toBe(false);
+      expect(board.isTerminal('shipped')).toBe(true);
+      expect(board.isTerminal('shipping')).toBe(false);
+      expect(board.isTerminal('unknown')).toBe(false);
+      expect(board.roleForPhase('shipping')).toBe('release');
+      expect(board.roleForPhase('queued')).toBeUndefined();
+      expect(board.roleForPhase('shipped')).toBeUndefined();
+      expect(board.phaseForRole('release')).toBe('shipping');
+      expect(board.phaseForRole('work')).toBeUndefined();
+      expect(board.phases.shipping.role).toBe('release');
+      expect('role' in board.phases.queued).toBe(false);
+    });
+
+    it('ignores inherited property names', () => {
+      const board = defineBoard({
+        ...base,
+        phases: { queued: { title: 'Queued', kind: 'resting' } },
+      });
+      expect(board.phaseKind('constructor')).toBeUndefined();
+      expect(board.roleForPhase('toString')).toBeUndefined();
+      expect(board.phaseForRole('hasOwnProperty')).toBeUndefined();
+    });
+
+    it('rejects phases without a kind', () => {
+      expect(() => looseBoard({ queued: { title: 'Queued' } })).toThrow(
+        new BoardDefinitionError(`Phase "queued" must declare kind 'resting', 'working', or 'terminal'.`),
+      );
+      expect(() => looseBoard({ queued: { title: 'Queued', kind: 'idle' } })).toThrow(BoardDefinitionError);
+    });
+
+    it('rejects working phases without a valid role', () => {
+      const cases: unknown[] = [undefined, '', 'has space', 'x'.repeat(33), 42];
+      for (const role of cases) {
+        expect(() =>
+          looseBoard({
+            queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
+            shipping: { title: 'Shipping', kind: 'working', role },
+          }),
+        ).toThrow(new BoardDefinitionError('Working phase "shipping" must declare a valid role.'));
+      }
+    });
+
+    it('rejects roles on resting and terminal phases', () => {
+      expect(() => looseBoard({ queued: { title: 'Queued', kind: 'resting', role: 'bot' } })).toThrow(
+        new BoardDefinitionError('Phase "queued" is resting and cannot declare a role.'),
+      );
+      expect(() =>
+        looseBoard({
+          queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+          shipped: { title: 'Shipped', kind: 'terminal', role: 'bot' },
+        }),
+      ).toThrow(new BoardDefinitionError('Phase "shipped" is terminal and cannot declare a role.'));
+    });
+
+    it('requires the initial phase to be resting', () => {
+      expect(() => looseBoard({ queued: { title: 'Queued', kind: 'working', role: 'bot' } })).toThrow(
+        new BoardDefinitionError('Initial phase "queued" must be a resting phase.'),
+      );
+      expect(() => looseBoard({ queued: { title: 'Queued', kind: 'terminal' } })).toThrow(
+        new BoardDefinitionError('Initial phase "queued" must be a resting phase.'),
+      );
+    });
+  });
+
+});
+
+describe('defineBoard tool-result rules', () => {
+  const phases = {
+    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  } as const;
+
+  it('freezes declared tool rules and defaults to none', () => {
+    const onResult = () => undefined;
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases,
+      tools: { ship_it: { onResult } },
+    });
+    expect(board.tools.ship_it?.onResult).toBe(onResult);
+    expect(Object.isFrozen(board.tools)).toBe(true);
+    expect(Object.isFrozen(board.tools.ship_it)).toBe(true);
+    expect(defineBoard({ id: 'bare', title: 'Bare', initialPhase: 'queued', phases }).tools).toEqual({});
+  });
+
+  it('rejects malformed tool rules at definition time', () => {
+    const define = (tools: unknown) =>
+      defineBoard({ id: 'release', title: 'Release', initialPhase: 'queued', phases, tools: tools as never });
+    expect(() => define(new Map())).toThrow(BoardDefinitionError);
+    expect(() => define({ 'bad name!': { onResult: () => undefined } })).toThrow(/invalid tool name/);
+    expect(() => define({ ['x'.repeat(200)]: { onResult: () => undefined } })).toThrow(/invalid tool name/);
+    expect(() => define({ ship_it: { onResult: 'nope' } })).toThrow(/onResult function/);
+    expect(() => define({ ship_it: { onResult: () => undefined, extra: true } })).toThrow(/only onResult/);
+    expect(() => define({ ship_it: () => undefined })).toThrow(BoardDefinitionError);
+  });
+
+});
+
+describe('defineBoard sourceClosed', () => {
+  const phases = {
+    queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+    building: { title: 'Building', kind: 'working', role: 'work', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+    dropped: { title: 'Dropped', kind: 'terminal' },
+  } as const;
+  const define = (sourceClosed: unknown) =>
+    defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases,
+      sourceClosed: sourceClosed as never,
+    });
+
+  it('exposes a frozen terminal-phase mapping and omits it when undeclared', () => {
+    const board = define({ completed: 'shipped', canceled: 'dropped' });
+    expect(board.sourceClosed).toEqual({ completed: 'shipped', canceled: 'dropped' });
+    expect(Object.isFrozen(board.sourceClosed)).toBe(true);
+    expect(define(undefined).sourceClosed).toBeUndefined();
+    expect('sourceClosed' in define(undefined)).toBe(false);
+  });
+
+  it('rejects mappings to undefined or non-terminal phases and malformed shapes', () => {
+    expect(() => define({ completed: 'missing', canceled: 'dropped' })).toThrow(/sourceClosed.completed "missing"/);
+    expect(() => define({ completed: 'shipped', canceled: 'building' })).toThrow(/sourceClosed.canceled "building"/);
+    expect(() => define({ completed: 'shipped', canceled: 'toString' })).toThrow(BoardDefinitionError);
+    expect(() => define({ completed: 'shipped' })).toThrow(/exactly completed and canceled/);
+    expect(() => define({ completed: 'shipped', canceled: 'dropped', extra: 'x' })).toThrow(
+      /exactly completed and canceled/,
+    );
+    expect(() => define('shipped')).toThrow(/plain object/);
+  });
+
+});

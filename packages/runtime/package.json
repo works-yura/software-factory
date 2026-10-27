@@ -1,0 +1,26 @@
+{
+  "name": "@factory/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Moves cards: transition service, decision dispatcher, run audit, terminal cleanup.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/core": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/core": "1.79.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@factory/pipelines": "workspace:*",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@factory/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Factory engine: define a pipeline, move a card, resolve the decision. Work, Review, and Acceptance live in @factory/pipelines.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/boards/test-utils.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

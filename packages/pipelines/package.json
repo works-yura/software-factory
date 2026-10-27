@@ -1,0 +1,23 @@
+{
+  "name": "@factory/pipelines",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Work, Review, and Acceptance pipelines for the conveyor.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

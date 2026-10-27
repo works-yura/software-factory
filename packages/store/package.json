@@ -1,0 +1,25 @@
+{
+  "name": "@factory/store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Card, decision, and run-binding storage on Mastra storage domains (libsql, pg).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/core": "workspace:*",
+    "@mastra/core": "1.79.0"
+  },
+  "devDependencies": {
+    "@mastra/libsql": "1.27.0",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
