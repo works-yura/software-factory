@@ -1,4 +1,4 @@
-import { optionalBoolean, optionalPositiveInteger } from '../reconciliation-config.ts';
+import { optionalBoolean, optionalPositiveInteger } from '@factory/integrations';
 
 const RECONCILIATION_LABEL = 'Jira reconciliation';
 

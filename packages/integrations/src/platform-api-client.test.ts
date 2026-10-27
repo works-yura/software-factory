@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from './api-client.ts';
+import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from './platform-api-client.ts';
 
 const accessToken = 'platform-secret-token';
 

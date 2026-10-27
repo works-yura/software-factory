@@ -4,7 +4,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { AuditEventRow } from '@factory/store';
-import type { FactoryIntegration, IntegrationContext } from '../base.ts';
+import type { FactoryIntegration, IntegrationContext } from '@factory/integrations';
 
 type WorkOSClient = ConstructorParameters<typeof WorkOSAdminPortal>[0];
 

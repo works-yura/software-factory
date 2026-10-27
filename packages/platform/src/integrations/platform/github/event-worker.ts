@@ -16,8 +16,8 @@ import type {
   GithubWebhookNotification,
   ParsedGithubWebhook,
 } from '../../github/webhook.ts';
-import type { PlatformApiClient } from '../api-client.ts';
-import { PlatformApiError } from '../api-client.ts';
+import type { PlatformApiClient } from '@factory/integrations';
+import { PlatformApiError } from '@factory/integrations';
 
 const API_PREFIX = '/v1/server/github-app';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;

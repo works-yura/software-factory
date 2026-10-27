@@ -21,7 +21,7 @@ import type {
 import type { RouteAuth } from '@factory/http';
 import type { IntakeStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.ts';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
 import { buildIncidentioAgentTools } from '../../incidentio/agent-tools.ts';
 import { IncidentioApiClient, IncidentioApiError } from '../../incidentio/api.ts';
 import { resolveIncidentioRules } from '../../incidentio/default-rules.ts';
@@ -38,9 +38,9 @@ import {
 } from '../../incidentio/reconciliation-config.ts';
 import { buildIncidentioRoutes } from '../../incidentio/routes.ts';
 import { attachIncidentioRules } from '../../incidentio/rules.ts';
-import { IssueReconcileWorker } from '../../issue-reconcile-worker.ts';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.ts';
-import type { PlatformApiClientConfig } from '../api-client.ts';
+import { IssueReconcileWorker } from '@factory/integrations';
+import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/integrations';
+import type { PlatformApiClientConfig } from '@factory/integrations';
 
 export interface PlatformIncidentioIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;

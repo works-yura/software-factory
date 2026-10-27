@@ -1,9 +1,9 @@
 import { workItemPhaseSemantics } from '@factory/core';
 import type { IntakeIssue } from '@factory/capabilities';
 import type { WorkItemRow } from '@factory/store';
-import type { IntegrationContext } from '../base.ts';
-import { createIssueReconciler } from '../issue-reconciler.ts';
-import type { IssueReconciler } from '../issue-reconciler.ts';
+import type { IntegrationContext } from '@factory/integrations';
+import { createIssueReconciler } from '@factory/integrations';
+import type { IssueReconciler } from '@factory/integrations';
 import { decodeIssueReference } from './integration.ts';
 import type { GitLabIntegrationBase } from './integration.ts';
 import { attachGitLabRules } from './rules.ts';

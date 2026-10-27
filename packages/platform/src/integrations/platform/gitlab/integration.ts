@@ -1,14 +1,14 @@
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { IntegrationConnection } from '@factory/capabilities';
-import type { IntegrationContext } from '../../base.ts';
+import type { IntegrationContext } from '@factory/integrations';
 import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.ts';
 import type { GitLabRuleOverrides } from '../../gitlab/default-rules.ts';
 import { gitlabConnection, GitLabIntegrationBase } from '../../gitlab/integration.ts';
 import type { GitLabStatusConnection } from '../../gitlab/integration.ts';
 import { attachGitLabRules } from '../../gitlab/rules.ts';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.ts';
-import type { PlatformApiClientConfig } from '../api-client.ts';
+import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/integrations';
+import type { PlatformApiClientConfig } from '@factory/integrations';
 import { PlatformGitLabEventWorker } from './event-worker.ts';
 import type { PlatformGitLabEventStorage } from './event-worker.ts';
 

@@ -8,7 +8,7 @@ import type { IntegrationConnection } from '@factory/capabilities';
 import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } from '@factory/capabilities';
 import type { RouteAuth } from '@factory/http';
 import type { FactoryProjectsStorage } from '@factory/store';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.ts';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
 import { buildLinearAgentTools } from '../../linear/agent-tools.ts';
 import type { LinearEventRules, LinearRuleOverrides } from '../../linear/default-rules.ts';
 import { resolveLinearRules } from '../../linear/default-rules.ts';
@@ -31,7 +31,7 @@ import {
   PlatformApiClient,
   PlatformApiError,
   platformApiClientConfigFromEnv,
-} from '../api-client.ts';
+} from '@factory/integrations';
 import { PlatformLinearEventWorker } from './event-worker.ts';
 import type { PlatformLinearEventStorage } from './event-worker.ts';
 

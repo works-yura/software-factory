@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.ts';
 import type { GithubPullRequestReconciler } from '../../github/rules.ts';
 import type { dispatchGithubWebhook } from '../../github/webhook.ts';
-import { PlatformApiClient } from '../api-client.ts';
+import { PlatformApiClient } from '@factory/integrations';
 import { PlatformGithubEventWorker } from './event-worker.ts';
 import type { PlatformGithubEventDispatchIntegration, PlatformGithubEventStorage } from './event-worker.ts';
 

@@ -1,5 +1,5 @@
 import { workItemPhaseSemantics } from '@factory/core';
-import type { IntegrationContext } from '../base.ts';
+import type { IntegrationContext } from '@factory/integrations';
 import {
   githubRulesOptions,
   reconcilableIssueNumber,

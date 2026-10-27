@@ -1,5 +1,5 @@
-import type { PlatformApiClient} from '../platform/api-client.ts';
-import { PlatformApiError } from '../platform/api-client.ts';
+import type { PlatformApiClient} from '@factory/integrations';
+import { PlatformApiError } from '@factory/integrations';
 
 export const GITLAB_PROJECTS_PAGE_SIZE = 100;
 export const GITLAB_ISSUES_PAGE_SIZE = 30;

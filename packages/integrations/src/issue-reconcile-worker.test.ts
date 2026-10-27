@@ -7,6 +7,7 @@ import type { IssueReconcileSummary } from './issue-reconciler.ts';
 const EMPTY_SUMMARY: IssueReconcileSummary = {
   projects: 0,
   checked: 0,
+  closed: 0,
   updated: 0,
   missing: 0,
   failed: 0,

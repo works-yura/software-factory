@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import type { IntegrationTools } from '../integrations/base.ts';
+import type { IntegrationTools } from '@factory/integrations';
 import { transitionBodySchema } from '@factory/contracts';
 import type { FactoryTransitionService } from '@factory/runtime';
 import type { SourceControlSessionLookup } from '@factory/session';

@@ -6,10 +6,10 @@ import type { WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import type { IssueReconciler } from '../../issue-reconciler.ts';
+import type { IssueReconciler } from '@factory/integrations';
 import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.ts';
-import type { PlatformApiClient} from '../api-client.ts';
-import { PlatformApiError } from '../api-client.ts';
+import type { PlatformApiClient} from '@factory/integrations';
+import { PlatformApiError } from '@factory/integrations';
 
 const API_PREFIX = '/v1/server/linear';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;

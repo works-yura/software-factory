@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '@factory/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
-import type { IntegrationContext } from '../base.ts';
+import type { IntegrationContext } from '@factory/integrations';
 import { IncidentioIntegration } from './integration.ts';
 import { attachIncidentioIssueReconciler } from './issue-reconciler.ts';
 

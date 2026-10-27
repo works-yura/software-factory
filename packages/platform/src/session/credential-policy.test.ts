@@ -16,7 +16,7 @@ import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { prepareSessionRunContext } from '../integrations/subscription-session.ts';
+import { prepareSessionRunContext } from '@factory/integrations';
 import {
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,

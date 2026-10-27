@@ -47,7 +47,7 @@ import type {
   ReviewComment,
   VersionControl,
 } from '@factory/capabilities';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.ts';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.ts';
 import { resolveGithubRules } from './default-rules.ts';
 import { attachGithubIssueReconciler } from './issue-reconciler.ts';

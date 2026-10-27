@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../issue-reconcile-worker.ts', () => ({
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/integrations', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/integrations')>()),
+  ...(await (() => ({
   IssueReconcileWorker: class {
     readonly name = 'incidentio-issue-reconcile';
 
     constructor(readonly config: unknown) {}
   },
+}))()),
 }));
 
 import { createBoardRegistry } from '@factory/testing';

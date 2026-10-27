@@ -2,7 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { IntegrationTools } from '../integrations/base.ts';
+import type { IntegrationTools } from '@factory/integrations';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { FactorySessionSourceLookup } from '@factory/session';
 import { resolveFactorySessionAddress } from '@factory/session';

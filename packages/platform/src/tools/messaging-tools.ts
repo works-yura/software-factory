@@ -13,7 +13,7 @@ import type {
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { IntegrationTools } from '../integrations/base.ts';
+import type { IntegrationTools } from '@factory/integrations';
 import type { SourceControlSessionLookup } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
 import type { SourceControlSession } from '@factory/store';

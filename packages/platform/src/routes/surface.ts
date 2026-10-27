@@ -8,7 +8,7 @@ import type { FactorySandbox } from '@mastra/core/workspace';
 
 import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.ts';
+import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '@factory/integrations';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.ts';
 import type { GithubIntegration } from '../integrations/github/integration.ts';
 import { MaterializeError } from '@factory/sandbox';

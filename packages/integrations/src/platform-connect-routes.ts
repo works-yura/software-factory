@@ -17,8 +17,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { RouteAuth } from '@factory/http';
-import type { PlatformApiClient} from '../api-client.ts';
-import { PlatformApiError } from '../api-client.ts';
+import type { PlatformApiClient} from './platform-api-client.ts';
+import { PlatformApiError } from './platform-api-client.ts';
 
 type RouteContext = Context;
 

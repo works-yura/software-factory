@@ -59,4 +59,4 @@ export type {
   IntegrationContext,
   IntegrationHooks,
   IntegrationTools,
-} from './integrations/base.ts';
+} from '@factory/integrations';

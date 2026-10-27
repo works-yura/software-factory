@@ -4,7 +4,7 @@ import { createBoardRegistry } from '@factory/testing';
 import type { PullRequest, VersionControl } from '@factory/capabilities';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
-import type { IntegrationContext } from '../base.ts';
+import type { IntegrationContext } from '@factory/integrations';
 import { resolveGitLabRules } from './default-rules.ts';
 import { encodeSourceId } from './integration.ts';
 import { attachGitLabMergeRequestReconciler } from './merge-request-reconciler.ts';

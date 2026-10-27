@@ -1,4 +1,4 @@
-import { optionalPositiveInteger } from '../reconciliation-config.ts';
+import { optionalPositiveInteger } from '@factory/integrations';
 
 export function reconciliationEnabled(child: string | undefined, legacy: string | undefined): boolean {
   return parseOptionalBoolean(child) ?? parseOptionalBoolean(legacy) ?? true;

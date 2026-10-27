@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import type { AuditEventRow } from '@factory/store';
-import type { IntegrationContext } from '../base.ts';
+import type { IntegrationContext } from '@factory/integrations';
 import { toWorkOSEvent, WorkOSAuditIntegration } from './integration.ts';
 
 const createEvent = vi.fn(async () => undefined);

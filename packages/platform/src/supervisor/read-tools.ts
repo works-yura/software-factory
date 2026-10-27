@@ -9,7 +9,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { BoardRegistry } from '@factory/core';
-import type { IntegrationTools } from '../integrations/base.ts';
+import type { IntegrationTools } from '@factory/integrations';
 import { decisionRetryable, overtakenDecisionIds } from '@factory/runtime';
 import { factoryDispatchFailureMetadata } from '@factory/store';
 import { FACTORY_RULE_STAGES, factoryRuleStage } from '@factory/core';

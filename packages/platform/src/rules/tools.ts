@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { boardForWorkItem, workItemPhaseSemantics } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import { SELF_REVIEW_ROUND_LIMIT } from '@factory/pipelines';
-import type { IntegrationTools } from '../integrations/base.ts';
+import type { IntegrationTools } from '@factory/integrations';
 import { WorkItemUpdateConflictError } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { FactorySessionSourceLookup } from '@factory/session';

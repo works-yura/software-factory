@@ -23,7 +23,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
 import type { WorkItemFeedPublisher } from '@factory/feed';
-import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.ts';
+import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '@factory/integrations';
 
 import { createSlackConnectRoutes } from './connect-route.ts';
 import { SlackFeedPublisher } from './feed-publisher.ts';

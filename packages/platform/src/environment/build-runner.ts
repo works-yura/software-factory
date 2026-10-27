@@ -6,7 +6,7 @@
 
 import type { Mastra } from '@mastra/core/mastra';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
-import type { RepositoryPushEvent } from '../integrations/base.ts';
+import type { RepositoryPushEvent } from '@factory/integrations';
 import { resolveProjectEnvironment } from '../workspace.ts';
 import { probeSchedulesAvailable } from './build-schedule.ts';
 import type { ScheduleService } from './build-schedule.ts';

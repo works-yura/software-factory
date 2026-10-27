@@ -7,7 +7,7 @@ import { findEnvironmentRepository, resolveSessionRepositories } from '@factory/
 import type { EnvironmentRepository } from '@factory/session';
 import { runsPullRequestCreate } from '@factory/session';
 import type { SourceControlInstallation, SourceControlSession } from '@factory/store';
-import type { IntegrationTools } from '../base.ts';
+import type { IntegrationTools } from '@factory/integrations';
 import type { GithubIntegration } from './integration.ts';
 import { getGithubPat } from './pat.ts';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.ts';

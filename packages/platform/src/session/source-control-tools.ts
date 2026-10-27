@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '@factory/auth';
 import type { VersionControl } from '@factory/capabilities';
-import type { IntegrationTools } from '../integrations/base.ts';
+import type { IntegrationTools } from '@factory/integrations';
 import {
   ensureLocalBranch,
   isCheckoutOf,

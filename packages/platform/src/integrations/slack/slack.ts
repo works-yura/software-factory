@@ -44,8 +44,8 @@ import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.ts';
-import type { FactoryChannelsConfig } from '../base.ts';
-import { prepareSessionRunContext } from '../subscription-session.ts';
+import type { FactoryChannelsConfig } from '@factory/integrations';
+import { prepareSessionRunContext } from '@factory/integrations';
 
 import { resolveEmojiShortcodes } from './emoji.ts';
 import { slackCommentSource } from './feed-publisher.ts';

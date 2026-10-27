@@ -46,7 +46,7 @@ import type {
   SourceControlInstallation,
   SourceControlStorageHandle,
 } from '@factory/store';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.ts';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
 import { GithubAppIdentity } from '../../github/app-identity.ts';
 import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.ts';
 import { resolveGithubRules } from '../../github/default-rules.ts';
@@ -76,7 +76,7 @@ import {
   PlatformApiClient,
   PlatformApiError,
   platformApiClientConfigFromEnv,
-} from '../api-client.ts';
+} from '@factory/integrations';
 import { PlatformGithubEventWorker } from './event-worker.ts';
 import type { PlatformGithubEventStorage } from './event-worker.ts';
 

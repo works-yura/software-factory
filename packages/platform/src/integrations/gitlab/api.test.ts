@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PlatformApiClient } from '../platform/api-client.ts';
+import { PlatformApiClient } from '@factory/integrations';
 import { GitLabApiClient, GitLabApiError } from './api.ts';
 
 function json(body: unknown, status = 200): Response {

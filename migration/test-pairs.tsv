@@ -87,7 +87,7 @@ integrations/incidentio/integration.test.ts	platform/src/integrations/incidentio
 integrations/incidentio/issue-reconciler.test.ts	platform/src/integrations/incidentio/issue-reconciler.test.ts
 integrations/incidentio/routes.test.ts	platform/src/integrations/incidentio/routes.test.ts
 integrations/incidentio/rules.test.ts	platform/src/integrations/incidentio/rules.test.ts
-integrations/issue-reconcile-worker.test.ts	platform/src/integrations/issue-reconcile-worker.test.ts
+integrations/issue-reconcile-worker.test.ts	integrations/src/issue-reconcile-worker.test.ts
 integrations/issue-reconciler.test.ts	platform/src/integrations/issue-reconciler.test.ts
 integrations/jira/adf.test.ts	platform/src/integrations/jira/adf.test.ts
 integrations/jira/agent-tools.test.ts	platform/src/integrations/jira/agent-tools.test.ts
@@ -101,8 +101,8 @@ integrations/linear/default-rules.test.ts	platform/src/integrations/linear/defau
 integrations/linear/integration.test.ts	platform/src/integrations/linear/integration.test.ts
 integrations/linear/routes.test.ts	platform/src/integrations/linear/routes.test.ts
 integrations/linear/rules.test.ts	platform/src/integrations/linear/rules.test.ts
-integrations/platform/api-client.test.ts	platform/src/integrations/platform/api-client.test.ts
-integrations/platform/connect/routes.test.ts	platform/src/integrations/platform/connect/routes.test.ts
+integrations/platform/api-client.test.ts	integrations/src/platform-api-client.test.ts
+integrations/platform/connect/routes.test.ts	integrations/src/platform-connect-routes.test.ts
 integrations/platform/github/event-worker.lifecycle.test.ts	platform/src/integrations/platform/github/event-worker.lifecycle.test.ts
 integrations/platform/github/event-worker.test.ts	platform/src/integrations/platform/github/event-worker.test.ts
 integrations/platform/github/integration.test.ts	platform/src/integrations/platform/github/integration.test.ts
@@ -114,14 +114,14 @@ integrations/platform/jira/routes.test.ts	platform/src/integrations/platform/jir
 integrations/platform/linear/event-worker.test.ts	platform/src/integrations/platform/linear/event-worker.test.ts
 integrations/platform/linear/integration.test.ts	platform/src/integrations/platform/linear/integration.test.ts
 integrations/platform/linear/source-id.test.ts	platform/src/integrations/platform/linear/source-id.test.ts
-integrations/pull-request-head.test.ts	platform/src/integrations/pull-request-head.test.ts
-integrations/reconciliation-config.test.ts	platform/src/integrations/reconciliation-config.test.ts
+integrations/pull-request-head.test.ts	integrations/src/pull-request-head.test.ts
+integrations/reconciliation-config.test.ts	integrations/src/reconciliation-config.test.ts
 integrations/slack/connect-route.test.ts	platform/src/integrations/slack/connect-route.test.ts
 integrations/slack/emoji.test.ts	platform/src/integrations/slack/emoji.test.ts
 integrations/slack/feed-publisher.test.ts	platform/src/integrations/slack/feed-publisher.test.ts
 integrations/slack/integration.test.ts	platform/src/integrations/slack/integration.test.ts
 integrations/slack/slack.test.ts	platform/src/integrations/slack/slack.test.ts
-integrations/subscription-session.test.ts	platform/src/integrations/subscription-session.test.ts
+integrations/subscription-session.test.ts	integrations/src/subscription-session.test.ts
 integrations/workos/integration.test.ts	platform/src/integrations/workos/integration.test.ts
 mcp/routes.test.ts	platform/src/mcp/routes.test.ts
 platform-auth-host.test.ts	auth/src/platform-auth-host.test.ts

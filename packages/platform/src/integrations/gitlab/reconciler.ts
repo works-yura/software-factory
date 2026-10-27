@@ -1,5 +1,5 @@
-import type { IntegrationContext } from '../base.ts';
-import type { IssueReconciler, IssueReconcileSummary } from '../issue-reconciler.ts';
+import type { IntegrationContext } from '@factory/integrations';
+import type { IssueReconciler, IssueReconcileSummary } from '@factory/integrations';
 import type { GitLabIntegrationBase } from './integration.ts';
 import { attachGitLabIssueReconciler } from './issue-reconciler.ts';
 import { attachGitLabMergeRequestReconciler } from './merge-request-reconciler.ts';

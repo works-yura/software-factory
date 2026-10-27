@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '@factory/testing';
 import { fakeRouteAuth } from '@factory/http/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
-import type { IntegrationContext } from '../base.ts';
+import type { IntegrationContext } from '@factory/integrations';
 import { encodeIssueReference, encodeSourceId, GitLabIntegration } from './integration.ts';
 import { attachGitLabIssueReconciler } from './issue-reconciler.ts';
 

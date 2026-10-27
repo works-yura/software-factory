@@ -8,8 +8,8 @@ import type { IntegrationStorageHandle } from '@factory/store';
 import type { GitLabWebhookDispatchIntegration } from '../../gitlab/webhook-dispatch.ts';
 import { parseGitLabWebhookBody, processGitLabWebhook } from '../../gitlab/webhook.ts';
 import type { ParsedGitLabWebhook } from '../../gitlab/webhook.ts';
-import type { PlatformApiClient } from '../api-client.ts';
-import { PlatformApiError } from '../api-client.ts';
+import type { PlatformApiClient } from '@factory/integrations';
+import { PlatformApiError } from '@factory/integrations';
 
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const EVENT_PAGE_SIZE = 500;

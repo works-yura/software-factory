@@ -1,7 +1,7 @@
 import { workItemPhaseSemantics } from '@factory/core';
-import type { IntegrationContext } from '../base.ts';
-import { createIssueReconciler } from '../issue-reconciler.ts';
-import type { IssueReconciler } from '../issue-reconciler.ts';
+import type { IntegrationContext } from '@factory/integrations';
+import { createIssueReconciler } from '@factory/integrations';
+import type { IssueReconciler } from '@factory/integrations';
 import type { LinearIntegration } from './integration.ts';
 import { LinearRules } from './rules.ts';
 import type { LinearIssueIngress } from './rules.ts';

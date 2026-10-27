@@ -1,4 +1,4 @@
-import { optionalBoolean, optionalPositiveInteger } from '../reconciliation-config.ts';
+import { optionalBoolean, optionalPositiveInteger } from '@factory/integrations';
 
 function configuredValue(primary: string | undefined, legacy: string | undefined): string | undefined {
   return primary?.trim() ? primary : legacy;

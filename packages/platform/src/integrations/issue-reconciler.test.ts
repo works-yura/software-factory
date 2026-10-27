@@ -13,7 +13,7 @@ import type { GithubRuleOverrides } from './github/default-rules.ts';
 import { createGithubIssueReconciler } from './github/issue-reconciler.ts';
 import { reconciledIssueRelabeledEvent } from './github/rules.ts';
 import type { GithubIssueFetcher, GithubOpenIssueLister, ReconcileIssueState } from './github/rules.ts';
-import { createIssueReconciler, EXTERNAL_SOURCE_MISSING_KEY } from './issue-reconciler.ts';
+import { createIssueReconciler, EXTERNAL_SOURCE_MISSING_KEY } from '@factory/integrations';
 import { resolveLinearRules } from './linear/default-rules.ts';
 import { attachLinearIssueReconciler } from './linear/issue-reconciler.ts';
 

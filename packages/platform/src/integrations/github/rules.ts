@@ -31,8 +31,8 @@ import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
 } from '@factory/store';
-import type { IntegrationContext, IntegrationHooks } from '../base.ts';
-import { recordPullRequestHead } from '../pull-request-head.ts';
+import type { IntegrationContext, IntegrationHooks } from '@factory/integrations';
+import { recordPullRequestHead } from '@factory/integrations';
 import type { GithubAppIdentity } from './app-identity.ts';
 import type { GithubEventRules } from './default-rules.ts';
 import type { GithubRepositoryPermission } from './integration.ts';

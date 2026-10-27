@@ -12,7 +12,7 @@ import type { FactoryLinearRuleContext, FactoryRuleDecision } from '@factory/cor
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '@factory/core';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
-import type { IntegrationContext } from '../base.ts';
+import type { IntegrationContext } from '@factory/integrations';
 import { linearClaimKey } from './claim.ts';
 import type { LinearEventRules } from './default-rules.ts';
 

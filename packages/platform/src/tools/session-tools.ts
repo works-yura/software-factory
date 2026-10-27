@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import type { IntegrationTools } from '../integrations/base.ts';
+import type { IntegrationTools } from '@factory/integrations';
 import { buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 import { USER_SESSION_BRANCH_PREFIX } from '@factory/session';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';

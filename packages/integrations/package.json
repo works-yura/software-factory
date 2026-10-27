@@ -1,0 +1,35 @@
+{
+  "name": "@factory/integrations",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Integration contract (IntegrationContext, Integration), issue reconcilers, subscription sessions, platform API client and connect routes.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/auth": "workspace:*",
+    "@factory/capabilities": "workspace:*",
+    "@factory/core": "workspace:*",
+    "@factory/credentials": "workspace:*",
+    "@factory/feed": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@factory/sandbox": "workspace:*",
+    "@factory/session": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/code-sdk": "1.15.0",
+    "@mastra/core": "1.79.0",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@mastra/libsql": "1.27.0",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

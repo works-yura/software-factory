@@ -28,7 +28,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestBoard } from '@factory/pipelines/testing';
 import type { VersionControl } from '@factory/capabilities';
 import { MastraFactory } from './factory.ts';
-import type { FactoryIntegration, IntegrationContext } from './integrations/base.ts';
+import type { FactoryIntegration, IntegrationContext } from '@factory/integrations';
 import type * as platformGithubModule from './integrations/platform/github/integration.ts';
 import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-source.ts';
 import type * as projectRoutesModule from './routes/projects.ts';

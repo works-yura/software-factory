@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import type { IntegrationTools } from '../integrations/base.ts';
+import type { IntegrationTools } from '@factory/integrations';
 import { decisionRetryable, overtakenDecisionIds } from '@factory/runtime';
 import { factoryDispatchFailureMetadata } from '@factory/store';
 import type { AuditStorage } from '@factory/store';

@@ -1,7 +1,7 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 
-import { createSessionAsRowOwner } from '../integrations/subscription-session.ts';
+import { createSessionAsRowOwner } from '@factory/integrations';
 import type { SourceControlSessionLookup } from '@factory/session';
 import { listFactorySessionThreads, sessionMemoryResourceId, sessionStampCounts } from '@factory/session';
 import type { FactorySessionOwnership, SessionRunBindings } from '@factory/session';

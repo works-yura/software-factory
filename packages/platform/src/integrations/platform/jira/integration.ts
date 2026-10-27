@@ -20,8 +20,8 @@ import type {
 } from '@factory/capabilities';
 import type { RouteAuth } from '@factory/http';
 import type { FactoryProjectsStorage } from '@factory/store';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.ts';
-import { IssueReconcileWorker } from '../../issue-reconcile-worker.ts';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
+import { IssueReconcileWorker } from '@factory/integrations';
 import { adfToText } from '../../jira/adf.ts';
 import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.ts';
 import { JiraApiClient, JiraApiError } from '../../jira/api.ts';
@@ -30,8 +30,8 @@ import { resolveJiraRules } from '../../jira/default-rules.ts';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.ts';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.ts';
 import { attachJiraRules } from '../../jira/rules.ts';
-import { logPlatformInfo, PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.ts';
-import type { PlatformApiClientConfig } from '../api-client.ts';
+import { logPlatformInfo, PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/integrations';
+import type { PlatformApiClientConfig } from '@factory/integrations';
 import { buildPlatformJiraAgentTools } from './agent-tools.ts';
 import { buildPlatformJiraRoutes } from './routes.ts';
 

@@ -14,7 +14,7 @@ import type { Context } from 'hono';
 import { createBoardRegistry } from '@factory/core';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry } from '@factory/core';
-import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.ts';
+import { EXTERNAL_SOURCE_MISSING_KEY } from '@factory/integrations';
 import { decisionRetryable, overtakenDecisionIds } from '@factory/runtime';
 import type {
   FactoryStartCoordinator,

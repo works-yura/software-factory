@@ -3,10 +3,10 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '@factory/testing';
 
-import type { IntegrationContext } from '../../base.ts';
+import type { IntegrationContext } from '@factory/integrations';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.ts';
 
-import { createPlatformStorageForTests } from '../test-utils.ts';
+import { createPlatformStorageForTests } from '@factory/integrations/testing';
 
 vi.mock('./event-worker.ts', () => ({
   PlatformLinearEventWorker: class {

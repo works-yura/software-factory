@@ -1,8 +1,8 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 
-import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.ts';
-import type { SubscriptionSessionLookup } from '../subscription-session.ts';
+import { resolveSubscriptionSession, subscriptionRunContext } from '@factory/integrations';
+import type { SubscriptionSessionLookup } from '@factory/integrations';
 import { GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.ts';
 import {
   listMergeRequestSubscriptionsForWebhook,

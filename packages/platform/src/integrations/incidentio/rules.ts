@@ -12,7 +12,7 @@ import type { FactoryIncidentioRuleContext, FactoryRuleDecision } from '@factory
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '@factory/core';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
-import type { IntegrationContext } from '../base.ts';
+import type { IntegrationContext } from '@factory/integrations';
 import { incidentioClaimKey } from './claim.ts';
 import type { IncidentioEventRules } from './default-rules.ts';
 

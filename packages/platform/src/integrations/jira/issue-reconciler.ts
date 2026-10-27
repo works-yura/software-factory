@@ -1,8 +1,8 @@
 import { workItemPhaseSemantics } from '@factory/core';
 import type { Intake, IntakeIssue } from '@factory/capabilities';
-import type { IntegrationContext } from '../base.ts';
-import { createIssueReconciler } from '../issue-reconciler.ts';
-import type { IssueReconciler } from '../issue-reconciler.ts';
+import type { IntegrationContext } from '@factory/integrations';
+import { createIssueReconciler } from '@factory/integrations';
+import type { IssueReconciler } from '@factory/integrations';
 import type { JiraEventRules } from './default-rules.ts';
 import { JiraRules } from './rules.ts';
 import type { JiraIssueIngress } from './rules.ts';

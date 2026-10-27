@@ -37,8 +37,8 @@ import type {
 } from '@factory/capabilities';
 import type { RouteAuth } from '@factory/http';
 import type { FactoryProjectsStorage } from '@factory/store';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.ts';
-import { IssueReconcileWorker } from '../issue-reconcile-worker.ts';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
+import { IssueReconcileWorker } from '@factory/integrations';
 import { adfToText } from './adf.ts';
 import { buildJiraAgentTools } from './agent-tools.ts';
 import type { JiraComment, JiraIssue, JiraTransition } from './api.ts';

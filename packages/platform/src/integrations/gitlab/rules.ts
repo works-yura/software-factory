@@ -22,8 +22,8 @@ import type {
 } from '@factory/store';
 import { WorkItemUpdateConflictError } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
-import type { IntegrationContext } from '../base.ts';
-import { recordPullRequestHead } from '../pull-request-head.ts';
+import type { IntegrationContext } from '@factory/integrations';
+import { recordPullRequestHead } from '@factory/integrations';
 import type { GitLabEventRules } from './default-rules.ts';
 import { encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.ts';
 import type { ParsedGitLabWebhook } from './webhook.ts';

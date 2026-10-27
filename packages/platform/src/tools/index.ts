@@ -1,4 +1,4 @@
-import type { IntegrationTools } from '../integrations/base.ts';
+import type { IntegrationTools } from '@factory/integrations';
 import { createFactoryApprovalTools } from './approval-tools.ts';
 import type { FactoryApprovalToolDependencies } from './approval-tools.ts';
 import { createFactoryMessagingTools } from './messaging-tools.ts';
