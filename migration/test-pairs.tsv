@@ -44,7 +44,7 @@ environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule
 environment/build.test.ts	harness-mastra/src/environment/build.test.ts
 environment/heads.test.ts	harness-mastra/src/environment/heads.test.ts
 factory-disable-builtin-tools.test.ts	server/src/factory-disable-builtin-tools.test.ts
-factory.test.ts	server/src/factory.test.ts
+factory.test.ts	server/src/factory.test.ts	+1	upstream 7e428dc80e (recreate sandbox), after 4c22623ea3
 index.test.ts	server/src/index.test.ts
 integrations/github/acceptance-labels.test.ts	integration-github/src/acceptance-labels.test.ts
 integrations/github/app-identity.test.ts	integration-github/src/app-identity.test.ts
@@ -128,7 +128,7 @@ rules/start-coordinator.test.ts	harness-mastra/src/rules/start-coordinator.test.
 rules/tools.test.ts	harness-mastra/src/rules/tools.test.ts
 sandbox/callback-factory-sandbox.test.ts	sandbox/src/callback-factory-sandbox.test.ts
 sandbox/local-factory-sandbox.test.ts	sandbox/src/local-factory-sandbox.test.ts
-sandbox/session-retirement.test.ts	sandbox/src/session-retirement.test.ts
+sandbox/session-retirement.test.ts	sandbox/src/session-retirement.test.ts	+8	upstream 7e428dc80e resetSessionSandbox (+7), v4 local-sandbox reset probe (+1)
 sandbox/session-sandbox.test.ts	sandbox/src/session-sandbox.test.ts
 sandbox/workdir.test.ts	sandbox/src/workdir.test.ts
 server-error.test.ts	http/src/server-error.test.ts

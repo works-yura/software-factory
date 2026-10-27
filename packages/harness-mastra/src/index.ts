@@ -18,6 +18,7 @@ export * from './tools/permissions.ts';
 export * from './tools/read-tools.ts';
 export * from './tools/reports.ts';
 export * from './tools/run-watch.ts';
+export * from './tools/sandbox-tools.ts';
 export * from './tools/scope.ts';
 export * from './tools/session-tools.ts';
 export * from './tools/sessions-state-processor.ts';

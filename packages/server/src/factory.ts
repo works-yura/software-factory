@@ -159,6 +159,7 @@ import { createFactorySupervisorWriteTools } from '@factory/supervisor';
 import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from '@factory/observability';
 import { deliverFactorySessionNotification } from '@factory/harness-mastra';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from '@factory/harness-mastra';
+import { createFactorySandboxTools } from '@factory/harness-mastra';
 import type { FactoryToolDependencies } from '@factory/harness-mastra';
 import {
   createSessionApprovalNotifier,
@@ -349,6 +350,13 @@ export interface MastraFactoryDispatcherConfig {
 }
 
 const CONTROLLER_ID = 'code';
+
+/**
+ * Providers whose sandbox a session's agent may recreate itself. Each needs
+ * its `destroy()` to leave the instance able to start a fresh VM, proven
+ * against the real provider.
+ */
+const SELF_RECREATE_SANDBOX_PROVIDERS: ReadonlySet<string> = new Set(['platform']);
 
 /** Why a wake couldn't be run as its Factory session's owner. */
 const WAKE_OWNER_UNRESOLVED = {
@@ -1601,6 +1609,19 @@ export class MastraFactory {
                           deps: factoryToolDeps,
                         }),
                       );
+                      if (
+                        sessionRetirement &&
+                        sandboxConfig &&
+                        SELF_RECREATE_SANDBOX_PROVIDERS.has(sandboxConfig.provider)
+                      ) {
+                        mergeTools(
+                          'factory-sandbox-tools',
+                          createFactorySandboxTools(scope, {
+                            sessions: sourceControlSessions,
+                            resetSandbox: input => sessionRetirement.resetSessionSandbox(input),
+                          }),
+                        );
+                      }
                     }
                   }
                   // The supervisor session has no seat, so it never gets the

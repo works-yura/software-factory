@@ -107,6 +107,12 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 - `integrations/base.test.ts`, `credentials/base.test.ts`: тип даних підписки і мок `decrypt`.
 - `pipelines` тести: `'issue'` замість `'github-issue'`, `id` замість `bindingId` в актора.
 
+## Перенесено з upstream після 4c22623ea3
+
+| Коміт | Що | Куди | Відхилення |
+| --- | --- | --- | --- |
+| `7e428dc80e` (#28052) | інструмент `factory_recreate_sandbox`, `SessionRetirementCoordinator.resetSessionSandbox()`, `clearFailedSetupCommands` | `sandbox/src/{session-retirement,session-sandbox}.ts`, `harness-mastra/src/tools/{sandbox-tools,permissions}.ts`, `server/src/factory.ts` | інструмент лише на `platform`, як в upstream. Local не вмикаємо: `LocalSandbox.destroy()` лишає робочу теку, тож після скидання лишаються checkout, незакомічені файли й маркер setup (це фіксує тест «on a LocalFactorySandbox»). E2B не вмикаємо: справжнього провайдера перевірити нема як, а мок SDK не покаже, як E2B відповідає на вбиту VM. Зміни `rules/dispatcher.ts` і `skills/service.ts` (тип `skillName`) не перенесено: це звуження типу для skill-сигналу з `a5a9179daa`, якого у v4 нема. Фейковий `VmSandbox` у тесті повертає повний `CommandResult`, бо тести `sandbox` тайпчекаються. `.changeset` не переносили. |
+
 ## Далі
 
 Порядок і обсяг — у `README.md`, розділ «Що далі».
