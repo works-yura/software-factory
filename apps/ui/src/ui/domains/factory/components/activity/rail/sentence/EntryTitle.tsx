@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { boardItemPath, entryTarget } from '../../../../activity';
@@ -16,6 +17,7 @@ export function EntryTitle({
   flagged: ReadonlySet<ActivityEntry>;
   variant: 'column' | 'caption';
 }) {
+  const { t } = useTranslation('activity');
   const target = entryTarget(entry);
   const tone = variant === 'column' ? 'ink' : 'muted';
 
@@ -34,7 +36,7 @@ export function EntryTitle({
       )}
       {flagged.has(entry) ? (
         <Badge variant="orange" size="xs" className="shrink-0">
-          Needs you
+          {t('needsYou.title')}
         </Badge>
       ) : null}
     </span>

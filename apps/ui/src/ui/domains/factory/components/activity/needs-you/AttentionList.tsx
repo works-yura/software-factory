@@ -3,6 +3,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useFactoryAttentionHistory } from '../../../../../../hooks/useFactoryAttention';
 import type { FactoryAttentionKind, FactoryAttentionView } from '../../../services/attention';
@@ -25,20 +26,21 @@ export function AttentionList({
   kinds: readonly FactoryAttentionKind[];
   emptySlot: ReactNode;
 }) {
+  const { t } = useTranslation('activity');
   const [expanded, setExpanded] = useState(false);
   const attention = useFactoryAttentionHistory(factoryId, view, kinds);
   const actions = useAttentionItemActions(factoryId);
 
   if (attention.isPending) {
-    return <Skeleton role="status" aria-label="Loading what needs you" className="h-14 w-full rounded-xl" />;
+    return <Skeleton role="status" aria-label={t('needsYou.loading')} className="h-14 w-full rounded-xl" />;
   }
 
   if (attention.isError) {
     return (
       <Notice variant="destructive">
-        <span>Unable to load what needs you.</span>
+        <span>{t('needsYou.loadError')}</span>
         <Button type="button" variant="ghost" size="sm" onClick={() => void attention.refetch()}>
-          Try again
+          {t('feed.tryAgain')}
         </Button>
       </Notice>
     );
@@ -62,7 +64,7 @@ export function AttentionList({
         {foldedCount > 0 ? (
           <li className="py-1">
             <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded(true)}>
-              Show {foldedCount} more
+              {t('needsYou.showMore', { count: foldedCount })}
             </Button>
           </li>
         ) : null}
@@ -75,7 +77,7 @@ export function AttentionList({
               disabled={attention.isFetchingNextPage}
               onClick={() => void attention.fetchNextPage()}
             >
-              {attention.isFetchingNextPage ? 'Loading…' : 'Load older'}
+              {attention.isFetchingNextPage ? t('needsYou.loadingOlder') : t('needsYou.loadOlder')}
             </Button>
           </li>
         ) : null}

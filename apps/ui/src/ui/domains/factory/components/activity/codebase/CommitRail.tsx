@@ -1,6 +1,7 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTranslation } from 'react-i18next';
 
 import { useRepositoryCommits } from '../../../../../../hooks/useRepositoryCommits';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
@@ -29,10 +30,11 @@ function segment(first: boolean, last: boolean) {
 
 /** The ring is filled with the page colour so the rail does not show through its hole. */
 function CommitMark({ head }: { head: boolean }) {
+  const { t } = useTranslation('activity');
   return head ? (
     <span
       className="border-badge-green-indicator bg-background size-2.5 rounded-full border-2"
-      aria-label="Tip of the branch"
+      aria-label={t('codebase.branchTip')}
     />
   ) : (
     <span className="bg-border-strong size-1.5 rounded-full" aria-hidden />
@@ -45,7 +47,8 @@ interface DatedCommit {
 }
 
 function CommitRow({ commit, at, head, first, last }: DatedCommit & { head: boolean; first: boolean; last: boolean }) {
-  const author = commit.author ?? 'Unknown';
+  const { t } = useTranslation('activity');
+  const author = commit.author ?? t('codebase.unknownAuthor');
   const line = segment(first, last);
 
   return (
@@ -93,12 +96,13 @@ export function CommitRail({
   projectRepositoryId: string | undefined;
   factoryProjectId: string;
 }) {
+  const { t } = useTranslation('activity');
   const query = useRepositoryCommits(projectRepositoryId, COMMITS_FETCHED);
 
   // No repository means the query never fetches, so it stays pending for good.
   if (!projectRepositoryId) return <CommitRailEmptyState linked={false} factoryProjectId={factoryProjectId} />;
-  if (query.isPending) return <SkeletonRows label="Loading commits" rows={6} rowClassName="h-8 w-full" />;
-  if (query.isError) return <Notice variant="destructive">Could not reach GitHub for the commit history.</Notice>;
+  if (query.isPending) return <SkeletonRows label={t('codebase.loadingCommits')} rows={6} rowClassName="h-8 w-full" />;
+  if (query.isError) return <Notice variant="destructive">{t('codebase.loadError')}</Notice>;
 
   const commits = query.data.commits;
   if (commits.length === 0) return <CommitRailEmptyState linked factoryProjectId={factoryProjectId} />;

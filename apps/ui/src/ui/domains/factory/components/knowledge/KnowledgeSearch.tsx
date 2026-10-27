@@ -4,7 +4,10 @@ import { Search } from 'lucide-react';
 import { useDeferredValue, useId, useState } from 'react';
 
 import { useKnowledgeSearch } from '../../../../../hooks/useKnowledgeGraph';
+import { translator } from '../../../../i18n/t';
 import type { KnowledgeSearchResult } from '../../services/knowledge';
+
+const tk = translator('knowledge');
 
 interface KnowledgeSearchProps {
   factoryProjectId: string | undefined;
@@ -43,14 +46,14 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
         <Input
           variant="unstyled"
           role="combobox"
-          aria-label="Search knowledge"
+          aria-label={tk('search.label')}
           aria-autocomplete="list"
           aria-controls={listboxId}
           aria-expanded={open}
           aria-activedescendant={activeResult ? `${listboxId}-option-${activeIndex}` : undefined}
           autoComplete="off"
           className="text-foreground placeholder:text-placeholder h-9 min-w-0 flex-1 p-0"
-          placeholder="Search"
+          placeholder={tk('search.placeholder')}
           value={query}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
@@ -87,14 +90,14 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
         <div
           id={listboxId}
           role="listbox"
-          aria-label="Knowledge search results"
+          aria-label={tk('search.results')}
           className={`${overlaySurfaceStyle} absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-lg p-1`}
           onMouseDown={event => event.preventDefault()}
         >
           {search.isPending || deferredQuery !== query ? (
-            <div className="text-muted-foreground px-3 py-2 text-xs">Searching…</div>
+            <div className="text-muted-foreground px-3 py-2 text-xs">{tk('search.searching')}</div>
           ) : search.isError ? (
-            <div className="px-3 py-2 text-xs text-red-400">Unable to search knowledge.</div>
+            <div className="px-3 py-2 text-xs text-red-400">{tk('search.error')}</div>
           ) : search.data?.results.length ? (
             <>
               {results.map((result, index) => (
@@ -120,16 +123,16 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
                     ) : null}
                   </span>{' '}
                   <span className="text-muted-foreground shrink-0 text-xs">
-                    {result.type === 'scope' ? 'scope' : result.kind}
+                    {result.type === 'scope' ? tk('kind.scope') : result.kind}
                   </span>
                 </button>
               ))}
               {search.data.truncated ? (
-                <div className="text-muted-foreground px-3 py-1.5 text-xs">Keep typing to narrow the results.</div>
+                <div className="text-muted-foreground px-3 py-1.5 text-xs">{tk('search.keepTyping')}</div>
               ) : null}
             </>
           ) : (
-            <div className="text-muted-foreground px-3 py-2 text-xs">No matching knowledge.</div>
+            <div className="text-muted-foreground px-3 py-2 text-xs">{tk('search.empty')}</div>
           )}
         </div>
       ) : null}

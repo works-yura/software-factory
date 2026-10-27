@@ -4,7 +4,11 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { Bot, User, Zap } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
+import { translator } from '../../../../../../i18n/t';
+
 import type { FactoryMentionMember } from '../../../../services/members';
+
+const ta = translator('activity');
 
 const ACTOR_GLYPHS: Array<[string, ComponentType<SVGProps<SVGSVGElement>>]> = [
   ['agent:', Bot],
@@ -14,11 +18,11 @@ const ACTOR_GLYPHS: Array<[string, ComponentType<SVGProps<SVGSVGElement>>]> = [
 
 /** Only `github:` carries a name; an agent id is a uuid and a WorkOS id off the roster is worse than no name, so both read as a word. */
 function actorName(by: string | undefined, roster: Map<string, FactoryMentionMember>): string {
-  if (by === undefined) return 'Someone';
-  if (by.startsWith('agent:')) return 'Agent';
+  if (by === undefined) return ta('actor.someone');
+  if (by.startsWith('agent:')) return ta('actor.agent');
   if (by.startsWith('github:')) return by.slice('github:'.length) || 'GitHub';
-  if (by.startsWith('factory-')) return 'A rule';
-  return roster.get(by)?.name ?? 'Someone';
+  if (by.startsWith('factory-')) return ta('actor.rule');
+  return roster.get(by)?.name ?? ta('actor.someone');
 }
 
 function ActorMark({ by, avatarUrl, name }: { by: string | undefined; avatarUrl: string | undefined; name: string }) {

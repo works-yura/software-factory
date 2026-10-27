@@ -1,6 +1,7 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, ChevronDown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import type { LinkedRepositoryPayload } from '../../../../workspaces/services/github';
 
@@ -13,6 +14,7 @@ export function RepositorySwitcher({
   selected: LinkedRepositoryPayload;
   onSelect: (projectRepositoryId: string) => void;
 }) {
+  const { t } = useTranslation('activity');
   if (repositories.length < 2) {
     return (
       <Txt as="span" variant="caption" tone="muted">
@@ -23,7 +25,7 @@ export function RepositorySwitcher({
 
   return (
     <DropdownMenu>
-      <DropdownMenu.Trigger variant="ghost" size="sm" aria-label={`Repository: ${selected.slug}`}>
+      <DropdownMenu.Trigger variant="ghost" size="sm" aria-label={t('codebase.repository', { slug: selected.slug })}>
         {selected.slug}
         <ChevronDown aria-hidden />
       </DropdownMenu.Trigger>
@@ -34,7 +36,7 @@ export function RepositorySwitcher({
             onClick={() => onSelect(candidate.projectRepositoryId)}
           >
             <span className="flex-1">{candidate.slug}</span>
-            {candidate.projectRepositoryId === selected.projectRepositoryId ? <Check aria-label="Selected" /> : null}
+            {candidate.projectRepositoryId === selected.projectRepositoryId ? <Check aria-label={t('codebase.selected')} /> : null}
           </DropdownMenu.Item>
         ))}
       </DropdownMenu.Content>

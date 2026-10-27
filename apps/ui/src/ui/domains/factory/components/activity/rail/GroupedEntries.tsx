@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { clockTime } from '../../../activity';
 import type { ActivityEntry } from '../../../activity';
@@ -25,6 +26,7 @@ export function GroupedEntries({
   flagged: ReadonlySet<ActivityEntry>;
   compact: boolean;
 }) {
+  const { t } = useTranslation('activity');
   const [expanded, setExpanded] = useState(false);
   const folds = !compact && entries.length > GROUP_SHOWN + 1;
   const shown = folds && !expanded ? entries.slice(0, GROUP_SHOWN) : entries;
@@ -47,7 +49,7 @@ export function GroupedEntries({
             onClick={() => setExpanded(!expanded)}
             className="-mx-1.5 h-6 px-1.5"
           >
-            {expanded ? 'Show less' : `Show ${entries.length - GROUP_SHOWN} more`}
+            {expanded ? t('rail.showLess') : t('needsYou.showMore', { count: entries.length - GROUP_SHOWN })}
           </Button>
         </li>
       ) : null}

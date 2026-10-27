@@ -2,6 +2,7 @@ import type { FactoryHealthRepair } from '@factory/supervisor/health';
 import type { FactoryDispatchFailureCode } from '@factory/store/work-items/base';
 
 import { boardPath } from '../boardCatalog';
+import { currentLanguage } from '../../../i18n';
 import { requestJson } from './request';
 
 export type FactoryAttentionView = 'open' | 'unread' | 'archived';
@@ -88,18 +89,20 @@ export function attentionAuthorName(item: FactoryAttentionItem): string | undefi
 
 const ISO_INSTANT = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z\b/g;
 
-const detailDate = new Intl.DateTimeFormat(undefined, {
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-});
+function detailDate(at: number): string {
+  return new Intl.DateTimeFormat(currentLanguage(), {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(at);
+}
 
 /** Supervisor evidence stamps raw ISO instants for the agent that reads it; people get their own clock. */
 export function readableAttentionDetail(detail: string): string {
   return detail.replace(ISO_INSTANT, instant => {
     const at = Date.parse(instant);
-    return Number.isNaN(at) ? instant : detailDate.format(at);
+    return Number.isNaN(at) ? instant : detailDate(at);
   });
 }
 

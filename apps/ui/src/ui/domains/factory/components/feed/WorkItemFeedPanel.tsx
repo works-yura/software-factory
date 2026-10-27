@@ -3,6 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, MessageSquare, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { queryKeys } from '../../../../../api/keys';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
@@ -23,6 +24,7 @@ export function WorkItemFeedPanel({
   visible: boolean;
   onBack: () => void;
 }) {
+  const { t } = useTranslation('activity');
   const auth = useFactoryAuth();
   const queryClient = useQueryClient();
   const [quote, setQuote] = useState<CommentQuoteDraft>();
@@ -30,24 +32,24 @@ export function WorkItemFeedPanel({
   return (
     <aside
       className="flex min-h-0 min-w-0 grow flex-col"
-      aria-label="Work item comments"
+      aria-label={t('comments.panel')}
       data-testid="work-item-feed-panel"
     >
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
+        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label={t('comments.back')}>
           <ArrowLeft />
         </Button>
         <MessageSquare className="text-muted-foreground" size={14} />
         <Txt tone="ink" as="h2" variant="column">
-          Comments
+          {t('comments.title')}
         </Txt>
         <Txt tone="muted" variant="meta" className="ml-auto">
-          {item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}
+          {t('comments.count', { count: item.commentCount })}
         </Txt>
         <Button
           size="icon-sm"
           variant="ghost"
-          aria-label="Refresh comments"
+          aria-label={t('comments.refresh')}
           onClick={() => void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(item.id) })}
         >
           <RefreshCw />

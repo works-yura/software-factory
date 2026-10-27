@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Archive } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import {
   useFactoryAttentionSummary,
@@ -10,12 +11,13 @@ import {
 import { PropertiesMenu } from '../../../../../ui/PropertiesMenu';
 import { ATTENTION_KINDS, attentionCounts, NEEDS_YOU_KINDS } from '../../../services/attention';
 import type { FactoryAttentionView } from '../../../services/attention';
+import { lazyOption } from '../../../../../i18n/lazy';
 
 export type NeedsYouView = Exclude<FactoryAttentionView, 'unread'>;
 
 const VIEW_OPTIONS = [
-  { value: 'open', label: 'Open' },
-  { value: 'archived', label: 'Archived' },
+  lazyOption<NeedsYouView>('open', 'activity:needsYou.views.open'),
+  lazyOption<NeedsYouView>('archived', 'activity:needsYou.views.archived'),
 ] satisfies Array<{ value: NeedsYouView; label: string }>;
 
 export function NeedsYouHeader({
@@ -27,6 +29,7 @@ export function NeedsYouHeader({
   view: NeedsYouView;
   onViewChange: (view: NeedsYouView) => void;
 }) {
+  const { t } = useTranslation('activity');
   const summary = useFactoryAttentionSummary(factoryId);
   const markAllRead = useMarkAllFactoryAttentionRead(factoryId);
   const archived = view === 'archived';
@@ -36,7 +39,7 @@ export function NeedsYouHeader({
   return (
     <div className="min-h-control-sm flex items-center gap-2">
       <Txt as="h2" variant="column" tone="ink" id="needs-you-heading" className="m-0">
-        {archived ? 'Archived' : 'Needs you'}
+        {archived ? t('needsYou.views.archived') : t('needsYou.title')}
       </Txt>
       {!archived && waitingCount > 0 ? (
         <Txt
@@ -57,17 +60,17 @@ export function NeedsYouHeader({
             disabled={markAllRead.isPending}
             onClick={() => markAllRead.mutate()}
           >
-            Mark all read
+            {t('needsYou.markAllRead')}
           </Button>
         ) : null}
         <PropertiesMenu
-          label="Needs you properties"
+          label={t('needsYou.properties')}
           align="end"
           changedCount={archived ? 1 : 0}
           onReset={() => onViewChange('open')}
         >
           <DropdownMenu.RadioSub
-            label="Show"
+            label={t('needsYou.show')}
             icon={<Archive aria-hidden />}
             options={VIEW_OPTIONS}
             value={view}

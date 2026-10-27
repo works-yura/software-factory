@@ -1,6 +1,7 @@
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
@@ -26,6 +27,7 @@ function ActivityBody({ codebase }: { codebase: boolean }) {
 }
 
 export function ActivityPage() {
+  const { t } = useTranslation('activity');
   const slots = useSidebarHeaderSlots();
   const [searchParams, setSearchParams] = useSearchParams();
   const codebase = searchParams.get(VIEW_PARAM) === CODEBASE_VIEW;
@@ -44,16 +46,16 @@ export function ActivityPage() {
       variant="narrow"
       header={
         <PageHeader>
-          <PageHeader.Title>Activity</PageHeader.Title>
+          <PageHeader.Title>{t('workItem.activity')}</PageHeader.Title>
           <PageHeader.Action>
             <SegmentedControl
-              aria-label="Activity view"
+              aria-label={t('page.view')}
               size="sm"
               value={codebase ? CODEBASE_VIEW : 'factory'}
               onValueChange={next => showCodebase(next === CODEBASE_VIEW)}
             >
               <SegmentedControlItem value="factory">Factory</SegmentedControlItem>
-              <SegmentedControlItem value={CODEBASE_VIEW}>Codebase</SegmentedControlItem>
+              <SegmentedControlItem value={CODEBASE_VIEW}>{t('page.codebase')}</SegmentedControlItem>
             </SegmentedControl>
           </PageHeader.Action>
         </PageHeader>

@@ -13,7 +13,10 @@ import type {
   KnowledgeGraphNode,
   KnowledgeRung,
 } from '../../services/knowledge';
+import { translator } from '../../../../i18n/t';
 import { parseRecordSegments } from './recordText';
+
+const tk = translator('knowledge');
 
 export const NODE_SIZE_MIN = 52;
 export const NODE_SIZE_MAX = 176;
@@ -39,7 +42,7 @@ export function graphNodesWithBoundaries(
       .map(
         (boundary): KnowledgeGraphNode => ({
           ...boundary,
-          kind: 'outside view',
+          kind: tk('kind.outsideView'),
           isBoundary: true,
           pinned: false,
           recordCount: 0,
@@ -313,8 +316,8 @@ export type KnowledgeFlowEdge = Edge<{
 }>;
 
 export function knowledgeEdgeHoverText(edge: KnowledgeFlowEdge): string {
-  if (edge.data?.linkType === 'contains') return 'Direct member of this scope';
-  return edge.data?.text ?? 'Mentioned in a knowledge record';
+  if (edge.data?.linkType === 'contains') return tk('graph.edgeContains');
+  return edge.data?.text ?? tk('graph.edgeMentioned');
 }
 
 /** A11 record edges replace wikilinks only; containment remains visible. */

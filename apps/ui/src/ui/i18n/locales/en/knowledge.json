@@ -1,1 +1,165 @@
-{}
+{
+  "page": {
+    "title": "Knowledge",
+    "subtitle": "Explore captured knowledge and review how it changes over time.",
+    "region": "Knowledge graph",
+    "views": "Knowledge views",
+    "view": {
+      "explore": "explore",
+      "activity": "activity"
+    },
+    "layouts": "Knowledge layout",
+    "layout": {
+      "graph": "graph",
+      "list": "list"
+    },
+    "selectedToolbar": "Selected knowledge",
+    "details": "Details",
+    "threadGone": "This session's knowledge is no longer available.",
+    "backToProject": "Back to the project view",
+    "scopesError": "Unable to load knowledge scopes.",
+    "scopesLoading": "Loading knowledge scopes",
+    "selectScope": "Select a scope to explore its knowledge.",
+    "graphError": "Unable to load the knowledge graph.",
+    "graphLoading": "Loading knowledge graph",
+    "empty": {
+      "scope": "No knowledge in this scope yet.",
+      "org": "No knowledge captured at organization scope yet — knowledge captured in projects and sessions does not roll up here.",
+      "project": "No knowledge captured at project scope yet — knowledge captured in sessions does not roll up here.",
+      "session": "No knowledge captured in this session yet — the graph fills in as factory sessions work."
+    }
+  },
+  "breadcrumb": {
+    "label": "Knowledge scope",
+    "org": "org",
+    "project": "project",
+    "session": "session {{id}}"
+  },
+  "scopes": {
+    "label": "Knowledge scopes",
+    "title": "Scopes",
+    "expand": "Expand {{name}}",
+    "collapse": "Collapse {{name}}",
+    "loadMore": "Load more",
+    "loadMoreScopes": "Load more scopes",
+    "loadError": "Unable to load more scopes.",
+    "truncated": "This org has more scopes than can be listed; some are not shown."
+  },
+  "kind": {
+    "org": "org",
+    "project": "project",
+    "session": "session",
+    "scope": "scope",
+    "topic": "topic",
+    "outsideView": "outside view"
+  },
+  "rung": {
+    "org": "Org",
+    "resource": "Project",
+    "thread": "Session"
+  },
+  "activity": {
+    "selectScope": "Select a scope to view its recent activity.",
+    "loading": "Loading knowledge activity",
+    "error": "Unable to load knowledge activity.",
+    "empty": "No knowledge activity yet.",
+    "label": "Knowledge activity",
+    "loadingOlder": "Loading older activity…",
+    "loadOlder": "Load older activity",
+    "truncated": "This scope has more members than activity can cover; activity for some members is not shown.",
+    "action": {
+      "recordCreated": "new record",
+      "recordDeleted": "deleted record",
+      "recordRestored": "restored record",
+      "recordRescoped": "moved record",
+      "nodeCreated": "new node",
+      "nodeUpdated": "updated node",
+      "nodeMerged": "merged node"
+    }
+  },
+  "fields": {
+    "address": "Address",
+    "kind": "Kind",
+    "type": "Type",
+    "scope": "Scope",
+    "contentNodes": "Content nodes",
+    "childScopes": "Child scopes",
+    "directMembers": "Direct members",
+    "knowledgeRecords": "Knowledge records",
+    "connections": "Connections",
+    "connectionsValue": "{{incoming}} in · {{outgoing}} out",
+    "created": "Created",
+    "updated": "Updated",
+    "capturedInSession": "Captured in session",
+    "capturedAt": "Captured at",
+    "when": "When",
+    "scopeChain": "Scope chain",
+    "pinned": "Pinned",
+    "yes": "yes",
+    "no": "no"
+  },
+  "scopeFlyout": {
+    "label": "{{name}} scope details",
+    "close": "Close scope details",
+    "recentActivity": "Recent activity",
+    "loading": "Loading…",
+    "error": "Unable to load recent activity.",
+    "empty": "No recent activity."
+  },
+  "flyout": {
+    "label": "Knowledge node details",
+    "loading": "Loading knowledge node…",
+    "error": "Unable to load this knowledge node.",
+    "close": "Close details",
+    "content": "Content",
+    "node": "Knowledge node",
+    "records": "Knowledge records",
+    "noRecords": "No knowledge records about this node yet.",
+    "pinnedRecord": "Pinned knowledge record",
+    "mentions": "mentions",
+    "captured": "captured {{time}}",
+    "reasoning": "Reasoning",
+    "noReasoning": "No capture reasoning was recorded for this knowledge record."
+  },
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago"
+  },
+  "list": {
+    "pinned": "Pinned",
+    "childScopes": "Child scopes",
+    "scopes": "Scopes",
+    "nodesLabel": "Knowledge nodes",
+    "nodes": "Nodes",
+    "records_one": "{{count}} record",
+    "records_other": "{{count}} records",
+    "nodeRecords": "{{name}} records"
+  },
+  "search": {
+    "label": "Search knowledge",
+    "placeholder": "Search",
+    "results": "Knowledge search results",
+    "searching": "Searching…",
+    "error": "Unable to search knowledge.",
+    "keepTyping": "Keep typing to narrow the results.",
+    "empty": "No matching knowledge."
+  },
+  "graph": {
+    "directMembers_one": "{{count}} direct member",
+    "directMembers_other": "{{count}} direct members",
+    "directMembersAtLeast": "{{count}}+ direct members",
+    "pinnedRelationship": "Pinned relationship",
+    "pinnedRecord": "Pinned record",
+    "pinned": "Pinned",
+    "record": "Record",
+    "partialView": "Partial view — {{details}}",
+    "newestNodes_one": "showing the newest {{count}} node",
+    "newestNodes_other": "showing the newest {{count}} nodes",
+    "unresolvedLinks_one": "{{count}} link unresolved (capped)",
+    "unresolvedLinks_other": "{{count}} links unresolved (capped)",
+    "edgeContains": "Direct member of this scope",
+    "edgeMentioned": "Mentioned in a knowledge record"
+  }
+}

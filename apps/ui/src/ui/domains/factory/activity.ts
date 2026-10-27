@@ -2,12 +2,17 @@
 
 import type { AuditAction } from '@factory/store/audit/actions';
 
+import { currentLanguage } from '../../i18n';
+import { translator } from '../../i18n/t';
+
 import { auditDetailLine, auditVisibleMetadata } from './auditPresentation';
 
 import type { BoardKind } from './boardStages';
 import { itemBoard } from './boardStages';
 import type { AuditEvent } from './services/audit';
 import type { WorkItem } from './services/workItems';
+
+const ta = translator('activity');
 
 export function boardItemPath(factoryProjectId: string | undefined, item: { board: string; id: string }): string {
   return `/factories/${factoryProjectId ?? ''}/${item.board}?item=${encodeURIComponent(item.id)}`;
@@ -293,16 +298,14 @@ export function activityBlocks(entries: ActivityEntry[]): ActivityBlock[] {
   return blocks;
 }
 
-const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
-
 export function clockTime(at: number): string {
-  return clock.format(at);
+  return new Intl.DateTimeFormat(currentLanguage(), { hour: '2-digit', minute: '2-digit' }).format(at);
 }
 
 /** Today and yesterday get their names; older days get their date. */
 export function dayHeading(dayMs: number, nowMs: number): string {
   const today = startOfLocalDay(nowMs);
-  if (dayMs === today) return 'Today';
-  if (dayMs === previousLocalDay(today)) return 'Yesterday';
-  return new Date(dayMs).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  if (dayMs === today) return ta('day.today');
+  if (dayMs === previousLocalDay(today)) return ta('day.yesterday');
+  return new Date(dayMs).toLocaleDateString(currentLanguage(), { weekday: 'short', month: 'short', day: 'numeric' });
 }

@@ -1,9 +1,11 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ExternalLink } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuditPortalLink } from '../../../../../../hooks/useAuditEvents';
 
 export function AuditPortalItem() {
+  const { t } = useTranslation('activity');
   const portalQuery = useAuditPortalLink(true);
   const portalUrl = portalQuery.data;
   if (!portalUrl) return null;
@@ -16,7 +18,7 @@ export function AuditPortalItem() {
       }}
     >
       <ExternalLink aria-hidden />
-      <span>Open audit log in WorkOS</span>
+      <span>{t('timeline.auditPortal')}</span>
     </DropdownMenu.Item>
   );
 }

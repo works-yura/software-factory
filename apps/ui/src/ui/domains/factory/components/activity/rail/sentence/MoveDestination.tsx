@@ -1,5 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { StageBadge } from '../../../StageBadge';
 
@@ -7,13 +8,14 @@ import { StageBadge } from '../../../StageBadge';
 const CHAIN_SHOWN = 2;
 
 export function MoveDestination({ stages }: { stages: string[] }) {
+  const { t } = useTranslation('activity');
   const folded = stages.length - CHAIN_SHOWN;
   const shown = folded > 0 ? stages.slice(-CHAIN_SHOWN) : stages;
 
   return (
     <>
       <Txt as="span" variant="caption" tone="muted" className="shrink-0">
-        to
+        {t('sentence.to')}
       </Txt>
       <span className="flex shrink-0 items-center gap-1">
         {folded > 0 ? (
