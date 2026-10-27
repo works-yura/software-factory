@@ -9,7 +9,7 @@ import type { Context } from 'hono';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.ts';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.ts';
 import { redactCredentials } from '../environment/build.ts';
-import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.ts';
+import type { SessionRetirementCoordinator } from '@factory/sandbox';
 import type {
   FactoryProject,
   FactoryProjectsStorage,

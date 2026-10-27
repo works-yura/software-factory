@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Session sandboxes: local and callback sandboxes, workdirs, setup gates, materialization.",
+  "description": "Session sandboxes: local and callback sandboxes, workdirs, setup gates, materialization, git in the sandbox, retirement.",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -12,7 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@factory/capabilities": "workspace:*",
     "@factory/observability": "workspace:*",
+    "@factory/store": "workspace:*",
     "@internal/workspace": "workspace:*",
     "@mastra/core": "1.79.0"
   },

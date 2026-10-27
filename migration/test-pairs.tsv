@@ -58,10 +58,10 @@ integrations/github/reconcile-worker.test.ts	platform/src/integrations/github/re
 integrations/github/routes-scenario.test.ts	platform/src/integrations/github/routes-scenario.test.ts
 integrations/github/routes.test.ts	platform/src/integrations/github/routes.test.ts
 integrations/github/rules.test.ts	platform/src/integrations/github/rules.test.ts
-integrations/github/sandbox-release.test.ts	platform/src/integrations/github/sandbox-release.test.ts
+integrations/github/sandbox-release.test.ts	sandbox/src/github/sandbox-release.test.ts
 integrations/github/sandbox-scenario.test.ts	platform/src/integrations/github/sandbox-scenario.test.ts
-integrations/github/sandbox.git.test.ts	platform/src/integrations/github/sandbox.git.test.ts
-integrations/github/sandbox.test.ts	platform/src/integrations/github/sandbox.test.ts
+integrations/github/sandbox.git.test.ts	sandbox/src/github/sandbox.git.test.ts
+integrations/github/sandbox.test.ts	sandbox/src/github/sandbox.test.ts
 integrations/github/session-subscriptions.test.ts	platform/src/integrations/github/session-subscriptions.test.ts
 integrations/github/stale-reviews.test.ts	platform/src/integrations/github/stale-reviews.test.ts
 integrations/github/subscriptions.test.ts	platform/src/integrations/github/subscriptions.test.ts
@@ -160,7 +160,7 @@ rules/start-coordinator.test.ts	platform/src/rules/start-coordinator.test.ts
 rules/tools.test.ts	platform/src/rules/tools.test.ts
 sandbox/callback-factory-sandbox.test.ts	sandbox/src/callback-factory-sandbox.test.ts
 sandbox/local-factory-sandbox.test.ts	sandbox/src/local-factory-sandbox.test.ts
-sandbox/session-retirement.test.ts	platform/src/sandbox/session-retirement.test.ts
+sandbox/session-retirement.test.ts	sandbox/src/session-retirement.test.ts
 sandbox/session-sandbox.test.ts	sandbox/src/session-sandbox.test.ts
 sandbox/workdir.test.ts	sandbox/src/workdir.test.ts
 server-error.test.ts	http/src/server-error.test.ts
@@ -170,7 +170,7 @@ session/credential-policy.test.ts	platform/src/session/credential-policy.test.ts
 session/default-model-hydration.scenario.test.ts	platform/src/session/default-model-hydration.scenario.test.ts
 session/default-model-hydration.test.ts	platform/src/session/default-model-hydration.test.ts
 session/environment-repositories.test.ts	platform/src/session/environment-repositories.test.ts
-session/environment-state-processor.test.ts	platform/src/session/environment-state-processor.test.ts
+session/environment-state-processor.test.ts	sandbox/src/environment-state-processor.test.ts
 session/factory-session.test.ts	platform/src/session/factory-session.test.ts
 session/filesystem-capture.test.ts	platform/src/session/filesystem-capture.test.ts
 session/first-exec-capture.test.ts	platform/src/session/first-exec-capture.test.ts

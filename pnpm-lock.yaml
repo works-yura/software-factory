@@ -674,9 +674,15 @@ importers:
 
   packages/sandbox:
     dependencies:
+      '@factory/capabilities':
+        specifier: workspace:*
+        version: link:../capabilities
       '@factory/observability':
         specifier: workspace:*
         version: link:../observability
+      '@factory/store':
+        specifier: workspace:*
+        version: link:../store
       '@internal/workspace':
         specifier: workspace:*
         version: link:../internal-workspace

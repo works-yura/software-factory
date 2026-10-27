@@ -166,6 +166,8 @@ def main():
                 new = SPEC.sub(outward, text)
                 if new != text:
                     open(path, 'w').write(new)
+                    if name.endswith('.test.ts'):
+                        widen_package_mocks(path, args.name)
 
     # Package files.
 
@@ -176,9 +178,30 @@ def main():
             return versions[name]
         sys.exit(f'no version for {name} in {args.source}/package.json')
 
-    deps = {n: version(n) for n in sorted(externals)}
+    deps = {n: version(n) for n in sorted(externals - {args.name})}
     dev = {n: version(n) for n in sorted(test_externals - externals - {'vitest'})}
     dev.update({'@types/node': '22.20.1', 'typescript': 'catalog:', 'vitest': 'catalog:'})
+    existing_manifest = os.path.join(PACKAGES, args.dir, 'package.json')
+    if os.path.exists(existing_manifest):
+        with open(existing_manifest) as handle:
+            current = json.load(handle)
+        if current['name'] != args.name:
+            sys.exit(f"{args.dir} is {current['name']}, not {args.name}")
+        current.setdefault('dependencies', {}).update(deps)
+        current['dependencies'] = dict(sorted(current['dependencies'].items()))
+        current.setdefault('devDependencies', {}).update({k: v for k, v in dev.items() if k not in current['dependencies']})
+        current['devDependencies'] = dict(sorted(current['devDependencies'].items()))
+        current.setdefault('scripts', {})
+        if any(f.endswith('.test.ts') for fs in files.values() for f in fs) and 'test' not in current['scripts']:
+            current['scripts']['test'] = 'vitest run'
+        with open(existing_manifest, 'w') as handle:
+            json.dump(current, handle, indent=2)
+            handle.write('\n')
+        with open(os.path.join(dest_root, 'index.ts'), 'a') as handle:
+            for m in sorted(moved, key=lambda x: target_of[x]):
+                handle.write(f"export * from './{target_of[m]}.ts';\n")
+        finish(args, moved, files, target_of, consumers, deps)
+        return
     pkg = {
         'name': args.name,
         'version': '0.1.0',
@@ -209,6 +232,96 @@ def main():
             for m in sorted(moved, key=lambda x: target_of[x]):
                 handle.write(f"export * from './{target_of[m]}.ts';\n")
 
+    finish(args, moved, files, target_of, consumers, deps)
+
+
+def widen_package_mocks(path, package_name):
+    """A v3 `vi.mock` replaced one module; after extraction it names a whole package.
+
+    Keep the package's real exports and lay the original factory's result over them,
+    so only the symbols the test meant to fake are faked.
+    """
+    text = open(path).read()
+    head = f"vi.mock('{package_name}', "
+    out, i, changed = [], 0, False
+    while True:
+        j = text.find(head, i)
+        if j < 0:
+            out.append(text[i:])
+            break
+        start = j + len(head)
+        depth, k = 1, start
+        while depth:
+            c = text[k]
+            if c in '([{':
+                depth += 1
+            elif c in ')]}':
+                depth -= 1
+            k += 1
+        factory = text[start : k - 1].rstrip().rstrip(',')
+        if 'widened from a v3 module mock' in text[max(0, j - 120) : j]:
+            out.append(text[i:k])
+            i = k
+            continue
+        out.append(text[i:j])
+        out.append(
+            "// widened from a v3 module mock: real package exports, then the original overrides\n"
+            f"{head}async importOriginal => ({{\n"
+            f"  ...(await importOriginal<typeof import('{package_name}')>()),\n"
+            f"  ...(await ({factory})(importOriginal)),\n"
+            "}))"
+        )
+        i = k
+        changed = True
+    if changed:
+        open(path, 'w').write(''.join(out))
+    return changed
+
+
+def resolve_self_imports(package_name, dest_root, paths):
+    """Turn `import { a, b } from '<this package>'` inside the package into imports of the files that export them."""
+    exported = {}
+    for walk_root, _, names in os.walk(dest_root):
+        for name in names:
+            if not name.endswith('.ts') or name.endswith('.test.ts') or name == 'index.ts':
+                continue
+            path = os.path.join(walk_root, name)
+            text = open(path).read()
+            for symbol in re.findall(r'^export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:function\*?|const|let|class|interface|type|enum)\s+([A-Za-z_$][\w$]*)', text, re.M):
+                exported.setdefault(symbol, path)
+            for group in re.findall(r'^export\s+(?:type\s+)?\{([^}]*)\}', text, re.M):
+                for item in group.split(','):
+                    item = item.strip().split(' as ')[-1].strip()
+                    if item:
+                        exported.setdefault(item.replace('type ', ''), path)
+    pattern = re.compile(r"^import (type )?\{([^}]*)\} from '" + re.escape(package_name) + r"';\n", re.M)
+    for path in paths:
+        text = open(path).read()
+
+        def split(match):
+            kind = match.group(1) or ''
+            by_file = {}
+            for item in [i.strip() for i in match.group(2).split(',') if i.strip()]:
+                symbol = item.replace('type ', '').split(' as ')[0].strip()
+                if symbol not in exported:
+                    sys.exit(f'{path}: {symbol} is not exported by any file in {package_name}')
+                by_file.setdefault(exported[symbol], []).append(item)
+            lines = []
+            for source, items in sorted(by_file.items()):
+                rel = os.path.relpath(source, os.path.dirname(path))
+                rel = rel if rel.startswith('.') else './' + rel
+                lines.append(f"import {kind}{{ {', '.join(items)} }} from '{rel}';\n")
+            return ''.join(lines)
+
+        new = pattern.sub(split, text)
+        if new != text:
+            open(path, 'w').write(new)
+
+
+def finish(args, moved, files, target_of, consumers, deps):
+    dest_root = os.path.join(PACKAGES, args.dir, 'src')
+    moved_paths = [os.path.join(dest_root, target_of[m] + f[len(m):]) for m in moved for f in files[m]]
+    resolve_self_imports(args.name, dest_root, moved_paths)
     for consumer in consumers:
         path = os.path.join(PACKAGES, consumer, 'package.json')
         with open(path) as handle:
@@ -239,4 +352,8 @@ def main():
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 2 and sys.argv[1] == '--widen-mocks':
+        for target in sys.argv[3:]:
+            print(target, widen_package_mocks(target, sys.argv[2]))
+        sys.exit(0)
     main()

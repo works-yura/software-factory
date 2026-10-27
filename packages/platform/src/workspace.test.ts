@@ -120,20 +120,24 @@ const mocks = vi.hoisted(() => ({
   ),
 }));
 
-vi.mock('./integrations/github/sandbox', async importOriginal => ({
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/sandbox', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/sandbox')>()),
+  ...(await (async importOriginal => ({
   // Keep the real lifecycle constants and MaterializeError so workspace.ts uses production behavior.
-  DEFAULT_COMMAND_TIMEOUT_MS: (await importOriginal<typeof import('./integrations/github/sandbox.ts')>())
+  DEFAULT_COMMAND_TIMEOUT_MS: (await importOriginal<typeof import('@factory/sandbox')>())
     .DEFAULT_COMMAND_TIMEOUT_MS,
-  MaterializeError: (await importOriginal<typeof import('./integrations/github/sandbox.ts')>()).MaterializeError,
-  SetupCommandError: (await importOriginal<typeof import('./integrations/github/sandbox.ts')>()).SetupCommandError,
+  MaterializeError: (await importOriginal<typeof import('@factory/sandbox')>()).MaterializeError,
+  SetupCommandError: (await importOriginal<typeof import('@factory/sandbox')>()).SetupCommandError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
   syncEnvironmentRepository: (...args: unknown[]) => (mocks.syncEnvironmentRepository as any)(...args),
   runSetupCommand: (...args: unknown[]) => (mocks.runSetupCommand as any)(...args),
   runTeardownCommand: (...args: unknown[]) => (mocks.runTeardownCommand as any)(...args),
+}))(importOriginal)),
 }));
 
-import { MaterializeError, SetupCommandError } from './integrations/github/sandbox.ts';
+import { MaterializeError, SetupCommandError } from '@factory/sandbox';
 import { createGithubSubscriptionTools } from './integrations/github/session-subscriptions.ts';
 import { requireGithubTokenInjector } from './integrations/github/token-refresh.ts';
 import { CallbackFactorySandbox } from '@factory/sandbox';
@@ -147,7 +151,7 @@ import {
   __clearSessionEnvironmentsForTests,
   peekSessionEnvironment,
   peekSessionEnvironmentTeardown,
-} from './session/environment-state-processor.ts';
+} from '@factory/sandbox';
 import {
   createWorkspaceFactory,
   FactorySkillSource,

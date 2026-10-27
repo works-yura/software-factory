@@ -2,7 +2,7 @@ import type { ExecuteCommandOptions } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExecutableSandbox, SandboxCommandResult } from '@factory/sandbox';
-import { createPullRequest, MaterializeError, pushBranch } from './sandbox.ts';
+import { createPullRequest, MaterializeError, pushBranch } from '@factory/sandbox';
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };

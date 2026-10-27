@@ -11,7 +11,7 @@ import type { BoardRegistry } from '@factory/core';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.ts';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.ts';
 import type { GithubIntegration } from '../integrations/github/integration.ts';
-import { MaterializeError } from '../integrations/github/sandbox.ts';
+import { MaterializeError } from '@factory/sandbox';
 import { FactoryDispatchError } from '@factory/store';
 import type { FactoryBindingPreparationInput } from '@factory/runtime';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
@@ -129,7 +129,7 @@ export interface FactoryApiRoutesDeps {
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
-  sessionRetirement?: import('../sandbox/session-retirement.ts').SessionRetirementCoordinator;
+  sessionRetirement?: import('@factory/sandbox').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
   onFactoryRuntime?: (runtime: {

@@ -29,7 +29,7 @@ import type { BoardRegistry } from '@factory/core';
 import type { Intake } from '@factory/capabilities';
 import type { VersionControl } from '@factory/capabilities';
 import type { RouteAuth } from '@factory/http';
-import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.ts';
+import type { SessionRetirementCoordinator } from '@factory/sandbox';
 import type { StateSigner } from '@factory/auth';
 import type { AuditEventRow } from '@factory/store';
 import type { AuditEmitter } from '@factory/feed';

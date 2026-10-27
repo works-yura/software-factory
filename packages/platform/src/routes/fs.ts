@@ -13,7 +13,7 @@ import { requireExec } from '@factory/sandbox';
 import type { ExecutableSandbox } from '@factory/sandbox';
 import { peekSessionSandbox, sessionLayout } from '@factory/sandbox';
 import type { SessionLayout, SessionLayoutRepository } from '@factory/sandbox';
-import { peekSessionEnvironment } from '../session/environment-state-processor.ts';
+import { peekSessionEnvironment } from '@factory/sandbox';
 import type { SourceControlSession } from '@factory/store';
 import type { RouteAuth } from '@factory/http';
 

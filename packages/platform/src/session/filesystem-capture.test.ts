@@ -7,8 +7,8 @@ import type { SessionBeforeAgentEndListener } from '@mastra/core/agent-controlle
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '@factory/sandbox';
-import { __clearSessionEnvironmentsForTests, recordSessionEnvironment } from './environment-state-processor.ts';
-import type { SessionEnvironmentRepositoryState } from './environment-state-processor.ts';
+import { __clearSessionEnvironmentsForTests, recordSessionEnvironment } from '@factory/sandbox';
+import type { SessionEnvironmentRepositoryState } from '@factory/sandbox';
 import {
   captureSessionFilesystem,
   observeSessionFilesystem,

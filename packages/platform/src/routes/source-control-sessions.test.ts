@@ -9,7 +9,7 @@ import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { getFactorySessionAddress, resolveFactorySessionAddress } from '../rules/binding-context.ts';
-import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.ts';
+import type { SessionRetirementCoordinator } from '@factory/sandbox';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.ts';
 import {
   FACTORY_OPEN_RUNS_SETTING,

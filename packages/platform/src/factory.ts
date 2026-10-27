@@ -103,7 +103,7 @@ import { FactoryTransitionService } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { CallbackFactorySandbox } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
-import { SessionRetirementCoordinator } from './sandbox/session-retirement.ts';
+import { SessionRetirementCoordinator } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
@@ -113,7 +113,7 @@ import { FactoryChannelSessionLinkProcessor } from './session/channel-session-li
 import { resolveFactoryCredentialTenant } from './session/credential-policy.ts';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.ts';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.ts';
-import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.ts';
+import { FactoryEnvironmentStateProcessor } from '@factory/sandbox';
 import { createSourceControlSessionLookup } from './session/factory-session.ts';
 import { observeSessionFilesystem } from './session/filesystem-capture.ts';
 import { observeSessionFirstExec } from './session/first-exec-capture.ts';

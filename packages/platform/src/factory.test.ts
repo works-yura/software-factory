@@ -39,7 +39,7 @@ import type * as runtimeModule from '@factory/runtime';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { createFactorySecretEncryption } from '@factory/store';
 import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.ts';
-import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.ts';
+import { FactoryEnvironmentStateProcessor } from '@factory/sandbox';
 import type * as resourceMigrationModule from './session/resource-migration.ts';
 import type { CustomProvidersStorage } from '@factory/store';
 import type { MemorySettingsStorage } from '@factory/store';
@@ -204,14 +204,18 @@ function lastStudioProvider():
 // in local/auth-disabled mode would force model calls through an empty tenant
 // store and break chat with "Not logged in", so the factory must gate it.
 const registerTenantCredentialResolverMock = vi.fn();
-vi.mock('@factory/credentials', async importOriginal => {
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/credentials', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/credentials')>()),
+  ...(await (async importOriginal => {
   const actual = await importOriginal<typeof tenantCredentialsModule>();
   return {
     ...actual,
     registerTenantCredentialResolver: (...args: Parameters<typeof actual.registerTenantCredentialResolver>) =>
       registerTenantCredentialResolverMock(...args),
   };
-});
+})(importOriginal)),
+}));
 
 // Wrap the route-surface assembly with a spy so tests can assert the DI deps
 // the factory threads into it (e.g. the resolved Factory rules) — there is no

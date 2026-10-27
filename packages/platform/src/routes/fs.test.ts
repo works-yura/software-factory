@@ -12,7 +12,7 @@ import { __clearSessionSandboxesForTests, getSessionSandbox } from '@factory/san
 import {
   __clearSessionEnvironmentsForTests,
   recordSessionEnvironment,
-} from '../session/environment-state-processor.ts';
+} from '@factory/sandbox';
 import type { SourceControlSession } from '@factory/store';
 
 afterEach(() => {

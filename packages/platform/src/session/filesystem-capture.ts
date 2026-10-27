@@ -5,7 +5,7 @@ import type { SessionLayoutRepository } from '@factory/sandbox';
 
 import type { FilesystemFile, FilesystemStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
-import { peekSessionEnvironment } from './environment-state-processor.ts';
+import { peekSessionEnvironment } from '@factory/sandbox';
 import { isMeaningfulToolName } from './first-exec-capture.ts';
 
 /** Exit code of `GIT_CHANGED_FILES_SCRIPT` when the checkout is not there: the repository is skipped, not failed. */

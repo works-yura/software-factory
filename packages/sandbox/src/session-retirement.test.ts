@@ -4,21 +4,19 @@ import { MastraSandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxContext, ProviderStatus, WorkspaceSandbox } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  __clearSessionEnvironmentsForTests,
-  recordSessionEnvironment,
-} from '../session/environment-state-processor.ts';
-import type { SourceControlSession } from '@factory/store';
+import { __clearSessionEnvironmentsForTests, recordSessionEnvironment } from './environment-state-processor.ts';
+import type { CreateSourceControlSessionInput, ProjectRepository, SourceControlSession } from '@factory/store';
 import { SourceControlStorageInMemory } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { SessionRetirementCoordinator } from './session-retirement.ts';
-import { __clearSessionSandboxesForTests, getSessionSandbox, peekSessionSandbox } from '@factory/sandbox';
+import { __clearSessionSandboxesForTests, getSessionSandbox, peekSessionSandbox } from './session-sandbox.ts';
 
 afterEach(() => {
   __clearSessionSandboxesForTests();
   __clearSessionEnvironmentsForTests();
 });
 
+// The fixture carries only the fields retirement reads.
 function workItem(sessionId: string): WorkItemRow {
   const session = { sessionId, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' };
   return {
@@ -36,7 +34,7 @@ function workItem(sessionId: string): WorkItemRow {
     createdBy: 'user-1',
     createdAt: new Date(),
     updatedAt: new Date(),
-  };
+  } as unknown as WorkItemRow;
 }
 
 function workItems(item: WorkItemRow): Pick<WorkItemsStorage, 'get'> {
@@ -86,7 +84,7 @@ function seedRepositoryLink(storage: SourceControlStorageInMemory, teardownComma
     teardownCommand,
     createdAt: now,
     updatedAt: now,
-  });
+  } as ProjectRepository);
 }
 
 async function seedSession(storage: SourceControlStorageInMemory): Promise<SourceControlSession> {
@@ -97,7 +95,7 @@ async function seedSession(storage: SourceControlStorageInMemory): Promise<Sourc
     userId: 'user-1',
     branch: 'factory/issue-1',
     baseBranch: 'main',
-  });
+  } as CreateSourceControlSessionInput);
 }
 
 /** Seed a live fake sandbox into the per-process session memo. */
@@ -261,7 +259,9 @@ describe('SessionRetirementCoordinator', () => {
     const session = await seedSession(storage);
     const calls: string[] = [];
     const fake = seedMemoSandbox(session, calls);
-    const invalidateSession = vi.fn(async () => calls.push('invalidate'));
+    const invalidateSession = vi.fn(async () => {
+      calls.push('invalidate');
+    });
     const coordinator = new SessionRetirementCoordinator({ invalidateSession });
 
     await coordinator.retireWorkItemSessions({
@@ -362,7 +362,9 @@ describe('SessionRetirementCoordinator', () => {
     const calls: string[] = [];
     const fake = seedMemoSandbox(session, calls);
     const coordinator = new SessionRetirementCoordinator({
-      invalidateSession: vi.fn(async () => calls.push('invalidate')),
+      invalidateSession: vi.fn(async () => {
+      calls.push('invalidate');
+    }),
     });
 
     await coordinator.retireSession({

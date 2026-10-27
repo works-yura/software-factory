@@ -218,7 +218,10 @@ const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 /** DI-injected sandbox callback stub — presence signals "configured". */
 const sandboxRuntime = ((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
-vi.mock('./sandbox', () => {
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/sandbox', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/sandbox')>()),
+  ...(await (() => {
   class MaterializeError extends Error {
     code: string;
     constructor(m: string, code: string) {
@@ -243,7 +246,8 @@ vi.mock('./sandbox', () => {
     MaterializeError,
     SetupCommandError,
   };
-});
+})(importOriginal)),
+}));
 
 let featureEnabled = true;
 vi.mock('./config', () => ({

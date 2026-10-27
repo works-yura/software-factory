@@ -12,7 +12,7 @@ import {
   isCheckoutOf,
   pushRepositoryBranch,
   refreshMergeRequestCheckout,
-} from '../integrations/github/sandbox.ts';
+} from '@factory/sandbox';
 import { normalizedVerdictLine } from '../review-verdict.ts';
 import type { ExecutableSandbox } from '@factory/sandbox';
 import { resolveSessionWorkdir } from '@factory/sandbox';
@@ -25,7 +25,7 @@ import type {
 } from '@factory/store';
 import { mergeRequestNumberFromBranch } from '@factory/pipelines';
 import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from './environment-repositories.ts';
-import { updateSessionEnvironmentRepository } from './environment-state-processor.ts';
+import { updateSessionEnvironmentRepository } from '@factory/sandbox';
 
 type RepositorySessionState = {
   factoryProjectId?: string;

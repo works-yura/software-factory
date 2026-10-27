@@ -4,3 +4,7 @@ export * from './local-factory-sandbox.ts';
 export * from './materialization.ts';
 export * from './session-sandbox.ts';
 export * from './workdir.ts';
+export * from './github/sandbox.ts';
+export * from './github/sandbox-release.ts';
+export * from './environment-state-processor.ts';
+export * from './session-retirement.ts';

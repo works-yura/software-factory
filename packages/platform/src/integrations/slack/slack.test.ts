@@ -17,10 +17,14 @@ const primeTenant = vi.fn(async (_tenant: unknown) => undefined);
 const providerDefault = vi.fn(
   async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> => undefined,
 );
-vi.mock('@factory/credentials', () => ({
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/credentials', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/credentials')>()),
+  ...(await (() => ({
   primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
   primeTenantCredentialsForTenant: (tenant: unknown) => primeTenant(tenant),
   resolveTenantProviderDefaultModel: (tenant: unknown, current: string | undefined) => providerDefault(tenant, current),
+}))(importOriginal)),
 }));
 
 import {

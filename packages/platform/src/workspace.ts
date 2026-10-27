@@ -30,7 +30,7 @@ import {
   runTeardownCommand,
   SetupCommandError,
   syncEnvironmentRepository,
-} from './integrations/github/sandbox.ts';
+} from '@factory/sandbox';
 import {
   registerGithubPatKind,
   registerGithubRefreshTarget,
@@ -54,8 +54,8 @@ import {
   clearSessionEnvironment,
   recordSessionEnvironment,
   setSessionEnvironmentNote,
-} from './session/environment-state-processor.ts';
-import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.ts';
+} from '@factory/sandbox';
+import type { SessionEnvironmentRepositoryState } from '@factory/sandbox';
 import type { FactoryProject, FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession, SourceControlStorageHandle } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';

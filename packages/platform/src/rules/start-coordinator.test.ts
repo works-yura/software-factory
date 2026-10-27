@@ -9,7 +9,10 @@ import { FactoryStartCoordinator } from './start-coordinator.ts';
 import { FactoryTransitionService } from '../test-support.ts';
 
 const { primeTenant } = vi.hoisted(() => ({ primeTenant: vi.fn() }));
-vi.mock('@factory/credentials', async importOriginal => {
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/credentials', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/credentials')>()),
+  ...(await (async importOriginal => {
   const actual = await importOriginal<typeof import('@factory/credentials')>();
   return {
     ...actual,
@@ -18,7 +21,8 @@ vi.mock('@factory/credentials', async importOriginal => {
       return actual.primeTenantCredentialsForTenant(...args);
     },
   };
-});
+})(importOriginal)),
+}));
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 

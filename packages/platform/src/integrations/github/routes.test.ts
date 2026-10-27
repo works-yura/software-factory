@@ -6,7 +6,7 @@ import type { CreatePullRequestInput, ListPullRequestsInput } from '@factory/cap
 import type { RouteAuth } from '@factory/http';
 import { mountApiRoutes } from '@factory/http/testing';
 
-import { SessionRetirementCoordinator } from '../../sandbox/session-retirement.ts';
+import { SessionRetirementCoordinator } from '@factory/sandbox';
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '@factory/sandbox';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
@@ -498,7 +498,18 @@ let sandboxEnabled = true;
  * A `vi.fn` so tests can assert the factory never constructed a sandbox.
  */
 const sandboxCallback = vi.fn((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
-vi.mock('./sandbox', () => {
+// In v3 session retirement imported the mocked git module too. It now lives inside
+// @factory/sandbox and imports that file relatively, so mock the file as well.
+vi.mock('../../../../sandbox/src/github/sandbox.ts', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../../../sandbox/src/github/sandbox.ts')>()),
+  runTeardownCommand: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
+    runTeardownCommand(sb, worktreePath, command, options),
+}));
+
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/sandbox', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/sandbox')>()),
+  ...(await (() => {
   class MaterializeError extends Error {
     code: string;
     constructor(m: string, code: string) {
@@ -528,7 +539,8 @@ vi.mock('./sandbox', () => {
     MaterializeError,
     SetupCommandError,
   };
-});
+})(importOriginal)),
+}));
 
 const filesystemCaptureMock = vi.hoisted(() => ({ waitError: null as Error | null }));
 vi.mock('../../session/filesystem-capture.ts', async importOriginal => {

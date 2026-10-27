@@ -6,9 +6,9 @@ import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
 
-import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.ts';
+import { reclaimDeletedSessionSandbox } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
-import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.ts';
+import type { SessionRetirementCoordinator } from '@factory/sandbox';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.ts';
 import { seedSessionOrg } from '../session/org-seed.ts';
 import {

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { ExecutableSandbox } from '@factory/sandbox';
+import type { ExecutableSandbox } from '../materialization.ts';
 import { syncEnvironmentRepository } from './sandbox.ts';
 
 describe('environment branch selection with real Git', () => {

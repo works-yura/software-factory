@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  __clearSessionSandboxesForTests,
-  getSessionSandbox,
-  peekSessionSandbox,
-} from '@factory/sandbox';
+import { __clearSessionSandboxesForTests, getSessionSandbox, peekSessionSandbox } from '../session-sandbox.ts';
 import { reclaimDeletedSessionSandbox, releaseSessionSandbox } from './sandbox-release.ts';
 
 afterEach(() => {

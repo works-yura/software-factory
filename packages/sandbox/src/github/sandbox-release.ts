@@ -1,6 +1,6 @@
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import { evictSessionSandbox, peekSessionSandbox } from '@factory/sandbox';
+import { evictSessionSandbox, peekSessionSandbox } from '../session-sandbox.ts';
 import type { SourceControlSession } from '@factory/store';
 
 /**

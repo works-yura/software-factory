@@ -1,16 +1,16 @@
 import type { FactorySandbox, WorkspaceSandbox } from '@mastra/core/workspace';
 
-import { destroyDetachedSessionSandbox, releaseSessionSandbox } from '../integrations/github/sandbox-release.ts';
-import { DEFAULT_COMMAND_TIMEOUT_MS, runTeardownCommand } from '../integrations/github/sandbox.ts';
-import { peekSessionEnvironmentTeardown } from '../session/environment-state-processor.ts';
+import { destroyDetachedSessionSandbox, releaseSessionSandbox } from './github/sandbox-release.ts';
+import { DEFAULT_COMMAND_TIMEOUT_MS, runTeardownCommand } from './github/sandbox.ts';
+import { peekSessionEnvironmentTeardown } from './environment-state-processor.ts';
 import type {
   ProjectRepository,
   SourceControlSession,
   SourceControlStorageHandle,
 } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
-import { requireExec } from '@factory/sandbox';
-import { evictSessionSandbox, peekSessionSandbox } from '@factory/sandbox';
+import { requireExec } from './materialization.ts';
+import { evictSessionSandbox, peekSessionSandbox } from './session-sandbox.ts';
 
 type WarningLogger = (message: string, details: Record<string, unknown>) => void;
 

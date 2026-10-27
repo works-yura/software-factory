@@ -3,13 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbUpdates: Array<Record<string, unknown>> = [];
 
-import { requireExec } from '@factory/sandbox';
-import type { ExecutableSandbox, SandboxCommandResult } from '@factory/sandbox';
-import { __clearSessionSandboxesForTests } from '@factory/sandbox';
-import type {
-  ProjectRepositorySandbox,
-  SourceControlStorageHandle,
-} from '@factory/store';
+import { requireExec } from '../materialization.ts';
+import type { ExecutableSandbox, SandboxCommandResult } from '../materialization.ts';
+import { __clearSessionSandboxesForTests } from '../session-sandbox.ts';
+import type { SourceControlStorageHandle } from '@factory/store';
 import {
   hasLocalBranch,
   checkoutSessionBranch,
@@ -28,6 +25,9 @@ import {
   SetupCommandError,
   syncEnvironmentRepository,
 } from './sandbox.ts';
+import type { MaterializeRepoOptions } from './sandbox.ts';
+
+type RepoMaterializationBinding = MaterializeRepoOptions['row'];
 import type { RepoMaterializeInfo } from './sandbox.ts';
 
 type Responder = (script: string) => SandboxCommandResult;
@@ -82,15 +82,11 @@ class FakeSandbox implements ExecutableSandbox {
   }
 }
 
-function makeRow(overrides: Partial<ProjectRepositorySandbox> = {}): ProjectRepositorySandbox {
+function makeRow(overrides: Partial<RepoMaterializationBinding> = {}): RepoMaterializationBinding {
   return {
     id: 'sbrow-1',
-    projectRepositoryId: 'project-repository-1',
-    userId: 'user-1',
-    sandboxId: null,
     sandboxWorkdir: '/workspace/hello',
     materializedAt: null,
-    createdAt: new Date(),
     ...overrides,
   };
 }
@@ -106,7 +102,7 @@ const storage = {
 } as unknown as SourceControlStorageHandle['sessions'];
 
 function materializeRepo(
-  row: ProjectRepositorySandbox,
+  row: RepoMaterializationBinding,
   repoInfo: RepoMaterializeInfo,
   sandbox: ExecutableSandbox,
   token: string,

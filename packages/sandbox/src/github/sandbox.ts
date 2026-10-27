@@ -16,8 +16,8 @@
  */
 
 import type { RepositoryAccess } from '@factory/capabilities';
-import { isValidGitRef } from '@factory/sandbox';
-import type { ExecutableSandbox, SandboxCommandResult } from '@factory/sandbox';
+import { isValidGitRef } from '../git-ref.ts';
+import type { ExecutableSandbox, SandboxCommandResult } from '../materialization.ts';
 import type { SourceControlStorageHandle } from '@factory/store';
 import { timedPhase } from '@factory/observability';
 

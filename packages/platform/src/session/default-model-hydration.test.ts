@@ -11,9 +11,13 @@ const { primeTenant, providerDefault } = vi.hoisted(() => ({
     async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> => undefined,
   ),
 }));
-vi.mock('@factory/credentials', () => ({
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/credentials', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/credentials')>()),
+  ...(await (() => ({
   primeTenantCredentialsForTenant: primeTenant,
   resolveTenantProviderDefaultModel: providerDefault,
+}))(importOriginal)),
 }));
 
 const modelId = 'anthropic/claude-opus-5';

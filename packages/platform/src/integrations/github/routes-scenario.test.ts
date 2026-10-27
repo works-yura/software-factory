@@ -216,7 +216,10 @@ const createPullRequest = vi.fn(async (..._args: any[]) => ({ url: 'https://gith
  * A `vi.fn` so tests can assert the routes never constructed a sandbox.
  */
 const sandboxCallback = vi.fn((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
-vi.mock('./sandbox', () => {
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/sandbox', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/sandbox')>()),
+  ...(await (() => {
   class MaterializeError extends Error {
     code: string;
     constructor(m: string, code: string) {
@@ -241,7 +244,8 @@ vi.mock('./sandbox', () => {
     MaterializeError,
     SetupCommandError,
   };
-});
+})(importOriginal)),
+}));
 
 let featureEnabled = true;
 vi.mock('./config', () => ({

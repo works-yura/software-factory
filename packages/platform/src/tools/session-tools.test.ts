@@ -29,9 +29,13 @@ import { FACTORY_TOOLS_OWNER_ID, createFactorySessionTools } from './session-too
 import { createFactoryTools } from './index.ts';
 import type { FactoryToolDependencies } from './index.ts';
 
+// widened from a v3 module mock: real package exports, then the original overrides
 vi.mock('@factory/credentials', async importOriginal => ({
   ...(await importOriginal<typeof import('@factory/credentials')>()),
+  ...(await (async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/credentials')>()),
   primeTenantCredentialsForTenant: vi.fn(async () => undefined),
+}))(importOriginal)),
 }));
 
 const prime = vi.mocked(primeTenantCredentialsForTenant);

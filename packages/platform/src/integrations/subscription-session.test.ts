@@ -8,8 +8,12 @@ import { Workspace } from '@mastra/core/workspace';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 const prime = vi.fn<(context: unknown) => Promise<void>>().mockResolvedValue(undefined);
-vi.mock('@factory/credentials', () => ({
+// widened from a v3 module mock: real package exports, then the original overrides
+vi.mock('@factory/credentials', async importOriginal => ({
+  ...(await importOriginal<typeof import('@factory/credentials')>()),
+  ...(await (() => ({
   primeTenantCredentialsForRequestContext: (context: unknown) => prime(context),
+}))(importOriginal)),
 }));
 
 import {

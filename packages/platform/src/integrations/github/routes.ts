@@ -48,15 +48,15 @@ import type { GithubPatKind } from './pat.ts';
 import { polledPullRequestEvent } from './rules.ts';
 import type { PolledPullRequestState, ReconcileRepository } from './rules.ts';
 
-import { reclaimDeletedSessionSandbox } from './sandbox-release.ts';
+import { reclaimDeletedSessionSandbox } from '@factory/sandbox';
 import {
   commitAll,
   isValidGitRef as isValidGitRefSandbox,
   MaterializeError,
   pushBranch,
   SetupCommandError,
-} from './sandbox.ts';
-import type { GitIdentity } from './sandbox.ts';
+} from '@factory/sandbox';
+import type { GitIdentity } from '@factory/sandbox';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
 const USER_SESSION_BRANCH_PREFIX = 'user/session-';
@@ -140,7 +140,7 @@ export interface MountGithubRoutesOptions {
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
   projects?: FactoryProjectsStorage;
-  sessionRetirement?: import('../../sandbox/session-retirement.ts').SessionRetirementCoordinator;
+  sessionRetirement?: import('@factory/sandbox').SessionRetirementCoordinator;
   /** Work-items domain — session deletion strips the refs work items hold on it. */
   workItems?: Pick<
     import('@factory/store').WorkItemsStorage,
