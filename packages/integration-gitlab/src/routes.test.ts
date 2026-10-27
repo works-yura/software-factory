@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFactoryAuthGate } from '@factory/auth';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import type { TestAuthUser } from '@factory/http/testing';
-import { PlatformGitLabIntegration } from '../platform/gitlab/integration.ts';
+import { PlatformGitLabIntegration } from './platform/integration.ts';
 import { GitLabApiError } from './api.ts';
 import { decodeIssueReference, encodeIssueReference, encodeSourceId, GitLabIntegration } from './integration.ts';
 import type { GitLabIntegrationBase } from './integration.ts';

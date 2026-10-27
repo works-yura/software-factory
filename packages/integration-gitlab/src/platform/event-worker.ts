@@ -5,9 +5,9 @@ import { MastraWorker } from '@mastra/core/worker';
 import type { WorkerDeps } from '@mastra/core/worker';
 
 import type { IntegrationStorageHandle } from '@factory/store';
-import type { GitLabWebhookDispatchIntegration } from '../../gitlab/webhook-dispatch.ts';
-import { parseGitLabWebhookBody, processGitLabWebhook } from '../../gitlab/webhook.ts';
-import type { ParsedGitLabWebhook } from '../../gitlab/webhook.ts';
+import type { GitLabWebhookDispatchIntegration } from '../webhook-dispatch.ts';
+import { parseGitLabWebhookBody, processGitLabWebhook } from '../webhook.ts';
+import type { ParsedGitLabWebhook } from '../webhook.ts';
 import type { PlatformApiClient } from '@factory/integrations';
 import { PlatformApiError } from '@factory/integrations';
 

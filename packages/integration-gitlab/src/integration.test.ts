@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth } from '@factory/http/testing';
 import { SourceControlStorageInMemory } from '@factory/store';
-import { PlatformGitLabIntegration } from '../platform/gitlab/integration.ts';
+import { PlatformGitLabIntegration } from './platform/integration.ts';
 import {
   decodeIssueReference,
   decodeSourceId,

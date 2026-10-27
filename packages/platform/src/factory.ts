@@ -68,7 +68,7 @@ import { dismissStaleFactoryReviews } from '@factory/integration-github';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/integrations';
 import { buildPlatformConnectRoutes } from '@factory/integrations';
 import { PlatformGithubIntegration } from '@factory/integration-github';
-import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integration.ts';
+import { PlatformGitLabIntegration } from '@factory/integration-gitlab';
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.ts';
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.ts';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.ts';

@@ -2,9 +2,9 @@ import type { LeaseProvider } from '@mastra/core/events';
 import type { WorkerDeps } from '@mastra/core/worker';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { GitLabSignalSubscriptionRow } from '../../gitlab/subscriptions.ts';
-import { normalizeGitLabWebhookMetadata } from '../../gitlab/webhook.ts';
-import type { ParsedGitLabWebhook } from '../../gitlab/webhook.ts';
+import type { GitLabSignalSubscriptionRow } from '../subscriptions.ts';
+import { normalizeGitLabWebhookMetadata } from '../webhook.ts';
+import type { ParsedGitLabWebhook } from '../webhook.ts';
 import { PlatformApiClient } from '@factory/integrations';
 import { PlatformGitLabEventWorker } from './event-worker.ts';
 import type {

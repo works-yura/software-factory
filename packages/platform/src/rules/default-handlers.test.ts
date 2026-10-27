@@ -5,7 +5,7 @@ import { reviewBoard } from '@factory/pipelines';
 import { withBoardClosure } from '@factory/core';
 import { workBoard } from '@factory/pipelines';
 import { defaultGithubRules } from '@factory/integration-github';
-import { defaultGitLabRules } from '../integrations/gitlab/default-rules.ts';
+import { defaultGitLabRules } from '@factory/integration-gitlab';
 import { defaultIncidentioRules } from '../integrations/incidentio/default-rules.ts';
 import { defaultJiraRules } from '../integrations/jira/default-rules.ts';
 import { defaultLinearRules } from '../integrations/linear/default-rules.ts';

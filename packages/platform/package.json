@@ -22,6 +22,7 @@
     "@factory/feed": "workspace:*",
     "@factory/http": "workspace:*",
     "@factory/integration-github": "workspace:*",
+    "@factory/integration-gitlab": "workspace:*",
     "@factory/integrations": "workspace:*",
     "@factory/observability": "workspace:*",
     "@factory/pipelines": "workspace:*",
