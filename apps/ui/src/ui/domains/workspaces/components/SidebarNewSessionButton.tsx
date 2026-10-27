@@ -1,5 +1,5 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { SquarePen } from 'lucide-react';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
@@ -16,15 +16,15 @@ export function SidebarNewSessionButton() {
   if (!factoryId || !hasRepositories) return null;
 
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label={t('newSession')}
-      tooltip={t('newSession')}
-      tooltipPosition="bottom"
-      onClick={() => openNewUserSession(factoryId)}
-    >
-      <SquarePen />
-    </Button>
+    <Sidebar.NavList>
+      <Sidebar.NavLink
+        render={
+          <button type="button" onClick={() => openNewUserSession(factoryId)}>
+            <Plus />
+            <Sidebar.NavLabel>{t('newSession')}</Sidebar.NavLabel>
+          </button>
+        }
+      />
+    </Sidebar.NavList>
   );
 }

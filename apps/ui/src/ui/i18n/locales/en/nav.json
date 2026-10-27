@@ -2,7 +2,6 @@
   "mainSidebar": "Main sidebar",
   "main": "Main",
   "settingsSections": "Settings sections",
-  "factorySwitcher": "Factory switcher",
   "navigation": "Navigation",
   "footer": "Activity, account, and settings",
   "factory": "Factory",
@@ -17,7 +16,6 @@
   "activityUnread_other": "Activity, {{count}} unread",
   "sessions": {
     "title": "Sessions",
-    "new": "New user session",
     "properties": "Sessions properties",
     "sort": "Sort",
     "owner": "Owner",
@@ -68,5 +66,6 @@
     "settingsMenu": "Settings menu",
     "logOut": "Log out"
   },
-  "newSession": "New session"
+  "newSession": "New session",
+  "searchAndNavigate": "Search and navigate"
 }

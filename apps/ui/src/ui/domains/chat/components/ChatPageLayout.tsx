@@ -21,10 +21,11 @@ export function ChatPageLayout({ crumbs, headerActions, children }: ChatPageLayo
         {crumbs}
       </Breadcrumb>
     ),
+    headerActions,
   });
 
   return (
-    <PageLayout variant="fit" {...slots} headerActions={headerActions}>
+    <PageLayout variant="fit" {...slots}>
       {children}
     </PageLayout>
   );

@@ -3,7 +3,6 @@
     "label": "Language",
     "description": "Interface language"
   },
-  "beta": "Beta",
   "general": "General",
   "storedInBrowser": "Stored in this browser.",
   "theme": {
