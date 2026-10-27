@@ -436,8 +436,8 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionRunObserver.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionRunObserver.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionGroups.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionGroups.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOrder.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOrder.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOwner.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOwner.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionProperties.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionProperties.msw.test.tsx
+../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOwner.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionOwner.msw.test.tsx	-2	upstream 74761d4c2e (#28245): no Mine default, the three default-owner cases become one Mine case
+../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionProperties.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionProperties.msw.test.tsx	-1	upstream 74761d4c2e (#28245): the Mine-default race case is gone with the default
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionShowMore.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionShowMore.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionSourceIcons.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/SessionsSectionSourceIcons.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/components/__tests__/UserSessionsActivity.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/components/__tests__/UserSessionsActivity.msw.test.tsx
@@ -457,7 +457,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/workspaces/hooks/usePinnedSessions.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/hooks/usePinnedSessions.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/hooks/useSessionListView.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/hooks/useSessionListView.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/onboardingFlow.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/onboardingFlow.test.ts
-../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts
+../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	-2	upstream 74761d4c2e (#28245): defaultSessionFilters removed
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionPresentation.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionPresentation.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts

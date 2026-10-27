@@ -54,7 +54,7 @@ export function SessionsSection() {
     resetView,
   } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
-  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
+  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
   const deletion = useSessionDeletion(factoryId);
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
@@ -74,8 +74,6 @@ export function SessionsSection() {
     rowCount: rows.length,
     filteredCount: filteredRows.length,
     groupCount: groups.length,
-    activeFilterCount,
-    viewerKnown: Boolean(viewerUserId),
   });
 
   const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
@@ -200,17 +198,12 @@ function emptyListMessage({
   rowCount,
   filteredCount,
   groupCount,
-  activeFilterCount,
-  viewerKnown,
 }: {
   rowCount: number;
   filteredCount: number;
   groupCount: number;
-  activeFilterCount: number;
-  viewerKnown: boolean;
 }): string | undefined {
   if (filteredCount > 0) return groupCount === 0 ? i18n.t('sessions.empty.allHidden', { ns: 'nav' }) : undefined;
   if (rowCount === 0) return i18n.t('sessions.empty.noneYet', { ns: 'nav' });
-  if (activeFilterCount === 0 && viewerKnown) return i18n.t('sessions.empty.noneOwn', { ns: 'nav' });
   return i18n.t('sessions.empty.noneMatch', { ns: 'nav' });
 }
