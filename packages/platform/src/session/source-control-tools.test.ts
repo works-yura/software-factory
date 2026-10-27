@@ -7,7 +7,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { VersionControl } from '@factory/capabilities';
-import type { AuditAgentEmitter } from '../storage/domains/audit/domain.ts';
+import type { AuditAgentEmitter } from '@factory/feed';
 import { SourceControlStorageInMemory } from '@factory/store';
 import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-control-tools.ts';
 

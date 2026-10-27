@@ -9,7 +9,7 @@ import { createBoardRegistry } from '../test-support.ts';
 import type { BoardRegistry } from '@factory/core';
 import { FactoryTransitionService } from '../test-support.ts';
 import type { FactoryRuleActor } from '@factory/core';
-import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.ts';
+import type { AuditEmitter, AuditRecorder } from '@factory/feed';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   FACTORY_RULE_MATERIALIZATION_KEY,

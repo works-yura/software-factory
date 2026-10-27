@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { observeAgentGitAction } from './agent-audit.ts';
-import type { AuditAgentEmitter } from './domain.ts';
+import type { AuditAgentEmitter } from '@factory/feed';
 
 const THREAD = 'thread-42';
 const PROJECT = '11111111-1111-4111-8111-111111111111';

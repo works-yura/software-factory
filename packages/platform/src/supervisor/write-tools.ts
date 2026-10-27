@@ -9,7 +9,7 @@ import { factoryDispatchFailureMetadata } from '@factory/store';
 import type { FactoryTransitionService } from '@factory/runtime';
 import { IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@factory/core';
 import type { AuditAction } from '@factory/store';
-import type { AuditRecorder } from '../storage/domains/audit/domain.ts';
+import type { AuditRecorder } from '@factory/feed';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { SupervisorScope } from './read-tools.ts';
 import type { WorkerMessageResult } from './session-messaging.ts';

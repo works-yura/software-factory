@@ -26,10 +26,10 @@ import type { EnsuredFactorySourceSession } from '../session/factory-session.ts'
 import type { LiveSessions } from '../session/live-sessions.ts';
 import { resolveWorkItemRepository } from '../session/work-item-repository.ts';
 import type { StateSigner } from '@factory/auth';
-import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.ts';
+import type { AuditEmitter, AuditRecorder } from '@factory/feed';
 import type { ChannelIdentityStorage } from '@factory/store';
 import type { WorkItemCommentsStorage } from '@factory/store';
-import type { CommentsDomain } from '../storage/domains/comments/domain.ts';
+import type { CommentsDomain } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
 import type { CustomProvidersStorage } from '@factory/store';
 import type { FilesystemStorage } from '@factory/store';

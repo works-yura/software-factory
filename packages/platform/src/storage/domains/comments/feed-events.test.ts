@@ -11,11 +11,11 @@ import { Hono } from 'hono';
 import { SSEStreamingApi } from 'hono/streaming';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { feedTopic } from '../../../feed-events.ts';
+import { feedTopic } from '@factory/feed';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import type { TestAuthUser } from '@factory/http/testing';
-import { createFactoryStorageForTests } from '../../../test-support.ts';
-import { CommentsDomain } from './domain.ts';
+import { createFactoryStorageForTests } from '@factory/store/testing';
+import { CommentsDomain } from '@factory/feed';
 
 type Seed = Awaited<ReturnType<typeof createFactoryStorageForTests>>;
 

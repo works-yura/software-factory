@@ -21,8 +21,8 @@ import type { Context } from 'hono';
 
 import type { AuditAction } from '@factory/store';
 import type { AuditTarget } from '@factory/store';
-import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.ts';
-import { auditRequestContext } from '../storage/domains/audit/domain.ts';
+import type { AuditEmitter, AuditRecorder } from '@factory/feed';
+import { auditRequestContext } from '@factory/feed';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';

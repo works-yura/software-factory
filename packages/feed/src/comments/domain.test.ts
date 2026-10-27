@@ -9,9 +9,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import type { TestAuthUser } from '@factory/http/testing';
-import { createFactoryStorageForTests } from '../../../test-support.ts';
+import { createFactoryStorageForTests } from '@factory/store/testing';
 import type { AuditEmitter } from '../audit/domain.ts';
 import type { CommentsDomainOptions } from './domain.ts';
+
+type CommentBody = { comment: { revision: number } };
+type CommentListBody = { comments: Array<{ body: string; deletedAt?: string | null }> };
+type RosterBody = { members: Array<{ id: string; name: string }> };
 import { CommentsDomain } from './domain.ts';
 
 type Seed = Awaited<ReturnType<typeof createFactoryStorageForTests>>;
@@ -255,14 +259,14 @@ describe('CommentsDomain routes', () => {
 
     const first = await patch({ body: 'v2', expectedRevision: 1 });
     expect(first.status).toBe(200);
-    expect((await first.json()).comment.revision).toBe(2);
+    expect(((await first.json()) as CommentBody).comment.revision).toBe(2);
 
     const stale = await patch({ body: 'v2-lost-race', expectedRevision: 1 });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toEqual({ error: 'comment_conflict' });
 
-    const list = await (await app.request(`/web/factory/work-items/${item.id}/comments`)).json();
-    expect(list.comments[0].body).toBe('v2');
+    const list = (await (await app.request(`/web/factory/work-items/${item.id}/comments`)).json()) as CommentListBody;
+    expect(list.comments[0]?.body).toBe('v2');
   });
 
   it('diffs mention rows on edit and lists the tombstone after delete', async () => {
@@ -282,10 +286,10 @@ describe('CommentsDomain routes', () => {
     expect(await seed.comments.listMentionsForUser({ ...scope, userId: 'user-carol', limit: 10 })).toHaveLength(1);
 
     await app.request(`/web/factory/work-items/${item.id}/comments/${comment.id}`, { method: 'DELETE' });
-    const list = await (await app.request(`/web/factory/work-items/${item.id}/comments`)).json();
+    const list = (await (await app.request(`/web/factory/work-items/${item.id}/comments`)).json()) as CommentListBody;
     expect(list.comments).toHaveLength(1);
     expect(list.comments[0]).toMatchObject({ body: '' });
-    expect(list.comments[0].deletedAt).toBeTruthy();
+    expect(list.comments[0]?.deletedAt).toBeTruthy();
     expect((await seed.workItems.get({ orgId: ORG, id: item.id }))?.commentCount).toBe(0);
   });
 
@@ -325,7 +329,7 @@ describe('CommentsDomain routes', () => {
 
     const response = await app.request(`/web/factory/projects/${project.id}/mention-roster`);
     expect(response.status).toBe(200);
-    expect((await response.json()).members).toEqual([
+    expect(((await response.json()) as RosterBody).members).toEqual([
       { id: 'user-alice', name: 'Alice' },
       { id: 'user-bob', name: 'Bob' },
     ]);
@@ -366,13 +370,13 @@ describe('CommentsDomain routes', () => {
     });
     const app = buildApp(commentsDomain(seed), asAlice);
 
-    const all = await (await app.request(`/web/factory/projects/${project.id}/mention-roster`)).json();
+    const all = (await (await app.request(`/web/factory/projects/${project.id}/mention-roster`)).json()) as RosterBody;
     expect(all.members).toEqual([
       { id: 'user-alice', name: 'Alice' },
       { id: 'user-carol', name: 'Carol' },
     ]);
 
-    const filtered = await (await app.request(`/web/factory/projects/${project.id}/mention-roster?q=ca`)).json();
+    const filtered = (await (await app.request(`/web/factory/projects/${project.id}/mention-roster?q=ca`)).json()) as RosterBody;
     expect(filtered.members).toEqual([{ id: 'user-carol', name: 'Carol' }]);
   });
 

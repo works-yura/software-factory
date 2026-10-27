@@ -189,8 +189,8 @@ skills/review-skill-publish.test.ts	platform/src/skills/review-skill-publish.tes
 spa-static.test.ts	http/src/spa-static.test.ts
 state-signing.test.ts	auth/src/state-signing.test.ts
 storage/domains/audit/agent-audit.test.ts	platform/src/storage/domains/audit/agent-audit.test.ts
-storage/domains/audit/domain.test.ts	platform/src/storage/domains/audit/domain.test.ts
-storage/domains/comments/domain.test.ts	platform/src/storage/domains/comments/domain.test.ts
+storage/domains/audit/domain.test.ts	feed/src/audit/domain.test.ts
+storage/domains/comments/domain.test.ts	feed/src/comments/domain.test.ts
 storage/domains/comments/feed-events.test.ts	platform/src/storage/domains/comments/feed-events.test.ts
 storage/domains/work-items/metrics.test.ts	platform/src/storage/domains/work-items/metrics.test.ts
 supervisor/health.test.ts	platform/src/supervisor/health.test.ts

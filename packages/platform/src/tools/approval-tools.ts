@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.ts';
 import type { SourceControlSessionLookup } from '../session/factory-session.ts';
-import type { AuditRecorder } from '../storage/domains/audit/domain.ts';
+import type { AuditRecorder } from '@factory/feed';
 import type { WorkItemsStorage } from '@factory/store';
 import type { FactoryMessaging } from './messaging-tools.ts';
 import { requirePerson } from './scope.ts';

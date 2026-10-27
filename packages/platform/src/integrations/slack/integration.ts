@@ -22,7 +22,7 @@ import type { TypingStatusFn } from '@mastra/core/channels';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
-import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.ts';
+import type { WorkItemFeedPublisher } from '@factory/feed';
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.ts';
 
 import { createSlackConnectRoutes } from './connect-route.ts';

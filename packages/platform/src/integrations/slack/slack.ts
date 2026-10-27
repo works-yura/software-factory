@@ -38,7 +38,7 @@ import type {
 } from '@factory/store';
 import type { FactoryActorExternalIdentity } from '@factory/store';
 import { actorFromChannelAuthor } from '@factory/store';
-import type { CommentsDomain } from '../../storage/domains/comments/domain.ts';
+import type { CommentsDomain } from '@factory/feed';
 import type { ModelDefaultsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';

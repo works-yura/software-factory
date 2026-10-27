@@ -4,7 +4,7 @@ import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { RouteAuth } from '@factory/http';
 import { sanitizeSegment } from '@factory/sandbox';
-import type { AuditEmitter } from '../../storage/domains/audit/domain.ts';
+import type { AuditEmitter } from '@factory/feed';
 import type { IntakeStorage } from '@factory/store';
 import { GitLabApiError } from './api.ts';
 import {

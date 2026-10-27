@@ -146,7 +146,8 @@ def main():
         package_src = os.path.join(PACKAGES, directory, 'src')
         if directory == args.dir or not os.path.isdir(package_src):
             continue
-        for walk_root, _, names in os.walk(package_src):
+        roots = [package_src] + [os.path.join(PACKAGES, directory, 'scripts')] * os.path.isdir(os.path.join(PACKAGES, directory, 'scripts'))
+        for walk_root, _, names in (entry for root in roots for entry in os.walk(root)):
             for name in names:
                 if not name.endswith('.ts'):
                     continue

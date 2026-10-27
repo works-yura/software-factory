@@ -16,7 +16,7 @@ import {
   isOpenRunLiveElsewhere,
   listSessionOpenRuns,
 } from '@factory/runtime';
-import { AuditDomain } from '../storage/domains/audit/domain.ts';
+import { AuditDomain } from '@factory/feed';
 import type { SourceControlSessionVisibility } from '@factory/store';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import { deliverFactorySessionNotification } from './deliver.ts';

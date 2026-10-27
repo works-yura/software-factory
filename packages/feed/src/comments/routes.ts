@@ -12,7 +12,7 @@ import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
 import { getFactoryAuthUser } from '@factory/auth';
-import { feedTopic } from '../../../feed-events.ts';
+import { feedTopic } from '../feed-events.ts';
 import type { RouteAuth } from '@factory/http';
 import type { AuditEmitter } from '../audit/domain.ts';
 import type { FactoryProjectsStorage } from '@factory/store';

@@ -1,0 +1,26 @@
+{
+  "name": "@factory/feed",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Work-item feed over HTTP: audit and comments domains, wire formats, feed events.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/auth": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/core": "1.79.0",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

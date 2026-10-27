@@ -3,7 +3,8 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
-import { createFactoryStorageForTests } from '../../../test-support.ts';
+import type { AuditAction } from '@factory/store';
+import { createFactoryStorageForTests } from '@factory/store/testing';
 import type { AuditDomainOptions } from './domain.ts';
 import { AuditDomain } from './domain.ts';
 
@@ -82,7 +83,7 @@ describe('AuditDomain', () => {
     });
 
     await expect(
-      domain.record({ orgId: 'org-1', actorId: 'user-1', action: 'test', targets: [] }),
+      domain.record({ orgId: 'org-1', actorId: 'user-1', action: 'test' as AuditAction, targets: [] }),
     ).resolves.not.toBeNull();
     await vi.waitFor(() => expect(good).toHaveBeenCalledTimes(1));
     await vi.waitFor(() =>
@@ -96,7 +97,7 @@ describe('AuditDomain', () => {
     vi.spyOn(seed.audit, 'record').mockRejectedValueOnce(new Error('db down'));
     const domain = auditDomain(seed, { sinks: [{ id: 'mirror', audit }] });
 
-    await expect(domain.record({ orgId: 'org-1', actorId: 'user-1', action: 'test', targets: [] })).resolves.toBeNull();
+    await expect(domain.record({ orgId: 'org-1', actorId: 'user-1', action: 'test' as AuditAction, targets: [] })).resolves.toBeNull();
     expect(audit).not.toHaveBeenCalled();
   });
 
@@ -117,7 +118,7 @@ describe('AuditDomain', () => {
       await domain.emit({
         context: c,
         input: {
-          action: 'test',
+          action: 'test' as AuditAction,
           factoryProjectId: 'project-1',
           projectRepositoryId: 'project-repository-1',
           targets: [],

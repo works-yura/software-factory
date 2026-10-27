@@ -8,7 +8,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { executableCommand, runsPullRequestCreate } from '../../../session/shell-commands.ts';
-import type { AuditAgentEmitter } from './domain.ts';
+import type { AuditAgentEmitter } from '@factory/feed';
 
 type FactorySessionState = { factoryProjectId?: string; projectRepositoryId?: string; projectPath?: string };
 

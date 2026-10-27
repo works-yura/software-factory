@@ -2,10 +2,10 @@ import { EventEmitterPubSub } from '@mastra/core/events';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../test-support.ts';
-import { feedTopic } from '../feed-events.ts';
+import { feedTopic } from '@factory/feed';
 import { fakeRouteAuth } from '@factory/http/testing';
 import type { FactoryTransitionService } from '../test-support.ts';
-import { CommentsDomain } from '../storage/domains/comments/domain.ts';
+import { CommentsDomain } from '@factory/feed';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { FactoryDeferredDecisionRecord } from '@factory/store';
 import { createFactoryStorageForTests } from '../test-support.ts';

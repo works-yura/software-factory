@@ -31,7 +31,7 @@ import { waitForPendingFilesystemCapture } from '../../session/filesystem-captur
 import { sessionMemoryResourceId, listFactorySessionThreads } from '../../session/session-threads.ts';
 import { normalizeSessionTitle } from '../../session/session-title.ts';
 import type { StateSigner } from '@factory/auth';
-import type { AuditEmitter } from '../../storage/domains/audit/domain.ts';
+import type { AuditEmitter } from '@factory/feed';
 import type { MemorySettingsStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type {

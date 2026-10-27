@@ -25,8 +25,8 @@ import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/s
 import type { FactoryTransitionRequest, FactoryTransitionService } from '@factory/runtime';
 import type { WorkItemSource } from '@factory/core';
 import type { LiveSessions } from '../session/live-sessions.ts';
-import { auditRequestOrigin } from '../storage/domains/audit/domain.ts';
-import type { AuditEmitter } from '../storage/domains/audit/domain.ts';
+import { auditRequestOrigin } from '@factory/feed';
+import type { AuditEmitter } from '@factory/feed';
 import type { WorkItemCommentsStorage } from '@factory/store';
 import { effectiveModelScope } from '@factory/store';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '@factory/store';

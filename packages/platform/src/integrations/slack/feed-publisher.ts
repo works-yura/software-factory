@@ -6,7 +6,7 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 
 import type { WorkItemCommentRow } from '@factory/store';
-import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.ts';
+import type { WorkItemFeedPublisher } from '@factory/feed';
 import type { ExternalWorkItemSource, WorkItemRow } from '@factory/store';
 
 /** Slack rejects a `markdown_text` block over this; comments allow 16k. */

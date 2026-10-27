@@ -16,7 +16,7 @@ import {
 import { normalizedVerdictLine } from '../review-verdict.ts';
 import type { ExecutableSandbox } from '@factory/sandbox';
 import { resolveSessionWorkdir } from '@factory/sandbox';
-import type { AuditAgentEmitter } from '../storage/domains/audit/domain.ts';
+import type { AuditAgentEmitter } from '@factory/feed';
 import type {
   ProjectRepository,
   SourceControlRepository,

@@ -5,7 +5,7 @@
 
 import type { BoardRegistry } from '@factory/core';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '@factory/runtime';
-import type { EmitAuditInput } from '../storage/domains/audit/domain.ts';
+import type { EmitAuditInput } from '@factory/feed';
 import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
 
 /** Records one audit event for the caller; routes bind it to the request, tools to the session's person. */

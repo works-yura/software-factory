@@ -19,7 +19,7 @@ import {
 } from '../session/factory-session.ts';
 import { recordSessionRunStart } from '@factory/runtime';
 import { resolveWorkItemRepository } from '../session/work-item-repository.ts';
-import type { AuditRecorder } from '../storage/domains/audit/domain.ts';
+import type { AuditRecorder } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
 import type { CustomProvidersStorage } from '@factory/store';
 import type { IntakeStorage } from '@factory/store';

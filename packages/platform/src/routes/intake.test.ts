@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineBoard } from '@factory/core';
 import { createBoardRegistry } from '../test-support.ts';
 import type { Intake } from '@factory/capabilities';
-import type { AuditEmitter } from '../storage/domains/audit/domain.ts';
+import type { AuditEmitter } from '@factory/feed';
 import { createFactoryStorageForTests } from '../test-support.ts';
 import type { FactoryStorageTestSeed } from '../test-support.ts';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.ts';
