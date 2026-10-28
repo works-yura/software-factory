@@ -5,6 +5,9 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 v3="${V3_SRC:-$root/../v3/packages/factory/src}"
+# v3 was archived under ../old; worktrees sit next to v4, so look there too.
+if [[ -z "${V3_SRC:-}" && ! -d "$v3" ]]; then v3="$root/../old/v3/packages/factory/src"; fi
+if [[ ! -d "$v3" ]]; then echo "v3 sources not found at $v3 (set V3_SRC)"; exit 1; fi
 count() { grep -cE '^\s*(it|test)(\.(each|skip|only|todo|concurrent)(\(.*\))?)?\(' "$1" || true; }
 # skip/only that v3 did not have hide a dropped or narrowed test.
 muted() { grep -cE '^\s*(it|test|describe)\.(skip|only)\(' "$1" || true; }
