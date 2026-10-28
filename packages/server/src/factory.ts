@@ -1322,6 +1322,7 @@ export class MastraFactory {
       ? createClaudeFactoryHarness({
           ...claudeCodeConfig,
           sessions: sourceControlSessions,
+          projects: factoryProjectsStorage,
           ...claudeCodeCredentials,
           cwdFor:
             claudeCodeConfig.cwdFor ??
@@ -1895,6 +1896,9 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             claudeCodeEnabled: claudeCode !== undefined,
+            // A replaced credentials hook decides on its own; only the default one falls back to the local login.
+            claudeCodeLocalLogin:
+              claudeCode !== undefined && !claudeCodeConfig?.credentials && claudeCodeConfig?.localDevelopment === true,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
@@ -1903,17 +1907,21 @@ export class MastraFactory {
             ...(claudeCode && transitionService
               ? {
                   harnessStartCoordinators: {
-                    'claude-code': new ClaudeStartCoordinator({
-                      harness: claudeCode.harness,
-                      storage: workItemsStorage,
-                      transitionService,
-                      sourceControl: request =>
-                        sourceControlSessions.getSourceControlBySessionId(request.sessionId).then(handle => handle ?? undefined),
-                      projects: factoryProjectsStorage,
-                      ...(claudeCodeConfig?.approvedPermissionMode
-                        ? { approvedPermissionMode: claudeCodeConfig.approvedPermissionMode }
-                        : {}),
-                    }),
+                    // `owns` keeps a card that started on Claude Code there after the Factory switches to Mastra.
+                    'claude-code': Object.assign(
+                      new ClaudeStartCoordinator({
+                        harness: claudeCode.harness,
+                        storage: workItemsStorage,
+                        transitionService,
+                        sourceControl: request =>
+                          sourceControlSessions.getSourceControlBySessionId(request.sessionId).then(handle => handle ?? undefined),
+                        projects: factoryProjectsStorage,
+                        ...(claudeCodeConfig?.approvedPermissionMode
+                          ? { approvedPermissionMode: claudeCodeConfig.approvedPermissionMode }
+                          : {}),
+                      }),
+                      { owns: claudeCode.route.owns },
+                    ),
                   },
                 }
               : {}),

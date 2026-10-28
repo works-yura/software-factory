@@ -48,13 +48,18 @@ const projectResponseSchema = z.object({ project: projectSchema });
 const workItemResponseSchema = z.object({ workItem: entitySchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
 
-/** The engines a Factory can run its agents on; fixed once the Factory exists. */
+/** The engines a Factory can run its agents on; switching applies to sessions started afterwards. */
 export const FACTORY_HARNESS_KINDS = ['mastra', 'claude-code'] as const;
+
+/** `claude --model` aliases a Claude Code Factory may pin; null means the CLI's own default. */
+export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
+const claudeCodeModelSchema = z.enum(CLAUDE_CODE_MODELS).nullable();
 
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
   harness: z.enum(FACTORY_HARNESS_KINDS).optional().default('mastra'),
+  claudeCodeModel: claudeCodeModelSchema.optional().default(null),
 });
 
 export const updateProjectBodySchema = z
@@ -63,6 +68,8 @@ export const updateProjectBodySchema = z
     description: nullableTrimmed(2_000).optional(),
     defaultModelId: nullableTrimmed(200).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
+    harness: z.enum(FACTORY_HARNESS_KINDS).optional(),
+    claudeCodeModel: claudeCodeModelSchema.optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),
     reviewTestChecksEnabled: z.boolean().optional(),

@@ -9,6 +9,11 @@ export interface ServerFeatures {
   mcp?: boolean;
   /** The Claude Code harness is configured, so new Factories may run on it. Absent from older servers. */
   claudeCode?: boolean;
+  /**
+   * Claude Code turns with no account fall back to the `claude` login of the machine the server
+   * runs on (local development), so nothing has to be added before the first run. Absent from older servers.
+   */
+  claudeCodeLocalLogin?: boolean;
 }
 
 export function useServerFeatures() {

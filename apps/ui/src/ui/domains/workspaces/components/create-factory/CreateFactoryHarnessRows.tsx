@@ -14,13 +14,13 @@ export interface CreateFactoryHarnessRowsProps {
   onSelect: (harness: FactoryHarness) => void;
 }
 
-/** Which runtime the Factory's agents run on. Fixed once the Factory exists. */
+/** Which runtime the Factory's agents run on. Switchable later in settings, for new sessions. */
 export function CreateFactoryHarnessRows({ selected, disabled, onSelect }: CreateFactoryHarnessRowsProps) {
   const { t } = useTranslation('workspaces');
 
   return (
     <>
-      <CreateFactoryPaletteMessage>{t('createFactory.harness.fixedNote')}</CreateFactoryPaletteMessage>
+      <CreateFactoryPaletteMessage>{t('createFactory.harness.changeLaterNote')}</CreateFactoryPaletteMessage>
       <CommandGroup heading={t('createFactory.harness.group')}>
         <CommandPaletteItem
           icon={<Boxes />}

@@ -673,13 +673,43 @@ function seedDraft(step: 'vcs' | 'model-provider') {
   );
 }
 
-/** Report the Claude Code harness as configured (or not) on this server. */
-function serveClaudeCodeFeature(claudeCode: boolean) {
+/** Report the Claude Code harness as configured (or not) on this server, and whether it runs on the local login. */
+function serveClaudeCodeFeature(claudeCode: boolean, { claudeCodeLocalLogin = false } = {}) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/features`, () =>
-      HttpResponse.json({ knowledge: false, mcp: false, claudeCode }),
+      HttpResponse.json({ knowledge: false, mcp: false, claudeCode, claudeCodeLocalLogin }),
     ),
   );
+}
+
+/** The organization's Claude Code accounts. */
+function serveClaudeAccounts(count: number) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts`, () =>
+      HttpResponse.json({
+        accounts: Array.from({ length: count }, (_, index) => ({
+          id: `acct-${index}`,
+          label: `Account ${index}`,
+          kind: 'api_key',
+          mine: false,
+          priority: index,
+          status: 'active',
+          hint: 'abcd',
+          canManage: true,
+          canReplaceSecret: true,
+          createdAt: '2026-10-01T10:00:00.000Z',
+        })),
+        canAddOrgKeys: true,
+      }),
+    ),
+  );
+}
+
+/** No Mastra provider row is on the Claude Code step. */
+function expectNoProviderRows() {
+  expect(screen.queryByRole('option', { name: /^Anthropic/ })).not.toBeInTheDocument();
+  expect(screen.queryByText('Sign in with your account')).not.toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /anthropic\/claude-sonnet-4-5/ })).not.toBeInTheDocument();
 }
 
 async function finishOnModelStep(user: ReturnType<typeof userEvent.setup>) {
@@ -691,7 +721,7 @@ describe('harness step', () => {
   it('asks which harness to run on between the name and the codebase, then sends the pick on create', async () => {
     const calls: string[] = [];
     serveClaudeCodeFeature(true);
-    const { createdBodies } = stubModelStepEndpoints(calls);
+    const { createdBodies, patchedBodies } = stubModelStepEndpoints(calls);
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
       http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
@@ -705,7 +735,9 @@ describe('harness step', () => {
 
     expect(await screen.findByLabelText('Choose how your agents run')).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Step 2 of 4' })).toBeInTheDocument();
-    expect(screen.getByText(/can’t be changed later/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/switch the harness later in Settings → Models; the switch applies to new sessions/),
+    ).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /Mastra.*Any model/ })).toBeInTheDocument();
     await user.click(screen.getByRole('option', { name: /Claude Code.*Claude subscription/ }));
 
@@ -714,10 +746,20 @@ describe('harness step', () => {
     expect(calls).toEqual([]);
 
     await user.click(await screen.findByRole('option', { name: /octo\/hello/ }));
-    await finishOnModelStep(user);
+
+    // The last step is Claude Code's own: a Claude model, no Mastra provider to connect.
+    expect(await screen.findByLabelText('Choose your Claude model')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Step 4 of 4' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Claude Code default/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Sonnet/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Haiku/ })).toBeInTheDocument();
+    expectNoProviderRows();
+    await user.click(screen.getByRole('option', { name: /Opus/ }));
 
     await waitForMutationsIdle(client);
-    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'claude-code' }]);
+    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'claude-code', claudeCodeModel: 'opus' }]);
+    // No Mastra default model is written for a Claude Code Factory.
+    expect(patchedBodies).toEqual([]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(HARNESS_KEY)).toBeNull();
   });
@@ -770,19 +812,87 @@ describe('harness step', () => {
     expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
   });
 
-  it('keeps the harness pick across a reload and sends it on create', async () => {
+  it('keeps the harness pick across a reload and creates on the Claude Code default model', async () => {
     serveClaudeCodeFeature(true);
     seedDraft('model-provider');
     sessionStorage.setItem(HARNESS_KEY, 'claude-code');
-    const { createdBodies } = stubModelStepEndpoints([]);
+    const { createdBodies, patchedBodies } = stubModelStepEndpoints([]);
     const user = userEvent.setup();
 
     const { client } = renderFlow();
 
+    await user.click(await screen.findByRole('option', { name: /Claude Code default/ }));
+
+    await waitForMutationsIdle(client);
+    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'claude-code', claudeCodeModel: null }]);
+    expect(patchedBodies).toEqual([]);
+  });
+
+  it('keeps the Mastra model step for a Mastra Factory: providers first, then the model', async () => {
+    serveClaudeCodeFeature(true);
+    seedDraft('model-provider');
+    sessionStorage.setItem(HARNESS_KEY, 'mastra');
+    const { createdBodies, patchedBodies } = stubModelStepEndpoints([]);
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Claude Code default/ })).not.toBeInTheDocument();
     await finishOnModelStep(user);
 
     await waitForMutationsIdle(client);
-    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'claude-code' }]);
+    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'mastra' }]);
+    expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
+  });
+
+  describe('Claude Code sign-in on the model step', () => {
+    it('says it runs on the local claude login in local development', async () => {
+      serveClaudeCodeFeature(true, { claudeCodeLocalLogin: true });
+      serveClaudeAccounts(0);
+      seedDraft('model-provider');
+      sessionStorage.setItem(HARNESS_KEY, 'claude-code');
+      stubModelStepEndpoints([]);
+
+      renderFlow();
+
+      expect(await screen.findByText(/Uses your `claude` login on this machine\./)).toBeInTheDocument();
+      expect(screen.getByText(/Settings → Models → Claude Code accounts/)).toBeInTheDocument();
+      expect(screen.queryByText(/needs an account/)).not.toBeInTheDocument();
+      expectNoProviderRows();
+    });
+
+    it('says an account or the organization’s Anthropic key is needed when there is none', async () => {
+      serveClaudeCodeFeature(true);
+      serveClaudeAccounts(0);
+      seedDraft('model-provider');
+      sessionStorage.setItem(HARNESS_KEY, 'claude-code');
+      stubModelStepEndpoints([]);
+
+      renderFlow();
+
+      expect(
+        await screen.findByText(/Claude Code needs an account to run: .*the organization’s Anthropic key\./),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/Settings → Models → Claude Code accounts/)).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: /Add a Claude Code account/ })).toBeInTheDocument();
+      expect(screen.queryByText(/`claude` login/)).not.toBeInTheDocument();
+    });
+
+    it('counts the organization’s accounts and adds another from the step', async () => {
+      serveClaudeCodeFeature(true);
+      serveClaudeAccounts(2);
+      seedDraft('model-provider');
+      sessionStorage.setItem(HARNESS_KEY, 'claude-code');
+      stubModelStepEndpoints([]);
+      const user = userEvent.setup();
+
+      renderFlow();
+
+      expect(await screen.findByText(/Runs on your organization’s 2 Claude Code accounts\./)).toBeInTheDocument();
+      await user.click(screen.getByRole('option', { name: /Add a Claude Code account/ }));
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    });
   });
 
   it('steps back from the codebase to the harness step with the pick still marked', async () => {

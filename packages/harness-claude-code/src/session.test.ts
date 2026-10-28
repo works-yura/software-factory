@@ -132,6 +132,38 @@ describe('ClaudeCodeSession', () => {
     expect(flagValue(args, '--allowedTools')).toBe('Read,Edit,Bash(git status:*),mcp__factory_gate__submit_plan');
   });
 
+  it('asks modelFor before each turn and lets it override the static model', async () => {
+    let chosen: string | undefined = 'opus';
+    const modelFor = vi.fn(async (session: ClaudeCodeSession) => (session.id === 'card-1' ? chosen : 'haiku'));
+    const { fake, session, signal } = await setup(
+      [{ lines: fixture('turn-complete.jsonl') }, { lines: fixture('turn-complete.jsonl') }],
+      { model: 'sonnet', modelFor },
+    );
+    let end = nextEnd(session);
+    await signal('one', 'first');
+    await end;
+    // Changed between turns (a Factory's model switched in settings): the next turn picks it up.
+    chosen = undefined;
+    end = nextEnd(session);
+    await signal('two', 'second');
+    await end;
+
+    expect(flagValue(fake.calls[0]!.args, '--model')).toBe('opus');
+    // `undefined` falls back to the static model.
+    expect(flagValue(fake.calls[1]!.args, '--model')).toBe('sonnet');
+    expect(modelFor).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes no --model when neither modelFor nor model name one', async () => {
+    const { fake, session, signal } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
+      modelFor: () => undefined,
+    });
+    const end = nextEnd(session);
+    await signal('one', 'first');
+    await end;
+    expect(fake.calls[0]!.args).not.toContain('--model');
+  });
+
   it('queues a signal sent mid-turn and runs it as the next turn of the same run', async () => {
     const hold = deferred();
     const { fake, session, events, signal } = await setup([

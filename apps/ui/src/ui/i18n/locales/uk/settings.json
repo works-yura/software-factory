@@ -547,7 +547,8 @@
       "label": "Агенти працюють на",
       "mastra": "Mastra",
       "claudeCode": "Claude Code",
-      "fixedNote": "Вибирається під час створення Factory; змінити його не можна."
+      "changeNote": "Змінюється в розділі Моделі; зміна діє для нових сесій.",
+      "openModels": "Змінити в Моделях"
     },
     "dangerZone": "Небезпечна зона",
     "deleteNamed": "Видалити {{name}}",
@@ -599,6 +600,29 @@
       "search": "Пошук моделей…",
       "empty": "Немає відповідних моделей.",
       "builtInDefault": "{{model}} · Вбудована типова"
+    },
+    "harness": {
+      "title": "Харнес",
+      "description": "На чому працюють агенти цієї Factory.",
+      "label": "Агенти працюють на",
+      "note": "Діє для нових сесій; картки, що вже виконуються, завершаться на своєму харнесі.",
+      "mastra": "Mastra",
+      "claudeCode": "Claude Code",
+      "claudeUnavailable": "Claude Code не налаштовано на цьому сервері.",
+      "changeFailed": "Не вдалося змінити харнес"
+    },
+    "claudeCode": {
+      "title": "Claude Code",
+      "description": "Як працюють сесії Claude Code цієї Factory.",
+      "modelLabel": "Модель Claude",
+      "modelDescription": "Передається в `claude --model`, починаючи з наступного ходу кожної сесії.",
+      "models": {
+        "default": "Типова модель Claude Code",
+        "opus": "Opus",
+        "sonnet": "Sonnet",
+        "haiku": "Haiku"
+      },
+      "changeFailed": "Не вдалося змінити модель Claude"
     }
   },
   "memory": {

@@ -11,6 +11,8 @@ import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft';
 import { factoryHomePath } from '../../services/factoryPaths';
 import { connectGithub, manageGithubConnection } from '../../services/github';
+import type { FactoryHarness } from '../../services/github';
+import { CreateFactoryClaudeCodeStep } from './CreateFactoryClaudeCodeStep';
 import { CreateFactoryHarnessRows } from './CreateFactoryHarnessRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
 import { CreateFactoryNameRows } from './CreateFactoryNameRows';
@@ -26,7 +28,7 @@ interface StepChrome {
   searchable?: boolean;
 }
 
-function stepChrome(step: CreateFactoryFlowStep): StepChrome {
+function stepChrome(step: CreateFactoryFlowStep, harness: FactoryHarness | undefined): StepChrome {
   switch (step) {
     case 'name':
       return {
@@ -43,6 +45,12 @@ function stepChrome(step: CreateFactoryFlowStep): StepChrome {
     case 'vcs':
       return { title: tk('createFactory.steps.vcs.title'), placeholder: tk('createFactory.steps.vcs.placeholder') };
     case 'model-provider':
+      if (harness === 'claude-code') {
+        return {
+          title: tk('createFactory.steps.claudeCode.title'),
+          placeholder: tk('createFactory.steps.claudeCode.placeholder'),
+        };
+      }
       return {
         title: tk('createFactory.steps.modelProvider.title'),
         placeholder: tk('createFactory.steps.modelProvider.placeholder'),
@@ -56,7 +64,8 @@ function errorMessage(error: unknown): string {
 
 /**
  * Name → Harness → VCS → Model provider (no harness step when the server only
- * runs Mastra). Every pick stays in the
+ * runs Mastra; for Claude Code the last step picks a Claude model instead of a
+ * provider). Every pick stays in the
  * draft until the model step commits it, so the Factory only exists once the
  * user finished the wizard.
  */
@@ -107,7 +116,7 @@ export function CreateFactoryWizard() {
   return (
     <div className="flex min-h-0 flex-col gap-2 pt-6">
       <CreateFactoryPalette
-        {...stepChrome(step)}
+        {...stepChrome(step, draft.harness)}
         step={step}
         steps={steps}
         value={value}
@@ -152,10 +161,26 @@ export function CreateFactoryWizard() {
             onSelectRepository={repository => void flow.chooseRepository(repository)}
           />
         )}
-        {step === 'model-provider' && (
+        {step === 'model-provider' && draft.harness === 'claude-code' && (
+          <CreateFactoryClaudeCodeStep
+            query={value}
+            saving={
+              createFactory.isPending && createFactory.variables && 'claudeCodeModel' in createFactory.variables
+                ? { model: createFactory.variables.claudeCodeModel }
+                : undefined
+            }
+            error={createFactory.error ? errorMessage(createFactory.error) : undefined}
+            onPick={claudeCodeModel => createFactory.mutate({ claudeCodeModel })}
+          />
+        )}
+        {step === 'model-provider' && draft.harness !== 'claude-code' && (
           <CreateFactoryModelStep
             query={value}
-            savingModelId={createFactory.isPending ? createFactory.variables?.modelId : undefined}
+            savingModelId={
+              createFactory.isPending && createFactory.variables && 'modelId' in createFactory.variables
+                ? createFactory.variables.modelId
+                : undefined
+            }
             error={createFactory.error ? errorMessage(createFactory.error) : undefined}
             onPick={(_providerId, modelId) => createFactory.mutate({ modelId })}
           />

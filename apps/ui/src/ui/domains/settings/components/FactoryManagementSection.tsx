@@ -1,14 +1,15 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
+import { settingsSectionPath } from '../settingsSections';
 import { SettingsSubsection } from './SettingsSubsection';
 
 export function FactoryManagementSection() {
@@ -30,11 +31,19 @@ export function FactoryManagementSection() {
         description={t('factory.harness.description')}
       >
         <SettingsContainer>
-          {/* Read-only: the harness is fixed when the Factory is created. */}
-          <SettingsRow label={t('factory.harness.label')} description={t('factory.harness.fixedNote')}>
-            <Txt as="span" variant="body" data-testid="factory-harness">
-              {factory.harness === 'claude-code' ? t('factory.harness.claudeCode') : t('factory.harness.mastra')}
-            </Txt>
+          {/* The switch itself lives in Models, next to the settings of each harness; this only points there. */}
+          <SettingsRow label={t('factory.harness.label')} description={t('factory.harness.changeNote')}>
+            <div className="flex items-center gap-3">
+              <Txt as="span" variant="body" data-testid="factory-harness">
+                {factory.harness === 'claude-code' ? t('factory.harness.claudeCode') : t('factory.harness.mastra')}
+              </Txt>
+              <Link
+                to={settingsSectionPath(factory.id, 'models')}
+                className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+              >
+                {t('factory.harness.openModels')}
+              </Link>
+            </div>
           </SettingsRow>
         </SettingsContainer>
       </SettingsSubsection>

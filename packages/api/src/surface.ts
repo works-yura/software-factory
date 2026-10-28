@@ -124,6 +124,8 @@ export interface FactoryApiRoutesDeps {
   mcpEnabled: boolean;
   /** The Claude Code harness is configured, so new factories may pick `harness: 'claude-code'`. */
   claudeCodeEnabled?: boolean;
+  /** Claude Code turns fall back to the server machine's own `claude` login (local development). */
+  claudeCodeLocalLogin?: boolean;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -720,7 +722,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
-      features: { knowledge: deps.knowledgeEnabled, mcp: deps.mcpEnabled, claudeCode: deps.claudeCodeEnabled ?? false },
+      features: {
+        knowledge: deps.knowledgeEnabled,
+        mcp: deps.mcpEnabled,
+        claudeCode: deps.claudeCodeEnabled ?? false,
+        claudeCodeLocalLogin: deps.claudeCodeLocalLogin ?? false,
+      },
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,

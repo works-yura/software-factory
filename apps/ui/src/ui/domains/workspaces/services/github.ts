@@ -243,12 +243,26 @@ export function isFactoryHarness(value: unknown): value is FactoryHarness {
   return FACTORY_HARNESSES.some(harness => harness === value);
 }
 
+/** `claude --model` aliases a Claude Code Factory may pin; mirrors `CLAUDE_CODE_MODELS` in @factory/contracts. */
+export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
+
+export type ClaudeCodeModel = (typeof CLAUDE_CODE_MODELS)[number];
+
+export function isClaudeCodeModel(value: unknown): value is ClaudeCodeModel {
+  return CLAUDE_CODE_MODELS.some(model => model === value);
+}
+
 /** A Factory project row from `/web/factory/projects`. */
 export interface FactoryProjectPayload {
   id: string;
   name: string;
-  /** The runtime its agents run on, fixed at creation. Absent from servers that predate it (= mastra). */
+  /**
+   * The runtime new agent sessions start on; switching it leaves running cards on theirs.
+   * Absent from servers that predate it (= mastra).
+   */
   harness?: FactoryHarness;
+  /** `claude --model` for Claude Code sessions; null or absent = the CLI's own default. */
+  claudeCodeModel?: ClaudeCodeModel | null;
   /** Org-wide default model for factory runs; null when unset. */
   defaultModelId?: string | null;
   /** Thinking level every session and run uses until it picks its own. */
@@ -356,6 +370,7 @@ export async function createFactoryProject(
   name: string,
   description?: string,
   harness?: FactoryHarness,
+  claudeCodeModel?: ClaudeCodeModel | null,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
     method: 'POST',
@@ -365,6 +380,7 @@ export async function createFactoryProject(
       name,
       ...(description ? { description } : {}),
       ...(harness ? { harness } : {}),
+      ...(claudeCodeModel !== undefined ? { claudeCodeModel } : {}),
     }),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.createFactory'));
@@ -397,6 +413,25 @@ export async function updateFactoryDefaultModel(
     res,
     tk('errors.updateDefaultModel'),
   );
+  return project;
+}
+
+/**
+ * Switch the harness new sessions start on, or the Claude Code model. Cards
+ * already running finish on the harness they started on.
+ */
+export async function updateFactoryHarness(
+  baseUrl: string,
+  factoryProjectId: string,
+  patch: { harness?: FactoryHarness; claudeCodeModel?: ClaudeCodeModel | null },
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.updateHarness'));
   return project;
 }
 

@@ -103,6 +103,12 @@ export interface ClaudeCodeSessionConfig
    */
   configDir?: (session: ClaudeCodeSession) => string | undefined;
   /**
+   * `--model` for this session, asked before each turn; wins over the static {@link model}.
+   * `undefined` falls back to {@link model}, and with neither the CLI picks its own default.
+   * A function so a host can read a per-session setting (a Factory's chosen model) when the turn starts.
+   */
+  modelFor?: (session: ClaudeCodeSession) => string | undefined | Promise<string | undefined>;
+  /**
    * MCP servers for every turn (e.g. the Factory MCP endpoint); the gate server is added to them.
    * A function is asked before each turn, so per-session servers can carry credentials minted for that turn.
    */
@@ -636,7 +642,12 @@ export class ClaudeCodeSession implements AgentSession {
   }
 
   /** The CLI options for one turn of this thread. */
-  #argsInput(thread: ClaudeThreadState, planning: boolean, mcpConfigPaths: string[]): ClaudeArgsInput {
+  #argsInput(
+    thread: ClaudeThreadState,
+    planning: boolean,
+    mcpConfigPaths: string[],
+    model: string | undefined,
+  ): ClaudeArgsInput {
     const config = this.#config;
     const mode = thread.mode ?? config.mode;
     // Planning pins the default mode, so a project setting cannot put the turn into the CLI's plan mode.
@@ -649,7 +660,7 @@ export class ClaudeCodeSession implements AgentSession {
     ];
     return {
       ...(thread.claudeSessionId ? { resumeSessionId: thread.claudeSessionId } : {}),
-      ...(config.model ? { model: config.model } : {}),
+      ...(model ? { model } : {}),
       ...(config.effort ? { effort: config.effort } : {}),
       ...(permissionMode ? { permissionMode } : {}),
       ...(settingSources ? { settingSources } : {}),
@@ -695,6 +706,7 @@ export class ClaudeCodeSession implements AgentSession {
     const cwd = await this.#cwd();
     const mcpConfig =
       typeof this.#config.mcpConfig === 'function' ? await this.#config.mcpConfig(this) : this.#config.mcpConfig;
+    const model = (await this.#config.modelFor?.(this)) || this.#config.model;
     if (run.abortRequested) return { kind: 'aborted' };
     const configDir = this.#config.configDir?.(this);
     const envFor = (turn: ClaudeTurnCredentials) =>
@@ -721,6 +733,7 @@ export class ClaudeCodeSession implements AgentSession {
         envFor,
         cwd,
         mcpConfigPaths: mcpFile.paths,
+        model,
       });
     } finally {
       await mcpFile.cleanup();
@@ -740,9 +753,10 @@ export class ClaudeCodeSession implements AgentSession {
       envFor: (credentials: ClaudeTurnCredentials) => Record<string, string>;
       cwd: string;
       mcpConfigPaths: string[];
+      model: string | undefined;
     },
   ): Promise<TurnOutcome | { kind: 'aborted' }> {
-    const { thread, planning, prompt, inputs, tried, envFor, cwd, mcpConfigPaths } = turn;
+    const { thread, planning, prompt, inputs, tried, envFor, cwd, mcpConfigPaths, model } = turn;
     let { credentials, env } = turn;
     let turnPrompt = prompt;
     let resumedStale = false;
@@ -756,7 +770,7 @@ export class ClaudeCodeSession implements AgentSession {
         this.#record.accountId = credentials.accountId;
         void this.#save().catch(() => {});
       }
-      const args = buildClaudeArgs(this.#argsInput(thread, planning, mcpConfigPaths));
+      const args = buildClaudeArgs(this.#argsInput(thread, planning, mcpConfigPaths, model));
       const translator = new TurnTranslator();
       let processRef: ClaudeRun | undefined;
       let stopForGate = false;

@@ -73,6 +73,41 @@ describe('ProjectRoutes', () => {
     expect((await app.request(`/web/factory/projects/${created.project.id}`)).status).toBe(404);
   });
 
+  it('creates a Claude Code factory with its model and switches harness and model later', async () => {
+    const seed = await createFactoryStorageForTests();
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const send = (method: string, path: string, body: unknown) =>
+      app.request(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+    const created = await send('POST', '/web/factory/projects', {
+      name: 'Claude',
+      harness: 'claude-code',
+      claudeCodeModel: 'opus',
+    });
+    expect(created.status).toBe(201);
+    const { project } = (await created.json()) as { project: { id: string } };
+    expect(project).toMatchObject({ harness: 'claude-code', claudeCodeModel: 'opus' });
+
+    expect((await send('POST', '/web/factory/projects', { name: 'Bad', claudeCodeModel: 'claude-opus-4' })).status).toBe(
+      400,
+    );
+
+    const path = `/web/factory/projects/${project.id}`;
+    const switched = await send('PATCH', path, { harness: 'mastra' });
+    expect(switched.status).toBe(200);
+    // The Claude model stays for a later switch back.
+    expect(await switched.json()).toMatchObject({ project: { harness: 'mastra', claudeCodeModel: 'opus' } });
+    const model = await send('PATCH', path, { claudeCodeModel: null });
+    expect(await model.json()).toMatchObject({ project: { harness: 'mastra', claudeCodeModel: null } });
+    expect((await send('PATCH', path, { harness: 'codex' })).status).toBe(400);
+    expect((await send('PATCH', path, { claudeCodeModel: 'gpt-5' })).status).toBe(400);
+  });
+
   it('treats the removed slackWorkItemsEnabled setting from an old client as an unknown field', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });

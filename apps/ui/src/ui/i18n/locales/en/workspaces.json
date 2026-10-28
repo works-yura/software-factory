@@ -54,7 +54,6 @@
     "typeName": "Type a name to create your Factory",
     "harness": {
       "group": "Harness",
-      "fixedNote": "This is fixed once the Factory is created — it can’t be changed later.",
       "selected": "Selected",
       "mastra": {
         "title": "Mastra",
@@ -63,7 +62,8 @@
       "claudeCode": {
         "title": "Claude Code",
         "description": "The official Claude Code CLI. Runs on your Claude subscription or an Anthropic key; add accounts in Settings → Models."
-      }
+      },
+      "changeLaterNote": "You can switch the harness later in Settings → Models; the switch applies to new sessions."
     },
     "steps": {
       "name": {
@@ -81,6 +81,10 @@
       "modelProvider": {
         "title": "Choose your Factory model",
         "placeholder": "Search models and providers…"
+      },
+      "claudeCode": {
+        "title": "Choose your Claude model",
+        "placeholder": "Search Claude models…"
       }
     },
     "repos": {
@@ -114,6 +118,39 @@
       "signInWithAccount": "Sign in with your account",
       "keySaved": "API key saved",
       "connectWithKey": "Connect with an API key"
+    },
+    "claudeCode": {
+      "signIn": {
+        "heading": "Sign-in",
+        "loading": "Checking Claude Code sign-in",
+        "localLogin": "Uses your `claude` login on this machine.",
+        "accounts_one": "Runs on your organization’s Claude Code account.",
+        "accounts_other": "Runs on your organization’s {{count}} Claude Code accounts.",
+        "none": "Claude Code needs an account to run: a Claude subscription or API key, or the organization’s Anthropic key.",
+        "needSignIn": "Sign in to an organization to use its Claude Code accounts.",
+        "addHint": "You can add accounts any time in Settings → Models → Claude Code accounts.",
+        "add": "Add a Claude Code account",
+        "addDescription": "A Claude subscription token or an Anthropic API key"
+      },
+      "models": {
+        "heading": "Claude model",
+        "default": {
+          "title": "Claude Code default",
+          "description": "Whichever model the claude CLI picks"
+        },
+        "opus": {
+          "title": "Opus",
+          "description": "Most capable, for complex work"
+        },
+        "sonnet": {
+          "title": "Sonnet",
+          "description": "Balances speed and capability"
+        },
+        "haiku": {
+          "title": "Haiku",
+          "description": "Fastest, for light work"
+        }
+      }
     }
   },
   "vcs": {
@@ -301,7 +338,8 @@
     "linkRepository": "Failed to link {{host}} repository",
     "unlinkRepository": "Failed to unlink repository ({{status}})",
     "deleteFactory": "Failed to delete Factory ({{status}})",
-    "loadRepositorySettings": "Failed to load repository settings ({{status}})"
+    "loadRepositorySettings": "Failed to load repository settings ({{status}})",
+    "updateHarness": "Failed to update the Factory harness"
   },
   "sessions": {
     "newSession": "New session",

@@ -208,6 +208,38 @@ describe('createClaudeFactoryHarness', () => {
     });
   });
 
+  describe('per-session model', () => {
+    it('reads the session Factory’s claudeCodeModel on every turn, in the session’s own org', async () => {
+      const models: Record<string, string | null> = { 'factory-a': 'opus', 'factory-b': null };
+      const projects = {
+        get: vi.fn(async ({ id }: { orgId: string; id: string }) =>
+          id in models ? ({ id, claudeCodeModel: models[id] } as never) : null,
+        ),
+      };
+      const { factory, config } = setup({ projects });
+      const a = await factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
+      const b = await factory.harness.createSession({ sessionId: 'session-b', threadId: 't' });
+
+      await expect(config.modelFor!(a)).resolves.toBe('opus');
+      expect(projects.get).toHaveBeenLastCalledWith({ orgId: 'org-a', id: 'factory-a' });
+      // No model chosen: the CLI's own default.
+      await expect(config.modelFor!(b)).resolves.toBeUndefined();
+      // Changed in settings: the next turn picks it up.
+      models['factory-a'] = 'haiku';
+      await expect(config.modelFor!(a)).resolves.toBe('haiku');
+    });
+
+    it('fails a turn whose session has no Factory session row', async () => {
+      const { factory, config } = setup({ projects: { get: vi.fn() } });
+      const orphan = await factory.harness.createSession({ sessionId: 'session-orphan', threadId: 't' });
+      await expect(config.modelFor!(orphan)).rejects.toThrow(/has no Factory session row/);
+    });
+
+    it('gives the CLI no model hook without the Factories', () => {
+      expect(setup().config.modelFor).toBeUndefined();
+    });
+  });
+
   describe('credentials', () => {
     it('asks for the session tenant’s credentials and passes the request through', async () => {
       const { factory, config, credentials } = setup();

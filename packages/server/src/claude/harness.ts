@@ -17,6 +17,7 @@ import { BUNDLED_FACTORY_SKILLS_PATH } from '@factory/harness-mastra';
 import { FACTORY_SESSION_TOKEN_HEADER, FACTORY_TOOL_ANNOTATIONS } from '@factory/mcp';
 import type { FactorySessionTokenSigner } from '@factory/mcp';
 import type { SourceControlSessionLookup } from '@factory/session';
+import type { FactoryProjectsStorage } from '@factory/store';
 
 import type { ClaudeCodeCredentialFailureHook, ClaudeCodeCredentialsHook } from './credentials.ts';
 
@@ -91,6 +92,11 @@ export interface ClaudeFactoryHarnessOptions {
   storeDir?: string;
   store?: ClaudeSessionStore;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
+  /**
+   * The Factories, read before each turn for the session's `claudeCodeModel`
+   * (`claude --model`). Unset, or a Factory with none, leaves the CLI's own default.
+   */
+  projects?: Pick<FactoryProjectsStorage, 'get'>;
   credentials: ClaudeCodeCredentialsHook;
   /** Told when a turn's account ran out of usage or was refused, so the pool sets it aside. */
   onCredentialFailure?: ClaudeCodeCredentialFailureHook;
@@ -173,6 +179,16 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
                 },
               },
             };
+          },
+        }
+      : {}),
+    ...(options.projects
+      ? {
+          // Read per turn, so a model changed in settings applies from the session's next turn.
+          modelFor: async (session: ClaudeCodeSession) => {
+            const row = await sourceSession(session.id);
+            const project = await options.projects!.get({ orgId: row.orgId, id: row.factoryProjectId });
+            return project?.claudeCodeModel ?? undefined;
           },
         }
       : {}),

@@ -537,7 +537,8 @@
       "label": "Agents run on",
       "mastra": "Mastra",
       "claudeCode": "Claude Code",
-      "fixedNote": "Chosen when the Factory was created; it can’t be changed."
+      "changeNote": "Switch it in Models; the switch applies to new sessions.",
+      "openModels": "Change in Models"
     },
     "dangerZone": "Danger zone",
     "deleteNamed": "Delete {{name}}",
@@ -585,6 +586,29 @@
       "search": "Search models…",
       "empty": "No matching model.",
       "builtInDefault": "{{model}} · Built-in default"
+    },
+    "harness": {
+      "title": "Harness",
+      "description": "What this Factory’s agents run on.",
+      "label": "Agents run on",
+      "note": "Applies to new sessions; cards already running finish on their harness.",
+      "mastra": "Mastra",
+      "claudeCode": "Claude Code",
+      "claudeUnavailable": "Claude Code isn’t configured on this server.",
+      "changeFailed": "Couldn’t switch the harness"
+    },
+    "claudeCode": {
+      "title": "Claude Code",
+      "description": "How this Factory’s Claude Code sessions run.",
+      "modelLabel": "Claude model",
+      "modelDescription": "Passed to `claude --model` from each session’s next turn.",
+      "models": {
+        "default": "Claude Code default",
+        "opus": "Opus",
+        "sonnet": "Sonnet",
+        "haiku": "Haiku"
+      },
+      "changeFailed": "Couldn’t change the Claude model"
     }
   },
   "memory": {

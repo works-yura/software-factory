@@ -54,7 +54,6 @@
     "typeName": "Введіть назву, щоб створити Factory",
     "harness": {
       "group": "Харнес",
-      "fixedNote": "Цей вибір фіксується під час створення Factory — змінити його згодом не вийде.",
       "selected": "Вибрано",
       "mastra": {
         "title": "Mastra",
@@ -63,7 +62,8 @@
       "claudeCode": {
         "title": "Claude Code",
         "description": "Офіційний CLI Claude Code. Працює на вашій підписці Claude або з ключем Anthropic; акаунти додаються в Налаштування → Моделі."
-      }
+      },
+      "changeLaterNote": "Харнес можна змінити згодом у Налаштування → Моделі; зміна діє для нових сесій."
     },
     "steps": {
       "name": {
@@ -81,6 +81,10 @@
       "modelProvider": {
         "title": "Виберіть модель для Factory",
         "placeholder": "Пошук моделей і провайдерів…"
+      },
+      "claudeCode": {
+        "title": "Виберіть модель Claude",
+        "placeholder": "Пошук моделей Claude…"
       }
     },
     "repos": {
@@ -114,6 +118,41 @@
       "signInWithAccount": "Увійти зі своїм акаунтом",
       "keySaved": "API-ключ збережено",
       "connectWithKey": "Підключити за API-ключем"
+    },
+    "claudeCode": {
+      "signIn": {
+        "heading": "Вхід",
+        "loading": "Перевірка входу Claude Code",
+        "localLogin": "Використовує ваш вхід `claude` на цьому комп’ютері.",
+        "accounts_one": "Працює на {{count}} акаунті Claude Code вашої організації.",
+        "accounts_few": "Працює на {{count}} акаунтах Claude Code вашої організації.",
+        "accounts_many": "Працює на {{count}} акаунтах Claude Code вашої організації.",
+        "accounts_other": "Працює на {{count}} акаунтах Claude Code вашої організації.",
+        "none": "Для роботи Claude Code потрібен акаунт: підписка Claude чи API-ключ або ключ Anthropic організації.",
+        "needSignIn": "Увійдіть в організацію, щоб користуватися її акаунтами Claude Code.",
+        "addHint": "Акаунти можна будь-коли додати в Налаштування → Моделі → Акаунти Claude Code.",
+        "add": "Додати акаунт Claude Code",
+        "addDescription": "Токен підписки Claude або API-ключ Anthropic"
+      },
+      "models": {
+        "heading": "Модель Claude",
+        "default": {
+          "title": "Типова модель Claude Code",
+          "description": "Модель, яку вибирає CLI claude"
+        },
+        "opus": {
+          "title": "Opus",
+          "description": "Найпотужніша, для складної роботи"
+        },
+        "sonnet": {
+          "title": "Sonnet",
+          "description": "Баланс швидкості та можливостей"
+        },
+        "haiku": {
+          "title": "Haiku",
+          "description": "Найшвидша, для легких задач"
+        }
+      }
     }
   },
   "vcs": {
@@ -301,7 +340,8 @@
     "linkRepository": "Не вдалося прив'язати репозиторій {{host}}",
     "unlinkRepository": "Не вдалося відв'язати репозиторій ({{status}})",
     "deleteFactory": "Не вдалося видалити Factory ({{status}})",
-    "loadRepositorySettings": "Не вдалося завантажити налаштування репозиторію ({{status}})"
+    "loadRepositorySettings": "Не вдалося завантажити налаштування репозиторію ({{status}})",
+    "updateHarness": "Не вдалося змінити харнес Factory"
   },
   "sessions": {
     "newSession": "Нова сесія",

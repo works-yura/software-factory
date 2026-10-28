@@ -28,15 +28,20 @@ function renderSection() {
 }
 
 describe('Factory settings: harness', () => {
-  it('shows a Claude Code Factory’s harness, read-only and fixed at creation', async () => {
+  it('shows a Claude Code Factory’s harness and points to Models to switch it', async () => {
     serveFactory({ id: 'fp-1', name: 'Mastra', harness: 'claude-code' });
 
     renderSection();
 
     expect(await screen.findByText('Agents run on')).toBeInTheDocument();
     expect(screen.getByText('Claude Code')).toBeInTheDocument();
-    expect(screen.getByText('Chosen when the Factory was created; it can’t be changed.')).toBeInTheDocument();
-    // Nothing to change it with.
+    expect(screen.getByText('Switch it in Models; the switch applies to new sessions.')).toBeInTheDocument();
+    // The switch lives in Models only: here there is a link to it, not a second control.
+    expect(screen.getByRole('link', { name: 'Change in Models' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/models',
+    );
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['Delete']);
   });

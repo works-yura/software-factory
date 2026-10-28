@@ -82,11 +82,28 @@ describe('Factory route contracts', () => {
       name: 'Factory',
       description: null,
       harness: 'mastra',
+      claudeCodeModel: null,
     });
     expect(createProjectBodySchema.parse({ name: 'Claude', harness: 'claude-code' })).toMatchObject({
       harness: 'claude-code',
     });
+    expect(
+      createProjectBodySchema.parse({ name: 'Claude', harness: 'claude-code', claudeCodeModel: 'opus' }),
+    ).toMatchObject({ harness: 'claude-code', claudeCodeModel: 'opus' });
     expect(createProjectBodySchema.safeParse({ name: 'Other', harness: 'codex' }).success).toBe(false);
+    // Only the CLI's aliases: no full model ids, no casing variants, no empty string.
+    for (const claudeCodeModel of ['claude-opus-4-1', 'Opus', '', 'gpt-5', 1]) {
+      expect(createProjectBodySchema.safeParse({ name: 'C', claudeCodeModel }).success, String(claudeCodeModel)).toBe(
+        false,
+      );
+      expect(updateProjectBodySchema.safeParse({ claudeCodeModel }).success, String(claudeCodeModel)).toBe(false);
+    }
+    expect(updateProjectBodySchema.parse({ harness: 'claude-code', claudeCodeModel: 'sonnet' })).toEqual({
+      harness: 'claude-code',
+      claudeCodeModel: 'sonnet',
+    });
+    expect(updateProjectBodySchema.parse({ claudeCodeModel: null })).toEqual({ claudeCodeModel: null });
+    expect(updateProjectBodySchema.safeParse({ harness: 'codex' }).success).toBe(false);
     expect(updateProjectBodySchema.safeParse({}).success).toBe(false);
     expect(updateProjectBodySchema.parse({ defaultModelId: '  ', autoRunEnabled: true })).toEqual({
       defaultModelId: null,

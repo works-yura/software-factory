@@ -36,6 +36,39 @@ describe('FactoryProjectsStorage', () => {
     expect(await seed.projects.getById({ id: project.id })).not.toHaveProperty('modelScope');
   });
 
+  it('stores the harness and Claude Code model, and switches them later', async () => {
+    const seed = await createFactoryStorageForTests();
+    const mastra = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'M' } });
+    expect(mastra).toMatchObject({ harness: 'mastra', claudeCodeModel: null });
+
+    const claude = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'C', harness: 'claude-code', claudeCodeModel: 'opus' },
+    });
+    expect(claude).toMatchObject({ harness: 'claude-code', claudeCodeModel: 'opus' });
+
+    const switched = await seed.projects.update({
+      orgId: 'org-1',
+      id: mastra.id,
+      input: { harness: 'claude-code', claudeCodeModel: 'haiku' },
+    });
+    expect(switched).toMatchObject({ harness: 'claude-code', claudeCodeModel: 'haiku' });
+
+    // Other updates leave both alone; null goes back to the CLI default.
+    await seed.projects.update({ orgId: 'org-1', id: mastra.id, input: { name: 'Renamed' } });
+    expect(await seed.projects.get({ orgId: 'org-1', id: mastra.id })).toMatchObject({
+      harness: 'claude-code',
+      claudeCodeModel: 'haiku',
+    });
+    const back = await seed.projects.update({
+      orgId: 'org-1',
+      id: mastra.id,
+      input: { harness: 'mastra', claudeCodeModel: null },
+    });
+    expect(back).toMatchObject({ harness: 'mastra', claudeCodeModel: null });
+  });
+
   it('lists, updates, and deletes projects within their organization', async () => {
     const seed = await createFactoryStorageForTests();
     const first = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'First' } });

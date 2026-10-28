@@ -291,8 +291,12 @@ async function persistMemorySettings(context: MemorySettingsContext, patch: Memo
 /** Dependencies injected into {@link ConfigRoutes}. */
 export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
-  /** `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server). */
-  features?: { knowledge: boolean; mcp?: boolean; claudeCode?: boolean };
+  /**
+   * `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server).
+   * `claudeCodeLocalLogin`: Claude Code turns with no pooled account run on the `claude` login of the
+   * machine the server runs on (local development), so no account or key is needed to start.
+   */
+  features?: { knowledge: boolean; mcp?: boolean; claudeCode?: boolean; claudeCodeLocalLogin?: boolean };
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -394,6 +398,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             knowledge: options.features?.knowledge ?? false,
             mcp: options.features?.mcp ?? false,
             claudeCode: options.features?.claudeCode ?? false,
+            claudeCodeLocalLogin:
+              (options.features?.claudeCode ?? false) && (options.features?.claudeCodeLocalLogin ?? false),
           }),
       }),
 

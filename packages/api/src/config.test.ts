@@ -41,10 +41,31 @@ function makeAgentController(models: { provider: string; hasApiKey: boolean; api
 
 describe('GET /web/config/features', () => {
   it.each([
-    { features: undefined, expected: { knowledge: false, mcp: false, claudeCode: false } },
-    { features: { knowledge: true }, expected: { knowledge: true, mcp: false, claudeCode: false } },
-    { features: { knowledge: false, mcp: true }, expected: { knowledge: false, mcp: true, claudeCode: false } },
-    { features: { knowledge: false, claudeCode: true }, expected: { knowledge: false, mcp: false, claudeCode: true } },
+    {
+      features: undefined,
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeCodeLocalLogin: false },
+    },
+    {
+      features: { knowledge: true },
+      expected: { knowledge: true, mcp: false, claudeCode: false, claudeCodeLocalLogin: false },
+    },
+    {
+      features: { knowledge: false, mcp: true },
+      expected: { knowledge: false, mcp: true, claudeCode: false, claudeCodeLocalLogin: false },
+    },
+    {
+      features: { knowledge: false, claudeCode: true },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeCodeLocalLogin: false },
+    },
+    {
+      features: { knowledge: false, claudeCode: true, claudeCodeLocalLogin: true },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeCodeLocalLogin: true },
+    },
+    // No Claude Code, no local login to speak of.
+    {
+      features: { knowledge: false, claudeCodeLocalLogin: true },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeCodeLocalLogin: false },
+    },
   ])('reports the server-side feature gates as $expected', async ({ features, expected }) => {
     const app = new Hono();
     mountApiRoutes(

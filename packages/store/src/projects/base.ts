@@ -15,6 +15,17 @@ export function isFactoryHarnessKind(value: unknown): value is FactoryHarnessKin
   return typeof value === 'string' && (FACTORY_HARNESSES as readonly string[]).includes(value);
 }
 
+/**
+ * Models a Claude Code Factory may pin, as the `claude` CLI's own aliases
+ * (`claude --model opus`), so they follow the CLI's current Opus/Sonnet/Haiku.
+ */
+export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
+export type ClaudeCodeModel = (typeof CLAUDE_CODE_MODELS)[number];
+
+export function isClaudeCodeModel(value: unknown): value is ClaudeCodeModel {
+  return typeof value === 'string' && (CLAUDE_CODE_MODELS as readonly string[]).includes(value);
+}
+
 export interface FactoryProject {
   id: string;
   orgId: string;
@@ -29,11 +40,14 @@ export interface FactoryProject {
   /** Thinking level for this Factory's sessions and runs that have not picked their own. */
   defaultThinkingLevel: ThinkingLevelSetting;
   /**
-   * The engine every agent session of this Factory runs on. Chosen at creation
-   * and fixed: a session's memory, thread and events belong to its harness, so
-   * a card cannot move between harnesses mid-flight.
+   * The engine new agent sessions of this Factory start on. It can be switched
+   * later, but only for new sessions: a session's memory, thread and events
+   * belong to its harness, so a card already started keeps the harness it
+   * started on (the start coordinator routes it there).
    */
   harness: FactoryHarnessKind;
+  /** `claude --model` for this Factory's Claude Code sessions; null = the CLI's own default. */
+  claudeCodeModel: ClaudeCodeModel | null;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
   autoRunEnabled: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
@@ -81,6 +95,7 @@ export interface CreateFactoryProjectInput {
   defaultModelId?: string | null;
   /** `mastra` when omitted. */
   harness?: FactoryHarnessKind;
+  claudeCodeModel?: ClaudeCodeModel | null;
 }
 
 export interface UpdateFactoryProjectInput {
@@ -88,6 +103,9 @@ export interface UpdateFactoryProjectInput {
   description?: string | null;
   defaultModelId?: string | null;
   defaultThinkingLevel?: ThinkingLevelSetting;
+  /** Applies to sessions started from now on; running cards keep their harness. */
+  harness?: FactoryHarnessKind;
+  claudeCodeModel?: ClaudeCodeModel | null;
   autoRunEnabled?: boolean;
   autoApprovePlans?: boolean;
   sandboxWorkingDirectory?: string | null;
@@ -119,6 +137,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     model_scope: { type: 'text', default: 'hybrid' },
     default_thinking_level: { type: 'text', default: DEFAULT_FACTORY_THINKING_LEVEL },
     harness: { type: 'text', default: DEFAULT_FACTORY_HARNESS },
+    claude_code_model: { type: 'text', nullable: true },
     // Deprecated: no longer read or written. Kept so existing databases need no
     // migration. Old rows may still hold `true`, so never read it to bring Slack
     // work items back. Drop it in a later migration.
@@ -160,6 +179,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   model_scope: string;
   default_thinking_level: string | null;
   harness: string | null;
+  claude_code_model: string | null;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
   sandbox_working_directory: string | null;
@@ -197,6 +217,8 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
       : DEFAULT_FACTORY_THINKING_LEVEL,
     // Rows from before the column, or with a value this build does not know, run on Mastra.
     harness: isFactoryHarnessKind(row.harness) ? row.harness : DEFAULT_FACTORY_HARNESS,
+    // Rows from before the column, or with an alias this build does not know, use the CLI default.
+    claudeCodeModel: isClaudeCodeModel(row.claude_code_model) ? row.claude_code_model : null,
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
@@ -253,6 +275,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       description: input.description ?? null,
       default_model_id: input.defaultModelId ?? null,
       harness: input.harness ?? DEFAULT_FACTORY_HARNESS,
+      claude_code_model: input.claudeCodeModel ?? null,
       auto_run_enabled: false,
       auto_approve_plans: false,
       created_at: now,
@@ -312,6 +335,8 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.defaultThinkingLevel !== undefined
             ? { default_thinking_level: changes.defaultThinkingLevel }
             : {}),
+          ...(changes.harness !== undefined ? { harness: changes.harness } : {}),
+          ...(changes.claudeCodeModel !== undefined ? { claude_code_model: changes.claudeCodeModel } : {}),
           ...(changes.autoRunEnabled !== undefined ? { auto_run_enabled: changes.autoRunEnabled } : {}),
           ...(changes.autoApprovePlans !== undefined ? { auto_approve_plans: changes.autoApprovePlans } : {}),
           ...(changes.sandboxWorkingDirectory !== undefined

@@ -12,6 +12,7 @@ import {
   unlinkRepository,
 } from '../ui/domains/workspaces/services/github';
 import type {
+  ClaudeCodeModel,
   FactoryHarness,
   FactoryProject,
   LinkedRepositoryPayload,
@@ -60,8 +61,17 @@ export function useCreateFactoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, description, harness }: { name: string; description?: string; harness?: FactoryHarness }) =>
-      createFactoryProject(baseUrl, name, description, harness),
+    mutationFn: ({
+      name,
+      description,
+      harness,
+      claudeCodeModel,
+    }: {
+      name: string;
+      description?: string;
+      harness?: FactoryHarness;
+      claudeCodeModel?: ClaudeCodeModel | null;
+    }) => createFactoryProject(baseUrl, name, description, harness, claudeCodeModel),
     onSuccess: () => refetchFactories(queryClient),
   });
 }
