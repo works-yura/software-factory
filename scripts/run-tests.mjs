@@ -11,7 +11,10 @@
 //   [tests] 3/26 ok packages/runtime 41s
 //   [tests] 4/26 STALLED packages/api (no output for 300s)
 //
-// Usage (from the repo root): node scripts/run-tests.mjs [package-dir-filter]
+// Usage (from the repo root): node scripts/run-tests.mjs [--script <name>] [package-dir-filter]
+//
+// `--script` picks another package script than `test`, e.g. `--script e2e` runs
+// the end-to-end suites (tests/e2e), which boot the real dev server.
 
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -20,18 +23,22 @@ import { join, relative } from 'node:path';
 const root = new URL('..', import.meta.url).pathname;
 const packageTimeoutMs = Number(process.env.FACTORY_TEST_PACKAGE_TIMEOUT_MS) || 15 * 60_000;
 const stallMs = Number(process.env.FACTORY_TEST_STALL_MS) || 5 * 60_000;
-const filter = process.argv[2];
+const argv = process.argv.slice(2);
+const scriptFlag = argv.indexOf('--script');
+const script = scriptFlag === -1 ? 'test' : argv[scriptFlag + 1];
+if (!script) throw new Error('--script needs a script name');
+const filter = argv.filter((_, index) => scriptFlag === -1 || (index !== scriptFlag && index !== scriptFlag + 1))[0];
 
 function workspaceDirs() {
   const dirs = [];
-  for (const group of ['packages', 'apps']) {
+  for (const group of ['packages', 'apps', 'tests']) {
     const base = join(root, group);
     if (!existsSync(base)) continue;
     for (const name of readdirSync(base).sort()) {
       const manifest = join(base, name, 'package.json');
       if (!existsSync(manifest)) continue;
       const scripts = JSON.parse(readFileSync(manifest, 'utf8')).scripts ?? {};
-      if (scripts.test) dirs.push(join(base, name));
+      if (scripts[script]) dirs.push(join(base, name));
     }
   }
   return filter ? dirs.filter(dir => relative(root, dir).includes(filter)) : dirs;
@@ -41,7 +48,7 @@ function runPackage(dir) {
   return new Promise(resolve => {
     const started = Date.now();
     // Own process group, so a timeout kills vitest's workers too.
-    const child = spawn('corepack', ['pnpm', 'run', 'test'], { cwd: dir, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('corepack', ['pnpm', 'run', script], { cwd: dir, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let lastOutput = Date.now();
     let verdict;
     const onData = chunk => {
@@ -84,6 +91,6 @@ for (const [index, dir] of dirs.entries()) {
 }
 
 const failed = results.filter(result => !result.ok);
-console.log(`\n[tests] summary: ${results.length - failed.length}/${results.length} packages passed`);
+console.log(`\n[tests] summary (${script}): ${results.length - failed.length}/${results.length} packages passed`);
 for (const result of results) console.log(`[tests]   ${result.ok ? 'ok    ' : 'FAILED'} ${result.name} ${result.seconds}s ${result.ok ? '' : result.verdict}`);
 process.exit(failed.length === 0 ? 0 : 1);

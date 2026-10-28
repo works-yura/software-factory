@@ -9,7 +9,9 @@
   "scripts": {
     "check": "corepack pnpm -r --if-present check",
     "test": "node scripts/run-tests.mjs",
+    "e2e": "node scripts/run-tests.mjs --script e2e",
+    "e2e:ui": "node scripts/run-tests.mjs --script e2e:ui",
     "compare-tests": "./scripts/compare-tests.sh",
-    "verify": "corepack pnpm check && corepack pnpm test && ./scripts/compare-tests.sh"
+    "verify": "corepack pnpm check && corepack pnpm test && corepack pnpm e2e && corepack pnpm e2e:ui && ./scripts/compare-tests.sh"
   }
 }
