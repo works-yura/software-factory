@@ -653,5 +653,55 @@
     },
     "model": "Model",
     "providers": "Providers"
+  },
+  "claudeAccounts": {
+    "title": "Claude Code accounts",
+    "description": "Claude Code sessions run on these accounts. When one runs out of usage (5-hour or weekly limit), the session continues on the next; a limited account comes back after its reset, and a refused key stays off until you fix it.",
+    "add": "Add account",
+    "loading": "Loading Claude Code accounts",
+    "empty": "No accounts yet. Add your Claude subscription or an organization API key so sessions can switch to another account when one hits its usage limit.",
+    "kind": {
+      "mySubscription": "Your subscription",
+      "memberSubscription": "Member’s subscription",
+      "orgKey": "Organization key"
+    },
+    "status": {
+      "active": "Active",
+      "limited": "Limited",
+      "limitedUntil": "Limited until {{time}}",
+      "off": "Off"
+    },
+    "lastUsed": "Last used {{time}}",
+    "neverUsed": "Not used yet",
+    "actionsFor": "Actions for {{label}}",
+    "turnOff": "Turn off",
+    "turnOn": "Turn on",
+    "rename": "Rename",
+    "replaceSecret": "Replace secret",
+    "remove": "Remove",
+    "cancel": "Cancel",
+    "removeTitle": "Remove {{label}}?",
+    "removeDescription": "Sessions stop using this account. Its secret is deleted and can’t be recovered.",
+    "dialog": {
+      "addTitle": "Add Claude Code account",
+      "renameTitle": "Rename {{label}}",
+      "replaceTitle": "Replace secret for {{label}}",
+      "subscriptionHint": "For your Claude subscription, run claude setup-token and paste the token: it serves only your own runs and is never shared with other people.",
+      "orgKeyHint": "An organization API key serves everyone’s runs.",
+      "orgKeyAdminOnly": "Organization API keys can only be added by an organization admin.",
+      "label": "Name",
+      "labelPlaceholder": "e.g. My Max plan",
+      "secret": "Token or API key",
+      "secretPlaceholder": "Paste the token or API key",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…"
+    },
+    "errors": {
+      "adminRequired": "Only organization admins can add organization API keys. You can add your own subscription token.",
+      "forbidden": "You can’t change this account.",
+      "needSignIn": "Sign in to an organization to add Claude Code accounts.",
+      "failed": "Something went wrong. Try again."
+    }
   }
 }

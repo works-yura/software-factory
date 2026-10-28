@@ -69,6 +69,35 @@ export interface ProvidersResponse {
   orgKeyAdmin?: boolean;
 }
 
+/** One rotation account (`GET /web/config/providers/:provider/accounts`); never the secret. */
+export interface CredentialAccountInfo {
+  id: string;
+  label: string;
+  kind: 'api_key' | 'subscription';
+  /** The caller's own subscription. */
+  mine: boolean;
+  priority: number;
+  status: 'active' | 'limited' | 'disabled';
+  limitedUntil?: string;
+  lastError?: string;
+  lastUsedAt?: string;
+  /** Last characters of the secret. */
+  hint: string;
+  canManage: boolean;
+  canReplaceSecret: boolean;
+  createdAt: string;
+}
+
+export interface CredentialAccountsResponse {
+  accounts: CredentialAccountInfo[];
+  /** Whether the caller may add organization API keys (an organization admin). */
+  canAddOrgKeys: boolean;
+}
+
+export interface CredentialAccountResponse {
+  account: CredentialAccountInfo;
+}
+
 export interface CustomProvidersResponse {
   providers: CustomProviderInfo[];
 }

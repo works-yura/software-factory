@@ -25,19 +25,38 @@ export interface ApiClient {
   get<T>(path: string): Promise<T>;
   put<T>(path: string, body?: unknown): Promise<T>;
   post<T>(path: string, body?: unknown): Promise<T>;
+  patch<T>(path: string, body?: unknown): Promise<T>;
   del<T>(path: string, body?: unknown): Promise<T>;
 }
 
-async function extractError(res: Response): Promise<string> {
+/**
+ * A failed request. `message` keeps the server's `{ error }` (or the status
+ * fallback); `code` and `detail` expose the envelope's machine code and its
+ * human-readable `message`, for callers that show the latter.
+ */
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly detail?: string,
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
+async function extractError(res: Response): Promise<ApiRequestError> {
   try {
     const data: unknown = await res.clone().json();
     if (data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string') {
-      return (data as { error: string }).error;
+      const { error, message } = data as { error: string; message?: unknown };
+      return new ApiRequestError(error, res.status, error, typeof message === 'string' ? message : undefined);
     }
   } catch {
     // Non-JSON body — fall through to the status-based message.
   }
-  return tk('errors.requestFailed', { status: res.status });
+  return new ApiRequestError(tk('errors.requestFailed', { status: res.status }), res.status);
 }
 
 export function createApiClient({ baseUrl, fetchImpl }: ApiClientConfig): ApiClient {
@@ -53,7 +72,7 @@ export function createApiClient({ baseUrl, fetchImpl }: ApiClientConfig): ApiCli
       init.body = JSON.stringify(body);
     }
     const res = await doFetch(`${baseUrl}${path}`, init);
-    if (!res.ok) throw new Error(await extractError(res));
+    if (!res.ok) throw await extractError(res);
     return (await res.json()) as T;
   }
 
@@ -61,6 +80,7 @@ export function createApiClient({ baseUrl, fetchImpl }: ApiClientConfig): ApiCli
     get: <T>(path: string) => request<T>('GET', path),
     put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
     post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
+    patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
     del: <T>(path: string, body?: unknown) => request<T>('DELETE', path, body),
   };
 }

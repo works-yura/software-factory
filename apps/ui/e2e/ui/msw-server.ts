@@ -23,6 +23,14 @@ export const server = setupServer(
   // Ambient provider catalog (read by the NewPage credential guard wherever
   // it renders); credential-specific tests override it with `server.use(...)`.
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
+  // Ambient Claude Code accounts (Models settings): a server without a signed-in
+  // organization refuses them; account tests override it with `server.use(...)`.
+  http.get('*/web/config/providers/:provider/accounts', () =>
+    HttpResponse.json(
+      { error: 'accounts_need_sign_in', message: 'Credential accounts need a signed-in organization.' },
+      { status: 400 },
+    ),
+  ),
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
