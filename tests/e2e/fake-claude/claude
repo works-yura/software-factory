@@ -1,0 +1,5 @@
+#!/bin/sh
+# The fake `claude` (see claude.mjs). Tests usually generate their own wrapper
+# that also sets FAKE_CLAUDE_* variables, since the harness passes the CLI only
+# an allow-listed environment.
+exec node "$(dirname "$0")/claude.mjs" "$@"

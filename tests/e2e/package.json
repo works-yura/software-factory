@@ -1,0 +1,20 @@
+{
+  "name": "@factory/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end tests: the real dev server (bundled like `dev:local`) driven over HTTP and in a browser, with a fake `claude` CLI that talks real MCP.",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "e2e": "vitest run",
+    "e2e:ui": "playwright test -c ui/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@playwright/test": "1.61.1",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  }
+}
