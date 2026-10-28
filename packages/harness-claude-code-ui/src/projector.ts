@@ -4,7 +4,12 @@ import type { AgentControllerEvent, MastraDBMessage, MastraMessagePart } from '@
 import { createSignal } from '@mastra/core/signals';
 
 import type { AgentEvent, PlanDecision } from '@factory/harness';
-import { PLAN_GATE_TOOL_IDS, type ClaudeTranscriptEntry, type PlanGate } from '@factory/harness-claude-code';
+import {
+  PLAN_GATE_TOOL_IDS,
+  type ClaudeTranscriptEntry,
+  type PermissionRequest,
+  type PlanGate,
+} from '@factory/harness-claude-code';
 
 /** The tool name the chat UI draws the plan card for; Claude calls the gate under its MCP id. */
 export const UI_PLAN_TOOL_NAME = 'submit_plan';
@@ -31,6 +36,20 @@ interface PendingPlan {
   toolCallId: string;
   args: { title?: string; plan?: string };
 }
+
+/** A tool call waiting for a person's permission, as the chat UI keeps a pending tool approval. */
+interface PendingApproval {
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  /** The message the approval is stored on: the call's own, or its subagent's parent call's. */
+  holderId?: string;
+}
+
+/** The result a call gets once a person answered its permission request. */
+export const PERMISSION_ALLOWED = 'Allowed by a person. Claude retries the call.';
+export const PERMISSION_DENIED = 'Denied by a person.';
+export const PERMISSION_SUPERSEDED = 'Not answered: new input came first.';
 
 /** A part deltas grew that its full block has not confirmed yet. */
 interface StreamedPart {
@@ -104,6 +123,7 @@ export class ClaudeTranscriptProjector {
   /** Messages holding tool calls that have not settled, by tool call id. */
   #openTools = new Map<string, MastraDBMessage>();
   #pendingPlan: PendingPlan | undefined;
+  #pendingApproval: PendingApproval | undefined;
   #modelId: string | undefined;
 
   constructor(options: ProjectorOptions) {
@@ -135,6 +155,32 @@ export class ClaudeTranscriptProjector {
     return { toolCallId: pending.toolCallId, toolName: UI_PLAN_TOOL_NAME, args: pending.args, suspendPayload: pending.args };
   }
 
+  /** The tool call the UI should offer allow/deny for, if any. */
+  get pendingApproval(): { toolCallId: string; toolName: string; args: unknown } | undefined {
+    const pending = this.#pendingApproval;
+    return pending ? { toolCallId: pending.toolCallId, toolName: pending.toolName, args: clone(pending.args) } : undefined;
+  }
+
+  /**
+   * Picks up a stored message holding the permission request the session is
+   * parked on (after a restart), so an answer still settles its call.
+   */
+  adoptPermission(message: MastraDBMessage, request: PermissionRequest): void {
+    const holds = message.content.parts.some(
+      part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === request.toolCallId,
+    );
+    const copy = clone(message);
+    if (holds) this.#openTools.set(request.toolCallId, copy);
+    else if (request.parentToolCallId) this.#openTools.set(request.parentToolCallId, copy);
+    this.#pendingApproval = {
+      toolCallId: request.toolCallId,
+      toolName: request.toolName,
+      args: request.input,
+      holderId: message.id,
+    };
+    this.#lastCreatedAt = Math.max(this.#lastCreatedAt, new Date(message.createdAt).getTime());
+  }
+
   /**
    * Picks up a stored message holding the plan the session is parked on, so a
    * decision made after a restart still settles its card.
@@ -155,6 +201,11 @@ export class ClaudeTranscriptProjector {
         out.events.push({ type: 'agent_start' });
       }
     }
+    // A subagent's call needs the person too; its approval rides on the subagent's own call.
+    if (entry.kind === 'permission') {
+      this.#pendingApproval = { toolCallId: entry.toolCallId, toolName: entry.toolName, args: entry.input };
+      return out;
+    }
     if ('parentToolCallId' in entry && entry.parentToolCallId) return out;
 
     switch (entry.kind) {
@@ -165,6 +216,10 @@ export class ClaudeTranscriptProjector {
       case 'plan_decision':
         this.#closeCurrent(out);
         this.#settlePlan(out, entry.toolCallId, entry.decision);
+        break;
+      case 'permission_decision':
+        this.#closeCurrent(out);
+        this.#settleApproval(out, entry.toolCallId, entry.approved ? PERMISSION_ALLOWED : PERMISSION_DENIED, !entry.approved);
         break;
       case 'init':
         if (entry.model) this.#modelId = entry.model;
@@ -205,18 +260,26 @@ export class ClaudeTranscriptProjector {
    * A session event. `pendingPlan` is the session's own pending gate, which
    * fills in a plan whose call this projector did not see (e.g. after a restart).
    */
-  event(event: AgentEvent | { type: string }, pendingPlan?: PlanGate): Projection {
+  event(event: AgentEvent | { type: string }, pendingPlan?: PlanGate, pendingPermission?: PermissionRequest): Projection {
     const out: Projection = { events: [], writes: [] };
     switch (event.type) {
       case 'tool_suspended': {
         const { toolCallId } = event as Extract<AgentEvent, { type: 'tool_suspended' }>;
         this.#closeCurrent(out);
-        this.#suspend(toolCallId, pendingPlan, out);
+        if (pendingPermission?.toolCallId === toolCallId || this.#pendingApproval?.toolCallId === toolCallId) {
+          this.#requestApproval(toolCallId, pendingPermission, out);
+        } else {
+          this.#suspend(toolCallId, pendingPlan, out);
+        }
         break;
       }
       case 'tool_suspension_cancelled': {
         const { toolCallId } = event as Extract<AgentEvent, { type: 'tool_suspension_cancelled' }>;
-        this.#settlePlan(out, toolCallId, undefined, 'superseded by new work');
+        if (this.#pendingApproval?.toolCallId === toolCallId) {
+          this.#settleApproval(out, toolCallId, PERMISSION_SUPERSEDED, true);
+        } else {
+          this.#settlePlan(out, toolCallId, undefined, 'superseded by new work');
+        }
         break;
       }
       case 'error': {
@@ -230,8 +293,10 @@ export class ClaudeTranscriptProjector {
         this.#closeCurrent(out);
         this.#running = false;
         // A call cut off by an abort or a failure never gets its result; only a parked plan stays open.
+        const waiting = this.#pendingApproval;
         for (const [toolCallId, message] of [...this.#openTools]) {
           if (toolCallId === this.#pendingPlan?.toolCallId) continue;
+          if (waiting && (toolCallId === waiting.toolCallId || message.id === waiting.holderId)) continue;
           this.#settleTool(message, toolCallId, INTERRUPTED, true, out);
         }
         out.events.push({ type: 'agent_end', ...(reason ? { reason } : {}) });
@@ -379,6 +444,57 @@ export class ClaudeTranscriptProjector {
     };
     out.writes.push(clone(message));
     out.events.push({ type: 'tool_suspended', toolCallId, toolName: UI_PLAN_TOOL_NAME, args, suspendPayload: args });
+  }
+
+  /** The message to store a pending approval on: the call's own, or (a subagent's call) the newest open one. */
+  #approvalHolder(toolCallId: string): MastraDBMessage | undefined {
+    const own = this.#openTools.get(toolCallId);
+    if (own) return own;
+    const holderId = this.#pendingApproval?.holderId;
+    const open = [...this.#openTools.values()];
+    return (holderId ? open.find(message => message.id === holderId) : undefined) ?? open.at(-1);
+  }
+
+  #requestApproval(toolCallId: string, request: PermissionRequest | undefined, out: Projection) {
+    const pending: PendingApproval =
+      this.#pendingApproval?.toolCallId === toolCallId
+        ? this.#pendingApproval
+        : { toolCallId, toolName: request?.toolName ?? 'unknown', args: request?.input };
+    const message = this.#approvalHolder(toolCallId);
+    pending.holderId = message?.id;
+    this.#pendingApproval = pending;
+    const approval = { toolCallId, toolName: pending.toolName, args: clone(pending.args) };
+    if (message) {
+      message.content.metadata = {
+        ...message.content.metadata,
+        pendingToolApprovals: { ...(message.content.metadata?.pendingToolApprovals as object | undefined), [toolCallId]: approval },
+      };
+      out.writes.push(clone(message));
+    }
+    out.events.push({ type: 'tool_approval_required', ...approval } as AgentControllerEvent);
+  }
+
+  /** Settles a call that waited for permission: allowed, denied, or superseded by new input. */
+  #settleApproval(out: Projection, toolCallId: string, result: string, isError: boolean) {
+    const pending = this.#pendingApproval?.toolCallId === toolCallId ? this.#pendingApproval : undefined;
+    if (pending) this.#pendingApproval = undefined;
+    const holder =
+      this.#openTools.get(toolCallId) ??
+      [...this.#openTools.values()].find(message => message.id === pending?.holderId);
+    if (holder?.content.metadata?.pendingToolApprovals) {
+      const { pendingToolApprovals, ...metadata } = holder.content.metadata as Record<string, unknown> & {
+        pendingToolApprovals: Record<string, unknown>;
+      };
+      const { [toolCallId]: _settled, ...rest } = pendingToolApprovals;
+      holder.content.metadata = Object.keys(rest).length ? { ...metadata, pendingToolApprovals: rest } : metadata;
+      out.writes.push(clone(holder));
+    }
+    const message = this.#openTools.get(toolCallId);
+    if (message) this.#settleTool(message, toolCallId, result, isError, out);
+    else if (holder) {
+      // A subagent's call: its parent stays as it was, cut off by the stop.
+      for (const [id, open] of [...this.#openTools]) if (open === holder) this.#settleTool(open, id, INTERRUPTED, true, out);
+    }
   }
 
   /** Settles the plan card: with the person's decision, or as superseded when new work replaced it. */

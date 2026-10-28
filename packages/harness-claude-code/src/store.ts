@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import type { PlanDecision } from '@factory/harness';
 
-import type { PlanGate } from './events.ts';
+import type { PermissionRequest, PlanGate } from './events.ts';
 import type { ClaudeSessionMode } from './cli.ts';
 
 /** Input that waits for the next turn: a persisted notification, or signals queued when a gate parked the run. */
@@ -25,6 +25,10 @@ export interface ClaudeThreadState {
   settings: Record<string, unknown>;
   /** The plan gate the thread is parked on. */
   pendingGate?: PlanGate;
+  /** The tool call the thread is parked on until a person allows or denies it. */
+  pendingPermission?: PermissionRequest;
+  /** Tools a person allowed for the rest of this thread. Absent in records written before permissions. */
+  grantedTools?: string[];
   pendingInputs: ClaudePendingInput[];
   /** Recent signal ids Claude received, newest last; the dispatcher's replay guard reads them. */
   deliveredIds: string[];

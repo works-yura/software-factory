@@ -11,6 +11,7 @@ import type {
   ClaudePermissionMode,
   ClaudeSessionStore,
   ClaudeSpawn,
+  ClaudeToolPermissions,
 } from '@factory/harness-claude-code';
 import type { HarnessRoute } from '@factory/harness';
 import { BUNDLED_FACTORY_SKILLS_PATH } from '@factory/harness-mastra';
@@ -25,20 +26,19 @@ import type { ClaudeCodeCredentialFailureHook, ClaudeCodeCredentialsHook } from 
 export const CLAUDE_FACTORY_MCP_SERVER = 'factory';
 
 /**
- * What a Factory session may do without asking, in `-p` where nothing can ask.
- * Reading the repository, git and gh, and the Factory's own tools; file edits
- * come with the permission mode once a plan is approved. Hosts widen it (test
- * runners, package managers) per deployment.
+ * What a Factory session may always use: the Factory's own tools and the task
+ * list, which are the harness's plumbing. Everything else follows the
+ * Factory's tool permissions (`permissions`), read before each turn; a call
+ * they say to ask about parks the run until a person allows or denies it.
+ * Hosts widen this per deployment; the Factory's `deny` still wins.
  */
-export const DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS = [
-  'Read',
-  'Glob',
-  'Grep',
-  'TodoWrite',
-  'Bash(git:*)',
-  'Bash(gh:*)',
-  `mcp__${CLAUDE_FACTORY_MCP_SERVER}`,
-];
+export const DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS = ['TodoWrite', `mcp__${CLAUDE_FACTORY_MCP_SERVER}`];
+
+/** The Factory's tool permissions, for the Factory a Claude session belongs to. */
+export type ClaudeFactoryPermissionsHook = (tenant: {
+  orgId: string;
+  factoryProjectId: string;
+}) => ClaudeToolPermissions | undefined | Promise<ClaudeToolPermissions | undefined>;
 
 /** Factory tools that change something: every annotated write, and the bound-run and session tools that are not annotated. */
 export const CLAUDE_FACTORY_MUTATING_TOOLS = [
@@ -98,6 +98,11 @@ export interface ClaudeFactoryHarnessOptions {
    */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
   credentials: ClaudeCodeCredentialsHook;
+  /**
+   * The Factory's tool permissions (Settings → Behavior), read before each
+   * turn. Unset, or `undefined` for a Factory, every category asks.
+   */
+  permissions?: ClaudeFactoryPermissionsHook;
   /** Told when a turn's account ran out of usage or was refused, so the pool sets it aside. */
   onCredentialFailure?: ClaudeCodeCredentialFailureHook;
   /** The session's checkout (see `createClaudeCheckoutResolver`). */
@@ -192,6 +197,12 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
           },
         }
       : {}),
+    // Read per turn: the settings change between turns, and reset when the server restarts.
+    permissions: async (session: ClaudeCodeSession) => {
+      const row = await sourceSession(session.id);
+      return (await options.permissions?.({ orgId: row.orgId, factoryProjectId: row.factoryProjectId })) ?? {};
+    },
+    trustedMcpServers: [CLAUDE_FACTORY_MCP_SERVER],
     ...(options.configDir ? { configDir: options.configDir } : {}),
     allowedTools: options.allowedTools ?? DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS,
     appendSystemPrompt: CLAUDE_FACTORY_SYSTEM_PROMPT,

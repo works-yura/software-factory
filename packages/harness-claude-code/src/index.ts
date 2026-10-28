@@ -7,3 +7,5 @@ export * from './session.ts';
 export * from './skills.ts';
 export * from './store.ts';
 export * from './stream.ts';
+export * from './permissions.ts';
+export * from './gate-server.ts';

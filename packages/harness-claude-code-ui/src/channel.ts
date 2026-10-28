@@ -52,7 +52,9 @@ export class ClaudeSessionUiChannel {
     });
     this.#detach = [
       session.onTranscript((entry, meta) => this.#apply(this.#projector.entry(entry, meta))),
-      session.subscribe(event => this.#apply(this.#projector.event(event, session.pendingPlan))),
+      session.subscribe(event =>
+        this.#apply(this.#projector.event(event, session.pendingPlan, session.pendingPermission)),
+      ),
     ];
     this.ready = this.#prepare().catch(error => {
       console.warn('[claude-code ui] Unable to prepare the session thread.', error);
@@ -88,6 +90,8 @@ export class ClaudeSessionUiChannel {
     state.currentMessage = this.#projector.currentMessage;
     const pending = this.#projector.pendingSuspension ?? this.#sessionPlan();
     if (pending) state.pendingSuspensions.set(pending.toolCallId, { ...pending, threadId: this.threadId });
+    const approval = this.#projector.pendingApproval ?? this.#sessionApproval();
+    if (approval) state.pendingApprovals.set(approval.toolCallId, { ...approval, threadId: this.threadId });
     return state;
   }
 
@@ -123,11 +127,17 @@ export class ClaudeSessionUiChannel {
     return { toolCallId: gate.toolCallId, toolName: 'submit_plan', args, suspendPayload: args };
   }
 
+  #sessionApproval() {
+    const request = this.session.pendingPermission;
+    return request ? { toolCallId: request.toolCallId, toolName: request.toolName, args: request.input } : undefined;
+  }
+
   async #prepare(): Promise<void> {
     const memory = await this.memory();
     await this.#ensureThread(memory, this.threadId);
     const gate = this.session.pendingPlan;
-    if (!gate) return;
+    const permission = this.session.pendingPermission;
+    if (!gate && !permission) return;
     const { messages } = await memory.listMessages({
       threadId: this.threadId,
       resourceId: this.resourceId,
@@ -135,12 +145,21 @@ export class ClaudeSessionUiChannel {
       page: 0,
       orderBy: { field: 'createdAt', direction: 'DESC' },
     });
-    const holder = messages.find(message =>
-      message.content.parts.some(
-        part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === gate.toolCallId,
-      ),
-    );
-    if (holder) this.#projector.adopt(holder, gate);
+    if (gate) {
+      const holder = messages.find(message =>
+        message.content.parts.some(
+          part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === gate.toolCallId,
+        ),
+      );
+      if (holder) this.#projector.adopt(holder, gate);
+    }
+    if (permission) {
+      const holder = messages.find(message => {
+        const approvals = message.content.metadata?.pendingToolApprovals;
+        return !!approvals && typeof approvals === 'object' && permission.toolCallId in approvals;
+      });
+      if (holder) this.#projector.adoptPermission(holder, permission);
+    }
   }
 
   async #ensureThread(memory: MemoryStore, threadId: string): Promise<void> {

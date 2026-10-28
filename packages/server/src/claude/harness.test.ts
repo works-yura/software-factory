@@ -11,6 +11,7 @@ import type { FactorySessionTokenClaims } from '@factory/mcp';
 
 import { CLAUDE_FACTORY_MCP_SERVER, createClaudeFactoryHarness, DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS } from './harness.ts';
 import type { ClaudeFactoryHarnessOptions } from './harness.ts';
+import { createFactoryToolPermissions } from './permissions.ts';
 
 // Record the config the Factory harness hands to the Claude Code harness, so its per-turn
 // hooks can be driven directly; the real harness is still built (no CLI is ever spawned).
@@ -237,6 +238,57 @@ describe('createClaudeFactoryHarness', () => {
 
     it('gives the CLI no model hook without the Factories', () => {
       expect(setup().config.modelFor).toBeUndefined();
+    });
+  });
+
+  describe('tool permissions', () => {
+    it("reads the session Factory's permissions on every turn, in the session's own org", async () => {
+      const policies: Record<string, claudeCode.ClaudeToolPermissions | undefined> = {
+        'factory-a': { categories: { edit: 'ask', execute: 'deny' } },
+      };
+      const permissions = vi.fn(async ({ factoryProjectId }: { orgId: string; factoryProjectId: string }) => policies[factoryProjectId]);
+      const { factory, config } = setup({ permissions });
+      const a = await factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
+      const b = await factory.harness.createSession({ sessionId: 'session-b', threadId: 't' });
+
+      await expect(config.permissions!(a)).resolves.toEqual({ categories: { edit: 'ask', execute: 'deny' } });
+      expect(permissions).toHaveBeenLastCalledWith({ orgId: 'org-a', factoryProjectId: 'factory-a' });
+      // Nothing set (or nothing since a restart): every category asks.
+      await expect(config.permissions!(b)).resolves.toEqual({});
+      policies['factory-a'] = { yolo: true };
+      await expect(config.permissions!(a)).resolves.toEqual({ yolo: true });
+      expect(config.trustedMcpServers).toEqual([CLAUDE_FACTORY_MCP_SERVER]);
+    });
+
+    it('allows only the harness plumbing by default; the settings decide the rest', () => {
+      expect(DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS).toEqual(['TodoWrite', 'mcp__factory']);
+    });
+  });
+
+  describe('createFactoryToolPermissions', () => {
+    const state = (value: unknown) => ({ state: { get: () => value } });
+
+    it("reads the Factory session's category policies and auto-approve", async () => {
+      const read = createFactoryToolPermissions(async id =>
+        id === 'factory-a'
+          ? state({
+              factoryOrgId: 'org-a',
+              yolo: true,
+              permissionRules: { categories: { read: 'allow', edit: 'ask', execute: 'deny', bogus: 'allow', mcp: 'maybe' }, tools: {} },
+            })
+          : undefined,
+      );
+      await expect(read({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toEqual({
+        categories: { read: 'allow', edit: 'ask', execute: 'deny' },
+        yolo: true,
+      });
+      // No live Factory session (nobody opened it since the restart): nothing to apply.
+      await expect(read({ orgId: 'org-a', factoryProjectId: 'factory-b' })).resolves.toBeUndefined();
+    });
+
+    it("never applies another organization's settings", async () => {
+      const read = createFactoryToolPermissions(async () => state({ factoryOrgId: 'org-b', yolo: true }));
+      await expect(read({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toBeUndefined();
     });
   });
 

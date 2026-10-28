@@ -289,23 +289,27 @@ export async function resolveSessionTokenScope(
   if (!row || row.orgId !== claims.orgId || row.factoryProjectId !== factoryProjectId) return null;
   const project = await deps.projects.get({ orgId: claims.orgId, id: factoryProjectId });
   if (!project) return null;
-  const bound = await deps.tools.workItems.hasRunBindingForSession({
-    orgId: claims.orgId,
-    factoryProjectId,
-    sessionId: claims.sessionId,
-  });
-  if (!bound) return null;
+  // As for a Mastra session: a side session, or one that ever ran a role, is a worker.
+  const worker =
+    Boolean(row.originSessionId) ||
+    (await deps.tools.workItems.hasRunBindingForSession({
+      orgId: claims.orgId,
+      factoryProjectId,
+      sessionId: claims.sessionId,
+    }));
   return {
     projectName: project.name,
     scope: {
       orgId: claims.orgId,
       factoryProjectId,
-      // A worker acts as its session row, like a dispatcher-driven Mastra run.
+      // A worker acts as its session row, like a dispatcher-driven Mastra run; a
+      // person's own session (a Claude Code chat) acts as its owner.
       userId: row.userId,
       sessionId: claims.sessionId,
       resourceId: claims.resourceId,
       threadId: claims.threadId,
-      kind: 'worker',
+      kind: worker ? 'worker' : 'user',
+      // The token cannot tell who started the turn, so nothing only a person may do.
       interactive: false,
     },
   };
@@ -363,7 +367,7 @@ async function handleSessionMcp(
   // Never fall through to the person path: a request that brought a session token stands or falls by it.
   if (!resolved) return c.json({ error: 'invalid_session_token' }, 401);
   const tools = createFactoryMcpTools(resolved.scope, deps, { persistedSession: true });
-  Object.assign(tools, (await deps.tools.createBound?.(resolved.scope)) ?? {});
+  if (resolved.scope.kind === 'worker') Object.assign(tools, (await deps.tools.createBound?.(resolved.scope)) ?? {});
   return serveTools(c, mcpPath, { factoryProjectId, projectName: resolved.projectName, tools });
 }
 

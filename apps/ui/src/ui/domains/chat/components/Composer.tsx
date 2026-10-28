@@ -93,7 +93,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     ? t('composer.planFeedbackPlaceholder')
     : liveRun
       ? t('composer.steerPlaceholder')
-      : t('composer.placeholder');
+      : claudeCode
+        ? t('claudeCode.placeholder')
+        : t('composer.placeholder');
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = chatPreparing ? t('composer.initializingSession') : undefined;
 

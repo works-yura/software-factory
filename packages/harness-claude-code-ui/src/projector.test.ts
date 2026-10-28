@@ -4,7 +4,14 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 
 import { SUBMIT_PLAN_TOOL_ID, type ClaudeTranscriptEntry } from '@factory/harness-claude-code';
 
-import { ClaudeTranscriptProjector, INTERRUPTED, type Projection } from './projector.ts';
+import {
+  ClaudeTranscriptProjector,
+  INTERRUPTED,
+  PERMISSION_ALLOWED,
+  PERMISSION_DENIED,
+  PERMISSION_SUPERSEDED,
+  type Projection,
+} from './projector.ts';
 
 const RUN = { runId: 'run-1', threadId: 'thread-1' };
 
@@ -281,6 +288,59 @@ describe('ClaudeTranscriptProjector', () => {
         id: holder.id,
         content: { parts: [expect.anything(), expect.objectContaining({ toolInvocation: expect.objectContaining({ state: 'result', result: { action: 'approved', submittedPlan: plan } }) })] },
       });
+    });
+  });
+
+  describe('permission requests', () => {
+    const request = { toolCallId: 'toolu_w', toolName: 'Write', input: { file_path: 'x.txt', content: '' } };
+
+    function parked() {
+      const p = projector();
+      const out = play(p, [
+        { kind: 'input', source: 'signal', text: 'Create x.txt', id: 'sig-1' },
+        { kind: 'tool_call', toolCallId: 'toolu_w', toolName: 'Write', input: request.input },
+        { kind: 'permission', ...request },
+      ]);
+      for (const event of [{ type: 'tool_suspended', toolName: 'Write', toolCallId: 'toolu_w' }, { type: 'agent_end', reason: 'suspended' }] as const) {
+        const next = p.event(event, undefined, request);
+        out.events.push(...next.events);
+        out.writes.push(...next.writes);
+      }
+      return { p, out };
+    }
+
+    it('asks for approval like a Mastra session and keeps the call open', () => {
+      const { p, out } = parked();
+      expect(out.events).toContainEqual({ type: 'tool_approval_required', toolCallId: 'toolu_w', toolName: 'Write', args: request.input });
+      expect(out.events.some(event => event.type === 'tool_end' || event.type === 'tool_suspended')).toBe(false);
+      const assistant = stored(out.writes).find(message => message.role === 'assistant')!;
+      expect(assistant.content.metadata?.pendingToolApprovals).toEqual({
+        toolu_w: { toolCallId: 'toolu_w', toolName: 'Write', args: request.input },
+      });
+      expect(p.pendingApproval).toEqual({ toolCallId: 'toolu_w', toolName: 'Write', args: request.input });
+    });
+
+    it('settles the call with the answer, or as superseded by new input', () => {
+      const denied = play(parked().p, [{ kind: 'permission_decision', toolCallId: 'toolu_w', toolName: 'Write', approved: false }], {
+        runId: 'run-2',
+        threadId: 'thread-1',
+      });
+      expect(denied.events).toContainEqual({ type: 'tool_end', toolCallId: 'toolu_w', result: PERMISSION_DENIED, isError: true });
+      expect(stored(denied.writes)[0]?.content.metadata?.pendingToolApprovals).toBeUndefined();
+
+      const { p } = parked();
+      const superseded = p.event({ type: 'tool_suspension_cancelled', toolCallId: 'toolu_w' });
+      expect(superseded.events).toContainEqual({ type: 'tool_end', toolCallId: 'toolu_w', result: PERMISSION_SUPERSEDED, isError: true });
+      expect(p.pendingApproval).toBeUndefined();
+    });
+
+    it('settles a request parked before a restart once the stored message is adopted', () => {
+      const holder = stored(parked().out.writes).find(message => message.role === 'assistant')!;
+      const restarted = projector();
+      restarted.adoptPermission(holder, request);
+      expect(restarted.pendingApproval?.toolCallId).toBe('toolu_w');
+      const allowed = play(restarted, [{ kind: 'permission_decision', toolCallId: 'toolu_w', toolName: 'Write', approved: true }]);
+      expect(allowed.events).toContainEqual({ type: 'tool_end', toolCallId: 'toolu_w', result: PERMISSION_ALLOWED, isError: false });
     });
   });
 

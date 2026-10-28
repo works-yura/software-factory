@@ -1,9 +1,8 @@
-import { fileURLToPath } from 'node:url';
-
 /**
  * The plan gate. `claude -p` has no ExitPlanMode, so the harness gives Claude
  * its own `submit_plan` tool through a tiny stdio MCP server
- * (`gate-mcp-server.mjs`) and stops the turn as soon as Claude calls it.
+ * (`gate-server.ts`) and stops the turn as soon as Claude calls it. The same
+ * server answers the CLI's permission prompts.
  */
 
 /** The MCP server name the gate is registered under; part of the tool's id. */
@@ -15,8 +14,16 @@ export const SUBMIT_PLAN_TOOL_ID = `mcp__${GATE_SERVER_NAME}__${SUBMIT_PLAN_TOOL
 /** The answer the gate server gives a call that reaches it before the turn is stopped. */
 export const SUBMIT_PLAN_REPLY = 'Plan submitted for approval. Stop now and wait; do not start implementing.';
 
-/** The gate server script, run with Node. */
-export const GATE_SERVER_SCRIPT = fileURLToPath(new URL('./gate-mcp-server.mjs', import.meta.url));
+/** The gate server's permission tool: the CLI's `--permission-prompt-tool`, asked whenever a tool call needs a person. */
+export const PERMISSION_PROMPT_TOOL_NAME = 'permission_prompt';
+/** How the CLI names the permission tool. */
+export const PERMISSION_PROMPT_TOOL_ID = `mcp__${GATE_SERVER_NAME}__${PERMISSION_PROMPT_TOOL_NAME}`;
+/**
+ * Leads the refusal the permission tool gives (the CLI shows it as the refused
+ * call's result): the harness watches for it to stop the turn and ask the
+ * person.
+ */
+export const PERMISSION_PENDING_MARKER = '[factory:permission-pending]';
 
 export interface GateServerCommand {
   command: string;
@@ -24,7 +31,7 @@ export interface GateServerCommand {
 }
 
 /** An `--mcp-config` object holding just the gate server. */
-export function gateMcpConfig(server: GateServerCommand = { command: process.execPath, args: [GATE_SERVER_SCRIPT] }) {
+export function gateMcpConfig(server: GateServerCommand) {
   return {
     mcpServers: {
       [GATE_SERVER_NAME]: { type: 'stdio', command: server.command, args: server.args ?? [] },

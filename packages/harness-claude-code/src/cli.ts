@@ -42,6 +42,11 @@ export interface ClaudeArgsInput {
   settings?: Record<string, unknown>;
   allowedTools?: string[];
   disallowedTools?: string[];
+  /**
+   * `--permission-prompt-tool`: the MCP tool the CLI asks whenever a tool call
+   * needs permission. Without one, `-p` silently refuses such calls.
+   */
+  permissionPromptTool?: string;
   appendSystemPrompt?: string;
   includePartialMessages?: boolean;
   maxTurns?: number;
@@ -72,6 +77,7 @@ export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
   if (input.strictMcpConfig) args.push('--strict-mcp-config');
   if (input.allowedTools?.length) args.push('--allowedTools', input.allowedTools.join(','));
   if (input.disallowedTools?.length) args.push('--disallowedTools', input.disallowedTools.join(','));
+  if (input.permissionPromptTool) args.push('--permission-prompt-tool', input.permissionPromptTool);
   if (input.maxTurns && input.maxTurns > 0) args.push('--max-turns', String(input.maxTurns));
   if (input.appendSystemPrompt) args.push('--append-system-prompt', input.appendSystemPrompt);
   for (const arg of input.extraArgs ?? []) {

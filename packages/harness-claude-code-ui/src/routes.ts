@@ -235,8 +235,19 @@ export class ClaudeSessionUi {
         });
         return c.json({ ok: true });
       }
-      case 'POST /tool-approval':
-        return c.json({ ok: false, reason: 'not_pending' });
+      case 'POST /tool-approval': {
+        const body = await jsonBody(c);
+        const request = session.pendingPermission;
+        if (!request) return c.json({ ok: false, reason: 'not_pending' });
+        if (body.toolCallId !== request.toolCallId) return c.json({ ok: false, reason: 'stale_tool_call' });
+        if (typeof body.approved !== 'boolean') return c.json({ error: 'approved must be a boolean' }, 400);
+        if (session.run.isRunning()) return c.json({ ok: false, reason: 'not_pending' });
+        // Like the Mastra route: acknowledged now, the resumed run arrives on the stream.
+        session.respondToToolApproval({ approved: body.approved, toolCallId: request.toolCallId }).catch(error => {
+          channel.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+        });
+        return c.json({ ok: true });
+      }
       case 'PUT /state': {
         const body = await jsonBody(c);
         if (body.state && typeof body.state === 'object' && !Array.isArray(body.state)) {

@@ -258,6 +258,56 @@ describe('Claude Code session routes', () => {
     expect(after.messages.filter(message => message.role === 'signal')).toHaveLength(1);
   });
 
+  it('asks the person in the chat when Claude needs permission, and resumes the session with their answer', async () => {
+    const { app, session, fake } = await setup([{ lines: fixture('turn-permission.jsonl') }, { lines: fixture('turn-complete.jsonl') }]);
+    const stream = await openStream(app);
+    const parked = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'Create an empty file x.txt.' });
+    expect(await parked).toBe('suspended');
+    const call = 'toolu_01EeMtJW2FWqSJ5sKMZmuQub';
+    const input = { file_path: '/work/card-1/x.txt', content: '' };
+    // The same event a Mastra session sends, so the chat draws its Allow / Deny card.
+    expect(await stream.until(event => event.type === 'tool_approval_required')).toEqual({
+      type: 'tool_approval_required',
+      toolCallId: call,
+      toolName: 'Write',
+      args: input,
+    });
+
+    // A reload finds it in the history and in the state a new stream starts with.
+    const { messages } = (await (await app.request(`${BASE}/card-1/threads/card-1/messages?limit=100`)).json()) as {
+      messages: Array<Record<string, any>>;
+    };
+    const assistant = messages.find(message => message.role === 'assistant')!;
+    expect(assistant.content.metadata.pendingToolApprovals[call]).toEqual({ toolCallId: call, toolName: 'Write', args: input });
+    expect(assistant.content.parts[0].toolInvocation).toMatchObject({ state: 'call', toolCallId: call, toolName: 'Write' });
+    const fresh = await openStream(app);
+    expect(await fresh.until(() => true)).toMatchObject({
+      displayState: { pendingApprovals: { [call]: { toolCallId: call, toolName: 'Write', args: input } } },
+    });
+
+    expect(await (await post(app, `${BASE}/card-1/tool-approval`, { toolCallId: 'toolu_other', approved: true })).json()).toEqual({
+      ok: false,
+      reason: 'stale_tool_call',
+    });
+    const resumed = nextEnd(session);
+    expect(await (await post(app, `${BASE}/card-1/tool-approval`, { toolCallId: call, approved: true })).json()).toEqual({ ok: true });
+    expect(await resumed).toBe('complete');
+    expect(fake.calls[1]!.stdin).toContain('The person allowed `Write`');
+    expect(fake.calls[1]!.args).toContain('--resume');
+
+    const after = (await (await app.request(`${BASE}/card-1/threads/card-1/messages?limit=100`)).json()) as {
+      messages: Array<Record<string, any>>;
+    };
+    const settled = after.messages.find(message => message.id === assistant.id)!;
+    expect(settled.content.metadata?.pendingToolApprovals).toBeUndefined();
+    expect(settled.content.parts[0].toolInvocation).toMatchObject({ state: 'result', toolCallId: call });
+    expect(await (await post(app, `${BASE}/card-1/tool-approval`, { toolCallId: call, approved: true })).json()).toEqual({
+      ok: false,
+      reason: 'not_pending',
+    });
+  });
+
   it('keeps another person’s private session out of reach', async () => {
     const { app } = await setup([], { user: { workosId: 'someone-else', organizationId: 'org-1' }, visibility: 'private' });
     expect((await app.request(`${BASE}/card-1/threads/card-1/messages?limit=10`)).status).toBe(404);

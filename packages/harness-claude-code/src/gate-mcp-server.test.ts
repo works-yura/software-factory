@@ -1,12 +1,21 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
-import { GATE_SERVER_SCRIPT, SUBMIT_PLAN_REPLY, SUBMIT_PLAN_TOOL_NAME } from './gate.ts';
+import { PERMISSION_PENDING_MARKER, PERMISSION_PROMPT_TOOL_NAME, SUBMIT_PLAN_REPLY, SUBMIT_PLAN_TOOL_NAME } from './gate.ts';
+import { GATE_SERVER_SOURCE } from './gate-server.ts';
+
+const scriptDir = mkdtempSync(join(tmpdir(), 'gate-server-test-'));
+const script = join(scriptDir, 'gate-mcp-server.mjs');
+writeFileSync(script, GATE_SERVER_SOURCE);
+afterAll(() => rmSync(scriptDir, { recursive: true, force: true }));
 
 /** Drives the gate server over stdio, one JSON-RPC message per line. */
 function startServer() {
-  const child = spawn(process.execPath, [GATE_SERVER_SCRIPT], { stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams;
+  const child = spawn(process.execPath, [script], { stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams;
   const received: Array<Record<string, unknown>> = [];
   const waiters: Array<() => void> = [];
   let buffer = '';
@@ -59,13 +68,13 @@ describe('gate MCP server', () => {
       result: {
         protocolVersion: '2025-06-18',
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'factory-gate', version: '0.1.0' },
+        serverInfo: { name: 'factory-gate', version: '0.2.0' },
       },
     });
     server.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
 
     const list = (await server.request(2, 'tools/list', {})) as { result: { tools: Array<Record<string, unknown>> } };
-    expect(list.result.tools).toHaveLength(1);
+    expect(list.result.tools.map(tool => tool.name)).toEqual([SUBMIT_PLAN_TOOL_NAME, PERMISSION_PROMPT_TOOL_NAME]);
     expect(list.result.tools[0]).toMatchObject({
       name: SUBMIT_PLAN_TOOL_NAME,
       inputSchema: { type: 'object', required: ['plan'], properties: { plan: { type: 'string' }, title: { type: 'string' } } },
@@ -80,6 +89,20 @@ describe('gate MCP server', () => {
 
     server.child.stdin.end();
     expect(await server.exited).toBe(0);
+  });
+
+  it('refuses every permission prompt with the marker that parks the turn, as JSON the CLI reads', async () => {
+    server = startServer();
+    await server.request(1, 'initialize', { protocolVersion: '2025-06-18', capabilities: {} });
+    // What the CLI sends (seen live with 2.1.312): the tool, its input and the call's id.
+    const answer = (await server.request(2, 'tools/call', {
+      name: PERMISSION_PROMPT_TOOL_NAME,
+      arguments: { tool_name: 'Write', input: { file_path: '/repo/x.txt', content: '' }, tool_use_id: 'toolu_1' },
+    })) as { result: { content: Array<{ type: string; text: string }> } };
+    const decision = JSON.parse(answer.result.content[0]!.text) as { behavior: string; message: string };
+    expect(decision.behavior).toBe('deny');
+    expect(decision.message.startsWith(PERMISSION_PENDING_MARKER)).toBe(true);
+    expect(decision.message).toContain('Write');
   });
 
   it('answers an unknown protocol version with the newest one it supports', async () => {

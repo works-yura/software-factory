@@ -137,6 +137,31 @@ describe('TurnTranslator', () => {
     expect(translator.gate).toBeUndefined();
   });
 
+  it('turns a call the permission tool refused for a person into a permission request (recorded live)', () => {
+    const { translator, transcript } = play('turn-permission.jsonl');
+    const request = {
+      toolCallId: 'toolu_01EeMtJW2FWqSJ5sKMZmuQub',
+      toolName: 'Write',
+      input: { file_path: '/work/card-1/x.txt', content: '' },
+    };
+    expect(translator.permission).toEqual(request);
+    // The refusal is not the call's result: the call waits for the person.
+    expect(transcript.map(entry => entry.kind)).toEqual(['init', 'tool_call', 'permission', 'text', 'result']);
+    expect(translator.outcome({ exitCode: 0, stderr: '' })).toEqual({ kind: 'permission', request });
+  });
+
+  it('keeps an ordinary refused call as its result', () => {
+    const translator = new TurnTranslator();
+    translator.push({ type: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }], raw: {} });
+    const entries = translator.push({
+      type: 'user',
+      content: [{ type: 'tool_result', toolUseId: 't1', content: 'Permission denied.', isError: true }],
+      raw: {},
+    });
+    expect(entries).toEqual([{ kind: 'tool_result', toolCallId: 't1', content: 'Permission denied.', isError: true }]);
+    expect(translator.permission).toBeUndefined();
+  });
+
   it('streams partial text deltas when the CLI sends them', () => {
     const { transcript } = play('turn-partial.jsonl');
     expect(transcript.filter(entry => entry.kind === 'text_delta')).toEqual([

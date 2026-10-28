@@ -63,6 +63,8 @@ describe('Composer on a draft in a Claude Code Factory', () => {
     );
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
+    // The composer names the harness the chat runs on, not Mastra Code.
+    await waitFor(() => expect(message).toHaveAttribute('placeholder', 'Ask Claude Code…'));
     await user.type(message, 'fix the login bug');
     await user.keyboard('{Enter}');
 

@@ -965,8 +965,9 @@ describe('Factory MCP for a bound agent session (session tokens)', () => {
     }
   });
 
-  it('refuses a token for a session with no run binding, another Factory, or another org', async () => {
-    const seed = await setup({ sessionTokens: signer });
+  it("serves a person's own session (no run binding) its owner's tools, without the bound-only ones", async () => {
+    const createBound = vi.fn(() => ({}));
+    const seed = await setup({ sessionTokens: signer, createBound });
     await seed.createSessions([{ sessionId: 'session-unbound', userId: 'alice', visibility: 'org' }]);
     const unbound = signer.sign({
       orgId: 'org-1',
@@ -975,8 +976,16 @@ describe('Factory MCP for a bound agent session (session tokens)', () => {
       threadId: 'session-unbound',
       resourceId: seed.project.id,
     });
-    expect((await sessionRequest(seed.url, 'tools/list', {}, unbound)).status).toBe(401);
+    const list = await sessionRequest(seed.url, 'tools/list', {}, unbound);
+    expect(list.status).toBe(200);
+    const names = (list.body?.result.tools as Array<{ name: string }>).map(tool => tool.name);
+    // A Claude Code chat gets what a person's Mastra chat gets.
+    expect(names).toEqual(expect.arrayContaining(['factory_create_work_item']));
+    expect(createBound).not.toHaveBeenCalled();
+  });
 
+  it('refuses a token for another Factory, or another org', async () => {
+    const seed = await setup({ sessionTokens: signer });
     const bound = await boundSession(seed);
     const other = await seed.projects.create({
       orgId: 'org-1',

@@ -1,7 +1,7 @@
 import type { AgentTokenUsage, PlanDecision } from '@factory/harness';
 
 import { classifyFailure, type ClaudeCodeError } from './errors.ts';
-import { SUBMIT_PLAN_TOOL_ID } from './gate.ts';
+import { PERMISSION_PENDING_MARKER, SUBMIT_PLAN_TOOL_ID } from './gate.ts';
 import type { ClaudeStreamMessage, ClaudeUsage } from './stream.ts';
 
 /**
@@ -37,6 +37,13 @@ export type ClaudeTranscriptEntry =
   | { kind: 'tool_call'; toolCallId: string; toolName: string; input: unknown; parentToolCallId?: string }
   | { kind: 'tool_result'; toolCallId: string; content: string; isError: boolean; parentToolCallId?: string }
   | { kind: 'plan'; toolCallId: string; toolName: string; plan?: string; title?: string }
+  /**
+   * A tool call that needs a person's permission (it stands in for the call's
+   * refused result); the run parks on it once the turn stops.
+   */
+  | ({ kind: 'permission' } & PermissionRequest)
+  /** A person allowed or denied the call the thread was parked on; the next turn carries the answer. */
+  | { kind: 'permission_decision'; toolCallId: string; toolName: string; approved: boolean }
   | {
       kind: 'result';
       subtype: string;
@@ -56,9 +63,20 @@ export interface PlanGate {
   title?: string;
 }
 
+/** A tool call the CLI asked permission for (through the gate's permission tool) and the harness parks on. */
+export interface PermissionRequest {
+  toolCallId: string;
+  /** The tool as the CLI names it, e.g. `Write` or `mcp__server__tool`. */
+  toolName: string;
+  input?: unknown;
+  /** The subagent call it came from, when a subagent made it. */
+  parentToolCallId?: string;
+}
+
 export type TurnOutcome =
   | { kind: 'complete'; text?: string }
   | { kind: 'gate'; gate: PlanGate }
+  | { kind: 'permission'; request: PermissionRequest }
   | { kind: 'error'; error: ClaudeCodeError };
 
 /** Anthropic usage as the contract counts it: prompt tokens include cache reads and writes. */
@@ -101,6 +119,9 @@ export class TurnTranslator {
   #anonymousUsage: ClaudeUsage[] = [];
   #result: Extract<ClaudeStreamMessage, { type: 'result' }> | undefined;
   #gate: PlanGate | undefined;
+  #permission: PermissionRequest | undefined;
+  /** Tool calls seen this turn, so a refused call's permission request names its tool and input. */
+  #toolCalls = new Map<string, { toolName: string; input: unknown }>();
   #errorMarker: string | undefined;
   #errorText: string | undefined;
   #rateLimitRejected = false;
@@ -109,6 +130,11 @@ export class TurnTranslator {
 
   get gate(): PlanGate | undefined {
     return this.#gate;
+  }
+
+  /** The first call this turn that waits for a person's permission; check it after each {@link push}. */
+  get permission(): PermissionRequest | undefined {
+    return this.#permission;
   }
 
   get sawResult(): boolean {
@@ -152,6 +178,7 @@ export class TurnTranslator {
           } else if (block.type === 'thinking' && block.thinking) {
             entries.push(withParent({ kind: 'thinking', text: block.thinking, ...messageId }, parent));
           } else if (block.type === 'tool_use') {
+            this.#toolCalls.set(block.id, { toolName: block.name, input: block.input });
             entries.push(
               withParent({ kind: 'tool_call', toolCallId: block.id, toolName: block.name, input: block.input }, parent),
             );
@@ -182,6 +209,18 @@ export class TurnTranslator {
         return message.content.flatMap((block): ClaudeTranscriptEntry[] => {
           if (block.type === 'text' && block.text) return [withParent({ kind: 'user', text: block.text }, parent)];
           if (block.type === 'tool_result') {
+            // The permission tool refused the call so a person can answer it: the call waits, it did not fail.
+            if (block.isError && block.content.includes(PERMISSION_PENDING_MARKER)) {
+              if (this.#permission) return [];
+              const call = this.#toolCalls.get(block.toolUseId);
+              this.#permission = {
+                toolCallId: block.toolUseId,
+                toolName: call?.toolName ?? 'unknown',
+                ...(call && call.input !== undefined ? { input: call.input } : {}),
+                ...(parent ? { parentToolCallId: parent } : {}),
+              };
+              return [{ kind: 'permission', ...this.#permission }];
+            }
             return [
               withParent(
                 { kind: 'tool_result', toolCallId: block.toolUseId, content: block.content, isError: block.isError },
@@ -239,6 +278,7 @@ export class TurnTranslator {
   /** How the turn went once the process exited. Aborts are the session's call, not the stream's. */
   outcome(exit: { exitCode: number | null; stderr: string }, now = new Date()): TurnOutcome {
     if (this.#gate) return { kind: 'gate', gate: this.#gate };
+    if (this.#permission) return { kind: 'permission', request: this.#permission };
     const result = this.#result;
     if (result && !result.isError && !this.#errorMarker) {
       return { kind: 'complete', ...(result.result !== undefined ? { text: result.result } : {}) };

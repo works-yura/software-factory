@@ -29,9 +29,11 @@ import {
   type ClaudeSpawn,
 } from './cli.ts';
 import { ClaudeCodeError } from './errors.ts';
-import { TurnTranslator, type ClaudeTranscriptEntry, type PlanGate, type TurnOutcome } from './events.ts';
+import { TurnTranslator, type ClaudeTranscriptEntry, type PermissionRequest, type PlanGate, type TurnOutcome } from './events.ts';
 import {
+  GATE_SERVER_NAME,
   GATE_SYSTEM_PROMPT,
+  PERMISSION_PROMPT_TOOL_ID,
   PLANNING_DISALLOWED_TOOLS,
   PLANNING_PROMPT,
   SUBMIT_PLAN_TOOL_ID,
@@ -39,6 +41,8 @@ import {
   gateMcpConfig,
   type GateServerCommand,
 } from './gate.ts';
+import { writeGateServerScript } from './gate-server.ts';
+import { claudePermissionRules, type ClaudeToolPermissions } from './permissions.ts';
 import { emptyThreadState, type ClaudePendingInput, type ClaudeSessionRecord, type ClaudeSessionStore, type ClaudeThreadState } from './store.ts';
 import { parseStreamLine } from './stream.ts';
 
@@ -129,7 +133,22 @@ export interface ClaudeCodeSessionConfig
    * out of `~/.claude/plans` should a project's settings turn plan mode on. `false` leaves it unset.
    */
   plansDirectory?: string | false;
-  /** How the gate server is started; `node gate-mcp-server.mjs` with this process's Node by default. */
+  /**
+   * The tool permissions for this session's next turn (the host's settings),
+   * asked before each turn so a change applies from the next one. Each
+   * category's policy becomes CLI rules (see `claudePermissionRules`): `ask`
+   * calls go to the gate's permission tool, which parks the run until a person
+   * answers ({@link ClaudeCodeSession.respondToToolApproval}). Unset, the turn
+   * runs with {@link allowedTools} and the CLI's own defaults, and a call the
+   * CLI would ask about still parks the run.
+   */
+  permissions?: (session: ClaudeCodeSession) => ClaudeToolPermissions | undefined | Promise<ClaudeToolPermissions | undefined>;
+  /** MCP servers that are the host's own plumbing (e.g. the Factory's tools): the MCP category never governs them. */
+  trustedMcpServers?: string[];
+  /**
+   * How the gate server is started. By default each turn writes it next to its
+   * MCP config (`gate-server.ts`) and runs it with this process's Node.
+   */
   gateServer?: GateServerCommand;
   spawn?: ClaudeSpawn;
   /** The CLI binary; `claude` on PATH by default. */
@@ -243,6 +262,13 @@ function approvalPrompt(decision: PlanDecision): string {
   return parts.join('\n\n');
 }
 
+function permissionPrompt(request: PermissionRequest, approved: boolean): string {
+  const tool = `\`${request.toolName}\``;
+  return approved
+    ? `The person allowed ${tool} for the rest of this session. Retry the call that was waiting for permission, then go on.`
+    : `The person denied permission for the ${tool} call that was waiting. Do not retry it or work around it; go on without it, or say what you would need it for.`;
+}
+
 function rejectionPrompt(decision: PlanDecision): string {
   const parts = ['The plan was not approved.'];
   if (decision.feedback?.trim()) parts.push(`Reviewer feedback:\n${decision.feedback.trim()}`);
@@ -315,6 +341,17 @@ export class ClaudeCodeSession implements AgentSession {
     return gate ? { ...gate } : undefined;
   }
 
+  /** The tool call the current thread is parked on until a person allows or denies it, if any. */
+  get pendingPermission(): PermissionRequest | undefined {
+    const request = this.#threadState().pendingPermission;
+    return request ? structuredClone(request) : undefined;
+  }
+
+  /** Tools a person allowed for the rest of the current thread. */
+  get grantedTools(): string[] {
+    return [...(this.#threadState().grantedTools ?? [])];
+  }
+
   /** The id of the run in flight. */
   get runId(): string | undefined {
     return this.#run?.runId;
@@ -348,7 +385,8 @@ export class ClaudeCodeSession implements AgentSession {
   };
 
   readonly suspensions = {
-    hasPending: (): boolean => this.#threadState().pendingGate !== undefined,
+    hasPending: (): boolean =>
+      this.#threadState().pendingGate !== undefined || this.#threadState().pendingPermission !== undefined,
   };
 
   subscribe(listener: AgentEventListener): () => void {
@@ -433,6 +471,13 @@ export class ClaudeCodeSession implements AgentSession {
 
   async respondToToolSuspension({ resumeData, toolCallId }: { resumeData: PlanDecision; toolCallId?: string }): Promise<void> {
     const thread = this.#threadState();
+    // A caller that only knows the contract's gate answers a permission request with a plan decision.
+    if (!thread.pendingGate && thread.pendingPermission) {
+      return this.respondToToolApproval({
+        approved: resumeData.action === 'approved',
+        ...(toolCallId ? { toolCallId } : {}),
+      });
+    }
     const gate = thread.pendingGate;
     if (!gate) throw new Error('This session is not waiting on a person.');
     if (toolCallId && toolCallId !== gate.toolCallId) {
@@ -446,6 +491,33 @@ export class ClaudeCodeSession implements AgentSession {
     const accepted = this.#accept([{ kind: 'signal', text, gate: true }], true, { keepGate: true });
     if (accepted.action === 'persist') return;
     this.#emitTranscript({ kind: 'plan_decision', toolCallId: gate.toolCallId, decision: { ...resumeData } }, accepted.run);
+    await accepted.run.started;
+  }
+
+  /**
+   * Answers the tool call the thread is parked on. Allowed, the tool is
+   * allowed for the rest of the thread and Claude is told to retry the call;
+   * denied, Claude is told so. Either way the same Claude session goes on in a
+   * new run.
+   */
+  async respondToToolApproval({ approved, toolCallId }: { approved: boolean; toolCallId?: string }): Promise<void> {
+    const thread = this.#threadState();
+    const request = thread.pendingPermission;
+    if (!request) throw new Error('This session is not waiting on a permission.');
+    if (toolCallId && toolCallId !== request.toolCallId) {
+      throw new Error(`This session is waiting on ${request.toolCallId}, not ${toolCallId}.`);
+    }
+    if (this.#run) throw new Error('Cannot answer a permission while a run is in flight.');
+    thread.pendingPermission = undefined;
+    if (approved) thread.grantedTools = [...new Set([...(thread.grantedTools ?? []), request.toolName])];
+    const accepted = this.#accept([{ kind: 'signal', text: permissionPrompt(request, approved), gate: true }], true, {
+      keepGate: true,
+    });
+    if (accepted.action === 'persist') return;
+    this.#emitTranscript(
+      { kind: 'permission_decision', toolCallId: request.toolCallId, toolName: request.toolName, approved },
+      accepted.run,
+    );
     await accepted.run.started;
   }
 
@@ -535,6 +607,12 @@ export class ClaudeCodeSession implements AgentSession {
       thread.pendingGate = undefined;
       this.#emit({ type: 'tool_suspension_cancelled', toolCallId });
     }
+    if (thread.pendingPermission && !keepGate) {
+      // And the permission nobody gave: Claude hears about it with the new input instead.
+      const { toolCallId } = thread.pendingPermission;
+      thread.pendingPermission = undefined;
+      this.#emit({ type: 'tool_suspension_cancelled', toolCallId });
+    }
     return { action: 'wake', run: this.#startRun(inputs) };
   }
 
@@ -585,6 +663,15 @@ export class ClaudeCodeSession implements AgentSession {
         if (outcome.kind === 'error') {
           this.#emit({ type: 'error', error: outcome.error });
           reason = 'error';
+          break;
+        }
+        if (outcome.kind === 'permission') {
+          const thread = this.#threadState(run.threadId);
+          thread.pendingPermission = outcome.request;
+          thread.pendingInputs.push(...run.queue);
+          run.queue = [];
+          this.#emit({ type: 'tool_suspended', toolName: outcome.request.toolName, toolCallId: outcome.request.toolCallId });
+          reason = 'suspended';
           break;
         }
         if (outcome.kind === 'gate') {
@@ -647,6 +734,7 @@ export class ClaudeCodeSession implements AgentSession {
     planning: boolean,
     mcpConfigPaths: string[],
     model: string | undefined,
+    permissions: { rules?: { allow: string[]; ask: string[]; deny: string[] } } = {},
   ): ClaudeArgsInput {
     const config = this.#config;
     const mode = thread.mode ?? config.mode;
@@ -654,21 +742,37 @@ export class ClaudeCodeSession implements AgentSession {
     const permissionMode: ClaudePermissionMode | undefined = planning ? 'default' : mode === 'planning' ? undefined : mode;
     const settingSources = config.settingSources ?? DEFAULT_SETTING_SOURCES;
     const plansDirectory = config.plansDirectory ?? DEFAULT_PLANS_DIRECTORY;
+    const rules = permissions.rules;
     const disallowedTools = [
       ...(config.disallowedTools ?? []),
+      ...(rules?.deny ?? []),
       ...(planning ? (config.planningDisallowedTools ?? PLANNING_DISALLOWED_TOOLS) : []),
     ];
+    const granted = thread.grantedTools ?? [];
+    const settings: Record<string, unknown> = {
+      ...(plansDirectory ? { plansDirectory } : {}),
+      ...(rules?.ask.length ? { permissions: { ask: rules.ask } } : {}),
+    };
     return {
       ...(thread.claudeSessionId ? { resumeSessionId: thread.claudeSessionId } : {}),
       ...(model ? { model } : {}),
       ...(config.effort ? { effort: config.effort } : {}),
       ...(permissionMode ? { permissionMode } : {}),
       ...(settingSources ? { settingSources } : {}),
-      ...(plansDirectory ? { settings: { plansDirectory } } : {}),
+      ...(Object.keys(settings).length ? { settings } : {}),
       mcpConfig: mcpConfigPaths,
       strictMcpConfig: config.strictMcpConfig ?? true,
-      allowedTools: [...new Set([...(config.allowedTools ?? []), SUBMIT_PLAN_TOOL_ID])],
+      allowedTools: [
+        ...new Set([
+          ...(config.allowedTools ?? []),
+          ...(rules?.allow ?? []),
+          ...granted,
+          SUBMIT_PLAN_TOOL_ID,
+          PERMISSION_PROMPT_TOOL_ID,
+        ]),
+      ],
       ...(disallowedTools.length ? { disallowedTools: [...new Set(disallowedTools)] } : {}),
+      permissionPromptTool: PERMISSION_PROMPT_TOOL_ID,
       appendSystemPrompt: [config.appendSystemPrompt, GATE_SYSTEM_PROMPT].filter(Boolean).join('\n\n'),
       ...(config.includePartialMessages ? { includePartialMessages: true } : {}),
       ...(config.maxTurns ? { maxTurns: config.maxTurns } : {}),
@@ -707,6 +811,7 @@ export class ClaudeCodeSession implements AgentSession {
     const mcpConfig =
       typeof this.#config.mcpConfig === 'function' ? await this.#config.mcpConfig(this) : this.#config.mcpConfig;
     const model = (await this.#config.modelFor?.(this)) || this.#config.model;
+    const permissions = await this.#config.permissions?.(this);
     if (run.abortRequested) return { kind: 'aborted' };
     const configDir = this.#config.configDir?.(this);
     const envFor = (turn: ClaudeTurnCredentials) =>
@@ -720,7 +825,16 @@ export class ClaudeCodeSession implements AgentSession {
       );
     const configured = mcpConfig === undefined ? [] : Array.isArray(mcpConfig) ? mcpConfig : [mcpConfig];
     // MCP configs carry per-turn tokens: a private file, not the command line every local user can read.
-    const mcpFile = await writeMcpConfigFile([...configured, gateMcpConfig(this.#config.gateServer)], this.#config.tempDir);
+    const mcpFile = await writeMcpConfigFile(configured, this.#config.tempDir, {
+      gate: this.#config.gateServer ?? 'embedded',
+    });
+    const rules = permissions
+      ? claudePermissionRules(permissions, {
+          mcpServers: mcpFile.servers.filter(server => server !== GATE_SERVER_NAME),
+          trustedMcpServers: this.#config.trustedMcpServers ?? [],
+          granted: thread.grantedTools ?? [],
+        })
+      : undefined;
     try {
       return await this.#attempts(run, {
         thread,
@@ -734,6 +848,7 @@ export class ClaudeCodeSession implements AgentSession {
         cwd,
         mcpConfigPaths: mcpFile.paths,
         model,
+        ...(rules ? { rules } : {}),
       });
     } finally {
       await mcpFile.cleanup();
@@ -754,9 +869,10 @@ export class ClaudeCodeSession implements AgentSession {
       cwd: string;
       mcpConfigPaths: string[];
       model: string | undefined;
+      rules?: { allow: string[]; ask: string[]; deny: string[] };
     },
   ): Promise<TurnOutcome | { kind: 'aborted' }> {
-    const { thread, planning, prompt, inputs, tried, envFor, cwd, mcpConfigPaths, model } = turn;
+    const { thread, planning, prompt, inputs, tried, envFor, cwd, mcpConfigPaths, model, rules } = turn;
     let { credentials, env } = turn;
     let turnPrompt = prompt;
     let resumedStale = false;
@@ -770,7 +886,7 @@ export class ClaudeCodeSession implements AgentSession {
         this.#record.accountId = credentials.accountId;
         void this.#save().catch(() => {});
       }
-      const args = buildClaudeArgs(this.#argsInput(thread, planning, mcpConfigPaths, model));
+      const args = buildClaudeArgs(this.#argsInput(thread, planning, mcpConfigPaths, model, rules ? { rules } : {}));
       const translator = new TurnTranslator();
       let processRef: ClaudeRun | undefined;
       let stopForGate = false;
@@ -790,8 +906,8 @@ export class ClaudeCodeSession implements AgentSession {
         }
         // Once the plan is in, the rest is the process being stopped (e.g. the gate call failing with "Connection closed").
         if (!run.settled && !stopForGate) for (const entry of entries) this.#emitTranscript(entry, run);
-        if (translator.gate && !stopForGate) {
-          // The plan is the turn's last word: stop before Claude acts on a mode it was not granted.
+        if ((translator.gate || translator.permission) && !stopForGate) {
+          // The plan, or a call waiting for a person, is the turn's last word: stop before Claude goes on without the answer.
           stopForGate = true;
           processRef?.terminate();
         }
@@ -887,11 +1003,14 @@ function signalText(input: AgentSignalInput): string {
  * Writes a turn's MCP servers into one file only this user can read, and
  * returns the `--mcp-config` values: that file, then any config given as a
  * path. Configs given inline (objects or JSON text) are merged into the file.
+ * `gate` adds the gate server: a command, or `'embedded'` to write the gate
+ * server's script into the same private folder and run it with this Node.
  */
 export async function writeMcpConfigFile(
   configs: ClaudeMcpConfig[],
   dir = tmpdir(),
-): Promise<{ paths: string[]; cleanup: () => Promise<void> }> {
+  { gate }: { gate?: GateServerCommand | 'embedded' } = {},
+): Promise<{ paths: string[]; servers: string[]; cleanup: () => Promise<void> }> {
   const servers: Record<string, unknown> = {};
   const paths: string[] = [];
   for (const config of configs.flat()) {
@@ -906,10 +1025,17 @@ export async function writeMcpConfigFile(
     Object.assign(servers, (value as { mcpServers?: Record<string, unknown> }).mcpServers ?? {});
   }
   const folder = await mkdtemp(join(dir, 'factory-claude-'));
+  if (gate) {
+    const command =
+      gate === 'embedded' ? { command: process.execPath, args: [await writeGateServerScript(folder)] } : gate;
+    Object.assign(servers, gateMcpConfig(command).mcpServers);
+  }
   const file = join(folder, 'mcp.json');
   await writeFile(file, JSON.stringify({ mcpServers: servers }), { mode: 0o600 });
   return {
     paths: [file, ...paths],
+    /** The servers written into the file (configs given as paths are not read). */
+    servers: Object.keys(servers),
     cleanup: () => rm(folder, { recursive: true, force: true }).catch(() => {}),
   };
 }

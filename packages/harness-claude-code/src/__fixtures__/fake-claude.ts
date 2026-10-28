@@ -35,6 +35,17 @@ export interface FakeCall {
   killed: string[];
   /** Each `--mcp-config` value as the CLI would read it at spawn: file contents (with the file's mode) or inline JSON. */
   mcpConfigs: Array<{ path?: string; mode?: number; config: unknown }>;
+  /** The gate server's script as the CLI would start it at spawn, when its config names one that exists. */
+  gateScript?: { path: string; mode: number; source: string };
+}
+
+function readGateScript(configs: FakeCall['mcpConfigs']): FakeCall['gateScript'] {
+  for (const { config } of configs) {
+    const gate = (config as { mcpServers?: { factory_gate?: { args?: string[] } } }).mcpServers?.factory_gate;
+    const path = gate?.args?.[0];
+    if (path && existsSync(path)) return { path, mode: statSync(path).mode & 0o777, source: readFileSync(path, 'utf8') };
+  }
+  return undefined;
 }
 
 function readMcpConfigs(args: string[]): FakeCall['mcpConfigs'] {
@@ -68,6 +79,8 @@ export function fakeClaude(turns: FakeTurn[]) {
       killed: [],
       mcpConfigs: readMcpConfigs(args),
     };
+    const gateScript = readGateScript(call.mcpConfigs);
+    if (gateScript) call.gateScript = gateScript;
     calls.push(call);
     const child = new EventEmitter();
     const stdout = new EventEmitter();

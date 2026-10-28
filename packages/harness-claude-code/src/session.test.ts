@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -8,7 +9,8 @@ import { deferred, fakeClaude, fixture, type FakeTurn } from './__fixtures__/fak
 import { ClaudeCodeError } from './errors.ts';
 import { createClaudeCodeHarness, type ClaudeCodeHarnessConfig } from './harness.ts';
 import type { ClaudeTranscriptEntry } from './events.ts';
-import { GATE_SERVER_SCRIPT, PLANNING_PROMPT } from './gate.ts';
+import { PLANNING_PROMPT } from './gate.ts';
+import { GATE_SERVER_SOURCE } from './gate-server.ts';
 import { ACCOUNT_SWITCH_PROMPT, MAX_ACCOUNT_SWITCHES } from './session.ts';
 import type { ClaudeCodeSession, ClaudeCredentialFailure, ClaudeCredentialRequest } from './session.ts';
 import { createInMemorySessionStore, type ClaudeSessionStore } from './store.ts';
@@ -129,7 +131,7 @@ describe('ClaudeCodeSession', () => {
     expect(flagValue(args, '--resume')).toBe(CLAUDE_SESSION);
     expect(flagValue(args, '--model')).toBe('claude-sonnet-4-6');
     expect(flagValue(args, '--effort')).toBe('high');
-    expect(flagValue(args, '--allowedTools')).toBe('Read,Edit,Bash(git status:*),mcp__factory_gate__submit_plan');
+    expect(flagValue(args, '--allowedTools')).toBe('Read,Edit,Bash(git status:*),mcp__factory_gate__submit_plan,mcp__factory_gate__permission_prompt');
   });
 
   it('asks modelFor before each turn and lets it override the static model', async () => {
@@ -189,6 +191,166 @@ describe('ClaudeCodeSession', () => {
     expect(events.filter(event => event.type === 'agent_end')).toHaveLength(1);
   });
 
+  describe('tool permissions', () => {
+    const WRITE_CALL = 'toolu_01EeMtJW2FWqSJ5sKMZmuQub';
+
+    async function parkOnPermission(extraTurns: FakeTurn[] = [], overrides: Partial<ClaudeCodeHarnessConfig> = {}) {
+      const context = await setup([{ lines: fixture('turn-permission.jsonl') }, ...extraTurns], {
+        permissions: () => ({ categories: { read: 'allow', edit: 'ask', execute: 'deny', other: 'ask' } }),
+        ...overrides,
+      });
+      const end = nextEnd(context.session);
+      await context.signal('ask-1', 'Create an empty file x.txt.');
+      expect(await end).toBe('suspended');
+      return context;
+    }
+
+    it("turns the host's categories into CLI rules and points permission prompts at the gate", async () => {
+      const { fake } = await parkOnPermission();
+      const [call] = fake.calls;
+
+      expect(flagValue(call!.args, '--permission-prompt-tool')).toBe('mcp__factory_gate__permission_prompt');
+      expect(flagValue(call!.args, '--allowedTools')?.split(',')).toEqual([
+        'Read',
+        'Glob',
+        'Grep',
+        'LS',
+        'NotebookRead',
+        'mcp__factory_gate__submit_plan',
+        'mcp__factory_gate__permission_prompt',
+      ]);
+      expect(flagValue(call!.args, '--disallowedTools')?.split(',')).toEqual(['Bash', 'BashOutput', 'KillShell', 'Monitor']);
+      // Ask is a rule, so even a call the permission mode would accept goes to the person.
+      const settings = JSON.parse(flagValue(call!.args, '--settings')!) as { permissions: { ask: string[] } };
+      expect(settings.permissions.ask).toEqual(expect.arrayContaining(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'Task']));
+      expect(settings.permissions.ask).not.toContain('Read');
+    });
+
+    it('parks the run on a call the gate refused for a person, without showing the refusal as its result', async () => {
+      const { fake, session, events, transcript } = await parkOnPermission();
+
+      expect(fake.calls[0]!.killed).toEqual(['SIGTERM']);
+      expect(events.filter(event => event.type !== 'usage_update')).toEqual([
+        { type: 'tool_suspended', toolName: 'Write', toolCallId: WRITE_CALL },
+        { type: 'agent_end', reason: 'suspended' },
+      ]);
+      expect(session.suspensions.hasPending()).toBe(true);
+      expect(session.pendingPermission).toEqual({
+        toolCallId: WRITE_CALL,
+        toolName: 'Write',
+        input: { file_path: '/work/card-1/x.txt', content: '' },
+      });
+      expect(transcript.at(-1)).toEqual({ kind: 'permission', ...session.pendingPermission });
+      expect(transcript.some(entry => entry.kind === 'tool_result')).toBe(false);
+      // What Claude said after the refusal is not shown: the turn stopped there.
+      expect(transcript.some(entry => entry.kind === 'text')).toBe(false);
+    });
+
+    it('allows the tool for the rest of the thread and resumes the same Claude session to retry', async () => {
+      const { fake, session, transcript, store } = await parkOnPermission([
+        { lines: fixture('turn-complete.jsonl') },
+        { lines: fixture('turn-complete.jsonl') },
+      ]);
+
+      const end = nextEnd(session);
+      await session.respondToToolApproval({ approved: true, toolCallId: WRITE_CALL });
+      expect(await end).toBe('complete');
+      const retry = fake.calls[1]!;
+      expect(flagValue(retry.args, '--resume')).toBe(CLAUDE_SESSION);
+      expect(retry.stdin).toContain('The person allowed `Write` for the rest of this session. Retry the call');
+      expect(flagValue(retry.args, '--allowedTools')?.split(',')).toContain('Write');
+      const settings = JSON.parse(flagValue(retry.args, '--settings')!) as { permissions: { ask: string[] } };
+      expect(settings.permissions.ask).not.toContain('Write');
+      expect(settings.permissions.ask).toContain('Edit');
+      expect(session.pendingPermission).toBeUndefined();
+      expect(session.grantedTools).toEqual(['Write']);
+      expect(transcript).toContainEqual({ kind: 'permission_decision', toolCallId: WRITE_CALL, toolName: 'Write', approved: true });
+      expect((await store.get('card-1'))!.threads['thread-1']!.grantedTools).toEqual(['Write']);
+
+      // The grant lasts: the next turn still allows it.
+      const next = nextEnd(session);
+      await session.sendMessage({ content: 'And another one.' });
+      await next;
+      expect(flagValue(fake.calls[2]!.args, '--allowedTools')?.split(',')).toContain('Write');
+    });
+
+    it('tells Claude a denied call was denied, and grants nothing', async () => {
+      const { fake, session } = await parkOnPermission([{ lines: fixture('turn-complete.jsonl') }]);
+
+      const end = nextEnd(session);
+      await session.respondToToolSuspension({ resumeData: { action: 'rejected' }, toolCallId: WRITE_CALL });
+      expect(await end).toBe('complete');
+      expect(fake.calls[1]!.stdin).toContain('The person denied permission for the `Write` call');
+      expect(flagValue(fake.calls[1]!.args, '--allowedTools')?.split(',')).not.toContain('Write');
+      expect(session.grantedTools).toEqual([]);
+    });
+
+    it('refuses an answer for another call, and drops the request when new input comes first', async () => {
+      const { session, events, signal } = await parkOnPermission([{ lines: fixture('turn-complete.jsonl') }]);
+
+      await expect(session.respondToToolApproval({ approved: true, toolCallId: 'toolu_other' })).rejects.toThrow(
+        /waiting on toolu_01EeMtJW2FWqSJ5sKMZmuQub/,
+      );
+      const end = nextEnd(session);
+      await signal('next-1', 'Never mind.');
+      await end;
+      expect(events).toContainEqual({ type: 'tool_suspension_cancelled', toolCallId: WRITE_CALL });
+      expect(session.pendingPermission).toBeUndefined();
+    });
+
+    it('allows everything with auto-approve and reads the settings again before each turn', async () => {
+      let yolo = true;
+      const { fake, session, signal } = await setup(
+        [{ lines: fixture('turn-complete.jsonl') }, { lines: fixture('turn-complete.jsonl') }],
+        { permissions: () => ({ yolo, categories: { execute: 'deny' } }) },
+      );
+      let end = nextEnd(session);
+      await signal('one', 'Go.');
+      await end;
+      const first = fake.calls[0]!;
+      expect(first.args).not.toContain('--disallowedTools');
+      expect(flagValue(first.args, '--allowedTools')?.split(',')).toEqual(expect.arrayContaining(['Bash', 'Write', 'WebFetch']));
+      expect(JSON.parse(flagValue(first.args, '--settings')!)).toEqual({ plansDirectory: '.claude/plans' });
+
+      yolo = false;
+      end = nextEnd(session);
+      await signal('two', 'Again.');
+      await end;
+      expect(flagValue(fake.calls[1]!.args, '--disallowedTools')?.split(',')).toContain('Bash');
+    });
+
+    it('keeps the planning deny list on top of what the settings allow', async () => {
+      const { fake, session, signal } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
+        mode: 'planning',
+        permissions: () => ({ yolo: true }),
+      });
+      const end = nextEnd(session);
+      await signal('plan', 'Plan it.');
+      await end;
+      const call = fake.calls[0]!;
+      expect(flagValue(call.args, '--disallowedTools')?.split(',')).toEqual(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+    });
+
+    it('governs other MCP servers by the MCP category, never the trusted ones or the gate', async () => {
+      const { fake, session, signal } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
+        mcpConfig: {
+          mcpServers: {
+            factory: { type: 'http', url: 'http://factory.test/mcp' },
+            linear: { type: 'http', url: 'http://linear.test/mcp' },
+          },
+        },
+        trustedMcpServers: ['factory'],
+        permissions: () => ({ categories: { mcp: 'deny' } }),
+      });
+      const end = nextEnd(session);
+      await signal('mcp', 'Go.');
+      await end;
+      const disallowed = flagValue(fake.calls[0]!.args, '--disallowedTools')!.split(',');
+      expect(disallowed).toContain('mcp__linear');
+      expect(disallowed.some(rule => rule.startsWith('mcp__factory'))).toBe(false);
+    });
+  });
+
   describe('plan gate', () => {
     async function parkOnPlan(extraTurns: FakeTurn[] = [], first = 'turn-submit-plan.jsonl') {
       const context = await setup([{ lines: fixture(first) }, ...extraTurns], { mode: 'planning' });
@@ -205,7 +367,7 @@ describe('ClaudeCodeSession', () => {
       expect(flagValue(call!.args, '--permission-mode')).toBe('default');
       expect(call!.args.join(' ')).not.toMatch(/--permission-mode plan/);
       expect(flagValue(call!.args, '--disallowedTools')?.split(',')).toEqual(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
-      expect(flagValue(call!.args, '--allowedTools')).toBe('mcp__factory_gate__submit_plan');
+      expect(flagValue(call!.args, '--allowedTools')).toBe('mcp__factory_gate__submit_plan,mcp__factory_gate__permission_prompt');
       expect(call!.stdin).toBe(`${PLANNING_PROMPT}\n\nPlan the README change.`);
     });
 
@@ -404,10 +566,15 @@ describe('ClaudeCodeSession', () => {
       expect(JSON.parse(flagValue(call.args, '--settings')!)).toEqual({ plansDirectory: '.claude/plans' });
       expect(call.args).not.toContain('--permission-mode');
       expect(call.args).not.toContain('--disallowedTools');
+      // The gate server is written next to the MCP config, so a bundled host (no sibling .mjs) still starts it.
+      const [file] = call.mcpConfigs;
+      const script = join(dirname(file!.path!), 'gate-mcp-server.mjs');
       expect(call.mcpConfigs.map(value => value.config)).toEqual([
-        { mcpServers: { factory_gate: { type: 'stdio', command: process.execPath, args: [GATE_SERVER_SCRIPT] } } },
+        { mcpServers: { factory_gate: { type: 'stdio', command: process.execPath, args: [script] } } },
       ]);
-      expect(flagValue(call.args, '--allowedTools')).toBe('mcp__factory_gate__submit_plan');
+      expect(call.gateScript).toEqual({ path: script, mode: 0o600, source: GATE_SERVER_SOURCE });
+      expect(flagValue(call.args, '--allowedTools')).toBe('mcp__factory_gate__submit_plan,mcp__factory_gate__permission_prompt');
+      expect(flagValue(call.args, '--permission-prompt-tool')).toBe('mcp__factory_gate__permission_prompt');
       expect(flagValue(call.args, '--append-system-prompt')).toContain('mcp__factory_gate__submit_plan');
     });
 
@@ -428,7 +595,7 @@ describe('ClaudeCodeSession', () => {
           },
         },
       ]);
-      expect(flagValue(call.args, '--allowedTools')).toBe('Read,mcp__factory,mcp__factory_gate__submit_plan');
+      expect(flagValue(call.args, '--allowedTools')).toBe('Read,mcp__factory,mcp__factory_gate__submit_plan,mcp__factory_gate__permission_prompt');
       expect(flagValue(call.args, '--append-system-prompt')).toMatch(/^You work a Factory card\.\n\nPlan approval:/);
     });
 

@@ -367,6 +367,7 @@
     }
   },
   "claudeCode": {
+    "placeholder": "Запитайте Claude Code…",
     "model": "Claude Code · {{model}}",
     "modelHint": "Цей чат працює на Claude Code з моделлю Claude цієї Factory. Змінити її можна в Налаштування → Моделі."
   }

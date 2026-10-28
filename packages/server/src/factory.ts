@@ -62,6 +62,7 @@ import {
   createClaudeCodeCredentials,
   createClaudeFactoryHarness,
   createClaudeUserSessions,
+  createFactoryToolPermissions,
 } from './claude/index.ts';
 import type {
   ClaudeCodeCredentialFailureHook,
@@ -1324,6 +1325,8 @@ export class MastraFactory {
           ...claudeCodeConfig,
           sessions: sourceControlSessions,
           projects: factoryProjectsStorage,
+          // Settings → Behavior → Tool permissions: the Factory's own session keeps them.
+          permissions: createFactoryToolPermissions(async sessionId => this.#prepared?.base.controller.getSession(sessionId)),
           ...claudeCodeCredentials,
           cwdFor:
             claudeCodeConfig.cwdFor ??

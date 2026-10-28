@@ -90,7 +90,7 @@ integrations/platform/gitlab/event-worker.test.ts	integration-gitlab/src/platfor
 integrations/pull-request-head.test.ts	integrations/src/pull-request-head.test.ts
 integrations/reconciliation-config.test.ts	integrations/src/reconciliation-config.test.ts
 integrations/subscription-session.test.ts	integrations/src/subscription-session.test.ts
-mcp/routes.test.ts	mcp/src/routes.test.ts	+19	connector support and factory.activity events ported from upstream f3bc1caddb; plus 6 cases for the session-scoped tokens Claude Code sessions use
+mcp/routes.test.ts	mcp/src/routes.test.ts	+20	connector support and factory.activity events ported from upstream f3bc1caddb; plus 7 cases for the session-scoped tokens Claude Code sessions use
 platform-auth-host.test.ts	auth/src/platform-auth-host.test.ts
 routes/apply-default-model.scenario.test.ts	api/src/apply-default-model.scenario.test.ts
 routes/attention.test.ts	api/src/attention.test.ts
