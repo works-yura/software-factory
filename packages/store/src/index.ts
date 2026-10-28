@@ -6,6 +6,7 @@ export * from './comments/actor.ts';
 export * from './comments/base.ts';
 export * from './comments/feed-context.ts';
 export * from './credentials/base.ts';
+export * from './credentials/accounts.ts';
 export * from './custom-providers/base.ts';
 export * from './dispatch-errors.ts';
 export * from './filesystem/base.ts';

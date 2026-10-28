@@ -39,6 +39,8 @@ export interface ClaudeSessionRecord {
   /** Where the CLI runs. Fixed after the first turn: the CLI files sessions by project directory. */
   cwd?: string;
   threads: Record<string, ClaudeThreadState>;
+  /** The credential account the last turn ran on; the next turn prefers it. */
+  accountId?: string;
   updatedAt: string;
 }
 

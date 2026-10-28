@@ -59,10 +59,15 @@ import {
   ClaudeStartCoordinator,
   createClaudeBoundTools,
   createClaudeCheckoutResolver,
-  createClaudeCodeCredentialsHook,
+  createClaudeCodeCredentials,
   createClaudeFactoryHarness,
 } from './claude/index.ts';
-import type { ClaudeCodeCredentialsHook, ClaudeFactoryHarness, ClaudeFactoryHarnessOptions } from './claude/index.ts';
+import type {
+  ClaudeCodeCredentialFailureHook,
+  ClaudeCodeCredentialsHook,
+  ClaudeFactoryHarness,
+  ClaudeFactoryHarnessOptions,
+} from './claude/index.ts';
 import type { ClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import { EnvironmentBuildRunner } from '@factory/harness-mastra';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '@factory/harness-mastra';
@@ -367,8 +372,10 @@ export interface MastraFactoryClaudeCodeConfig
   store?: ClaudeFactoryHarnessOptions['store'];
   /** Local development: turns run on the person's own `claude` login, with no credentials passed. */
   localDevelopment?: boolean;
-  /** Replaces the default credentials hook (`createClaudeCodeCredentialsHook`), e.g. with a credential pool. */
+  /** Replaces the default credentials (`createClaudeCodeCredentials`: the organization's Anthropic accounts). */
   credentials?: ClaudeCodeCredentialsHook;
+  /** Goes with a replaced `credentials` hook: told when a turn's account ran out of usage or was refused. */
+  onCredentialFailure?: ClaudeCodeCredentialFailureHook;
   /** Replaces the default checkout (`createClaudeCheckoutResolver`). */
   cwdFor?: (sessionId: string) => string | Promise<string>;
   /** The origin the CLI reaches this server's MCP endpoint at; `publicUrl` by default. */
@@ -1302,16 +1309,20 @@ export class MastraFactory {
     const sessionTokens = claudeCodeConfig
       ? createFactorySessionTokenSigner(claudeCodeConfig.sessionTokenSecret ?? this.#config.stateSecret)
       : undefined;
+    const claudeCodeCredentials = claudeCodeConfig?.credentials
+      ? {
+          credentials: claudeCodeConfig.credentials,
+          ...(claudeCodeConfig.onCredentialFailure ? { onCredentialFailure: claudeCodeConfig.onCredentialFailure } : {}),
+        }
+      : createClaudeCodeCredentials({
+          localDevelopment: claudeCodeConfig?.localDevelopment === true,
+          credentials: modelCredentialsStorage,
+        });
     const claudeCode: ClaudeFactoryHarness | undefined = claudeCodeConfig
       ? createClaudeFactoryHarness({
           ...claudeCodeConfig,
           sessions: sourceControlSessions,
-          credentials:
-            claudeCodeConfig.credentials ??
-            createClaudeCodeCredentialsHook({
-              localDevelopment: claudeCodeConfig.localDevelopment === true,
-              credentials: modelCredentialsStorage,
-            }),
+          ...claudeCodeCredentials,
           cwdFor:
             claudeCodeConfig.cwdFor ??
             createClaudeCheckoutResolver({

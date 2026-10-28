@@ -7,7 +7,8 @@ import { ClaudeCodeError } from './errors.ts';
 import { createClaudeCodeHarness, type ClaudeCodeHarnessConfig } from './harness.ts';
 import type { ClaudeTranscriptEntry } from './events.ts';
 import { GATE_SERVER_SCRIPT, PLANNING_PROMPT } from './gate.ts';
-import type { ClaudeCodeSession } from './session.ts';
+import { ACCOUNT_SWITCH_PROMPT, MAX_ACCOUNT_SWITCHES } from './session.ts';
+import type { ClaudeCodeSession, ClaudeCredentialFailure, ClaudeCredentialRequest } from './session.ts';
 import { createInMemorySessionStore, type ClaudeSessionStore } from './store.ts';
 
 const CLAUDE_SESSION = '9f0c1a52-6b1e-4d6a-9a43-2f3b8f0e7c11';
@@ -572,5 +573,168 @@ describe('ClaudeCodeSession', () => {
     for (const call of fake.calls) {
       expect(call.args.join(' ')).not.toMatch(/dangerously|bypassPermissions|--permission-mode plan/);
     }
+  });
+});
+
+describe('ClaudeCodeSession account rotation', () => {
+  const authFailure = (withInit: boolean) => [
+    ...(withInit ? [fixture('turn-rate-limit.jsonl')[0]!] : []),
+    JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: true,
+      result: 'Invalid API key · Please run /login',
+      session_id: CLAUDE_SESSION,
+    }),
+  ];
+
+  /** A credentials hook over a fixed list of accounts that records what each turn asked. */
+  function accounts(ids: string[]) {
+    const requests: ClaudeCredentialRequest[] = [];
+    const failures: ClaudeCredentialFailure[] = [];
+    return {
+      requests,
+      failures,
+      credentials: async (_session: ClaudeCodeSession, request: ClaudeCredentialRequest) => {
+        requests.push(structuredClone(request));
+        const id =
+          (request.preferredAccountId && !request.exclude.includes(request.preferredAccountId)
+            ? request.preferredAccountId
+            : undefined) ?? ids.find(candidate => !request.exclude.includes(candidate));
+        if (!id) throw new ClaudeCodeError('rate_limit', 'Every account is out of usage.');
+        return { env: { CLAUDE_CODE_OAUTH_TOKEN: `token-${id}` }, accountId: id };
+      },
+      onCredentialFailure: async (_session: ClaudeCodeSession, failure: ClaudeCredentialFailure) => {
+        failures.push(failure);
+      },
+    };
+  }
+
+  it('goes on in the same Claude session with the next account when one runs out of usage', async () => {
+    const pool = accounts(['a', 'b']);
+    const { fake, session, signal, store, transcript } = await setup(
+      [{ lines: fixture('turn-rate-limit.jsonl'), exitCode: 1 }, { lines: fixture('turn-complete.jsonl') }],
+      { credentials: pool.credentials, onCredentialFailure: pool.onCredentialFailure },
+    );
+    const end = nextEnd(session);
+    await signal('one', 'Update the README.');
+    expect(await end).toBe('complete');
+
+    expect(fake.calls.map(call => call.env.CLAUDE_CODE_OAUTH_TOKEN)).toEqual(['token-a', 'token-b']);
+    expect(fake.calls[0]!.stdin).toBe('Update the README.');
+    // The prompt is already in the session; the next account is told to continue, on the same session.
+    expect(fake.calls[1]!.stdin).toBe(ACCOUNT_SWITCH_PROMPT);
+    expect(flagValue(fake.calls[1]!.args, '--resume')).toBe(CLAUDE_SESSION);
+
+    expect(pool.failures).toHaveLength(1);
+    expect(pool.failures[0]!.accountId).toBe('a');
+    expect(pool.failures[0]!.error.kind).toBe('rate_limit');
+    expect(pool.failures[0]!.error.resetsAt).toEqual(new Date(1793116800 * 1000));
+    expect(pool.requests).toEqual([{ exclude: [] }, { exclude: ['a'] }]);
+    expect((await store.get('card-1'))?.accountId).toBe('b');
+    // The person's input shows once, not once per account.
+    expect(transcript.filter(entry => entry.kind === 'input')).toHaveLength(1);
+  });
+
+  it('prefers the account the session ran on last', async () => {
+    const pool = accounts(['a', 'b']);
+    const { fake, session, signal } = await setup(
+      [
+        { lines: fixture('turn-rate-limit.jsonl'), exitCode: 1 },
+        { lines: fixture('turn-complete.jsonl') },
+        { lines: fixture('turn-complete.jsonl') },
+      ],
+      { credentials: pool.credentials, onCredentialFailure: pool.onCredentialFailure },
+    );
+    let end = nextEnd(session);
+    await signal('one', 'first');
+    await end;
+    end = nextEnd(session);
+    await signal('two', 'second');
+    await end;
+
+    expect(pool.requests.at(-1)).toEqual({ preferredAccountId: 'b', exclude: [] });
+    expect(fake.calls[2]!.env.CLAUDE_CODE_OAUTH_TOKEN).toBe('token-b');
+  });
+
+  it('moves off a refused account and resends the prompt when the CLI never started the conversation', async () => {
+    const pool = accounts(['a', 'b']);
+    const { fake, session, signal } = await setup(
+      [{ lines: authFailure(false), exitCode: 1 }, { lines: fixture('turn-complete.jsonl') }],
+      { credentials: pool.credentials, onCredentialFailure: pool.onCredentialFailure },
+    );
+    const end = nextEnd(session);
+    await signal('one', 'Update the README.');
+    expect(await end).toBe('complete');
+
+    expect(pool.failures.map(failure => [failure.accountId, failure.error.kind])).toEqual([['a', 'auth']]);
+    expect(fake.calls[1]!.stdin).toBe('Update the README.');
+    expect(fake.calls[1]!.env.CLAUDE_CODE_OAUTH_TOKEN).toBe('token-b');
+  });
+
+  it('ends the run with the hook’s error when no account is left', async () => {
+    const pool = accounts(['a']);
+    const { fake, session, signal, events } = await setup([{ lines: fixture('turn-rate-limit.jsonl'), exitCode: 1 }], {
+      credentials: pool.credentials,
+      onCredentialFailure: pool.onCredentialFailure,
+    });
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    expect(await end).toBe('error');
+
+    expect(fake.calls).toHaveLength(1);
+    const error = events.find(event => event.type === 'error')?.error as ClaudeCodeError;
+    expect(error.message).toBe('Every account is out of usage.');
+  });
+
+  it('does not switch accounts for a failure that is not the account’s', async () => {
+    const pool = accounts(['a', 'b']);
+    const { fake, session, signal } = await setup(
+      [{ lines: [JSON.stringify({ type: 'result', subtype: 'success', is_error: true, result: 'Something broke.' })], exitCode: 1 }],
+      { credentials: pool.credentials, onCredentialFailure: pool.onCredentialFailure },
+    );
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    expect(await end).toBe('error');
+    expect(fake.calls).toHaveLength(1);
+    expect(pool.failures).toEqual([]);
+  });
+
+  it('does not switch when the hook names no account', async () => {
+    const { fake, session, signal } = await setup([{ lines: fixture('turn-rate-limit.jsonl'), exitCode: 1 }]);
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    expect(await end).toBe('error');
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it('stops after a bounded number of switches', async () => {
+    const ids = Array.from({ length: MAX_ACCOUNT_SWITCHES + 5 }, (_, index) => `acct-${index}`);
+    const pool = accounts(ids);
+    const { fake, session, signal } = await setup(
+      ids.map(() => ({ lines: fixture('turn-rate-limit.jsonl'), exitCode: 1 })),
+      { credentials: pool.credentials, onCredentialFailure: pool.onCredentialFailure },
+    );
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    expect(await end).toBe('error');
+    expect(fake.calls).toHaveLength(MAX_ACCOUNT_SWITCHES + 1);
+  });
+
+  it('keeps going when the failure hook throws', async () => {
+    const pool = accounts(['a', 'b']);
+    const { fake, session, signal } = await setup(
+      [{ lines: fixture('turn-rate-limit.jsonl'), exitCode: 1 }, { lines: fixture('turn-complete.jsonl') }],
+      {
+        credentials: pool.credentials,
+        onCredentialFailure: async () => {
+          throw new Error('storage down');
+        },
+      },
+    );
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    expect(await end).toBe('complete');
+    expect(fake.calls).toHaveLength(2);
   });
 });

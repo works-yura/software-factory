@@ -52,6 +52,7 @@ import { workItemSource } from '@factory/core';
 import { legacyGithubWorkItemBranch, workItemBranch, workItemThreadTitle } from '@factory/pipelines';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
+import { CredentialAccountRoutes } from './credential-accounts.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
 import { buildFsRoutes } from './fs.ts';
 import { IntakeRoutes } from './intake.ts';
@@ -721,6 +722,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
+    }).routes(),
+    ...new CredentialAccountRoutes({
+      auth: deps.auth,
+      modelCredentials: deps.domains.modelCredentials,
     }).routes(),
     ...new OAuthRoutes({
       auth: deps.auth,

@@ -28,6 +28,20 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { createPlaintextFactorySecretEncryption } from '../secret-encryption.ts';
 import type { FactorySecretEncryption } from '../secret-encryption.ts';
+import {
+  boundedError,
+  CREDENTIAL_ACCOUNTS,
+  CREDENTIAL_ACCOUNTS_SCHEMA,
+  secretHint,
+  toCredentialAccount,
+} from './accounts.ts';
+import type {
+  AddCredentialAccountInput,
+  CredentialAccount,
+  CredentialAccountDbRow,
+  CredentialAccountSecret,
+  UpdateCredentialAccountInput,
+} from './accounts.ts';
 
 /** Owning tenant of a credential row. `userId` absent = org-scoped row. */
 export interface CredentialTenant {
@@ -191,12 +205,15 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
   }
 
   async init(): Promise<void> {
-    await this.ensureCollections([MODEL_CREDENTIALS_SCHEMA, OAUTH_LOGIN_SESSIONS_SCHEMA]);
+    await this.ensureCollections([MODEL_CREDENTIALS_SCHEMA, OAUTH_LOGIN_SESSIONS_SCHEMA, CREDENTIAL_ACCOUNTS_SCHEMA]);
     const rows = await this.ops.findMany<CredentialDbRow>('model_provider_credentials', {});
     await Promise.all(rows.map(row => this.#migrateCredential(row.id)));
+    const accounts = await this.ops.findMany<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, {});
+    await Promise.all(accounts.map(row => this.#migrateAccount(row.id)));
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany(CREDENTIAL_ACCOUNTS, {});
     await this.ops.deleteMany('oauth_login_sessions', {});
     await this.ops.deleteMany('model_provider_credentials', {});
   }
@@ -212,6 +229,14 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
   async #migrateCredential(id: string): Promise<void> {
     await this.#db.updateAtomic<CredentialDbRow>('model_provider_credentials', { id }, async row => {
       const decrypted = await this.encryption.decrypt<AuthCredential>(row.data);
+      if (!decrypted.needsReencryption) return null;
+      return { data: await this.encryption.encrypt(decrypted.value) };
+    });
+  }
+
+  async #migrateAccount(id: string): Promise<void> {
+    await this.#db.updateAtomic<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, { id }, async row => {
+      const decrypted = await this.encryption.decrypt<CredentialAccountSecret>(row.data);
       if (!decrypted.needsReencryption) return null;
       return { data: await this.encryption.encrypt(decrypted.value) };
     });
@@ -349,6 +374,108 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       },
     );
     return result;
+  }
+
+  // -- credential accounts ---------------------------------------------------
+
+  /** The organization's accounts, for one provider or all, in the order runs try them. Never carries secrets. */
+  async listAccounts(orgId: string, provider?: string): Promise<CredentialAccount[]> {
+    const rows = await this.#db.findMany<CredentialAccountDbRow>(
+      CREDENTIAL_ACCOUNTS,
+      provider ? { org_id: orgId, provider } : { org_id: orgId },
+    );
+    return rows
+      .map(toCredentialAccount)
+      .sort((a, b) => a.priority - b.priority || a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async getAccount(orgId: string, id: string): Promise<CredentialAccount | undefined> {
+    const row = await this.#db.findOne<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, { org_id: orgId, id });
+    return row ? toCredentialAccount(row) : undefined;
+  }
+
+  /** The account's secret, for the run about to use it. */
+  async getAccountSecret(orgId: string, id: string): Promise<string | undefined> {
+    const row = await this.#db.findOne<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, { org_id: orgId, id });
+    if (!row) return undefined;
+    return (await this.encryption.decrypt<CredentialAccountSecret>(row.data)).value.secret;
+  }
+
+  async addAccount(input: AddCredentialAccountInput): Promise<CredentialAccount> {
+    if (input.kind === 'subscription' && !input.ownerUserId) {
+      throw new Error('A subscription account needs the person it belongs to.');
+    }
+    const now = new Date();
+    const row = await this.#db.insertOne<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, {
+      org_id: input.orgId,
+      provider: input.provider,
+      label: input.label,
+      kind: input.kind,
+      owner_user_id: input.kind === 'subscription' ? (input.ownerUserId ?? null) : null,
+      data: await this.encryption.encrypt<CredentialAccountSecret>({ secret: input.secret }),
+      secret_hint: secretHint(input.secret),
+      priority: input.priority ?? 0,
+      disabled: false,
+      limited_until: null,
+      last_error: null,
+      last_used_at: null,
+      created_by: input.createdBy,
+      created_at: now,
+      updated_at: now,
+    });
+    return toCredentialAccount(row);
+  }
+
+  async updateAccount(
+    orgId: string,
+    id: string,
+    patch: UpdateCredentialAccountInput,
+  ): Promise<CredentialAccount | undefined> {
+    const set: Record<string, unknown> = { updated_at: new Date() };
+    if (patch.label !== undefined) set.label = patch.label;
+    if (patch.priority !== undefined) set.priority = patch.priority;
+    if (patch.disabled !== undefined) {
+      set.disabled = patch.disabled;
+      // Turning an account back on is a person saying it works again.
+      if (!patch.disabled) Object.assign(set, { limited_until: null, last_error: null });
+    }
+    if (patch.secret !== undefined) {
+      Object.assign(set, {
+        data: await this.encryption.encrypt<CredentialAccountSecret>({ secret: patch.secret }),
+        secret_hint: secretHint(patch.secret),
+        disabled: patch.disabled ?? false,
+        limited_until: null,
+        last_error: null,
+      });
+    }
+    const updated = await this.#db.updateMany(CREDENTIAL_ACCOUNTS, { org_id: orgId, id }, set);
+    return updated > 0 ? this.getAccount(orgId, id) : undefined;
+  }
+
+  async removeAccount(orgId: string, id: string): Promise<boolean> {
+    return (await this.#db.deleteMany(CREDENTIAL_ACCOUNTS, { org_id: orgId, id })) > 0;
+  }
+
+  /** The provider said the account is out of usage until `until`. */
+  async markAccountLimited(orgId: string, id: string, { until, error }: { until: Date; error: string }): Promise<void> {
+    await this.#db.updateMany(
+      CREDENTIAL_ACCOUNTS,
+      { org_id: orgId, id },
+      { limited_until: until, last_error: boundedError(error), updated_at: new Date() },
+    );
+  }
+
+  /** The provider refused the account's secret: no run uses it until a person fixes it. */
+  async markAccountFailed(orgId: string, id: string, error: string): Promise<void> {
+    await this.#db.updateMany(
+      CREDENTIAL_ACCOUNTS,
+      { org_id: orgId, id },
+      { disabled: true, last_error: boundedError(error), updated_at: new Date() },
+    );
+  }
+
+  async markAccountUsed(orgId: string, id: string, at = new Date()): Promise<void> {
+    await this.#db.updateMany(CREDENTIAL_ACCOUNTS, { org_id: orgId, id }, { last_used_at: at });
   }
 
   /** Persist a pending login flow started by a web route. */

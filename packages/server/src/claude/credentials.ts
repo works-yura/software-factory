@@ -1,4 +1,6 @@
-import { TenantCredentialStore } from '@factory/credentials';
+import { getTenantCredentialsStorage, pickCredentialAccount, TenantCredentialStore } from '@factory/credentials';
+import { ClaudeCodeError } from '@factory/harness-claude-code';
+import type { ClaudeCredentialFailure, ClaudeCredentialRequest, ClaudeTurnCredentials } from '@factory/harness-claude-code';
 import type { ModelCredentialsStorage } from '@factory/store';
 
 /** Who a Claude Code turn runs for: the organization whose credential pays, and the session's owner. */
@@ -7,8 +9,23 @@ export interface ClaudeCodeCredentialTenant {
   userId: string;
 }
 
-/** The env a turn's `claude` process authenticates with. */
-export type ClaudeCodeCredentialsHook = (tenant: ClaudeCodeCredentialTenant) => Promise<Record<string, string>>;
+/** The env a turn's `claude` process authenticates with, and the account it came from when there are several. */
+export type ClaudeCodeCredentialsHook = (
+  tenant: ClaudeCodeCredentialTenant,
+  request?: ClaudeCredentialRequest,
+) => Promise<Record<string, string> | ClaudeTurnCredentials>;
+
+/** Told when a turn's account ran out of usage or was refused. */
+export type ClaudeCodeCredentialFailureHook = (
+  tenant: ClaudeCodeCredentialTenant,
+  failure: ClaudeCredentialFailure,
+) => Promise<void>;
+
+/** The provider whose accounts Claude Code turns use. */
+export const CLAUDE_CODE_ACCOUNT_PROVIDER = 'anthropic';
+
+/** How long an account sits out when the provider gave no reset time. */
+export const DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS = 60 * 60_000;
 
 /** `claude setup-token` and Claude subscription OAuth tokens; the CLI takes them as `CLAUDE_CODE_OAUTH_TOKEN`. */
 const OAUTH_TOKEN_PREFIX = 'sk-ant-oat';
@@ -33,32 +50,109 @@ export function claudeCodeCredentialEnv(credential: {
   return { ANTHROPIC_API_KEY: credential.secret };
 }
 
+export interface ClaudeCodeCredentials {
+  credentials: ClaudeCodeCredentialsHook;
+  onCredentialFailure: ClaudeCodeCredentialFailureHook;
+}
+
 /**
- * The credentials hook every Claude Code turn asks. Harness-agnostic on
- * purpose and a single function, so the credential pool (phase 3) replaces it
- * whole.
+ * The credentials every Claude Code turn asks for, harness-agnostic on purpose.
  *
- * - Local development passes nothing: the CLI runs on the person's own
- *   `claude` login, which is the point of running locally.
- * - Otherwise the factory's (organization-scoped) Anthropic credential is
- *   handed over: an API key as `ANTHROPIC_API_KEY`, an OAuth or setup token as
- *   `CLAUDE_CODE_OAUTH_TOKEN`. OAuth tokens are refreshed first, the same way a
- *   Mastra run's model call refreshes them.
+ * - The organization's Anthropic accounts (Settings → Models) come first: the
+ *   turn gets one (see `pickCredentialAccount` for which), and an account that
+ *   runs out of usage sits out until it resets while the turn goes on with the
+ *   next. A subscription account serves only its owner's runs.
+ * - With no account this run may use, the old single credential applies: in
+ *   local development nothing is passed, so the CLI runs on the person's own
+ *   `claude` login; otherwise the organization's Anthropic credential (an API
+ *   key as `ANTHROPIC_API_KEY`, an OAuth or setup token as
+ *   `CLAUDE_CODE_OAUTH_TOKEN`, refreshed first like a Mastra run's).
+ * - When every account the run may use is out of usage, the turn fails with a
+ *   `rate_limit` error that says when the first one comes back.
  */
-export function createClaudeCodeCredentialsHook({
+export function createClaudeCodeCredentials({
   localDevelopment,
   credentials,
+  now = () => new Date(),
 }: {
   localDevelopment: boolean;
   credentials: ModelCredentialsStorage | undefined;
-}): ClaudeCodeCredentialsHook {
-  return async ({ orgId, userId }) => {
+  now?: () => Date;
+}): ClaudeCodeCredentials {
+  const single = async ({ orgId, userId }: ClaudeCodeCredentialTenant): Promise<Record<string, string>> => {
     if (localDevelopment) return {};
     const store = new TenantCredentialStore(orgId, userId, credentials, 'factory');
     await store.ensureFresh();
-    const stored = store.get('anthropic');
-    const secret = stored ? await store.getApiKey('anthropic') : undefined;
+    const stored = store.get(CLAUDE_CODE_ACCOUNT_PROVIDER);
+    const secret = stored ? await store.getApiKey(CLAUDE_CODE_ACCOUNT_PROVIDER) : undefined;
     if (!stored || !secret) throw new ClaudeCodeCredentialMissingError(orgId);
     return claudeCodeCredentialEnv({ type: stored.type, secret });
   };
+
+  return {
+    async credentials(tenant, request = { exclude: [] }) {
+      const storage = await getTenantCredentialsStorage(credentials);
+      const accounts = storage ? await storage.listAccounts(tenant.orgId, CLAUDE_CODE_ACCOUNT_PROVIDER) : [];
+      const at = now();
+      const picked = pickCredentialAccount(accounts, {
+        userId: tenant.userId,
+        ...(request.preferredAccountId ? { preferredId: request.preferredAccountId } : {}),
+        exclude: request.exclude,
+        now: at,
+      });
+      if (picked.account) {
+        const { account } = picked;
+        const secret = await storage?.getAccountSecret(tenant.orgId, account.id);
+        // Removed between the listing and now: the next turn lists again.
+        if (!storage || !secret) throw new ClaudeCodeError('auth', `Claude account ${account.label} is no longer available.`);
+        await storage.markAccountUsed(tenant.orgId, account.id, at).catch(() => {});
+        return {
+          env: claudeCodeCredentialEnv({ type: account.kind === 'subscription' ? 'oauth' : 'api_key', secret }),
+          accountId: account.id,
+        };
+      }
+      if (picked.resetsAt) {
+        throw new ClaudeCodeError(
+          'rate_limit',
+          `Every Claude account this run may use is out of usage; the first comes back at ${picked.resetsAt.toISOString()}.`,
+          { resetsAt: picked.resetsAt, now: at },
+        );
+      }
+      // An account already failed this turn and no other is left: the old credential is not a fallback for it.
+      if (request.exclude.length > 0) {
+        throw new ClaudeCodeError('auth', 'No other Claude account is available for this run.');
+      }
+      return single(tenant);
+    },
+
+    async onCredentialFailure(tenant, { accountId, error }) {
+      const storage = await getTenantCredentialsStorage(credentials);
+      if (!storage) return;
+      if (error.kind === 'rate_limit') {
+        const until = error.resetsAt ?? new Date(now().getTime() + DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS);
+        await storage.markAccountLimited(tenant.orgId, accountId, { until, error: error.message });
+      } else if (error.kind === 'auth') {
+        await storage.markAccountFailed(tenant.orgId, accountId, error.message);
+      } else {
+        return;
+      }
+      console.warn('[factory] Claude account taken out of rotation', {
+        orgId: tenant.orgId,
+        accountId,
+        kind: error.kind,
+        ...(error.resetsAt ? { resetsAt: error.resetsAt.toISOString() } : {}),
+      });
+    },
+  };
+}
+
+/**
+ * The credentials hook alone, for hosts that keep one credential per
+ * organization; see {@link createClaudeCodeCredentials}.
+ */
+export function createClaudeCodeCredentialsHook(options: {
+  localDevelopment: boolean;
+  credentials: ModelCredentialsStorage | undefined;
+}): ClaudeCodeCredentialsHook {
+  return createClaudeCodeCredentials(options).credentials;
 }

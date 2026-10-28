@@ -4,6 +4,7 @@ export * from './attention-parked.ts';
 export * from './attention-proposed.ts';
 export * from './automation-runs.ts';
 export * from './config.ts';
+export * from './credential-accounts.ts';
 export * from './custom-provider-source.ts';
 export * from './fs.ts';
 export * from './harness-start.ts';

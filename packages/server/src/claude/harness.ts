@@ -2,6 +2,7 @@ import { createClaudeCodeHarness, createJsonFileSessionStore, SUBMIT_PLAN_TOOL_I
 import type {
   ClaudeCodeHarness,
   ClaudeCodeSession,
+  ClaudeCredentialFailure,
   ClaudePermissionMode,
   ClaudeSessionStore,
   ClaudeSpawn,
@@ -12,7 +13,7 @@ import { FACTORY_SESSION_TOKEN_HEADER } from '@factory/mcp';
 import type { FactorySessionTokenSigner } from '@factory/mcp';
 import type { SourceControlSessionLookup } from '@factory/session';
 
-import type { ClaudeCodeCredentialsHook } from './credentials.ts';
+import type { ClaudeCodeCredentialFailureHook, ClaudeCodeCredentialsHook } from './credentials.ts';
 
 /** The MCP server name the Factory's tools are mounted under: Claude sees them as `mcp__factory__<tool>`. */
 export const CLAUDE_FACTORY_MCP_SERVER = 'factory';
@@ -61,6 +62,8 @@ export interface ClaudeFactoryHarnessOptions {
   store?: ClaudeSessionStore;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   credentials: ClaudeCodeCredentialsHook;
+  /** Told when a turn's account ran out of usage or was refused, so the pool sets it aside. */
+  onCredentialFailure?: ClaudeCodeCredentialFailureHook;
   /** The session's checkout (see `createClaudeCheckoutResolver`). */
   cwdFor: (sessionId: string) => string | Promise<string>;
   /** The Factory MCP endpoint for a factory, and the signer for the session tokens it accepts. */
@@ -106,10 +109,18 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
   const harness = createClaudeCodeHarness({
     store,
     cwdFor: options.cwdFor,
-    credentials: async session => {
+    credentials: async (session, request) => {
       const row = await sourceSession(session.id);
-      return options.credentials({ orgId: row.orgId, userId: row.userId });
+      return options.credentials({ orgId: row.orgId, userId: row.userId }, request);
     },
+    ...(options.onCredentialFailure
+      ? {
+          onCredentialFailure: async (session: ClaudeCodeSession, failure: ClaudeCredentialFailure) => {
+            const row = await sourceSession(session.id);
+            await options.onCredentialFailure!({ orgId: row.orgId, userId: row.userId }, failure);
+          },
+        }
+      : {}),
     ...(options.mcp
       ? {
           mcpConfig: async (session: ClaudeCodeSession) => {

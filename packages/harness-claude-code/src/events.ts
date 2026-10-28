@@ -105,6 +105,7 @@ export class TurnTranslator {
   #errorText: string | undefined;
   #rateLimitRejected = false;
   #rateLimitResetsAt: Date | undefined;
+  #started = false;
 
   get gate(): PlanGate | undefined {
     return this.#gate;
@@ -114,12 +115,18 @@ export class TurnTranslator {
     return this.#result !== undefined;
   }
 
+  /** The CLI announced the session (`system init`), so the turn's prompt is in it. */
+  get started(): boolean {
+    return this.#started;
+  }
+
   /** Transcript entries for one message; check {@link gate} afterwards to stop the turn at a plan. */
   push(message: ClaudeStreamMessage): ClaudeTranscriptEntry[] {
     if ('sessionId' in message && message.sessionId) this.sessionId = message.sessionId;
     switch (message.type) {
       case 'system':
         if (message.subtype !== 'init' || !message.sessionId) return [];
+        this.#started = true;
         {
           const init = message as Extract<ClaudeStreamMessage, { subtype: 'init' }>;
           return [

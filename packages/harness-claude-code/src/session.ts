@@ -74,8 +74,19 @@ export interface ClaudeCodeSessionConfig
   /**
    * Credentials for one turn as env (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
    * `CLAUDE_CONFIG_DIR`). A `CLAUDE_CONFIG_DIR` returned here wins over {@link configDir}.
+   *
+   * A hook with several accounts returns {@link ClaudeTurnCredentials} naming the
+   * account. When that account hits a usage limit or is refused, the turn asks
+   * again with the accounts it tried in `request.exclude` and goes on, in the
+   * same Claude session, with the next one; a hook with no account left throws
+   * (a `rate_limit` {@link ClaudeCodeError} with `resetsAt`, say).
    */
-  credentials: (session: ClaudeCodeSession) => Promise<Record<string, string>>;
+  credentials: (
+    session: ClaudeCodeSession,
+    request: ClaudeCredentialRequest,
+  ) => Promise<Record<string, string> | ClaudeTurnCredentials>;
+  /** Told when a turn's account hit a usage limit or was refused, before the turn asks for another. */
+  onCredentialFailure?: (session: ClaudeCodeSession, failure: ClaudeCredentialFailure) => void | Promise<void>;
   /** The session's working directory; asked once, before its first turn. */
   cwdFor: (sessionId: string) => string | Promise<string>;
   /**
@@ -132,6 +143,41 @@ export interface ClaudeCodeSessionConfig
 }
 
 export type ClaudeMcpConfig = string | Record<string, unknown> | Array<string | Record<string, unknown>>;
+
+/** What a turn asks the credentials hook. */
+export interface ClaudeCredentialRequest {
+  /** The account the session used last; staying on it keeps the provider's prompt cache. */
+  preferredAccountId?: string;
+  /** Accounts this turn already tried and lost to a limit or a refusal. */
+  exclude: string[];
+}
+
+/** One account's credentials for a turn. */
+export interface ClaudeTurnCredentials {
+  env: Record<string, string>;
+  /** Names the account, so the turn can move off it when it runs out. */
+  accountId?: string;
+}
+
+export interface ClaudeCredentialFailure {
+  accountId: string;
+  error: ClaudeCodeError;
+}
+
+/** How many times one turn moves to another account before it gives up. */
+export const MAX_ACCOUNT_SWITCHES = 10;
+
+/**
+ * Sent instead of the turn's prompt when it goes on under another account
+ * after the CLI had started the conversation: the prompt is already in the
+ * session, so sending it again would repeat it.
+ */
+export const ACCOUNT_SWITCH_PROMPT =
+  'Your previous attempt at this request stopped because the account ran out of usage. The session now runs on another account. Continue where you stopped.';
+
+function turnCredentials(value: Record<string, string> | ClaudeTurnCredentials): ClaudeTurnCredentials {
+  return typeof (value as ClaudeTurnCredentials).env === 'object' ? (value as ClaudeTurnCredentials) : { env: value as Record<string, string> };
+}
 
 export type ClaudeTranscriptListener = (entry: ClaudeTranscriptEntry, meta: { runId: string; threadId: string }) => void;
 
@@ -614,20 +660,35 @@ export class ClaudeCodeSession implements AgentSession {
         this.#emitTranscript({ kind: 'input', source: input.kind, text: input.text, ...(input.id ? { id: input.id } : {}) }, run);
       }
     }
-    const credentials = await this.#config.credentials(this);
+    const tried: string[] = [];
+    let credentials = turnCredentials(
+      await this.#config.credentials(this, {
+        ...(this.#record.accountId ? { preferredAccountId: this.#record.accountId } : {}),
+        exclude: tried,
+      }),
+    );
     const cwd = await this.#cwd();
     const mcpConfig =
       typeof this.#config.mcpConfig === 'function' ? await this.#config.mcpConfig(this) : this.#config.mcpConfig;
     if (run.abortRequested) return { kind: 'aborted' };
     const configDir = this.#config.configDir?.(this);
-    const env = buildClaudeEnv(this.#config.env ?? process.env, {
-      ...(configDir ? { CLAUDE_CONFIG_DIR: configDir } : {}),
-      ...credentials,
-    });
+    const envFor = (turn: ClaudeTurnCredentials) =>
+      buildClaudeEnv(this.#config.env ?? process.env, {
+        ...(configDir ? { CLAUDE_CONFIG_DIR: configDir } : {}),
+        ...turn.env,
+      });
+    let env = envFor(credentials);
+    let turnPrompt = prompt;
+    let resumedStale = false;
 
-    // A stale resume id (the CLI's session files were lost) gets one fresh session instead of failing forever.
-    for (let attempt = 0; ; attempt += 1) {
+    // A stale resume id (the CLI's session files were lost) gets one fresh session instead of failing forever;
+    // an account that runs out of usage or is refused hands the turn to the next account.
+    while (true) {
       const resumeSessionId = thread.claudeSessionId;
+      if (credentials.accountId && credentials.accountId !== this.#record.accountId) {
+        this.#record.accountId = credentials.accountId;
+        void this.#save().catch(() => {});
+      }
       const args = buildClaudeArgs(this.#argsInput(thread, planning, mcpConfig));
       const translator = new TurnTranslator();
       let processRef: ClaudeRun | undefined;
@@ -652,7 +713,7 @@ export class ClaudeCodeSession implements AgentSession {
         args,
         cwd,
         env,
-        prompt,
+        prompt: turnPrompt,
         onLine,
         ...(this.#config.spawn ? { spawn: this.#config.spawn } : {}),
         ...(this.#config.command ? { command: this.#config.command } : {}),
@@ -678,13 +739,50 @@ export class ClaudeCodeSession implements AgentSession {
         return { kind: 'error', error: new ClaudeCodeError('timeout', 'Claude Code turn timed out.') };
       }
       const outcome = translator.outcome(exit);
-      if (outcome.kind === 'error' && outcome.error.kind === 'unknown_session' && resumeSessionId && attempt === 0) {
+      if (outcome.kind === 'error' && outcome.error.kind === 'unknown_session' && resumeSessionId && !resumedStale) {
+        resumedStale = true;
         thread.claudeSessionId = undefined;
+        turnPrompt = prompt;
         await this.#save();
         continue;
       }
+      if (outcome.kind === 'error') {
+        const next = await this.#nextAccount(run, credentials, outcome.error, tried);
+        if (next) {
+          credentials = next;
+          env = envFor(next);
+          // Once the CLI started the conversation the prompt is in it; the next account picks up from there.
+          if (translator.started) turnPrompt = ACCOUNT_SWITCH_PROMPT;
+          continue;
+        }
+      }
       return outcome;
     }
+  }
+
+  /**
+   * The account a turn goes on with after `error`, or `undefined` when it must
+   * stop: the error is not the account's fault, the turn already switched too
+   * often, or the hook has no other account (its error then ends the turn).
+   */
+  async #nextAccount(
+    run: ActiveRun,
+    current: ClaudeTurnCredentials,
+    error: ClaudeCodeError,
+    tried: string[],
+  ): Promise<ClaudeTurnCredentials | undefined> {
+    const accountId = current.accountId;
+    if (!accountId || (error.kind !== 'rate_limit' && error.kind !== 'auth')) return undefined;
+    if (run.abortRequested || run.settled || tried.length >= MAX_ACCOUNT_SWITCHES) return undefined;
+    tried.push(accountId);
+    try {
+      await this.#config.onCredentialFailure?.(this, { accountId, error });
+    } catch (failure) {
+      console.warn('[claude-code harness] Credential failure hook failed.', failure);
+    }
+    const next = turnCredentials(await this.#config.credentials(this, { exclude: [...tried] }));
+    if (!next.accountId || tried.includes(next.accountId)) return undefined;
+    return next;
   }
 }
 
