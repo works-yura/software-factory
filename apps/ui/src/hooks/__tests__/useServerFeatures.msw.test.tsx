@@ -28,4 +28,18 @@ describe('useServerFeatures', () => {
       await waitFor(() => expect(result.current.data?.mcp).toBe(true));
     });
   });
+
+  describe('when the server runs the Claude Code harness', () => {
+    it('exposes the flag so the create-Factory wizard can offer the harness step', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/features`, () =>
+          HttpResponse.json({ knowledge: false, mcp: false, claudeCode: true }),
+        ),
+      );
+
+      const { result } = renderHookWithProviders(() => useServerFeatures());
+
+      await waitFor(() => expect(result.current.data?.claudeCode).toBe(true));
+    });
+  });
 });

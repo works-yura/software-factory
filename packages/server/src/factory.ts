@@ -1894,6 +1894,7 @@ export class MastraFactory {
             factoryReady,
             knowledgeEnabled,
             mcpEnabled,
+            claudeCodeEnabled: claudeCode !== undefined,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,

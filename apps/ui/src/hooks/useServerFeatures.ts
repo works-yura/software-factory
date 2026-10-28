@@ -7,6 +7,8 @@ export interface ServerFeatures {
   knowledge: boolean;
   /** The server serves its MCP endpoint. Absent from servers that predate it. */
   mcp?: boolean;
+  /** The Claude Code harness is configured, so new Factories may run on it. Absent from older servers. */
+  claudeCode?: boolean;
 }
 
 export function useServerFeatures() {

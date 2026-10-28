@@ -1,6 +1,6 @@
 /**
  * BDD coverage for the inline `/factories/:factoryId/new-factory` wizard: Name →
- * VCS (GitHub repo) → Model provider (default
+ * Harness (only when the server runs Claude Code) → VCS (GitHub repo) → Model provider (default
  * model), each step rendered as a searchable command palette. Every pick lives
  * in a sessionStorage draft — so a full-page OAuth redirect resumes the flow,
  * and quitting halfway leaves nothing on the server — until the model step
@@ -23,6 +23,7 @@ if (!Element.prototype.scrollIntoView) {
 
 const STEP_KEY = 'mastracode.factory-create.step';
 const NAME_KEY = 'mastracode.factory-create.name';
+const HARNESS_KEY = 'mastracode.factory-create.harness';
 const REPO_KEY = 'mastracode.factory-create.repository';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
 const LINKED_KEY = 'mastracode.factory-create.linked-repository-id';
@@ -220,7 +221,7 @@ describe('Create Factory wizard', () => {
   it('creates the Factory, links the repository and saves the model on the last step', async () => {
     const calls: string[] = [];
     seedDraft('model-provider');
-    const { patchedBodies, intakeConfigs } = stubModelStepEndpoints(calls);
+    const { patchedBodies, intakeConfigs, createdBodies } = stubModelStepEndpoints(calls);
     const user = userEvent.setup();
 
     const { client } = renderFlow();
@@ -235,6 +236,8 @@ describe('Create Factory wizard', () => {
 
     await waitForMutationsIdle(client);
     expect(calls).toEqual(['create', 'connect', 'link']);
+    // No harness step on this deployment, so the Factory runs on Mastra.
+    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'mastra' }]);
     expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
     // The picked repository feeds Work intake without a trip to Settings.
     expect(intakeConfigs).toEqual([
@@ -516,6 +519,7 @@ function stubIntakeConfig(initial: Record<string, unknown> = {}) {
  */
 function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, unknown> = {}) {
   const patchedBodies: unknown[] = [];
+  const createdBodies: unknown[] = [];
   const intakeConfigs = stubIntakeConfig(intakeConfig);
   let savedModelId: string | null = null;
   let created = false;
@@ -523,8 +527,9 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: created ? [{ id: 'fp-1', name: 'Mastra' }] : [] }),
     ),
-    http.post(`${TEST_BASE_URL}/web/factory/projects`, () => {
+    http.post(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
       calls.push('create');
+      createdBodies.push(await request.json());
       created = true;
       return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra' } });
     }),
@@ -571,7 +576,7 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
       }),
     ),
   );
-  return { patchedBodies, intakeConfigs };
+  return { patchedBodies, intakeConfigs, createdBodies };
 }
 
 describe('back navigation', () => {
@@ -667,3 +672,147 @@ function seedDraft(step: 'vcs' | 'model-provider') {
     http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
   );
 }
+
+/** Report the Claude Code harness as configured (or not) on this server. */
+function serveClaudeCodeFeature(claudeCode: boolean) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/config/features`, () =>
+      HttpResponse.json({ knowledge: false, mcp: false, claudeCode }),
+    ),
+  );
+}
+
+async function finishOnModelStep(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+  await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+}
+
+describe('harness step', () => {
+  it('asks which harness to run on between the name and the codebase, then sends the pick on create', async () => {
+    const calls: string[] = [];
+    serveClaudeCodeFeature(true);
+    const { createdBodies } = stubModelStepEndpoints(calls);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.type(await screen.findByLabelText('Name your new Factory'), 'Mastra');
+    await user.click(await screen.findByRole('option', { name: /Create “Mastra”/ }));
+
+    expect(await screen.findByLabelText('Choose how your agents run')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Step 2 of 4' })).toBeInTheDocument();
+    expect(screen.getByText(/can’t be changed later/)).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Mastra.*Any model/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: /Claude Code.*Claude subscription/ }));
+
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    expect(sessionStorage.getItem(HARNESS_KEY)).toBe('claude-code');
+    expect(calls).toEqual([]);
+
+    await user.click(await screen.findByRole('option', { name: /octo\/hello/ }));
+    await finishOnModelStep(user);
+
+    await waitForMutationsIdle(client);
+    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'claude-code' }]);
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
+    expect(sessionStorage.getItem(HARNESS_KEY)).toBeNull();
+  });
+
+  it('creates a Mastra Factory when Mastra is picked', async () => {
+    serveClaudeCodeFeature(true);
+    sessionStorage.setItem(STEP_KEY, 'harness');
+    sessionStorage.setItem(NAME_KEY, 'Mastra');
+    const { createdBodies } = stubModelStepEndpoints([]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Mastra.*Any model/ }));
+    await user.click(await screen.findByRole('option', { name: /octo\/hello/ }));
+    await finishOnModelStep(user);
+
+    await waitForMutationsIdle(client);
+    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'mastra' }]);
+  });
+
+  it('skips the harness step when the server has no Claude Code harness', async () => {
+    serveClaudeCodeFeature(false);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
+    );
+    // A stale pick from an earlier run must not leak into this Factory.
+    sessionStorage.setItem(HARNESS_KEY, 'claude-code');
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    expect(await screen.findByRole('list', { name: 'Step 1 of 3' })).toBeInTheDocument();
+    await user.type(await screen.findByLabelText('Name your new Factory'), 'Mastra');
+    await user.click(await screen.findByRole('option', { name: /Create “Mastra”/ }));
+
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Choose how your agents run')).not.toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Step 2 of 3' })).toBeInTheDocument();
+    expect(sessionStorage.getItem(HARNESS_KEY)).toBeNull();
+
+    // Back from the codebase goes straight to the name.
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+  });
+
+  it('keeps the harness pick across a reload and sends it on create', async () => {
+    serveClaudeCodeFeature(true);
+    seedDraft('model-provider');
+    sessionStorage.setItem(HARNESS_KEY, 'claude-code');
+    const { createdBodies } = stubModelStepEndpoints([]);
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await finishOnModelStep(user);
+
+    await waitForMutationsIdle(client);
+    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'claude-code' }]);
+  });
+
+  it('steps back from the codebase to the harness step with the pick still marked', async () => {
+    serveClaudeCodeFeature(true);
+    seedDraft('vcs');
+    sessionStorage.setItem(HARNESS_KEY, 'claude-code');
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+
+    expect(await screen.findByLabelText('Choose how your agents run')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Claude Code/ })).toHaveTextContent('Selected');
+    expect(screen.getByRole('option', { name: /Mastra.*Any model/ })).not.toHaveTextContent('Selected');
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('harness');
+
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+    expect(sessionStorage.getItem(HARNESS_KEY)).toBe('claude-code');
+  });
+
+  it('restarts at the name step when a stored harness step has no name', async () => {
+    serveClaudeCodeFeature(true);
+    sessionStorage.setItem(STEP_KEY, 'harness');
+    server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+  });
+});

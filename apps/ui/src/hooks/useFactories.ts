@@ -12,6 +12,7 @@ import {
   unlinkRepository,
 } from '../ui/domains/workspaces/services/github';
 import type {
+  FactoryHarness,
   FactoryProject,
   LinkedRepositoryPayload,
   SourceControlRepository,
@@ -59,8 +60,8 @@ export function useCreateFactoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, description }: { name: string; description?: string }) =>
-      createFactoryProject(baseUrl, name, description),
+    mutationFn: ({ name, description, harness }: { name: string; description?: string; harness?: FactoryHarness }) =>
+      createFactoryProject(baseUrl, name, description, harness),
     onSuccess: () => refetchFactories(queryClient),
   });
 }

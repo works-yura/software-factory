@@ -5,11 +5,13 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { useApiConfig } from '../../../../../api/config';
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
-import { useCreateFactoryFlow } from '../../hooks/useCreateFactoryFlow';
+import { useServerFeatures } from '../../../../../hooks/useServerFeatures';
+import { createFactorySteps, useCreateFactoryFlow } from '../../hooks/useCreateFactoryFlow';
 import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft';
 import { factoryHomePath } from '../../services/factoryPaths';
 import { connectGithub, manageGithubConnection } from '../../services/github';
+import { CreateFactoryHarnessRows } from './CreateFactoryHarnessRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
 import { CreateFactoryNameRows } from './CreateFactoryNameRows';
 import { CreateFactoryPalette } from './CreateFactoryPalette';
@@ -32,6 +34,12 @@ function stepChrome(step: CreateFactoryFlowStep): StepChrome {
         placeholder: tk('createFactory.steps.name.placeholder'),
         searchable: false,
       };
+    case 'harness':
+      return {
+        title: tk('createFactory.steps.harness.title'),
+        placeholder: tk('createFactory.steps.harness.placeholder'),
+        searchable: false,
+      };
     case 'vcs':
       return { title: tk('createFactory.steps.vcs.title'), placeholder: tk('createFactory.steps.vcs.placeholder') };
     case 'model-provider':
@@ -47,7 +55,8 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * Name → VCS → Model provider. Every pick stays in the
+ * Name → Harness → VCS → Model provider (no harness step when the server only
+ * runs Mastra). Every pick stays in the
  * draft until the model step commits it, so the Factory only exists once the
  * user finished the wizard.
  */
@@ -63,6 +72,11 @@ export function CreateFactoryWizard() {
   const draft = flow.draft;
   // The repository list loads while the name is still being typed, so the next step has rows on arrival.
   const githubStatus = useGithubStatusQuery();
+  const features = useServerFeatures();
+  // Until the server says otherwise there is nothing to choose: Factories run on Mastra.
+  // A draft resumed on the harness step keeps it in view even if the flag is still loading.
+  const harnessChoice = features.data?.claudeCode === true || draft?.step === 'harness';
+  const steps = createFactorySteps({ harnessChoice });
   useGithubReposQuery(undefined, draft?.step === 'name' && githubStatus.data?.connected === true);
 
   const createFactory = useCreateFactoryFromDraft({
@@ -95,6 +109,7 @@ export function CreateFactoryWizard() {
       <CreateFactoryPalette
         {...stepChrome(step)}
         step={step}
+        steps={steps}
         value={value}
         onValueChange={nextValue => setTyped({ step, value: nextValue })}
         onBack={
@@ -106,11 +121,21 @@ export function CreateFactoryWizard() {
             ? undefined
             : () => {
                 setTyped(undefined);
-                void flow.back();
+                void flow.back({ harnessChoice });
               }
         }
       >
-        {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}
+        {step === 'name' && (
+          <CreateFactoryNameRows
+            name={value}
+            // Hold the name until the server says whether there is a harness to pick.
+            disabled={features.isPending}
+            onSubmit={name => void flow.submitName(name, { harnessChoice })}
+          />
+        )}
+        {step === 'harness' && (
+          <CreateFactoryHarnessRows selected={draft.harness} onSelect={harness => void flow.chooseHarness(harness)} />
+        )}
         {step === 'vcs' && (
           <CreateFactoryRepositoryRows
             query={value}

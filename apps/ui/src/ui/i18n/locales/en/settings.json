@@ -531,6 +531,14 @@
   },
   "factory": {
     "selectFactory": "Select a factory to manage its settings.",
+    "harness": {
+      "title": "Harness",
+      "description": "The runtime this Factory’s agents run on.",
+      "label": "Agents run on",
+      "mastra": "Mastra",
+      "claudeCode": "Claude Code",
+      "fixedNote": "Chosen when the Factory was created; it can’t be changed."
+    },
     "dangerZone": "Danger zone",
     "deleteNamed": "Delete {{name}}",
     "deleteDescription": "Also unlinks its repositories.",

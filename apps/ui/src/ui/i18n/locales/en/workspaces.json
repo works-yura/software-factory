@@ -52,10 +52,27 @@
     "nameGroup": "Create",
     "createNamed": "Create “{{name}}”",
     "typeName": "Type a name to create your Factory",
+    "harness": {
+      "group": "Harness",
+      "fixedNote": "This is fixed once the Factory is created — it can’t be changed later.",
+      "selected": "Selected",
+      "mastra": {
+        "title": "Mastra",
+        "description": "Any model — provider keys or sign-in"
+      },
+      "claudeCode": {
+        "title": "Claude Code",
+        "description": "The official Claude Code CLI. Runs on your Claude subscription or an Anthropic key; add accounts in Settings → Models."
+      }
+    },
     "steps": {
       "name": {
         "title": "Name your new Factory",
         "placeholder": "e.g. Mastra"
+      },
+      "harness": {
+        "title": "Choose how your agents run",
+        "placeholder": "Pick a harness"
       },
       "vcs": {
         "title": "Choose your codebase",

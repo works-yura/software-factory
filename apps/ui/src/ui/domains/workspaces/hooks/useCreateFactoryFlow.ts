@@ -1,19 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../api/keys';
-import type { FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
+import { isFactoryHarness } from '../services/github';
+import type { FactoryHarness, FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
 
 // Separate sessionStorage keys from onboarding so the two flows never collide.
 const STEP_KEY = 'mastracode.factory-create.step';
 const NAME_KEY = 'mastracode.factory-create.name';
+const HARNESS_KEY = 'mastracode.factory-create.harness';
 const REPO_KEY = 'mastracode.factory-create.repository';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
 const LINKED_KEY = 'mastracode.factory-create.linked-repository-id';
 const HOST_KEY = 'mastracode.factory-create.host-factory-id';
 
-export const CREATE_FACTORY_STEPS = ['name', 'vcs', 'model-provider'] as const;
+export const CREATE_FACTORY_STEPS = ['name', 'harness', 'vcs', 'model-provider'] as const;
 
 export type CreateFactoryFlowStep = (typeof CREATE_FACTORY_STEPS)[number];
+
+/**
+ * The steps this deployment walks through. The harness step only appears when
+ * the server runs the Claude Code harness; otherwise every Factory is Mastra.
+ */
+export function createFactorySteps({ harnessChoice }: { harnessChoice: boolean }): readonly CreateFactoryFlowStep[] {
+  return harnessChoice ? CREATE_FACTORY_STEPS : CREATE_FACTORY_STEPS.filter(step => step !== 'harness');
+}
 
 function isResumableStep(value: string | null): value is Exclude<CreateFactoryFlowStep, 'name'> {
   return value !== null && value !== 'name' && CREATE_FACTORY_STEPS.some(step => step === value);
@@ -25,7 +35,8 @@ function isKnownStep(value: string | null): value is CreateFactoryFlowStep {
 
 /** A stored step is only honoured while the picks it was reached through are still there. */
 function canResume(step: Exclude<CreateFactoryFlowStep, 'name'>, draft: Omit<CreateFactoryDraft, 'step'>): boolean {
-  return step === 'vcs' ? Boolean(draft.name) : Boolean(draft.name && draft.repository);
+  if (step === 'harness' || step === 'vcs') return Boolean(draft.name);
+  return Boolean(draft.name && draft.repository);
 }
 
 function isSourceControlRepository(value: unknown): value is SourceControlRepository {
@@ -68,6 +79,8 @@ function readRepository(): SourceControlRepository | undefined {
 export interface CreateFactoryDraft {
   step: CreateFactoryFlowStep;
   name?: string;
+  /** The runtime picked on the harness step; unset means the server default (mastra). */
+  harness?: FactoryHarness;
   repository?: SourceControlRepository;
   factoryId?: string;
   linkedRepositoryId?: string;
@@ -75,9 +88,15 @@ export interface CreateFactoryDraft {
   hostFactoryId?: string;
 }
 
+function readHarness(): FactoryHarness | undefined {
+  const stored = sessionStorage.getItem(HARNESS_KEY);
+  return isFactoryHarness(stored) ? stored : undefined;
+}
+
 function readDraft(): CreateFactoryDraft {
   const picks = {
     name: sessionStorage.getItem(NAME_KEY) ?? undefined,
+    harness: readHarness(),
     repository: readRepository(),
     factoryId: sessionStorage.getItem(FACTORY_KEY) ?? undefined,
     linkedRepositoryId: sessionStorage.getItem(LINKED_KEY) ?? undefined,
@@ -89,12 +108,13 @@ function readDraft(): CreateFactoryDraft {
   // when the stored value is unknown or its resume gate fails.
   if (isKnownStep(step) && (step === 'name' || (isResumableStep(step) && canResume(step, picks))))
     return { ...picks, step };
-  return { step: 'name', name: picks.name, hostFactoryId: picks.hostFactoryId };
+  return { step: 'name', name: picks.name, harness: picks.harness, hostFactoryId: picks.hostFactoryId };
 }
 
 function writeDraft({
   step,
   name,
+  harness,
   repository,
   factoryId,
   linkedRepositoryId,
@@ -102,6 +122,7 @@ function writeDraft({
 }: CreateFactoryDraft): void {
   sessionStorage.setItem(STEP_KEY, step);
   writeEntry(NAME_KEY, name);
+  writeEntry(HARNESS_KEY, harness);
   writeEntry(REPO_KEY, repository && JSON.stringify(repository));
   writeEntry(FACTORY_KEY, factoryId);
   writeEntry(LINKED_KEY, linkedRepositoryId);
@@ -117,6 +138,7 @@ function clearDraft(): void {
   for (const key of [
     STEP_KEY,
     NAME_KEY,
+    HARNESS_KEY,
     REPO_KEY,
     FACTORY_KEY,
     LINKED_KEY,
@@ -136,7 +158,8 @@ export function pendingCreateFlowFactoryId(): string | undefined {
 }
 
 /**
- * State machine for the create-Factory wizard (Name → VCS → Model provider).
+ * State machine for the create-Factory wizard (Name → Harness → VCS → Model
+ * provider; the harness step is left out when the server only runs Mastra).
  * The draft lives in sessionStorage so a full-page OAuth redirect (GitHub)
  * resumes where it left off.
  */
@@ -160,15 +183,24 @@ export function useCreateFactoryFlow() {
 
   return {
     draft: draftQuery.data,
-    startVcs: (name: string) => patchDraft.mutateAsync({ step: 'vcs', name }),
+    /**
+     * Commit the name. With a harness choice it moves on to the harness step;
+     * without one it drops any stale pick so the Factory is created on Mastra.
+     */
+    submitName: (name: string, { harnessChoice }: { harnessChoice: boolean }) =>
+      patchDraft.mutateAsync(
+        harnessChoice ? { step: 'harness', name } : { step: 'vcs', name, harness: undefined },
+      ),
+    chooseHarness: (harness: FactoryHarness) => patchDraft.mutateAsync({ step: 'vcs', harness }),
     chooseRepository: (repository: SourceControlRepository) =>
       patchDraft.mutateAsync({ step: 'model-provider', repository }),
     /** Step backwards to the previous wizard step, preserving already-collected picks. */
-    back: () => {
-      const currentIndex = CREATE_FACTORY_STEPS.indexOf(step);
+    back: ({ harnessChoice }: { harnessChoice: boolean }) => {
+      const steps = createFactorySteps({ harnessChoice });
+      const currentIndex = steps.indexOf(step);
       if (currentIndex <= 0) return Promise.resolve(null);
-      const previous = CREATE_FACTORY_STEPS[currentIndex - 1];
-      return patchDraft.mutateAsync({ step: previous });
+      const previous = steps[currentIndex - 1];
+      return previous ? patchDraft.mutateAsync({ step: previous }) : Promise.resolve(null);
     },
     /** Keep what the final commit already achieved, so a retry resumes instead of duplicating. */
     rememberFactory: (factory: FactoryProject | FactoryProjectPayload) =>

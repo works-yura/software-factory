@@ -541,6 +541,14 @@
   },
   "factory": {
     "selectFactory": "Виберіть Factory, щоб керувати її налаштуваннями.",
+    "harness": {
+      "title": "Середовище запуску",
+      "description": "Середовище, у якому працюють агенти цієї Factory.",
+      "label": "Агенти працюють на",
+      "mastra": "Mastra",
+      "claudeCode": "Claude Code",
+      "fixedNote": "Вибирається під час створення Factory; змінити його не можна."
+    },
     "dangerZone": "Небезпечна зона",
     "deleteNamed": "Видалити {{name}}",
     "deleteDescription": "Також від’єднує її репозиторії.",

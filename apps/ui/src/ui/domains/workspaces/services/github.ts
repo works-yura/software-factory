@@ -234,10 +234,21 @@ export async function listGithubRepos(
 /** The GitHub source-control integration id registered on the server. */
 const GITHUB_INTEGRATION_ID = 'github';
 
+/** Runtimes a Factory's agents can run on; mirrors `FACTORY_HARNESS_KINDS` in @factory/contracts. */
+export const FACTORY_HARNESSES = ['mastra', 'claude-code'] as const;
+
+export type FactoryHarness = (typeof FACTORY_HARNESSES)[number];
+
+export function isFactoryHarness(value: unknown): value is FactoryHarness {
+  return FACTORY_HARNESSES.some(harness => harness === value);
+}
+
 /** A Factory project row from `/web/factory/projects`. */
 export interface FactoryProjectPayload {
   id: string;
   name: string;
+  /** The runtime its agents run on, fixed at creation. Absent from servers that predate it (= mastra). */
+  harness?: FactoryHarness;
   /** Org-wide default model for factory runs; null when unset. */
   defaultModelId?: string | null;
   /** Thinking level every session and run uses until it picks its own. */
@@ -344,6 +355,7 @@ export async function createFactoryProject(
   baseUrl: string,
   name: string,
   description?: string,
+  harness?: FactoryHarness,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
     method: 'POST',
@@ -352,6 +364,7 @@ export async function createFactoryProject(
     body: JSON.stringify({
       name,
       ...(description ? { description } : {}),
+      ...(harness ? { harness } : {}),
     }),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.createFactory'));

@@ -52,10 +52,27 @@
     "nameGroup": "Створення",
     "createNamed": "Створити «{{name}}»",
     "typeName": "Введіть назву, щоб створити Factory",
+    "harness": {
+      "group": "Середовище запуску",
+      "fixedNote": "Цей вибір фіксується під час створення Factory — змінити його згодом не вийде.",
+      "selected": "Вибрано",
+      "mastra": {
+        "title": "Mastra",
+        "description": "Будь-яка модель — ключі провайдерів або вхід в акаунт"
+      },
+      "claudeCode": {
+        "title": "Claude Code",
+        "description": "Офіційний CLI Claude Code. Працює на вашій підписці Claude або з ключем Anthropic; акаунти додаються в Налаштування → Моделі."
+      }
+    },
     "steps": {
       "name": {
         "title": "Назвіть нову Factory",
         "placeholder": "наприклад, Mastra"
+      },
+      "harness": {
+        "title": "Виберіть, як працюватимуть агенти",
+        "placeholder": "Виберіть середовище запуску"
       },
       "vcs": {
         "title": "Виберіть кодову базу",

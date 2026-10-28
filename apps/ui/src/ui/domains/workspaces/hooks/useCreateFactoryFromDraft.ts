@@ -40,7 +40,7 @@ export function useCreateFactoryFromDraft({
 
       const factory = draft.factoryId
         ? { id: draft.factoryId, name: draft.name }
-        : await createFactory.mutateAsync({ name: draft.name });
+        : await createFactory.mutateAsync({ name: draft.name, harness: draft.harness ?? 'mastra' });
       if (!draft.factoryId) await onFactoryCreated(factory);
 
       if (!draft.linkedRepositoryId) {

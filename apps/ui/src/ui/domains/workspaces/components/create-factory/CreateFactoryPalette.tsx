@@ -13,6 +13,8 @@ import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 
 export interface CreateFactoryPaletteProps {
   step: CreateFactoryFlowStep;
+  /** The steps this run walks through, for the progress dots. Defaults to every step. */
+  steps?: readonly CreateFactoryFlowStep[];
   title: string;
   placeholder: string;
   /** The name step types into the field instead of searching it. */
@@ -34,6 +36,7 @@ const stepTransition = 'animate-in fade-in slide-in-from-bottom-2 duration-200 m
  */
 export function CreateFactoryPalette({
   step,
+  steps = CREATE_FACTORY_STEPS,
   title,
   placeholder,
   searchable = true,
@@ -44,7 +47,7 @@ export function CreateFactoryPalette({
   children,
 }: CreateFactoryPaletteProps) {
   const { t } = useTranslation('workspaces');
-  const stepIndex = CREATE_FACTORY_STEPS.indexOf(step);
+  const stepIndex = steps.indexOf(step);
 
   return (
     <Command
@@ -84,9 +87,9 @@ export function CreateFactoryPalette({
         )}
         <ol
           className="flex shrink-0 gap-1"
-          aria-label={t('createFactory.stepOf', { step: stepIndex + 1, total: CREATE_FACTORY_STEPS.length })}
+          aria-label={t('createFactory.stepOf', { step: stepIndex + 1, total: steps.length })}
         >
-          {CREATE_FACTORY_STEPS.map((item, index) => (
+          {steps.map((item, index) => (
             <li
               key={item}
               aria-current={item === step ? 'step' : undefined}
