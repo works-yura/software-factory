@@ -1,0 +1,26 @@
+diff --git a/dist/analyze-Cb5JJp7Y.cjs b/dist/analyze-Cb5JJp7Y.cjs
+index 189af8e5320c809a0cbb9941bf9edba7bdc35be2..819c176d1d44701e8234b130a88b153bc37ce6b6 100644
+--- a/dist/analyze-Cb5JJp7Y.cjs
++++ b/dist/analyze-Cb5JJp7Y.cjs
+@@ -979,7 +979,7 @@ async function buildExternalDependencies(virtualDependencies, { externals, packa
+ 					const normalized = require_utils.slash(moduleId);
+ 					for (const [pkgName, pkgInfo] of workspaceMap.entries()) {
+ 						const location = require_utils.slash(pkgInfo.location);
+-						if (normalized.startsWith(location)) {
++						if (normalized === location || normalized.startsWith(location + "/")) {
+ 							importedFromPackages.add(pkgName);
+ 							break;
+ 						}
+diff --git a/dist/analyze-CbVhoukh.js b/dist/analyze-CbVhoukh.js
+index 93284cf2a625857289bae9e6de76304d5a6d6619..0cea60bf02bd1daa444641d1305eb7a46ddb6859 100644
+--- a/dist/analyze-CbVhoukh.js
++++ b/dist/analyze-CbVhoukh.js
+@@ -992,7 +992,7 @@ async function buildExternalDependencies(virtualDependencies, { externals, packa
+ 					const normalized = slash(moduleId);
+ 					for (const [pkgName, pkgInfo] of workspaceMap.entries()) {
+ 						const location = slash(pkgInfo.location);
+-						if (normalized.startsWith(location)) {
++						if (normalized === location || normalized.startsWith(location + "/")) {
+ 							importedFromPackages.add(pkgName);
+ 							break;
+ 						}
