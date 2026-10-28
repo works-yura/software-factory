@@ -542,8 +542,8 @@
   "factory": {
     "selectFactory": "Виберіть Factory, щоб керувати її налаштуваннями.",
     "harness": {
-      "title": "Середовище запуску",
-      "description": "Середовище, у якому працюють агенти цієї Factory.",
+      "title": "Харнес",
+      "description": "На чому працюють агенти цієї Factory.",
       "label": "Агенти працюють на",
       "mastra": "Mastra",
       "claudeCode": "Claude Code",

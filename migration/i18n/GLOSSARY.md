@@ -28,6 +28,7 @@ Id етапу ≠ англійський підпис в UI: `execute` в UI п�
 | phase, stage | етап | |
 | session | сесія | |
 | run | запуск | «Start run» → «Запустити» |
+| harness | харнес | на чому працюють агенти Factory (Mastra чи Claude Code); не плутати з «Середовище» (sandbox/environment) |
 | agent | агент | |
 | role | роль | назви ролей (`triage`, `plan`, `work`, `review`) — розбір, планування, реалізація, рев'ю |
 | skill | скіл | файл інструкцій агента |
