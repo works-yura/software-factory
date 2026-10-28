@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { ClaudeChildProcess, ClaudeSpawn } from '../cli.ts';
@@ -33,6 +33,23 @@ export interface FakeCall {
   detached: boolean;
   stdin?: string;
   killed: string[];
+  /** Each `--mcp-config` value as the CLI would read it at spawn: file contents (with the file's mode) or inline JSON. */
+  mcpConfigs: Array<{ path?: string; mode?: number; config: unknown }>;
+}
+
+function readMcpConfigs(args: string[]): FakeCall['mcpConfigs'] {
+  const index = args.indexOf('--mcp-config');
+  if (index === -1) return [];
+  const values: FakeCall['mcpConfigs'] = [];
+  for (let i = index + 1; i < args.length && !args[i]!.startsWith('--'); i += 1) {
+    const value = args[i]!;
+    if (existsSync(value)) {
+      values.push({ path: value, mode: statSync(value).mode & 0o777, config: JSON.parse(readFileSync(value, 'utf8')) });
+    } else {
+      values.push({ config: JSON.parse(value) });
+    }
+  }
+  return values;
 }
 
 /** A scripted `claude`: each spawn plays the next turn's recorded stream-json. */
@@ -42,7 +59,15 @@ export function fakeClaude(turns: FakeTurn[]) {
   const spawn: ClaudeSpawn = (command, args, options) => {
     const turn = turns[next] ?? { lines: [] };
     next += 1;
-    const call: FakeCall = { command, args, cwd: options.cwd, env: options.env, detached: options.detached, killed: [] };
+    const call: FakeCall = {
+      command,
+      args,
+      cwd: options.cwd,
+      env: options.env,
+      detached: options.detached,
+      killed: [],
+      mcpConfigs: readMcpConfigs(args),
+    };
     calls.push(call);
     const child = new EventEmitter();
     const stdout = new EventEmitter();

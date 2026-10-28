@@ -60,6 +60,16 @@ describe('buildClaudeArgs', () => {
 });
 
 describe('buildClaudeEnv', () => {
+  it('keeps the server’s secrets out and lets hosts add names', () => {
+    expect(
+      buildClaudeEnv(
+        { PATH: '/bin', XDG_CACHE_HOME: '/c', AWS_SECRET_ACCESS_KEY: 'x', DATABASE_URL: 'y', EXTRA: 'z' },
+        {},
+        ['EXTRA'],
+      ),
+    ).toEqual({ PATH: '/bin', XDG_CACHE_HOME: '/c', EXTRA: 'z' });
+  });
+
   it('lets only the turn credentials choose the account', () => {
     expect(
       buildClaudeEnv(

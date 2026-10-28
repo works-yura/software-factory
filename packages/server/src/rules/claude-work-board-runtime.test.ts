@@ -1,4 +1,5 @@
 import { mkdtemp } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -147,12 +148,14 @@ function issueOpened() {
   };
 }
 
-/** The Factory MCP server's session token in a turn's `--mcp-config`. */
+/** The Factory MCP server's session token in a turn's `--mcp-config` file (read while the turn runs). */
 function factoryToken(args: string[]): string {
   const index = args.indexOf('--mcp-config');
   for (const value of args.slice(index + 1)) {
     if (value.startsWith('--')) break;
-    const token = (JSON.parse(value) as { mcpServers?: Record<string, { headers?: Record<string, string> }> })
+    // The token never rides the command line itself.
+    expect(value).not.toContain(FACTORY_SESSION_TOKEN_HEADER);
+    const token = (JSON.parse(readFileSync(value, 'utf8')) as { mcpServers?: Record<string, { headers?: Record<string, string> }> })
       .mcpServers?.factory?.headers?.[FACTORY_SESSION_TOKEN_HEADER];
     if (token) return token;
   }

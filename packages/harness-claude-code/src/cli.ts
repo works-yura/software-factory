@@ -99,14 +99,57 @@ export const CREDENTIAL_ENV_KEYS = [
 /** Set inside a Claude Code session; a nested `claude` refuses to start when it sees them. */
 const NESTED_SESSION_ENV_KEYS = ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SSE_PORT'];
 
+/**
+ * What a turn inherits from the server's environment: what the CLI, git and
+ * a shell need to run (paths, locale, temp dirs, proxies, CA bundles) and
+ * nothing else. The server's own secrets (database URLs, provider and
+ * GitHub tokens, signing keys) stay out of reach of the agent; hosts add
+ * names with `passEnv`.
+ */
+export const DEFAULT_CLAUDE_ENV_ALLOWLIST: readonly string[] = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'LANG',
+  'LANGUAGE',
+  'TERM',
+  'COLORTERM',
+  'TZ',
+  'NODE_EXTRA_CA_CERTS',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+  // Windows
+  'SYSTEMROOT',
+  'COMSPEC',
+  'PATHEXT',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'USERPROFILE',
+];
+const ALLOWED_ENV_PREFIXES = ['LC_', 'XDG_'];
+
 export function buildClaudeEnv(
   base: Record<string, string | undefined>,
   credentials: Record<string, string>,
+  passEnv: readonly string[] = [],
 ): Record<string, string> {
   const env: Record<string, string> = {};
+  const allowed = new Set<string>([...DEFAULT_CLAUDE_ENV_ALLOWLIST, ...passEnv]);
   const drop = new Set<string>([...CREDENTIAL_ENV_KEYS, ...NESTED_SESSION_ENV_KEYS]);
   for (const [key, value] of Object.entries(base)) {
-    if (value !== undefined && !drop.has(key)) env[key] = value;
+    if (value === undefined || drop.has(key)) continue;
+    if (allowed.has(key) || ALLOWED_ENV_PREFIXES.some(prefix => key.startsWith(prefix))) env[key] = value;
   }
   return { ...env, ...credentials };
 }

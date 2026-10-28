@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type {
   AgentEvent,
@@ -138,8 +141,16 @@ export interface ClaudeCodeSessionConfig
   /** Tools denied while planning; {@link PLANNING_DISALLOWED_TOOLS} by default. */
   planningDisallowedTools?: string[];
   turnTimeoutMs?: number;
-  /** The environment turns inherit, minus credential keys; `process.env` by default. */
+  /**
+   * The environment turns inherit from; `process.env` by default. Only the
+   * names in `DEFAULT_CLAUDE_ENV_ALLOWLIST` and {@link passEnv} reach the CLI,
+   * never credential keys.
+   */
   env?: Record<string, string | undefined>;
+  /** Where a turn's private MCP config file goes; the OS temp dir by default. */
+  tempDir?: string;
+  /** More variable names the CLI may inherit, e.g. a test runner's or package registry's settings. */
+  passEnv?: string[];
 }
 
 export type ClaudeMcpConfig = string | Record<string, unknown> | Array<string | Record<string, unknown>>;
@@ -186,6 +197,8 @@ interface ActiveRun {
   threadId: string;
   /** Input that arrived while a turn ran; it becomes the run's next turn. */
   queue: ClaudePendingInput[];
+  /** The current turn's input until the CLI took it (its `init`); given back if the turn never started. */
+  unsent?: ClaudePendingInput[];
   process?: ClaudeRun;
   abortRequested: boolean;
   settled: boolean;
@@ -200,14 +213,20 @@ interface ActiveRun {
 
 type Accepted = { action: 'deliver' | 'wake'; run: ActiveRun } | { action: 'persist' };
 
+const escapeAttribute = (value: string) =>
+  value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+/** Only the envelope's own tags are escaped in the body, so the text reads as written otherwise. */
+const escapeNotificationBody = (value: string) =>
+  value.replace(/<(\/?)system-notification/gi, (_match, slash: string) => `&lt;${slash}system-notification`);
+
 function formatNotification(input: AgentNotificationInput): string {
-  const attrs = [`source="${input.source}"`, `kind="${input.kind}"`];
-  if (input.priority) attrs.push(`priority="${input.priority}"`);
+  const attrs = [`source="${escapeAttribute(input.source)}"`, `kind="${escapeAttribute(input.kind)}"`];
+  if (input.priority) attrs.push(`priority="${escapeAttribute(input.priority)}"`);
   const payload = input.payload as { message?: unknown; body?: unknown } | undefined;
   const detail = [payload?.message, payload?.body].find(
     (value): value is string => typeof value === 'string' && value.trim() !== '' && value !== input.summary,
   );
-  const body = detail ? `${input.summary}\n\n${detail}` : input.summary;
+  const body = escapeNotificationBody(detail ? `${input.summary}\n\n${detail}` : input.summary);
   return `<system-notification ${attrs.join(' ')}>\n${body}\n</system-notification>`;
 }
 
@@ -591,6 +610,12 @@ export class ClaudeCodeSession implements AgentSession {
     if (this.#run === run) this.#run = undefined;
     if (reason === 'aborted' || reason === 'error') {
       const thread = this.#threadState(run.threadId);
+      // The turn never reached Claude: its notifications wait for the next turn, and its
+      // signals stay undelivered, so the dispatcher's replay guard sends them again.
+      if (run.unsent) {
+        thread.pendingInputs.unshift(...run.unsent.filter(input => input.kind === 'notification' || input.gate));
+        run.unsent = undefined;
+      }
       // A queued signal never reached Claude: forget it so the dispatcher's replay guard sends it again.
       const dropped = new Set(run.queue.flatMap(input => (input.kind === 'signal' && input.id ? [input.id] : [])));
       thread.deliveredIds = thread.deliveredIds.filter(id => !dropped.has(id));
@@ -611,12 +636,11 @@ export class ClaudeCodeSession implements AgentSession {
   }
 
   /** The CLI options for one turn of this thread. */
-  #argsInput(thread: ClaudeThreadState, planning: boolean, mcpConfig: ClaudeMcpConfig | undefined): ClaudeArgsInput {
+  #argsInput(thread: ClaudeThreadState, planning: boolean, mcpConfigPaths: string[]): ClaudeArgsInput {
     const config = this.#config;
     const mode = thread.mode ?? config.mode;
     // Planning pins the default mode, so a project setting cannot put the turn into the CLI's plan mode.
     const permissionMode: ClaudePermissionMode | undefined = planning ? 'default' : mode === 'planning' ? undefined : mode;
-    const configured = mcpConfig === undefined ? [] : Array.isArray(mcpConfig) ? mcpConfig : [mcpConfig];
     const settingSources = config.settingSources ?? DEFAULT_SETTING_SOURCES;
     const plansDirectory = config.plansDirectory ?? DEFAULT_PLANS_DIRECTORY;
     const disallowedTools = [
@@ -630,7 +654,7 @@ export class ClaudeCodeSession implements AgentSession {
       ...(permissionMode ? { permissionMode } : {}),
       ...(settingSources ? { settingSources } : {}),
       ...(plansDirectory ? { settings: { plansDirectory } } : {}),
-      mcpConfig: [...configured, gateMcpConfig(config.gateServer)],
+      mcpConfig: mcpConfigPaths,
       strictMcpConfig: config.strictMcpConfig ?? true,
       allowedTools: [...new Set([...(config.allowedTools ?? []), SUBMIT_PLAN_TOOL_ID])],
       ...(disallowedTools.length ? { disallowedTools: [...new Set(disallowedTools)] } : {}),
@@ -660,8 +684,9 @@ export class ClaudeCodeSession implements AgentSession {
         this.#emitTranscript({ kind: 'input', source: input.kind, text: input.text, ...(input.id ? { id: input.id } : {}) }, run);
       }
     }
+    run.unsent = inputs;
     const tried: string[] = [];
-    let credentials = turnCredentials(
+    const credentials = turnCredentials(
       await this.#config.credentials(this, {
         ...(this.#record.accountId ? { preferredAccountId: this.#record.accountId } : {}),
         exclude: tried,
@@ -673,11 +698,52 @@ export class ClaudeCodeSession implements AgentSession {
     if (run.abortRequested) return { kind: 'aborted' };
     const configDir = this.#config.configDir?.(this);
     const envFor = (turn: ClaudeTurnCredentials) =>
-      buildClaudeEnv(this.#config.env ?? process.env, {
-        ...(configDir ? { CLAUDE_CONFIG_DIR: configDir } : {}),
-        ...turn.env,
+      buildClaudeEnv(
+        this.#config.env ?? process.env,
+        {
+          ...(configDir ? { CLAUDE_CONFIG_DIR: configDir } : {}),
+          ...turn.env,
+        },
+        this.#config.passEnv,
+      );
+    const configured = mcpConfig === undefined ? [] : Array.isArray(mcpConfig) ? mcpConfig : [mcpConfig];
+    // MCP configs carry per-turn tokens: a private file, not the command line every local user can read.
+    const mcpFile = await writeMcpConfigFile([...configured, gateMcpConfig(this.#config.gateServer)], this.#config.tempDir);
+    try {
+      return await this.#attempts(run, {
+        thread,
+        planning,
+        prompt,
+        inputs,
+        tried,
+        credentials,
+        env: envFor(credentials),
+        envFor,
+        cwd,
+        mcpConfigPaths: mcpFile.paths,
       });
-    let env = envFor(credentials);
+    } finally {
+      await mcpFile.cleanup();
+    }
+  }
+
+  async #attempts(
+    run: ActiveRun,
+    turn: {
+      thread: ClaudeThreadState;
+      planning: boolean;
+      prompt: string;
+      inputs: ClaudePendingInput[];
+      tried: string[];
+      credentials: ClaudeTurnCredentials;
+      env: Record<string, string>;
+      envFor: (credentials: ClaudeTurnCredentials) => Record<string, string>;
+      cwd: string;
+      mcpConfigPaths: string[];
+    },
+  ): Promise<TurnOutcome | { kind: 'aborted' }> {
+    const { thread, planning, prompt, inputs, tried, envFor, cwd, mcpConfigPaths } = turn;
+    let { credentials, env } = turn;
     let turnPrompt = prompt;
     let resumedStale = false;
 
@@ -689,7 +755,7 @@ export class ClaudeCodeSession implements AgentSession {
         this.#record.accountId = credentials.accountId;
         void this.#save().catch(() => {});
       }
-      const args = buildClaudeArgs(this.#argsInput(thread, planning, mcpConfig));
+      const args = buildClaudeArgs(this.#argsInput(thread, planning, mcpConfigPaths));
       const translator = new TurnTranslator();
       let processRef: ClaudeRun | undefined;
       let stopForGate = false;
@@ -699,6 +765,12 @@ export class ClaudeCodeSession implements AgentSession {
         const entries = translator.push(message);
         if (translator.sessionId && translator.sessionId !== thread.claudeSessionId) {
           thread.claudeSessionId = translator.sessionId;
+          void this.#save().catch(() => {});
+        }
+        // The CLI has the prompt: from here on the input counts as delivered.
+        if (translator.started && run.unsent) {
+          this.#markDelivered(run.unsent);
+          run.unsent = undefined;
           void this.#save().catch(() => {});
         }
         // Once the plan is in, the rest is the process being stopped (e.g. the gate call failing with "Connection closed").
@@ -723,7 +795,6 @@ export class ClaudeCodeSession implements AgentSession {
       if (stopForGate) proc.terminate();
       run.process = proc;
       if (run.abortRequested) proc.terminate();
-      this.#markDelivered(inputs);
       run.markStarted();
       void this.#save().catch(() => {});
 
@@ -795,4 +866,35 @@ function signalText(input: AgentSignalInput): string {
   if (input.tagName !== 'skill') return input.contents;
   const contents = input.contents.replace(/<\/skill\s*>/gi, match => match.replace('<', '&lt;').replace('>', '&gt;'));
   return `<skill name="${input.attributes.name.replaceAll('"', '&quot;')}">\n${contents}\n</skill>`;
+}
+
+/**
+ * Writes a turn's MCP servers into one file only this user can read, and
+ * returns the `--mcp-config` values: that file, then any config given as a
+ * path. Configs given inline (objects or JSON text) are merged into the file.
+ */
+export async function writeMcpConfigFile(
+  configs: ClaudeMcpConfig[],
+  dir = tmpdir(),
+): Promise<{ paths: string[]; cleanup: () => Promise<void> }> {
+  const servers: Record<string, unknown> = {};
+  const paths: string[] = [];
+  for (const config of configs.flat()) {
+    let value: unknown = config;
+    if (typeof config === 'string') {
+      if (!config.trim().startsWith('{')) {
+        paths.push(config);
+        continue;
+      }
+      value = JSON.parse(config);
+    }
+    Object.assign(servers, (value as { mcpServers?: Record<string, unknown> }).mcpServers ?? {});
+  }
+  const folder = await mkdtemp(join(dir, 'factory-claude-'));
+  const file = join(folder, 'mcp.json');
+  await writeFile(file, JSON.stringify({ mcpServers: servers }), { mode: 0o600 });
+  return {
+    paths: [file, ...paths],
+    cleanup: () => rm(folder, { recursive: true, force: true }).catch(() => {}),
+  };
 }

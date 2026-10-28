@@ -77,7 +77,9 @@ export function createClaudeCheckoutResolver({
         project?.sandboxSettings ?? {},
       ),
     );
-    const workdir = entry.workdir ?? deriveLocalWorkdir(entry.sandbox, repository.slug);
+    // Only a local sandbox has a directory on this host; a remembered workdir of a remote one is a path on another machine.
+    const workdir =
+      entry.sandbox.provider === 'local' ? (entry.workdir ?? deriveLocalWorkdir(entry.sandbox, repository.slug)) : undefined;
     if (!workdir) {
       throw new Error(
         `Claude Code sessions run on this host and need a local sandbox; the '${entry.sandbox.provider}' sandbox is not supported yet.`,
