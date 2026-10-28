@@ -26,8 +26,16 @@ export interface ClaudeSessionUiOptions {
    * only sessions passed to {@link ClaudeSessionUi.attach} are answered.
    */
   resolveSession?: (sessionId: string) => Promise<ClaudeCodeSession | undefined>;
+  /**
+   * Told, before it is passed on, that a person sent a session a message or
+   * answered its plan or permission request, with the request it came in, e.g.
+   * to record who drives a shared session's next turn.
+   */
+  onPersonInput?: PersonInputHook;
   heartbeatMs?: number;
 }
+
+export type PersonInputHook = (c: Context, session: ClaudeCodeSession) => void | Promise<void>;
 
 function decode(segment: string): string {
   try {
@@ -123,10 +131,17 @@ export class ClaudeSessionUi {
   readonly #options: ClaudeSessionUiOptions;
   readonly #channels = new Map<string, ClaudeSessionUiChannel>();
   #resolve: ClaudeSessionUiOptions['resolveSession'];
+  #onPersonInput: PersonInputHook | undefined;
 
   constructor(options: ClaudeSessionUiOptions) {
     this.#options = options;
     this.#resolve = options.resolveSession;
+    this.#onPersonInput = options.onPersonInput;
+  }
+
+  /** Sets the {@link ClaudeSessionUiOptions.onPersonInput} hook, once the host's auth exists. */
+  setPersonInputHook(hook: PersonInputHook): void {
+    this.#onPersonInput = hook;
   }
 
   /**
@@ -211,6 +226,7 @@ export class ClaudeSessionUi {
         if (Array.isArray(body.files) && body.files.length > 0) {
           return c.json({ error: 'Claude Code sessions do not take attachments yet.' }, 400);
         }
+        await this.#onPersonInput?.(c, session);
         const { accepted } = session.sendSignal(
           { id: randomUUID(), type: 'user', tagName: 'user', contents: body.message },
           { requestContext: new ClaudeCodeRunContext() },
@@ -228,6 +244,7 @@ export class ClaudeSessionUi {
         if (body.toolCallId !== gate.toolCallId) return c.json({ ok: false, reason: 'stale_tool_call' });
         if (!isPlanDecision(body.resumeData)) return c.json({ error: 'resumeData must be a plan decision' }, 400);
         if (session.run.isRunning()) return c.json({ ok: false, reason: 'not_pending' });
+        await this.#onPersonInput?.(c, session);
         // Answered like the Mastra route: acknowledged now, the resumed run arrives on the stream.
         session.respondToToolSuspension({ resumeData: body.resumeData, toolCallId: gate.toolCallId }).catch(error => {
           // The client was told `ok`; the stream is where it learns the answer did not land.
@@ -242,6 +259,7 @@ export class ClaudeSessionUi {
         if (body.toolCallId !== request.toolCallId) return c.json({ ok: false, reason: 'stale_tool_call' });
         if (typeof body.approved !== 'boolean') return c.json({ error: 'approved must be a boolean' }, 400);
         if (session.run.isRunning()) return c.json({ ok: false, reason: 'not_pending' });
+        await this.#onPersonInput?.(c, session);
         // Like the Mastra route: acknowledged now, the resumed run arrives on the stream.
         session.respondToToolApproval({ approved: body.approved, toolCallId: request.toolCallId }).catch(error => {
           channel.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });

@@ -1,7 +1,8 @@
 /**
- * The Supervisor page binds the chat to the factory's deterministic supervisor
- * session (no stored session row, no sandbox) and keeps health-check
- * findings in a chat-style side panel. "Ask supervisor" hands a finding to the composer.
+ * The Factory chat page (the supervisor, shown as "Chat") binds the chat to the
+ * factory's deterministic supervisor session (no stored session row, no
+ * sandbox) and keeps health-check findings in a chat-style side panel. "Ask in
+ * chat" hands a finding to the composer.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -31,14 +32,17 @@ function report(findings: FactoryHealthReport['findings']): FactoryHealthReport 
   return { checkedAt: '2026-09-03T00:00:00.000Z', findings, counts };
 }
 
-function stubSupervisorRoute(health: FactoryHealthReport) {
+function stubSupervisorRoute(
+  health: FactoryHealthReport,
+  project: Record<string, unknown> = { id: FACTORY_ID, name: 'Acme Factory' },
+) {
   const sessionCreates: string[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      HttpResponse.json({ projects: [project] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
@@ -88,20 +92,35 @@ describe('SupervisorPage', () => {
       const { sessionCreates } = stubSupervisorRoute(report([]));
       renderSupervisor();
 
-      expect(await screen.findByRole('region', { name: 'Supervisor composer' })).toBeInTheDocument();
+      expect(await screen.findByRole('region', { name: 'Chat composer' })).toBeInTheDocument();
       const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
       expect(within(breadcrumb).queryByRole('link')).not.toBeInTheDocument();
-      expect(within(breadcrumb).getByText('Supervisor')).toBeInTheDocument();
+      expect(within(breadcrumb).getByText('Chat')).toBeInTheDocument();
       await waitFor(() => expect(sessionCreates).toContain(SUPERVISOR_ID));
+      expect(document.title).toContain('Chat');
+    });
+
+    it('runs on Claude Code in a Claude Code Factory: its Claude model, no Mastra model or credentials', async () => {
+      stubSupervisorRoute(report([]), {
+        id: FACTORY_ID,
+        name: 'Acme Factory',
+        harness: 'claude-code',
+        claudeCodeModel: 'haiku',
+      });
+      renderSupervisor();
+
+      expect(await screen.findByRole('link', { name: /Claude Code · Haiku/ })).toBeInTheDocument();
+      const composer = await screen.findByRole('region', { name: 'Chat composer' });
+      expect(within(composer).getByRole('textbox')).toHaveAttribute('placeholder', 'Ask Claude Code…');
     });
 
     it('shows a healthy state in the findings panel', async () => {
       stubSupervisorRoute(report([]));
       renderSupervisor();
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Supervisor findings' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Health findings' }));
 
-      const findings = screen.getByRole('region', { name: 'Supervisor findings' });
+      const findings = screen.getByRole('region', { name: 'Health findings' });
       expect(within(findings).getByText(/No findings/)).toBeInTheDocument();
     });
   });
@@ -124,8 +143,8 @@ describe('SupervisorPage', () => {
       );
       renderSupervisor();
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Supervisor findings' }));
-      const findings = screen.getByRole('region', { name: 'Supervisor findings' });
+      await userEvent.click(await screen.findByRole('button', { name: 'Health findings' }));
+      const findings = screen.getByRole('region', { name: 'Health findings' });
       await userEvent.click(within(findings).getByRole('button', { name: /Stuck decisions/ }));
 
       expect(within(findings).getByText('Stuck decision 5')).toBeInTheDocument();
@@ -150,24 +169,24 @@ describe('SupervisorPage', () => {
       stubSupervisorRoute(report([finding]));
       renderSupervisor();
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Supervisor findings' }));
-      const findings = screen.getByRole('region', { name: 'Supervisor findings' });
+      await userEvent.click(await screen.findByRole('button', { name: 'Health findings' }));
+      const findings = screen.getByRole('region', { name: 'Health findings' });
       await userEvent.click(within(findings).getByRole('button', { name: /Stuck decisions/ }));
-      await userEvent.click(within(findings).getByRole('button', { name: 'Ask supervisor' }));
+      await userEvent.click(within(findings).getByRole('button', { name: 'Ask in chat' }));
 
-      const composer = screen.getByRole('region', { name: 'Supervisor composer' });
+      const composer = screen.getByRole('region', { name: 'Chat composer' });
       await waitFor(() =>
         expect(within(composer).getByRole<HTMLTextAreaElement>('textbox')).toHaveValue(findingPrompt(finding)),
       );
     });
   });
 
-  describe('when the page is opened from an Ask supervisor deep link', () => {
+  describe('when the page is opened from an Ask in chat deep link', () => {
     it('prefills the composer with the linked question', async () => {
       stubSupervisorRoute(report([]));
       renderSupervisor('?ask=Why%20is%20%2322874%20red%3F');
 
-      const composer = await screen.findByRole('region', { name: 'Supervisor composer' });
+      const composer = await screen.findByRole('region', { name: 'Chat composer' });
       await waitFor(() => expect(within(composer).getByRole('textbox')).toHaveValue('Why is #22874 red?'));
     });
   });

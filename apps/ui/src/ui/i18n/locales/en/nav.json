@@ -5,7 +5,7 @@
   "navigation": "Navigation",
   "footer": "Activity, account, and settings",
   "factory": "Factory",
-  "supervisor": "Supervisor",
+  "supervisor": "Chat",
   "boards": "Boards",
   "loadingBoards": "Loading boards…",
   "boardsError": "Unable to load boards.",

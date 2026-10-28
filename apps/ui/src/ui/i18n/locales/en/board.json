@@ -242,7 +242,7 @@
     "starting": "Starting…",
     "startSuggestedRun": "Start suggested run",
     "dismissSuggestedRun": "Dismiss suggested run",
-    "askSupervisor": "Ask supervisor",
+    "askSupervisor": "Ask in chat",
     "markDone": "Mark done",
     "moveTo": "Move to {{stage}}",
     "remove": "Remove"

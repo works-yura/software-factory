@@ -159,8 +159,8 @@ describe('AppLayout', () => {
       `/factories/${FACTORY_ID}/activity`,
     );
     const nav = within(sidebar).getByRole('navigation', { name: 'Factory' });
-    // Supervisor is restored from @mastra/factory 0.23.
-    expect(within(nav).getByRole('link', { name: 'Supervisor' })).toHaveAttribute(
+    // The supervisor (restored from @mastra/factory 0.23) is the Factory's Chat.
+    expect(within(nav).getByRole('link', { name: 'Chat' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/supervisor`,
     );

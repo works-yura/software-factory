@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -33,6 +33,7 @@ interface Row {
   orgId: string;
   userId: string;
   factoryProjectId: string | null;
+  originSessionId?: string;
 }
 
 function setup(
@@ -262,6 +263,136 @@ describe('createClaudeFactoryHarness', () => {
 
     it('allows only the harness plumbing by default; the settings decide the rest', () => {
       expect(DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS).toEqual(['TodoWrite', 'mcp__factory']);
+    });
+  });
+
+  describe('card runs (nobody to answer a permission prompt)', () => {
+    it('runs a session that ran a card role, or one another session started, unattended; a personal chat keeps asking', async () => {
+      const cardRun = vi.fn(async ({ sessionId }: { sessionId: string }) => sessionId === 'session-a');
+      const { factory, config } = setup(
+        { permissions: async () => ({ categories: { edit: 'ask' } }), cardRun },
+        {
+          'session-a': { orgId: 'org-a', userId: 'user-a', factoryProjectId: 'factory-a' },
+          'session-b': { orgId: 'org-a', userId: 'user-a', factoryProjectId: 'factory-a' },
+          'session-side': { orgId: 'org-a', userId: 'user-a', factoryProjectId: 'factory-a', originSessionId: 'session-a' },
+          'session-card': { orgId: 'org-a', userId: 'user-a', factoryProjectId: 'factory-a' },
+        },
+      );
+      const bound = await factory.harness.createSession({ sessionId: 'session-a', threadId: 'session-a' });
+      const chat = await factory.harness.createSession({ sessionId: 'session-b', threadId: 'session-b' });
+      const side = await factory.harness.createSession({ sessionId: 'session-side', threadId: 'session-side' });
+      const started = await factory.harness.createSession({ sessionId: 'session-card', threadId: 'session-card' });
+      // The start coordinator records the card on the session's thread before its first turn.
+      await started.thread.setSetting({ key: 'factoryWorkItemId', value: 'item-1' });
+
+      await expect(config.permissions!(bound)).resolves.toEqual({ categories: { edit: 'ask' }, unattended: true });
+      expect(cardRun).toHaveBeenCalledWith({ orgId: 'org-a', factoryProjectId: 'factory-a', sessionId: 'session-a' });
+      await expect(config.permissions!(side)).resolves.toMatchObject({ unattended: true });
+      await expect(config.permissions!(started)).resolves.toMatchObject({ unattended: true });
+      await expect(config.permissions!(chat)).resolves.toEqual({ categories: { edit: 'ask' } });
+    });
+  });
+
+  describe('the Factory chat (supervisor) on Claude Code', () => {
+    const FACTORY = '11111111-1111-4111-8111-111111111111';
+    const SUPERVISOR = `factory-supervisor:${FACTORY}`;
+    let workdirRoot: string | undefined;
+    afterEach(async () => {
+      if (workdirRoot) await rm(workdirRoot, { recursive: true, force: true });
+      workdirRoot = undefined;
+    });
+
+    async function supervisorSetup(overrides: Partial<ClaudeFactoryHarnessOptions> = {}) {
+      workdirRoot = await mkdtemp(join(tmpdir(), 'claude-supervisor-test-'));
+      const projects = {
+        get: vi.fn(async ({ orgId, id }: { orgId: string; id: string }) =>
+          orgId === 'org-a' && id === FACTORY ? ({ id, orgId, claudeCodeModel: 'haiku' } as never) : null,
+        ),
+        getById: vi.fn(async ({ id }: { id: string }) =>
+          id === FACTORY ? ({ id, orgId: 'org-a', createdBy: 'creator', harness: 'claude-code' } as never) : null,
+        ),
+      };
+      const cwdFor = vi.fn(() => '/checkout');
+      const context = setup({ projects, cwdFor, supervisorWorkdirRoot: workdirRoot, ...overrides });
+      const session = await context.factory.harness.createSession({ sessionId: SUPERVISOR, threadId: SUPERVISOR, resourceId: SUPERVISOR });
+      return { ...context, session, projects, cwdFor };
+    }
+
+    it('runs in a private empty folder of its own, never a checkout, with the supervisor playbook', async () => {
+      const { config, session, cwdFor } = await supervisorSetup();
+      const dir = await config.cwdFor(SUPERVISOR);
+      expect(dir).toBe(join(workdirRoot!, encodeURIComponent(FACTORY)));
+      expect(await readdir(dir)).toEqual([]);
+      expect(((await stat(dir)).mode & 0o777).toString(8)).toBe('700');
+      expect(cwdFor).not.toHaveBeenCalled();
+      expect(await config.cwdFor('session-a')).toBe('/checkout');
+
+      const prompt = await config.appendSystemPromptFor!(session);
+      expect(prompt).toContain('# Factory supervisor');
+      expect(prompt).toContain('mcp__factory__<tool>');
+      const other = await setup().factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
+      expect(await config.appendSystemPromptFor!(other)).toBeUndefined();
+    });
+
+    it('mints a supervisor token acting as the person behind the turn, and runs on their credentials', async () => {
+      const { config, session, signed, credentials } = await supervisorSetup();
+      const mcp = config.mcpConfig as unknown as McpHook;
+
+      await mcp(session);
+      expect(signed.at(-1)).toEqual({
+        orgId: 'org-a',
+        factoryProjectId: FACTORY,
+        sessionId: SUPERVISOR,
+        threadId: SUPERVISOR,
+        resourceId: SUPERVISOR,
+        scope: 'supervisor',
+        // Before anyone wrote, the Factory's creator.
+        userId: 'creator',
+      });
+      await session.thread.setSetting({ key: 'factoryActorUserId', value: 'bob' });
+      const config2 = await mcp(session);
+      expect(signed.at(-1)).toMatchObject({ scope: 'supervisor', userId: 'bob' });
+      expect(config2.mcpServers.factory.url).toBe(`https://factory.test/mcp/${FACTORY}`);
+      await config.credentials(session, { exclude: [] });
+      expect(credentials).toHaveBeenLastCalledWith({ orgId: 'org-a', userId: 'bob' }, { exclude: [] });
+      expect(await config.modelFor!(session)).toBe('haiku');
+    });
+
+    it('asks before every repair unless the Factory auto-approves, and never runs unattended', async () => {
+      const cardRun = vi.fn(async () => true);
+      const { config, session } = await supervisorSetup({
+        permissions: async () => ({ categories: { read: 'allow' } }),
+        cardRun,
+      });
+      const permissions = (await config.permissions!(session))!;
+      expect(permissions.unattended).toBeUndefined();
+      expect(permissions.categories).toEqual({ read: 'allow' });
+      expect(permissions.askEachTime).toEqual(
+        expect.arrayContaining([
+          'mcp__factory__factory_retry_decision',
+          'mcp__factory__factory_dismiss_decision',
+          'mcp__factory__factory_resolve_proposal',
+          'mcp__factory__factory_transition_work_item',
+          'mcp__factory__factory_reconcile_labels',
+          'mcp__factory__factory_revoke_binding',
+          'mcp__factory__factory_signal_session',
+        ]),
+      );
+      expect(permissions.askEachTime).not.toContain('mcp__factory__factory_health_check');
+      expect(cardRun).not.toHaveBeenCalled();
+      // The rules the CLI gets: reads through the trusted server, repairs asked.
+      const rules = claudeCode.claudePermissionRules(permissions, { mcpServers: ['factory'], trustedMcpServers: ['factory'] });
+      expect(rules.ask).toContain('mcp__factory__factory_retry_decision');
+      expect(claudeCode.claudePermissionRules({ ...permissions, yolo: true }).ask).toEqual([]);
+    });
+
+    it('fails clearly for a supervisor of a Factory that is gone', async () => {
+      const { config, factory } = await supervisorSetup();
+      const ghost = await factory.harness.createSession({
+        sessionId: 'factory-supervisor:22222222-2222-4222-8222-222222222222',
+        threadId: 't',
+      });
+      await expect(config.credentials(ghost, { exclude: [] })).rejects.toThrow(/was not found/);
     });
   });
 

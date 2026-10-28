@@ -20,7 +20,23 @@ export interface ClaudeToolPermissions {
   categories?: Partial<Record<ClaudeToolCategory, ClaudeToolPolicy>>;
   /** Auto-approve: every category is allowed. */
   yolo?: boolean;
+  /**
+   * Tools (CLI names, e.g. `mcp__factory__factory_retry_decision`) that ask on
+   * every call whatever their category says, unless auto-approve is on. A
+   * person's Allow lets the waiting call through once, not for the session.
+   */
+  askEachTime?: string[];
+  /**
+   * Nobody is there to answer (a card run started by the Factory). Reading
+   * (Read tools, and `git` and `gh` in the shell) is allowed unless its
+   * category is denied; every other call that would ask is refused at once by
+   * the gate, with a message saying why, instead of parking the run.
+   */
+  unattended?: boolean;
 }
+
+/** Shell commands an unattended run may use unless the Execute category is denied. */
+export const CLAUDE_UNATTENDED_SHELL_RULES: readonly string[] = ['Bash(git:*)', 'Bash(gh:*)'];
 
 /** The CLI's built-in tools per category; MCP servers are named per turn. */
 export const CLAUDE_TOOL_CATEGORY_TOOLS: Readonly<Record<Exclude<ClaudeToolCategory, 'mcp'>, readonly string[]>> = {
@@ -69,7 +85,9 @@ export function claudePermissionRules(
   const own = new Set([GATE_SERVER_NAME, ...trustedMcpServers]);
   const grantedSet = new Set(granted);
   for (const category of CLAUDE_TOOL_CATEGORIES) {
-    const policy: ClaudeToolPolicy = permissions.yolo ? 'allow' : (permissions.categories?.[category] ?? 'ask');
+    let policy: ClaudeToolPolicy = permissions.yolo ? 'allow' : (permissions.categories?.[category] ?? 'ask');
+    // An unattended run reads without asking: nobody could answer.
+    if (permissions.unattended && category === 'read' && policy === 'ask') policy = 'allow';
     const tools =
       category === 'mcp'
         ? mcpServers.filter(server => !own.has(server)).map(server => `mcp__${server}`)
@@ -77,10 +95,23 @@ export function claudePermissionRules(
     for (const tool of tools) {
       if (policy === 'deny') rules.deny.push(tool);
       else if (policy === 'allow' || grantedSet.has(tool)) rules.allow.push(tool);
+      // An ask rule for `Bash` would outrank `Bash(git:*)`: unlisted, the other commands still reach the gate.
+      else if (permissions.unattended && tool === 'Bash') rules.allow.push(...CLAUDE_UNATTENDED_SHELL_RULES);
       else rules.ask.push(tool);
     }
   }
+  if (!permissions.yolo) {
+    for (const tool of permissions.askEachTime ?? []) {
+      if (rules.deny.includes(tool)) continue;
+      if (grantedSet.has(tool)) rules.allow.push(tool);
+      else {
+        rules.allow = rules.allow.filter(rule => rule !== tool);
+        if (!rules.ask.includes(tool)) rules.ask.push(tool);
+      }
+    }
+  }
   // A granted tool outside the lists (an MCP tool, a newer built-in) is allowed too.
+  rules.allow = [...new Set(rules.allow)];
   for (const tool of granted) {
     if (!rules.allow.includes(tool) && !rules.deny.includes(tool)) rules.allow.push(tool);
   }

@@ -1,5 +1,5 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpRight, CircleSlash, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, MessagesSquare, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -34,7 +34,7 @@ export interface WorkItemMenuProps {
   onRemove: () => void;
 }
 
-/** Deep link into the Supervisor chat with a question about this card prefilled. */
+/** Deep link into the Factory chat (the supervisor) with a question about this card prefilled. */
 export function askSupervisorPath(
   factoryId: string | undefined,
   item: Pick<WorkItem, 'id' | 'source' | 'metadata' | 'title'>,
@@ -121,7 +121,7 @@ export function WorkItemMenuItems({
         </DropdownMenu.Item>
       )}
       <DropdownMenu.Item render={<Link to={askSupervisorPath(factoryId, item)} />}>
-        <ShieldCheck aria-hidden />
+        <MessagesSquare aria-hidden />
         <span>{t('menu.askSupervisor')}</span>
       </DropdownMenu.Item>
       {stages

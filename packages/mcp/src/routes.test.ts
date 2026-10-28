@@ -94,6 +94,7 @@ function tokenAuth(): RouteAuth {
 async function setup(
   options: Pick<FactoryMcpRoutesDeps, 'sessionTokens' | 'allowUsers'> & {
     createBound?: FactoryMcpRoutesDeps['tools']['createBound'];
+    createSupervisor?: FactoryMcpRoutesDeps['tools']['createSupervisor'];
   } = {},
 ) {
   const seed = await createFactoryStorageForTests();
@@ -155,6 +156,7 @@ async function setup(
       ...tools,
       create: scope => createFactoryTools({ scope, deps: tools }) as Record<string, Tool<any, any, any, any>>,
       ...(options.createBound ? { createBound: options.createBound } : {}),
+      ...(options.createSupervisor ? { createSupervisor: options.createSupervisor } : {}),
     },
     ...(options.sessionTokens ? { sessionTokens: options.sessionTokens } : {}),
     ...(options.allowUsers !== undefined ? { allowUsers: options.allowUsers } : {}),
@@ -1002,6 +1004,85 @@ describe('Factory MCP for a bound agent session (session tokens)', () => {
       resourceId: seed.project.id,
     });
     expect((await sessionRequest(seed.url, 'tools/list', {}, foreignOrg)).status).toBe(401);
+  });
+
+  describe('the Factory chat (supervisor) on Claude Code', () => {
+    const supervisorTools = () => ({
+      factory_health_check: createTool({
+        id: 'factory_health_check',
+        description: 'Health.',
+        inputSchema: z.object({}),
+        execute: async () => ({ findings: [] }),
+      }),
+      factory_retry_decision: createTool({
+        id: 'factory_retry_decision',
+        description: 'Retry.',
+        inputSchema: z.object({ decisionId: z.string() }),
+        execute: async ({ decisionId }) => ({ retried: decisionId }),
+      }),
+    });
+    const supervisorToken = (projectId: string, overrides: Record<string, unknown> = {}) =>
+      signer.sign({
+        orgId: 'org-1',
+        factoryProjectId: projectId,
+        sessionId: `factory-supervisor:${projectId}`,
+        threadId: `factory-supervisor:${projectId}`,
+        resourceId: `factory-supervisor:${projectId}`,
+        scope: 'supervisor',
+        userId: 'bob',
+        ...overrides,
+      } as never);
+
+    it('serves the supervisor tools only, acting as the person the token names', async () => {
+      const createSupervisor = vi.fn(supervisorTools);
+      const createBound = vi.fn(() => ({}));
+      const seed = await setup({ sessionTokens: signer, createSupervisor, createBound });
+      const token = supervisorToken(seed.project.id);
+
+      const list = await sessionRequest(seed.url, 'tools/list', {}, token);
+      expect(list.status).toBe(200);
+      const names = (list.body?.result.tools as Array<{ name: string }>).map(tool => tool.name).sort();
+      expect(names).toEqual(['factory_health_check', 'factory_retry_decision']);
+      expect(createBound).not.toHaveBeenCalled();
+      expect(createSupervisor).toHaveBeenCalledWith({
+        orgId: 'org-1',
+        factoryProjectId: seed.project.id,
+        userId: 'bob',
+        sessionId: `factory-supervisor:${seed.project.id}`,
+        threadId: `factory-supervisor:${seed.project.id}`,
+        resourceId: `factory-supervisor:${seed.project.id}`,
+        kind: 'supervisor',
+        interactive: false,
+      });
+      const call = await sessionRequest(
+        seed.url,
+        'tools/call',
+        { name: 'factory_retry_decision', arguments: { decisionId: 'd-1' } },
+        token,
+      );
+      expect(toolText(call.body?.result)).toEqual({ retried: 'd-1' });
+    });
+
+    it("refuses a supervisor token for another Factory's session, another org, without a person, or with no supervisor tools", async () => {
+      const seed = await setup({ sessionTokens: signer, createSupervisor: supervisorTools });
+      const other = await seed.projects.create({ orgId: 'org-1', userId: 'alice', input: { name: 'Other' } });
+      const refused = [
+        // The session must be this Factory's own supervisor.
+        supervisorToken(seed.project.id, { sessionId: `factory-supervisor:${other.id}` }),
+        supervisorToken(seed.project.id, { sessionId: 'session-claude' }),
+        supervisorToken(seed.project.id, { orgId: 'org-2' }),
+        supervisorToken(seed.project.id, { userId: undefined }),
+        supervisorToken(seed.project.id, { scope: 'admin' }),
+      ];
+      for (const token of refused) {
+        expect((await sessionRequest(seed.url, 'tools/list', {}, token)).status).toBe(401);
+      }
+      // A token for one Factory does not open another's endpoint.
+      expect((await sessionRequest(mcpUrl(seed.base, other.id), 'tools/list', {}, supervisorToken(seed.project.id))).status).toBe(401);
+
+      const without = await setup({ sessionTokens: signer });
+      expect((await sessionRequest(without.url, 'tools/list', {}, supervisorToken(without.project.id))).status).toBe(401);
+    });
   });
 
   it('refuses session tokens when the endpoint has no verifier', async () => {

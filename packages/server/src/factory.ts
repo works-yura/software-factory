@@ -18,6 +18,8 @@
  * and the storage domains those capabilities require.
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
@@ -53,6 +55,7 @@ import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { boardForWorkItem } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
+import { ClaudeCodeRunContext } from '@factory/harness-claude-code';
 import { createRoutingHarness } from '@factory/harness';
 import { createFactorySessionTokenSigner } from '@factory/mcp';
 import {
@@ -62,6 +65,9 @@ import {
   createClaudeCodeCredentials,
   createClaudeFactoryHarness,
   createClaudeUserSessions,
+  createClaudeSupervisorSessions,
+  claudeSupervisorProjectId,
+  CLAUDE_THREAD_SETTINGS,
   createFactoryToolPermissions,
 } from './claude/index.ts';
 import type {
@@ -1304,6 +1310,46 @@ export class MastraFactory {
         : [],
     );
 
+    // The supervisor's tools (the Factory chat): its Mastra session gets them in-process, a Claude Code one over MCP.
+    const supervisorReadTools = (scope: { orgId: string; factoryProjectId: string }) =>
+      createFactorySupervisorReadTools({
+        scope,
+        workItems: workItemsStorage,
+        boards: this.#boards,
+        comments: workItemCommentsStorage,
+        audit: auditStorage,
+        messageReader: {
+          listMessages: async input => {
+            const memory = await storage.getMastraStorage().getStore('memory');
+            return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
+          },
+        },
+      });
+    const supervisorWriteTools = (
+      scope: { orgId: string; factoryProjectId: string },
+      userId: string,
+      messageSession: NonNullable<Parameters<typeof createFactorySupervisorWriteTools>[0]['messageSession']>,
+    ) =>
+      createFactorySupervisorWriteTools({
+        scope,
+        userId,
+        workItems: workItemsStorage,
+        boards: this.#boards,
+        audit: auditDomain,
+        transitionService: transitionService!,
+        ...(githubIntegration
+          ? {
+              reconcileAcceptanceLabels: (args: { orgId: string; factoryProjectId: string; item: WorkItemRow }) =>
+                reconcileGithubAcceptanceLabels(
+                  githubIntegration,
+                  sourceControlStorage.forIntegration(githubIntegration.id),
+                  args,
+                ),
+            }
+          : {}),
+        messageSession,
+      });
+
     // Claude Code factories: their sessions live in the Claude harness, reach the
     // Factory's tools over MCP with per-turn session tokens, and show in the chat
     // through `claudeSessionUi`. Everything else stays on Mastra.
@@ -1327,6 +1373,11 @@ export class MastraFactory {
           projects: factoryProjectsStorage,
           // Settings → Behavior → Tool permissions: the Factory's own session keeps them.
           permissions: createFactoryToolPermissions(async sessionId => this.#prepared?.base.controller.getSession(sessionId)),
+          // A session that ever ran a card's role is a card run: nobody is there to answer a permission prompt.
+          cardRun: ({ orgId, factoryProjectId, sessionId }) =>
+            workItemsReady
+              ? workItemsStorage.hasRunBindingForSession({ orgId, factoryProjectId, sessionId })
+              : false,
           ...claudeCodeCredentials,
           cwdFor:
             claudeCodeConfig.cwdFor ??
@@ -1350,7 +1401,26 @@ export class MastraFactory {
           },
         })
       : undefined;
-    if (claudeCode) this.#claudeSessionUi.setSessionResolver(sessionId => claudeCode.harness.getSession(sessionId));
+    if (claudeCode) {
+      // The Factory chat (supervisor) of a Claude Code Factory is a Claude session too, created when the chat first reaches it.
+      const supervisorSessions = createClaudeSupervisorSessions({
+        harness: claudeCode.harness,
+        projects: {
+          getById: async args => {
+            if (!storage.isDomainReady('projects')) return null;
+            await factoryProjectsStorage.ensureReady();
+            return factoryProjectsStorage.getById(args);
+          },
+        },
+      });
+      this.#claudeSessionUi.setSessionResolver(sessionId => supervisorSessions.resolve(sessionId));
+      // The Factory chat is shared by the Factory's organization: its next turn runs as whoever wrote or answered.
+      this.#claudeSessionUi.setPersonInputHook(async (c, session) => {
+        if (!claudeSupervisorProjectId(session.id)) return;
+        const userId = routeAuth.tenant(c)?.userId;
+        if (userId) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.actorUserId, value: userId });
+      });
+    }
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
     // providers) — the terminal app's, minus modes. Agent state lives in
@@ -1727,55 +1797,19 @@ export class MastraFactory {
                   });
                   if (supervisorScope) {
                     const userId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
-                    mergeTools(
-                      'factory-supervisor',
-                      createFactorySupervisorReadTools({
-                        scope: supervisorScope,
-                        workItems: workItemsStorage,
-                        boards: this.#boards,
-                        comments: workItemCommentsStorage,
-                        audit: auditStorage,
-                        messageReader: {
-                          listMessages: async input => {
-                            const memory = await storage.getMastraStorage().getStore('memory');
-                            return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
-                          },
-                        },
-                      }),
-                    );
+                    mergeTools('factory-supervisor', supervisorReadTools(supervisorScope));
                     if (userId) {
                       mergeTools(
                         'factory-supervisor-write',
-                        createFactorySupervisorWriteTools({
-                          scope: supervisorScope,
-                          userId,
-                          workItems: workItemsStorage,
-                          boards: this.#boards,
-                          audit: auditDomain,
-                          transitionService,
-                          ...(githubIntegration
-                            ? {
-                                reconcileAcceptanceLabels: (args: {
-                                  orgId: string;
-                                  factoryProjectId: string;
-                                  item: WorkItemRow;
-                                }) =>
-                                  reconcileGithubAcceptanceLabels(
-                                    githubIntegration,
-                                    sourceControlStorage.forIntegration(githubIntegration.id),
-                                    args,
-                                  ),
-                              }
-                            : {}),
-                          messageSession: ({ sessionId, message, delivery }) =>
-                            messageWorkerSession({
-                              controller: prepared.base.controller,
-                              sessionId,
-                              message,
-                              delivery,
-                              ...(requestContext ? { requestContext } : {}),
-                            }),
-                        }),
+                        supervisorWriteTools(supervisorScope, userId, ({ sessionId, message, delivery }) =>
+                          messageWorkerSession({
+                            controller: prepared.base.controller,
+                            sessionId,
+                            message,
+                            delivery,
+                            ...(requestContext ? { requestContext } : {}),
+                          }),
+                        ),
                       );
                     }
                   }
@@ -1857,6 +1891,27 @@ export class MastraFactory {
                             boards: this.#boards,
                             sessions: sourceControlSessions,
                           }),
+                        // The Factory chat on Claude Code: the supervisor's tools, acting as the person behind the turn.
+                        createSupervisor: scope => {
+                          const project = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
+                          return {
+                            ...supervisorReadTools(project),
+                            ...supervisorWriteTools(project, scope.userId, async ({ sessionId, message, delivery }) => {
+                              // A worker on Claude Code takes the message as a person's input; a Mastra one through its controller.
+                              const claudeSession = await claudeCode?.harness.getSession(sessionId);
+                              if (claudeSession) {
+                                await claudeSession.sendSignal(
+                                  { id: randomUUID(), type: 'user', tagName: 'user', contents: message },
+                                  { requestContext: new ClaudeCodeRunContext() },
+                                ).accepted;
+                                return;
+                              }
+                              const controller = this.#prepared?.base.controller;
+                              if (!controller) throw new Error('The worker session is not currently available.');
+                              return messageWorkerSession({ controller, sessionId, message, delivery });
+                            }),
+                          } as Record<string, Tool<any, any, any, any>>;
+                        },
                       }
                     : {}),
                 },

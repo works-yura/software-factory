@@ -29,6 +29,8 @@ export interface ClaudeThreadState {
   pendingPermission?: PermissionRequest;
   /** Tools a person allowed for the rest of this thread. Absent in records written before permissions. */
   grantedTools?: string[];
+  /** Tools a person allowed for one call (`askEachTime` tools): the next turn's, then they ask again. */
+  grantedOnce?: string[];
   pendingInputs: ClaudePendingInput[];
   /** Recent signal ids Claude received, newest last; the dispatcher's replay guard reads them. */
   deliveredIds: string[];

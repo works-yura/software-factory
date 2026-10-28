@@ -1,12 +1,12 @@
 {
-  "title": "Supervisor",
-  "documentTitle": "Supervisor · {{factory}}",
-  "loading": "Loading supervisor",
-  "composer": "Supervisor composer",
+  "title": "Chat",
+  "documentTitle": "Chat · {{factory}}",
+  "loading": "Loading chat",
+  "composer": "Chat composer",
   "healthCheckFailed": "Couldn't run the health check: {{reason}}",
   "empty": {
     "title": "What needs your attention?",
-    "description": "Ask why a card is stuck, what changed overnight, or how to safely repair a Factory issue.",
+    "description": "Chat about this Factory's state and repairs: ask why a card is stuck, what changed overnight, or how to safely fix a Factory issue.",
     "suggestions": "Suggested prompts",
     "actions": {
       "needsMe": "What needs me?",
@@ -20,13 +20,13 @@
     }
   },
   "findings": {
-    "region": "Supervisor findings",
+    "region": "Health findings",
     "title": "Findings",
     "empty": "No findings — everything looks healthy.",
-    "ask": "Ask supervisor",
+    "ask": "Ask in chat",
     "viewAll": "View all in Attention",
-    "show": "Show supervisor findings",
-    "hide": "Hide supervisor findings",
+    "show": "Show health findings",
+    "hide": "Hide health findings",
     "kinds": {
       "decision-stuck": "Stuck decisions",
       "start-stalled": "Stalled starts",

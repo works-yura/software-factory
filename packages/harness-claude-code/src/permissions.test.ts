@@ -40,4 +40,35 @@ describe('claudePermissionRules', () => {
     expect(rules.deny).toContain('Bash');
     expect(rules.allow).not.toContain('Bash');
   });
+
+  it('lets an unattended run read, and use git and gh, unless those categories are denied', () => {
+    const rules = claudePermissionRules({ unattended: true }, { mcpServers: ['linear'] });
+    expect(rules.allow).toEqual([...['Read', 'Glob', 'Grep', 'LS', 'NotebookRead'], 'Bash(git:*)', 'Bash(gh:*)']);
+    // An ask rule for Bash would outrank Bash(git:*); other commands reach the gate unlisted.
+    expect(rules.ask).not.toContain('Bash');
+    expect(rules.ask).toEqual(expect.arrayContaining(['Write', 'Edit', 'BashOutput', 'WebFetch', 'mcp__linear']));
+
+    const denied = claudePermissionRules({ unattended: true, categories: { read: 'deny', execute: 'deny' } });
+    expect(denied.allow).toEqual([]);
+    expect(denied.deny).toEqual(expect.arrayContaining(['Read', 'Bash']));
+
+    const allowed = claudePermissionRules({ unattended: true, categories: { execute: 'allow' } });
+    expect(allowed.allow).toContain('Bash');
+    expect(allowed.allow).not.toContain('Bash(git:*)');
+  });
+
+  it('asks about askEachTime tools on every call unless auto-approve, and lets a granted call through', () => {
+    const tool = 'mcp__factory__factory_retry_decision';
+    expect(claudePermissionRules({ categories: { read: 'allow' }, askEachTime: [tool] }).ask).toEqual(
+      expect.arrayContaining([tool]),
+    );
+    expect(claudePermissionRules({ categories: { read: 'allow' }, askEachTime: ['Read'] })).toMatchObject({
+      ask: expect.arrayContaining(['Read']),
+      allow: expect.not.arrayContaining(['Read']),
+    });
+    const granted = claudePermissionRules({ askEachTime: [tool] }, { granted: [tool] });
+    expect(granted.ask).not.toContain(tool);
+    expect(granted.allow).toContain(tool);
+    expect(claudePermissionRules({ yolo: true, askEachTime: [tool] }).ask).toEqual([]);
+  });
 });

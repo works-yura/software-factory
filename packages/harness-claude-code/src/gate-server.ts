@@ -2,10 +2,12 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
+  GATE_UNATTENDED_ARG,
   PERMISSION_PENDING_MARKER,
   PERMISSION_PROMPT_TOOL_NAME,
   SUBMIT_PLAN_REPLY,
   SUBMIT_PLAN_TOOL_NAME,
+  UNATTENDED_PERMISSION_MESSAGE,
 } from './gate.ts';
 
 /**
@@ -24,7 +26,9 @@ import {
  *    a tool call needs a person's permission. A person cannot answer inside the
  *    turn, so the call is refused with {@link PERMISSION_PENDING_MARKER}; the
  *    harness sees the refusal in the stream, stops the turn and parks it until
- *    the person allows or denies the call.
+ *    the person allows or denies the call. Started with `--unattended` (a card
+ *    run nobody watches), it refuses without the marker and says why, so the
+ *    turn goes on.
  *
  * Dependency-free on purpose: hand-rolled JSON-RPC 2.0 over newline-delimited
  * JSON on stdin/stdout (the MCP stdio transport). Nothing but protocol
@@ -39,6 +43,8 @@ const SERVER_INFO = { name: 'factory-gate', version: '0.2.0' };
 
 const SUBMIT_PLAN_REPLY = ${JSON.stringify(SUBMIT_PLAN_REPLY)};
 const PERMISSION_PENDING_MARKER = ${JSON.stringify(PERMISSION_PENDING_MARKER)};
+const UNATTENDED_PERMISSION_MESSAGE = ${JSON.stringify(UNATTENDED_PERMISSION_MESSAGE)};
+const UNATTENDED = process.argv.slice(2).includes(${JSON.stringify(GATE_UNATTENDED_ARG)});
 
 const SUBMIT_PLAN_TOOL = {
   name: ${JSON.stringify(SUBMIT_PLAN_TOOL_NAME)},
@@ -113,8 +119,12 @@ function handle(message) {
     case 'tools/call': {
       if (params?.name === PERMISSION_PROMPT_TOOL.name) {
         const toolName = typeof params?.arguments?.tool_name === 'string' ? params.arguments.tool_name : 'this tool';
-        // The CLI reads the decision as JSON text: refuse, with the marker that parks the turn.
-        const decision = { behavior: 'deny', message: permissionPendingMessage(toolName) };
+        // The CLI reads the decision as JSON text: refuse, with the marker that parks the turn,
+        // or, with nobody to ask, refuse for good and say why.
+        const message = UNATTENDED
+          ? UNATTENDED_PERMISSION_MESSAGE.split('{tool}').join(toolName)
+          : permissionPendingMessage(toolName);
+        const decision = { behavior: 'deny', message };
         reply(id, { content: [{ type: 'text', text: JSON.stringify(decision) }] });
         return;
       }

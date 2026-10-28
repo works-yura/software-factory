@@ -71,6 +71,8 @@ export interface PermissionRequest {
   input?: unknown;
   /** The subagent call it came from, when a subagent made it. */
   parentToolCallId?: string;
+  /** The tool asks on every call: an Allow lets this one call through, not the rest of the session. */
+  once?: boolean;
 }
 
 export type TurnOutcome =

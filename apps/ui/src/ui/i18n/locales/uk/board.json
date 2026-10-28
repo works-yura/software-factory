@@ -246,7 +246,7 @@
     "starting": "Запускаємо…",
     "startSuggestedRun": "Запустити запропоноване",
     "dismissSuggestedRun": "Відхилити пропозицію запуску",
-    "askSupervisor": "Запитати Наглядача",
+    "askSupervisor": "Запитати в чаті",
     "markDone": "Позначити як готове",
     "moveTo": "Перемістити: {{stage}}",
     "remove": "Видалити"

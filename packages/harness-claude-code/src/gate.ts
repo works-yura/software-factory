@@ -25,6 +25,20 @@ export const PERMISSION_PROMPT_TOOL_ID = `mcp__${GATE_SERVER_NAME}__${PERMISSION
  */
 export const PERMISSION_PENDING_MARKER = '[factory:permission-pending]';
 
+/**
+ * The gate server's argument for an unattended turn (a card run nobody is
+ * watching): its permission tool refuses at once, saying why, instead of
+ * parking the turn for a person.
+ */
+export const GATE_UNATTENDED_ARG = '--unattended';
+
+/** How an unattended turn's refused call reads; `{tool}` is the tool's name. */
+export const UNATTENDED_PERMISSION_MESSAGE =
+  "Permission denied: using {tool} needs a person's permission (the Factory's tool settings say to ask), " +
+  'but nobody is attending this run: the Factory started it, not a person in a chat. ' +
+  'Do not retry it or work around it. Go on without it if you can; otherwise stop and say in your reply that you needed {tool}, ' +
+  'so a person can allow it in Settings → Behavior → Tool permissions.';
+
 export interface GateServerCommand {
   command: string;
   args?: string[];

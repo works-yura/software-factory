@@ -26,7 +26,7 @@ import { chatColumnClass, DOCK_MIN_REM, threadGeometryClass } from '../domains/w
 
 import '../domains/chat/components/chat-enter.css';
 import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
-import { ShieldCheck } from 'lucide-react';
+import { MessagesSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export function SupervisorPage() {
@@ -52,7 +52,7 @@ export function SupervisorPage() {
 function SupervisorCrumb() {
   const { t } = useTranslation('supervisor');
   return (
-    <Crumb as="span" isCurrent icon={<ShieldCheck />}>
+    <Crumb as="span" isCurrent icon={<MessagesSquare />}>
       {t('title')}
     </Crumb>
   );

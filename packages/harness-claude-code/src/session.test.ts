@@ -548,6 +548,87 @@ describe('ClaudeCodeSession', () => {
     });
   });
 
+  describe('unattended runs and one-call grants', () => {
+    const WRITE_CALL = 'toolu_01EeMtJW2FWqSJ5sKMZmuQub';
+
+    it('starts the gate unattended and lets the run read and use git without asking', async () => {
+      const { fake, session, signal } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
+        permissions: () => ({ unattended: true }),
+      });
+      const end = nextEnd(session);
+      await signal('one', 'go');
+      await end;
+      const call = fake.calls[0]!;
+      const gate = (call.mcpConfigs[0]!.config as { mcpServers: { factory_gate: { args: string[] } } }).mcpServers.factory_gate;
+      expect(gate.args.at(-1)).toBe('--unattended');
+      expect(flagValue(call.args, '--allowedTools')?.split(',')).toEqual(
+        expect.arrayContaining(['Read', 'Grep', 'Bash(git:*)', 'Bash(gh:*)']),
+      );
+      const settings = JSON.parse(flagValue(call.args, '--settings')!) as { permissions: { ask: string[] } };
+      expect(settings.permissions.ask).not.toContain('Bash');
+      expect(settings.permissions.ask).toContain('Write');
+    });
+
+    it('runs an attended turn with the gate that parks', async () => {
+      const { fake, session, signal } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
+        permissions: () => ({}),
+      });
+      const end = nextEnd(session);
+      await signal('one', 'go');
+      await end;
+      const gate = (fake.calls[0]!.mcpConfigs[0]!.config as { mcpServers: { factory_gate: { args: string[] } } }).mcpServers
+        .factory_gate;
+      expect(gate.args).not.toContain('--unattended');
+    });
+
+    it('lets an askEachTime call through once, then asks again', async () => {
+      const { fake, session, signal, store } = await setup(
+        [{ lines: fixture('turn-permission.jsonl') }, { lines: fixture('turn-complete.jsonl') }, { lines: fixture('turn-complete.jsonl') }],
+        {
+          permissions: () => ({
+            categories: { read: 'allow', edit: 'allow', execute: 'allow', mcp: 'allow', other: 'allow' },
+            askEachTime: ['Write'],
+          }),
+        },
+      );
+      const parked = nextEnd(session);
+      await signal('ask-1', 'Create an empty file x.txt.');
+      expect(await parked).toBe('suspended');
+      const first = JSON.parse(flagValue(fake.calls[0]!.args, '--settings')!) as { permissions: { ask: string[] } };
+      expect(first.permissions.ask).toEqual(['Write']);
+      expect(flagValue(fake.calls[0]!.args, '--allowedTools')?.split(',')).not.toContain('Write');
+      expect(session.pendingPermission).toMatchObject({ toolName: 'Write', once: true });
+
+      const retried = nextEnd(session);
+      await session.respondToToolApproval({ approved: true, toolCallId: WRITE_CALL });
+      expect(await retried).toBe('complete');
+      const retry = fake.calls[1]!;
+      expect(retry.stdin).toContain('The person allowed this one `Write` call.');
+      expect(flagValue(retry.args, '--allowedTools')?.split(',')).toContain('Write');
+      const retrySettings = JSON.parse(flagValue(retry.args, '--settings')!) as { permissions?: { ask: string[] } };
+      expect(retrySettings.permissions).toBeUndefined();
+      expect(session.grantedTools).toEqual([]);
+      expect((await store.get('card-1'))!.threads['thread-1']!.grantedOnce).toBeUndefined();
+
+      const next = nextEnd(session);
+      await signal('ask-2', 'Another one.');
+      await next;
+      const again = JSON.parse(flagValue(fake.calls[2]!.args, '--settings')!) as { permissions: { ask: string[] } };
+      expect(again.permissions.ask).toEqual(['Write']);
+    });
+
+    it('takes the appended system prompt per session when the host gives one', async () => {
+      const { fake, session, signal } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
+        appendSystemPrompt: 'You work a Factory card.',
+        appendSystemPromptFor: candidate => (candidate.id === 'card-1' ? 'You supervise the Factory.' : undefined),
+      });
+      const end = nextEnd(session);
+      await signal('one', 'go');
+      await end;
+      expect(flagValue(fake.calls[0]!.args, '--append-system-prompt')).toMatch(/^You supervise the Factory\.\n\nPlan approval:/);
+    });
+  });
+
   describe('isolation', () => {
 
     async function firstCall(overrides: Partial<ClaudeCodeHarnessConfig> = {}) {

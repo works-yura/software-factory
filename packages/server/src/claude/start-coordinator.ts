@@ -17,6 +17,8 @@ export const CLAUDE_THREAD_SETTINGS = {
   workItemId: 'factoryWorkItemId',
   title: 'factoryThreadTitle',
   targetRepository: 'factoryTargetRepository',
+  /** The Factory chat (supervisor): the person whose message or answer started its latest turn. */
+  actorUserId: 'factoryActorUserId',
 } as const;
 
 export interface ClaudeStartCoordinatorOptions {

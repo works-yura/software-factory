@@ -192,6 +192,8 @@ export function createSessionAccessGuard({
   };
 
   const canReachSession = async (sessionId: string, viewer: Viewer): Promise<boolean> => {
+    // A supervisor session is its own resource and has no row: only the Factory's organization reaches it.
+    if (parseSupervisorResourceId(sessionId)) return canReachResource(sessionId, viewer);
     const session = await sessions.getBySessionId(sessionId);
     if (session && !canViewSourceControlSession(session, viewer)) return false;
     const resourceId = await sessionResourceId(sessionId);

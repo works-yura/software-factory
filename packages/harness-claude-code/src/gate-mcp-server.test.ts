@@ -5,7 +5,13 @@ import { join } from 'node:path';
 
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
-import { PERMISSION_PENDING_MARKER, PERMISSION_PROMPT_TOOL_NAME, SUBMIT_PLAN_REPLY, SUBMIT_PLAN_TOOL_NAME } from './gate.ts';
+import {
+  GATE_UNATTENDED_ARG,
+  PERMISSION_PENDING_MARKER,
+  PERMISSION_PROMPT_TOOL_NAME,
+  SUBMIT_PLAN_REPLY,
+  SUBMIT_PLAN_TOOL_NAME,
+} from './gate.ts';
 import { GATE_SERVER_SOURCE } from './gate-server.ts';
 
 const scriptDir = mkdtempSync(join(tmpdir(), 'gate-server-test-'));
@@ -14,8 +20,8 @@ writeFileSync(script, GATE_SERVER_SOURCE);
 afterAll(() => rmSync(scriptDir, { recursive: true, force: true }));
 
 /** Drives the gate server over stdio, one JSON-RPC message per line. */
-function startServer() {
-  const child = spawn(process.execPath, [script], { stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams;
+function startServer(args: string[] = []) {
+  const child = spawn(process.execPath, [script, ...args], { stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams;
   const received: Array<Record<string, unknown>> = [];
   const waiters: Array<() => void> = [];
   let buffer = '';
@@ -103,6 +109,22 @@ describe('gate MCP server', () => {
     expect(decision.behavior).toBe('deny');
     expect(decision.message.startsWith(PERMISSION_PENDING_MARKER)).toBe(true);
     expect(decision.message).toContain('Write');
+  });
+
+  it('refuses for good, saying nobody is there to ask, when the turn is unattended', async () => {
+    server = startServer([GATE_UNATTENDED_ARG]);
+    await server.request(1, 'initialize', { protocolVersion: '2025-06-18', capabilities: {} });
+    const answer = (await server.request(2, 'tools/call', {
+      name: PERMISSION_PROMPT_TOOL_NAME,
+      arguments: { tool_name: 'Write', input: { file_path: '/repo/x.txt', content: '' }, tool_use_id: 'toolu_1' },
+    })) as { result: { content: Array<{ type: string; text: string }> } };
+    const decision = JSON.parse(answer.result.content[0]!.text) as { behavior: string; message: string };
+    expect(decision.behavior).toBe('deny');
+    // No marker: the harness must not park a turn nobody will answer.
+    expect(decision.message).not.toContain(PERMISSION_PENDING_MARKER);
+    expect(decision.message).toMatch(/^Permission denied: using Write needs a person's permission/);
+    expect(decision.message).toContain('nobody is attending this run');
+    expect(decision.message).not.toContain('{tool}');
   });
 
   it('answers an unknown protocol version with the newest one it supports', async () => {

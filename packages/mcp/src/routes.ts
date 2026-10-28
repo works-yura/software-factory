@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { getFactoryAuthUser } from '@factory/auth';
 import { PLATFORM_AUTH_PROVIDER } from '@factory/auth';
 import type { RouteAuth } from '@factory/http';
-import { ensureFactorySourceSession, FactorySourceSessionResolutionError } from '@factory/session';
+import { ensureFactorySourceSession, FactorySourceSessionResolutionError, supervisorResourceId } from '@factory/session';
 import type { SourceControlSessionLookup } from '@factory/session';
 import { auditActorProfile } from '@factory/store';
 import type {
@@ -107,6 +107,8 @@ export interface FactoryMcpRoutesDeps {
  * Who an MCP client acts as. A signed-in person gets a `user` scope with the
  * reach of a web UI turn; an agent session holding a session token gets the
  * `worker` scope its bound run would get in Mastra. Matches the agent tools' scope.
+ * The Factory's chat (the supervisor session) on Claude Code gets a
+ * `supervisor` scope: the supervisor's read and repair tools, nothing else.
  */
 export interface FactoryMcpToolScope {
   orgId: string;
@@ -115,11 +117,14 @@ export interface FactoryMcpToolScope {
   sessionId: string;
   resourceId: string;
   threadId: string;
-  kind: 'user' | 'worker';
+  kind: 'user' | 'worker' | 'supervisor';
   /** True only for a signed-in person; a worker's turns were started by rules. */
   interactive: boolean;
   actorProfile?: AuditActorProfileInput;
 }
+
+/** A scope the Factory's agent tools are built for: a person's or a bound session's. */
+export type FactoryMcpAgentScope = FactoryMcpToolScope & { kind: 'user' | 'worker' };
 
 /**
  * The Factory's agent tools, built by the harness for one scope, and the
@@ -127,12 +132,19 @@ export interface FactoryMcpToolScope {
  * tools a client sees; the tools themselves are the ones agent sessions get.
  */
 export interface FactoryMcpToolDependencies {
-  create: (scope: FactoryMcpToolScope) => Record<string, Tool<any, any, any, any>>;
+  create: (scope: FactoryMcpAgentScope) => Record<string, Tool<any, any, any, any>>;
   /**
    * Tools only a bound worker session has (the governed card move, review
    * verdicts), built for its binding. They take precedence over `create`'s.
    */
   createBound?: (
+    scope: FactoryMcpAgentScope,
+  ) => Record<string, Tool<any, any, any, any>> | Promise<Record<string, Tool<any, any, any, any>>>;
+  /**
+   * The supervisor's tools (health check, records, repairs) for the Factory's
+   * chat on Claude Code, acting as `scope.userId`. Unset → supervisor tokens are refused.
+   */
+  createSupervisor?: (
     scope: FactoryMcpToolScope,
   ) => Record<string, Tool<any, any, any, any>> | Promise<Record<string, Tool<any, any, any, any>>>;
   workItems: Pick<WorkItemsStorage, 'list' | 'getForProject' | 'hasRunBindingForSession'>;
@@ -235,7 +247,7 @@ function createSearchFetchTools(
 
 /** The tools a signed-in person's MCP client sees for one Factory. */
 export function createFactoryMcpTools(
-  scope: FactoryMcpToolScope,
+  scope: FactoryMcpAgentScope,
   deps: FactoryMcpRoutesDeps,
   options: { persistedSession?: boolean } = {},
 ): Record<string, Tool<any, any, any, any>> {
@@ -285,6 +297,25 @@ export async function resolveSessionTokenScope(
 ): Promise<{ scope: FactoryMcpToolScope; projectName: string } | null> {
   const claims = deps.sessionTokens?.verify(token);
   if (!claims || claims.factoryProjectId !== factoryProjectId) return null;
+  if (claims.scope === 'supervisor') {
+    // Only the Factory's own supervisor session, in the org that owns the Factory.
+    if (claims.sessionId !== supervisorResourceId(factoryProjectId) || !claims.userId) return null;
+    const project = await deps.projects.get({ orgId: claims.orgId, id: factoryProjectId });
+    if (!project) return null;
+    return {
+      projectName: project.name,
+      scope: {
+        orgId: claims.orgId,
+        factoryProjectId,
+        userId: claims.userId,
+        sessionId: claims.sessionId,
+        resourceId: claims.resourceId,
+        threadId: claims.threadId,
+        kind: 'supervisor',
+        interactive: false,
+      },
+    };
+  }
   const row = await deps.tools.sessions.getBySessionId(claims.sessionId);
   if (!row || row.orgId !== claims.orgId || row.factoryProjectId !== factoryProjectId) return null;
   const project = await deps.projects.get({ orgId: claims.orgId, id: factoryProjectId });
@@ -366,8 +397,18 @@ async function handleSessionMcp(
   const resolved = await resolveSessionTokenScope(deps, token, factoryProjectId);
   // Never fall through to the person path: a request that brought a session token stands or falls by it.
   if (!resolved) return c.json({ error: 'invalid_session_token' }, 401);
-  const tools = createFactoryMcpTools(resolved.scope, deps, { persistedSession: true });
-  if (resolved.scope.kind === 'worker') Object.assign(tools, (await deps.tools.createBound?.(resolved.scope)) ?? {});
+  if (resolved.scope.kind === 'supervisor') {
+    if (!deps.tools.createSupervisor) return c.json({ error: 'invalid_session_token' }, 401);
+    const tools = { ...(await deps.tools.createSupervisor(resolved.scope)) };
+    for (const [name, tool] of Object.entries(tools)) {
+      const annotations = FACTORY_TOOL_ANNOTATIONS[name];
+      if (annotations) tool.mcp = { ...tool.mcp, annotations };
+    }
+    return serveTools(c, mcpPath, { factoryProjectId, projectName: resolved.projectName, tools });
+  }
+  const scope = resolved.scope as FactoryMcpAgentScope;
+  const tools = createFactoryMcpTools(scope, deps, { persistedSession: true });
+  if (scope.kind === 'worker') Object.assign(tools, (await deps.tools.createBound?.(scope)) ?? {});
   return serveTools(c, mcpPath, { factoryProjectId, projectName: resolved.projectName, tools });
 }
 
@@ -393,7 +434,7 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
     factoryProjectId,
   });
   const actorProfile = auditActorProfile(getFactoryAuthUser(c));
-  const scope: FactoryMcpToolScope = {
+  const scope: FactoryMcpAgentScope = {
     orgId: tenant.orgId,
     factoryProjectId,
     userId: tenant.userId,

@@ -24,6 +24,14 @@ export interface FactorySessionTokenClaims {
   sessionId: string;
   threadId: string;
   resourceId: string;
+  /**
+   * `supervisor`: the token speaks for the Factory's own chat (the supervisor
+   * session, `factory-supervisor:<factory>`), which has no session row; it
+   * gets the supervisor's tools, acting as {@link userId}.
+   */
+  scope?: 'supervisor';
+  /** Who a `supervisor` token acts as: the person whose message or answer started the turn. */
+  userId?: string;
 }
 
 export interface FactorySessionTokenSigner {
@@ -81,6 +89,8 @@ export function createFactorySessionTokenSigner(
         const value = payload[claim];
         if (typeof value !== 'string' || value.length === 0) return null;
       }
+      if (payload.scope !== undefined && payload.scope !== 'supervisor') return null;
+      if (payload.scope === 'supervisor' && (typeof payload.userId !== 'string' || payload.userId.length === 0)) return null;
       return pickClaims(payload as FactorySessionTokenClaims);
     },
   };
@@ -93,5 +103,7 @@ function pickClaims(claims: FactorySessionTokenClaims): FactorySessionTokenClaim
     sessionId: claims.sessionId,
     threadId: claims.threadId,
     resourceId: claims.resourceId,
+    ...(claims.scope ? { scope: claims.scope } : {}),
+    ...(typeof claims.userId === 'string' ? { userId: claims.userId } : {}),
   };
 }

@@ -308,6 +308,25 @@ describe('Claude Code session routes', () => {
     });
   });
 
+  it('tells the host who answered or wrote, before the session acts on it', async () => {
+    const { app, ui, session } = await setup([{ lines: fixture('turn-permission.jsonl') }, { lines: fixture('turn-complete.jsonl') }]);
+    const seen: Array<{ user: unknown; sessionId: string; running: boolean }> = [];
+    ui.setPersonInputHook((c, target) => {
+      seen.push({ user: c.get('factoryAuthUser' as never), sessionId: target.id, running: target.run.isRunning() });
+    });
+    const parked = nextEnd(session);
+    expect((await post(app, `${BASE}/card-1/messages`, { message: 'Create x.txt' })).status).toBe(200);
+    await parked;
+    const call = session.pendingPermission!.toolCallId;
+    const resumed = nextEnd(session);
+    await post(app, `${BASE}/card-1/tool-approval`, { toolCallId: call, approved: false });
+    await resumed;
+    expect(seen).toEqual([
+      { user: OWNER, sessionId: 'card-1', running: false },
+      { user: OWNER, sessionId: 'card-1', running: false },
+    ]);
+  });
+
   it('keeps another person’s private session out of reach', async () => {
     const { app } = await setup([], { user: { workosId: 'someone-else', organizationId: 'org-1' }, visibility: 'private' });
     expect((await app.request(`${BASE}/card-1/threads/card-1/messages?limit=10`)).status).toBe(404);

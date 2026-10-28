@@ -80,7 +80,7 @@ describe('Rules page filters', () => {
     const user = userEvent.setup();
     const router = renderRulesPage(() => undefined);
 
-    await user.click(await screen.findByRole('button', { name: 'Ask supervisor about failed sendMessage decision' }));
+    await user.click(await screen.findByRole('button', { name: 'Ask the chat about the failed sendMessage decision' }));
 
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/supervisor`);
   });

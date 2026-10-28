@@ -21,6 +21,13 @@ import type { SourceControlSessionLookup } from '@factory/session';
 import type { FactoryProjectsStorage } from '@factory/store';
 
 import type { ClaudeCodeCredentialFailureHook, ClaudeCodeCredentialsHook } from './credentials.ts';
+import { CLAUDE_THREAD_SETTINGS } from './start-coordinator.ts';
+import {
+  CLAUDE_SUPERVISOR_ASK_TOOLS,
+  CLAUDE_SUPERVISOR_SYSTEM_PROMPT,
+  claudeSupervisorProjectId,
+  createClaudeSupervisorWorkdir,
+} from './supervisor.ts';
 
 /** The MCP server name the Factory's tools are mounted under: Claude sees them as `mcp__factory__<tool>`. */
 export const CLAUDE_FACTORY_MCP_SERVER = 'factory';
@@ -96,8 +103,23 @@ export interface ClaudeFactoryHarnessOptions {
    * The Factories, read before each turn for the session's `claudeCodeModel`
    * (`claude --model`). Unset, or a Factory with none, leaves the CLI's own default.
    */
-  projects?: Pick<FactoryProjectsStorage, 'get'>;
+  projects?: Pick<FactoryProjectsStorage, 'get'> & Partial<Pick<FactoryProjectsStorage, 'getById'>>;
   credentials: ClaudeCodeCredentialsHook;
+  /**
+   * Whether a session's turns are a card run nobody is watching (the
+   * dispatcher or a start coordinator drives them), beyond what the session
+   * itself shows (a work item recorded on its thread, or a session another
+   * session started). Such turns read without asking and are refused, not
+   * parked, where the settings say to ask. Personal chats and the Factory chat
+   * keep asking.
+   */
+  cardRun?: (session: { orgId: string; factoryProjectId: string; sessionId: string }) => boolean | Promise<boolean>;
+  /**
+   * Where the Factory chats (supervisor sessions) on Claude Code get their
+   * private empty working folders; `<storeDir>-supervisor`, or one under the
+   * OS temp dir, by default.
+   */
+  supervisorWorkdirRoot?: string;
   /**
    * The Factory's tool permissions (Settings → Behavior), read before each
    * turn. Unset, or `undefined` for a Factory, every category asks.
@@ -147,39 +169,89 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     return { ...row, factoryProjectId: row.factoryProjectId };
   };
 
+  /**
+   * Who a session's turn runs for. A session with a row runs as its row; the
+   * Factory chat (supervisor) has none: it belongs to its Factory and runs as
+   * the person whose message or answer started the turn (recorded on its
+   * thread by the chat), or the Factory's creator before anyone did.
+   */
+  const tenantOf = async (session: ClaudeCodeSession) => {
+    const supervisorProjectId = claudeSupervisorProjectId(session.id);
+    if (supervisorProjectId) {
+      const project = await options.projects?.getById?.({ id: supervisorProjectId });
+      if (!project) throw new Error(`The Factory of supervisor session ${session.id} was not found.`);
+      const actor = await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.actorUserId });
+      return {
+        orgId: project.orgId,
+        factoryProjectId: project.id,
+        userId: typeof actor === 'string' && actor ? actor : project.createdBy,
+        supervisor: true as const,
+        originSessionId: null,
+      };
+    }
+    const row = await sourceSession(session.id);
+    return {
+      orgId: row.orgId,
+      factoryProjectId: row.factoryProjectId,
+      userId: row.userId,
+      supervisor: false as const,
+      originSessionId: row.originSessionId ?? null,
+    };
+  };
+
+  const isCardRun = async (session: ClaudeCodeSession, tenant: Awaited<ReturnType<typeof tenantOf>>) => {
+    if (tenant.supervisor) return false;
+    if (tenant.originSessionId) return true;
+    if (await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.workItemId })) return true;
+    return (
+      (await options.cardRun?.({ orgId: tenant.orgId, factoryProjectId: tenant.factoryProjectId, sessionId: session.id })) ===
+      true
+    );
+  };
+
+  const supervisorWorkdir = createClaudeSupervisorWorkdir(
+    options.supervisorWorkdirRoot ?? (options.storeDir ? `${options.storeDir.replace(/\/+$/, '')}-supervisor` : undefined),
+  );
+
   const harness = createClaudeCodeHarness({
     store,
-    cwdFor: options.cwdFor,
+    // The Factory chat has no repository: a private empty folder instead of a checkout.
+    cwdFor: async sessionId => {
+      const supervisorProjectId = claudeSupervisorProjectId(sessionId);
+      return supervisorProjectId ? supervisorWorkdir(supervisorProjectId) : options.cwdFor(sessionId);
+    },
     credentials: async (session, request) => {
-      const row = await sourceSession(session.id);
-      return options.credentials({ orgId: row.orgId, userId: row.userId }, request);
+      const tenant = await tenantOf(session);
+      return options.credentials({ orgId: tenant.orgId, userId: tenant.userId }, request);
     },
     ...(options.onCredentialFailure
       ? {
           onCredentialFailure: async (session: ClaudeCodeSession, failure: ClaudeCredentialFailure) => {
-            const row = await sourceSession(session.id);
-            await options.onCredentialFailure!({ orgId: row.orgId, userId: row.userId }, failure);
+            const tenant = await tenantOf(session);
+            await options.onCredentialFailure!({ orgId: tenant.orgId, userId: tenant.userId }, failure);
           },
         }
       : {}),
     ...(options.mcp
       ? {
           mcpConfig: async (session: ClaudeCodeSession) => {
-            const row = await sourceSession(session.id);
+            const tenant = await tenantOf(session);
             const mcp = options.mcp!;
             // Minted per turn and only for this session's own coordinates; it expires on its own.
+            // The Factory chat's token is a supervisor token: its tools, acting as the person behind the turn.
             const token = mcp.tokens.sign({
-              orgId: row.orgId,
-              factoryProjectId: row.factoryProjectId,
+              orgId: tenant.orgId,
+              factoryProjectId: tenant.factoryProjectId,
               sessionId: session.id,
               threadId: session.thread.requireId(),
-              resourceId: session.resourceId ?? row.factoryProjectId,
+              resourceId: session.resourceId ?? (tenant.supervisor ? session.id : tenant.factoryProjectId),
+              ...(tenant.supervisor ? { scope: 'supervisor' as const, userId: tenant.userId } : {}),
             });
             return {
               mcpServers: {
                 [CLAUDE_FACTORY_MCP_SERVER]: {
                   type: 'http',
-                  url: mcp.url(row.factoryProjectId),
+                  url: mcp.url(tenant.factoryProjectId),
                   headers: { [FACTORY_SESSION_TOKEN_HEADER]: token },
                 },
               },
@@ -191,17 +263,25 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       ? {
           // Read per turn, so a model changed in settings applies from the session's next turn.
           modelFor: async (session: ClaudeCodeSession) => {
-            const row = await sourceSession(session.id);
-            const project = await options.projects!.get({ orgId: row.orgId, id: row.factoryProjectId });
+            const tenant = await tenantOf(session);
+            const project = await options.projects!.get({ orgId: tenant.orgId, id: tenant.factoryProjectId });
             return project?.claudeCodeModel ?? undefined;
           },
         }
       : {}),
     // Read per turn: the settings change between turns, and reset when the server restarts.
+    // A card run nobody watches reads freely and is refused, not parked, where they say to ask;
+    // the Factory chat asks before every repair.
     permissions: async (session: ClaudeCodeSession) => {
-      const row = await sourceSession(session.id);
-      return (await options.permissions?.({ orgId: row.orgId, factoryProjectId: row.factoryProjectId })) ?? {};
+      const tenant = await tenantOf(session);
+      const permissions =
+        (await options.permissions?.({ orgId: tenant.orgId, factoryProjectId: tenant.factoryProjectId })) ?? {};
+      if (tenant.supervisor) return { ...permissions, askEachTime: [...CLAUDE_SUPERVISOR_ASK_TOOLS] };
+      if (await isCardRun(session, tenant)) return { ...permissions, unattended: true };
+      return permissions;
     },
+    appendSystemPromptFor: session =>
+      claudeSupervisorProjectId(session.id) ? CLAUDE_SUPERVISOR_SYSTEM_PROMPT : undefined,
     trustedMcpServers: [CLAUDE_FACTORY_MCP_SERVER],
     ...(options.configDir ? { configDir: options.configDir } : {}),
     allowedTools: options.allowedTools ?? DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS,

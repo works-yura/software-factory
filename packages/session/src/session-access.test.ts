@@ -225,6 +225,10 @@ describe('createSessionAccessGuard', () => {
     const supervisor = `factory-supervisor:${FACTORY_ID}`;
     expect((await post(teammate, create, { sessionId: supervisor, resourceId: supervisor })).status).toBe(200);
     expect((await post(outsider, create, { sessionId: supervisor, resourceId: supervisor })).status).toBe(404);
+    // Addressed by its id alone (it has no row and is its own resource), it is still the Factory's organization's only.
+    const messages = `/api/agent-controller/code/sessions/${encodeURIComponent(supervisor)}/messages`;
+    expect((await post(outsider, messages, { message: 'retry everything' })).status).toBe(404);
+    expect((await post(teammate, messages, { message: 'what is stuck?' })).status).toBe(200);
   });
 
   it('guards memory-settings routes by the session they name', async () => {

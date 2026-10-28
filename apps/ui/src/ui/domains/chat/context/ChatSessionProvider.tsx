@@ -70,8 +70,8 @@ export function ChatSessionConfigProvider({
   userScoped?: boolean;
   draftSessionId?: string;
   /**
-   * Bind the chat to the factory's supervisor session instead of a stored
-   * workspace session. The supervisor has no repository or sandbox and no
+   * Bind the chat to the factory's supervisor session (the Factory chat)
+   * instead of a stored workspace session. The supervisor has no repository or sandbox and no
    * session row: its resource is addressable straight away, and the server's
    * session-start hook stamps factory state from the resource id.
    */
@@ -116,6 +116,8 @@ export function ChatSessionConfigProvider({
           factorySessionState: factory ? { factoryProjectId: factory.id } : undefined,
           baseUrl,
           kind: 'factory' as const,
+          // A Claude Code Factory's chat runs on Claude Code too (the server creates it there), on its Claude model.
+          claudeCode: factory?.harness === 'claude-code' ? { model: factory.claudeCodeModel ?? null } : undefined,
         }}
       >
         {children}
