@@ -750,6 +750,7 @@ export class ClaudeCodeSession implements AgentSession {
     // A stale resume id (the CLI's session files were lost) gets one fresh session instead of failing forever;
     // an account that runs out of usage or is refused hands the turn to the next account.
     while (true) {
+      if (run.abortRequested) return { kind: 'aborted' };
       const resumeSessionId = thread.claudeSessionId;
       if (credentials.accountId && credentials.accountId !== this.#record.accountId) {
         this.#record.accountId = credentials.accountId;

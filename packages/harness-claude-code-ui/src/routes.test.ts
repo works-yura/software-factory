@@ -1,7 +1,7 @@
 import { InMemoryStore } from '@mastra/core/storage';
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentRunEndReason } from '@factory/harness';
 import {
@@ -204,6 +204,7 @@ describe('Claude Code session routes', () => {
     const stream = await openStream(app);
     await post(app, `${BASE}/card-1/messages`, { message: 'Take your time.' });
     await stream.until(event => event.type === 'agent_start');
+    await vi.waitFor(() => expect(fake.calls).toHaveLength(1));
 
     const aborted = await post(app, `${BASE}/card-1/abort`);
     expect(await aborted.json()).toEqual({ ok: true });
