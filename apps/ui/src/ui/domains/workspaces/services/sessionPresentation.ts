@@ -1,6 +1,6 @@
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
 import { isPullRequestSource } from '../../factory/services/workItems';
-import { SLACK_SESSION_BRANCH_PREFIX, USER_SESSION_BRANCH_PREFIX } from './user-sessions';
+import { USER_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 import { translator } from '../../../i18n/t';
 
@@ -49,7 +49,6 @@ export function getFactorySessionSource(session: FactoryUserSession, workItem: W
   if (workItem) return workItem.source;
   if (GITHUB_REVIEW_BRANCH.test(session.branch)) return 'github-pr';
   if (GITLAB_REVIEW_BRANCH.test(session.branch)) return 'gitlab-pr';
-  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)) return 'slack-thread';
   return 'manual';
 }
 

@@ -4,7 +4,7 @@
     "github-pr": "Рев'ю PR",
     "gitlab-issue": "GitLab",
     "gitlab-pr": "Рев'ю MR",
-    "slack-thread": "Slack",
+    "clickup-task": "ClickUp",
     "manual": "Вручну"
   },
   "pullRequestStatus": {
@@ -16,7 +16,7 @@
   "externalLink": {
     "github": "Відкрити в GitHub",
     "gitlab": "Відкрити в GitLab",
-    "slack": "Відкрити в Slack",
+    "clickup": "Відкрити в ClickUp",
     "manual": "Відкрити посилання"
   },
   "emptyColumn": {

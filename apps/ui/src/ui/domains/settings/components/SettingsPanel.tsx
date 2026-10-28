@@ -14,7 +14,6 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { ConnectedAccountsSection } from './ConnectedAccountsSection';
 import { EnvironmentSection } from './EnvironmentSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
@@ -66,16 +65,7 @@ export function SettingsPanel() {
       {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && (
-        <div className="flex flex-col gap-8">
-          <SettingsSubsection
-            scope="personal"
-            title={t('panel.connections.title')}
-            description={t('panel.connections.description')}
-          >
-            <ConnectedAccountsSection />
-          </SettingsSubsection>
-          <McpClientsSection />
-        </div>
+        <McpClientsSection />
       )}
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}

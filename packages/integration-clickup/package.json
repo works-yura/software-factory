@@ -1,0 +1,31 @@
+{
+  "name": "@factory/integration-clickup",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ClickUp integration: polls List tasks with an API token and files them as work items.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "check:tests": "tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@factory/capabilities": "workspace:*",
+    "@factory/core": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@factory/integrations": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/core": "1.79.0",
+    "hono": "4.13.13",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

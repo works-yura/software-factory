@@ -25,7 +25,7 @@ function descriptionSource(
   return undefined;
 }
 
-/** The body behind the card; undefined for sources with none to fetch (manual, Slack). */
+/** The body behind the card; undefined for sources with none to fetch (manual). */
 export function useSourceDescription(
   item: SourceItem,
   projectRepositoryId: string | undefined,

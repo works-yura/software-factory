@@ -16,7 +16,7 @@ const WORK_ITEM_SOURCES = [
   'github-pr',
   'gitlab-issue',
   'gitlab-pr',
-  'slack-thread',
+  'clickup-task',
   'manual',
 ] as const satisfies readonly WorkItemSource[];
 
@@ -113,7 +113,7 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
 /** Aria label for the icon-only external link next to a card title. */
 export function externalLinkLabel(source: WorkItemSource): string {
   if (source === 'gitlab-issue' || source === 'gitlab-pr') return tk('externalLink.gitlab');
-  if (source === 'slack-thread') return tk('externalLink.slack');
+  if (source === 'clickup-task') return tk('externalLink.clickup');
   if (source === 'manual') return tk('externalLink.manual');
   return tk('externalLink.github');
 }

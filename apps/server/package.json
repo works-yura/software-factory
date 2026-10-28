@@ -23,6 +23,7 @@
     "@factory/api": "workspace:*",
     "@factory/http": "workspace:*",
     "@factory/integration-github": "workspace:*",
+    "@factory/integration-clickup": "workspace:*",
     "@factory/integration-gitlab": "workspace:*",
     "@factory/pipelines": "workspace:*",
     "@factory/server": "workspace:*",

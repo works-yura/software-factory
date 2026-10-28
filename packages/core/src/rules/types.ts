@@ -5,6 +5,7 @@ export const WORK_ITEM_SOURCES = [
   'github-pr',
   'gitlab-issue',
   'gitlab-pr',
+  'clickup-task',
   'manual',
 ] as const;
 export type WorkItemSource = (typeof WORK_ITEM_SOURCES)[number];
@@ -16,6 +17,7 @@ const WORK_ITEM_SOURCE_ORIGINS: Readonly<
   'github-pr': { integrationId: 'github', type: 'pull-request' },
   'gitlab-issue': { integrationId: 'gitlab', type: 'issue' },
   'gitlab-pr': { integrationId: 'gitlab', type: 'pull-request' },
+  'clickup-task': { integrationId: 'clickup', type: 'task' },
   manual: { integrationId: 'factory', type: 'manual' },
 };
 
@@ -49,8 +51,9 @@ export function needsApproval(item: {
 
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
+  if (source.integrationId === 'clickup') return 'clickup-task';
   if (source.integrationId === 'gitlab') return source.type === 'pull-request' ? 'gitlab-pr' : 'gitlab-issue';
-  // Only GitHub and GitLab have provider-specific rules; anything else (a Slack
+  // Only GitHub, GitLab and ClickUp have provider-specific sources; anything else (a Slack
   // thread, or a stored card from an integration Factory no longer supports) is
   // a plain work item, not a mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
@@ -650,7 +653,9 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'gitlabIssue';
     case 'gitlab-pr':
       return 'gitlabPullRequest';
+    case 'clickup-task':
     case 'manual':
+      // ClickUp tasks have no provider-specific phase rules; boards treat them like hand-filed cards.
       return 'manual';
   }
 }

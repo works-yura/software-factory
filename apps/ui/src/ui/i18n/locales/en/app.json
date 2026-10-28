@@ -53,38 +53,5 @@
       "addToHomeScreen": "Scroll down and tap <em>Add to Home Screen</em>",
       "confirmAdd": "Tap <em>Add</em> to install the app"
     }
-  },
-  "slack": {
-    "breadcrumb": "Breadcrumb",
-    "connections": "Connections",
-    "connection": "Connection",
-    "description": "Start and continue Factory sessions from Slack.",
-    "loading": "Loading Slack connection…",
-    "loadFailed": "Failed to load Slack connection",
-    "notConnected": "Not connected",
-    "notConfigured": "Slack connection is not configured",
-    "connect": "Connect Slack",
-    "workspace": "Slack workspace",
-    "workspaceId": "Workspace ID",
-    "userId": "Slack user ID",
-    "connectedAt": "Connected {{date}}",
-    "sessionBehavior": "Session behavior",
-    "defaultFactory": "Default factory",
-    "defaultFactoryFor": "Default factory for {{user}}",
-    "defaultFactoryDescription": "New Slack sessions are routed to this Factory.",
-    "setDefaultFactory": "Set default factory",
-    "dangerZone": "Danger zone",
-    "disconnectTitle": "Disconnect Slack",
-    "disconnectDescription": "Slack messages from <user></user> will no longer start or continue Factory sessions.",
-    "disconnectUser": "Disconnect {{user}}",
-    "disconnect": "Disconnect",
-    "disconnecting": "Disconnecting…",
-    "toasts": {
-      "disconnected": "Disconnected Slack account",
-      "alreadyDisconnected": "Account was already disconnected",
-      "disconnectFailed": "Failed to disconnect account",
-      "defaultSet": "Slack sessions will go to {{name}}",
-      "defaultFailed": "Failed to set default factory"
-    }
   }
 }

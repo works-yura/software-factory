@@ -24,7 +24,6 @@ import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { SlackConnectionPage } from './pages/SlackConnectionPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
 import { SupervisorPage } from './pages/SupervisorPage';
@@ -165,7 +164,6 @@ export function createAppRoutes(): RouteObject[] {
                   path: 'settings',
                   children: [
                     { index: true, element: <Navigate to="preferences" replace /> },
-                    { path: 'connections/slack', element: <SlackConnectionPage /> },
                     { path: ':section', element: <SettingsPage /> },
                   ],
                 },

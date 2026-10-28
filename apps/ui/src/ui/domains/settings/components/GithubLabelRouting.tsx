@@ -144,7 +144,7 @@ export function GithubLabelRouting({
   );
 }
 
-function BoardSelect({
+export function BoardSelect({
   ariaLabel,
   value,
   placeholder,

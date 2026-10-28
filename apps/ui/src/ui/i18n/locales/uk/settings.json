@@ -55,6 +55,25 @@
       "projects": "Проєкти GitLab",
       "routingTitle": "Маршрутизація GitLab",
       "routingDescription": "Кожен вибраний проєкт наповнює одну дошку у Factory. Доки проєкт не має повної маршрутизації, його задачі не підхоплюються."
+    },
+    "clickup": {
+      "title": "Задачі ClickUp",
+      "checking": "Перевіряємо підключення до ClickUp…",
+      "notConfigured": "ClickUp не налаштовано на цьому сервері. Задайте CLICKUP_API_TOKEN і перезапустіть сервер.",
+      "authRequired": "Увійдіть знову, щоб керувати синхронізацією ClickUp.",
+      "organizationRequired": "Оберіть організацію, щоб керувати синхронізацією ClickUp.",
+      "statusUnavailable": "Не вдалося завантажити стан ClickUp.",
+      "rejected": "ClickUp відхилив налаштований API-токен. Попросіть оператора перевірити його.",
+      "ready": "Задачі з обраних Lists перевіряються кожні {{seconds}} с і стають картками на дошці, яку визначає їхній тег або List.",
+      "sync": "Синхронізувати задачі ClickUp",
+      "lists": "Lists ClickUp",
+      "listsFailed": "Не вдалося завантажити Lists ClickUp. Спробуйте за хвилину.",
+      "autoStart": "Автоматично запускати триаж",
+      "autoStartHint": "Нові задачі, створені після старту сервера, одразу йдуть у Triage. Вимкнено: вони чекають в Intake, поки людина їх не перенесе.",
+      "autoStartSaved": "Автоматизацію ClickUp оновлено",
+      "autoStartFailed": "Не вдалося зберегти автоматизацію ClickUp",
+      "routingTitle": "Маршрутизація ClickUp",
+      "routingDescription": "Кожен обраний List живить одну дошку фабрики. Доки List не маршрутизовано повністю, його задачі не підхоплюються."
     }
   },
   "intakeSource": {
@@ -384,20 +403,7 @@
     "activating": "Авторизацію {{name}} завершено — підключення активується",
     "connectFailed": "Не вдалося підключити {{name}}",
     "needsReauth": "Потрібна повторна авторизація",
-    "reconnect": "Перепідключити",
-    "loading": "Завантаження підключених акаунтів",
-    "loadFailed": "Не вдалося завантажити підключені акаунти",
-    "slack": {
-      "notConfigured": "Не налаштовано",
-      "notSetUp": "Slack не налаштовано для цієї фабрики.",
-      "connectedCount_one": "{{count}} підключений",
-      "connectedCount_few": "{{count}} підключені",
-      "connectedCount_many": "{{count}} підключених",
-      "connectedCount_other": "{{count}} підключених",
-      "connected": "Підключено",
-      "notConnected": "Не підключено",
-      "configure": "Налаштувати"
-    }
+    "reconnect": "Перепідключити"
   },
   "githubPat": {
     "title": "Токени GitHub CLI",
@@ -462,17 +468,10 @@
       "connect": "Підключити GitHub"
     }
   },
-  "channels": {
-    "requestFailed": "Запит не вдався ({{status}})"
-  },
   "panel": {
     "label": "Налаштування",
     "updateFailed": "Не вдалося оновити налаштування",
-    "updateFailedWith": "Не вдалося оновити налаштування: {{message}}",
-    "connections": {
-      "title": "Підключені акаунти",
-      "description": "Підключіть свій акаунт, щоб користуватися Factory зі Slack."
-    }
+    "updateFailedWith": "Не вдалося оновити налаштування: {{message}}"
   },
   "scope": {
     "personal": "Особисте",
@@ -749,5 +748,21 @@
       "needSignIn": "Увійдіть в організацію, щоб додавати акаунти Claude Code.",
       "failed": "Щось пішло не так. Спробуйте ще раз."
     }
+  },
+  "tagRouting": {
+    "saved": "Маршрути тегів ClickUp оновлено",
+    "saveFailed": "Не вдалося зберегти маршрути тегів ClickUp",
+    "description": "Задача з одним із цих тегів потрапляє на вказану дошку замість дошки List.",
+    "unavailable": "Маршрути тегів ClickUp зараз недоступні.",
+    "boardFor": "Дошка для тегу {{label}}",
+    "removeRoute": "Прибрати маршрут тегу {{label}}",
+    "remove": "Прибрати",
+    "addRoute": "Додати маршрут тегу",
+    "duplicate": "Для цього тегу вже є маршрут.",
+    "tagFor": "Тег для {{name}}",
+    "tagPlaceholder": "Тег, напр. bug",
+    "boardForNew": "Дошка для нового тегу в {{name}}",
+    "chooseBoard": "Оберіть дошку",
+    "add": "Додати"
   }
 }

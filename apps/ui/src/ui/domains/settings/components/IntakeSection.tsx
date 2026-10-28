@@ -16,6 +16,7 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { GithubStatus } from '../../workspaces/services/github';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
+import { ClickUpIntakeSection } from './ClickUpIntakeSection';
 import { GithubLabelRouting } from './GithubLabelRouting';
 import { IntakeSourceRouting } from './LinearRouting';
 
@@ -293,6 +294,7 @@ export function IntakeSection() {
           </SettingsContainer>
         </SettingsSubsection>
       )}
+      <ClickUpIntakeSection config={config} busy={busy} update={update} factories={factoriesQuery.data ?? []} />
     </div>
   );
 }

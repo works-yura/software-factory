@@ -1,6 +1,5 @@
 import type { BoardPhaseKind } from '@factory/core';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   CheckCircle2,
@@ -11,6 +10,7 @@ import {
   Eye,
   GitPullRequest,
   Hammer,
+  ListChecks,
   Play,
   Search,
 } from 'lucide-react';
@@ -31,7 +31,7 @@ const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVG
   'github-pr': { icon: GitPullRequest, className: 'text-badge-green-indicator' },
   'gitlab-issue': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
   'gitlab-pr': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
-  'slack-thread': { icon: SlackIcon, className: '' },
+  'clickup-task': { icon: ListChecks, className: 'text-badge-purple-indicator' },
   manual: { icon: CircleDot, className: 'text-muted-foreground' },
 };
 

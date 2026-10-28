@@ -221,7 +221,7 @@ export function buildUserSessionRow({
     origin: 'user',
     board: undefined,
     kind: 'User session',
-    source: fromSlack ? 'slack-thread' : 'user',
+    source: 'user',
     name: (fromSlack && !session.title?.trim() && item?.title.trim()) || getUserSessionLabel(session),
     url,
     openPath: url,

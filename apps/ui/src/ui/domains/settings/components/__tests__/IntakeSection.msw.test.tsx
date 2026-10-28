@@ -16,11 +16,15 @@ const BINDINGS_URL = `${TEST_BASE_URL}/web/intake/bindings`;
 const GITHUB_STATUS_URL = `${TEST_BASE_URL}/web/github/status`;
 const GITLAB_STATUS_URL = `${TEST_BASE_URL}/web/gitlab/status`;
 const GITLAB_PROJECTS_URL = `${TEST_BASE_URL}/web/gitlab/projects`;
+const CLICKUP_STATUS_URL = `${TEST_BASE_URL}/web/clickup/status`;
+const CLICKUP_LISTS_URL = `${TEST_BASE_URL}/web/clickup/lists`;
+const CLICKUP_SETTINGS_URL = `${TEST_BASE_URL}/web/clickup/settings`;
 
 function baseConfig(): IntakeConfig {
   return {
     github: { enabled: true, sourceIds: null },
     gitlab: { enabled: false, sourceIds: null },
+    clickup: { enabled: false, sourceIds: null },
   };
 }
 
@@ -72,6 +76,8 @@ function useIntakeHandlers({
       return HttpResponse.json({ config: next });
     }),
     http.get(GITHUB_STATUS_URL, () => HttpResponse.json(githubStatus)),
+    // No ClickUp token on the server: the status route is not mounted.
+    http.get(CLICKUP_STATUS_URL, () => new HttpResponse(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json({ boards: [] })),
   );
@@ -158,6 +164,7 @@ describe('IntakeSection', () => {
         config: {
           github: { enabled: true, sourceIds: ['mastra'] },
           gitlab: { enabled: false, sourceIds: null },
+          clickup: { enabled: false, sourceIds: null },
         },
       });
 
@@ -379,6 +386,85 @@ describe('IntakeSection', () => {
         await screen.findByText('A GitLab account needs to be reconnected in Mastra Platform.'),
       ).toBeInTheDocument();
       expect(await screen.findByRole('checkbox', { name: 'acme/app' })).toBeInTheDocument();
+    });
+  });
+  describe('ClickUp', () => {
+    const readyStatus = {
+      configured: true,
+      connected: true,
+      workspaces: ['Acme'],
+      intervalSeconds: 60,
+      autoStart: false,
+    };
+    const lists = [
+      { id: 'L1', name: 'Backlog', path: 'Eng / Mobile', workspaceId: 'w1' },
+      { id: 'L2', name: 'Inbox', path: 'Support', workspaceId: 'w1' },
+    ];
+
+    it('explains that the server has no token when the status route is missing', async () => {
+      useIntakeHandlers();
+      renderIntakeSection();
+
+      expect(await screen.findByText(/Set CLICKUP_API_TOKEN and restart it/)).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync ClickUp tasks' })).toBeDisabled();
+    });
+
+    it('treats the HTML app shell as "not configured", as the real server answers an unmounted route', async () => {
+      useIntakeHandlers();
+      server.use(
+        http.get(CLICKUP_STATUS_URL, () => HttpResponse.html('<!doctype html><html></html>')),
+      );
+      renderIntakeSection();
+
+      expect(await screen.findByText(/Set CLICKUP_API_TOKEN and restart it/)).toBeInTheDocument();
+    });
+
+    it('reports a rejected token instead of showing an empty list', async () => {
+      useIntakeHandlers();
+      server.use(
+        http.get(CLICKUP_STATUS_URL, () =>
+          HttpResponse.json({ ...readyStatus, connected: false, workspaces: [], error: 'ClickUp request failed with 401.' }),
+        ),
+      );
+      renderIntakeSection();
+
+      expect(await screen.findByText(/ClickUp rejected the configured API token/)).toBeInTheDocument();
+      expect(screen.getByText('ClickUp request failed with 401.')).toBeInTheDocument();
+    });
+
+    it('offers the Lists once sync is on, and saves a picked List', async () => {
+      const saved = useIntakeHandlers({ config: { ...baseConfig(), clickup: { enabled: true, sourceIds: null } } });
+      server.use(
+        http.get(CLICKUP_STATUS_URL, () => HttpResponse.json(readyStatus)),
+        http.get(CLICKUP_LISTS_URL, () => HttpResponse.json({ lists })),
+      );
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      expect(await screen.findByText('Eng / Mobile')).toBeInTheDocument();
+      await user.click(await screen.findByRole('checkbox', { name: 'Backlog' }));
+
+      await waitFor(() => expect(saved.at(-1)?.clickup).toEqual({ enabled: true, sourceIds: ['L1'] }));
+    });
+
+    it('turns automatic triage on', async () => {
+      useIntakeHandlers({ config: { ...baseConfig(), clickup: { enabled: true, sourceIds: null } } });
+      const bodies: unknown[] = [];
+      server.use(
+        http.get(CLICKUP_STATUS_URL, () => HttpResponse.json(readyStatus)),
+        http.get(CLICKUP_LISTS_URL, () => HttpResponse.json({ lists })),
+        http.put(CLICKUP_SETTINGS_URL, async ({ request }) => {
+          const body = await request.json();
+          bodies.push(body);
+          return HttpResponse.json(body);
+        }),
+      );
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await user.click(await screen.findByRole('switch', { name: 'Start triage automatically' }));
+
+      await waitFor(() => expect(bodies).toEqual([{ autoStart: true }]));
     });
   });
 });

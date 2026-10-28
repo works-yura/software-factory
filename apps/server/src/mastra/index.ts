@@ -31,6 +31,7 @@ import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { AgentBrowser } from '@mastra/agent-browser';
 import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } from '@factory/server';
 import { GithubIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
+import { ClickUpIntegration } from '@factory/integration-clickup';
 import { GitLabIntegration } from '@factory/integration-gitlab';
 import { acceptanceBoard, bugBoard } from '@factory/pipelines';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -220,6 +221,17 @@ const gitlab = gitlabAccessToken
     })
   : undefined;
 
+// ClickUp by polling: only the token lives in env; Lists, routing and tag → board are set in
+// Settings › Intake. No webhook, so it works on a local server.
+const clickupApiToken = process.env.CLICKUP_API_TOKEN?.trim();
+const clickupPollSeconds = Number(process.env.CLICKUP_POLL_INTERVAL_SECONDS);
+const clickup = clickupApiToken
+  ? new ClickUpIntegration({
+      apiToken: clickupApiToken,
+      ...(Number.isFinite(clickupPollSeconds) && clickupPollSeconds > 0 ? { intervalSeconds: clickupPollSeconds } : {}),
+    })
+  : undefined;
+
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
 // commands run against untrusted repo checkouts. PATH is always added by the
@@ -295,6 +307,7 @@ const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_
 const integrations = [
   ...(github ? [github] : []),
   ...(gitlab ? [gitlab] : []),
+  ...(clickup ? [clickup] : []),
 ];
 
 export const factoryConfigVersion = 'mastracode-web-v1';

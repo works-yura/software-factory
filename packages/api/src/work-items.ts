@@ -176,6 +176,7 @@ function summarySource(decision: Record<string, unknown>): WorkItemSource | null
     source === 'github-pr' ||
     source === 'gitlab-issue' ||
     source === 'gitlab-pr' ||
+    source === 'clickup-task' ||
     source === 'manual'
     ? source
     : null;

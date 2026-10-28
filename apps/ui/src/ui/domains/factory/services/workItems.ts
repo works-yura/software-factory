@@ -18,7 +18,7 @@ export type WorkItemSource =
   | 'github-pr'
   | 'gitlab-issue'
   | 'gitlab-pr'
-  | 'slack-thread'
+  | 'clickup-task'
   | 'manual';
 
 export function isPullRequestSource(source: WorkItemSource): boolean {
@@ -125,7 +125,7 @@ function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkIt
   if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
   if (source.integrationId === 'gitlab' && source.type === 'issue') return 'gitlab-issue';
   if (source.integrationId === 'gitlab' && source.type === 'pull-request') return 'gitlab-pr';
-  if (source.integrationId === 'slack' && source.type === 'slack-thread') return 'slack-thread';
+  if (source.integrationId === 'clickup' && source.type === 'task') return 'clickup-task';
   return 'manual';
 }
 
@@ -141,8 +141,8 @@ function externalSourceTarget(
       return { integrationId: 'gitlab', type: 'issue' };
     case 'gitlab-pr':
       return { integrationId: 'gitlab', type: 'pull-request' };
-    case 'slack-thread':
-      return { integrationId: 'slack', type: 'slack-thread' };
+    case 'clickup-task':
+      return { integrationId: 'clickup', type: 'task' };
   }
 }
 

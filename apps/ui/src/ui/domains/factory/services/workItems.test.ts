@@ -47,7 +47,7 @@ describe('Factory work item service boundary', () => {
     });
   });
 
-  it('maps Slack thread work items to the Slack board source', async () => {
+  it('maps ClickUp task work items to the ClickUp board source', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -56,10 +56,10 @@ describe('Factory work item service boundary', () => {
             {
               ...wireItem,
               externalSource: {
-                integrationId: 'slack',
-                type: 'slack-thread',
-                externalId: 'slack:C-1:1700.42',
-                url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
+                integrationId: 'clickup',
+                type: 'task',
+                externalId: 'abc123',
+                url: 'https://app.clickup.com/t/abc123',
               },
             },
           ],
@@ -70,9 +70,9 @@ describe('Factory work item service boundary', () => {
     const [item] = (await listWorkItems('', 'project-1')).workItems;
 
     expect(item).toMatchObject({
-      source: 'slack-thread',
-      sourceKey: 'slack:C-1:1700.42',
-      url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
+      source: 'clickup-task',
+      sourceKey: 'abc123',
+      url: 'https://app.clickup.com/t/abc123',
     });
   });
 

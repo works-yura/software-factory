@@ -53,38 +53,5 @@
       "addToHomeScreen": "Прокрутіть униз і торкніться <em>На початковий екран</em>",
       "confirmAdd": "Торкніться <em>Додати</em>, щоб установити застосунок"
     }
-  },
-  "slack": {
-    "breadcrumb": "Навігаційний ланцюжок",
-    "connections": "Підключення",
-    "connection": "Підключення",
-    "description": "Починайте й продовжуйте сесії Factory у Slack.",
-    "loading": "Завантаження підключення Slack…",
-    "loadFailed": "Не вдалося завантажити підключення Slack",
-    "notConnected": "Не підключено",
-    "notConfigured": "Підключення Slack не налаштовано",
-    "connect": "Підключити Slack",
-    "workspace": "Робочий простір Slack",
-    "workspaceId": "ID робочого простору",
-    "userId": "ID користувача Slack",
-    "connectedAt": "Підключено {{date}}",
-    "sessionBehavior": "Поведінка сесій",
-    "defaultFactory": "Factory за замовчуванням",
-    "defaultFactoryFor": "Factory за замовчуванням для {{user}}",
-    "defaultFactoryDescription": "Нові сесії зі Slack спрямовуються в цю Factory.",
-    "setDefaultFactory": "Вибрати Factory за замовчуванням",
-    "dangerZone": "Небезпечна зона",
-    "disconnectTitle": "Відключити Slack",
-    "disconnectDescription": "Повідомлення Slack від <user></user> більше не запускатимуть і не продовжуватимуть сесії Factory.",
-    "disconnectUser": "Відключити {{user}}",
-    "disconnect": "Відключити",
-    "disconnecting": "Відключення…",
-    "toasts": {
-      "disconnected": "Акаунт Slack відключено",
-      "alreadyDisconnected": "Акаунт уже було відключено",
-      "disconnectFailed": "Не вдалося відключити акаунт",
-      "defaultSet": "Сесії зі Slack надходитимуть у {{name}}",
-      "defaultFailed": "Не вдалося вибрати Factory за замовчуванням"
-    }
   }
 }

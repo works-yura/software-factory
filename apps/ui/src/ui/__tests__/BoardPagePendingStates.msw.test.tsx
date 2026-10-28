@@ -641,7 +641,7 @@ describe('Board card pending states', () => {
     expect(githubLink).toHaveAttribute('target', '_blank');
   });
 
-  it('identifies Slack-created work items as Slack instead of Manual', async () => {
+  it('identifies ClickUp work items as ClickUp instead of Manual', async () => {
     stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -649,16 +649,16 @@ describe('Board card pending states', () => {
           workItems: [
             {
               ...workItem,
-              id: 'slack-item',
+              id: 'clickup-item',
               factoryProjectId: FACTORY_ID,
-              title: 'Slack request',
+              title: 'ClickUp request',
               stages: ['execute'],
               sessions: {},
               externalSource: {
-                integrationId: 'slack',
-                type: 'slack-thread',
-                externalId: 'slack:C-1:1700.42',
-                url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
+                integrationId: 'clickup',
+                type: 'task',
+                externalId: 'abc123',
+                url: 'https://app.clickup.com/t/abc123',
               },
             },
           ],
@@ -667,10 +667,10 @@ describe('Board card pending states', () => {
     );
     renderWorkBoard();
 
-    const title = await screen.findByText('Slack request');
+    const title = await screen.findByText('ClickUp request');
     const card = title.closest<HTMLElement>('[data-testid="work-item-card"]');
     if (!card) throw new Error('Expected the title inside its work item card');
-    expect(within(card).getByText('Slack:')).toBeInTheDocument();
+    expect(within(card).getByText('ClickUp:')).toBeInTheDocument();
     expect(within(card).queryByText('Manual:')).not.toBeInTheDocument();
   });
 

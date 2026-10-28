@@ -19,6 +19,7 @@ export interface IntakeSelection {
 export interface IntakeConfig {
   github: IntakeSelection;
   gitlab: IntakeSelection;
+  clickup: IntakeSelection;
 }
 
 /**
@@ -36,6 +37,7 @@ function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | n
   return {
     github: raw?.github ?? { enabled: false, sourceIds: null },
     gitlab: raw?.gitlab ?? { enabled: false, sourceIds: null },
+    clickup: raw?.clickup ?? { enabled: false, sourceIds: null },
   };
 }
 

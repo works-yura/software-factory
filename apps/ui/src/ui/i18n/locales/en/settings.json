@@ -53,6 +53,25 @@
       "projects": "GitLab projects",
       "routingTitle": "GitLab routing",
       "routingDescription": "Each selected project feeds one factory board. Until a project is fully routed, its issues are not picked up."
+    },
+    "clickup": {
+      "title": "ClickUp tasks",
+      "checking": "Checking the ClickUp connection…",
+      "notConfigured": "ClickUp is not configured on this server. Set CLICKUP_API_TOKEN and restart it to enable ClickUp.",
+      "authRequired": "Sign in again to manage ClickUp syncing.",
+      "organizationRequired": "Select an organization to manage ClickUp syncing.",
+      "statusUnavailable": "ClickUp status could not be loaded.",
+      "rejected": "ClickUp rejected the configured API token. Ask the operator to check it.",
+      "ready": "Tasks from the selected Lists are checked every {{seconds}} seconds and filed as cards on the board their tag or List routes to.",
+      "sync": "Sync ClickUp tasks",
+      "lists": "ClickUp Lists",
+      "listsFailed": "ClickUp Lists could not be loaded. Try again in a minute.",
+      "autoStart": "Start triage automatically",
+      "autoStartHint": "New tasks created after the server started go straight to Triage. Off: they wait in Intake until a person moves them.",
+      "autoStartSaved": "ClickUp automation updated",
+      "autoStartFailed": "Failed to save ClickUp automation",
+      "routingTitle": "ClickUp routing",
+      "routingDescription": "Each selected List feeds one factory board. Until a List is fully routed, its tasks are not picked up."
     }
   },
   "intakeSource": {
@@ -376,18 +395,7 @@
     "activating": "{{name}} authorization completed — the connection is activating",
     "connectFailed": "Failed to connect {{name}}",
     "needsReauth": "Needs reauthorization",
-    "reconnect": "Reconnect",
-    "loading": "Loading connected accounts",
-    "loadFailed": "Failed to load connected accounts",
-    "slack": {
-      "notConfigured": "Not configured",
-      "notSetUp": "Slack is not set up for this factory.",
-      "connectedCount_one": "{{count}} connected",
-      "connectedCount_other": "{{count}} connected",
-      "connected": "Connected",
-      "notConnected": "Not connected",
-      "configure": "Configure"
-    }
+    "reconnect": "Reconnect"
   },
   "githubPat": {
     "title": "GitHub CLI tokens",
@@ -452,17 +460,10 @@
       "connect": "Connect GitHub"
     }
   },
-  "channels": {
-    "requestFailed": "Request failed ({{status}})"
-  },
   "panel": {
     "label": "Settings",
     "updateFailed": "Failed to update settings",
-    "updateFailedWith": "Failed to update settings: {{message}}",
-    "connections": {
-      "title": "Connected accounts",
-      "description": "Connect your account to use Factory from Slack."
-    }
+    "updateFailedWith": "Failed to update settings: {{message}}"
   },
   "scope": {
     "personal": "Personal",
@@ -735,5 +736,21 @@
       "needSignIn": "Sign in to an organization to add Claude Code accounts.",
       "failed": "Something went wrong. Try again."
     }
+  },
+  "tagRouting": {
+    "saved": "ClickUp tag routing updated",
+    "saveFailed": "Failed to save ClickUp tag routing",
+    "description": "A task with one of these tags files onto that board instead of the List's board.",
+    "unavailable": "ClickUp tag routes are unavailable right now.",
+    "boardFor": "Board for tag {{label}}",
+    "removeRoute": "Remove route for tag {{label}}",
+    "remove": "Remove",
+    "addRoute": "Add tag route",
+    "duplicate": "This tag already has a route.",
+    "tagFor": "Tag for {{name}}",
+    "tagPlaceholder": "Tag, e.g. bug",
+    "boardForNew": "Board for new tag in {{name}}",
+    "chooseBoard": "Choose board",
+    "add": "Add"
   }
 }
