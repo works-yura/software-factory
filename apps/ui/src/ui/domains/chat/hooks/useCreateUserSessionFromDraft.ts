@@ -17,7 +17,7 @@ import { translator } from '../../../i18n/t';
 const tk = translator('chat');
 
 export function useCreateUserSessionFromDraft() {
-  const { baseUrl, factorySessionState } = useChatSessionContext();
+  const { baseUrl, factorySessionState, claudeCode } = useChatSessionContext();
   const { activeModelId, defaultModelId } = useChatModels();
   const { override: thinkingLevelOverride } = useChatThinking();
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
@@ -30,12 +30,14 @@ export function useCreateUserSessionFromDraft() {
       if (!draftSessionId || !factoryId || !projectRepositoryId) {
         throw new Error(tk('draftSession.reload'));
       }
-      if (!activeModelId) {
+      // A Claude Code session runs on its Factory's Claude model: no Mastra model or thinking level to hand off.
+      if (!claudeCode && !activeModelId) {
         throw new Error(tk('draftSession.configNotReady'));
       }
 
-      const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
+      const draftKeepsServerDefaults = claudeCode || (activeModelId === defaultModelId && !thinkingLevelOverride);
       const handoffModelId = draftKeepsServerDefaults ? undefined : activeModelId;
+      const handoffThinkingLevel = claudeCode ? undefined : thinkingLevelOverride;
 
       try {
         const session = await createUserSession(baseUrl, projectRepositoryId, {
@@ -44,7 +46,7 @@ export function useCreateUserSessionFromDraft() {
           // A session someone opens for themselves stays theirs until they share it.
           visibility: 'private',
         });
-        return { session, prompt, files, factoryId, handoffModelId, thinkingLevelOverride };
+        return { session, prompt, files, factoryId, handoffModelId, thinkingLevelOverride: handoffThinkingLevel };
       } catch (error) {
         const message = error instanceof Error ? error.message : tk('draftSession.creationFailed');
         throw new Error(tk('draftSession.createFailed', { message }), { cause: error });

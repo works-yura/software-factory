@@ -236,6 +236,11 @@
         "label": "Кодова база",
         "title": "Виберіть кодову базу."
       },
+      "harness": {
+        "label": "Харнес",
+        "title": "Виберіть харнес.",
+        "description": "На чому працюватимуть агенти вашої Factory."
+      },
       "model-provider": {
         "label": "Модель",
         "title": "Виберіть модель."
@@ -249,6 +254,10 @@
     "companyModel": {
       "local": "Підключіть провайдера й виберіть модель для своєї Factory.",
       "factory": "Акаунт компанії · модель для роботи Factory і сесій."
+    },
+    "claudeCode": {
+      "title": "Виберіть модель Claude.",
+      "description": "Claude Code входить самостійно: через ваш вхід claude на цьому комп’ютері або акаунти Claude Code організації."
     }
   },
   "welcomePreview": {
@@ -289,7 +298,10 @@
     "sharedModel": {
       "local": "Factory за замовчуванням · локальне підключення",
       "factory": "Акаунт компанії · робота Factory і сесії"
-    }
+    },
+    "harness": "Харнес",
+    "harnessDetail": "Можна змінити згодом у Налаштування → Моделі",
+    "claudeModelDetail": "Claude Code · для роботи Factory і сесій"
   },
   "githubCallback": {
     "requested": "Запит на встановлення GitHub App надіслано. Власник організації має схвалити його, перш ніж тут з'являться репозиторії.",

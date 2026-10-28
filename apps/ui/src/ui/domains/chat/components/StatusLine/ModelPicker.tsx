@@ -28,6 +28,7 @@ import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { settingsSectionPath } from '../../../settings/settingsSections';
+import { ClaudeCodeModelLabel } from './ClaudeCodeModelLabel';
 import { LockedModelButton } from './LockedModelButton';
 import { ModelThinkingGroup } from './ModelThinkingGroup';
 
@@ -155,11 +156,14 @@ export function ModelPicker() {
   const { t } = useTranslation('chat');
   const modelSwitch = useModelSwitch();
   const { modelsQuery, activeModelId, selectedModelId, catalogLoading, switchable, busy } = modelSwitch;
-  const { modelLockedReason } = useChatSessionContext();
+  const { modelLockedReason, claudeCode } = useChatSessionContext();
   const { status } = useChatConnection();
   const { isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
   const organizationScoped = useFactoryAuth().data?.authEnabled === true;
+
+  // Claude Code runs on the Factory's Claude model: nothing to pick per session.
+  if (claudeCode) return <ClaudeCodeModelLabel model={claudeCode.model} factoryId={factoryId} />;
 
   if (!selectedModelId && (isLoading || status === 'connecting')) {
     return <Skeleton aria-label={t('modelPicker.loading')} className="h-3.5 w-24" />;

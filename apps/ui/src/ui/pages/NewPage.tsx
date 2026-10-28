@@ -12,6 +12,7 @@ import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
 import { useFallbackModelQuery } from '../../hooks/useAvailableModels';
 import { useProvidersQuery } from '../../hooks/use-providers';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
+import { useServerFeatures } from '../../hooks/useServerFeatures';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '@factory/credentials/provider-display-name';
 import { MODEL_DEFAULTS_ANCHORS, settingsSectionPath } from '../domains/settings/settingsSections';
@@ -34,14 +35,19 @@ export function NewPage() {
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
   const providersQuery = useProvidersQuery();
   const defaultModelId = projectQuery.data?.defaultModelId ?? undefined;
+  // A Claude Code Factory's chats run on its Claude model, so no Mastra model or provider key is asked for.
+  const claudeCode = (projectQuery.data?.harness ?? activeFactory?.harness) === 'claude-code';
   // No Factory default: chats start on the built-in model the organization's keys can run, as the server picks.
   const fallbackModelQuery = useFallbackModelQuery({
     factoryProjectId: activeFactory?.id,
-    enabled: projectQuery.isSuccess && !defaultModelId,
+    enabled: projectQuery.isSuccess && !defaultModelId && !claudeCode,
   });
   const chatModelId = defaultModelId ?? fallbackModelQuery.data;
   const chatModelSettled =
-    Boolean(activeFactory) && projectQuery.isSuccess && (Boolean(defaultModelId) || fallbackModelQuery.isSuccess);
+    !claudeCode &&
+    Boolean(activeFactory) &&
+    projectQuery.isSuccess &&
+    (Boolean(defaultModelId) || fallbackModelQuery.isSuccess);
   const missingModel = chatModelSettled && !chatModelId;
   const chatModelProvider = chatModelId
     ? providersQuery.data?.find(entry => entry.provider === chatModelId.split('/')[0])
@@ -50,8 +56,9 @@ export function NewPage() {
     chatModelSettled && chatModelId && chatModelProvider?.source === 'none'
       ? { modelId: chatModelId, provider: chatModelProvider.provider }
       : undefined;
-  const configurationError =
-    projectQuery.error ?? (defaultModelId ? null : fallbackModelQuery.error) ?? providersQuery.error ?? undefined;
+  const configurationError = claudeCode
+    ? (projectQuery.error ?? undefined)
+    : (projectQuery.error ?? (defaultModelId ? null : fallbackModelQuery.error) ?? providersQuery.error ?? undefined);
 
   return (
     <ChatPageLayout
@@ -68,6 +75,7 @@ export function NewPage() {
       <ChatSessionBoundary key={draftSessionId}>
         <NewPageContent
           activeFactory={activeFactory}
+          claudeCode={claudeCode}
           missingModel={missingModel}
           missingCredential={missingCredential}
           configurationError={configurationError}
@@ -90,11 +98,13 @@ function readRouteErrorNotice(state: unknown): string | undefined {
 
 function NewPageContent({
   activeFactory,
+  claudeCode,
   missingModel,
   missingCredential,
   configurationError,
 }: {
   activeFactory: FactoryProject | undefined;
+  claudeCode: boolean;
   missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
   configurationError: Error | undefined;
@@ -111,6 +121,7 @@ function NewPageContent({
       <div className="flex w-full max-w-xl min-w-0 flex-col items-center gap-4">
         <DraftStart
           activeFactory={activeFactory}
+          claudeCode={claudeCode}
           configurationError={configurationError}
           missingModel={missingModel}
           missingCredential={missingCredential}
@@ -128,16 +139,29 @@ function NewPageContent({
 
 function DraftStart({
   activeFactory,
+  claudeCode,
   configurationError,
   missingModel,
   missingCredential,
 }: {
   activeFactory: FactoryProject | undefined;
+  claudeCode: boolean;
   configurationError: Error | undefined;
   missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
 }) {
   const { t } = useTranslation('chat');
+  const features = useServerFeatures();
+  if (activeFactory && claudeCode) {
+    const blocker = claudeCodeBlocker(activeFactory, features.data?.claudeCode);
+    if (blocker) {
+      return (
+        <section className={draftStartClass} aria-label={t('newPage.claudeCode.setupRequired')}>
+          <ClaudeCodeBlockedState factoryId={activeFactory.id} blocker={blocker} />
+        </section>
+      );
+    }
+  }
   if (activeFactory && missingModel) {
     return (
       <section className={draftStartClass} aria-label={t('newPage.modelSetupRequired')}>
@@ -168,8 +192,47 @@ function DraftStart({
       <div className="flex min-w-0 flex-col gap-2">
         {activeFactory && <ComposerPanel composerVariant="textarea" />}
         <FactoryContext activeFactory={activeFactory} />
+        {claudeCode && (
+          <Txt as="p" variant="caption" tone="muted" className="m-0">
+            {t('newPage.claudeCode.note')}
+          </Txt>
+        )}
       </div>
     </section>
+  );
+}
+
+type ClaudeCodeBlocker = 'harnessUnavailable' | 'noRepository';
+
+/**
+ * What keeps a Claude Code chat from starting, said before anyone types: the
+ * server has no Claude Code harness, or the Factory has no repository for the
+ * session to check out (Claude Code runs in a checkout of it).
+ */
+function claudeCodeBlocker(
+  factory: FactoryProject,
+  claudeCodeAvailable: boolean | undefined,
+): ClaudeCodeBlocker | undefined {
+  if (claudeCodeAvailable === false) return 'harnessUnavailable';
+  if (factory.repositories.length === 0) return 'noRepository';
+  return undefined;
+}
+
+function ClaudeCodeBlockedState({ factoryId, blocker }: { factoryId: string; blocker: ClaudeCodeBlocker }) {
+  const { t } = useTranslation('chat');
+  const target = settingsSectionPath(factoryId, blocker === 'noRepository' ? 'repositories' : 'models');
+  return (
+    <EmptyState
+      as="h2"
+      iconSlot={<Bot />}
+      titleSlot={t(`newPage.claudeCode.${blocker}.title`)}
+      descriptionSlot={t(`newPage.claudeCode.${blocker}.description`)}
+      actionSlot={
+        <Link to={target} className={buttonVariants({ variant: 'primary' })}>
+          {t(`newPage.claudeCode.${blocker}.action`)}
+        </Link>
+      }
+    />
   );
 }
 

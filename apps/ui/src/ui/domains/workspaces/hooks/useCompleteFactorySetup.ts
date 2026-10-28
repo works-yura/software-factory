@@ -13,6 +13,7 @@ import {
   renameFactoryProject,
   unlinkRepository,
   updateFactoryDefaultModel,
+  updateFactoryHarness,
 } from '../services/github';
 import {
   clearOnboardingFlow,
@@ -46,22 +47,30 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       if (!parsed.success) throw new Error(tk('setup.incomplete'));
       const setup = parsed.data;
       const repo = setup.repository;
-      const choice = setup.model;
-      const [providers, catalog] = await Promise.all([
-        queryClient.fetchQuery({ ...providersQueryOptions(client), staleTime: 0 }),
-        queryClient.fetchQuery({ ...availableModelsQueryOptions(baseUrl), staleTime: 0 }),
-      ]);
-      if (!catalog.models.some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
-        throw new Error(tk('setup.modelUnavailableCompany', { model: choice.modelId }));
-      }
-      const provider = providers.providers.find(item => item.provider === choice.providerId);
-      if (!provider || !isProviderConnected(provider, local ? undefined : 'org', choice.method)) {
-        throw new Error(tk('setup.connectionChangedCompany'));
+      // Claude Code signs in on its own (local login or the organization's Claude Code accounts): no provider to check.
+      const claude = setup.harness === 'claude-code' ? { claudeCodeModel: setup.claudeCodeModel } : undefined;
+      const choice = setup.harness === 'claude-code' ? undefined : setup.model;
+      if (choice) {
+        const [providers, catalog] = await Promise.all([
+          queryClient.fetchQuery({ ...providersQueryOptions(client), staleTime: 0 }),
+          queryClient.fetchQuery({ ...availableModelsQueryOptions(baseUrl), staleTime: 0 }),
+        ]);
+        if (!catalog.models.some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
+          throw new Error(tk('setup.modelUnavailableCompany', { model: choice.modelId }));
+        }
+        const provider = providers.providers.find(item => item.provider === choice.providerId);
+        if (!provider || !isProviderConnected(provider, local ? undefined : 'org', choice.method)) {
+          throw new Error(tk('setup.connectionChangedCompany'));
+        }
       }
 
       const pendingId = readOnboardingFactory();
       const existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
-      const factory = existing ?? (await createFactoryProject(baseUrl, repo.name));
+      const factory =
+        existing ??
+        (claude
+          ? await createFactoryProject(baseUrl, repo.name, undefined, 'claude-code', claude.claudeCodeModel)
+          : await createFactoryProject(baseUrl, repo.name));
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);
       if (existing && existing.name !== repo.name) await renameFactoryProject(baseUrl, factory.id, repo.name);
@@ -79,7 +88,15 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
           persistOnboardingLinkedRepositories([linked.projectRepositoryId]);
         },
       });
-      await updateFactoryDefaultModel(baseUrl, factory.id, choice.modelId);
+      if (choice) {
+        // A retry may find the Factory an earlier attempt created on Claude Code.
+        if (existing && existing.harness === 'claude-code') {
+          await updateFactoryHarness(baseUrl, factory.id, { harness: 'mastra' });
+        }
+        await updateFactoryDefaultModel(baseUrl, factory.id, choice.modelId);
+      } else if (existing && claude) {
+        await updateFactoryHarness(baseUrl, factory.id, { harness: 'claude-code', ...claude });
+      }
       return factory.id;
     },
     onSuccess: async factoryId => {

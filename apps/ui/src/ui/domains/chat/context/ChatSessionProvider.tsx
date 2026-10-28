@@ -10,7 +10,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
-import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import type { ClaudeCodeModel, FactoryProject, LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
@@ -32,6 +32,29 @@ function modelLockedReason(session: FactoryUserSession | undefined): string | un
   if (session?.capabilities?.switchModel !== false) return undefined;
   const name = session.owner?.name;
   return name ? tk('modelPicker.lockedReason', { name }) : tk('modelPicker.lockedReasonOwnerUnknown');
+}
+
+/**
+ * A personal chat runs on Claude Code when the server created its session
+ * there; a draft does when its Factory's harness is `claude-code` (the server
+ * creates it there). Either way its model is the Factory's Claude model.
+ */
+function claudeCodeChat({
+  userScoped,
+  isUserDraft,
+  storedSession,
+  factory,
+}: {
+  userScoped: boolean;
+  isUserDraft: boolean;
+  storedSession: FactoryUserSession | undefined;
+  factory: FactoryProject | undefined;
+}): { model: ClaudeCodeModel | null } | undefined {
+  if (!userScoped) return undefined;
+  const claude = storedSession
+    ? storedSession.harness === 'claude-code'
+    : isUserDraft && factory?.harness === 'claude-code';
+  return claude ? { model: factory?.claudeCodeModel ?? null } : undefined;
 }
 
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */
@@ -197,6 +220,7 @@ export function ChatSessionConfigProvider({
     kind: userScoped ? ('user' as const) : ('factory' as const),
     owner,
     modelLockedReason: modelLockedReason(storedSession),
+    claudeCode: claudeCodeChat({ userScoped, isUserDraft, storedSession, factory }),
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;

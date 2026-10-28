@@ -26,6 +26,9 @@ import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { OnboardingReviewStep } from './onboarding/OnboardingReviewStep';
+import { OnboardingClaudeCodeStep, OnboardingHarnessStep } from './onboarding/OnboardingCommandRows';
+import { useServerFeatures } from '../../../../hooks/useServerFeatures';
+import type { FactoryHarness } from '../services/github';
 
 interface StepPreview {
   repository?: SourceControlRepository;
@@ -69,12 +72,24 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
     goTo(returnToReview ? 'review' : next);
     setReturnToReview(false);
   };
-  const steps = onboardingSteps();
+  const features = useServerFeatures();
+  // A Claude Code pick only counts while the server still runs Claude Code.
+  const harness: FactoryHarness =
+    draft.harness === 'claude-code' && features.data?.claudeCode !== false ? 'claude-code' : 'mastra';
+  // Only a server that runs Claude Code offers the harness step; a draft resumed on it keeps it in view.
+  const harnessChoice = features.data?.claudeCode === true || step === 'harness' || harness === 'claude-code';
+  const committedDraft: OnboardingDraft = harnessChoice ? { ...draft, harness } : { ...draft, harness: undefined };
+  const steps = onboardingSteps({ harnessChoice });
   const stepIndex = steps.indexOf(step);
   const previousStep = stepIndex > 0 ? steps[stepIndex - 1] : undefined;
   const repository = preview.repository ?? draft.repository;
-  const model = shownModel(preview.model, preview.providerId, draft.model?.modelId);
-  const meta = onboardingStepMeta(step, local);
+  const claudeModelLabel =
+    harness === 'claude-code' && draft.claudeCodeModel !== undefined
+      ? t(`createFactory.claudeCode.models.${draft.claudeCodeModel ?? 'default'}.title`)
+      : undefined;
+  const model =
+    harness === 'claude-code' ? claudeModelLabel : shownModel(preview.model, preview.providerId, draft.model?.modelId);
+  const meta = onboardingStepMeta(step, local, harness);
 
   return (
     <main className="onboarding-page bg-background text-foreground min-h-dvh pb-20">
@@ -137,11 +152,33 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
                   onPreviewRepository={previewed => previewWith({ repository: previewed })}
                   onSelectRepository={repo => {
                     updateDraft({ ...draft, repository: repo });
-                    advance('model-provider');
+                    advance(harnessChoice ? 'harness' : 'model-provider');
                   }}
                 />
               )}
-              {step === 'model-provider' && (
+              {step === 'harness' && (
+                <OnboardingHarnessStep
+                  label={meta.title}
+                  selected={draft.harness ?? (returnToReview ? 'mastra' : undefined)}
+                  onSelect={picked => {
+                    const changed = picked !== harness;
+                    updateDraft({ ...draft, harness: picked });
+                    // Another harness needs its own model pick before review.
+                    if (changed) goTo('model-provider');
+                    else advance('model-provider');
+                  }}
+                />
+              )}
+              {step === 'model-provider' && harness === 'claude-code' && (
+                <OnboardingClaudeCodeStep
+                  label={meta.title}
+                  onPick={claudeCodeModel => {
+                    updateDraft({ ...draft, harness: 'claude-code', claudeCodeModel });
+                    advance('review');
+                  }}
+                />
+              )}
+              {step === 'model-provider' && harness !== 'claude-code' && (
                 <ModelProviderFactoryStep
                   initialChoice={draft.model}
                   onPreviewModel={previewed => previewWith({ model: previewed })}
@@ -154,12 +191,13 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
               )}
               {step === 'review' && (
                 <OnboardingReviewStep
-                  draft={draft}
+                  draft={committedDraft}
                   local={local}
+                  harnessChoice={harnessChoice}
                   pending={complete.isPending}
                   error={complete.error?.message}
                   onConfirm={() => {
-                    if (!complete.isPending) complete.mutate(draft);
+                    if (!complete.isPending) complete.mutate(committedDraft);
                   }}
                   onEdit={target => {
                     setReturnToReview(true);
@@ -176,11 +214,11 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
           local={local}
           repository={repository}
           model={model}
-          providerId={preview.providerId ?? draft.model?.providerId}
-          connectionMethod={preview.method ?? draft.model?.method}
+          providerId={harness === 'claude-code' ? undefined : (preview.providerId ?? draft.model?.providerId)}
+          connectionMethod={harness === 'claude-code' ? undefined : (preview.method ?? draft.model?.method)}
         />
       </div>
-      <OnboardingProgress step={step} editingReview={returnToReview} />
+      <OnboardingProgress step={step} editingReview={returnToReview} harnessChoice={harnessChoice} />
     </main>
   );
 }

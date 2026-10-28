@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GitBranch, Sparkles } from 'lucide-react';
+import { Boxes, GitBranch, Sparkles } from 'lucide-react';
 import { isGitLabRepository } from '../../services/github';
 import { completeOnboardingSchema } from '../../services/onboardingFlow';
 import type { OnboardingDraft, OnboardingStep } from '../../services/onboardingFlow';
@@ -16,9 +16,15 @@ function sharedModelDetail(local: boolean) {
   return tk('review.sharedModel.factory');
 }
 
+function claudeModelTitle(model: OnboardingDraft['claudeCodeModel']) {
+  if (model === undefined) return tk('review.chooseModel');
+  return tk(`createFactory.claudeCode.models.${model ?? 'default'}.title`);
+}
+
 export function OnboardingReviewStep({
   draft,
   local = false,
+  harnessChoice = false,
   onEdit,
   onConfirm,
   pending,
@@ -26,12 +32,15 @@ export function OnboardingReviewStep({
 }: {
   draft: OnboardingDraft;
   local?: boolean;
+  /** The server runs Claude Code, so the harness is a choice worth showing. */
+  harnessChoice?: boolean;
   onEdit: (step: OnboardingStep) => void;
   onConfirm: () => void;
   pending: boolean;
   error?: string;
 }) {
   const repo = draft.repository;
+  const claude = draft.harness === 'claude-code';
   const readyToCreate = completeOnboardingSchema.safeParse(draft).success;
   return (
     <section aria-label={tk('review.label')} className="flex flex-col gap-5">
@@ -44,11 +53,21 @@ export function OnboardingReviewStep({
           disabled={pending}
           onEdit={() => onEdit('vcs')}
         />
+        {harnessChoice && (
+          <OnboardingReviewRow
+            icon={<Boxes />}
+            label={tk('review.harness')}
+            value={tk(claude ? 'createFactory.harness.claudeCode.title' : 'createFactory.harness.mastra.title')}
+            detail={tk('review.harnessDetail')}
+            disabled={pending}
+            onEdit={() => onEdit('harness')}
+          />
+        )}
         <OnboardingReviewRow
           icon={<Sparkles />}
           label={tk('review.model')}
-          value={draft.model?.modelId ?? tk('review.chooseModel')}
-          detail={sharedModelDetail(local)}
+          value={claude ? claudeModelTitle(draft.claudeCodeModel) : (draft.model?.modelId ?? tk('review.chooseModel'))}
+          detail={claude ? tk('review.claudeModelDetail') : sharedModelDetail(local)}
           disabled={pending}
           onEdit={() => onEdit('model-provider')}
         />

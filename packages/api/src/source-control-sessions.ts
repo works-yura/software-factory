@@ -72,6 +72,34 @@ export interface SourceControlSessionRoutesOptions {
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
   /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /**
+   * Personal sessions of a Factory whose harness is `claude-code` run on Claude
+   * Code: created in its session store (the chat then reaches them through the
+   * Claude session UI) instead of starting a Mastra conversation. Unset when
+   * the server has no Claude Code harness.
+   */
+  claudeCode?: ClaudeCodeUserSessions;
+}
+
+/** How the session routes reach the Claude Code harness for personal sessions. */
+export interface ClaudeCodeUserSessions {
+  /** The Claude Code session behind a session id, or undefined when Claude Code does not run it. */
+  get(sessionId: string): Promise<{ resourceId?: string } | undefined>;
+  /** Get-or-create the Claude Code session of a user session: its thread is the session id, under `resourceId`. */
+  start(input: { session: SourceControlSession; resourceId: string }): Promise<void>;
+  /**
+   * Why new Claude Code sessions cannot run on this server (e.g. no local
+   * sandbox to check the repository out in); undefined when they can.
+   */
+  unavailableReason?: string;
+}
+
+/** What a personal session of a Claude Code Factory needs and this server cannot give, or undefined. */
+function claudeCodeRefusal(options: SourceControlSessionRoutesOptions): string | undefined {
+  if (!options.claudeCode) {
+    return "This Factory runs on Claude Code, but this server has no Claude Code harness. Switch the Factory's harness to Mastra in Settings → Models, or configure Claude Code on the server.";
+  }
+  return options.claudeCode.unavailableReason;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -241,6 +269,46 @@ async function startUserSessionConversation(
     });
   }
   return live;
+}
+
+/**
+ * Start a personal session on its Factory's harness: a session Claude Code
+ * already holds stays there, a new one follows the Factory (`claude-code` →
+ * the Claude Code store, anything else → the Mastra conversation).
+ */
+async function startPersonalSession(
+  options: SourceControlSessionRoutesOptions,
+  session: SourceControlSession,
+  factoryHarness?: string,
+): Promise<{ claude: boolean } | { refused: string }> {
+  const held = await options.claudeCode?.get(session.sessionId);
+  let harness = factoryHarness;
+  if (!held && harness === undefined && session.factoryProjectId) {
+    harness = (await options.projects.get({ orgId: session.orgId, id: session.factoryProjectId }))?.harness;
+  }
+  if (held || harness === 'claude-code') {
+    const refused = held ? undefined : claudeCodeRefusal(options);
+    if (refused || !options.claudeCode) return { refused: refused ?? 'Claude Code is unavailable.' };
+    await options.claudeCode.start({
+      session,
+      resourceId: held?.resourceId ?? userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
+    });
+    return { claude: true };
+  }
+  await startUserSessionConversation(options.controller, session);
+  return { claude: false };
+}
+
+/** A created session as the page reads it; a Claude Code session has no Mastra model to switch. */
+function createdSessionPayload(
+  options: SourceControlSessionRoutesOptions,
+  session: SourceControlSession,
+  claude: boolean,
+) {
+  return {
+    ...withCapabilities(session, { recreateSandbox: !claude && canRecreateSandbox(options), switchModel: !claude }),
+    ...(claude ? { harness: 'claude-code' as const } : {}),
+  };
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -415,11 +483,17 @@ function projectSessionRoutes(
             ) {
               return c.json({ error: 'Session ID conflict' }, 409);
             }
-            await startUserSessionConversation(options.controller, existing);
-            return c.json({
-              session: withCapabilities(existing, { recreateSandbox: canRecreateSandbox(options), switchModel: true }),
-            });
+            const harness = await startPersonalSession(options, existing);
+            if ('refused' in harness) return c.json({ error: 'claude_code_unavailable', message: harness.refused }, 409);
+            return c.json({ session: createdSessionPayload(options, existing, harness.claude) });
           }
+        }
+
+        // A Claude Code Factory refuses before writing anything, so a session row never outlives a refused start.
+        const factory = await options.projects.get({ orgId, id: project.factoryProjectId });
+        if (factory?.harness === 'claude-code') {
+          const refused = claudeCodeRefusal(options);
+          if (refused) return c.json({ error: 'claude_code_unavailable', message: refused }, 409);
         }
 
         const session = await project.sourceControl.sessions
@@ -450,11 +524,10 @@ function projectSessionRoutes(
         ) {
           return c.json({ error: 'Session ID conflict' }, 409);
         }
-        await startUserSessionConversation(options.controller, session);
+        const harness = await startPersonalSession(options, session, factory?.harness);
+        if ('refused' in harness) return c.json({ error: 'claude_code_unavailable', message: harness.refused }, 409);
         // The creator owns the session, so no admin check is needed.
-        return c.json({
-          session: withCapabilities(session, { recreateSandbox: canRecreateSandbox(options), switchModel: true }),
-        });
+        return c.json({ session: createdSessionPayload(options, session, harness.claude) });
       },
     }),
   ];
@@ -501,21 +574,26 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         // The client opens the session by its id and creates it under this resource.
-        const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
+        const claude = await options.claudeCode?.get(session.sessionId);
+        const resourceId =
+          claude?.resourceId ?? (await sessionMemoryResourceId(options.controller, session, options.workItems));
         if (!canReadSessionResource(session, resourceId, resolved.tenant)) {
           return c.json({ error: 'Session not found' }, 404);
         }
         const owners = await resolveOwnerProfiles([session.userId]);
         const recreateSandbox =
+          !claude &&
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
         return c.json({
           session: {
             ...withCapabilities(withOwnerProfile(session, owners), {
               recreateSandbox,
-              switchModel: canSwitchSessionModel(session, resolved.tenant),
+              // A Claude Code session runs on its Factory's Claude model, set in settings, not per session.
+              switchModel: !claude && canSwitchSessionModel(session, resolved.tenant),
             }),
             resourceId,
+            ...(claude ? { harness: 'claude-code' as const } : {}),
           },
         });
       },
@@ -536,6 +614,12 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (permission === 'not-found') return c.json({ error: 'Session not found' }, 404);
         if (permission === 'forbidden') {
           return c.json({ error: "Only the session's owner or an organization admin can start its sandbox." }, 403);
+        }
+        if (await options.claudeCode?.get(session.sessionId)) {
+          return c.json(
+            { error: 'A Claude Code session checks its repository out when it runs its first turn; send it a message.' },
+            409,
+          );
         }
         const controller = options.controller;
         if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
@@ -709,6 +793,10 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             })))
         ) {
           return c.json({ error: 'Only user sessions can change visibility' }, 409);
+        }
+        // A Claude Code session keeps the resource it was created on in its own store; moving it is not supported yet.
+        if (await options.claudeCode?.get(sessionId)) {
+          return c.json({ error: "Claude Code sessions can't change visibility yet." }, 409);
         }
         // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
         if (visibility === 'org' && !row.factoryProjectId) {

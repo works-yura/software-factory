@@ -1,3 +1,4 @@
+import type { ClaudeCodeModel } from '../../workspaces/services/github';
 import { createContext } from 'react';
 
 import type { ThreadOwner } from '../services/reply-credential';
@@ -73,6 +74,12 @@ export interface ChatSessionContextApi {
   owner?: ThreadOwner;
   /** Why the viewer can't change the model or thinking level: set when they steer someone else's session. */
   modelLockedReason?: string;
+  /**
+   * Set when this chat runs on Claude Code: a session the server created in
+   * Claude Code, or a draft in a Factory whose harness is `claude-code`. Its
+   * model is the Factory's Claude model (null = the CLI default), not a Mastra pick.
+   */
+  claudeCode?: { model: ClaudeCodeModel | null };
 }
 
 export const ChatSessionContext = createContext<ChatSessionContextApi | null>(null);

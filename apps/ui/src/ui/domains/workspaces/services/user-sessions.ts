@@ -41,6 +41,8 @@ export interface FactoryUserSession {
   updatedAt: string;
   /** What the viewer may do with this session, computed by the server. */
   capabilities?: { recreateSandbox: boolean; switchModel?: boolean };
+  /** Set when the session runs on Claude Code (its Factory's Claude model); absent for Mastra sessions. */
+  harness?: 'claude-code';
 }
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };

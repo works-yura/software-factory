@@ -1,11 +1,15 @@
+import type { FactoryHarness } from './github';
 import type { OnboardingDraft, OnboardingStep } from './onboardingFlow';
 import { i18n } from '../../../i18n';
 import { translator } from '../../../i18n/t';
 
 const tk = translator('workspaces');
 
-export function onboardingSteps(): OnboardingStep[] {
-  return ['initial', 'vcs', 'model-provider', 'review'];
+/** The steps this run walks; the harness step only when the server runs Claude Code. */
+export function onboardingSteps({ harnessChoice = false }: { harnessChoice?: boolean } = {}): OnboardingStep[] {
+  return harnessChoice
+    ? ['initial', 'vcs', 'harness', 'model-provider', 'review']
+    : ['initial', 'vcs', 'model-provider', 'review'];
 }
 
 export function restoredOnboardingStep(saved: OnboardingStep, draft: OnboardingDraft): OnboardingStep {
@@ -19,7 +23,7 @@ interface StepMeta {
   description?: string;
 }
 
-const ONBOARDING_STEPS: readonly OnboardingStep[] = ['initial', 'vcs', 'model-provider', 'review'];
+const ONBOARDING_STEPS: readonly OnboardingStep[] = ['initial', 'vcs', 'harness', 'model-provider', 'review'];
 
 /** Step copy, translated when read: module constants outlive a language switch. */
 function lazyStepMeta(step: OnboardingStep): StepMeta {
@@ -43,7 +47,13 @@ export const STEP_META: Readonly<Record<OnboardingStep, StepMeta>> = Object.from
   ONBOARDING_STEPS.map(step => [step, lazyStepMeta(step)]),
 ) as Record<OnboardingStep, StepMeta>;
 
-export function onboardingStepMeta(step: OnboardingStep, local = false): StepMeta {
+export function onboardingStepMeta(step: OnboardingStep, local = false, harness?: FactoryHarness): StepMeta {
+  if (step === 'model-provider' && harness === 'claude-code')
+    return {
+      label: STEP_META[step].label,
+      title: tk('onboarding.claudeCode.title'),
+      description: tk('onboarding.claudeCode.description'),
+    };
   if (step === 'model-provider')
     return {
       ...STEP_META[step],

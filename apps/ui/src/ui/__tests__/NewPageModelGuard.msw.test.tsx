@@ -177,3 +177,82 @@ describe('NewPage credential guard', () => {
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
   });
 });
+
+describe('NewPage in a Claude Code Factory', () => {
+  const claudeFactory = {
+    id: 'fp-1',
+    name: 'Mastra',
+    harness: 'claude-code',
+    claudeCodeModel: 'sonnet',
+    defaultModelId: null,
+  };
+
+  function stubClaudeFactory({ repositories, claudeCode = true }: { repositories: boolean; claudeCode?: boolean }) {
+    stubFactory(claudeFactory);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [claudeFactory] })),
+      http.get(`${TEST_BASE_URL}/web/config/features`, () => HttpResponse.json({ knowledge: false, claudeCode })),
+      // No Mastra model anywhere: a Claude Code chat must not ask for one.
+      http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [], fallbackModelId: null })),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: repositories
+            ? [
+                {
+                  id: 'conn-1',
+                  installationId: 'inst-1',
+                  repositories: [
+                    {
+                      id: 'repo-1',
+                      branch: 'main',
+                      sandboxWorkdir: '/workspace/hello',
+                      repository: { slug: 'octo/hello', defaultBranch: 'main' },
+                    },
+                  ],
+                },
+              ]
+            : [],
+        }),
+      ),
+    );
+  }
+
+  it('offers the composer on the Claude model without asking for a Mastra model', async () => {
+    stubClaudeFactory({ repositories: true });
+
+    renderNewPage('/factories/fp-1/user/new/draft-1');
+
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+    expect(await screen.findByText(/Runs on Claude Code in a checkout of the Factory’s repository/)).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /Claude Code · Sonnet/ })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No model available' })).not.toBeInTheDocument();
+  });
+
+  it('says a repository is needed when the Factory has none to check out', async () => {
+    stubClaudeFactory({ repositories: false });
+
+    renderNewPage('/factories/fp-1/user/new/draft-1');
+
+    expect(await screen.findByRole('heading', { name: 'Link a repository first' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Repositories settings' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/repositories',
+    );
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No model available' })).not.toBeInTheDocument();
+  });
+
+  it('says Claude Code is unavailable when the server has no Claude Code harness', async () => {
+    stubClaudeFactory({ repositories: true, claudeCode: false });
+
+    renderNewPage('/factories/fp-1/user/new/draft-1');
+
+    expect(await screen.findByRole('heading', { name: 'Claude Code isn’t available on this server' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/models',
+    );
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  });
+});

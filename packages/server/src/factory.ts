@@ -61,6 +61,7 @@ import {
   createClaudeCheckoutResolver,
   createClaudeCodeCredentials,
   createClaudeFactoryHarness,
+  createClaudeUserSessions,
 } from './claude/index.ts';
 import type {
   ClaudeCodeCredentialFailureHook,
@@ -1896,6 +1897,17 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             claudeCodeEnabled: claudeCode !== undefined,
+            // New chats of a Claude Code Factory are Claude Code sessions, checked out like a card's.
+            ...(claudeCode
+              ? {
+                  claudeCodeUserSessions: createClaudeUserSessions({
+                    harness: claudeCode.harness,
+                    checkout: claudeCodeConfig?.cwdFor
+                      ? { custom: true }
+                      : { custom: false, sandboxProvider: sandboxConfig?.provider },
+                  }),
+                }
+              : {}),
             // A replaced credentials hook decides on its own; only the default one falls back to the local login.
             claudeCodeLocalLogin:
               claudeCode !== undefined && !claudeCodeConfig?.credentials && claudeCodeConfig?.localDevelopment === true,

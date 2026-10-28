@@ -30,7 +30,21 @@
     "noAccessDescriptionOrg": "The default model ({{modelId}}) needs a credential for {{provider}}. Ask an org admin to add one under Factory defaults in Models settings.",
     "openModelsSettings": "Open Models settings",
     "noModelTitle": "No model available",
-    "noModelDescription": "Chats in this Factory run on the organization's keys. Ask an org admin to connect a provider or choose a Factory default model in Models settings."
+    "noModelDescription": "Chats in this Factory run on the organization's keys. Ask an org admin to connect a provider or choose a Factory default model in Models settings.",
+    "claudeCode": {
+      "setupRequired": "Claude Code setup required",
+      "note": "Runs on Claude Code in a checkout of the Factory’s repository, on the Factory’s Claude model.",
+      "noRepository": {
+        "title": "Link a repository first",
+        "description": "Claude Code chats run in a checkout of one of the Factory’s repositories. Link a repository to start one.",
+        "action": "Open Repositories settings"
+      },
+      "harnessUnavailable": {
+        "title": "Claude Code isn’t available on this server",
+        "description": "This Factory’s harness is Claude Code, but the server has no Claude Code harness configured. Switch the Factory to Mastra in Models settings, or ask an admin to set up Claude Code.",
+        "action": "Open Models settings"
+      }
+    }
   },
   "threadPage": {
     "loadingSession": "Loading session",
@@ -349,5 +363,9 @@
       "noReason": "The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.",
       "unexpected": "An unexpected error stopped the run. Copy the error details to investigate."
     }
+  },
+  "claudeCode": {
+    "model": "Claude Code · {{model}}",
+    "modelHint": "This chat runs on Claude Code with the Factory’s Claude model. Change it in Settings → Models."
   }
 }

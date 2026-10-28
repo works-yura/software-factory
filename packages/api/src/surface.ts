@@ -61,6 +61,7 @@ import { OAuthRoutes } from './oauth.ts';
 import type { RouteAuth } from '@factory/http';
 import { SkillRoutes } from './skills.ts';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
+import type { ClaudeCodeUserSessions } from './source-control-sessions.ts';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.ts';
 import { invalidateTenantCredentialSnapshots } from '@factory/credentials';
 import { WorkItemRoutes } from './work-items.ts';
@@ -126,6 +127,8 @@ export interface FactoryApiRoutesDeps {
   claudeCodeEnabled?: boolean;
   /** Claude Code turns fall back to the server machine's own `claude` login (local development). */
   claudeCodeLocalLogin?: boolean;
+  /** Personal sessions of Claude Code Factories start in the Claude Code harness (see the session routes). */
+  claudeCodeUserSessions?: ClaudeCodeUserSessions;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -633,6 +636,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           filesystem: deps.domains.filesystem,
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
+          ...(deps.claudeCodeUserSessions ? { claudeCode: deps.claudeCodeUserSessions } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
   // Absent known integrations still get their disabled-status stub.

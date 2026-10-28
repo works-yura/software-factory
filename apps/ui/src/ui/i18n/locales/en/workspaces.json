@@ -234,6 +234,11 @@
         "label": "Codebase",
         "title": "Choose your codebase."
       },
+      "harness": {
+        "label": "Harness",
+        "title": "Choose the harness.",
+        "description": "What your Factory’s agents run on."
+      },
       "model-provider": {
         "label": "Model",
         "title": "Choose your model."
@@ -247,6 +252,10 @@
     "companyModel": {
       "local": "Connect a provider and choose the model for your Factory.",
       "factory": "Company account · model for Factory work and sessions."
+    },
+    "claudeCode": {
+      "title": "Choose your Claude model.",
+      "description": "Claude Code signs in on its own: your claude login on this machine or the organization’s Claude Code accounts."
     }
   },
   "welcomePreview": {
@@ -287,7 +296,10 @@
     "sharedModel": {
       "local": "Factory default · local connection",
       "factory": "Company account · Factory work and sessions"
-    }
+    },
+    "harness": "Harness",
+    "harnessDetail": "You can switch it later in Settings → Models",
+    "claudeModelDetail": "Claude Code · for Factory work and sessions"
   },
   "githubCallback": {
     "requested": "GitHub App installation requested. An organization owner needs to approve it before repositories appear here.",

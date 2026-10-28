@@ -6,12 +6,14 @@ import { onboardingSteps, STEP_META } from '../../services/onboardingSteps';
 export function OnboardingProgress({
   step,
   editingReview,
+  harnessChoice = false,
 }: {
   step: OnboardingStep;
   editingReview: boolean;
+  harnessChoice?: boolean;
 }) {
   const { t } = useTranslation('workspaces');
-  const steps: OnboardingStep[] = onboardingSteps().filter(item => item !== 'initial');
+  const steps: OnboardingStep[] = onboardingSteps({ harnessChoice }).filter(item => item !== 'initial');
   const activeStep = step;
   const progressIndex = editingReview ? steps.length - 1 : steps.indexOf(activeStep);
   return (

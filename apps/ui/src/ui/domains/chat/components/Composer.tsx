@@ -45,7 +45,7 @@ type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { t } = useTranslation('chat');
-  const { sessionId, sessionEnabled, baseUrl, factorySessionState } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, factorySessionState, claudeCode } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
@@ -79,7 +79,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const liveRun = phase === 'working' && !preparingThreadId;
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
-  const draftConfigNotReady = onUserDraft && (modelLoading || modelError !== undefined);
+  // A Claude Code draft runs on its Factory's Claude model: the Mastra model list has no say.
+  const draftConfigNotReady = onUserDraft && !claudeCode && (modelLoading || modelError !== undefined);
   const attachDisabled = blocked || chatPreparing || planFeedback.pending;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
     disabled: chatPreparing || planFeedback.pending,

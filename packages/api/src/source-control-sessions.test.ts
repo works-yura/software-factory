@@ -1379,3 +1379,137 @@ describe('session sandbox recreate', () => {
     }
   });
 });
+
+describe('personal sessions of a Claude Code Factory', () => {
+  function fakeClaude(unavailableReason?: string) {
+    const sessions = new Map<string, { resourceId: string }>();
+    const started: { sessionId: string; resourceId: string; title: string | null }[] = [];
+    const claudeCode: NonNullable<RouteOptions['claudeCode']> = {
+      get: async sessionId => sessions.get(sessionId),
+      start: async ({ session, resourceId }) => {
+        started.push({ sessionId: session.sessionId, resourceId, title: session.title });
+        if (!sessions.has(session.sessionId)) sessions.set(session.sessionId, { resourceId });
+      },
+      ...(unavailableReason ? { unavailableReason } : {}),
+    };
+    return { claudeCode, sessions, started };
+  }
+
+  function claudeApp(
+    seed: Awaited<ReturnType<typeof seedGitLabRepository>>,
+    claudeCode: RouteOptions['claudeCode'],
+    controller?: RouteOptions['controller'],
+  ) {
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, user as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      buildSourceControlSessionRoutes({
+        auth: fakeRouteAuth(),
+        sourceControls: [seed.sourceControl],
+        projects: seed.seed.projects,
+        memorySettings: seed.seed.memorySettings,
+        ...(controller ? { controller } : {}),
+        ...(claudeCode ? { claudeCode } : {}),
+        workItems: seed.seed.workItems,
+      }),
+    );
+    return app;
+  }
+
+  const sessionId = '22222222-2222-4222-8222-222222222222';
+  const create = (app: Hono, projectRepositoryId: string, id = sessionId) =>
+    app.request(`/web/source-control/projects/${projectRepositoryId}/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: id, title: 'Fix the login page', visibility: 'private' }),
+    });
+
+  async function claudeFactory() {
+    const seeded = await seedGitLabRepository();
+    await seeded.seed.projects.update({
+      orgId: 'org-1',
+      id: seeded.project.id,
+      input: { harness: 'claude-code', claudeCodeModel: 'sonnet' },
+    });
+    return seeded;
+  }
+
+  it('creates the session in Claude Code on its owner resource, with no Mastra conversation', async () => {
+    const seeded = await claudeFactory();
+    const claude = fakeClaude();
+    const controller = { createSession: vi.fn() } as unknown as RouteOptions['controller'];
+    const app = claudeApp(seeded, claude.claudeCode, controller);
+
+    const response = await create(app, seeded.projectRepository.id);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      session: { sessionId, harness: 'claude-code', capabilities: { switchModel: false, recreateSandbox: false } },
+    });
+    expect(claude.started).toEqual([{ sessionId, resourceId: 'user-1', title: 'Fix the login page' }]);
+    expect(controller!.createSession).not.toHaveBeenCalled();
+
+    // Opening it reports the Claude session's resource and no model switch.
+    const opened = await app.request(`/web/user-sessions/${sessionId}`);
+    expect(opened.status).toBe(200);
+    await expect(opened.json()).resolves.toMatchObject({
+      session: { sessionId, resourceId: 'user-1', harness: 'claude-code', capabilities: { switchModel: false } },
+    });
+
+    // A retried create stays on Claude Code.
+    expect((await create(app, seeded.projectRepository.id)).status).toBe(200);
+    expect(claude.started).toHaveLength(2);
+    expect(controller!.createSession).not.toHaveBeenCalled();
+  });
+
+  it('refuses before writing a session row when the server cannot run Claude Code chats', async () => {
+    const seeded = await claudeFactory();
+    const noHarness = claudeApp(seeded, undefined);
+    const refused = await create(noHarness, seeded.projectRepository.id);
+    expect(refused.status).toBe(409);
+    await expect(refused.json()).resolves.toMatchObject({ error: 'claude_code_unavailable' });
+
+    const noCheckout = claudeApp(seeded, fakeClaude('needs a local sandbox').claudeCode);
+    const response = await create(noCheckout, seeded.projectRepository.id);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: 'claude_code_unavailable',
+      message: 'needs a local sandbox',
+    });
+    await expect(seeded.sourceControl.sessions.getBySessionId(sessionId)).resolves.toBeNull();
+  });
+
+  it('keeps a Mastra Factory on Mastra even when Claude Code is configured', async () => {
+    const seeded = await seedGitLabRepository();
+    const claude = fakeClaude();
+    const app = claudeApp(seeded, claude.claudeCode);
+
+    const response = await create(app, seeded.projectRepository.id);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { session: Record<string, unknown> };
+    expect(body.session.harness).toBeUndefined();
+    expect(body.session).toMatchObject({ capabilities: { switchModel: true } });
+    expect(claude.started).toEqual([]);
+  });
+
+  it('refuses visibility changes and sandbox starts for a Claude Code session', async () => {
+    const seeded = await claudeFactory();
+    const claude = fakeClaude();
+    const app = claudeApp(seeded, claude.claudeCode);
+    expect((await create(app, seeded.projectRepository.id)).status).toBe(200);
+
+    const visibility = await app.request(`/web/user-sessions/${sessionId}/visibility`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ visibility: 'org' }),
+    });
+    expect(visibility.status).toBe(409);
+    const sandbox = await app.request(`/web/user-sessions/${sessionId}/sandbox/start`, { method: 'POST' });
+    expect(sandbox.status).toBe(409);
+  });
+});

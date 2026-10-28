@@ -10,6 +10,7 @@
  * user in onboarding once a factory exists.
  */
 import { z } from 'zod';
+import { CLAUDE_CODE_MODELS, FACTORY_HARNESSES } from './github';
 import type { SourceControlRepository } from './github';
 
 export const ONBOARDING_REVIEW_RETURN_KEY = 'mastracode.factory-onboarding.return-to-review';
@@ -26,9 +27,11 @@ export const ONBOARDING_UPDATED_AT_KEY = 'mastracode.factory-onboarding.updated-
  */
 export const ONBOARDING_RESUME_WINDOW_MS = 30 * 60 * 1000;
 
+/** `harness` is only walked when the server runs Claude Code (`features.claudeCode`). */
 export const ONBOARDING_STEPS = [
   'initial',
   'vcs',
+  'harness',
   'model-provider',
   'review',
 ] as const;
@@ -59,13 +62,24 @@ const repositorySchema: z.ZodType<SourceControlRepository> = z.union([
 ]);
 const connectionSchema = z.object({ providerId: z.string(), method: z.enum(['api_key', 'oauth']) });
 const modelChoiceSchema = connectionSchema.extend({ modelId: z.string().min(1) });
+const claudeCodeModelSchema = z.enum(CLAUDE_CODE_MODELS).nullable();
 const draftSchema = z.object({
   repository: repositorySchema.optional(),
+  /** Absent = Mastra (no harness step on servers without Claude Code). */
+  harness: z.enum(FACTORY_HARNESSES).optional(),
   model: connectionSchema.extend({ modelId: z.string() }).optional(),
+  /** The Claude model of a Claude Code Factory; null = the CLI's default, absent = not picked yet. */
+  claudeCodeModel: claudeCodeModelSchema.optional(),
 });
 
-/** A Factory is created with its repository and the company account's model. */
-export const completeOnboardingSchema = z.object({ repository: repositorySchema, model: modelChoiceSchema });
+/**
+ * A Factory is created with its repository and either the company account's
+ * model (Mastra) or, on Claude Code, the Claude model its sessions run.
+ */
+export const completeOnboardingSchema = z.union([
+  z.object({ repository: repositorySchema, harness: z.literal('mastra').optional(), model: modelChoiceSchema }),
+  z.object({ repository: repositorySchema, harness: z.literal('claude-code'), claudeCodeModel: claudeCodeModelSchema }),
+]);
 
 export type CompleteOnboardingSetup = z.infer<typeof completeOnboardingSchema>;
 

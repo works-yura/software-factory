@@ -593,3 +593,87 @@ describe('Account presets', () => {
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name });
   });
 });
+
+describe('harness choice in onboarding', () => {
+  function serveClaudeCode(claudeCode: boolean) {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/features`, () =>
+        HttpResponse.json({ knowledge: false, mcp: false, claudeCode, claudeCodeLocalLogin: true }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts`, () =>
+        HttpResponse.json({ accounts: [], canAddOrgKeys: true }),
+      ),
+    );
+  }
+
+  it('asks for the harness after the codebase and, for Claude Code, a Claude model instead of a provider', async () => {
+    serveClaudeCode(true);
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
+    const writes = registerSetup();
+    const user = userEvent.setup();
+    renderOnboarding();
+
+    await user.click(await screen.findByRole('radio', { name: 'octo/hello' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(await screen.findByRole('heading', { name: 'Choose the harness.' })).toBeInTheDocument();
+    expect(screen.getByText(/switch the harness later in Settings → Models/)).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Factory setup progress')).getByText('Harness')).toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: /Claude Code.*Claude subscription/ }));
+
+    // Claude Code's sign-in and Claude model rows, no Mastra provider list.
+    expect(await screen.findByRole('heading', { name: 'Choose your Claude model.' })).toBeInTheDocument();
+    expect(screen.getByText(/Uses your `claude` login on this machine/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'OpenAI' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: /Sonnet/ }));
+
+    const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
+    expect(review.getByText('Claude Code')).toBeInTheDocument();
+    expect(review.getByText('Sonnet')).toBeInTheDocument();
+    expect(writes).toEqual([]);
+
+    await user.click(screen.getByRole('button', { name: 'Create factory' }));
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(writes.filter(item => item.path === 'create')).toEqual([
+      { path: 'create', body: { name: 'hello', harness: 'claude-code', claudeCodeModel: 'sonnet' } },
+    ]);
+    // No Mastra default model is written for a Claude Code Factory.
+    expect(writes.filter(item => item.path === 'model')).toEqual([]);
+  }, 20_000);
+
+  it('switches back to Mastra from review and asks for a provider model again', async () => {
+    serveClaudeCode(true);
+    persistOnboardingDraft({ repository: repo, harness: 'claude-code', claudeCodeModel: null });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    const writes = registerSetup();
+    const user = userEvent.setup();
+    renderOnboarding();
+
+    const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
+    expect(review.getByText('Claude Code default')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Edit harness' }));
+    await user.click(await screen.findByRole('option', { name: /Mastra.*Any model/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    await screen.findByRole('heading', { name: 'Ready to create.' });
+    await user.click(screen.getByRole('button', { name: 'Create factory' }));
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(writes.filter(item => item.path === 'create')).toEqual([{ path: 'create', body: { name: 'hello' } }]);
+    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: model.modelId });
+  }, 20_000);
+
+  it('has no harness step when the server does not run Claude Code', async () => {
+    serveClaudeCode(false);
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
+    registerSetup();
+    const user = userEvent.setup();
+    renderOnboarding();
+
+    await user.click(await screen.findByRole('radio', { name: 'octo/hello' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Factory setup progress')).queryByText('Harness')).not.toBeInTheDocument();
+  });
+});
