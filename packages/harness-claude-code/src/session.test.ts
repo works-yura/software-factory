@@ -653,6 +653,22 @@ describe('ClaudeCodeSession', () => {
       expect(settings.permissions.ask).toContain('Write');
     });
 
+    it('parks an unattended run that asks when the host says a person can answer, still reading unasked', async () => {
+      const { fake, session, signal } = await setup([{ lines: fixture('turn-permission.jsonl') }], {
+        permissions: () => ({ unattended: true, parkAsks: true }),
+      });
+      const parked = nextEnd(session);
+      await signal('one', 'Create an empty file x.txt.');
+      expect(await parked).toBe('suspended');
+      const call = fake.calls[0]!;
+      const gate = (call.mcpConfigs[0]!.config as { mcpServers: { factory_gate: { args: string[] } } }).mcpServers.factory_gate;
+      expect(gate.args).not.toContain('--unattended');
+      expect(flagValue(call.args, '--allowedTools')?.split(',')).toEqual(
+        expect.arrayContaining(['Read', 'Grep', 'Bash(git:*)', 'Bash(gh:*)']),
+      );
+      expect(session.pendingPermission).toMatchObject({ toolName: 'Write', toolCallId: WRITE_CALL });
+    });
+
     it('runs an attended turn with the gate that parks', async () => {
       const { fake, session, signal } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
         permissions: () => ({}),

@@ -33,6 +33,12 @@ export interface ClaudeToolPermissions {
    * the gate, with a message saying why, instead of parking the run.
    */
   unattended?: boolean;
+  /**
+   * With {@link unattended}: a call that would ask parks the run until a
+   * person answers (the host shows it waiting), as in a chat, instead of
+   * being refused. What an unattended run may do unasked stays allowed.
+   */
+  parkAsks?: boolean;
 }
 
 /** Shell commands an unattended run may use unless the Execute category is denied. */

@@ -286,10 +286,14 @@ describe('createClaudeFactoryHarness', () => {
       // The start coordinator records the card on the session's thread before its first turn.
       await started.thread.setSetting({ key: 'factoryWorkItemId', value: 'item-1' });
 
-      await expect(config.permissions!(bound)).resolves.toEqual({ categories: { edit: 'ask' }, unattended: true });
+      await expect(config.permissions!(bound)).resolves.toEqual({
+        categories: { edit: 'ask' },
+        unattended: true,
+        parkAsks: true,
+      });
       expect(cardRun).toHaveBeenCalledWith({ orgId: 'org-a', factoryProjectId: 'factory-a', sessionId: 'session-a' });
-      await expect(config.permissions!(side)).resolves.toMatchObject({ unattended: true });
-      await expect(config.permissions!(started)).resolves.toMatchObject({ unattended: true });
+      await expect(config.permissions!(side)).resolves.toMatchObject({ unattended: true, parkAsks: true });
+      await expect(config.permissions!(started)).resolves.toMatchObject({ unattended: true, parkAsks: true });
       await expect(config.permissions!(chat)).resolves.toEqual({ categories: { edit: 'ask' } });
     });
   });
