@@ -231,11 +231,15 @@ export function sessionLink(href: string | undefined): CardAction | undefined {
 export function retryButton({
   decisionId,
   onRetry,
+  onChooseRepository,
 }: {
   decisionId?: string;
   onRetry: (decisionId: string) => void;
+  /** Set when the run failed for want of the card's repository: the button asks for it, then retries. */
+  onChooseRepository?: (decisionId: string) => void;
 }): CardPrimaryAction | undefined {
   if (decisionId === undefined) return undefined;
+  if (onChooseRepository) return { label: tk('primaryAction.chooseRepository'), start: () => onChooseRepository(decisionId) };
   return { label: tk('primaryAction.retry'), start: () => onRetry(decisionId) };
 }
 

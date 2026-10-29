@@ -95,6 +95,7 @@
     "startSession": "Почати сесію",
     "openSession": "Відкрити сесію",
     "retry": "Повторити",
+    "chooseRepository": "Вибрати репозиторій",
     "startSuggestedRun": "Запустити запропоноване: {{label}}"
   },
   "cardState": {

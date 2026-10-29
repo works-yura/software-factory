@@ -342,6 +342,14 @@ export function BoardContent({
                 onApproveProposal={decisions.approve}
                 onDismissProposal={decisions.dismiss}
                 onRetryDecision={decisions.retry}
+                onChooseRepository={decisionId =>
+                  repositoryChoice.ask(slug =>
+                    void items
+                      .setRepository(item, slug)
+                      .then(() => decisions.retry(decisionId))
+                      .catch(error => toast.error(error instanceof Error ? error.message : tk('page.actionFailed'))),
+                  )
+                }
                 onCreateSession={() => void runs.openOrCreateSession(item)}
                 onMove={toStage =>
                   void repositoryChoice.choose(

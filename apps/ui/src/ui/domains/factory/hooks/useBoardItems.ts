@@ -166,6 +166,9 @@ export function useBoardItems({
     refetch: items.refetch,
     move,
     remove: (id: string) => remove.mutate(id),
+    /** Files the card under a linked repository, so a run on it knows where to work. */
+    setRepository: (item: WorkItem, slug: string) =>
+      update.mutateAsync({ id: item.id, patch: { metadata: { ...item.metadata, repository: slug } } }),
     handleDrop,
   };
 }

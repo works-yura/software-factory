@@ -59,6 +59,7 @@ export function WorkItemCard({
   onApproveProposal,
   onDismissProposal,
   onRetryDecision,
+  onChooseRepository,
   sessionStatus,
   onCreateSession,
   onMove,
@@ -88,6 +89,8 @@ export function WorkItemCard({
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
+  /** Ask for the card's repository, then retry the run that needed it. */
+  onChooseRepository?: (decisionId: string) => void;
   /** Live status of the card's bound sessions, resolved once for the whole board. */
   sessionStatus?: SessionRowStatus;
   /** Fallback when the card offers no lane: open a session on it (no run). */
@@ -211,7 +214,11 @@ export function WorkItemCard({
   const actions = cardActions({
     state,
     session: sessionLink(sessionHref),
-    retry: retryButton({ decisionId: retryDecisionId, onRetry: onRetryDecision }),
+    retry: retryButton({
+      decisionId: retryDecisionId,
+      onRetry: onRetryDecision,
+      ...(status.kind === 'error' && status.chooseRepository && onChooseRepository ? { onChooseRepository } : {}),
+    }),
     run: primaryAction,
   });
 

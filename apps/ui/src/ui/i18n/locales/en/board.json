@@ -93,6 +93,7 @@
     "startSession": "Start session",
     "openSession": "Open session",
     "retry": "Retry",
+    "chooseRepository": "Choose repository",
     "startSuggestedRun": "Start suggested run: {{label}}"
   },
   "cardState": {

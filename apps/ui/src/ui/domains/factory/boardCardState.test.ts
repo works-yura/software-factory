@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { InstalledPhaseInfo } from '../../../api/types';
 import { boardCardState, canMoveTo, itemAwaitsPerson } from './boardCardState';
 import type { BoardCardOwner, BoardCardStateInput } from './boardCardState';
-import { cardActions } from './cardPrimaryAction';
+import { cardActions, retryButton } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 
 function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecisionSummary {
@@ -53,6 +53,37 @@ describe('status row', () => {
       detail: 'ENOENT: no such file',
       retryDecisionId: 'decision-1',
     });
+  });
+
+  it('asks for the repository when the run could not tell which one, then retries', () => {
+    const state = boardCardState({
+      decision: decision({
+        status: 'failed',
+        failureCode: 'source_repository_ambiguous',
+        lastError: 'Choose one of the linked repositories: works_yura/ai, works_yura/test.',
+      }),
+    });
+    expect(state.status).toEqual({
+      kind: 'error',
+      label: 'Automated run could not start',
+      detail: 'Choose one of the linked repositories: works_yura/ai, works_yura/test.',
+      retryDecisionId: 'decision-1',
+      chooseRepository: true,
+    });
+    const asked: string[] = [];
+    const retried: string[] = [];
+    const [action] = cardActions({
+      state,
+      retry: retryButton({
+        decisionId: 'decision-1',
+        onRetry: id => retried.push(id),
+        onChooseRepository: id => asked.push(id),
+      }),
+    });
+    expect(action).toMatchObject({ label: 'Choose repository' });
+    action!.start();
+    expect(asked).toEqual(['decision-1']);
+    expect(retried).toEqual([]);
   });
 
   it('does not offer Retry for a deterministic failure', () => {

@@ -12,7 +12,14 @@ export type BoardCardStatus =
   /** Triage classed the card as non-bug work, so it waits on a maintainer's call. */
   | { kind: 'held'; label: string }
   | { kind: 'busy'; label: string }
-  | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
+  | {
+      kind: 'error';
+      label: string;
+      detail?: string;
+      retryDecisionId?: string;
+      /** The run needs the card's repository: retrying asks a person to choose it first. */
+      chooseRepository?: boolean;
+    };
 
 export type BoardCardOwner =
   | { kind: 'free' }
@@ -122,6 +129,7 @@ function automationOnCard(
         kind: 'error',
         label: copy.failed,
         ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
+        ...(decision.failureCode === 'source_repository_ambiguous' ? { chooseRepository: true } : {}),
         detail,
       },
       owner: FREE,

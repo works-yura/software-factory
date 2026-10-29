@@ -6,7 +6,7 @@ import { createPipelines } from '@factory/pipelines';
 import { createLifecycleTestRegistry } from '@factory/pipelines/testing';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from './attention-providers.ts';
 import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from './run-audit.ts';
-import { FactoryFeedReader } from '@factory/store';
+import { FactoryDispatchError, FactoryFeedReader } from '@factory/store';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import { createFactoryStorageForTests } from './test-support.ts';
@@ -6749,6 +6749,51 @@ describe('a skill run that ends in error (#27740)', () => {
     });
     const provider = new DecisionAttentionProvider({ workItems: storage, boards: createPipelines() }, failedDecisionAttentionSpec);
     expect(await provider.counts({ orgId: 'org-1', userId: 'user-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
+  });
+
+  it('stops at once when only a person can choose the card’s repository, and lets them retry after', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'plan',
+      message: 'Start triage.',
+      priority: 'urgent',
+      idleBehavior: 'wake',
+      prepareBinding: true,
+      idempotencyKey: 'ambiguous-repository',
+    });
+    const { controller } = createSession();
+    const prepareBinding = vi.fn(async () => {
+      throw new FactoryDispatchError(
+        'source_repository_ambiguous',
+        'Choose one of the linked repositories: works_yura/ai, works_yura/test.',
+      );
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+    const start = Date.parse('2030-01-01T00:00:00Z');
+
+    await dispatcher.runOnce(new Date(start));
+    // Retrying could not change the answer until the card names a repository.
+    await dispatcher.runOnce(new Date(start + 2 * 60 * 60_000));
+
+    expect(prepareBinding).toHaveBeenCalledTimes(1);
+    const [failed] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(failed).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      failureCode: 'source_repository_ambiguous',
+      lastError: expect.stringContaining('works_yura/test'),
+    });
+    expect(
+      await storage.retryDeferredDecision('org-1', PROJECT_ID, failed!.id, new Date(start + 3 * 60 * 60_000)),
+    ).toMatchObject({ id: failed!.id, status: 'retry' });
   });
 
   it('keeps a non-credential run error as a retryable run failure with its message', async () => {

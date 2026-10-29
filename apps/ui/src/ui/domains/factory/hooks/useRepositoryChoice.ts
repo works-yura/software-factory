@@ -28,6 +28,8 @@ export function useRepositoryChoice(factory: FactoryProject, definition: Install
 
   return {
     choose,
+    /** Ask which linked repository, whatever the card says, e.g. after a run could not tell. */
+    ask: (onSelect: (slug: string) => void) => setPendingSelect(() => onSelect),
     pending: pendingSelect !== undefined,
     cancel: () => setPendingSelect(undefined),
     select: (slug: string) => {
