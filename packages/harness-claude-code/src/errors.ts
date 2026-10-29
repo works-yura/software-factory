@@ -162,7 +162,7 @@ export function classifyFailure(evidence: FailureEvidence, now = new Date()): Cl
   if (UNKNOWN_SESSION_RE.test(haystack)) {
     return new ClaudeCodeError('unknown_session', describe('Claude Code could not resume the session.'), details);
   }
-  if (evidence.errorMarker === 'authentication_failed' || status === 401 || AUTH_RE.test(haystack)) {
+  if (evidence.errorMarker === 'authentication_failed' || status === 401 || status === 403 || AUTH_RE.test(haystack)) {
     return new ClaudeCodeError('auth', describe('Claude Code authentication failed.'), details);
   }
   // The stream's own reset time is exact; the wording is wall-clock and zone-guessed.

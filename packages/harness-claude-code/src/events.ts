@@ -128,6 +128,7 @@ export class TurnTranslator {
   #errorText: string | undefined;
   #rateLimitRejected = false;
   #rateLimitResetsAt: Date | undefined;
+  #apiRetry: { status?: number; error?: string; attempt: number } | undefined;
   #started = false;
 
   get gate(): PlanGate | undefined {
@@ -137,6 +138,22 @@ export class TurnTranslator {
   /** The first call this turn that waits for a person's permission; check it after each {@link push}. */
   get permission(): PermissionRequest | undefined {
     return this.#permission;
+  }
+
+  /**
+   * The CLI is retrying a request its account can never make (a refused key:
+   * 401 or 403). It would keep at it for minutes with growing delays; the turn
+   * stops here instead and goes on with another account.
+   */
+  get accountRefused(): boolean {
+    const retry = this.#apiRetry;
+    return retry !== undefined && (retry.error === 'authentication_failed' || retry.status === 401 || retry.status === 403);
+  }
+
+  /** How many times the CLI retried a rate-limited request this turn. */
+  get rateLimitRetries(): number {
+    const retry = this.#apiRetry;
+    return retry && (retry.error === 'rate_limit' || retry.status === 429) ? retry.attempt : 0;
   }
 
   get sawResult(): boolean {
@@ -153,6 +170,13 @@ export class TurnTranslator {
     if ('sessionId' in message && message.sessionId) this.sessionId = message.sessionId;
     switch (message.type) {
       case 'system':
+        if (message.subtype === 'api_retry') {
+          const status = typeof message.raw.error_status === 'number' ? message.raw.error_status : undefined;
+          const error = typeof message.raw.error === 'string' ? message.raw.error : undefined;
+          const attempt = typeof message.raw.attempt === 'number' ? message.raw.attempt : 1;
+          this.#apiRetry = { attempt, ...(status !== undefined ? { status } : {}), ...(error ? { error } : {}) };
+          return [];
+        }
         if (message.subtype !== 'init' || !message.sessionId) return [];
         this.#started = true;
         {
@@ -294,8 +318,18 @@ export class TurnTranslator {
         errors: result?.errors ?? [],
         stderr: exit.stderr,
         ...(result?.subtype ? { subtype: result.subtype } : {}),
-        ...(result?.apiErrorStatus !== undefined ? { status: result.apiErrorStatus } : {}),
-        ...(this.#errorMarker ? { errorMarker: this.#errorMarker } : rejected ? { errorMarker: 'rate_limit' } : {}),
+        ...(result?.apiErrorStatus !== undefined
+          ? { status: result.apiErrorStatus }
+          : this.#apiRetry?.status !== undefined
+            ? { status: this.#apiRetry.status }
+            : {}),
+        ...(this.#errorMarker
+          ? { errorMarker: this.#errorMarker }
+          : rejected
+            ? { errorMarker: 'rate_limit' }
+            : this.#apiRetry?.error
+              ? { errorMarker: this.#apiRetry.error }
+              : {}),
         ...(resetsAt ? { rateLimitResetsAt: resetsAt } : {}),
         exitCode: exit.exitCode,
       },

@@ -1061,6 +1061,85 @@ describe('ClaudeCodeSession account rotation', () => {
     expect(fake.calls[1]!.env.CLAUDE_CODE_OAUTH_TOKEN).toBe('token-b');
   });
 
+  // As the CLI (2.1.312) reports a request it is about to retry.
+  const apiRetry = (attempt: number, status: number, error: string) =>
+    JSON.stringify({ type: 'system', subtype: 'api_retry', attempt, max_retries: 10, retry_delay_ms: 500, error_status: status, error, session_id: CLAUDE_SESSION });
+
+  it('stops a CLI retrying a refused key at once and moves to the next account', async () => {
+    const pool = accounts(['a', 'b']);
+    const { fake, session, signal } = await setup(
+      [{ lines: [apiRetry(1, 401, 'authentication_failed')], hang: true }, { lines: fixture('turn-complete.jsonl') }],
+      { credentials: pool.credentials, onCredentialFailure: pool.onCredentialFailure },
+    );
+    const end = nextEnd(session);
+    await signal('one', 'Update the README.');
+    expect(await end).toBe('complete');
+
+    expect(fake.calls[0]!.killed).toEqual(['SIGTERM']);
+    expect(pool.failures.map(failure => [failure.accountId, failure.error.kind, failure.error.status])).toEqual([['a', 'auth', 401]]);
+    expect(fake.calls[1]!.env.CLAUDE_CODE_OAUTH_TOKEN).toBe('token-b');
+    // The CLI never started the conversation: the next account gets the prompt itself.
+    expect(fake.calls[1]!.stdin).toBe('Update the README.');
+  });
+
+  it('treats a 403 retry as a refused account too', async () => {
+    const pool = accounts(['a', 'b']);
+    const { fake, session, signal } = await setup(
+      [{ lines: [apiRetry(1, 403, 'unknown')], hang: true }, { lines: fixture('turn-complete.jsonl') }],
+      { credentials: pool.credentials, onCredentialFailure: pool.onCredentialFailure },
+    );
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    expect(await end).toBe('complete');
+    expect(fake.calls[0]!.killed).toEqual(['SIGTERM']);
+    expect(pool.failures.map(failure => failure.error.status)).toEqual([403]);
+  });
+
+  it('lets a pooled turn wait out one rate-limit retry, and moves on at the second', async () => {
+    const pool = accounts(['a', 'b']);
+    const hold = deferred();
+    const { fake, session, signal } = await setup(
+      [
+        { lines: [apiRetry(1, 429, 'rate_limit'), apiRetry(2, 429, 'rate_limit')], holdAt: 1, hold: hold.promise, hang: true },
+        { lines: fixture('turn-complete.jsonl') },
+      ],
+      { credentials: pool.credentials, onCredentialFailure: pool.onCredentialFailure },
+    );
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    await vi.waitFor(() => expect(fake.calls).toHaveLength(1));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(fake.calls[0]!.killed).toEqual([]);
+    hold.resolve();
+    expect(await end).toBe('complete');
+    expect(fake.calls[0]!.killed).toEqual(['SIGTERM']);
+    expect(pool.failures.map(failure => [failure.accountId, failure.error.kind, failure.error.status])).toEqual([['a', 'rate_limit', 429]]);
+  });
+
+  it('leaves rate-limit retries to the CLI when there is no account pool', async () => {
+    const { fake, session, signal } = await setup([
+      { lines: [apiRetry(1, 429, 'rate_limit'), apiRetry(5, 429, 'rate_limit'), ...fixture('turn-complete.jsonl')] },
+    ]);
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    expect(await end).toBe('complete');
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0]!.killed).toEqual([]);
+  });
+
+  it('does not leave the account for an overloaded API', async () => {
+    const pool = accounts(['a', 'b']);
+    const { fake, session, signal } = await setup(
+      [{ lines: [apiRetry(1, 529, 'overloaded'), apiRetry(4, 529, 'overloaded'), ...fixture('turn-complete.jsonl')] }],
+      { credentials: pool.credentials, onCredentialFailure: pool.onCredentialFailure },
+    );
+    const end = nextEnd(session);
+    await signal('one', 'go');
+    expect(await end).toBe('complete');
+    expect(fake.calls).toHaveLength(1);
+    expect(pool.failures).toEqual([]);
+  });
+
   it('ends the run with the hook’s error when no account is left', async () => {
     const pool = accounts(['a']);
     const { fake, session, signal, events } = await setup([{ lines: fixture('turn-rate-limit.jsonl'), exitCode: 1 }], {

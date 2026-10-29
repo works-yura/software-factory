@@ -144,9 +144,23 @@ export interface MockAnthropic {
   turns: Turn[];
   /** Swaps the script; requests made later follow the new one. */
   script(next: ModelScript): void;
+  /**
+   * Refuses requests by who makes them (`x-api-key`, `authorization`): a
+   * returned failure is sent instead of the script's answer. Models an account
+   * out of usage, or a revoked key.
+   */
+  refuse(rule: ((headers: Record<string, string | string[] | undefined>) => MockFailure | undefined) | undefined): void;
+  /** Requests refused so far. */
+  refused: number;
   /** Answers the next requests with this HTTP status (e.g. 429) instead of the script. */
   failNext(status: number, body: Record<string, unknown>, count?: number, headers?: Record<string, string>): void;
   close(): Promise<void>;
+}
+
+export interface MockFailure {
+  status: number;
+  body: Record<string, unknown>;
+  headers?: Record<string, string>;
 }
 
 export async function startMockAnthropic(initial: ModelScript): Promise<MockAnthropic> {
@@ -154,6 +168,8 @@ export async function startMockAnthropic(initial: ModelScript): Promise<MockAnth
   const turns: Turn[] = [];
   const failures: Array<{ status: number; body: Record<string, unknown>; headers: Record<string, string> }> = [];
   let ids = 0;
+  let refuseRule: ((headers: Record<string, string | string[] | undefined>) => MockFailure | undefined) | undefined;
+  let refused = 0;
 
   const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
     let raw = '';
@@ -163,6 +179,12 @@ export async function startMockAnthropic(initial: ModelScript): Promise<MockAnth
       if (path === '/v1/messages/count_tokens') return json(res, 200, { input_tokens: 1 });
       if (path !== '/v1/messages') return json(res, 404, { type: 'error', error: { type: 'not_found_error', message: path } });
       const request = JSON.parse(raw || '{}') as ModelRequest;
+      const refusal = refuseRule?.(req.headers);
+      if (refusal) {
+        refused++;
+        res.writeHead(refusal.status, { 'content-type': 'application/json', ...refusal.headers });
+        return res.end(JSON.stringify(refusal.body));
+      }
       const failure = failures.shift();
       if (failure) {
         res.writeHead(failure.status, { 'content-type': 'application/json', ...failure.headers });
@@ -212,6 +234,12 @@ export async function startMockAnthropic(initial: ModelScript): Promise<MockAnth
     turns,
     script(next) {
       current = next;
+    },
+    refuse(rule) {
+      refuseRule = rule;
+    },
+    get refused() {
+      return refused;
     },
     failNext(status, body, count = 1, headers = {}) {
       for (let i = 0; i < count; i++) failures.push({ status, body, headers });

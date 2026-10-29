@@ -208,6 +208,13 @@ export interface ClaudeCredentialFailure {
   error: ClaudeCodeError;
 }
 
+/**
+ * How many times the CLI may retry a rate-limited request before a turn with
+ * an account pool moves to the next account. The CLI's own backoff runs ten
+ * retries over minutes; without a pool it is left to do so.
+ */
+export const RATE_LIMIT_RETRIES_BEFORE_SWITCH = 2;
+
 /** How many times one turn moves to another account before it gives up. */
 export const MAX_ACCOUNT_SWITCHES = 10;
 
@@ -920,6 +927,7 @@ export class ClaudeCodeSession implements AgentSession {
       const translator = new TurnTranslator();
       let processRef: ClaudeRun | undefined;
       let stopForGate = false;
+      let stopForAccount = false;
       const onLine = (line: string) => {
         const message = parseStreamLine(line);
         if (!message) return;
@@ -941,6 +949,14 @@ export class ClaudeCodeSession implements AgentSession {
           stopForGate = true;
           processRef?.terminate();
         }
+        // A refused account never recovers by retrying, and a rate-limited one in a pool is faster to leave than to wait out.
+        const leaveAccount =
+          translator.accountRefused ||
+          (credentials.accountId !== undefined && translator.rateLimitRetries >= RATE_LIMIT_RETRIES_BEFORE_SWITCH);
+        if (leaveAccount && !stopForAccount) {
+          stopForAccount = true;
+          processRef?.terminate();
+        }
       };
       const proc = runClaude({
         args,
@@ -953,7 +969,7 @@ export class ClaudeCodeSession implements AgentSession {
         ...(this.#config.turnTimeoutMs ? { timeoutMs: this.#config.turnTimeoutMs } : {}),
       });
       processRef = proc;
-      if (stopForGate) proc.terminate();
+      if (stopForGate || stopForAccount) proc.terminate();
       run.process = proc;
       if (run.abortRequested) proc.terminate();
       run.markStarted();
