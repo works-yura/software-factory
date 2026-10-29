@@ -66,6 +66,13 @@ describe('buildClaudeArgs', () => {
 });
 
 describe('buildClaudeEnv', () => {
+  it('always tells the CLI to keep the turn credentials out of the processes it starts', () => {
+    expect(buildClaudeEnv({ CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0' }, { ANTHROPIC_API_KEY: 'k' }, ['CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'])).toEqual({
+      ANTHROPIC_API_KEY: 'k',
+      CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1',
+    });
+  });
+
   it('keeps the server’s secrets out and lets hosts add names', () => {
     expect(
       buildClaudeEnv(
@@ -73,7 +80,7 @@ describe('buildClaudeEnv', () => {
         {},
         ['EXTRA'],
       ),
-    ).toEqual({ PATH: '/bin', XDG_CACHE_HOME: '/c', EXTRA: 'z' });
+    ).toEqual({ PATH: '/bin', XDG_CACHE_HOME: '/c', EXTRA: 'z', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' });
   });
 
   it('lets only the turn credentials choose the account', () => {
@@ -82,7 +89,7 @@ describe('buildClaudeEnv', () => {
         { PATH: '/bin', HOME: '/home/agent', ANTHROPIC_API_KEY: 'server', CLAUDE_CONFIG_DIR: '/srv', CLAUDECODE: '1', UNSET: undefined },
         { CLAUDE_CODE_OAUTH_TOKEN: 'oauth', CLAUDE_CONFIG_DIR: '/pool/a' },
       ),
-    ).toEqual({ PATH: '/bin', HOME: '/home/agent', CLAUDE_CODE_OAUTH_TOKEN: 'oauth', CLAUDE_CONFIG_DIR: '/pool/a' });
+    ).toEqual({ PATH: '/bin', HOME: '/home/agent', CLAUDE_CODE_OAUTH_TOKEN: 'oauth', CLAUDE_CONFIG_DIR: '/pool/a', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' });
   });
 });
 

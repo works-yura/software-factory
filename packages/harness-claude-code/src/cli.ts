@@ -157,7 +157,8 @@ export function buildClaudeEnv(
     if (value === undefined || drop.has(key)) continue;
     if (allowed.has(key) || ALLOWED_ENV_PREFIXES.some(prefix => key.startsWith(prefix))) env[key] = value;
   }
-  return { ...env, ...credentials };
+  // The CLI keeps the turn's credentials (API key, OAuth token) out of the shells and MCP servers it starts.
+  return { ...env, ...credentials, CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' };
 }
 
 /** The slice of a Node child process the runner uses, so tests can hand in a fake. */

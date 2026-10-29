@@ -10,7 +10,8 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "contract": "vitest run -c vitest.contract.config.ts"
   },
   "dependencies": {
     "@factory/harness": "workspace:*"

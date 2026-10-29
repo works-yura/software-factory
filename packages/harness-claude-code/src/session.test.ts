@@ -112,7 +112,7 @@ describe('ClaudeCodeSession', () => {
     await signal('kickoff-1', 'go');
     await end;
 
-    expect(fake.calls[0]!.env).toEqual({ PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-for-card-1' });
+    expect(fake.calls[0]!.env).toEqual({ PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-for-card-1', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' });
   });
 
   it('resumes the Claude session on the next turn', async () => {
@@ -699,6 +699,7 @@ describe('ClaudeCodeSession', () => {
         LC_ALL: 'C',
         NPM_CONFIG_REGISTRY: 'https://registry.test',
         ANTHROPIC_API_KEY: 'sk-for-card-1',
+        CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1',
       });
     });
 
@@ -719,13 +720,18 @@ describe('ClaudeCodeSession', () => {
 
     it('sets the session’s config dir; a config dir from the credentials hook wins', async () => {
       const call = await firstCall({ configDir: session => `/srv/claude-config/${session.id}` });
-      expect(call.env).toEqual({ PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-for-card-1', CLAUDE_CONFIG_DIR: '/srv/claude-config/card-1' });
+      expect(call.env).toEqual({
+        PATH: '/usr/bin',
+        ANTHROPIC_API_KEY: 'sk-for-card-1',
+        CLAUDE_CONFIG_DIR: '/srv/claude-config/card-1',
+        CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1',
+      });
 
       const pooled = await firstCall({
         configDir: () => '/srv/claude-config/card-1',
         credentials: async () => ({ CLAUDE_CODE_OAUTH_TOKEN: 'oauth', CLAUDE_CONFIG_DIR: '/pool/a' }),
       });
-      expect(pooled.env).toEqual({ PATH: '/usr/bin', CLAUDE_CODE_OAUTH_TOKEN: 'oauth', CLAUDE_CONFIG_DIR: '/pool/a' });
+      expect(pooled.env).toEqual({ PATH: '/usr/bin', CLAUDE_CODE_OAUTH_TOKEN: 'oauth', CLAUDE_CONFIG_DIR: '/pool/a', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' });
 
       const unset = await firstCall({ configDir: () => undefined });
       expect(unset.env).not.toHaveProperty('CLAUDE_CONFIG_DIR');
