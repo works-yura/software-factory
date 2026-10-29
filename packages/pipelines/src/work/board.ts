@@ -4,6 +4,7 @@ import type { BoardPhaseDefinition, FactoryRuleHandler, FactoryRuleSource, Facto
 import {
   buildWorkItem,
   completeIssue,
+  investigateTriagedClickUpTask,
   investigateTriagedGitLabIssue,
   planWorkItem,
   selfReviewWorkItem,
@@ -64,6 +65,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
     },
     planning: {
       title: 'Planning',
+        manual: investigateTriagedClickUpTask,
       kind: 'working',
       role: 'plan',
       outcomes: anyPhase,

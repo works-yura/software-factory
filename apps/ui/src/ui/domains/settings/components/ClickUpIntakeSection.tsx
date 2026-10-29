@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useClickUpListsQuery, useClickUpStatusQuery, useSaveClickUpSettingsMutation } from '../../../../hooks/useClickUp';
+import { useClickUpListsQuery, useClickUpStatusQuery } from '../../../../hooks/useClickUp';
 import {
   useIntakeBindingsQuery,
   useIntakeLabelRoutesQuery,
@@ -16,6 +16,7 @@ import {
 } from '../../../../hooks/useIntakeConfig';
 import type { ClickUpList } from '../../factory/services/clickup';
 import type { IntakeConfig } from '../../factory/services/intake';
+import { ClickUpStatusRules } from './ClickUpStatusRules';
 import { BoardSelect } from './GithubLabelRouting';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
@@ -54,7 +55,6 @@ export function ClickUpIntakeSection({
 }) {
   const { t } = useTranslation('settings');
   const statusQuery = useClickUpStatusQuery();
-  const saveSettings = useSaveClickUpSettingsMutation();
   const status = statusQuery.data;
   const connected = status?.connected === true;
   const listsQuery = useClickUpListsQuery(connected);
@@ -104,25 +104,6 @@ export function ClickUpIntakeSection({
               onCheckedChange={enabled => update({ ...config, clickup: { ...config.clickup, enabled } })}
             />
           </SettingsRow>
-          {connected && (
-            <SettingsRow label={t('intake.clickup.autoStart')} description={t('intake.clickup.autoStartHint')}>
-              <Switch
-                aria-label={t('intake.clickup.autoStart')}
-                checked={status.autoStart}
-                disabled={saveSettings.isPending}
-                onCheckedChange={autoStart =>
-                  saveSettings.mutate(
-                    { autoStart },
-                    {
-                      onSuccess: () => toast.success(t('intake.clickup.autoStartSaved')),
-                      onError: err =>
-                        toast.error(err instanceof Error ? err.message : t('intake.clickup.autoStartFailed')),
-                    },
-                  )
-                }
-              />
-            </SettingsRow>
-          )}
           {showPickers &&
             (listsQuery.isError ? (
               <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
@@ -160,6 +141,15 @@ export function ClickUpIntakeSection({
           </SettingsContainer>
           <ClickUpTagRoutingGroup factories={factories} />
         </SettingsSubsection>
+      )}
+      {showPickers && (
+        <ClickUpStatusRules
+          enabled
+          lists={sourceIds.map(id => {
+            const list = lists.find(candidate => candidate.id === id);
+            return { id, name: list ? `${list.path} / ${list.name}` : id };
+          })}
+        />
       )}
     </>
   );

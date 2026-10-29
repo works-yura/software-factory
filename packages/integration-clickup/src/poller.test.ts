@@ -26,7 +26,7 @@ function task(overrides: Partial<ClickUpTask> = {}): ClickUpTask {
 interface SetupOptions {
   tasks: ClickUpTask[];
   existing?: unknown;
-  autoStart?: boolean;
+  rules?: Record<string, { action: string; phase?: string }>;
   enabled?: boolean;
   binding?: { board: string | null } | null;
   routes?: Array<{ label: string; board: string }>;
@@ -54,7 +54,7 @@ function setup(options: SetupOptions) {
       listBindings: async () => (binding ? [{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'proj', ...binding }] : []),
       listLabelRoutes: async () => (options.routes ?? []).map(route => ({ factoryProjectId: 'proj', integrationId: 'clickup', ...route })),
     } as never,
-    autoStart: async () => options.autoStart ?? false,
+    rules: async () => ({ L1: { statuses: options.rules ?? { 'to do': { action: 'phase', phase: 'intake' } } } }) as never,
     projects: { listAll: async () => [{ id: 'proj', orgId: 'org' }] as never },
     workItems: { getByProjectSource, commitRuleEvaluation, update } as never,
     boards: { get: () => board } as never,
@@ -98,18 +98,72 @@ describe('createClickUpPoller', () => {
     }
   });
 
-  it('starts Triage only for autoStart tasks created after the poller started', async () => {
-    const fresh = setup({ autoStart: true, tasks: [task()] });
+  it('files a task in the phase its status maps to, but only a task created after start runs ahead', async () => {
+    const rules = { 'to do': { action: 'phase', phase: 'triage' } };
+    const fresh = setup({ rules, tasks: [task()] });
     await fresh.poll();
     expect(decisionOf(fresh.commitRuleEvaluation).stage).toBe('triage');
 
-    const old = setup({ autoStart: true, tasks: [task({ createdAt: '2026-10-27T00:00:00.000Z' })] });
+    const old = setup({ rules, tasks: [task({ createdAt: '2026-10-27T00:00:00.000Z' })] });
     await old.poll();
     expect(decisionOf(old.commitRuleEvaluation).stage).toBe('intake');
+  });
 
-    const off = setup({ autoStart: false, tasks: [task()] });
-    await off.poll();
-    expect(decisionOf(off.commitRuleEvaluation).stage).toBe('intake');
+  it('ignores tasks whose status has no rule or is ignored', async () => {
+    for (const rules of [{}, { 'to do': { action: 'ignore' } }, { backlog: { action: 'phase', phase: 'intake' } }]) {
+      const { poll, commitRuleEvaluation } = setup({ rules, tasks: [task()] });
+      expect(await poll()).toMatchObject({ failed: 0 });
+      expect(commitRuleEvaluation).not.toHaveBeenCalled();
+    }
+  });
+
+  it('matches status names without regard to case', async () => {
+    const { poll, commitRuleEvaluation } = setup({
+      rules: { 'dev fixed': { action: 'phase', phase: 'intake' } },
+      tasks: [task({ status: { name: 'DEV FIXED', type: 'custom' } })],
+    });
+    await poll();
+    expect(commitRuleEvaluation).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails visibly when a rule names a phase the board does not have', async () => {
+    const { poll, commitRuleEvaluation } = setup({
+      rules: { 'to do': { action: 'phase', phase: 'nope' } },
+      tasks: [task()],
+    });
+    const summary = await poll();
+    expect(summary.failed).toBe(1);
+    expect(summary.errors[0]!.error).toContain('no phase "nope"');
+    expect(commitRuleEvaluation).not.toHaveBeenCalled();
+  });
+
+  it('closes the card of a task whose status is mapped to close', async () => {
+    const { poll, commitRuleEvaluation } = setup({
+      rules: { 'dev fixed': { action: 'close' } },
+      tasks: [task({ status: { name: 'DEV FIXED', type: 'custom' } })],
+      existing: { id: 'card', board: 'bug', stages: ['triage'], revision: 2, externalSource: null, metadata: {} },
+    });
+    expect(await poll()).toMatchObject({ closed: 1 });
+    expect(decisionOf(commitRuleEvaluation)).toMatchObject({ type: 'transition', stage: 'done' });
+  });
+
+  it('moves a card into the phase of its new status while it is still where sync put it', async () => {
+    const rules = { backlog: { action: 'phase', phase: 'intake' }, 'to do': { action: 'phase', phase: 'triage' } };
+    const card = (stages: string[]) => ({
+      id: 'card',
+      board: 'bug',
+      stages,
+      revision: 3,
+      externalSource: null,
+      metadata: { state: 'BACKLOG' },
+    });
+    const moved = setup({ rules, tasks: [task()], existing: card(['intake']) });
+    expect(await moved.poll()).toMatchObject({ updated: 1 });
+    expect(decisionOf(moved.commitRuleEvaluation)).toMatchObject({ type: 'transition', board: 'bug', stage: 'triage' });
+
+    const owned = setup({ rules, tasks: [task()], existing: card(['execute']) });
+    await owned.poll();
+    expect(owned.commitRuleEvaluation).not.toHaveBeenCalled();
   });
 
   it('refreshes a known card instead of creating a second one', async () => {

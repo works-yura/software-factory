@@ -56,6 +56,8 @@ export const queryKeys = {
     ['github', 'commits', projectRepositoryId ?? null, limit] as const,
   clickupStatus: (baseUrl: string) => ['clickup', 'status', baseUrl] as const,
   clickupLists: (baseUrl: string) => ['clickup', 'lists', baseUrl] as const,
+  clickupSettings: (baseUrl: string) => ['clickup', 'settings', baseUrl] as const,
+  clickupListStatuses: (baseUrl: string, listId: string) => ['clickup', 'statuses', baseUrl, listId] as const,
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
   gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
   gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,

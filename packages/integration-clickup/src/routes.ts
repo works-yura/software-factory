@@ -9,9 +9,9 @@ import type { IntegrationStorageHandle } from '@factory/store';
 import { ClickUpApiError } from './api.ts';
 import type { ClickUpClient } from './api.ts';
 import type { ClickUpIntake } from './intake.ts';
-import { readClickUpSettings, saveClickUpSettings } from './settings.ts';
+import { listRulesSchema, readClickUpSettings, saveListRules } from './settings.ts';
 
-const settingsBodySchema = z.object({ autoStart: z.boolean() });
+const listIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 export interface ClickUpRoutesOptions {
   auth: RouteAuth;
@@ -43,11 +43,10 @@ export function buildClickUpRoutes(options: ClickUpRoutesOptions): ApiRoute[] {
       handler: async c => {
         const resolved = await resolveOrg(c as unknown as Context, auth);
         if ('response' in resolved) return resolved.response;
-        const settings = await readClickUpSettings(storage, resolved.orgId);
         // The token is checked live, so the page can say "rejected" instead of showing an empty list.
         try {
           const workspaces = await client.listWorkspaces();
-          return c.json({ configured: true, connected: true, workspaces: workspaces.map(w => w.name), intervalSeconds, ...settings });
+          return c.json({ configured: true, connected: true, workspaces: workspaces.map(w => w.name), intervalSeconds });
         } catch (error) {
           return c.json({
             configured: true,
@@ -55,7 +54,6 @@ export function buildClickUpRoutes(options: ClickUpRoutesOptions): ApiRoute[] {
             error: error instanceof Error ? error.message : String(error),
             workspaces: [],
             intervalSeconds,
-            ...settings,
           });
         }
       },
@@ -81,16 +79,45 @@ export function buildClickUpRoutes(options: ClickUpRoutesOptions): ApiRoute[] {
       },
     }),
     registerApiRoute('/web/clickup/settings', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrg(c as unknown as Context, auth);
+        if ('response' in resolved) return resolved.response;
+        return c.json(await readClickUpSettings(storage, resolved.orgId));
+      },
+    }),
+    registerApiRoute('/web/clickup/lists/:listId/statuses', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrg(c as unknown as Context, auth);
+        if ('response' in resolved) return resolved.response;
+        const listId = listIdSchema.safeParse(c.req.param('listId'));
+        if (!listId.success) return c.json({ error: 'invalid_list' }, 400);
+        try {
+          const list = await client.getList(listId.data);
+          return c.json({ statuses: list.statuses });
+        } catch (error) {
+          return c.json({ error: 'clickup_fetch_failed', message: error instanceof Error ? error.message : String(error) }, 502);
+        }
+      },
+    }),
+    registerApiRoute('/web/clickup/lists/:listId/rules', {
       method: 'PUT',
       requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrg(c as unknown as Context, auth);
         if ('response' in resolved) return resolved.response;
-        const body = await c.req.json().catch(() => undefined);
-        const parsed = settingsBodySchema.safeParse(body);
-        if (!parsed.success) return c.json({ error: 'invalid_settings' }, 400);
-        await saveClickUpSettings(storage, resolved.orgId, parsed.data);
-        return c.json(parsed.data);
+        // Rules decide which tasks start agent work, so they are an admin's call once auth is on.
+        if (auth.enabled() && !(await auth.isOrganizationAdmin(c as unknown as Context, resolved.orgId))) {
+          return c.json({ error: 'forbidden', message: 'Only organization admins can change ClickUp rules.' }, 403);
+        }
+        const listId = listIdSchema.safeParse(c.req.param('listId'));
+        const body = listRulesSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!listId.success || !body.success) return c.json({ error: 'invalid_rules' }, 400);
+        const saved = await saveListRules(storage, resolved.orgId, listId.data, body.data);
+        return c.json(saved);
       },
     }),
   ];

@@ -58,7 +58,7 @@ export class ClickUpIntegration implements FactoryIntegration {
     const reconcile = createClickUpPoller({
       client: this.#taskSource,
       intake: ctx.storage.intake,
-      autoStart: async orgId => (await readClickUpSettings(storage, orgId)).autoStart,
+      rules: async orgId => (await readClickUpSettings(storage, orgId)).lists,
       projects: ctx.storage.projects,
       workItems: ctx.runtime.workItems,
       boards: ctx.runtime.boards,

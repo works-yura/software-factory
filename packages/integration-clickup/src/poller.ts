@@ -5,6 +5,8 @@ import type { FactoryProject, FactoryProjectsStorage, IntakeStorage, WorkItemRow
 
 import type { ClickUpTask, ClickUpTaskSource } from './api.ts';
 import { isClosedTask } from './intake.ts';
+import { ruleFor } from './settings.ts';
+import type { ListRules } from './settings.ts';
 
 export const CLICKUP_INTEGRATION_ID = 'clickup';
 
@@ -12,13 +14,13 @@ const DAY_MS = 24 * 60 * 60_000;
 const DESCRIPTION_LIMIT = 8_000;
 const ACTOR = { type: 'system', id: 'clickup-poller' } as const;
 const USER_ID = 'clickup-poller';
-const START_PHASE = 'triage';
+const normalizeIdentity = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, '-');
 
 export interface ClickUpPollerOptions {
   client: ClickUpTaskSource;
   intake: Pick<IntakeStorage, 'getConfig' | 'listBindings' | 'listLabelRoutes'>;
-  /** Whether new tasks start Triage on their own, per organization. */
-  autoStart: (orgId: string) => Promise<boolean>;
+  /** Status → phase rules per List, chosen in Settings › Intake. */
+  rules: (orgId: string) => Promise<Record<string, ListRules>>;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
   workItems: Pick<WorkItemsStorage, 'getByProjectSource' | 'commitRuleEvaluation' | 'update'>;
   boards: Pick<BoardRegistry, 'get'>;
@@ -28,7 +30,7 @@ export interface ClickUpPollerOptions {
   now?: () => Date;
 }
 
-type Outcome = 'created' | 'refreshed' | 'closed' | 'unchanged';
+type Outcome = 'created' | 'refreshed' | 'moved' | 'closed' | 'unchanged';
 
 function taskMetadata(task: ClickUpTask): Record<string, string | string[] | boolean> {
   return {
@@ -93,10 +95,52 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
     return 'closed';
   };
 
+  const moveCard = async (
+    project: FactoryProject,
+    item: WorkItemRow,
+    task: ClickUpTask,
+    phase: string,
+    rules: ListRules | undefined,
+  ): Promise<boolean> => {
+    const board = item.board ? options.boards.get(item.board) : undefined;
+    if (!board || !(phase in board.phases) || item.stages.includes(phase)) return false;
+    const previous = typeof item.metadata?.state === 'string' ? item.metadata.state : undefined;
+    // Only a status change we have not filed yet moves a card, and only while the card is still
+    // where the previous status put it: a person or an agent that moved it owns it from then on.
+    if (previous === undefined || previous === task.status.name) return false;
+    const previousRule = ruleFor(rules, previous);
+    const placed = previousRule.action === 'phase' ? previousRule.phase : board.initialPhase;
+    if (!item.stages.includes(placed)) return false;
+    const identity = `clickup:task:${task.id}:status:${normalizeIdentity(task.status.name)}:${task.updatedAt}`;
+    const commit = await options.workItems.commitRuleEvaluation({
+      orgId: project.orgId,
+      factoryProjectId: project.id,
+      workItemId: item.id,
+      ingress: { identity, triggerType: 'clickup.task.status' },
+      configVersion: options.configVersion,
+      expectedRevision: item.revision,
+      actor: ACTOR,
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'transition',
+          idempotencyKey: `${identity}:transition`,
+          board: item.board,
+          stage: phase,
+          message: { text: `ClickUp status changed to "${task.status.name}"; moved to ${phase}.` },
+        },
+      ],
+      causalChain: [],
+      now: now(),
+    });
+    if (commit.status === 'stale') throw new Error(`Card ${item.id} changed while moving; retrying next sweep.`);
+    return true;
+  };
+
   const fileTask = async (
     project: FactoryProject,
     board: string,
-    autoStart: boolean,
+    rules: ListRules | undefined,
     task: ClickUpTask,
   ): Promise<Outcome> => {
     const source = { integrationId: CLICKUP_INTEGRATION_ID, type: 'task', externalId: task.id, url: task.url };
@@ -105,23 +149,32 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
       factoryProjectId: project.id,
       source,
     });
+    const rule = ruleFor(rules, task.status.name);
+    const closing = isClosedTask(task) || rule.action === 'close';
     if (existing) {
-      if (isClosedTask(task)) return closeCard(project, existing, task);
+      if (closing) return closeCard(project, existing, task);
+      const moved = rule.action === 'phase' ? await moveCard(project, existing, task, rule.phase, rules) : false;
       const metadata = taskMetadata(task);
-      if (sameMetadata(existing.metadata, metadata)) return 'unchanged';
+      if (sameMetadata(existing.metadata, metadata)) return moved ? 'moved' : 'unchanged';
       await options.workItems.update({
         orgId: project.orgId,
         id: existing.id,
         userId: USER_ID,
         patch: { metadata: { ...(existing.metadata ?? {}), ...metadata } },
       });
-      return 'refreshed';
+      return moved ? 'moved' : 'refreshed';
     }
-    if (isClosedTask(task)) return 'unchanged';
+    if (closing || rule.action !== 'phase') return 'unchanged';
 
     const installed = options.boards.get(board);
     if (!installed) throw new Error(`Board "${board}" is not installed.`);
-    const startNow = autoStart && Date.parse(task.createdAt) > startedAt.getTime() && START_PHASE in installed.phases;
+    if (!(rule.phase in installed.phases)) {
+      throw new Error(`Board "${board}" has no phase "${rule.phase}" for status "${task.status.name}".`);
+    }
+    // Tasks that already existed when the server started never start work on their own: the first
+    // sweep would otherwise launch an agent for every open task in the List.
+    const fresh = Date.parse(task.createdAt) > startedAt.getTime();
+    const stage = fresh ? rule.phase : installed.initialPhase;
     const identity = `clickup:task:${task.id}:created`;
     await options.workItems.commitRuleEvaluation({
       orgId: project.orgId,
@@ -141,7 +194,7 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
           sourceKey: task.id,
           title: task.name || `ClickUp task ${task.id}`,
           url: task.url || null,
-          stage: startNow ? START_PHASE : installed.initialPhase,
+          stage,
           metadata: taskMetadata(task),
         },
       ],
@@ -171,7 +224,7 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
       ];
       if (!selection?.enabled || !selection.sourceIds?.length) continue;
       const bindings = await options.intake.listBindings({ orgId, integrationId: CLICKUP_INTEGRATION_ID });
-      const autoStart = await options.autoStart(orgId);
+      const rules = await options.rules(orgId);
 
       for (const listId of selection.sourceIds) {
         const binding = bindings.find(candidate => candidate.sourceId === listId);
@@ -197,7 +250,7 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
             if (!board) continue;
             summary.checked += 1;
             try {
-              const outcome = await fileTask(project, board, autoStart, task);
+              const outcome = await fileTask(project, board, rules[listId], task);
               if (outcome === 'closed') summary.closed += 1;
               else if (outcome !== 'unchanged') summary.updated += 1;
               const updated = new Date(task.updatedAt);

@@ -10,8 +10,6 @@ export interface ClickUpStatus {
   connected: boolean;
   workspaces: string[];
   intervalSeconds: number;
-  /** Start Triage for new tasks without waiting for a person. */
-  autoStart: boolean;
   error?: string;
   reason?: 'not_configured' | 'auth_required' | 'organization_required' | 'unavailable';
 }
@@ -29,7 +27,6 @@ const UNAVAILABLE: ClickUpStatus = {
   connected: false,
   workspaces: [],
   intervalSeconds: 0,
-  autoStart: false,
   reason: 'unavailable',
 };
 
@@ -78,6 +75,44 @@ export async function fetchClickUpLists(baseUrl: string): Promise<ClickUpList[]>
   return (await request<{ lists: ClickUpList[] }>(baseUrl, '/web/clickup/lists')).lists;
 }
 
-export async function saveClickUpSettings(baseUrl: string, settings: { autoStart: boolean }): Promise<{ autoStart: boolean }> {
-  return request(baseUrl, '/web/clickup/settings', { method: 'PUT', body: JSON.stringify(settings) });
+/** What happens to a task carrying a ClickUp status; mirrors the server's rule shape. */
+export type ClickUpStatusRule = { action: 'ignore' } | { action: 'phase'; phase: string } | { action: 'close' };
+
+/** Rules per List, keyed by lower-cased status name. A status without a rule is ignored. */
+export interface ClickUpListRules {
+  statuses: Record<string, ClickUpStatusRule>;
+}
+
+export interface ClickUpSettings {
+  lists: Record<string, ClickUpListRules>;
+}
+
+export interface ClickUpListStatus {
+  name: string;
+  type: string;
+}
+
+export const statusKey = (name: string): string => name.trim().toLowerCase();
+
+export async function fetchClickUpSettings(baseUrl: string): Promise<ClickUpSettings> {
+  return request(baseUrl, '/web/clickup/settings');
+}
+
+export async function fetchClickUpListStatuses(baseUrl: string, listId: string): Promise<ClickUpListStatus[]> {
+  const { statuses } = await request<{ statuses: ClickUpListStatus[] }>(
+    baseUrl,
+    `/web/clickup/lists/${encodeURIComponent(listId)}/statuses`,
+  );
+  return statuses;
+}
+
+export async function saveClickUpListRules(
+  baseUrl: string,
+  listId: string,
+  rules: ClickUpListRules,
+): Promise<ClickUpSettings> {
+  return request(baseUrl, `/web/clickup/lists/${encodeURIComponent(listId)}/rules`, {
+    method: 'PUT',
+    body: JSON.stringify(rules),
+  });
 }

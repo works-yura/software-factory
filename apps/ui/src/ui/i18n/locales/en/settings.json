@@ -62,16 +62,27 @@
       "organizationRequired": "Select an organization to manage ClickUp syncing.",
       "statusUnavailable": "ClickUp status could not be loaded.",
       "rejected": "ClickUp rejected the configured API token. Ask the operator to check it.",
-      "ready": "Tasks from the selected Lists are checked every {{seconds}} seconds and filed as cards on the board their tag or List routes to.",
-      "sync": "Sync ClickUp tasks",
+      "ready": "Tasks from the selected Lists are checked every {{seconds}} s. What happens to each depends on its status, set below.",
+      "sync": "Import ClickUp tasks",
       "lists": "ClickUp Lists",
       "listsFailed": "ClickUp Lists could not be loaded. Try again in a minute.",
-      "autoStart": "Start triage automatically",
-      "autoStartHint": "New tasks created after the server started go straight to Triage. Off: they wait in Intake until a person moves them.",
-      "autoStartSaved": "ClickUp automation updated",
-      "autoStartFailed": "Failed to save ClickUp automation",
       "routingTitle": "ClickUp routing",
-      "routingDescription": "Each selected List feeds one factory board. Until a List is fully routed, its tasks are not picked up."
+      "routingDescription": "Each selected List feeds one factory board. Until a List is fully routed, its tasks are not picked up.",
+      "rules": {
+        "title": "ClickUp statuses",
+        "description": "For each List, choose what the factory does with a task by its status: ignore it, file it in a board column (the Triage column starts an agent) or close its card. A status with no rule is ignored.",
+        "listHint": "Columns of the \"{{board}}\" board. Tasks that already existed when the server started land in the first column and start nothing; starting applies to new tasks and when you change a status in ClickUp.",
+        "needsBoard": "First choose a factory and a board for this List in the routing above.",
+        "boardMissing": "The \"{{board}}\" board is not installed.",
+        "unavailable": "Could not load the statuses or columns. Try again in a minute.",
+        "loading": "Loading statuses…",
+        "ignore": "Ignore",
+        "close": "Close the card",
+        "intoPhase": "Into \"{{phase}}\"",
+        "statusAction": "Action for status {{status}}",
+        "saved": "Status rules saved",
+        "saveFailed": "Could not save the status rules"
+      }
     }
   },
   "intakeSource": {

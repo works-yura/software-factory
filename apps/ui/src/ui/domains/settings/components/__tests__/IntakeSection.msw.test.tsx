@@ -19,6 +19,8 @@ const GITLAB_PROJECTS_URL = `${TEST_BASE_URL}/web/gitlab/projects`;
 const CLICKUP_STATUS_URL = `${TEST_BASE_URL}/web/clickup/status`;
 const CLICKUP_LISTS_URL = `${TEST_BASE_URL}/web/clickup/lists`;
 const CLICKUP_SETTINGS_URL = `${TEST_BASE_URL}/web/clickup/settings`;
+const CLICKUP_STATUSES_URL = `${TEST_BASE_URL}/web/clickup/lists/L1/statuses`;
+const CLICKUP_RULES_URL = `${TEST_BASE_URL}/web/clickup/lists/L1/rules`;
 
 function baseConfig(): IntakeConfig {
   return {
@@ -394,7 +396,6 @@ describe('IntakeSection', () => {
       connected: true,
       workspaces: ['Acme'],
       intervalSeconds: 60,
-      autoStart: false,
     };
     const lists = [
       { id: 'L1', name: 'Backlog', path: 'Eng / Mobile', workspaceId: 'w1' },
@@ -406,7 +407,7 @@ describe('IntakeSection', () => {
       renderIntakeSection();
 
       expect(await screen.findByText(/Set CLICKUP_API_TOKEN and restart it/)).toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Sync ClickUp tasks' })).toBeDisabled();
+      expect(screen.getByRole('switch', { name: 'Import ClickUp tasks' })).toBeDisabled();
     });
 
     it('treats the HTML app shell as "not configured", as the real server answers an unmounted route', async () => {
@@ -447,24 +448,68 @@ describe('IntakeSection', () => {
       await waitFor(() => expect(saved.at(-1)?.clickup).toEqual({ enabled: true, sourceIds: ['L1'] }));
     });
 
-    it('turns automatic triage on', async () => {
-      useIntakeHandlers({ config: { ...baseConfig(), clickup: { enabled: true, sourceIds: null } } });
+    it('maps a ClickUp status to a board column and saves the rule', async () => {
+      useIntakeHandlers({ config: { ...baseConfig(), clickup: { enabled: true, sourceIds: ['L1'] } } });
       const bodies: unknown[] = [];
       server.use(
         http.get(CLICKUP_STATUS_URL, () => HttpResponse.json(readyStatus)),
         http.get(CLICKUP_LISTS_URL, () => HttpResponse.json({ lists })),
-        http.put(CLICKUP_SETTINGS_URL, async ({ request }) => {
+        http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+          HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme Web' }] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+          HttpResponse.json({
+            bindings: [{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: 'bug' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
+          HttpResponse.json({
+            boards: [
+              {
+                id: 'bug',
+                title: 'Bug',
+                initialPhase: 'intake',
+                phases: [
+                  { id: 'intake', title: 'Intake', kind: 'resting', transitions: [] },
+                  { id: 'triage', title: 'Triage', kind: 'working', transitions: [] },
+                  { id: 'done', title: 'Done', kind: 'terminal', transitions: [] },
+                ],
+              },
+            ],
+          }),
+        ),
+        http.get(CLICKUP_SETTINGS_URL, () => HttpResponse.json({ lists: {} })),
+        http.get(CLICKUP_STATUSES_URL, () =>
+          HttpResponse.json({ statuses: [{ name: 'TO DO', type: 'open' }, { name: 'BACKLOG', type: 'open' }] }),
+        ),
+        http.put(CLICKUP_RULES_URL, async ({ request }) => {
           const body = await request.json();
           bodies.push(body);
-          return HttpResponse.json(body);
+          return HttpResponse.json({ lists: { L1: body } });
         }),
       );
       const user = userEvent.setup();
       renderIntakeSection();
 
-      await user.click(await screen.findByRole('switch', { name: 'Start triage automatically' }));
+      await user.click(await screen.findByRole('combobox', { name: 'Action for status TO DO' }));
+      await user.click(await screen.findByRole('option', { name: 'Into "Triage"' }));
 
-      await waitFor(() => expect(bodies).toEqual([{ autoStart: true }]));
+      await waitFor(() =>
+        expect(bodies).toEqual([{ statuses: { 'to do': { action: 'phase', phase: 'triage' } } }]),
+      );
+    });
+
+    it('asks for a board before offering status rules', async () => {
+      useIntakeHandlers({ config: { ...baseConfig(), clickup: { enabled: true, sourceIds: ['L1'] } } });
+      server.use(
+        http.get(CLICKUP_STATUS_URL, () => HttpResponse.json(readyStatus)),
+        http.get(CLICKUP_LISTS_URL, () => HttpResponse.json({ lists })),
+        http.get(CLICKUP_SETTINGS_URL, () => HttpResponse.json({ lists: {} })),
+        http.get(CLICKUP_STATUSES_URL, () => HttpResponse.json({ statuses: [] })),
+      );
+      renderIntakeSection();
+
+      expect(await screen.findByText(/First choose a factory and a board/)).toBeInTheDocument();
     });
   });
 });
