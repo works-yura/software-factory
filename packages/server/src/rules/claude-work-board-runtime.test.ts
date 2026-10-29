@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { HarnessRoutingStartCoordinator, prepareFactoryRuleBinding } from '@factory/api';
+import { HarnessRoutingStartCoordinator, ParkedRunAttentionProvider, prepareFactoryRuleBinding } from '@factory/api';
 import { createRoutingHarness } from '@factory/harness';
 import { createInMemorySessionStore } from '@factory/harness-claude-code';
 import { deferred, fakeClaude } from '@factory/harness-claude-code/__fixtures__/fake-claude';
@@ -16,11 +16,12 @@ import { GithubRules, resolveGithubRules } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
 import { createFactorySessionTokenSigner, FACTORY_SESSION_TOKEN_HEADER, resolveSessionTokenScope } from '@factory/mcp';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
-import { createSourceControlSessionLookup } from '@factory/session';
+import { createSessionNotifier, createSourceControlSessionLookup, LiveSessions } from '@factory/session';
 import { createFactoryStorageForTests, FactoryDecisionDispatcher, FactoryTransitionService } from '@factory/testing';
 
 import {
   ClaudeStartCoordinator,
+  claudeLiveSession,
   createClaudeBoundTools,
   createClaudeFactoryHarness,
   createClaudePlanApproval,
@@ -175,6 +176,9 @@ async function runToPlanGate(nextTurnText: string) {
     const cwd = await mkdtemp(join(tmpdir(), 'claude-work-board-'));
     // The chat's history store (the Mastra memory domain in a real server).
     const chatStore = new InMemoryStore();
+    // What the board and the inbox read: the live sessions, a Claude Code one announced as the server does.
+    const claudeSessions = createSessionNotifier();
+    const liveSessions = new LiveSessions(claudeSessions);
 
     // Triage's turn moves the card itself, as Claude would through the MCP endpoint:
     // it presents the token its turn was given, and gets the tools of its own binding.
@@ -221,7 +225,10 @@ async function runToPlanGate(nextTurnText: string) {
       spawn,
       env: { PATH: '/usr/bin' },
       onSession: session => {
-        attachClaudeSessionToUi(session, { storage: chatStore });
+        const channel = attachClaudeSessionToUi(session, { storage: chatStore });
+        void sessions.getBySessionId(session.id).then(row => {
+          if (row) claudeSessions.created(claudeLiveSession(channel, row));
+        });
       },
     });
     const noMastra = { getSession: async () => undefined, listActiveThreadRuns: () => [] };
@@ -312,7 +319,21 @@ async function runToPlanGate(nextTurnText: string) {
     await drain();
     expect(fake.calls).toHaveLength(2);
 
-    return { workItems, project, transitionService, claude, fake, sessionId, session, card, move, drain, chatStore, sessions };
+    return {
+      workItems,
+      project,
+      transitionService,
+      claude,
+      fake,
+      sessionId,
+      session,
+      card,
+      move,
+      drain,
+      chatStore,
+      sessions,
+      liveSessions,
+    };
 }
 
 describe('Work board on the Claude Code harness', () => {
@@ -383,5 +404,35 @@ describe('Work board on the Claude Code harness', () => {
     await expect(
       approvePlan(session!, { resumeData: { action: 'approved' }, toolCallId: 'toolu-plan', userId: 'user-1' }),
     ).resolves.toBe(false);
+  }, 60_000);
+
+  it('shows the card waiting on its plan, on the board and in the inbox, until a person answers', async () => {
+    const { workItems, transitionService, project, sessionId, session, card, drain, liveSessions, sessions } = await runToPlanGate(
+      'Tests: committed.',
+    );
+    const scope = { orgId: 'org-1', factoryProjectId: project.id, userId: 'user-1' };
+    const inbox = new ParkedRunAttentionProvider({ workItems, liveSessions });
+
+    expect(liveSessions.parked(sessionId)).toMatchObject({ toolName: 'submit_plan' });
+    const { entries } = await inbox.page(scope as never, { view: 'open', limit: 10 } as never);
+    expect(entries.map(entry => entry.item)).toEqual([
+      expect.objectContaining({
+        kind: 'agent-waiting',
+        sessionId,
+        workItemId: (await card()).id,
+        toolName: 'submit_plan',
+        detail: 'Plan waiting for review',
+      }),
+    ]);
+
+    await createClaudePlanApproval({ sessions, workItems, transitionService })(session!, {
+      resumeData: { action: 'approved' },
+      toolCallId: 'toolu-plan',
+      userId: 'user-1',
+    });
+    // The next stage takes the answer: the session is no longer waiting.
+    await drain();
+    expect(liveSessions.parked(sessionId)).toBeUndefined();
+    expect((await inbox.page(scope as never, { view: 'open', limit: 10 } as never)).entries).toEqual([]);
   }, 60_000);
 });

@@ -7,3 +7,4 @@ export * from './user-sessions.ts';
 export * from './permissions.ts';
 export * from './supervisor.ts';
 export * from './plan-approval.ts';
+export * from './live-session.ts';

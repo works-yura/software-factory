@@ -2,7 +2,7 @@ import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LiveSession } from './live-sessions.ts';
-import { LiveSessions } from './live-sessions.ts';
+import { createSessionNotifier, LiveSessions } from './live-sessions.ts';
 
 function fakeController() {
   const created: ((session: LiveSession) => void)[] = [];
@@ -173,5 +173,54 @@ describe('LiveSessions', () => {
 
     expect(changed).toHaveBeenCalledTimes(2);
     expect(registry.parkedIn('project-1')).toEqual([]);
+  });
+
+  it('tracks the sessions of every notifier, one harness’s and another’s alike', () => {
+    const controller = fakeController();
+    const other = createSessionNotifier();
+    const registry = new LiveSessions(controller, other);
+    const mastra = fakeSession('mastra-1');
+    const claude = fakeSession('claude-1');
+    controller.create(mastra.session);
+    other.created(claude.session);
+    claude.park('call-1', 'Write');
+
+    expect(registry.parkedIn('project-1')).toEqual([
+      { sessionId: 'claude-1', run: { toolName: 'Write', suspendedAt: Date.now() } },
+    ]);
+    other.deleted(claude.session);
+    expect(registry.parked('claude-1')).toBeUndefined();
+  });
+
+  it('replaces a session created again, and ignores the deletion of the one it replaced', () => {
+    const notifier = createSessionNotifier();
+    const registry = new LiveSessions(notifier);
+    const changed = vi.fn();
+    registry.onParkedChanged(changed);
+    const first = fakeSession('session-1');
+    const second = fakeSession('session-1');
+    notifier.created(first.session);
+    notifier.created(second.session);
+
+    // The old object no longer reports, and dropping it leaves the new one tracked.
+    first.park('call-old', 'ask_user');
+    expect(changed).not.toHaveBeenCalled();
+    notifier.deleted(first.session);
+    second.park('call-new', 'submit_plan');
+    expect(registry.parked('session-1')).toEqual({ toolName: 'submit_plan', suspendedAt: Date.now() });
+  });
+
+  it('stops telling a listener once it unsubscribed from the notifier', () => {
+    const notifier = createSessionNotifier();
+    const created = vi.fn();
+    const deleted = vi.fn();
+    const offCreated = notifier.onSessionCreated(created);
+    const offDeleted = notifier.onSessionDeleted(deleted);
+    offCreated();
+    offDeleted();
+    notifier.created(fakeSession('session-1').session);
+    notifier.deleted(fakeSession('session-1').session);
+    expect(created).not.toHaveBeenCalled();
+    expect(deleted).not.toHaveBeenCalled();
   });
 });

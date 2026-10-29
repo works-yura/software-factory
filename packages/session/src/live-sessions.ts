@@ -9,9 +9,34 @@ export interface LiveSession {
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
 }
 
-interface SessionNotifier {
+export interface SessionNotifier {
   onSessionCreated(listener: (session: LiveSession) => void): () => void;
   onSessionDeleted(listener: (session: LiveSession) => void): () => void;
+}
+
+/** A {@link SessionNotifier} a host drives itself, for sessions no agent controller creates (e.g. another harness's). */
+export function createSessionNotifier(): SessionNotifier & {
+  created(session: LiveSession): void;
+  deleted(session: LiveSession): void;
+} {
+  const created = new Set<(session: LiveSession) => void>();
+  const deleted = new Set<(session: LiveSession) => void>();
+  return {
+    onSessionCreated: listener => {
+      created.add(listener);
+      return () => created.delete(listener);
+    },
+    onSessionDeleted: listener => {
+      deleted.add(listener);
+      return () => deleted.delete(listener);
+    },
+    created: session => {
+      for (const listener of created) listener(session);
+    },
+    deleted: session => {
+      for (const listener of deleted) listener(session);
+    },
+  };
 }
 
 /** The tool a session has waited on longest, and since when (epoch ms). */
@@ -46,15 +71,19 @@ export class LiveSessions {
   /** A park stamp doubles as the receipt key, so two suspensions in one millisecond must not share one. */
   #lastParkStamp = 0;
 
-  constructor(controller: SessionNotifier) {
-    controller.onSessionCreated(session => this.#track(session));
-    controller.onSessionDeleted(session => {
-      const id = session.identity.getId();
-      const wasParked = this.parked(id) !== undefined;
-      this.#byId.get(id)?.unsubscribe();
-      this.#byId.delete(id);
-      if (wasParked) for (const listener of this.#parkedListeners) listener(session);
-    });
+  /** Every notifier's sessions are tracked alike: one agent controller's, and any other harness's. */
+  constructor(...notifiers: SessionNotifier[]) {
+    for (const notifier of notifiers) {
+      notifier.onSessionCreated(session => this.#track(session));
+      notifier.onSessionDeleted(session => {
+        const id = session.identity.getId();
+        if (this.#byId.get(id)?.session !== session) return;
+        const wasParked = this.parked(id) !== undefined;
+        this.#byId.get(id)?.unsubscribe();
+        this.#byId.delete(id);
+        if (wasParked) for (const listener of this.#parkedListeners) listener(session);
+      });
+    }
   }
 
   #nextParkStamp(): number {
@@ -71,6 +100,8 @@ export class LiveSessions {
       else return;
       for (const listener of this.#parkedListeners) listener(session);
     });
+    // A session created again (rehydrated) replaces the one it was.
+    this.#byId.get(session.identity.getId())?.unsubscribe();
     this.#byId.set(session.identity.getId(), { session, seenAt: Date.now(), suspendedAt, unsubscribe });
   }
 
