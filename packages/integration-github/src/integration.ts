@@ -195,6 +195,9 @@ export interface GithubIntegrationConfig {
   authorizedBots?: string[];
 }
 
+/** Settings that do not depend on how the integration authenticates. */
+export type GithubIntegrationSharedConfig = Pick<GithubIntegrationConfig, 'rules' | 'webhookSecret' | 'authorizedBots'>;
+
 /** Human-readable names of the required config fields, for construction errors. */
 const REQUIRED_FIELDS = ['appId', 'privateKey', 'clientId', 'clientSecret', 'slug'] as const;
 
@@ -373,13 +376,13 @@ export class GithubIntegration implements FactoryIntegration {
     listRequestedReviewers: input => this.#listRequestedReviewers(input),
     requestReviewers: input => this.#requestReviewers(input),
     removeRequestedReviewers: input => this.#removeReviewers(input),
-    publishCommitCheck: input => this.#publishCommitCheck(input),
+    publishCommitCheck: input => this.publishCommitCheck(input),
   };
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
    * multi-replica deploy needs a deployment-stable state secret.
    */
-  readonly requiresStableStateSigner = true;
+  readonly requiresStableStateSigner: boolean = true;
 
   readonly #appId: string;
   readonly #privateKey: string;
@@ -405,9 +408,13 @@ export class GithubIntegration implements FactoryIntegration {
    */
   readonly #installationOctokits = new Map<number, Octokit>();
 
-  constructor(config: GithubIntegrationConfig) {
+  constructor(config: GithubIntegrationConfig);
+  /** For subclasses that authenticate without an App, such as `GithubTokenIntegration`. */
+  constructor(config: GithubIntegrationSharedConfig, appCredentials: false);
+  constructor(config: GithubIntegrationConfig | GithubIntegrationSharedConfig, appCredentials = true) {
     this.#rules = resolveGithubRules(config.rules);
-    const missing = REQUIRED_FIELDS.filter(field => !config[field]);
+    const app: Partial<GithubIntegrationConfig> = appCredentials ? config : {};
+    const missing = appCredentials ? REQUIRED_FIELDS.filter(field => !app[field]) : [];
     if (missing.length > 0) {
       throw new Error(
         `GithubIntegration: missing required config field(s): ${missing.join(', ')}. ` +
@@ -415,11 +422,11 @@ export class GithubIntegration implements FactoryIntegration {
           `or omit the integration to disable GitHub-backed repositories.`,
       );
     }
-    this.#appId = config.appId;
-    this.#privateKey = normalizePrivateKey(config.privateKey);
-    this.#clientId = config.clientId;
-    this.#clientSecret = config.clientSecret;
-    this.#slug = config.slug;
+    this.#appId = app.appId ?? '';
+    this.#privateKey = app.privateKey ? normalizePrivateKey(app.privateKey) : '';
+    this.#clientId = app.clientId ?? '';
+    this.#clientSecret = app.clientSecret ?? '';
+    this.#slug = app.slug ?? '';
     this.#webhookSecret = config.webhookSecret || undefined;
     this.#authorizedBots = (config.authorizedBots ?? []).map(bot => bot.trim()).filter(Boolean);
   }
@@ -821,7 +828,10 @@ export class GithubIntegration implements FactoryIntegration {
     }
   }
 
-  #repositoryClient(connection: IntegrationConnection, sourceId: string) {
+  protected repositoryClient(
+    connection: IntegrationConnection,
+    sourceId: string,
+  ): { octokit: Octokit; parts: { owner: string; repo: string } } {
     const installationId = getGithubInstallationId(connection);
     const parts = splitRepoFullName(sourceId);
     if (!parts) throw new Error('GitHub pull requests require an owner/repository source.');
@@ -829,7 +839,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #listPullRequests(input: InputOf<'listPullRequests'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const page = parsePositiveCursor(input.cursor);
     const response = await octokit.pulls.list({
       ...parts,
@@ -847,7 +857,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #getPullRequest(input: InputOf<'getPullRequest'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const pullNumber = requirePullRequestNumber(input.pullRequestId);
     try {
       const { data } = await octokit.pulls.get({ ...parts, pull_number: pullNumber });
@@ -859,7 +869,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #createPullRequest(input: InputOf<'createPullRequest'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.create({
       ...parts,
       title: input.title,
@@ -872,7 +882,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #updatePullRequest(input: InputOf<'updatePullRequest'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.update({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
@@ -889,7 +899,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #mergePullRequest(input: InputOf<'mergePullRequest'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.merge({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
@@ -901,7 +911,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #listComments(input: InputOf<'listComments'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const page = parsePositiveCursor(input.cursor);
     const response = await octokit.issues.listComments({
       ...parts,
@@ -916,7 +926,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #createComment(input: InputOf<'createComment'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.issues.createComment({
       ...parts,
       issue_number: requirePullRequestNumber(input.pullRequestId),
@@ -926,7 +936,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #updateComment(input: InputOf<'updateComment'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.issues.updateComment({
       ...parts,
       comment_id: requirePositiveId(input.commentId, 'comment'),
@@ -936,12 +946,12 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #deleteComment(input: InputOf<'deleteComment'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     await octokit.issues.deleteComment({ ...parts, comment_id: requirePositiveId(input.commentId, 'comment') });
   }
 
   async #listReviews(input: InputOf<'listReviews'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const page = parsePositiveCursor(input.cursor);
     const response = await octokit.pulls.listReviews({
       ...parts,
@@ -956,7 +966,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #getReview(input: InputOf<'getReview'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     try {
       const { data } = await octokit.pulls.getReview({
         ...parts,
@@ -971,7 +981,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #createReview(input: InputOf<'createReview'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.createReview({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
@@ -983,7 +993,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #updateReview(input: InputOf<'updateReview'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.updateReview({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
@@ -994,7 +1004,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #submitReview(input: InputOf<'submitReview'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.submitReview({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
@@ -1006,7 +1016,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #dismissReview(input: InputOf<'dismissReview'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.dismissReview({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
@@ -1017,7 +1027,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #deletePendingReview(input: InputOf<'deletePendingReview'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     await octokit.pulls.deletePendingReview({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
@@ -1026,7 +1036,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #listReviewComments(input: InputOf<'listReviewComments'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const page = parsePositiveCursor(input.cursor);
     const response = await octokit.pulls.listReviewComments({
       ...parts,
@@ -1041,7 +1051,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #createReviewComment(input: InputOf<'createReviewComment'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const pullNumber = requirePullRequestNumber(input.pullRequestId);
     if (input.replyToId) {
       const { data } = await octokit.pulls.createReplyForReviewComment({
@@ -1073,7 +1083,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #updateReviewComment(input: InputOf<'updateReviewComment'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.updateReviewComment({
       ...parts,
       comment_id: requirePositiveId(input.commentId, 'review comment'),
@@ -1083,7 +1093,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #deleteReviewComment(input: InputOf<'deleteReviewComment'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     await octokit.pulls.deleteReviewComment({
       ...parts,
       comment_id: requirePositiveId(input.commentId, 'review comment'),
@@ -1091,7 +1101,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #listRequestedReviewers(input: InputOf<'listRequestedReviewers'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.listRequestedReviewers({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
@@ -1100,7 +1110,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #requestReviewers(input: InputOf<'requestReviewers'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.requestReviewers({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
@@ -1111,7 +1121,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   async #removeReviewers(input: InputOf<'removeRequestedReviewers'>) {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.removeRequestedReviewers({
       ...parts,
       pull_number: requirePullRequestNumber(input.pullRequestId),
@@ -1125,8 +1135,8 @@ export class GithubIntegration implements FactoryIntegration {
    * Always creates a new check run: GitHub shows the latest run per app and
    * name on a commit, so a completed run supersedes an earlier in-progress one.
    */
-  async #publishCommitCheck(input: InputOf<'publishCommitCheck'>): Promise<CommitCheck> {
-    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+  async publishCommitCheck(input: InputOf<'publishCommitCheck'>): Promise<CommitCheck> {
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     const { status } = input;
     const { data } = await octokit.checks
       .create({
@@ -1314,6 +1324,20 @@ export class GithubIntegration implements FactoryIntegration {
     await ingestLinkedRepositoryBacklog({ github: this, ...args, ingestFactoryEvent: this.#ingestFactoryEvent });
   }
 
+  /** Sweep pace when no interval is configured; undefined keeps the worker's hourly default. */
+  protected get defaultReconcileIntervalMs(): number | undefined {
+    return undefined;
+  }
+
+  /**
+   * Installations this integration can register without the App install and
+   * OAuth flow, or undefined when it needs that flow. Connect persists these
+   * directly.
+   */
+  async directInstallations(_args: { orgId: string }): Promise<UserInstallation[] | undefined> {
+    return undefined;
+  }
+
   /**
    * Pull-request and issue sweeps share a worker and lease, but can be enabled
    * and paced independently. The legacy combined controls remain the fallback.
@@ -1342,7 +1366,8 @@ export class GithubIntegration implements FactoryIntegration {
       : undefined;
     if (!reconcile && !issues) return [];
 
-    const legacyInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
+    const legacyInterval =
+      reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS) ?? this.defaultReconcileIntervalMs;
     const intervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyInterval;
     const issueIntervalMs =
       reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;

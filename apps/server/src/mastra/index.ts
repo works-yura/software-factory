@@ -30,7 +30,7 @@ import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { AgentBrowser } from '@mastra/agent-browser';
 import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } from '@factory/server';
-import { GithubIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
+import { GithubIntegration, GithubTokenIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
 import { ClickUpIntegration } from '@factory/integration-clickup';
 import { GitLabIntegration } from '@factory/integration-gitlab';
 import { acceptanceBoard } from '@factory/pipelines';
@@ -190,6 +190,7 @@ const githubPrivateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
 const githubClientId = process.env.GITHUB_APP_CLIENT_ID?.trim();
 const githubClientSecret = process.env.GITHUB_APP_CLIENT_SECRET?.trim();
 const githubAppSlug = process.env.GITHUB_APP_SLUG?.trim();
+const githubAccessToken = process.env.GITHUB_ACCESS_TOKEN?.trim();
 const github =
   githubAppId && githubPrivateKey && githubClientId && githubClientSecret && githubAppSlug
     ? new GithubIntegration({
@@ -203,7 +204,14 @@ const github =
         // review/comment notifications, on top of the built-in defaults.
         authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
       })
-    : undefined;
+    : githubAccessToken
+      ? // GitHub without an App: one access token reaches the repositories its
+        // account can push to, and polling replaces webhooks.
+        new GithubTokenIntegration({
+          accessToken: githubAccessToken,
+          authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
+        })
+      : undefined;
 
 // Direct GitLab fallback for self-hosted / local deploys. GitLab Personal
 // and Group Access Tokens use the same API/Git authentication; the explicit

@@ -185,6 +185,19 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 - **Хост:** `boards: [acceptanceBoard]`. Маршрут мітки на дошку, якої нема, падає на звичайну логіку (прив'язка або Work); у локальній базі карток і маршрутів на `bug` не було, міграції нема.
 - **Тести:** `pipelines/src/bug/*` (2 файли) → `pipelines/src/work/test-first.test.ts` (15, разом із фічею, docs і порядком перевірок); `server/src/rules/bug-board-runtime.test.ts` → `work-board-runtime.test.ts` (наскрізний прогін бага через Work); у `default-handlers.test.ts` Bug-кейси change request тепер на власній тестовій дошці; новий `server/src/claude/bound-tools.test.ts` (справжній git: запис тесту, зміна тестового файлу блокує вихід, фікс проходить). `claude-work-board-runtime.test.ts`: план бага тепер `bug-plan`.
 
+### GitHub без App (2026-10-29)
+
+Новий режим, у v3 не було. `GithubTokenIntegration` — підклас `GithubIntegration`, де токен App замінено одним access token (`GITHUB_ACCESS_TOKEN`, лише коли група `GITHUB_APP_*` неповна); webhook-ів нема, лише опитування.
+
+- **Шви в `GithubIntegration`:** конструктор без облікових даних App (`appCredentials: false`, лише для підкласів); `directInstallations({ orgId })` (встановлення без App-потоку, connect зберігає їх напряму); `defaultReconcileIntervalMs` (у режимі токена 2 хв замість години); `publishCommitCheck` і `repositoryClient` тепер перевизначаються; `requiresStableStateSigner` — `boolean`.
+- **Підклас:** Octokit з токеном для всіх викликів, `mintInstallationToken` повертає токен (clone/push, `GH_TOKEN`), репозиторії — `GET /user/repos` з правом push, встановлення — акаунт токена (id з `GET /user`), check runs → commit statuses, `slug` порожній (фабрика не впізнає себе за логіном, бо токен може бути людини: її issues мають ставати картками), `isFactoryCommentAuthor` — логін токена (лише щоб знайти свій коментар тріажу за міткою).
+- **Яка організація:** токен належить серверу, тож підключити його може одна організація: `GITHUB_ACCESS_TOKEN_ORG_ID`, а без нього — перша, що підключилась (запис-заявка в налаштуваннях інтеграції поза будь-якою організацією, переживає рестарт; токен іншого акаунта переносить заявку). Решті connect відмовляє, тож чужі репозиторії вони не бачать.
+- **Відкликаний токен:** 401 один раз пишеться в лог (без токена) і ставить `tokenRejected` у діагностиці, поки якийсь запит не пройде; 403 (ліміт) — не відкликання.
+- **Маршрут connect:** якщо інтеграція має `directInstallations`, зберігає їх і веде на `/?github=connected` без OAuth; відмова — `/?github=error`.
+- **Хост:** `apps/server/src/mastra/index.ts` — повна група App має перевагу, інакше `GITHUB_ACCESS_TOKEN`; змінні в `.env.schema`.
+- **Тести:** `integration-github/src/token-integration.test.ts` (20, підроблений API GitHub і справжнє сховище в пам'яті: акаунт, заявка організації й рестарт, закріплена організація, відкликаний токен і 403, пагінація, clone, опитування, connect через змонтовані маршрути); `server/src/integrations/github-token-polling.test.ts` (3: issue власника токена стає довіреною карткою, а не «фабрикою»; issue стороннього — у `intake` без автостарту; відкликаний токен — невдалий прохід без карток); `routes.test.ts` +2; `apps/server/src/mastra/index.test.ts` +2 (вибір режиму, перевага App).
+- **Не перевірено:** UI-шлях зі справжнім токеном (Connect → пікер → картка з issue).
+
 ## Далі
 
 Порядок і обсяг — у `README.md`, розділ «Що далі».

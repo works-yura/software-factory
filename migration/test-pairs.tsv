@@ -55,7 +55,7 @@ integrations/github/org-isolation-scenario.test.ts	integration-github/src/org-is
 integrations/github/provenance.test.ts	integration-github/src/provenance.test.ts
 integrations/github/reconcile-worker.test.ts	integration-github/src/reconcile-worker.test.ts
 integrations/github/routes-scenario.test.ts	integration-github/src/routes-scenario.test.ts
-integrations/github/routes.test.ts	integration-github/src/routes.test.ts
+integrations/github/routes.test.ts	integration-github/src/routes.test.ts	+2	connect registers the access-token account without a GitHub App, and reports an unreadable token (+2)
 integrations/github/rules.test.ts	server/src/integrations/github/rules.test.ts	+3	edited Factory verdict cases ported from upstream f7d8e6bb96
 integrations/github/sandbox-release.test.ts	sandbox/src/github/sandbox-release.test.ts
 integrations/github/sandbox-scenario.test.ts	sandbox/src/github/sandbox-scenario.test.ts
@@ -185,7 +185,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug and factory-test s
 ../../../apps/server/src/factory-dev/settings.test.ts	../apps/server/src/factory-dev/settings.test.ts
 ../../../apps/server/src/factory-dev/token-lifecycle.test.ts	../apps/server/src/factory-dev/token-lifecycle.test.ts
 ../../../apps/server/src/mastra/env-schema.test.ts	../apps/server/src/mastra/env-schema.test.ts
-../../../apps/server/src/mastra/index.test.ts	../apps/server/src/mastra/index.test.ts	-13	Linear, Jira, incident.io, and Slack host wiring cases dropped with the integrations (-14); FACTORY_BROWSER wiring (+1)
+../../../apps/server/src/mastra/index.test.ts	../apps/server/src/mastra/index.test.ts	-11	Linear, Jira, incident.io, and Slack host wiring cases dropped with the integrations (-14); FACTORY_BROWSER wiring (+1); GitHub access-token wiring and App precedence (+2)
 ../../../apps/server/src/mastra/production-boot-guards.test.ts	../apps/server/src/mastra/production-boot-guards.test.ts
 ../../../apps/server/src/mastra/sandbox-provider.test.ts	../apps/server/src/mastra/sandbox-provider.test.ts
 ../../../apps/server/e2e/web/ask-user.scenario.test.ts	../apps/server/e2e/web/ask-user.scenario.test.ts

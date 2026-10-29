@@ -53,6 +53,8 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'GITHUB_APP_CLIENT_SECRET',
       'GITHUB_APP_SLUG',
       'GITHUB_APP_WEBHOOK_SECRET',
+      'GITHUB_ACCESS_TOKEN',
+      'GITHUB_ACCESS_TOKEN_ORG_ID',
       'GITLAB_ACCESS_TOKEN',
       'GITLAB_ACCESS_TOKEN_TYPE',
       'GITLAB_BASE_URL',
@@ -239,6 +241,8 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'GITHUB_APP_CLIENT_SECRET',
         'GITHUB_APP_SLUG',
         'GITHUB_APP_WEBHOOK_SECRET',
+        'GITHUB_ACCESS_TOKEN',
+        'GITHUB_ACCESS_TOKEN_ORG_ID',
         'GITLAB_ACCESS_TOKEN',
         'GITLAB_ACCESS_TOKEN_TYPE',
         'GITLAB_BASE_URL',
@@ -294,6 +298,59 @@ describe('platform entry (src/mastra/index.ts)', () => {
         expect(paths).toContain('/auth/github/connect');
       },
     );
+
+    // Boot verifies the token with `GET /user`; answer it locally so no test reaches GitHub.
+    function stubGithubUser(): ReturnType<typeof vi.fn> {
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: 4242, login: 'yura', type: 'User' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    }
+
+    it('registers GitHub without an App when only GITHUB_ACCESS_TOKEN is set', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+      vi.stubEnv('GITHUB_ACCESS_TOKEN', 'ghp_entry-secret');
+      vi.stubEnv('GITHUB_ACCESS_TOKEN_ORG_ID', 'org-local');
+      stubGithubUser();
+      try {
+        const mod = await import('./index.js');
+        const integration = factoryConfigs[0]?.integrations?.find(candidate => candidate.id === 'github');
+        expect(integration?.diagnostics()).toMatchObject({ mode: 'token', orgPinned: true, webhooks: false });
+        expect(JSON.stringify(integration?.diagnostics())).not.toContain('ghp_entry-secret');
+        expect(mod.mastra.getServer()?.apiRoutes?.map(route => route.path)).toContain('/auth/github/connect');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('prefers a complete GitHub App group over GITHUB_ACCESS_TOKEN', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+      vi.stubEnv('GITHUB_ACCESS_TOKEN', 'ghp_entry-secret');
+      vi.stubEnv('GITHUB_APP_ID', '12345');
+      vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+      vi.stubEnv('GITHUB_APP_CLIENT_ID', 'Iv1.client');
+      vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
+      vi.stubEnv('GITHUB_APP_SLUG', 'test-app');
+      vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'webhook-secret');
+      const fetchMock = stubGithubUser();
+      try {
+        await import('./index.js');
+        const integration = factoryConfigs[0]?.integrations?.find(candidate => candidate.id === 'github');
+        expect(integration?.diagnostics()).toEqual({ slug: 'test-app', webhookSecretConfigured: true });
+        expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/user'), expect.anything());
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
 
     it.each(['personal', 'group'] as const)(
       'registers direct GitLab with a %s access token',

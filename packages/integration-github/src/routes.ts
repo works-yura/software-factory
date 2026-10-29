@@ -626,6 +626,25 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
+        // A token-authenticated integration has no App to install: its
+        // installation is the token's account, persisted as-is.
+        const direct = await github.directInstallations({ orgId: resolved.tenant.orgId }).catch((error: unknown) => {
+          console.warn('[GitHub] Connect could not register the configured token account.', error);
+          return null;
+        });
+        if (direct === null) return c.redirect('/?github=error');
+        if (direct) {
+          for (const inst of direct) {
+            await github.sourceControlStorage.installations.upsert({
+              orgId: resolved.tenant.orgId,
+              connectedByUserId: resolved.tenant.userId,
+              externalId: inst.installationId.toString(),
+              accountName: inst.accountLogin,
+              accountType: inst.accountType,
+            });
+          }
+          return c.redirect('/?github=connected');
+        }
         const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
         if (c.req.query('manage')) return c.redirect(github.buildInstallUrl(state));
         return c.redirect(github.buildOAuthIdentifyUrl(state, redirectUri));

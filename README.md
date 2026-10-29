@@ -25,7 +25,7 @@
 | **Сесії й інтеграції** | | |
 | `@factory/session` | `packages/session` | Factory sessions: hydration, credential policy, threads, capture processors, session access, Supervisor session identity. |
 | `@factory/integrations` | `packages/integrations` | Integration contract (IntegrationContext, Integration), issue reconcilers, subscription sessions, platform API client and connect routes. |
-| `@factory/integration-github` | `packages/integration-github` | GitHub integration: app, PAT, webhooks, rules, reconcilers, routes, platform-mode adapter. |
+| `@factory/integration-github` | `packages/integration-github` | GitHub integration: app or access token (no App), PAT, webhooks, rules, reconcilers, routes, platform-mode adapter. |
 | `@factory/integration-gitlab` | `packages/integration-gitlab` | GitLab integration: API, webhooks, rules, reconcilers, merge requests, routes, platform-mode adapter. |
 | `@factory/integration-clickup` | `packages/integration-clickup` | ClickUp за polling (API-токен у env, без вебхука): Lists і маршрути налаштовуються в Settings › Intake; задачі → картки, закриття → перенесення картки. |
 | **Агент і нагляд** | | |
@@ -95,6 +95,18 @@ cd apps/server && corepack pnpm dev:local          # http://localhost:5874
 ```
 
 `dev:local` — локальний режим без входу (`FACTORY_LOCAL_DEV_AUTH=1`), база `~/.mastracode/factory-v4/mastra.db` (окремо від v3), пісочниці на цій машині. Налаштування інтеграцій — у `apps/server/.env` (у git не потрапляє); схема змінних — `apps/server/.env.schema`. Перевіряти лише на тестовому репозиторії.
+
+### GitHub без App
+
+`GITHUB_ACCESS_TOKEN` у `apps/server/.env` (група `GITHUB_APP_*` порожня) вмикає `GithubTokenIntegration` (`packages/integration-github/src/token-integration.ts`): токен акаунта, що може пушити в потрібні репозиторії (classic `repo` або fine-grained з read/write на Contents, Issues, Pull requests, Commit statuses).
+
+- «Connect GitHub» реєструє акаунт токена (`GET /user`) як єдине встановлення, без OAuth; у пікері — репозиторії, куди акаунт може пушити.
+- Токен підключає одна організація: `GITHUB_ACCESS_TOKEN_ORG_ID` або перша, що натиснула Connect; іншим відмовлено.
+- Відкликаний токен (401) пишеться в лог один раз; діагностика показує `tokenRejected`.
+- API, clone/push і `GH_TOKEN` у пісочниці — з цим токеном.
+- Webhook-ів нема: нові й закриті issues і merge PR ловить опитування, кожні 2 хв (`MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS`). Коментарі й рев'ю в GitHub не доходять — відповідати фабриці через UI.
+- Перевірки — commit statuses (check runs доступні лише App).
+- З власним токеном людини фабрика пише від її імені, тому себе за логіном не впізнає: свої PR — за міткою provenance, свій коментар тріажу — за міткою й логіном. GitHub не дає схвалити власний PR: рев'ю фабрики на її PR — лише коментар, якщо в Settings не задано окремий PAT рев'ювера.
 
 | Застосунок | Тека | Що це |
 | --- | --- | --- |

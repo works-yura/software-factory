@@ -351,6 +351,7 @@ const githubStub = {
   webhookSecret: undefined as string | undefined,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
+  directInstallations: vi.fn(async (): Promise<UserInstallation[] | undefined> => undefined),
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   getRepositoryCollaboratorPermission: vi.fn(async () => 'write'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
@@ -591,6 +592,7 @@ const testAuth: RouteAuth = {
   isOrganizationAdmin: async () => true,
 };
 
+import type { UserInstallation } from './integration.ts';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.ts';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
@@ -1336,6 +1338,32 @@ describe('connect + callback', () => {
     const res = await buildApp(null).request('/auth/github/connect');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
+  });
+
+  it('registers the token account directly when the integration has no App, for manage too', async () => {
+    githubStub.directInstallations.mockResolvedValue([
+      { installationId: 4242, accountLogin: 'yura', accountType: 'User' },
+    ]);
+    try {
+      for (const path of ['/auth/github/connect', '/auth/github/connect?manage=1']) {
+        const res = await buildApp({ workosId: 'u1' }).request(path);
+        expect(res.status).toBe(302);
+        expect(res.headers.get('location')).toBe('/?github=connected');
+      }
+      expect(tables.installations).toEqual([
+        expect.objectContaining({ orgId: 'org1', externalId: '4242', accountName: 'yura', accountType: 'User' }),
+      ]);
+      expect(githubStub.exchangeOAuthCode).not.toHaveBeenCalled();
+    } finally {
+      githubStub.directInstallations.mockResolvedValue(undefined);
+    }
+  });
+
+  it('reports an error when the token account cannot be read', async () => {
+    githubStub.directInstallations.mockRejectedValueOnce(new Error('Bad credentials'));
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
+    expect(res.headers.get('location')).toBe('/?github=error');
+    expect(tables.installations).toHaveLength(0);
   });
 
   it('401s on a cookie-only connect navigation when there is no session', async () => {
