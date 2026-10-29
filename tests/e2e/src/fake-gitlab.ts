@@ -26,6 +26,8 @@ export interface FakeGitLab {
   /** The self-signed certificate the server presents; trust it in whatever talks to `url`. */
   caFile: string;
   project: { id: number; path: string; defaultBranch: string };
+  /** Every project listed, the main one first: a Factory environment can link several. */
+  projects: Array<{ id: number; path: string; defaultBranch: string }>;
   /** The bare repository the project's git URL serves. */
   bareRepo: string;
   /** Requests nothing here answers, for diagnosing a failed run. */
@@ -58,7 +60,7 @@ function git(args: string[], cwd: string) {
 /** A bare repository `<root>/<path>.git` with one commit on `main`. */
 export function createBareRepo(root: string, path: string): string {
   const bare = join(root, `${path}.git`);
-  const work = join(root, 'seed-checkout');
+  const work = join(root, 'seed-checkouts', path);
   mkdirSync(bare, { recursive: true });
   mkdirSync(work, { recursive: true });
   git(['init', '--bare', '--initial-branch=main', bare], root);
@@ -163,9 +165,25 @@ function selfSignedCertificate(dir: string): { key: string; cert: string; certFi
   return { key: readFileSync(keyFile, 'utf8'), cert: readFileSync(certFile, 'utf8'), certFile };
 }
 
-export async function startFakeGitLab({ root, projectPath = 'e2e/fixture' }: { root: string; projectPath?: string }): Promise<FakeGitLab> {
+export async function startFakeGitLab({
+  root,
+  projectPath = 'e2e/fixture',
+  otherProjectPaths = [],
+}: {
+  root: string;
+  projectPath?: string;
+  /** More projects to list and serve; only the main one takes merge requests. */
+  otherProjectPaths?: string[];
+}): Promise<FakeGitLab> {
   const bareRepo = createBareRepo(root, projectPath);
   const project = { id: 4242, path: projectPath, defaultBranch: 'main' };
+  const projects = [
+    project,
+    ...otherProjectPaths.map((path, index) => {
+      createBareRepo(root, path);
+      return { id: 4243 + index, path, defaultBranch: 'main' };
+    }),
+  ];
   const unhandled: string[] = [];
   const mergeRequests: FakeMergeRequest[] = [];
   let url = '';
@@ -195,15 +213,15 @@ export async function startFakeGitLab({ root, projectPath = 'e2e/fixture' }: { r
         }
       });
     });
-  const projectBody = () => ({
-    id: project.id,
-    name: projectPath.split('/').at(-1),
-    path: projectPath.split('/').at(-1),
-    path_with_namespace: projectPath,
-    name_with_namespace: projectPath.replace('/', ' / '),
-    web_url: `${url}/${projectPath}`,
-    http_url_to_repo: `${url}/${projectPath}.git`,
-    default_branch: project.defaultBranch,
+  const projectBody = (listed: (typeof projects)[number] = project) => ({
+    id: listed.id,
+    name: listed.path.split('/').at(-1),
+    path: listed.path.split('/').at(-1),
+    path_with_namespace: listed.path,
+    name_with_namespace: listed.path.replace('/', ' / '),
+    web_url: `${url}/${listed.path}`,
+    http_url_to_repo: `${url}/${listed.path}.git`,
+    default_branch: listed.defaultBranch,
     visibility: 'private',
   });
 
@@ -224,19 +242,26 @@ export async function startFakeGitLab({ root, projectPath = 'e2e/fixture' }: { r
       }
     }
     const projectRoute = /^\/api\/v4\/projects\/([^/]+)(\/.*)?$/.exec(path);
-    const isProject = (id: string) => {
+    const projectOf = (id: string) => {
       const decoded = decodeURIComponent(id);
-      return decoded === String(project.id) || decoded === projectPath;
+      return projects.find(listed => decoded === String(listed.id) || decoded === listed.path);
     };
     if (req.method === 'GET' && path === '/api/v4/user') return json(res, 200, { id: 1, username: 'e2e', name: 'E2E Bot' });
     if (req.method === 'GET' && path === '/api/v4/projects') {
-      return json(res, 200, Number(parsed.searchParams.get('page') ?? '1') > 1 ? [] : [projectBody()]);
+      return json(res, 200, Number(parsed.searchParams.get('page') ?? '1') > 1 ? [] : projects.map(projectBody));
     }
-    if (projectRoute && isProject(projectRoute[1]!)) {
+    const routed = projectRoute ? projectOf(projectRoute[1]!) : undefined;
+    if (projectRoute && routed) {
       const rest = projectRoute[2] ?? '';
-      if (req.method === 'GET' && rest === '') return json(res, 200, projectBody());
+      if (req.method === 'GET' && rest === '') return json(res, 200, projectBody(routed));
       // Lists the integration may read while syncing: nothing there.
       if (req.method === 'GET' && /^\/(issues|merge_requests|members\/all|labels|hooks)$/.test(rest)) return json(res, 200, []);
+      if (req.method === 'GET' && rest.startsWith('/repository/branches/')) {
+        return json(res, 200, { name: decodeURIComponent(rest.split('/').at(-1)!), default: true });
+      }
+    }
+    if (projectRoute && routed === project) {
+      const rest = projectRoute[2] ?? '';
       if (req.method === 'POST' && rest === '/merge_requests') {
         void readBody(req).then(body => {
           const mr: FakeMergeRequest = {
@@ -260,9 +285,6 @@ export async function startFakeGitLab({ root, projectPath = 'e2e/fixture' }: { r
         const mr = mergeRequests.find(candidate => candidate.iid === Number(mergeRequestRoute[1]));
         return mr ? json(res, 200, mergeRequestBody(mr)) : json(res, 404, { message: '404 Not found' });
       }
-      if (req.method === 'GET' && rest.startsWith('/repository/branches/')) {
-        return json(res, 200, { name: decodeURIComponent(rest.split('/').at(-1)!), default: true });
-      }
     }
     unhandled.push(`${req.method} ${req.url}`);
     json(res, 404, { message: '404 Not Found (fake GitLab)' });
@@ -275,6 +297,7 @@ export async function startFakeGitLab({ root, projectPath = 'e2e/fixture' }: { r
     token: TOKEN,
     caFile: tls.certFile,
     project,
+    projects,
     bareRepo,
     unhandled,
     mergeRequests,

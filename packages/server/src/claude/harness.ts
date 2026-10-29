@@ -16,6 +16,7 @@ import type {
 import type { HarnessRoute } from '@factory/harness';
 import { BUNDLED_FACTORY_SKILLS_PATH } from '@factory/harness-mastra';
 import { FACTORY_SESSION_TOKEN_HEADER, FACTORY_TOOL_ANNOTATIONS } from '@factory/mcp';
+import { peekSessionEnvironment, renderSessionEnvironment } from '@factory/sandbox';
 import type { FactorySessionTokenSigner } from '@factory/mcp';
 import type { SourceControlSessionLookup } from '@factory/session';
 import type { FactoryProjectsStorage } from '@factory/store';
@@ -271,19 +272,24 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
         }
       : {}),
     // Read per turn: the settings change between turns, and reset when the server restarts.
-    // A card run nobody watches reads freely and is refused, not parked, where they say to ask;
-    // the Factory chat asks before every repair.
+    // A card run reads freely; where the settings say to ask, it waits on the board and in the inbox
+    // for a person, as a chat does. The Factory chat asks before every repair.
     permissions: async (session: ClaudeCodeSession) => {
       const tenant = await tenantOf(session);
       const permissions =
         (await options.permissions?.({ orgId: tenant.orgId, factoryProjectId: tenant.factoryProjectId })) ?? {};
       if (tenant.supervisor) return { ...permissions, askEachTime: [...CLAUDE_SUPERVISOR_ASK_TOOLS] };
-      if (await isCardRun(session, tenant)) return { ...permissions, unattended: true };
+      if (await isCardRun(session, tenant)) return { ...permissions, unattended: true, parkAsks: true };
       return permissions;
     },
     // A pull or merge request checkout reads no settings file: its hooks would run on this host.
     settingSourcesFor: async session =>
       (await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout })) === true ? [] : undefined,
+    // What a Mastra session's environment signal says: the repositories its workspace holds, where, on which branch.
+    turnContextFor: session => {
+      const environment = peekSessionEnvironment(session.id);
+      return environment ? `<factory-environment>\n${renderSessionEnvironment(environment)}\n</factory-environment>` : undefined;
+    },
     appendSystemPromptFor: session =>
       claudeSupervisorProjectId(session.id) ? CLAUDE_SUPERVISOR_SYSTEM_PROMPT : undefined,
     trustedMcpServers: [CLAUDE_FACTORY_MCP_SERVER],

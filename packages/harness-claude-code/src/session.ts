@@ -162,6 +162,13 @@ export interface ClaudeCodeSessionConfig
    */
   appendSystemPromptFor?: (session: ClaudeCodeSession) => string | undefined | Promise<string | undefined>;
   /**
+   * Context the agent reads ahead of this turn's input, asked once the
+   * working directory is ready (e.g. which repositories it holds and where).
+   * Unlike the system prompt it may change between turns; the transcript does
+   * not show it.
+   */
+  turnContextFor?: (session: ClaudeCodeSession) => string | undefined | Promise<string | undefined>;
+  /**
    * How the gate server is started. By default each turn writes it next to its
    * MCP config (`gate-server.ts`) and runs it with this process's Node.
    */
@@ -847,6 +854,7 @@ export class ClaudeCodeSession implements AgentSession {
     const permissions = await this.#config.permissions?.(this);
     const systemPrompt = (await this.#config.appendSystemPromptFor?.(this)) ?? this.#config.appendSystemPrompt;
     const settingSources = await this.#config.settingSourcesFor?.(this);
+    const turnContext = await this.#config.turnContextFor?.(this);
     if (run.abortRequested) return { kind: 'aborted' };
     const configDir = this.#config.configDir?.(this);
     const envFor = (turn: ClaudeTurnCredentials) =>
@@ -862,7 +870,7 @@ export class ClaudeCodeSession implements AgentSession {
     // MCP configs carry per-turn tokens: a private file, not the command line every local user can read.
     const mcpFile = await writeMcpConfigFile(configured, this.#config.tempDir, {
       gate: this.#config.gateServer ?? 'embedded',
-      unattended: permissions?.unattended === true,
+      unattended: permissions?.unattended === true && permissions.parkAsks !== true,
     });
     // A call a person allowed once goes through on this turn (the retry), and asks again after it.
     const grantedOnce = thread.grantedOnce ?? [];
@@ -882,7 +890,7 @@ export class ClaudeCodeSession implements AgentSession {
       return await this.#attempts(run, {
         thread,
         planning,
-        prompt,
+        prompt: turnContext ? `${turnContext}\n\n${prompt}` : prompt,
         inputs,
         tried,
         credentials,

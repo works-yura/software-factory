@@ -236,7 +236,7 @@ export async function startStack(options: StackOptions): Promise<Stack> {
     writeFileSync(claudeLog, '');
   }
 
-  const gitlab = await startFakeGitLab({ root: join(scratch, 'git') });
+  const gitlab = await startFakeGitLab({ root: join(scratch, 'git'), otherProjectPaths: ['e2e/companion'] });
   // Trust the fake GitLab's certificate: Node (the server's API calls) through NODE_EXTRA_CA_CERTS, git in the
   // sandbox through the scratch HOME's gitconfig, and anything reading SSL_CERT_FILE (the sandbox passes it on)
   // through a bundle of the system roots plus it.

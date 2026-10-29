@@ -68,6 +68,7 @@ import {
   createClaudeFactoryHarness,
   createClaudeUserSessions,
   createClaudeSupervisorSessions,
+  claudeLiveSession,
   claudeSupervisorProjectId,
   CLAUDE_THREAD_SETTINGS,
   createFactoryToolPermissions,
@@ -144,7 +145,8 @@ import { createSourceControlSessionLookup } from '@factory/session';
 import { observeSessionFilesystem } from '@factory/session';
 import { observeSessionFirstExec } from '@factory/session';
 import { observeSessionFirstMessage } from '@factory/session';
-import { LiveSessions } from '@factory/session';
+import { createSessionNotifier, LiveSessions } from '@factory/session';
+import type { SessionNotifier } from '@factory/session';
 import { hydrateSessionMemorySettings } from '@factory/session';
 import { hasResolvedOrg } from '@factory/session';
 import { FactoryReplyCredentialProcessor } from '@factory/session';
@@ -497,8 +499,8 @@ function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
 }
 
 /** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
-function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'], eventBus: PubSub): LiveSessions {
-  const liveSessions = new LiveSessions(controller);
+function liveSessionsTouchingTheFeed(eventBus: PubSub, ...notifiers: SessionNotifier[]): LiveSessions {
+  const liveSessions = new LiveSessions(...notifiers);
   liveSessions.onParkedChanged(session => {
     const { factoryOrgId, factoryProjectId } = session.state.get();
     if (factoryOrgId && factoryProjectId) touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
@@ -986,6 +988,9 @@ export class MastraFactory {
       reporting: factoryReporting,
     };
     const reportSessionRunEnd = createSessionRunEndReporter(sessionReports);
+    const notifyApprovalRequested = createSessionApprovalNotifier(sessionReports);
+    // Claude Code sessions are not the agent controller's: the host announces them to the live-session registry.
+    const claudeLiveSessions = createSessionNotifier();
     // Repeated attempts of one delivery send one report: identical failures to
     // the same follower are deduplicated.
     // A woken thread under a Factory or user resource names its session with its
@@ -1317,6 +1322,28 @@ export class MastraFactory {
         : [],
     );
 
+    // A session's workspace — its checkout, the environment's other repositories, setup commands — for both
+    // harnesses: a Mastra session's tools work in it, a Claude Code session's CLI runs in it.
+    const sessionWorkspaces = createWorkspaceFactory({
+      ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
+      ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
+      sourceControls: integrations.flatMap(integration =>
+        integration.versionControl
+          ? [
+              {
+                id: integration.id,
+                versionControl: integration.versionControl,
+                storage: sourceControlStorage.forIntegration(integration.id),
+                ...(integration.id === 'github' && githubIntegration ? { github: githubIntegration } : {}),
+              },
+            ]
+          : [],
+      ),
+      ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
+      ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
+      workspaceRegistry,
+    });
+
     // The brokered source-control tools (push, change requests, reviews, test checks): one build for both harnesses,
     // a Mastra session's in-process and a Claude Code session's over MCP.
     const sourceControlToolsFor = (requestContext: RequestContext) =>
@@ -1435,9 +1462,8 @@ export class MastraFactory {
     const claudeCheckout = claudeCodeConfig
       ? (claudeCodeConfig.cwdFor ??
         createClaudeCheckoutResolver({
-          sandbox: sandboxConfig,
-          sourceControls: () => sourceControlToolProviders,
-          projects: factoryProjectsStorage,
+          workspaces: context => sessionWorkspaces(context as never) as never,
+          sessions: sourceControlSessions,
         }))
       : undefined;
     // The sandbox a Claude Code session's checkout lives in, for the tools that run git there on its behalf.
@@ -1472,12 +1498,30 @@ export class MastraFactory {
             tokens: sessionTokens!,
           },
           onSession: session => {
-            this.#claudeSessionUi.attach(session);
+            const channel = this.#claudeSessionUi.attach(session);
             // The same run bookkeeping a Mastra session gets when it is created.
             observeSessionRunEnd(session, { audit: auditDomain });
             observeSessionRunReports(session as never, (outcome, since) =>
               reportSessionRunEnd({ sessionId: session.id, threadId: session.thread.getId() ?? null, outcome, since }),
             );
+            // A permission request reaches whoever follows the session, as a Mastra session's approval does.
+            channel.subscribe(event => {
+              if (event.type !== 'tool_approval_required') return;
+              void notifyApprovalRequested({
+                sessionId: session.id,
+                threadId: session.thread.getId() ?? null,
+                toolName: event.toolName,
+                toolCallId: event.toolCallId,
+                args: event.args,
+              }).catch(error => console.warn('[factory] Could not report a Claude Code permission request', error));
+            });
+            // Its card shows it waiting and the inbox lists it, as for a Mastra session.
+            void sourceControlSessions
+              .getBySessionId(session.id)
+              .then(row => {
+                if (row) claudeLiveSessions.created(claudeLiveSession(channel, row));
+              })
+              .catch(error => console.warn('[factory] Could not register a Claude Code session as live', error));
           },
         })
       : undefined;
@@ -1676,25 +1720,7 @@ export class MastraFactory {
             projects: factoryProjectsStorage,
             sourceControl: sourceControlSessions,
           }),
-        workspace: createWorkspaceFactory({
-          ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
-          ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
-          sourceControls: integrations.flatMap(integration =>
-            integration.versionControl
-              ? [
-                  {
-                    id: integration.id,
-                    versionControl: integration.versionControl,
-                    storage: sourceControlStorage.forIntegration(integration.id),
-                    ...(integration.id === 'github' && githubIntegration ? { github: githubIntegration } : {}),
-                  },
-                ]
-              : [],
-          ),
-          ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
-          ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
-          workspaceRegistry,
-        }),
+        workspace: sessionWorkspaces,
         disableGithubSignals: true,
         // A wake (notification or peer signal) has no signed-in request, so
         // tenant credential resolution would fail closed. Run it as the Factory
@@ -1976,7 +2002,7 @@ export class MastraFactory {
           ...assembleFactoryApiRoutes({
             controllerId: CONTROLLER_ID,
             controller,
-            liveSessions: liveSessionsTouchingTheFeed(controller, eventBus),
+            liveSessions: liveSessionsTouchingTheFeed(eventBus, controller, claudeLiveSessions),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,
@@ -2207,7 +2233,6 @@ export class MastraFactory {
       }),
     );
 
-    const notifyApprovalRequested = createSessionApprovalNotifier(sessionReports);
     prepared.base.controller.onSessionCreated(session => {
       observeSessionFilesystem(session, {
         filesystem: filesystemStorage,

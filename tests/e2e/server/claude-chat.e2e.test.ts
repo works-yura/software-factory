@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -168,5 +168,56 @@ describe('Claude Code chat through the dev server', () => {
     // The checkout never held the token: the remote is the plain URL.
     const remote = execFileSync('git', ['-C', turn!.cwd, 'remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim();
     expect(remote).not.toContain(stack.gitlab.token);
+  });
+
+  it('works in the environment a Mastra session gets: every linked repository, set up, and told where', async () => {
+    const companion = stack.gitlab.projects[1]!;
+    const environment = await createClaudeFactory(stack.baseUrl, {
+      name: 'E2E Claude Environment',
+      projectId: stack.gitlab.project.id,
+      setupCommand: 'echo ready > .factory-setup-ran',
+      otherProjectIds: [companion.id],
+    });
+    const before = stack.readClaudeLog().length;
+    const chat = await createChat(stack.baseUrl, environment.projectRepositoryId, 'Deliver from the environment');
+    await sendMessage(stack.baseUrl, chat.sessionId, '[fake:deliver] Commit, push and open the merge request.');
+
+    const turn = await waitFor('the environment run to finish', async () => {
+      const state = await displayState(stack.baseUrl, chat.sessionId);
+      const log = stack.readClaudeLog();
+      return log.length > before && !state.isRunning ? log[before] : undefined;
+    }).catch(error => {
+      throw new Error(`${error.message}\n--- server log ---\n${stack.tailServerLog(80)}`);
+    });
+
+    // The turn is told what the workspace holds, the session's own repository first.
+    const listed = [...turn!.prompt.matchAll(/^(\d)\. (\S+) at (\S+) on (\S+) \(default main, setup (\w+)\)/gm)].map(match => ({
+      slug: match[2],
+      dir: match[3]!,
+      setup: match[5],
+    }));
+    expect(turn!.prompt).toContain('<factory-environment>');
+    expect(listed.map(({ slug, setup }) => [slug, setup])).toEqual([
+      [stack.gitlab.project.path, 'ok'],
+      [companion.path, 'skipped'],
+    ]);
+    // The CLI runs in the workspace root, with each repository checked out beneath it.
+    for (const repo of listed) {
+      // The CLI reports its cwd resolved (/private/var on macOS); the environment names it as configured.
+      expect(realpathSync(repo.dir).startsWith(`${realpathSync(turn!.cwd)}/`), `${repo.dir} under ${turn!.cwd}`).toBe(true);
+      expect(existsSync(join(repo.dir, '.git'))).toBe(true);
+    }
+    // The repository's setup command ran in its checkout before the turn.
+    expect(readFileSync(join(listed[0]!.dir, '.factory-setup-ran'), 'utf8').trim()).toBe('ready');
+
+    const calls = turn!.toolCalls.map(call => [call.tool, call.outcome, call.result?.slice(0, 300)]);
+    expect(calls.map(([tool, outcome]) => [tool, outcome]), JSON.stringify(calls)).toEqual([
+      ['mcp__factory__source_control_push_branch', 'ok'],
+      ['mcp__factory__source_control_create_change_request', 'ok'],
+    ]);
+    const branch = execFileSync('git', ['-C', listed[0]!.dir, 'branch', '--show-current'], { encoding: 'utf8' }).trim();
+    expect(stack.gitlab.branches()[branch]).toBe(
+      execFileSync('git', ['-C', listed[0]!.dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    );
   });
 });

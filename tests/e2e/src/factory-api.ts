@@ -32,41 +32,71 @@ export interface ClaudeFactory {
  */
 export async function createClaudeFactory(
   baseUrl: string,
-  { name, projectId, claudeCodeModel = 'haiku' }: { name: string; projectId: number; claudeCodeModel?: string | null },
+  {
+    name,
+    projectId,
+    claudeCodeModel = 'haiku',
+    setupCommand,
+    otherProjectIds = [],
+  }: {
+    name: string;
+    projectId: number;
+    claudeCodeModel?: string | null;
+    /** The linked repository's setup command. */
+    setupCommand?: string;
+    /** More GitLab projects to link into the Factory's environment, after the main one. */
+    otherProjectIds?: number[];
+  },
 ): Promise<ClaudeFactory> {
   const { projects } = await api<{ projects: Array<{ id: string; projectId: string; projectPath: string; defaultBranch: string }> }>(
     baseUrl,
     '/web/gitlab/projects',
   );
-  const source = projects.find(project => project.projectId === String(projectId));
-  if (!source) throw new Error(`GitLab project ${projectId} is not listed: ${JSON.stringify(projects)}`);
-  const { project: registered } = await api<{
-    project: { installationStorageId: string; projectPath: string; defaultBranch: string; sandboxProvider: string; sandboxWorkdir: string };
-  }>(baseUrl, '/web/gitlab/projects/registration', { body: { sourceId: source.id } });
+  const register = async (id: number) => {
+    const source = projects.find(project => project.projectId === String(id));
+    if (!source) throw new Error(`GitLab project ${id} is not listed: ${JSON.stringify(projects)}`);
+    const { project } = await api<{
+      project: { installationStorageId: string; projectPath: string; defaultBranch: string; sandboxProvider: string; sandboxWorkdir: string };
+    }>(baseUrl, '/web/gitlab/projects/registration', { body: { sourceId: source.id } });
+    return project;
+  };
+  const registered = await register(projectId);
 
   const { project: factory } = await api<{ project: { id: string; harness: string } }>(baseUrl, '/web/factory/projects', {
     body: { name, harness: 'claude-code', claudeCodeModel },
   });
   if (factory.harness !== 'claude-code') throw new Error(`Factory was created on ${factory.harness}`);
 
-  const { connection } = await api<{ connection: { id: string } }>(
-    baseUrl,
-    `/web/factory/projects/${encodeURIComponent(factory.id)}/source-control-connections`,
-    { body: { integrationId: 'gitlab', installationId: registered.installationStorageId } },
-  );
-  const { projectRepository } = await api<{ projectRepository: { id: string } }>(
-    baseUrl,
-    `/web/factory/projects/${encodeURIComponent(factory.id)}/source-control-connections/${encodeURIComponent(connection.id)}/repositories`,
-    {
-      body: {
-        repository: { externalId: String(projectId), slug: registered.projectPath },
-        branch: registered.defaultBranch,
-        sandboxProvider: registered.sandboxProvider,
-        sandboxWorkdir: registered.sandboxWorkdir,
+  const connections = new Map<string, string>();
+  const link = async (id: number, project: Awaited<ReturnType<typeof register>>, extra: Record<string, unknown> = {}) => {
+    let connectionId = connections.get(project.installationStorageId);
+    if (!connectionId) {
+      const { connection } = await api<{ connection: { id: string } }>(
+        baseUrl,
+        `/web/factory/projects/${encodeURIComponent(factory.id)}/source-control-connections`,
+        { body: { integrationId: 'gitlab', installationId: project.installationStorageId } },
+      );
+      connectionId = connection.id;
+      connections.set(project.installationStorageId, connectionId);
+    }
+    const { projectRepository } = await api<{ projectRepository: { id: string } }>(
+      baseUrl,
+      `/web/factory/projects/${encodeURIComponent(factory.id)}/source-control-connections/${encodeURIComponent(connectionId)}/repositories`,
+      {
+        body: {
+          repository: { externalId: String(id), slug: project.projectPath },
+          branch: project.defaultBranch,
+          sandboxProvider: project.sandboxProvider,
+          sandboxWorkdir: project.sandboxWorkdir,
+          ...extra,
+        },
       },
-    },
-  );
-  return { factoryId: factory.id, projectRepositoryId: projectRepository.id };
+    );
+    return projectRepository.id;
+  };
+  const projectRepositoryId = await link(projectId, registered, setupCommand ? { setupCommand } : {});
+  for (const id of otherProjectIds) await link(id, await register(id));
+  return { factoryId: factory.id, projectRepositoryId };
 }
 
 export interface ChatSession {

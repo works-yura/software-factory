@@ -407,12 +407,14 @@ async function plan(ctx) {
 
 // What a build run does at the end: commit its change in the checkout (as its Bash would), then push the
 // session branch and open the merge request through the Factory's brokered tools, never with credentials of its own.
+// With several repositories the working directory is their root: the session's own is the first the environment lists.
 async function deliver(ctx) {
-  const file = join(ctx.cwd, DELIVERY_FILE);
+  const repo = /^1\. \S+ at (\S+) on /m.exec(ctx.prompt)?.[1] ?? ctx.cwd;
+  const file = join(repo, DELIVERY_FILE);
   writeFileSync(file, `delivered by the fake claude in session ${sessionId}\n`);
   const git = args =>
     execFileSync('git', ['-c', 'user.name=Fake Claude', '-c', 'user.email=fake-claude@factory.invalid', ...args], {
-      cwd: ctx.cwd,
+      cwd: repo,
       encoding: 'utf8',
     });
   git(['add', DELIVERY_FILE]);

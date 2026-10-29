@@ -113,6 +113,24 @@ function sessionIdFromContext(requestContext: RequestContext | undefined): strin
   return typeof controller?.sessionId === 'string' && controller.sessionId ? controller.sessionId : null;
 }
 
+/** What the agent is told about its environment: the repositories, where they are, their branches and setup. */
+export function renderSessionEnvironment(state: SessionEnvironmentState): string {
+  const lines = state.repositories.map(
+    repo =>
+      `${repo.position}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +
+      (repo.changeRequestUrl ? `, change request ${escapeText(repo.changeRequestUrl)}` : ''),
+  );
+  const only = state.repositories.length === 1 ? state.repositories[0] : undefined;
+  return (
+    (only
+      ? `Factory environment: 1 repository, ${escapeText(only.slug)} at ${escapeText(only.dir)}, your working directory.\n`
+      : `Factory environment: ${state.repositories.length} repositories under ${escapeText(state.workingDirectory)}, your working directory.\n`) +
+    lines.join('\n') +
+    (only ? '' : '\nRun git and project commands inside the repository directory they belong to.') +
+    (state.note ? `\n${escapeText(state.note)}` : '')
+  );
+}
+
 function environmentCacheKey(state: SessionEnvironmentState): string {
   return `environment:${createHash('sha256').update(JSON.stringify(state)).digest('hex').slice(0, 16)}`;
 }
@@ -136,19 +154,8 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
-    const lines = state.repositories.map(
-      repo =>
-        `${repo.position}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +
-        (repo.changeRequestUrl ? `, change request ${escapeText(repo.changeRequestUrl)}` : ''),
-    );
     const only = state.repositories.length === 1 ? state.repositories[0] : undefined;
-    const contents =
-      (only
-        ? `Factory environment: 1 repository, ${escapeText(only.slug)} at ${escapeText(only.dir)}, your working directory.\n`
-        : `Factory environment: ${state.repositories.length} repositories under ${escapeText(state.workingDirectory)}, your working directory.\n`) +
-      lines.join('\n') +
-      (only ? '' : '\nRun git and project commands inside the repository directory they belong to.') +
-      (state.note ? `\n${escapeText(state.note)}` : '');
+    const contents = renderSessionEnvironment(state);
     return {
       id: STATE_ID,
       cacheKey,
