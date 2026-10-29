@@ -55,14 +55,26 @@ describe('claudePermissionRules', () => {
     expect(rules.ask).toContain('WebFetch');
   });
 
+  it('lets an unattended run start subagents unless Other is denied, and asks about the rest of Other', () => {
+    const rules = claudePermissionRules({ unattended: true });
+    expect(rules.allow).toEqual(expect.arrayContaining(['Agent', 'Task']));
+    expect(rules.ask).toContain('WebFetch');
+    expect(rules.ask).not.toContain('Agent');
+    const denied = claudePermissionRules({ unattended: true, categories: { other: 'deny' } });
+    expect(denied.deny).toEqual(expect.arrayContaining(['Agent', 'Task']));
+    expect(denied.allow).not.toContain('Agent');
+    // With a person to ask, a subagent still asks.
+    expect(claudePermissionRules({}).ask).toEqual(expect.arrayContaining(['Agent', 'Task']));
+  });
+
   it('lets an unattended run read, and use git and gh, unless those categories are denied', () => {
     const rules = claudePermissionRules({ unattended: true }, { mcpServers: ['linear'] });
-    expect(rules.allow).toEqual([...['Read', 'Glob', 'Grep', 'LS', 'NotebookRead'], 'Bash(git:*)', 'Bash(gh:*)']);
+    expect(rules.allow).toEqual([...['Read', 'Glob', 'Grep', 'LS', 'NotebookRead'], 'Bash(git:*)', 'Bash(gh:*)', 'Task', 'Agent']);
     // An ask rule for Bash would outrank Bash(git:*); other commands reach the gate unlisted.
     expect(rules.ask).not.toContain('Bash');
     expect(rules.ask).toEqual(expect.arrayContaining(['Write', 'Edit', 'BashOutput', 'WebFetch', 'mcp__linear']));
 
-    const denied = claudePermissionRules({ unattended: true, categories: { read: 'deny', execute: 'deny' } });
+    const denied = claudePermissionRules({ unattended: true, categories: { read: 'deny', execute: 'deny', other: 'deny' } });
     expect(denied.allow).toEqual([]);
     expect(denied.deny).toEqual(expect.arrayContaining(['Read', 'Bash']));
 

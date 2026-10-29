@@ -55,13 +55,42 @@ describe('a card run nobody attends (unattended)', () => {
     expect(lastResult(s)).toMatchObject({ isError: false, content: expect.stringContaining('git version') });
   });
 
-  it.each(['execute', 'edit', 'other', 'mcp'] as const)('refuses %s at once and goes on, never parking', async category => {
+  it.each(['execute', 'edit', 'mcp'] as const)('refuses %s at once and goes on, never parking', async category => {
     const probe = PROBES[category];
     const s = await start(get => probeScript(probe, get), unattended);
     expect(await s.say('Go.')).toBe('complete');
     expect(probe.ran(s)).toBe(false);
     expect(permissionsAsked(s)).toEqual([]);
     expect(lastResult(s)).toMatchObject({ isError: true, content: expect.stringContaining('nobody is attending this run') });
+  });
+
+  it('refuses the rest of Other (a web fetch) at once', async () => {
+    const fetch: Probe = { category: 'other', tool: 'WebFetch', input: () => ({ url: 'http://127.0.0.1:9/x', prompt: 'x' }), ran: () => false };
+    const s = await start(get => probeScript(fetch, get), unattended);
+    expect(await s.say('Go.')).toBe('complete');
+    expect(permissionsAsked(s)).toEqual([]);
+    expect(lastResult(s)).toMatchObject({ isError: true, content: expect.stringContaining('nobody is attending this run') });
+  });
+
+  it('starts a subagent, whose own calls the settings ask about are refused without parking', async () => {
+    const s = await start(
+      get => turn => {
+        if (turn.has(SUBAGENT_MARKER)) return callToolThenReport('Bash', PROBES.execute.input(get()))(turn);
+        return callToolThenReport('Agent', PROBES.other.input(get()))(turn);
+      },
+      unattended,
+    );
+    expect(await s.say('Delegate.')).toBe('complete');
+    expect(permissionsAsked(s)).toEqual([]);
+    expect(PROBES.execute.ran(s)).toBe(false);
+    const inner = s.transcript.find(entry => entry.kind === 'tool_result' && entry.parentToolCallId !== undefined);
+    expect(inner).toMatchObject({ isError: true, content: expect.stringContaining('nobody is attending this run') });
+  });
+
+  it('never starts a subagent when Other is denied', async () => {
+    const s = await start(get => probeScript(PROBES.other, get), { unattended: true, categories: { other: 'deny' } });
+    expect(await s.say('Go.')).toBe('complete');
+    expect(PROBES.other.ran(s)).toBe(false);
   });
 
   it('still uses the Factory’s own tools', async () => {

@@ -28,8 +28,8 @@ export interface ClaudeToolPermissions {
   askEachTime?: string[];
   /**
    * Nobody is there to answer (a card run started by the Factory). Reading
-   * (Read tools, and `git` and `gh` in the shell) is allowed unless its
-   * category is denied; every other call that would ask is refused at once by
+   * (Read tools, and `git` and `gh` in the shell) and starting subagents are
+   * allowed unless their category is denied; every other call that would ask is refused at once by
    * the gate, with a message saying why, instead of parking the run.
    */
   unattended?: boolean;
@@ -37,6 +37,14 @@ export interface ClaudeToolPermissions {
 
 /** Shell commands an unattended run may use unless the Execute category is denied. */
 export const CLAUDE_UNATTENDED_SHELL_RULES: readonly string[] = ['Bash(git:*)', 'Bash(gh:*)'];
+
+/**
+ * Tools an unattended run may use unless their category is denied: the
+ * subagent tool. Starting a subagent changes nothing by itself, and every
+ * call the subagent makes goes through the same rules (and is refused the same
+ * way) as the run's own.
+ */
+export const CLAUDE_UNATTENDED_ALLOWED_TOOLS: readonly string[] = ['Agent', 'Task'];
 
 /** The CLI's built-in tools per category; MCP servers are named per turn. */
 export const CLAUDE_TOOL_CATEGORY_TOOLS: Readonly<Record<Exclude<ClaudeToolCategory, 'mcp'>, readonly string[]>> = {
@@ -121,8 +129,9 @@ export function claudePermissionRules(
         ? mcpServers.filter(server => !own.has(server)).map(server => `mcp__${server}`)
         : [...CLAUDE_TOOL_CATEGORY_TOOLS[category]];
     for (const tool of tools) {
+      const unattendedAllowed = permissions.unattended && CLAUDE_UNATTENDED_ALLOWED_TOOLS.includes(tool);
       if (policy === 'deny') rules.deny.push(tool);
-      else if (policy === 'allow' || grantedSet.has(tool)) rules.allow.push(tool);
+      else if (policy === 'allow' || grantedSet.has(tool) || unattendedAllowed) rules.allow.push(tool);
       // An ask rule for `Bash` would outrank `Bash(git:*)`: unlisted, the other commands still reach the gate.
       else if (permissions.unattended && tool === 'Bash') rules.allow.push(...CLAUDE_UNATTENDED_SHELL_RULES);
       else rules.ask.push(tool);
