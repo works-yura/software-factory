@@ -63,6 +63,16 @@ export const CLAUDE_TOOL_CATEGORY_TOOLS: Readonly<Record<Exclude<ClaudeToolCateg
   ],
 };
 
+/**
+ * Built-in tools the CLI also answers to under an old name. Its rules match a
+ * tool by name or alias, so an ask rule for `Task` still asks for `Agent`: a
+ * grant covers every name of the tool.
+ */
+export const CLAUDE_TOOL_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  Agent: ['Task'],
+  Task: ['Agent'],
+};
+
 export const CLAUDE_TOOL_CATEGORIES: readonly ClaudeToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
 export interface ClaudePermissionRules {
@@ -83,6 +93,7 @@ export function claudePermissionRules(
 ): ClaudePermissionRules {
   const rules: ClaudePermissionRules = { allow: [], ask: [], deny: [] };
   const own = new Set([GATE_SERVER_NAME, ...trustedMcpServers]);
+  granted = [...new Set(granted.flatMap(tool => [tool, ...(CLAUDE_TOOL_ALIASES[tool] ?? [])]))];
   const grantedSet = new Set(granted);
   for (const category of CLAUDE_TOOL_CATEGORIES) {
     let policy: ClaudeToolPolicy = permissions.yolo ? 'allow' : (permissions.categories?.[category] ?? 'ask');

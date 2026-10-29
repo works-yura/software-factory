@@ -41,6 +41,15 @@ describe('claudePermissionRules', () => {
     expect(rules.allow).not.toContain('Bash');
   });
 
+  it('grants a tool under its old name too, so an ask rule for the alias does not keep asking', () => {
+    // The CLI matches `Task` rules against `Agent` calls: a lone grant for `Agent` kept asking.
+    const rules = claudePermissionRules({}, { granted: ['Agent'] });
+    expect(rules.allow).toEqual(expect.arrayContaining(['Agent', 'Task']));
+    expect(rules.ask).not.toContain('Agent');
+    expect(rules.ask).not.toContain('Task');
+    expect(rules.ask).toContain('WebFetch');
+  });
+
   it('lets an unattended run read, and use git and gh, unless those categories are denied', () => {
     const rules = claudePermissionRules({ unattended: true }, { mcpServers: ['linear'] });
     expect(rules.allow).toEqual([...['Read', 'Glob', 'Grep', 'LS', 'NotebookRead'], 'Bash(git:*)', 'Bash(gh:*)']);
