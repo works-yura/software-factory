@@ -1505,6 +1505,153 @@ export class MastraFactory {
     // providers) — the terminal app's, minus modes. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
     // one shared database for all users, separated by `resourceId` scoping.
+    // The tools a session gets beyond the controller's own: integrations', the brokered source-control tools,
+    // the governed card moves and the Factory's tools. A Mastra session gets them in-process (`extraTools`),
+    // a Claude Code session over the Factory MCP endpoint (`createSession`).
+    const sessionExtraTools = async (requestContext: RequestContext): Promise<IntegrationTools> => {
+      const tools: IntegrationTools = {};
+      const toolOwners = new Map<string, string>();
+      const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
+        for (const [name, tool] of Object.entries(contributed)) {
+          const owner = toolOwners.get(name);
+          if (owner) {
+            throw new Error(
+              `MastraFactory: integration tool '${name}' from '${ownerId}' conflicts with '${owner}'.`,
+            );
+          }
+          toolOwners.set(name, ownerId);
+          tools[name] = tool;
+        }
+      };
+      if (storage.isDomainReady('source-control')) {
+        mergeTools(
+          'source-control',
+          await sourceControlToolsFor(requestContext),
+        );
+      }
+      if (workItemsStorage && transitionService) {
+        mergeTools(
+          'factory',
+          await createFactoryTransitionTools({
+            requestContext,
+            storage: workItemsStorage,
+            transitionService,
+            boards: this.#boards,
+            // The reproduction-test guard and recorder run git in the session checkout.
+            sessionGit: execution =>
+              resolveSessionGit({ ...execution, providers: sourceControlToolProviders }),
+            // Heals crash-resumed sessions: recovered addresses re-seed
+            // projectRepositoryId/baseRef from the source session record.
+            // Only offered while the source-control domain is ready — a
+            // throwing lookup would abort recovery's catch block and also
+            // skip the metadata baseRef fallback.
+            ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+          }),
+        );
+        // Review-role sessions get `factory_review_source` so the
+        // published review can carry the session URL that produced it
+        // — the affordance that lets a suspicious review (e.g. one
+        // that lands on the wrong PR) be traced back to its run.
+        //
+        // The session URL is browser-facing (a human opens it from a
+        // GitHub/GitLab review comment), so it needs the UI host —
+        // the same origin Slack session deep-links resolve against
+        // (`integrations/slack/slack.ts:168-171`, `:809-812`). In a
+        // separate-SPA deployment `publicUrl` (i.e. `publicOrigin`)
+        // is the API host, so we read `MASTRACODE_PUBLIC_URL` and
+        // mirror Slack's behavior: when it is unset, pass `null` so
+        // the tool is omitted from the toolset rather than fall back
+        // to the API/localhost origin and publish that URL into a
+        // public review body. The skill's tool-not-available branch
+        // handles the absence as stop-don't-publish. Blank counts as
+        // unset: `.env.schema` ships `MASTRACODE_PUBLIC_URL=`, so an
+        // empty/whitespace value must not register the tool with a
+        // hostless `sessionUrl`.
+        const reviewSourceUiOrigin = resolveReviewSourceUiOrigin(process.env.MASTRACODE_PUBLIC_URL);
+        mergeTools(
+          'factory-review-source',
+          await createReviewSourceTool({
+            requestContext,
+            storage: workItemsStorage,
+            uiOrigin: reviewSourceUiOrigin,
+            ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+          }),
+        );
+        if (storage.isDomainReady('source-control')) {
+          const scope = await resolveFactoryToolScope({
+            requestContext,
+            authEnabled: routeAuth.enabled(),
+            sessions: sourceControlSessions,
+            projects: factoryProjectsStorage,
+            workItems: workItemsStorage,
+          });
+          if (scope) {
+            mergeTools(
+              'factory-tools',
+              createFactoryTools({
+                scope,
+                deps: factoryToolDeps,
+              }),
+            );
+            if (
+              sessionRetirement &&
+              sandboxConfig &&
+              SELF_RECREATE_SANDBOX_PROVIDERS.has(sandboxConfig.provider)
+            ) {
+              mergeTools(
+                'factory-sandbox-tools',
+                createFactorySandboxTools(scope, {
+                  sessions: sourceControlSessions,
+                  resetSandbox: input => sessionRetirement.resetSessionSandbox(input),
+                }),
+              );
+            }
+          }
+        }
+        // The supervisor session has no seat, so it never gets the
+        // transition tool above; it gets the read surface instead,
+        // and only once the caller's org is shown to own the project.
+        const supervisorScope = await resolveSupervisorScope({
+          requestContext,
+          projects: factoryProjectsStorage,
+        });
+        if (supervisorScope) {
+          const userId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
+          mergeTools('factory-supervisor', supervisorReadTools(supervisorScope));
+          if (userId) {
+            mergeTools(
+              'factory-supervisor-write',
+              supervisorWriteTools(supervisorScope, userId, ({ sessionId, message, delivery }) =>
+                messageWorkerSession({
+                  controller: prepared.base.controller,
+                  sessionId,
+                  message,
+                  delivery,
+                  ...(requestContext ? { requestContext } : {}),
+                }),
+              ),
+            );
+          }
+        }
+      }
+      for (const { integration, ready, ensureReady } of toolIntegrations) {
+        if (!ready && ensureReady) {
+          try {
+            await ensureReady();
+          } catch {
+            continue;
+          }
+        }
+        if (integration.agentTools) {
+          mergeTools(integration.id, await integration.agentTools({ requestContext }));
+        }
+        if (integration.sessionTools) {
+          mergeTools(integration.id, integration.sessionTools({ requestContext }));
+        }
+      }
+      return tools;
+    };
+
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
@@ -1713,149 +1860,7 @@ export class MastraFactory {
         sourceControlToolProviders.length > 0 ||
         (workItemsStorage && transitionService)
           ? {
-              extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
-                const tools: IntegrationTools = {};
-                const toolOwners = new Map<string, string>();
-                const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
-                  for (const [name, tool] of Object.entries(contributed)) {
-                    const owner = toolOwners.get(name);
-                    if (owner) {
-                      throw new Error(
-                        `MastraFactory: integration tool '${name}' from '${ownerId}' conflicts with '${owner}'.`,
-                      );
-                    }
-                    toolOwners.set(name, ownerId);
-                    tools[name] = tool;
-                  }
-                };
-                if (storage.isDomainReady('source-control')) {
-                  mergeTools(
-                    'source-control',
-                    await sourceControlToolsFor(requestContext),
-                  );
-                }
-                if (workItemsStorage && transitionService) {
-                  mergeTools(
-                    'factory',
-                    await createFactoryTransitionTools({
-                      requestContext,
-                      storage: workItemsStorage,
-                      transitionService,
-                      boards: this.#boards,
-                      // The reproduction-test guard and recorder run git in the session checkout.
-                      sessionGit: execution =>
-                        resolveSessionGit({ ...execution, providers: sourceControlToolProviders }),
-                      // Heals crash-resumed sessions: recovered addresses re-seed
-                      // projectRepositoryId/baseRef from the source session record.
-                      // Only offered while the source-control domain is ready — a
-                      // throwing lookup would abort recovery's catch block and also
-                      // skip the metadata baseRef fallback.
-                      ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
-                    }),
-                  );
-                  // Review-role sessions get `factory_review_source` so the
-                  // published review can carry the session URL that produced it
-                  // — the affordance that lets a suspicious review (e.g. one
-                  // that lands on the wrong PR) be traced back to its run.
-                  //
-                  // The session URL is browser-facing (a human opens it from a
-                  // GitHub/GitLab review comment), so it needs the UI host —
-                  // the same origin Slack session deep-links resolve against
-                  // (`integrations/slack/slack.ts:168-171`, `:809-812`). In a
-                  // separate-SPA deployment `publicUrl` (i.e. `publicOrigin`)
-                  // is the API host, so we read `MASTRACODE_PUBLIC_URL` and
-                  // mirror Slack's behavior: when it is unset, pass `null` so
-                  // the tool is omitted from the toolset rather than fall back
-                  // to the API/localhost origin and publish that URL into a
-                  // public review body. The skill's tool-not-available branch
-                  // handles the absence as stop-don't-publish. Blank counts as
-                  // unset: `.env.schema` ships `MASTRACODE_PUBLIC_URL=`, so an
-                  // empty/whitespace value must not register the tool with a
-                  // hostless `sessionUrl`.
-                  const reviewSourceUiOrigin = resolveReviewSourceUiOrigin(process.env.MASTRACODE_PUBLIC_URL);
-                  mergeTools(
-                    'factory-review-source',
-                    await createReviewSourceTool({
-                      requestContext,
-                      storage: workItemsStorage,
-                      uiOrigin: reviewSourceUiOrigin,
-                      ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
-                    }),
-                  );
-                  if (storage.isDomainReady('source-control')) {
-                    const scope = await resolveFactoryToolScope({
-                      requestContext,
-                      authEnabled: routeAuth.enabled(),
-                      sessions: sourceControlSessions,
-                      projects: factoryProjectsStorage,
-                      workItems: workItemsStorage,
-                    });
-                    if (scope) {
-                      mergeTools(
-                        'factory-tools',
-                        createFactoryTools({
-                          scope,
-                          deps: factoryToolDeps,
-                        }),
-                      );
-                      if (
-                        sessionRetirement &&
-                        sandboxConfig &&
-                        SELF_RECREATE_SANDBOX_PROVIDERS.has(sandboxConfig.provider)
-                      ) {
-                        mergeTools(
-                          'factory-sandbox-tools',
-                          createFactorySandboxTools(scope, {
-                            sessions: sourceControlSessions,
-                            resetSandbox: input => sessionRetirement.resetSessionSandbox(input),
-                          }),
-                        );
-                      }
-                    }
-                  }
-                  // The supervisor session has no seat, so it never gets the
-                  // transition tool above; it gets the read surface instead,
-                  // and only once the caller's org is shown to own the project.
-                  const supervisorScope = await resolveSupervisorScope({
-                    requestContext,
-                    projects: factoryProjectsStorage,
-                  });
-                  if (supervisorScope) {
-                    const userId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
-                    mergeTools('factory-supervisor', supervisorReadTools(supervisorScope));
-                    if (userId) {
-                      mergeTools(
-                        'factory-supervisor-write',
-                        supervisorWriteTools(supervisorScope, userId, ({ sessionId, message, delivery }) =>
-                          messageWorkerSession({
-                            controller: prepared.base.controller,
-                            sessionId,
-                            message,
-                            delivery,
-                            ...(requestContext ? { requestContext } : {}),
-                          }),
-                        ),
-                      );
-                    }
-                  }
-                }
-                for (const { integration, ready, ensureReady } of toolIntegrations) {
-                  if (!ready && ensureReady) {
-                    try {
-                      await ensureReady();
-                    } catch {
-                      continue;
-                    }
-                  }
-                  if (integration.agentTools) {
-                    mergeTools(integration.id, await integration.agentTools({ requestContext }));
-                  }
-                  if (integration.sessionTools) {
-                    mergeTools(integration.id, integration.sessionTools({ requestContext }));
-                  }
-                }
-                return tools;
-              },
+              extraTools: ({ requestContext }: { requestContext: RequestContext }) => sessionExtraTools(requestContext),
             }
           : {}),
         postToolObserver: async (toolContext: IntegrationPostToolContext) => {
@@ -1911,7 +1916,7 @@ export class MastraFactory {
                     ? {
                         createSession: scope =>
                           createClaudeSessionTools(scope, {
-                            sourceControlTools: requestContext => sourceControlToolsFor(requestContext),
+                            sessionTools: requestContext => sessionExtraTools(requestContext),
                             sandboxFor: claudeSessionSandbox,
                           }) as Promise<Record<string, Tool<any, any, any, any>>>,
                       }

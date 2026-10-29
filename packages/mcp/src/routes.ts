@@ -143,7 +143,8 @@ export interface FactoryMcpToolDependencies {
   /**
    * Tools every agent session reaching the endpoint with its token gets (a
    * Claude Code session), bound or not: the ones a Mastra session has
-   * in-process, such as the brokered source-control tools.
+   * in-process, such as the brokered source-control tools. They never replace
+   * a tool the endpoint serves itself.
    */
   createSession?: (
     scope: FactoryMcpAgentScope,
@@ -416,7 +417,8 @@ async function handleSessionMcp(
   }
   const scope = resolved.scope as FactoryMcpAgentScope;
   const tools = createFactoryMcpTools(scope, deps, { persistedSession: true });
-  Object.assign(tools, (await deps.tools.createSession?.(scope)) ?? {});
+  // The endpoint's own tools stand: they are scoped for MCP. The session's only fill in what it lacks.
+  for (const [name, tool] of Object.entries((await deps.tools.createSession?.(scope)) ?? {})) tools[name] ??= tool;
   if (scope.kind === 'worker') Object.assign(tools, (await deps.tools.createBound?.(scope)) ?? {});
   return serveTools(c, mcpPath, { factoryProjectId, projectName: resolved.projectName, tools });
 }

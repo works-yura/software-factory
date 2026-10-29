@@ -58,16 +58,16 @@ function asMcpTool(
 }
 
 /**
- * The tools every Claude Code session gets on top of the Factory's own, the
- * ones a Mastra session has in-process: the brokered source-control tools
- * (push, change requests, reviews, test checks). They run git in the session's
- * own checkout (its sandbox) with credentials the server holds, so none enter
- * the agent's environment.
+ * The tools a Mastra session has in-process (`extraTools`), for a Claude Code
+ * session over MCP: the brokered source-control tools (push, change requests,
+ * reviews, test checks), review sources, sandbox recreation, integrations'
+ * tools. They run with the session's own context and its checkout's sandbox,
+ * with credentials the server holds, so none enter the agent's environment.
  */
 export async function createClaudeSessionTools(
   scope: FactoryMcpToolScope,
   deps: {
-    sourceControlTools: (requestContext: RequestContext) => Promise<Record<string, unknown>>;
+    sessionTools: (requestContext: RequestContext) => Promise<Record<string, unknown>>;
     /** The sandbox the session's checkout lives in. */
     sandboxFor: (sessionId: string) => Promise<unknown>;
   },
@@ -78,7 +78,7 @@ export async function createClaudeSessionTools(
     return sandbox ? { sandbox } : undefined;
   };
   const tools: Record<string, AnyTool> = {};
-  for (const [name, tool] of Object.entries(await deps.sourceControlTools(requestContext))) {
+  for (const [name, tool] of Object.entries(await deps.sessionTools(requestContext))) {
     tools[name] = asMcpTool(tool as AnyTool, requestContext, workspace);
   }
   return tools;

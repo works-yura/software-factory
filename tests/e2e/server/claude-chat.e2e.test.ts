@@ -150,7 +150,8 @@ describe('Claude Code chat through the dev server', () => {
     });
     const calls = turn!.toolCalls.map(call => [call.tool, call.outcome, call.result?.slice(0, 300)]);
     expect(turn!.mcp.find(server => server.name === 'factory')!.tools).toEqual(
-      expect.arrayContaining(['source_control_push_branch', 'source_control_create_change_request']),
+      // What a Mastra session has in-process: the brokered source-control tools and the integrations' own.
+      expect.arrayContaining(['source_control_push_branch', 'source_control_create_change_request', 'gitlab_get_issue']),
     );
     expect(calls.map(([tool, outcome]) => [tool, outcome]), JSON.stringify(calls)).toEqual([
       ['mcp__factory__source_control_push_branch', 'ok'],

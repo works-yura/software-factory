@@ -172,7 +172,7 @@ describe('Claude Code session tools', () => {
       },
     }));
     const sandboxFor = vi.fn(async (sessionId: string) => (sessionId === scope.sessionId ? sandbox : undefined));
-    const tools = await createClaudeSessionTools(scope as never, { sourceControlTools: sourceControlTools as never, sandboxFor });
+    const tools = await createClaudeSessionTools(scope as never, { sessionTools: sourceControlTools as never, sandboxFor });
 
     expect(Object.keys(tools)).toEqual(['source_control_push_branch']);
     expect(sourceControlTools).toHaveBeenCalledTimes(1);
@@ -195,7 +195,7 @@ describe('Claude Code session tools', () => {
   it('passes no workspace when the session has no sandbox, so the tool says so', async () => {
     let workspace: unknown = 'unset';
     const tools = await createClaudeSessionTools(scope as never, {
-      sourceControlTools: async () => ({
+      sessionTools: async () => ({
         source_control_push_branch: {
           id: 'source_control_push_branch',
           description: 'Push.',
