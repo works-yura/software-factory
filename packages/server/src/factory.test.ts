@@ -566,9 +566,9 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    // The restored supervisor hydration listener is registered first.
-    expect(blockingCalls).toHaveLength(4);
-    const blockingCall = blockingCalls[1];
+    // Supervisor hydration, then the Factory's stored tool permissions, then memory settings.
+    expect(blockingCalls).toHaveLength(5);
+    const blockingCall = blockingCalls[2];
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -1693,7 +1693,7 @@ describe('MastraFactory.prepare', () => {
       const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
         call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
       );
-      const applyPermissions = blockingCalls[3]![0] as (session: unknown) => Promise<void>;
+      const applyPermissions = blockingCalls[4]![0] as (session: unknown) => Promise<void>;
 
       const controller = new AgentController({
         workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
