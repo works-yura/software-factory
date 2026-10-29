@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../testing.ts';
+import { parseFactoryToolPermissions } from './base.ts';
 
 describe('FactoryProjectsStorage', () => {
   it('creates an org-owned project without any integration or repository', async () => {
@@ -219,5 +220,38 @@ describe('FactoryProjectsStorage builds', () => {
     const stored = await seed.projects.getById({ id: project.id });
     expect(stored?.activeTemplateId).toBe('tpl-2');
     expect(stored?.activeTemplateHeads).toEqual({ 'acme/api': 'abc' });
+  });
+
+  it('keeps the tool permissions, reading back only the policies it knows', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    expect(project.toolPermissions).toBeNull();
+
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { toolPermissions: { categories: { execute: 'allow', other: 'deny' }, yolo: true } },
+    });
+    expect((await seed.projects.getById({ id: project.id }))?.toolPermissions).toEqual({
+      categories: { execute: 'allow', other: 'deny' },
+      yolo: true,
+    });
+    // Other updates leave them alone; null clears them.
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { name: 'Q' } });
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.toolPermissions?.yolo).toBe(true);
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { toolPermissions: null } });
+    expect((await seed.projects.getById({ id: project.id }))?.toolPermissions).toBeNull();
+  });
+});
+
+describe('parseFactoryToolPermissions', () => {
+  it('drops what this build does not know, so it asks', () => {
+    expect(parseFactoryToolPermissions({ categories: { read: 'allow', edit: 'maybe', other: 3 }, yolo: 'yes' })).toEqual({
+      categories: { read: 'allow' },
+      yolo: false,
+    });
+    expect(parseFactoryToolPermissions({ yolo: true })).toEqual({ categories: {}, yolo: true });
+    expect(parseFactoryToolPermissions({ categories: ['allow'] })).toEqual({ categories: {}, yolo: false });
+    for (const value of [null, undefined, 'x', 3, []]) expect(parseFactoryToolPermissions(value)).toBeNull();
   });
 });

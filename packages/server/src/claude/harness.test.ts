@@ -421,6 +421,42 @@ describe('createClaudeFactoryHarness', () => {
       const read = createFactoryToolPermissions(async () => state({ factoryOrgId: 'org-b', yolo: true }));
       await expect(read({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toBeUndefined();
     });
+
+    it("reads the Factory's stored settings when its session is not in memory (after a restart)", async () => {
+      const get = vi.fn(async ({ orgId, id }: { orgId: string; id: string }) =>
+        orgId === 'org-a' && id === 'factory-a'
+          ? { toolPermissions: { categories: { execute: 'allow', other: 'deny', bogus: 'allow' }, yolo: false } }
+          : null,
+      );
+      const read = createFactoryToolPermissions(async () => undefined, { get } as never);
+      await expect(read({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toEqual({
+        categories: { execute: 'allow', other: 'deny' },
+      });
+      expect(get).toHaveBeenCalledWith({ orgId: 'org-a', id: 'factory-a' });
+      // Scoped by organization, and nothing stored reads as every category asking.
+      await expect(read({ orgId: 'org-b', factoryProjectId: 'factory-a' })).resolves.toBeUndefined();
+      const unset = createFactoryToolPermissions(async () => undefined, { get: async () => ({ toolPermissions: null }) });
+      await expect(unset({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toBeUndefined();
+      const yolo = createFactoryToolPermissions(async () => undefined, {
+        get: async () => ({ toolPermissions: { categories: {}, yolo: true } }),
+      });
+      await expect(yolo({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toEqual({ categories: {}, yolo: true });
+    });
+
+    it('prefers the live session over the stored copy, and survives a failing store', async () => {
+      const get = vi.fn(async () => ({ toolPermissions: { categories: { read: 'deny' }, yolo: false } }));
+      const live = createFactoryToolPermissions(async () => state({ permissionRules: { categories: { read: 'allow' } } }), {
+        get,
+      } as never);
+      await expect(live({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toEqual({ categories: { read: 'allow' } });
+      expect(get).not.toHaveBeenCalled();
+      const broken = createFactoryToolPermissions(async () => undefined, {
+        get: async () => {
+          throw new Error('db down');
+        },
+      });
+      await expect(broken({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toBeUndefined();
+    });
   });
 
   describe('credentials', () => {

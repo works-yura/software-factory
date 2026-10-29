@@ -179,7 +179,12 @@ import { FactorySupervisorHealthWorker } from '@factory/supervisor';
 import { SUPERVISOR_INSTRUCTIONS } from '@factory/supervisor';
 import { createFactorySupervisorReadTools } from '@factory/supervisor';
 import { messageWorkerSession } from '@factory/supervisor';
-import { hydrateSupervisorSession, supervisorProjectIdFromContext, resolveSupervisorScope } from '@factory/session';
+import {
+  hydrateSupervisorSession,
+  persistFactoryToolPermissions,
+  supervisorProjectIdFromContext,
+  resolveSupervisorScope,
+} from '@factory/session';
 import { createFactorySupervisorWriteTools } from '@factory/supervisor';
 import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from '@factory/observability';
 import { deliverFactorySessionNotification } from '@factory/harness-mastra';
@@ -1372,7 +1377,10 @@ export class MastraFactory {
           sessions: sourceControlSessions,
           projects: factoryProjectsStorage,
           // Settings → Behavior → Tool permissions: the Factory's own session keeps them.
-          permissions: createFactoryToolPermissions(async sessionId => this.#prepared?.base.controller.getSession(sessionId)),
+          permissions: createFactoryToolPermissions(
+            async sessionId => this.#prepared?.base.controller.getSession(sessionId),
+            factoryProjectsStorage,
+          ),
           // A session that ever ran a card's role is a card run: nobody is there to answer a permission prompt.
           cardRun: ({ orgId, factoryProjectId, sessionId }) =>
             workItemsReady
@@ -2211,6 +2219,20 @@ export class MastraFactory {
             error: error instanceof Error ? error.message : String(error),
           });
         }),
+      { blocking: true },
+    );
+
+    // The Factory's tool permissions live only in session memory: put the stored ones back on every
+    // (re)creation, before anything reads them, and keep each change.
+    prepared.base.controller.onSessionCreated(
+      session =>
+        persistFactoryToolPermissions(session, { projects: factoryProjectsStorage }).then(
+          () => undefined,
+          error =>
+            console.warn('[Factory tool permissions] Unable to restore the Factory’s tool permissions', {
+              error: error instanceof Error ? error.message : String(error),
+            }),
+        ),
       { blocking: true },
     );
 

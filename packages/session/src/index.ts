@@ -24,3 +24,4 @@ export * from './thinking-default.ts';
 export * from './thread-session-stamp.ts';
 export * from './thread-title-mirror.ts';
 export * from './work-item-repository.ts';
+export * from './tool-permissions.ts';

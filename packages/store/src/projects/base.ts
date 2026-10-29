@@ -22,6 +22,31 @@ export function isFactoryHarnessKind(value: unknown): value is FactoryHarnessKin
 export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
 export type ClaudeCodeModel = (typeof CLAUDE_CODE_MODELS)[number];
 
+/** A Factory's tool permissions (Settings → Behavior → Tool permissions), kept so they survive a restart. */
+export interface FactoryToolPermissions {
+  /** Per category (read, edit, execute, mcp, other); a category without one asks. */
+  categories: Partial<Record<string, FactoryToolPolicy>>;
+  /** Auto-approve: every category allowed. */
+  yolo: boolean;
+}
+
+export type FactoryToolPolicy = 'allow' | 'ask' | 'deny';
+
+const TOOL_POLICIES: readonly string[] = ['allow', 'ask', 'deny'];
+
+/** The stored value as this build reads it: unknown policies are dropped, so they ask. */
+export function parseFactoryToolPermissions(value: unknown): FactoryToolPermissions | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as { categories?: unknown; yolo?: unknown };
+  const categories: Partial<Record<string, FactoryToolPolicy>> = {};
+  if (raw.categories && typeof raw.categories === 'object' && !Array.isArray(raw.categories)) {
+    for (const [category, policy] of Object.entries(raw.categories)) {
+      if (typeof policy === 'string' && TOOL_POLICIES.includes(policy)) categories[category] = policy as FactoryToolPolicy;
+    }
+  }
+  return { categories, yolo: raw.yolo === true };
+}
+
 export function isClaudeCodeModel(value: unknown): value is ClaudeCodeModel {
   return typeof value === 'string' && (CLAUDE_CODE_MODELS as readonly string[]).includes(value);
 }
@@ -48,6 +73,8 @@ export interface FactoryProject {
   harness: FactoryHarnessKind;
   /** `claude --model` for this Factory's Claude Code sessions; null = the CLI's own default. */
   claudeCodeModel: ClaudeCodeModel | null;
+  /** Tool permissions as last set in Settings; null until someone set them (every category asks). */
+  toolPermissions: FactoryToolPermissions | null;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
   autoRunEnabled: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
@@ -106,6 +133,7 @@ export interface UpdateFactoryProjectInput {
   /** Applies to sessions started from now on; running cards keep their harness. */
   harness?: FactoryHarnessKind;
   claudeCodeModel?: ClaudeCodeModel | null;
+  toolPermissions?: FactoryToolPermissions | null;
   autoRunEnabled?: boolean;
   autoApprovePlans?: boolean;
   sandboxWorkingDirectory?: string | null;
@@ -138,6 +166,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     default_thinking_level: { type: 'text', default: DEFAULT_FACTORY_THINKING_LEVEL },
     harness: { type: 'text', default: DEFAULT_FACTORY_HARNESS },
     claude_code_model: { type: 'text', nullable: true },
+    tool_permissions: { type: 'json', nullable: true },
     // Deprecated: no longer read or written. Kept so existing databases need no
     // migration. Old rows may still hold `true`, so never read it to bring Slack
     // work items back. Drop it in a later migration.
@@ -180,6 +209,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   default_thinking_level: string | null;
   harness: string | null;
   claude_code_model: string | null;
+  tool_permissions?: unknown;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
   sandbox_working_directory: string | null;
@@ -219,6 +249,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     harness: isFactoryHarnessKind(row.harness) ? row.harness : DEFAULT_FACTORY_HARNESS,
     // Rows from before the column, or with an alias this build does not know, use the CLI default.
     claudeCodeModel: isClaudeCodeModel(row.claude_code_model) ? row.claude_code_model : null,
+    toolPermissions: parseFactoryToolPermissions(row.tool_permissions),
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
@@ -337,6 +368,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
             : {}),
           ...(changes.harness !== undefined ? { harness: changes.harness } : {}),
           ...(changes.claudeCodeModel !== undefined ? { claude_code_model: changes.claudeCodeModel } : {}),
+          ...(changes.toolPermissions !== undefined ? { tool_permissions: changes.toolPermissions } : {}),
           ...(changes.autoRunEnabled !== undefined ? { auto_run_enabled: changes.autoRunEnabled } : {}),
           ...(changes.autoApprovePlans !== undefined ? { auto_approve_plans: changes.autoApprovePlans } : {}),
           ...(changes.sandboxWorkingDirectory !== undefined
