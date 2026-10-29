@@ -837,6 +837,13 @@ describe('ClaudeCodeSession', () => {
       expect(existsSync(file!.path!)).toBe(false);
     });
 
+    it('reads the session’s own settings sources before each turn, no settings file at all included', async () => {
+      const none = await firstCall({ settingSourcesFor: () => [] });
+      expect(flagValue(none.args, '--setting-sources')).toBe('');
+      const fallback = await firstCall({ settingSourcesFor: () => undefined });
+      expect(flagValue(fallback.args, '--setting-sources')).toBe('project,local');
+    });
+
     it('can be opted out of', async () => {
       const call = await firstCall({ settingSources: false, strictMcpConfig: false, plansDirectory: false });
 

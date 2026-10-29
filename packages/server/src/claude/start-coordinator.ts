@@ -8,7 +8,6 @@ import {
 } from '@factory/harness-mastra';
 import type { FactoryStartPreparedResult, FactoryStartRequest } from '@factory/harness-mastra';
 import type { FactoryTransitionService } from '@factory/runtime';
-import { FactoryDispatchError } from '@factory/store';
 import type { FactoryProjectsStorage, SourceControlStorageHandle, WorkItemsStorage } from '@factory/store';
 
 /** Thread settings a Claude Code session carries, read by the chat and by later starts. */
@@ -19,6 +18,8 @@ export const CLAUDE_THREAD_SETTINGS = {
   targetRepository: 'factoryTargetRepository',
   /** The Factory chat (supervisor): the person whose message or answer started its latest turn. */
   actorUserId: 'factoryActorUserId',
+  /** The checkout is a pull or merge request someone outside wrote: its turns read no settings file from it. */
+  untrustedCheckout: 'factoryUntrustedCheckout',
 } as const;
 
 export interface ClaudeStartCoordinatorOptions {
@@ -77,12 +78,8 @@ export class ClaudeStartCoordinator {
       : null;
     const repository = await resolveStartRepository({ sourceControl, request, sourceSession, storedItem });
 
-    if (request.workItem.input.externalSource?.type === 'pull-request') {
-      throw new FactoryDispatchError(
-        'unsupported_provider_item',
-        'Claude Code sessions do not run on pull-request checkouts yet: the checkout’s Claude settings are untrusted.',
-      );
-    }
+    // A pull or merge request is code someone outside wrote: its `.claude/settings.json` hooks must not run here.
+    const untrustedCheckout = request.workItem.input.externalSource?.type === 'pull-request';
     const untrusted = externallyAuthoredWorkItem(
       storedItem ?? {
         externalSource: request.workItem.input.externalSource ?? null,
@@ -104,6 +101,8 @@ export class ClaudeStartCoordinator {
     await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.sessionId, value: sessionId });
     await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.title, value: request.threadTitle });
     await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.targetRepository, value: repository.slug });
+    // Once untrusted, always: a later role on the same session still runs in that checkout.
+    if (untrustedCheckout) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout, value: true });
 
     const project = await projects.get({ orgId: request.orgId, id: request.factoryProjectId });
     await this.#applyRoleMode(session, request.workItem.role, project?.autoApprovePlans === true);

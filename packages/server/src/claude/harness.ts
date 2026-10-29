@@ -281,6 +281,9 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       if (await isCardRun(session, tenant)) return { ...permissions, unattended: true };
       return permissions;
     },
+    // A pull or merge request checkout reads no settings file: its hooks would run on this host.
+    settingSourcesFor: async session =>
+      (await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout })) === true ? [] : undefined,
     appendSystemPromptFor: session =>
       claudeSupervisorProjectId(session.id) ? CLAUDE_SUPERVISOR_SYSTEM_PROMPT : undefined,
     trustedMcpServers: [CLAUDE_FACTORY_MCP_SERVER],

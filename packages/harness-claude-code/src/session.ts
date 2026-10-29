@@ -129,6 +129,14 @@ export interface ClaudeCodeSessionConfig
    */
   settingSources?: ClaudeSettingSource[] | false;
   /**
+   * `--setting-sources` for this session's next turn; wins over {@link settingSources}.
+   * `[]` reads no settings file at all: for a checkout someone outside wrote (a
+   * pull request), whose `.claude/settings.json` hooks would otherwise run here.
+   */
+  settingSourcesFor?: (
+    session: ClaudeCodeSession,
+  ) => ClaudeSettingSource[] | false | undefined | Promise<ClaudeSettingSource[] | false | undefined>;
+  /**
    * The CLI's `plansDirectory` setting, relative to the session cwd; `.claude/plans`
    * by default. The harness never enters plan mode itself; this keeps plan files
    * out of `~/.claude/plans` should a project's settings turn plan mode on. `false` leaves it unset.
@@ -759,12 +767,13 @@ export class ClaudeCodeSession implements AgentSession {
     model: string | undefined,
     permissions: { rules?: { allow: string[]; ask: string[]; deny: string[] } } = {},
     systemPrompt: string | undefined = this.#config.appendSystemPrompt,
+    sessionSettingSources?: ClaudeSettingSource[] | false,
   ): ClaudeArgsInput {
     const config = this.#config;
     const mode = thread.mode ?? config.mode;
     // Planning pins the default mode, so a project setting cannot put the turn into the CLI's plan mode.
     const permissionMode: ClaudePermissionMode | undefined = planning ? 'default' : mode === 'planning' ? undefined : mode;
-    const settingSources = config.settingSources ?? DEFAULT_SETTING_SOURCES;
+    const settingSources = sessionSettingSources ?? config.settingSources ?? DEFAULT_SETTING_SOURCES;
     const plansDirectory = config.plansDirectory ?? DEFAULT_PLANS_DIRECTORY;
     const rules = permissions.rules;
     const disallowedTools = [
@@ -837,6 +846,7 @@ export class ClaudeCodeSession implements AgentSession {
     const model = (await this.#config.modelFor?.(this)) || this.#config.model;
     const permissions = await this.#config.permissions?.(this);
     const systemPrompt = (await this.#config.appendSystemPromptFor?.(this)) ?? this.#config.appendSystemPrompt;
+    const settingSources = await this.#config.settingSourcesFor?.(this);
     if (run.abortRequested) return { kind: 'aborted' };
     const configDir = this.#config.configDir?.(this);
     const envFor = (turn: ClaudeTurnCredentials) =>
@@ -882,6 +892,7 @@ export class ClaudeCodeSession implements AgentSession {
         mcpConfigPaths: mcpFile.paths,
         model,
         systemPrompt,
+        ...(settingSources !== undefined ? { settingSources } : {}),
         ...(rules ? { rules } : {}),
       });
     } finally {
@@ -904,10 +915,12 @@ export class ClaudeCodeSession implements AgentSession {
       mcpConfigPaths: string[];
       model: string | undefined;
       systemPrompt: string | undefined;
+      settingSources?: ClaudeSettingSource[] | false;
       rules?: { allow: string[]; ask: string[]; deny: string[] };
     },
   ): Promise<TurnOutcome | { kind: 'aborted' }> {
-    const { thread, planning, prompt, inputs, tried, envFor, cwd, mcpConfigPaths, model, systemPrompt, rules } = turn;
+    const { thread, planning, prompt, inputs, tried, envFor, cwd, mcpConfigPaths, model, systemPrompt, settingSources, rules } =
+      turn;
     let { credentials, env } = turn;
     let turnPrompt = prompt;
     let resumedStale = false;
@@ -922,7 +935,7 @@ export class ClaudeCodeSession implements AgentSession {
         void this.#save().catch(() => {});
       }
       const args = buildClaudeArgs(
-        this.#argsInput(thread, planning, mcpConfigPaths, model, rules ? { rules } : {}, systemPrompt),
+        this.#argsInput(thread, planning, mcpConfigPaths, model, rules ? { rules } : {}, systemPrompt, settingSources),
       );
       const translator = new TurnTranslator();
       let processRef: ClaudeRun | undefined;

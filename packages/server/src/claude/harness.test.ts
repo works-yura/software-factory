@@ -12,6 +12,7 @@ import type { FactorySessionTokenClaims } from '@factory/mcp';
 import { CLAUDE_FACTORY_MCP_SERVER, createClaudeFactoryHarness, DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS } from './harness.ts';
 import type { ClaudeFactoryHarnessOptions } from './harness.ts';
 import { createFactoryToolPermissions } from './permissions.ts';
+import { CLAUDE_THREAD_SETTINGS } from './start-coordinator.ts';
 
 // Record the config the Factory harness hands to the Claude Code harness, so its per-turn
 // hooks can be driven directly; the real harness is still built (no CLI is ever spawned).
@@ -456,6 +457,18 @@ describe('createClaudeFactoryHarness', () => {
         },
       });
       await expect(broken({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toBeUndefined();
+    });
+  });
+
+  describe('settings files of the checkout', () => {
+    it("reads none from a pull or merge request checkout, and the defaults from any other", async () => {
+      const { factory, config } = setup();
+      const trusted = await factory.harness.createSession({ sessionId: 'session-b', threadId: 't' });
+      await expect(config.settingSourcesFor!(trusted)).resolves.toBeUndefined();
+
+      const pullRequest = await factory.harness.createSession({ sessionId: 'session-pr', threadId: 't-pr' });
+      await pullRequest.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout, value: true });
+      await expect(config.settingSourcesFor!(pullRequest)).resolves.toEqual([]);
     });
   });
 

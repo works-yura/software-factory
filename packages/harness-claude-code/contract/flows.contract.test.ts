@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -236,5 +236,27 @@ describe('MCP servers', () => {
     expect(await s.say('Go.')).toBe('complete');
     expect(s.echoed(TRUSTED_MCP)).toEqual(['PROBE']);
     expect(s.echoed(OTHER_MCP)).toEqual([]);
+  });
+});
+
+describe('a checkout someone outside wrote (a pull request)', () => {
+  async function withRepoHook(settingSourcesFor?: () => []) {
+    const s = await start(get => probeScript(PROBES.read, get), { categories: { read: 'allow' } }, settingSourcesFor ? { settingSourcesFor } : {});
+    const marker = join(s.root, 'repo-hook-ran');
+    await mkdir(join(s.cwd, '.claude'), { recursive: true });
+    await writeFile(
+      join(s.cwd, '.claude', 'settings.json'),
+      JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [{ type: 'command', command: `touch ${marker}` }] }] } }),
+    );
+    expect(await s.say('Go.')).toBe('complete');
+    return existsSync(marker);
+  }
+
+  it("runs the repository's own hooks under the default settings sources", async () => {
+    expect(await withRepoHook()).toBe(true);
+  });
+
+  it('runs none of them when the session reads no settings', async () => {
+    expect(await withRepoHook(() => [])).toBe(false);
   });
 });
