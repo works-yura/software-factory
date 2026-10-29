@@ -6,6 +6,9 @@
   "engines": {
     "node": ">=22.19.0"
   },
+  "devDependencies": {
+    "typescript": "catalog:ts6"
+  },
   "scripts": {
     "check": "corepack pnpm -r --if-present check",
     "test": "node scripts/run-tests.mjs",
@@ -13,6 +16,8 @@
     "e2e": "node scripts/run-tests.mjs --script e2e",
     "e2e:ui": "node scripts/run-tests.mjs --script e2e:ui",
     "compare-tests": "./scripts/compare-tests.sh",
-    "verify": "corepack pnpm check && corepack pnpm test && corepack pnpm contract && corepack pnpm e2e && corepack pnpm e2e:ui && ./scripts/compare-tests.sh"
+    "crap": "node scripts/run-tests.mjs --script crap",
+    "mutate": "node scripts/run-tests.mjs --script mutate",
+    "verify": "corepack pnpm check && corepack pnpm test && corepack pnpm contract && corepack pnpm crap && corepack pnpm e2e && corepack pnpm e2e:ui && ./scripts/compare-tests.sh"
   }
 }

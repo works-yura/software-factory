@@ -1,7 +1,41 @@
-import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { fakeClaude } from './__fixtures__/fake-claude.ts';
 import { buildClaudeArgs, buildClaudeEnv, runClaude } from './cli.ts';
+import type { ClaudeChildProcess, ClaudeSpawn } from './cli.ts';
+
+const BASE_ARGS = ['-p', '-', '--output-format', 'stream-json', '--verbose'];
+
+/** A hand-driven child process: the test decides when it prints, fails and exits. */
+function scriptedChild(options: { exitOn?: NodeJS.Signals[]; pipes?: boolean } = {}) {
+  const child = new EventEmitter();
+  const stdout = Object.assign(new EventEmitter(), { encodings: [] as string[] });
+  const stderr = Object.assign(new EventEmitter(), { encodings: [] as string[] });
+  const stdin = Object.assign(new EventEmitter(), {
+    written: undefined as string | undefined,
+    end(chunk?: string) {
+      stdin.written = chunk;
+    },
+  });
+  const killed: string[] = [];
+  const exitOn = options.exitOn ?? ['SIGTERM', 'SIGKILL'];
+  const pipes = options.pipes ?? true;
+  const fake = Object.assign(child, {
+    pid: 4242,
+    stdout: pipes ? Object.assign(stdout, { setEncoding: (encoding: string) => stdout.encodings.push(encoding) }) : null,
+    stderr: pipes ? Object.assign(stderr, { setEncoding: (encoding: string) => stderr.encodings.push(encoding) }) : null,
+    stdin: pipes ? stdin : null,
+    kill(signal: NodeJS.Signals) {
+      killed.push(signal);
+      if (exitOn.includes(signal)) setImmediate(() => child.emit('close', null, signal));
+      return true;
+    },
+  });
+  const spawn: ClaudeSpawn = () => fake as unknown as ClaudeChildProcess;
+  return { spawn, child, stdout, stderr, stdin, killed };
+}
 
 describe('buildClaudeArgs', () => {
   it('builds a non-interactive stream-json turn with the configured options', () => {
@@ -55,6 +89,41 @@ describe('buildClaudeArgs', () => {
     ]);
   });
 
+  it('passes nothing beyond the stream-json basics when no option is set', () => {
+    expect(buildClaudeArgs({})).toEqual(BASE_ARGS);
+    expect(buildClaudeArgs({ settings: {}, mcpConfig: [], allowedTools: [], disallowedTools: [], extraArgs: [] })).toEqual(BASE_ARGS);
+  });
+
+  it('accepts a single MCP config as a path or an object', () => {
+    expect(buildClaudeArgs({ mcpConfig: '/etc/mcp.json' })).toEqual([...BASE_ARGS, '--mcp-config', '/etc/mcp.json']);
+    expect(buildClaudeArgs({ mcpConfig: { mcpServers: {} } })).toEqual([...BASE_ARGS, '--mcp-config', '{"mcpServers":{}}']);
+  });
+
+  it('limits turns only with a positive count', () => {
+    expect(buildClaudeArgs({ maxTurns: 3 })).toEqual([...BASE_ARGS, '--max-turns', '3']);
+    expect(buildClaudeArgs({ maxTurns: 0 })).toEqual(BASE_ARGS);
+    expect(buildClaudeArgs({ maxTurns: -1 })).toEqual(BASE_ARGS);
+  });
+
+  it('appends extra arguments after the built ones', () => {
+    expect(buildClaudeArgs({ maxTurns: 2, extraArgs: ['--debug', '--add-dir=/data'] })).toEqual([
+      ...BASE_ARGS,
+      '--max-turns',
+      '2',
+      '--debug',
+      '--add-dir=/data',
+    ]);
+  });
+
+  it('refuses permission-skipping flags in any spelling', () => {
+    expect(() => buildClaudeArgs({ extraArgs: ['--dangerously-skip-permissions=true'] })).toThrow(
+      'Claude Code harness never passes --dangerously-skip-permissions=true.',
+    );
+    expect(() => buildClaudeArgs({ extraArgs: ['--allow-dangerously-skip-permissions'] })).toThrow(
+      'Claude Code harness never passes --allow-dangerously-skip-permissions.',
+    );
+  });
+
   it('refuses to skip permission checks', () => {
     expect(() => buildClaudeArgs({ extraArgs: ['--dangerously-skip-permissions'] })).toThrow(/never passes/);
     expect(() => buildClaudeArgs({ permissionMode: 'bypassPermissions' as never })).toThrow(/bypassPermissions/);
@@ -93,6 +162,68 @@ describe('buildClaudeEnv', () => {
   });
 });
 
+describe('buildClaudeEnv inheritance', () => {
+  it('passes every allowlisted name and locale or XDG prefix through', () => {
+    const base = Object.fromEntries(
+      [
+        'PATH',
+        'HOME',
+        'USER',
+        'LOGNAME',
+        'SHELL',
+        'TMPDIR',
+        'TMP',
+        'TEMP',
+        'LANG',
+        'LANGUAGE',
+        'TERM',
+        'COLORTERM',
+        'TZ',
+        'NODE_EXTRA_CA_CERTS',
+        'SSL_CERT_FILE',
+        'SSL_CERT_DIR',
+        'HTTP_PROXY',
+        'HTTPS_PROXY',
+        'NO_PROXY',
+        'http_proxy',
+        'https_proxy',
+        'no_proxy',
+        'SYSTEMROOT',
+        'COMSPEC',
+        'PATHEXT',
+        'APPDATA',
+        'LOCALAPPDATA',
+        'USERPROFILE',
+        'LC_ALL',
+        'XDG_CONFIG_HOME',
+      ].map(name => [name, `value of ${name}`]),
+    );
+    expect(buildClaudeEnv(base, {})).toEqual({ ...base, CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' });
+  });
+
+  it('never inherits credentials or nested-session markers, even when a host asks for them', () => {
+    const blocked = [
+      'ANTHROPIC_API_KEY',
+      'ANTHROPIC_AUTH_TOKEN',
+      'CLAUDE_CODE_OAUTH_TOKEN',
+      'ANTHROPIC_BASE_URL',
+      'CLAUDE_CONFIG_DIR',
+      'CLAUDECODE',
+      'CLAUDE_CODE_ENTRYPOINT',
+      'CLAUDE_CODE_SSE_PORT',
+    ];
+    const base = Object.fromEntries(blocked.map(name => [name, 'server']));
+    expect(buildClaudeEnv({ ...base, PATH: '/bin' }, {}, blocked)).toEqual({ PATH: '/bin', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' });
+  });
+
+  it('leaves out names that are unset', () => {
+    expect(buildClaudeEnv({ PATH: undefined, HOME: '/home/agent' }, {})).toStrictEqual({
+      HOME: '/home/agent',
+      CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1',
+    });
+  });
+});
+
 describe('runClaude', () => {
   it('feeds the prompt on stdin and splits chunked stdout into lines', async () => {
     const fake = fakeClaude([{ lines: ['{"type":"a"}', '{"type":"b"}'], chunkSize: 3, stderr: 'warn\n' }]);
@@ -126,5 +257,196 @@ describe('runClaude', () => {
       onLine: () => {},
     });
     expect((await run.exited).spawnError?.message).toBe('ENOENT');
+  });
+});
+
+
+describe('runClaude process handling', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const run = (spawn: ClaudeSpawn, extra: Partial<Parameters<typeof runClaude>[0]> = {}) =>
+    runClaude({ spawn, args: [], cwd: '/w', env: { PATH: '/bin' }, prompt: 'hi', onLine: () => {}, ...extra });
+
+  it('spawns the CLI with three pipes in the turn directory and environment', () => {
+    const scripted = scriptedChild();
+    const options: unknown[] = [];
+    run((command, args, spawnOptions) => {
+      options.push({ command, args, ...spawnOptions });
+      return scripted.spawn(command, args, spawnOptions);
+    }, { args: ['-p', '-'] });
+    expect(options).toEqual([
+      { command: 'claude', args: ['-p', '-'], cwd: '/w', env: { PATH: '/bin' }, detached: false, stdio: ['pipe', 'pipe', 'pipe'] },
+    ]);
+  });
+
+  it('reports a spawn that throws as a finished run that cannot be stopped', async () => {
+    const error = new Error('ENOENT');
+    const failed = run(() => {
+      throw error;
+    });
+    failed.terminate();
+    expect(failed.pid).toBeUndefined();
+    expect(failed.isAlive()).toBe(false);
+    expect(await failed.exited).toEqual({ exitCode: null, signal: null, stderr: '', timedOut: false, terminated: false, spawnError: error });
+  });
+
+  it('wraps a non-Error spawn failure', async () => {
+    const failed = run(() => {
+      throw 'no binary';
+    });
+    expect((await failed.exited).spawnError).toEqual(new Error('no binary'));
+  });
+
+  it('reports a process error as a spawn error', async () => {
+    const scripted = scriptedChild();
+    const turn = run(scripted.spawn);
+    const error = new Error('EACCES');
+    scripted.child.emit('error', error);
+    expect(await turn.exited).toEqual({ exitCode: null, signal: null, stderr: '', timedOut: false, terminated: false, spawnError: error });
+    expect(turn.isAlive()).toBe(false);
+  });
+
+  it('reads stdout and stderr as UTF-8 and delivers a last line without a newline on exit', async () => {
+    const scripted = scriptedChild();
+    const lines: string[] = [];
+    const turn = run(scripted.spawn, { onLine: line => lines.push(line) });
+    scripted.stdout.emit('data', '{"a":1}\n{"b"');
+    scripted.stdout.emit('data', ':2}');
+    expect(lines).toEqual(['{"a":1}']);
+    scripted.child.emit('close', 0, null);
+    expect(await turn.exited).toEqual({ exitCode: 0, signal: null, stderr: '', timedOut: false, terminated: false });
+    expect(lines).toEqual(['{"a":1}', '{"b":2}']);
+    expect(scripted.stdout.encodings).toEqual(['utf8']);
+    expect(scripted.stderr.encodings).toEqual(['utf8']);
+    expect(scripted.stdin.written).toBe('hi');
+  });
+
+  it('ignores a broken stdin pipe', async () => {
+    const scripted = scriptedChild();
+    const turn = run(scripted.spawn);
+    expect(() => scripted.stdin.emit('error', new Error('EPIPE'))).not.toThrow();
+    scripted.child.emit('close', 1, null);
+    expect((await turn.exited).exitCode).toBe(1);
+  });
+
+  it('runs a child that has no pipes', async () => {
+    const scripted = scriptedChild({ pipes: false });
+    const turn = run(scripted.spawn);
+    scripted.child.emit('close', 0, null);
+    expect((await turn.exited).exitCode).toBe(0);
+  });
+
+  it('keeps the first 64 KiB of stderr', async () => {
+    const scripted = scriptedChild();
+    const turn = run(scripted.spawn);
+    for (let i = 0; i < 70; i += 1) scripted.stderr.emit('data', 'x'.repeat(1024));
+    scripted.child.emit('close', 1, null);
+    expect((await turn.exited).stderr).toHaveLength(64 * 1024);
+  });
+
+  it('signals an injected child directly, never a process group', async () => {
+    const groupKill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    const scripted = scriptedChild();
+    const turn = run(scripted.spawn);
+    turn.terminate();
+    expect(await turn.exited).toMatchObject({ signal: 'SIGTERM', terminated: true, timedOut: false });
+    expect(scripted.killed).toEqual(['SIGTERM']);
+    expect(groupKill).not.toHaveBeenCalled();
+  });
+
+  it('stops a turn once, and not after it exited', async () => {
+    const scripted = scriptedChild();
+    const turn = run(scripted.spawn);
+    turn.terminate();
+    turn.terminate();
+    await turn.exited;
+    expect(scripted.killed).toEqual(['SIGTERM']);
+
+    const done = scriptedChild();
+    const finished = run(done.spawn);
+    done.child.emit('close', 0, null);
+    await finished.exited;
+    finished.terminate();
+    expect(done.killed).toEqual([]);
+  });
+
+  it('kills a turn that ignores SIGTERM after the grace period', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const scripted = scriptedChild({ exitOn: ['SIGKILL'] });
+    const turn = run(scripted.spawn, { killGraceMs: 50 });
+    turn.terminate();
+    vi.advanceTimersByTime(49);
+    expect(scripted.killed).toEqual(['SIGTERM']);
+    expect(turn.isAlive()).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(scripted.killed).toEqual(['SIGTERM', 'SIGKILL']);
+    expect(await turn.exited).toEqual({ exitCode: null, signal: 'SIGKILL', stderr: '', timedOut: false, terminated: true });
+  });
+
+  it('waits five seconds before killing by default', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const scripted = scriptedChild({ exitOn: ['SIGKILL'] });
+    const turn = run(scripted.spawn);
+    turn.terminate();
+    vi.advanceTimersByTime(4_999);
+    expect(scripted.killed).toEqual(['SIGTERM']);
+    vi.advanceTimersByTime(1);
+    expect(scripted.killed).toEqual(['SIGTERM', 'SIGKILL']);
+  });
+
+  it('leaves no timers behind once the turn exits', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const scripted = scriptedChild();
+    const turn = run(scripted.spawn, { timeoutMs: 60_000, killGraceMs: 1_000 });
+    turn.terminate();
+    await turn.exited;
+    expect(vi.getTimerCount()).toBe(0);
+
+    const quiet = scriptedChild();
+    const finished = run(quiet.spawn, { timeoutMs: 60_000 });
+    quiet.child.emit('close', 0, null);
+    expect(await finished.exited).toMatchObject({ timedOut: false, terminated: false });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('has no time budget unless it is positive', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    for (const timeoutMs of [undefined, 0, -1]) {
+      const scripted = scriptedChild();
+      const turn = run(scripted.spawn, timeoutMs === undefined ? {} : { timeoutMs });
+      vi.advanceTimersByTime(60_000);
+      expect(turn.isAlive()).toBe(true);
+      expect(scripted.killed).toEqual([]);
+      turn.terminate();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('stops the whole process group of a real CLI, including what it started', async () => {
+    const lines: string[] = [];
+    const turn = runClaude({
+      command: '/bin/sh',
+      args: ['-c', 'sleep 30 & echo $!; wait'],
+      cwd: process.cwd(),
+      env: { PATH: process.env.PATH ?? '/usr/bin:/bin' },
+      prompt: '',
+      onLine: line => lines.push(line),
+    });
+    await vi.waitFor(() => expect(lines).toHaveLength(1));
+    const sleeper = Number(lines[0]);
+    const groupKill = vi.spyOn(process, 'kill');
+    try {
+      turn.terminate();
+      expect(await turn.exited).toMatchObject({ signal: 'SIGTERM', terminated: true });
+      expect(groupKill).toHaveBeenCalledWith(-turn.pid!, 'SIGTERM');
+      groupKill.mockRestore();
+      await vi.waitFor(() => expect(() => process.kill(sleeper, 0)).toThrow(), { timeout: 2_000 });
+    } finally {
+      try {
+        process.kill(sleeper, 'SIGKILL');
+      } catch {}
+    }
   });
 });

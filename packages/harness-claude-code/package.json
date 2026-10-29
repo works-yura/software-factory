@@ -11,12 +11,18 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "contract": "vitest run -c vitest.contract.config.ts"
+    "contract": "vitest run -c vitest.contract.config.ts",
+    "coverage": "vitest run --coverage --coverage.reporter=json --coverage.reporter=text-summary --coverage.include=src/**/*.ts --coverage.exclude=src/**/*.test.ts --coverage.exclude=src/__fixtures__/**",
+    "crap": "corepack pnpm coverage && node ../../scripts/crap.mjs . --threshold 30 --top 10",
+    "mutate": "stryker run"
   },
   "dependencies": {
     "@factory/harness": "workspace:*"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "@types/node": "22.20.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

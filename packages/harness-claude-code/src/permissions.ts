@@ -57,6 +57,7 @@ export const CLAUDE_TOOL_CATEGORY_TOOLS: Readonly<Record<Exclude<ClaudeToolCateg
     'ScheduleWakeup',
     'RemoteTrigger',
     'SendMessage',
+    'ListAgents',
     'PushNotification',
     'EnterWorktree',
     'ExitWorktree',
@@ -72,6 +73,22 @@ export const CLAUDE_TOOL_ALIASES: Readonly<Record<string, readonly string[]>> = 
   Agent: ['Task'],
   Task: ['Agent'],
 };
+
+/**
+ * Built-in tools no category governs, each reviewed: the CLI's own plumbing,
+ * which reaches nothing outside the session. A built-in tool that is in
+ * neither list is one nobody reviewed (the CLI contract tests fail on it).
+ */
+export const CLAUDE_UNGOVERNED_TOOLS: readonly string[] = [
+  // The task list.
+  'TodoWrite',
+  // Loads the schema of a deferred tool; the tool itself is still governed.
+  'ToolSearch',
+  // Stops a background task (a subagent, a shell) this session started.
+  'TaskStop',
+  // Structured findings in the session's own output.
+  'ReportFindings',
+];
 
 export const CLAUDE_TOOL_CATEGORIES: readonly ClaudeToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 

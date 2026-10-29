@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "vitest": { "configFile": "vitest.config.ts", "related": true },
+  "checkers": [],
+  "tsconfigFile": "stryker-skip-tsconfig.json",
+  "disableTypeChecks": "src/**/*.ts",
+  "mutate": [
+    "src/permissions.ts",
+    "src/errors.ts",
+    "src/events.ts",
+    "src/stream.ts",
+    "src/cli.ts",
+    "src/gate.ts",
+    "src/gate-server.ts",
+    "src/store.ts",
+    "src/session.ts"
+  ],
+  "coverageAnalysis": "perTest",
+  "//": "Regex mutants are left out: the regexes match the CLI's wording, which the contract suite checks against the real CLI.",
+  "mutator": {
+    "excludedMutations": ["Regex"]
+  },
+  "reporters": ["clear-text", "json", "progress"],
+  "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
+  "thresholds": { "high": 90, "low": 80, "break": 90 },
+  "concurrency": 4,
+  "timeoutMS": 20000,
+  "inPlace": true,
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": "always"
+}

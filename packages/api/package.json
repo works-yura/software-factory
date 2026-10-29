@@ -41,6 +41,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
     "@factory/testing": "workspace:*",
     "@mastra/pg": "1.32.0",
     "@types/node": "22.20.1",

@@ -8,3 +8,8 @@ dist/
 .mastra/
 apps/server/src/mastra/public/factory/
 apps/server/src/mastra/public/factory-skills/
+
+# Test reports
+coverage/
+reports/
+.stryker-tmp/

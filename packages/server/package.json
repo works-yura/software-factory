@@ -52,6 +52,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
     "@factory/testing": "workspace:*",
     "@mastra/libsql": "1.27.0",
     "@mastra/pg": "1.32.0",

@@ -219,82 +219,90 @@ export function parseStreamLine(line: string): ClaudeStreamMessage | undefined {
   const withParent = <T extends object>(value: T) => (parentToolUseId ? { ...value, parentToolUseId } : value);
 
   switch (raw.type) {
-    case 'system': {
-      const subtype = str(raw.subtype) ?? '';
-      if (subtype === 'init' && sessionId) {
-        const tools = Array.isArray(raw.tools) ? raw.tools.filter((t): t is string => typeof t === 'string') : undefined;
-        return {
-          type: 'system',
-          subtype: 'init',
-          sessionId,
-          ...(str(raw.model) ? { model: str(raw.model) } : {}),
-          ...(str(raw.cwd) ? { cwd: str(raw.cwd) } : {}),
-          ...(str(raw.permissionMode) ? { permissionMode: str(raw.permissionMode) } : {}),
-          ...(tools ? { tools } : {}),
-          raw,
-        };
-      }
-      return withSession({ type: 'system' as const, subtype, raw });
-    }
-    case 'assistant': {
-      const message = record(raw.message);
-      const usage = usageOf(message?.usage);
-      const messageId = str(message?.id);
-      const model = str(message?.model);
-      const error = str(raw.error);
-      return withParent(
-        withSession({
-          type: 'assistant' as const,
-          content: contentOf(message),
-          ...(messageId ? { messageId } : {}),
-          ...(model ? { model } : {}),
-          ...(usage ? { usage } : {}),
-          ...(error ? { error } : {}),
-          raw,
-        }),
-      );
-    }
+    case 'system':
+      return systemMessage(raw, sessionId) ?? withSession({ type: 'system' as const, subtype: str(raw.subtype) ?? '', raw });
+    case 'assistant':
+      return withParent(withSession(assistantMessage(raw)));
     case 'user':
       return withParent(withSession({ type: 'user' as const, content: contentOf(record(raw.message)), raw }));
     case 'stream_event':
       return withParent(withSession({ type: 'stream_event' as const, event: record(raw.event) ?? {}, raw }));
-    case 'rate_limit_event': {
-      const info = record(raw.rate_limit_info) ?? {};
-      const resetsAt = dateOf(info.resetsAt ?? info.resets_at);
-      const status = str(info.status);
-      const rateLimitType = str(info.rateLimitType ?? info.rate_limit_type);
-      return withSession({
-        type: 'rate_limit' as const,
-        ...(status ? { status } : {}),
-        ...(resetsAt ? { resetsAt } : {}),
-        ...(rateLimitType ? { rateLimitType } : {}),
-        raw,
-      });
-    }
-    case 'result': {
-      const usage = usageOf(raw.usage);
-      const result = typeof raw.result === 'string' ? raw.result : undefined;
-      const totalCostUsd = num(raw.total_cost_usd);
-      const durationMs = num(raw.duration_ms);
-      const numTurns = num(raw.num_turns);
-      const apiErrorStatus = num(raw.api_error_status);
-      return withSession({
-        type: 'result' as const,
-        subtype: str(raw.subtype) ?? '',
-        isError: raw.is_error === true,
-        errors: errorsOf(raw.errors),
-        ...(result !== undefined ? { result } : {}),
-        ...(usage ? { usage } : {}),
-        ...(totalCostUsd !== undefined ? { totalCostUsd } : {}),
-        ...(durationMs !== undefined ? { durationMs } : {}),
-        ...(numTurns !== undefined ? { numTurns } : {}),
-        ...(apiErrorStatus !== undefined ? { apiErrorStatus } : {}),
-        raw,
-      });
-    }
+    case 'rate_limit_event':
+      return withSession(rateLimitMessage(raw));
+    case 'result':
+      return withSession(resultMessage(raw));
     default:
       return { type: 'unknown', raw };
   }
+}
+
+/** The `system init` line, which names the session; any other system line is left to the caller. */
+function systemMessage(raw: Record<string, unknown>, sessionId: string | undefined): ClaudeStreamMessage | undefined {
+  if (str(raw.subtype) !== 'init' || !sessionId) return undefined;
+  const tools = Array.isArray(raw.tools) ? raw.tools.filter((t): t is string => typeof t === 'string') : undefined;
+  return {
+    type: 'system',
+    subtype: 'init',
+    sessionId,
+    ...(str(raw.model) ? { model: str(raw.model) } : {}),
+    ...(str(raw.cwd) ? { cwd: str(raw.cwd) } : {}),
+    ...(str(raw.permissionMode) ? { permissionMode: str(raw.permissionMode) } : {}),
+    ...(tools ? { tools } : {}),
+    raw,
+  };
+}
+
+function assistantMessage(raw: Record<string, unknown>) {
+  const message = record(raw.message);
+  const usage = usageOf(message?.usage);
+  const messageId = str(message?.id);
+  const model = str(message?.model);
+  const error = str(raw.error);
+  return {
+    type: 'assistant' as const,
+    content: contentOf(message),
+    ...(messageId ? { messageId } : {}),
+    ...(model ? { model } : {}),
+    ...(usage ? { usage } : {}),
+    ...(error ? { error } : {}),
+    raw,
+  };
+}
+
+function rateLimitMessage(raw: Record<string, unknown>) {
+  const info = record(raw.rate_limit_info) ?? {};
+  const resetsAt = dateOf(info.resetsAt ?? info.resets_at);
+  const status = str(info.status);
+  const rateLimitType = str(info.rateLimitType ?? info.rate_limit_type);
+  return {
+    type: 'rate_limit' as const,
+    ...(status ? { status } : {}),
+    ...(resetsAt ? { resetsAt } : {}),
+    ...(rateLimitType ? { rateLimitType } : {}),
+    raw,
+  };
+}
+
+function resultMessage(raw: Record<string, unknown>) {
+  const usage = usageOf(raw.usage);
+  const result = typeof raw.result === 'string' ? raw.result : undefined;
+  const totalCostUsd = num(raw.total_cost_usd);
+  const durationMs = num(raw.duration_ms);
+  const numTurns = num(raw.num_turns);
+  const apiErrorStatus = num(raw.api_error_status);
+  return {
+    type: 'result' as const,
+    subtype: str(raw.subtype) ?? '',
+    isError: raw.is_error === true,
+    errors: errorsOf(raw.errors),
+    ...(result !== undefined ? { result } : {}),
+    ...(usage ? { usage } : {}),
+    ...(totalCostUsd !== undefined ? { totalCostUsd } : {}),
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...(numTurns !== undefined ? { numTurns } : {}),
+    ...(apiErrorStatus !== undefined ? { apiErrorStatus } : {}),
+    raw,
+  };
 }
 
 /** Splits a byte stream into lines, holding a partial line until its newline arrives. */

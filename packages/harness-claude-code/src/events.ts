@@ -2,7 +2,7 @@ import type { AgentTokenUsage, PlanDecision } from '@factory/harness';
 
 import { classifyFailure, type ClaudeCodeError } from './errors.ts';
 import { PERMISSION_PENDING_MARKER, SUBMIT_PLAN_TOOL_ID } from './gate.ts';
-import type { ClaudeStreamMessage, ClaudeUsage } from './stream.ts';
+import type { ClaudeContentBlock, ClaudeStreamMessage, ClaudeUsage } from './stream.ts';
 
 /**
  * Claude Code's own plan-mode tool. `claude -p` does not offer it today; it is
@@ -170,104 +170,13 @@ export class TurnTranslator {
     if ('sessionId' in message && message.sessionId) this.sessionId = message.sessionId;
     switch (message.type) {
       case 'system':
-        if (message.subtype === 'api_retry') {
-          const status = typeof message.raw.error_status === 'number' ? message.raw.error_status : undefined;
-          const error = typeof message.raw.error === 'string' ? message.raw.error : undefined;
-          const attempt = typeof message.raw.attempt === 'number' ? message.raw.attempt : 1;
-          this.#apiRetry = { attempt, ...(status !== undefined ? { status } : {}), ...(error ? { error } : {}) };
-          return [];
-        }
-        if (message.subtype !== 'init' || !message.sessionId) return [];
-        this.#started = true;
-        {
-          const init = message as Extract<ClaudeStreamMessage, { subtype: 'init' }>;
-          return [
-            {
-              kind: 'init',
-              sessionId: init.sessionId,
-              ...(init.model ? { model: init.model } : {}),
-              ...(init.permissionMode ? { permissionMode: init.permissionMode } : {}),
-            },
-          ];
-        }
-      case 'assistant': {
-        if (message.usage) {
-          if (message.messageId) this.#usageByMessage.set(message.messageId, message.usage);
-          else this.#anonymousUsage.push(message.usage);
-        }
-        const entries: ClaudeTranscriptEntry[] = [];
-        const parent = message.parentToolUseId;
-        const messageId = message.messageId ? { messageId: message.messageId } : {};
-        for (const block of message.content) {
-          if (block.type === 'text' && block.text) {
-            entries.push(withParent({ kind: 'text', text: block.text, ...messageId }, parent));
-          } else if (block.type === 'thinking' && block.thinking) {
-            entries.push(withParent({ kind: 'thinking', text: block.thinking, ...messageId }, parent));
-          } else if (block.type === 'tool_use') {
-            this.#toolCalls.set(block.id, { toolName: block.name, input: block.input });
-            entries.push(
-              withParent({ kind: 'tool_call', toolCallId: block.id, toolName: block.name, input: block.input }, parent),
-            );
-            // A subagent cannot ask the person for anything; only the main loop's plan is a gate.
-            if (PLAN_GATE_TOOL_IDS.includes(block.name) && !parent && !this.#gate) {
-              const input = block.input as { plan?: unknown; title?: unknown } | undefined;
-              this.#gate = {
-                toolCallId: block.id,
-                toolName: block.name,
-                ...(typeof input?.plan === 'string' ? { plan: input.plan } : {}),
-                ...(typeof input?.title === 'string' && input.title.trim() ? { title: input.title } : {}),
-              };
-              entries.push({ kind: 'plan', ...this.#gate });
-            }
-          }
-        }
-        if (message.error) {
-          this.#errorMarker = message.error;
-          this.#errorText = message.content
-            .map(block => (block.type === 'text' ? block.text : ''))
-            .join('\n')
-            .trim();
-        }
-        return entries;
-      }
-      case 'user': {
-        const parent = message.parentToolUseId;
-        return message.content.flatMap((block): ClaudeTranscriptEntry[] => {
-          if (block.type === 'text' && block.text) return [withParent({ kind: 'user', text: block.text }, parent)];
-          if (block.type === 'tool_result') {
-            // The permission tool refused the call so a person can answer it: the call waits, it did not fail.
-            if (block.isError && block.content.includes(PERMISSION_PENDING_MARKER)) {
-              if (this.#permission) return [];
-              const call = this.#toolCalls.get(block.toolUseId);
-              this.#permission = {
-                toolCallId: block.toolUseId,
-                toolName: call?.toolName ?? 'unknown',
-                ...(call && call.input !== undefined ? { input: call.input } : {}),
-                ...(parent ? { parentToolCallId: parent } : {}),
-              };
-              return [{ kind: 'permission', ...this.#permission }];
-            }
-            return [
-              withParent(
-                { kind: 'tool_result', toolCallId: block.toolUseId, content: block.content, isError: block.isError },
-                parent,
-              ),
-            ];
-          }
-          return [];
-        });
-      }
-      case 'stream_event': {
-        const delta = message.event.delta as { type?: unknown; text?: unknown; thinking?: unknown } | undefined;
-        if (message.event.type !== 'content_block_delta' || !delta) return [];
-        if (delta.type === 'text_delta' && typeof delta.text === 'string') {
-          return [withParent({ kind: 'text_delta', text: delta.text }, message.parentToolUseId)];
-        }
-        if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
-          return [withParent({ kind: 'thinking_delta', text: delta.thinking }, message.parentToolUseId)];
-        }
-        return [];
-      }
+        return this.#system(message);
+      case 'assistant':
+        return this.#assistant(message);
+      case 'user':
+        return this.#user(message);
+      case 'stream_event':
+        return this.#streamEvent(message);
       case 'rate_limit':
         if (message.status === 'rejected') {
           this.#rateLimitRejected = true;
@@ -275,23 +184,130 @@ export class TurnTranslator {
         }
         return [];
       case 'result':
-        this.#result = message;
-        return [
-          {
-            kind: 'result',
-            subtype: message.subtype,
-            isError: message.isError,
-            ...(message.result !== undefined ? { text: message.result } : {}),
-            ...(message.totalCostUsd !== undefined ? { costUsd: message.totalCostUsd } : {}),
-            ...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
-            ...(message.numTurns !== undefined ? { numTurns: message.numTurns } : {}),
-          },
-        ];
+        return this.#resultEntry(message);
       case 'invalid':
         return [{ kind: 'stdout', text: message.line }];
       case 'unknown':
         return [];
     }
+  }
+
+  #system(message: Extract<ClaudeStreamMessage, { type: 'system' }>): ClaudeTranscriptEntry[] {
+    if (message.subtype === 'api_retry') {
+      const status = typeof message.raw.error_status === 'number' ? message.raw.error_status : undefined;
+      const error = typeof message.raw.error === 'string' ? message.raw.error : undefined;
+      const attempt = typeof message.raw.attempt === 'number' ? message.raw.attempt : 1;
+      this.#apiRetry = { attempt, ...(status !== undefined ? { status } : {}), ...(error ? { error } : {}) };
+      return [];
+    }
+    if (message.subtype !== 'init' || !message.sessionId) return [];
+    this.#started = true;
+    const init = message as Extract<ClaudeStreamMessage, { subtype: 'init' }>;
+    return [
+      {
+        kind: 'init',
+        sessionId: init.sessionId,
+        ...(init.model ? { model: init.model } : {}),
+        ...(init.permissionMode ? { permissionMode: init.permissionMode } : {}),
+      },
+    ];
+  }
+
+  #assistant(message: Extract<ClaudeStreamMessage, { type: 'assistant' }>): ClaudeTranscriptEntry[] {
+    if (message.usage) {
+      if (message.messageId) this.#usageByMessage.set(message.messageId, message.usage);
+      else this.#anonymousUsage.push(message.usage);
+    }
+    const entries: ClaudeTranscriptEntry[] = [];
+    const parent = message.parentToolUseId;
+    const messageId = message.messageId ? { messageId: message.messageId } : {};
+    for (const block of message.content) {
+      if (block.type === 'text' && block.text) {
+        entries.push(withParent({ kind: 'text', text: block.text, ...messageId }, parent));
+      } else if (block.type === 'thinking' && block.thinking) {
+        entries.push(withParent({ kind: 'thinking', text: block.thinking, ...messageId }, parent));
+      } else if (block.type === 'tool_use') {
+        entries.push(...this.#toolUse(block, parent));
+      }
+    }
+    if (message.error) {
+      this.#errorMarker = message.error;
+      this.#errorText = message.content
+        .map(block => (block.type === 'text' ? block.text : ''))
+        .join('\n')
+        .trim();
+    }
+    return entries;
+  }
+
+  #toolUse(block: Extract<ClaudeContentBlock, { type: 'tool_use' }>, parent: string | undefined): ClaudeTranscriptEntry[] {
+    this.#toolCalls.set(block.id, { toolName: block.name, input: block.input });
+    const call = withParent({ kind: 'tool_call' as const, toolCallId: block.id, toolName: block.name, input: block.input }, parent);
+    // A subagent cannot ask the person for anything; only the main loop's plan is a gate.
+    if (!PLAN_GATE_TOOL_IDS.includes(block.name) || parent || this.#gate) return [call];
+    const input = block.input as { plan?: unknown; title?: unknown } | undefined;
+    this.#gate = {
+      toolCallId: block.id,
+      toolName: block.name,
+      ...(typeof input?.plan === 'string' ? { plan: input.plan } : {}),
+      ...(typeof input?.title === 'string' && input.title.trim() ? { title: input.title } : {}),
+    };
+    return [call, { kind: 'plan', ...this.#gate }];
+  }
+
+  #user(message: Extract<ClaudeStreamMessage, { type: 'user' }>): ClaudeTranscriptEntry[] {
+    const parent = message.parentToolUseId;
+    return message.content.flatMap((block): ClaudeTranscriptEntry[] => {
+      if (block.type === 'text' && block.text) return [withParent({ kind: 'user', text: block.text }, parent)];
+      if (block.type !== 'tool_result') return [];
+      // The permission tool refused the call so a person can answer it: the call waits, it did not fail.
+      if (block.isError && block.content.includes(PERMISSION_PENDING_MARKER)) return this.#permissionPending(block.toolUseId, parent);
+      return [
+        withParent(
+          { kind: 'tool_result', toolCallId: block.toolUseId, content: block.content, isError: block.isError },
+          parent,
+        ),
+      ];
+    });
+  }
+
+  #permissionPending(toolCallId: string, parent: string | undefined): ClaudeTranscriptEntry[] {
+    if (this.#permission) return [];
+    const call = this.#toolCalls.get(toolCallId);
+    this.#permission = {
+      toolCallId,
+      toolName: call?.toolName ?? 'unknown',
+      ...(call && call.input !== undefined ? { input: call.input } : {}),
+      ...(parent ? { parentToolCallId: parent } : {}),
+    };
+    return [{ kind: 'permission', ...this.#permission }];
+  }
+
+  #streamEvent(message: Extract<ClaudeStreamMessage, { type: 'stream_event' }>): ClaudeTranscriptEntry[] {
+    const delta = message.event.delta as { type?: unknown; text?: unknown; thinking?: unknown } | undefined;
+    if (message.event.type !== 'content_block_delta' || !delta) return [];
+    if (delta.type === 'text_delta' && typeof delta.text === 'string') {
+      return [withParent({ kind: 'text_delta', text: delta.text }, message.parentToolUseId)];
+    }
+    if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+      return [withParent({ kind: 'thinking_delta', text: delta.thinking }, message.parentToolUseId)];
+    }
+    return [];
+  }
+
+  #resultEntry(message: Extract<ClaudeStreamMessage, { type: 'result' }>): ClaudeTranscriptEntry[] {
+    this.#result = message;
+    return [
+      {
+        kind: 'result',
+        subtype: message.subtype,
+        isError: message.isError,
+        ...(message.result !== undefined ? { text: message.result } : {}),
+        ...(message.totalCostUsd !== undefined ? { costUsd: message.totalCostUsd } : {}),
+        ...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
+        ...(message.numTurns !== undefined ? { numTurns: message.numTurns } : {}),
+      },
+    ];
   }
 
   /** One usage step per model message seen, or the result's total when no message carried usage. */
