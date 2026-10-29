@@ -37,6 +37,17 @@ export interface ClaudeSessionUiOptions {
 
 export type PersonInputHook = (c: Context, session: ClaudeCodeSession) => void | Promise<void>;
 
+/**
+ * A person's answer to a parked plan, before the session resumes on it. `true`
+ * means the host took it over (e.g. the approval moves a card on, and the next
+ * stage starts the session); `false` resumes the session as usual.
+ */
+export type PlanDecisionHook = (
+  c: Context,
+  session: ClaudeCodeSession,
+  answer: { resumeData: PlanDecision; toolCallId: string },
+) => boolean | Promise<boolean>;
+
 function decode(segment: string): string {
   try {
     return decodeURIComponent(segment);
@@ -132,6 +143,7 @@ export class ClaudeSessionUi {
   readonly #channels = new Map<string, ClaudeSessionUiChannel>();
   #resolve: ClaudeSessionUiOptions['resolveSession'];
   #onPersonInput: PersonInputHook | undefined;
+  #onPlanDecision: PlanDecisionHook | undefined;
 
   constructor(options: ClaudeSessionUiOptions) {
     this.#options = options;
@@ -142,6 +154,11 @@ export class ClaudeSessionUi {
   /** Sets the {@link ClaudeSessionUiOptions.onPersonInput} hook, once the host's auth exists. */
   setPersonInputHook(hook: PersonInputHook): void {
     this.#onPersonInput = hook;
+  }
+
+  /** Sets the {@link PlanDecisionHook}, once the host's boards exist. */
+  setPlanDecisionHook(hook: PlanDecisionHook): void {
+    this.#onPlanDecision = hook;
   }
 
   /**
@@ -245,6 +262,9 @@ export class ClaudeSessionUi {
         if (!isPlanDecision(body.resumeData)) return c.json({ error: 'resumeData must be a plan decision' }, 400);
         if (session.run.isRunning()) return c.json({ ok: false, reason: 'not_pending' });
         await this.#onPersonInput?.(c, session);
+        if (await this.#onPlanDecision?.(c, session, { resumeData: body.resumeData, toolCallId: gate.toolCallId })) {
+          return c.json({ ok: true });
+        }
         // Answered like the Mastra route: acknowledged now, the resumed run arrives on the stream.
         session.respondToToolSuspension({ resumeData: body.resumeData, toolCallId: gate.toolCallId }).catch(error => {
           // The client was told `ok`; the stream is where it learns the answer did not land.

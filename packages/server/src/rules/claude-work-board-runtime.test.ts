@@ -19,7 +19,12 @@ import { createDefaultBoardRegistry } from '@factory/pipelines';
 import { createSourceControlSessionLookup } from '@factory/session';
 import { createFactoryStorageForTests, FactoryDecisionDispatcher, FactoryTransitionService } from '@factory/testing';
 
-import { ClaudeStartCoordinator, createClaudeBoundTools, createClaudeFactoryHarness } from '../claude/index.ts';
+import {
+  ClaudeStartCoordinator,
+  createClaudeBoundTools,
+  createClaudeFactoryHarness,
+  createClaudePlanApproval,
+} from '../claude/index.ts';
 
 /**
  * A Work card in a factory created on the Claude Code harness, end to end
@@ -162,8 +167,8 @@ function factoryToken(args: string[]): string {
   throw new Error('The turn had no Factory MCP server.');
 }
 
-describe('Work board on the Claude Code harness', () => {
-  it('runs triage, the plan gate and the build in one Claude session', async () => {
+/** A bug card on Claude Code, from intake to its plan waiting for a person; the next turn answers `nextTurnText`. */
+async function runToPlanGate(nextTurnText: string) {
     const { seeded, workItems, sourceControl, project, boards, transitionService, rules } = await setup();
     const sessions = createSourceControlSessionLookup([sourceControl]);
     const signer = createFactorySessionTokenSigner('scenario-secret');
@@ -178,7 +183,7 @@ describe('Work board on the Claude Code harness', () => {
     const fake = fakeClaude([
       { lines: turn('Triage: the save handler drops the phone field.'), holdAt: 1, hold: triageMoved.promise },
       { lines: turn('Here is the plan.', { submitPlan: true }), hang: true },
-      { lines: turn('Built: the phone number is saved, with a test.') },
+      { lines: turn(nextTurnText) },
     ]);
     const callAgentTools = async (args: string[]) => {
       const resolved = await resolveSessionTokenScope(
@@ -307,6 +312,14 @@ describe('Work board on the Claude Code harness', () => {
     await drain();
     expect(fake.calls).toHaveLength(2);
 
+    return { workItems, project, transitionService, claude, fake, sessionId, session, card, move, drain, chatStore, sessions };
+}
+
+describe('Work board on the Claude Code harness', () => {
+  it('runs triage, the plan gate and the build in one Claude session', async () => {
+    const { project, claude, fake, sessionId, session, card, move, drain, chatStore } = await runToPlanGate(
+      'Built: the phone number is saved, with a test.',
+    );
     // 3. Approval: a person moves the card to Building; the build resumes the same Claude session.
     await expect(move('execute')).resolves.toMatchObject({ status: 'accepted' });
     await drain();
@@ -334,5 +347,41 @@ describe('Work board on the Claude Code harness', () => {
     });
     // The chat opens the session's thread under the Factory's shared memory resource.
     expect(await memory!.getThreadById({ threadId: sessionId })).toMatchObject({ resourceId: project.id });
+  }, 60_000);
+
+  it('moves the card on when a person approves the plan in the chat, and the next stage takes the answer first', async () => {
+    const { workItems, transitionService, fake, sessionId, session, card, drain, sessions } = await runToPlanGate(
+      'Tests: the failing test for the dropped phone number is committed.',
+    );
+    const approvePlan = createClaudePlanApproval({ sessions, workItems, transitionService });
+
+    // A rejection stays with the session: it plans again.
+    await expect(
+      approvePlan(session!, { resumeData: { action: 'rejected', feedback: 'x' }, toolCallId: 'toolu-plan', userId: 'user-1' }),
+    ).resolves.toBe(false);
+    expect(session?.pendingPlan).toMatchObject({ toolCallId: 'toolu-plan' });
+
+    await expect(
+      approvePlan(session!, {
+        resumeData: { action: 'approved', feedback: 'Keep the migration small.' },
+        toolCallId: 'toolu-plan',
+        userId: 'user-1',
+      }),
+    ).resolves.toBe(true);
+    // A bug is test-first: the approved plan goes to the failing test, as a Mastra plan does.
+    expect(await card()).toMatchObject({ stages: ['tests'] });
+    await drain();
+    expect(fake.calls).toHaveLength(3);
+    const tester = fake.calls[2]!;
+    expect(tester.args).toEqual(expect.arrayContaining(['--resume', CLAUDE_SESSION, '--permission-mode', 'acceptEdits']));
+    expect(tester.stdin).toMatch(/^The plan was approved\. Implement it\./);
+    expect(tester.stdin).toContain('Keep the migration small.');
+    expect(session?.pendingPlan).toBeUndefined();
+    expect(await card()).toMatchObject({ stages: ['tests'], sessions: { tester: { sessionId } } });
+
+    // Approving again (a stale card) changes nothing.
+    await expect(
+      approvePlan(session!, { resumeData: { action: 'approved' }, toolCallId: 'toolu-plan', userId: 'user-1' }),
+    ).resolves.toBe(false);
   }, 60_000);
 });

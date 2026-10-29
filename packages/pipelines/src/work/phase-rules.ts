@@ -72,7 +72,7 @@ export const investigateTriagedGitLabIssue = investigateTriagedSource('gitlab', 
  */
 export const TEST_FIRST_TRIAGE_TYPES: ReadonlySet<string> = new Set(['bug', 'feature request']);
 
-export function isTestFirst(item: FactoryRuleItemContext): boolean {
+export function isTestFirst(item: Pick<FactoryRuleItemContext, 'triageType'>): boolean {
   return item.triageType != null && TEST_FIRST_TRIAGE_TYPES.has(item.triageType);
 }
 

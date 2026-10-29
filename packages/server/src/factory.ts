@@ -62,6 +62,7 @@ import {
   ClaudeStartCoordinator,
   createClaudeBoundTools,
   createClaudeSessionTools,
+  createClaudePlanApproval,
   createClaudeCheckoutResolver,
   createClaudeCodeCredentials,
   createClaudeFactoryHarness,
@@ -1499,6 +1500,14 @@ export class MastraFactory {
         const userId = routeAuth.tenant(c)?.userId;
         if (userId) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.actorUserId, value: userId });
       });
+      // A person approving a card's plan in the chat moves the card on, as an approved Mastra plan does
+      // (`advanceApprovedPlan`); the next stage then starts the session, which takes the answer first.
+      if (workItemsReady && transitionService) {
+        const approvePlan = createClaudePlanApproval({ sessions: sourceControlSessions, workItems: workItemsStorage, transitionService });
+        this.#claudeSessionUi.setPlanDecisionHook((c, session, answer) =>
+          approvePlan(session, { ...answer, userId: routeAuth.tenant(c)?.userId }),
+        );
+      }
     }
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
