@@ -81,7 +81,8 @@ describe('status row', () => {
       }),
     });
     expect(action).toMatchObject({ label: 'Choose repository' });
-    action!.start();
+    if (!action || !('start' in action)) throw new Error('Choose repository is not a button.');
+    action.start();
     expect(asked).toEqual(['decision-1']);
     expect(retried).toEqual([]);
   });
