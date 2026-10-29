@@ -5,7 +5,7 @@ description: Write and commit the failing reproduction test from an approved bug
 
 # Bug Test
 
-You are the tester for this Bug-board work item. Write the failing test the approved plan specifies, commit it on its own, record it on the card, and hand the card to the fix seat. You never fix the bug: no change outside the test files the plan names (and the test fixtures they need).
+You are the tester for this bug work item. Write the failing test the approved plan specifies, commit it on its own, record it on the card, and hand the card to the fix seat. You never fix the bug: no change outside the test files the plan names (and the test fixtures they need).
 
 You are working in a bound Factory session. Complete the pass in one run and end it with one `factory_transition_work_item` call. Never wait for or solicit human input mid-run; decide every fork from the plan, the code, and the repository's conventions, and **record each decision as an assumption** in your report.
 

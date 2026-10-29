@@ -1,5 +1,6 @@
 import type { FactoryToolResultRuleContext } from '@factory/core';
 
+import { isTestFirst } from './phase-rules.ts';
 import { changeRequestNoun, metadataString, untrustedSourceReference } from './references.ts';
 
 function resultContent(value: unknown): string | undefined {
@@ -35,8 +36,10 @@ export function advanceApprovedPlanTo(stage: string) {
   };
 }
 
-/** Work: an approved plan goes straight to Building. */
-export const advanceApprovedPlan = advanceApprovedPlanTo('execute');
+/** An approved plan goes to the failing test for test-first types, straight to Building for the rest. */
+export function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
+  return advanceApprovedPlanTo(isTestFirst(context.item) ? 'tests' : 'execute')(context);
+}
 
 /**
  * Self-review approves in place: the card stays in Review and the builder, woken

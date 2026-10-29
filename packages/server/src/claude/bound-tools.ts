@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
 import { RequestContext } from '@mastra/core/request-context';
@@ -7,6 +8,7 @@ import { z } from 'zod';
 
 import type { BoardRegistry } from '@factory/core';
 import { createFactoryTransitionTools } from '@factory/harness-mastra';
+import type { SessionGit } from '@factory/harness-mastra';
 import type { FactoryMcpToolScope } from '@factory/mcp';
 import type { FactoryTransitionService } from '@factory/runtime';
 import type { FactorySessionSourceLookup } from '@factory/session';
@@ -50,6 +52,17 @@ function asMcpTool(tool: AnyTool, requestContext: RequestContext): AnyTool {
   }) as AnyTool;
 }
 
+/** Git in a local checkout, for the reproduction-test recorder and guard; a failed command answers with its exit code. */
+export function checkoutGit(cwd: string): SessionGit {
+  return args =>
+    new Promise(resolve => {
+      execFile('git', ['-C', cwd, ...args], { timeout: 30_000 }, (error, stdout, stderr) => {
+        const code = (error as { code?: unknown } | null)?.code;
+        resolve({ exitCode: error ? (typeof code === 'number' ? code : 1) : 0, stdout: String(stdout), stderr: String(stderr) });
+      });
+    });
+}
+
 /**
  * The tools only a bound run has, for a Claude Code session reaching the
  * Factory MCP endpoint with its session token:
@@ -67,6 +80,8 @@ export async function createClaudeBoundTools(
     transitionService: Pick<FactoryTransitionService, 'transition'>;
     boards: BoardRegistry;
     sessions?: FactorySessionSourceLookup;
+    /** The session's checkout on this host, where the CLI runs; without it the tester cannot record its failing test. */
+    checkoutFor?: (sessionId: string) => Promise<string | undefined>;
   },
 ): Promise<Record<string, AnyTool>> {
   const requestContext = boundRunRequestContext(scope);
@@ -76,6 +91,14 @@ export async function createClaudeBoundTools(
     transitionService: deps.transitionService,
     boards: deps.boards,
     ...(deps.sessions ? { sessions: deps.sessions } : {}),
+    ...(deps.checkoutFor
+      ? {
+          sessionGit: async () => {
+            const cwd = await deps.checkoutFor!(scope.sessionId);
+            return cwd ? checkoutGit(cwd) : undefined;
+          },
+        }
+      : {}),
   })) as Record<string, AnyTool>;
   const tools: Record<string, AnyTool> = {};
   for (const [name, tool] of Object.entries(transitionTools)) tools[name] = asMcpTool(tool, requestContext);

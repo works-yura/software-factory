@@ -298,7 +298,8 @@ describe('Work board on the Claude Code harness', () => {
     expect(plan.args[plan.args.indexOf('--disallowedTools') + 1]).toContain('Write');
     expect(plan.stdin).toMatch(/^<factory-mode name="planning">/);
     expect(plan.stdin).toContain('do not call factory_transition_work_item');
-    expect(plan.stdin).toContain('Factory Plan');
+    // A bug plans with bug-plan.
+    expect(plan.stdin).toContain('Bug Plan');
     const session = await claude.harness.getSession(sessionId);
     expect(session?.pendingPlan).toMatchObject({ toolCallId: 'toolu-plan' });
     // The card waits for a person: no agent can carry it on, and nothing else ran.

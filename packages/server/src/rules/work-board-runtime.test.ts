@@ -3,14 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { createMastraHarness, FactoryStartCoordinator } from '@factory/harness-mastra';
 import { GithubRules, resolveGithubRules } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
-import { bugBoard } from '@factory/pipelines';
 import { createBoardRegistry, createFactoryStorageForTests, FactoryDecisionDispatcher, FactoryTransitionService } from '@factory/testing';
 
 /**
- * The Bug board end to end through the runtime: a `bug`-labelled issue routes to the board, a
- * person starts triage, the agents classify and plan, the plan gate holds the reproduction test
- * for a person, the tester's recorded test opens the fix, and the stock GitHub rules carry the
- * card through its pull request to Done.
+ * A bug on the Work board end to end through the runtime: an issue lands in Intake, a person
+ * starts triage, the agents classify and plan, the plan gate holds the failing test for a person,
+ * the tester's recorded test opens the fix, and the stock GitHub rules carry the card through its
+ * pull request to Done.
  */
 async function setup() {
   const seeded = await createFactoryStorageForTests();
@@ -21,7 +20,7 @@ async function setup() {
     Record<string, unknown>,
     { kind: 'factory-pr-provenance'; factoryProjectId: string; workItemId: string }
   >('github');
-  const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Bugs' } });
+  const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Work' } });
   const installation = await sourceControl.installations.upsert({
     orgId: 'org-1',
     connectedByUserId: 'user-1',
@@ -45,22 +44,13 @@ async function setup() {
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace',
   });
-  // Settings › Intake: issues labelled `bug` go to the Bug board.
-  await seeded.intake.setLabelRoute({
-    orgId: 'org-1',
-    factoryProjectId: project.id,
-    integrationId: 'github',
-    label: 'bug',
-    board: 'bug',
-    userId: 'user-1',
-  });
   const github = {
     rules: resolveGithubRules(),
     slug: 'factory-app',
     getRepositoryCollaboratorPermission: vi.fn().mockResolvedValue('write'),
   } as unknown as GithubIntegration;
-  const boards = createBoardRegistry({ boards: [bugBoard] });
-  const configVersion = 'bug-runtime-v1';
+  const boards = createBoardRegistry();
+  const configVersion = 'work-runtime-v1';
   const transitionService = new FactoryTransitionService({ storage: workItems, boards, configVersion });
   const rules = new GithubRules({
     github,
@@ -78,7 +68,7 @@ async function setup() {
 function issueOpened() {
   return {
     event: 'issues',
-    deliveryId: 'bug-issue-opened',
+    deliveryId: 'work-issue-opened',
     payload: {
       action: 'opened',
       installation: { id: 7 },
@@ -118,8 +108,8 @@ function pullRequest(action: 'opened' | 'closed', deliveryId: string, merged = f
   };
 }
 
-describe('Bug board runtime', () => {
-  it('carries a bug-labelled issue through triage, the plan gate, the reproduction test, the fix, its pull request, and the merge', async () => {
+describe('Work board runtime: a bug', () => {
+  it('carries a bug issue through triage, the plan gate, the failing test, the fix, its pull request, and the merge', async () => {
     const { workItems, sourceControl, integrationStorage, project, projectRepository, boards, transitionService, rules } =
       await setup();
     const delivered: string[] = [];
@@ -152,7 +142,7 @@ describe('Bug board runtime', () => {
         },
       }),
       sendSignal: vi.fn((input: { tagName: string; attributes?: { name: string }; contents: string }) => {
-        // Bug skills start as typed skill signals, like every Factory skill kickoff.
+        // Factory skills start as typed skill signals, like every Factory skill kickoff.
         if (input.tagName === 'skill') skills.push(input.attributes?.name);
         delivered.push(input.contents);
         for (const listener of agentEndListeners) listener({ type: 'agent_end' });
@@ -218,9 +208,9 @@ describe('Bug board runtime', () => {
     };
     const card = async () => {
       const [found] = (await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).filter(
-        item => item.board === 'bug',
+        item => item.board === 'work',
       );
-      if (!found) throw new Error('Missing Bug card.');
+      if (!found) throw new Error('Missing Work card.');
       return found;
     };
     let moves = 0;
@@ -235,7 +225,7 @@ describe('Bug board runtime', () => {
         orgId: 'org-1',
         factoryProjectId: project.id,
         workItemId: current.id,
-        board: 'bug',
+        board: 'work',
         stage,
         expectedRevision: current.revision,
         actor,
@@ -248,25 +238,24 @@ describe('Bug board runtime', () => {
       });
     };
 
-    // A `bug`-labelled issue lands on Bug › Intake (labels match case-insensitively) and starts nothing.
+    // An issue lands on Work › Intake and starts nothing.
     await expect(rules.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
     await drain();
-    expect(await card()).toMatchObject({ board: 'bug', stages: ['intake'], triageType: null });
+    expect(await card()).toMatchObject({ board: 'work', stages: ['intake'], triageType: null });
     expect(delivered).toEqual([]);
 
-    // A person starts triage: the triage seat runs bug-triage.
+    // A person starts triage: the triage seat runs factory-triage.
     await expect(move('triage', { type: 'human', id: 'user-1' })).resolves.toMatchObject({ status: 'accepted' });
     await drain();
-    expect(skills.at(-1)).toBe('bug-triage');
-    expect(delivered.at(-1)).toContain('Run bug-triage.');
+    expect(skills.at(-1)).toBe('factory-triage');
+    expect(delivered.at(-1)).toContain('Run factory-triage.');
 
-    // Triage must classify; a non-bug cannot be carried on to Planning on this board.
+    // Triage must classify; a non-bug waits for a person before Planning.
     const triage = { type: 'agent' as const, bindingId: 'binding-triage', role: 'triage' };
     await expect(move('planning', triage)).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
     await expect(move('planning', triage, { triageType: 'feature request' })).resolves.toMatchObject({
       status: 'rejected',
-      code: 'invalid_transition',
-      reason: expect.stringContaining('Cards cannot change boards'),
+      code: 'approval_required',
     });
     await expect(move('planning', triage, { triageType: 'bug' })).resolves.toMatchObject({ status: 'accepted' });
     await drain();
@@ -274,11 +263,11 @@ describe('Bug board runtime', () => {
     expect(skills.at(-1)).toBe('bug-plan');
     expect(delivered.at(-1)).toContain('Run bug-plan.');
 
-    // The plan gate: without auto-approved plans the planner cannot start the reproduction test
+    // The plan gate: without auto-approved plans the planner cannot start the failing test
     // itself, nor skip it straight to the fix.
     const plan = { type: 'agent' as const, bindingId: 'binding-plan', role: 'plan' };
     await expect(move('tests', plan)).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
-    await expect(move('execute', plan)).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    await expect(move('execute', plan)).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
     expect(await card()).toMatchObject({ stages: ['planning'] });
     await expect(move('tests', { type: 'human', id: 'user-1' })).resolves.toMatchObject({ status: 'accepted' });
     await drain();
@@ -291,7 +280,7 @@ describe('Bug board runtime', () => {
     const tester = { type: 'agent' as const, bindingId: 'binding-tester', role: 'tester' };
     await expect(move('execute', tester)).resolves.toMatchObject({
       status: 'rejected',
-      reason: expect.stringContaining('No reproduction test is recorded'),
+      reason: expect.stringContaining('No failing test is recorded'),
     });
     const testing = await card();
     await workItems.update({
@@ -316,7 +305,7 @@ describe('Bug board runtime', () => {
     expect(delivered.at(-1)).toContain('"apps/mobile/test/profile_save_test.dart"');
 
     // The fix seat leaves through Review (where its tool checks the test files), then opens the
-    // pull request. Provenance binds it to the Bug card, and it gets its own Review card.
+    // pull request. Provenance binds it to the Work card, and it gets its own Review card.
     const work = { type: 'agent' as const, bindingId: 'binding-work', role: 'work' };
     await expect(move('review', work)).resolves.toMatchObject({ status: 'accepted' });
     await drain();
@@ -327,7 +316,7 @@ describe('Bug board runtime', () => {
       status: 'active',
       data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: building.id },
     });
-    await rules.ingest(pullRequest('opened', 'bug-pr-opened'));
+    await rules.ingest(pullRequest('opened', 'work-pr-opened'));
     await drain();
     expect(await card()).toMatchObject({ stages: ['review'], metadata: expect.objectContaining({ openPullRequestNumber: 17 }) });
     const reviewCard = (await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).find(
@@ -335,11 +324,11 @@ describe('Bug board runtime', () => {
     );
     expect(reviewCard).toMatchObject({ parentWorkItemId: building.id, stages: ['intake'] });
 
-    // With the pull request open, an agent cannot close the bug; the merge does.
+    // With the pull request open, an agent cannot close the card; the merge does.
     await expect(move('done', work)).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
-    await rules.ingest(pullRequest('closed', 'bug-pr-merged', true));
+    await rules.ingest(pullRequest('closed', 'work-pr-merged', true));
     await drain();
-    expect(await card()).toMatchObject({ board: 'bug', stages: ['done'] });
+    expect(await card()).toMatchObject({ board: 'work', stages: ['done'] });
     expect(await workItems.get({ orgId: 'org-1', id: reviewCard!.id })).toMatchObject({
       board: 'review',
       stages: ['done'],
@@ -348,6 +337,6 @@ describe('Bug board runtime', () => {
       (await workItems.listDeferredDecisions('org-1', project.id))
         .filter(record => record.workItemId === building.id && record.decision.type === 'transition')
         .map(record => record.decision),
-    ).toEqual(expect.arrayContaining([expect.objectContaining({ board: 'bug', stage: 'done' })]));
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ board: 'work', stage: 'done' })]));
   }, 60_000);
 });

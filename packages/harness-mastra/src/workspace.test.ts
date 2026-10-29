@@ -388,7 +388,6 @@ describe('bundled Factory skill assets', () => {
       'bug-build',
       'bug-plan',
       'bug-test',
-      'bug-triage',
       'configure-factory-rules',
       'factory-complete-issue',
       'factory-gitlab-rereview',
@@ -397,6 +396,7 @@ describe('bundled Factory skill assets', () => {
       'factory-rereview',
       'factory-review',
       'factory-self-review',
+      'factory-test',
       'factory-triage',
     ]);
     await Promise.all(
@@ -406,7 +406,7 @@ describe('bundled Factory skill assets', () => {
 
   it('keeps the Bug skills generic and defers the stack to the target repository', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
-    for (const name of ['bug-triage', 'bug-plan', 'bug-test', 'bug-build']) {
+    for (const name of ['bug-plan', 'bug-test', 'bug-build', 'factory-test']) {
       const instructions = await fs.readFile(path.join(assetRoot, name, 'SKILL.md'), 'utf8');
       expect(instructions).toContain('AGENTS.md');
       expect(instructions).toContain('.agents/skills/');
@@ -419,8 +419,9 @@ describe('bundled Factory skill assets', () => {
     expect(test).toContain('never production code');
     const build = await fs.readFile(path.join(assetRoot, 'bug-build', 'SKILL.md'), 'utf8');
     expect(build).toContain('do **not** modify, move, rename, or delete the recorded test files');
-    const triage = await fs.readFile(path.join(assetRoot, 'bug-triage', 'SKILL.md'), 'utf8');
-    expect(triage).toContain('request `stage: "canceled"`');
+    const featureTest = await fs.readFile(path.join(assetRoot, 'factory-test', 'SKILL.md'), 'utf8');
+    expect(featureTest).toContain('factory_record_reproduction_test');
+    expect(featureTest).toContain('never production code');
   });
 
   it('bundles GitLab review instructions that use the scoped provider tools', async () => {
@@ -479,7 +480,6 @@ describe('bundled Factory skill assets', () => {
       'factory-plan',
       'factory-review',
       'factory-rereview',
-      'bug-triage',
       'bug-plan',
       'bug-test',
       'bug-build',
@@ -3288,7 +3288,6 @@ describe('FactorySkillSource layering', () => {
       'bug-build',
       'bug-plan',
       'bug-test',
-      'bug-triage',
       'configure-factory-rules',
       'factory-complete-issue',
       'factory-gitlab-rereview',
@@ -3297,6 +3296,7 @@ describe('FactorySkillSource layering', () => {
       'factory-rereview',
       'factory-review',
       'factory-self-review',
+      'factory-test',
       'factory-triage',
     ]);
     expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);
@@ -3313,10 +3313,10 @@ describe('FactorySkillSource layering', () => {
       'bug-build',
       'bug-plan',
       'bug-test',
-      'bug-triage',
       'configure-factory-rules',
       'factory-complete-issue',
       'factory-plan',
+      'factory-test',
       'factory-triage',
     ]);
     for (const name of REVIEW_ONLY_FACTORY_SKILLS) {

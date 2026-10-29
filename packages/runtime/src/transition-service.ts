@@ -464,6 +464,8 @@ export class FactoryTransitionService {
         url: item.externalSource?.url ?? null,
         stages: [...item.stages],
         acceptedAt: item.acceptedAt,
+        // The move out of Triage persists the classification it reports, after this snapshot.
+        triageType: item.triageType ?? request.triageType ?? null,
         metadata: item.metadata,
       },
       board: request.board,

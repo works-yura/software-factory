@@ -581,6 +581,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         url: item.externalSource?.url ?? null,
         stages: item.stages,
         acceptedAt: item.acceptedAt,
+        triageType: item.triageType,
         metadata: item.metadata,
       },
       board,

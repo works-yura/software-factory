@@ -46,6 +46,7 @@ Write the full plan into the conversation, structured as:
 
 - **Goal** — the outcome in one paragraph; what "done" means, stated verifiably.
 - **Scope** — what's in, what's explicitly out.
+- **Test plan** — written from the design, before the phases: the tests that prove the work from outside (integration or end-to-end where the repository has them, unit tests where the behavior is local), each with its file path, test name, what it asserts, and the documented command that runs it. A feature request's tester writes and commits exactly these tests before any code, and the builder may not change them afterwards, so they must fail on today's code and live in test files only.
 - **Phases** — each with: the changes (files and shape of the edit), the tests that prove it, and the verification commands to run. Order phases so each lands independently verifiable.
 - **Risks** — what could go wrong, and what to check to catch it early.
 - **Assumptions** — every recorded design decision and understanding correction from the run.
@@ -57,7 +58,7 @@ The plan must be executable by someone with no access to this conversation beyon
 
 End the run with a single `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal.
 
-Request `stage: "execute"` (work board) with `rationale` (max 1000 chars) — a few sentences: what the plan delivers and why this approach. The builder implements the plan and pushes the branch; its build prompt decides whether the pull or merge request opens directly or only after self-review approves, so do not plan a PR-opening step.
+Request `stage: "tests"` when triage classified the work as a feature request (the tester writes the Test plan's failing tests first), otherwise `stage: "execute"`, with `rationale` (max 1000 chars) — a few sentences: what the plan delivers and why this approach. The builder implements the plan and pushes the branch; its build prompt decides whether the pull or merge request opens directly or only after self-review approves, so do not plan a PR-opening step.
 
 Do not call `submit_plan` — that is the interactive planning gate; in the Factory, the plan message in this conversation is the handoff.
 

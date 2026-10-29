@@ -195,6 +195,8 @@ export interface FactoryRuleItemContext {
   url: string | null;
   stages: readonly string[];
   acceptedAt: Date | null;
+  /** Triage classification, once recorded; a move out of Triage carries the one it reports. Unset where the host does not supply it. */
+  triageType?: FactoryTriageType | null;
   /** Intake-stamped facts about the source — repository id, reporter login, labels. */
   metadata: Record<string, unknown> | null;
 }

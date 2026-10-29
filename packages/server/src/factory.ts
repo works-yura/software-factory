@@ -1890,6 +1890,9 @@ export class MastraFactory {
                             transitionService,
                             boards: this.#boards,
                             sessions: sourceControlSessions,
+                            // The CLI runs in the session's checkout on this host; git for the test recorder runs there too.
+                            checkoutFor: async sessionId =>
+                              ((await claudeCode?.harness.getSession(sessionId)) as { cwd?: string } | undefined)?.cwd,
                           }),
                         // The Factory chat on Claude Code: the supervisor's tools, acting as the person behind the turn.
                         createSupervisor: scope => {

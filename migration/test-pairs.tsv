@@ -1,5 +1,5 @@
 # v3 test (from v3/packages/factory/src)	v4 test (from v4/packages)	expected delta	why the counts differ
-boards/define-board.test.ts	core/src/boards/define-board.test.ts	-3	Work/Review lifecycle cases moved to pipelines/src/pipelines.test.ts (-6); changeRequests, triageClassification, and reproductionTest declarations for the Bug board (+3)
+boards/define-board.test.ts	core/src/boards/define-board.test.ts	-3	Work/Review lifecycle cases moved to pipelines/src/pipelines.test.ts (-6); changeRequests, triageClassification, and reproductionTest declarations (+3; first used by the Bug board, now by Work)
 boards/events.test.ts	core/src/boards/events.test.ts
 boards/registry.test.ts	core/src/boards/registry.test.ts	-3	rewritten: v4 registry has no built-in boards (4 cases replace 7)
 boards/relocate.test.ts	core/src/boards/relocate.test.ts
@@ -119,7 +119,7 @@ rules/binding-context.test.ts	session/src/binding-context.test.ts
 rules/bindings.test.ts	runtime/src/bindings.test.ts
 rules/custom-board-lifecycle.test.ts	server/src/rules/custom-board-lifecycle.test.ts
 rules/custom-board-runtime.test.ts	server/src/rules/custom-board-runtime.test.ts
-rules/default-handlers.test.ts	server/src/rules/default-handlers.test.ts	-1	Linear integration cases dropped with the integration (-3); Linear triage entry cases dropped with the vocabulary (-2); Bug board change-request flow (+4)
+rules/default-handlers.test.ts	server/src/rules/default-handlers.test.ts	-1	Linear integration cases dropped with the integration (-3); Linear triage entry cases dropped with the vocabulary (-2); change-request flow on a custom board (+4)
 rules/processor.test.ts	harness-mastra/src/rules/processor.test.ts
 rules/review-source-tool.test.ts	harness-mastra/src/rules/review-source-tool.test.ts
 rules/start-coordinator.scenario.test.ts	harness-mastra/src/rules/start-coordinator.scenario.test.ts
@@ -177,7 +177,7 @@ tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
 tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	-2	hybrid scope cases removed with the personal model scope
 tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts
 tools/work-item-tools.test.ts	harness-mastra/src/tools/work-item-tools.test.ts
-workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generic and defer the stack to the target repository (+1)
+workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug and factory-test skills stay generic and defer the stack to the target repository (+1)
 ../../internal-workspace/src/file-commands.test.ts	internal-workspace/src/file-commands.test.ts
 ../../internal-workspace/src/repo-clone.test.ts	internal-workspace/src/repo-clone.test.ts
 ../../internal-workspace/src/setup-marker.test.ts	internal-workspace/src/setup-marker.test.ts

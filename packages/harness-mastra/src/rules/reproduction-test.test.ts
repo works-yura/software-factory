@@ -1,7 +1,6 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { bugBoard } from '@factory/pipelines';
 import type { WorkItemsStorage } from '@factory/store';
 import { createBoardRegistry, createFactoryStorageForTests } from '@factory/testing';
 
@@ -35,7 +34,7 @@ async function bindBugCard(storage: WorkItemsStorage, stage: 'tests' | 'execute'
     factoryProjectId: PROJECT_ID,
     workItem: {
       input: {
-        board: 'bug',
+        board: 'work',
         title: 'Saving a profile drops the phone number',
         stages: [stage],
         externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:42' },
@@ -70,7 +69,7 @@ const accepted = async () => ({
 });
 
 describe('reproduction test guard', () => {
-  const boards = createBoardRegistry({ boards: [bugBoard] });
+  const boards = createBoardRegistry();
   const recorded = { bugReproTestSha: TEST_SHA, bugReproTestPaths: [TEST_PATH] };
 
   it('lists protected paths changed since the test commit, renames and deletions included', async () => {
@@ -121,7 +120,7 @@ describe('reproduction test guard', () => {
       { stage: 'review', expectedRevision: prepared.item.revision, rationale: 'Fixed.' },
       { requestContext: context, agent: { toolCallId: 'call-1' } },
     );
-    expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'bug', stage: 'review' }));
+    expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'work', stage: 'review' }));
 
     const touched = await createFactoryTransitionTools({
       requestContext: context,
@@ -159,7 +158,7 @@ describe('reproduction test guard', () => {
 });
 
 describe('factory_record_reproduction_test', () => {
-  const boards = createBoardRegistry({ boards: [bugBoard] });
+  const boards = createBoardRegistry();
 
   it('is offered only to the tester seat and records a verified test commit on the card', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;

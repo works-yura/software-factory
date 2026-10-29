@@ -3,7 +3,6 @@ import { defineBoard } from '@factory/core';
 import { createBoardRegistry } from '@factory/testing';
 import { reviewBoard } from '@factory/pipelines';
 import { withBoardClosure, withChangeRequests } from '@factory/core';
-import { bugBoard } from '@factory/pipelines';
 import { workBoard } from '@factory/pipelines';
 import { defaultGithubRules } from '@factory/integration-github';
 import { defaultGitLabRules } from '@factory/integration-gitlab';
@@ -1235,7 +1234,22 @@ describe('built-in board and integration handlers', () => {
     expect(await defaultGithubRules.pullRequestOpened?.(context)).toBeUndefined();
   });
 
-  describe('boards that declare a change-request flow (Bug)', () => {
+  describe('boards that declare a change-request flow (a custom Bug board)', () => {
+    // Any board other than Work that declares `changeRequests` gets the stock pull request rules.
+    const anyPhase = { intake: 'intake', execute: 'execute', review: 'review', done: 'done', canceled: 'canceled' } as const;
+    const bugBoard = defineBoard({
+      id: 'bug',
+      title: 'Bug',
+      initialPhase: 'intake',
+      changeRequests: { build: 'execute', review: 'review', merged: 'done' },
+      phases: {
+        intake: { title: 'Intake', kind: 'resting', outcomes: anyPhase },
+        execute: { title: 'Fix', kind: 'working', role: 'work', outcomes: anyPhase },
+        review: { title: 'Review', kind: 'working', role: 'work', outcomes: anyPhase },
+        done: { title: 'Done', kind: 'terminal', outcomes: anyPhase },
+        canceled: { title: 'Canceled', kind: 'terminal', outcomes: anyPhase },
+      },
+    });
     const boards = createBoardRegistry({ boards: [bugBoard] });
     const onBug = (stages: string[], metadata: Record<string, unknown> = {}) => ({
       item: { ...item, stages, metadata },

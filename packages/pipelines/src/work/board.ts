@@ -9,6 +9,7 @@ import {
   planWorkItem,
   selfReviewWorkItem,
   triageIssueEntry,
+  writeTests,
 } from './phase-rules.ts';
 import { advanceApprovedPlan, openApprovedChangeRequest } from './tool-rules.ts';
 import { workTransitionPolicy } from './transition-policy.ts';
@@ -22,13 +23,14 @@ function onEveryWorkSource(
   return Object.fromEntries(WORK_RULE_SOURCES.map(source => [source, handler]));
 }
 
-export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled';
+export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'tests' | 'execute' | 'review' | 'done' | 'canceled';
 
 /** Work lets a card move between any two phases; the transition policy guards the moves. */
 const anyPhase = {
   intake: 'intake',
   triage: 'triage',
   planning: 'planning',
+  tests: 'tests',
   execute: 'execute',
   review: 'review',
   done: 'done',
@@ -43,6 +45,8 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
   sourceClosed: { completed: 'done', canceled: 'canceled' },
   changeRequests: { build: 'execute', review: 'review', merged: 'done' },
   triageClassification: true,
+  // Bugs and feature requests: the tester commits the failing test, the builder may not touch it.
+  reproductionTest: { record: 'tests', protect: 'execute' },
   tools: {
     submit_plan: { onResult: advanceApprovedPlan },
     factory_record_review_verdict: { onResult: openApprovedChangeRequest },
@@ -61,15 +65,23 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       onEnter: {
         issue: triageIssueEntry,
         gitlabIssue: investigateTriagedGitLabIssue,
+        manual: investigateTriagedClickUpTask,
       },
     },
     planning: {
       title: 'Planning',
-        manual: investigateTriagedClickUpTask,
       kind: 'working',
       role: 'plan',
       outcomes: anyPhase,
       onEnter: onEveryWorkSource(planWorkItem),
+    },
+    tests: {
+      title: 'Tests',
+      // Its own seat: the tester writes and commits the failing tests, never the code that passes them.
+      kind: 'working',
+      role: 'tester',
+      outcomes: anyPhase,
+      onEnter: onEveryWorkSource(writeTests),
     },
     execute: {
       title: 'Building',
