@@ -23,6 +23,8 @@
 //    `e2e-proof.txt`. A resumed turn whose prompt says the person allowed the
 //    tool retries the pending Write; one that says they denied it gives up.
 //  - `plan`: call the gate's `submit_plan`.
+//  - `deliver`: commit a file in the checkout, then push the session branch and
+//    open a merge request with the Factory's `source_control_*` MCP tools.
 //  - `text`: answer with text only.
 //
 // Diagnostics: with `FAKE_CLAUDE_LOG` set, each invocation appends one JSON
@@ -30,6 +32,7 @@
 // passes only an allow-listed environment to the CLI, so tests set these
 // variables in a wrapper script (see `src/stack.ts`).
 
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -46,6 +49,7 @@ const READ_ONLY_TOOLS = new Set(['Glob', 'Grep', 'Read', 'LS', 'TodoWrite']);
 const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
 const MCP_CONNECT_TIMEOUT_MS = Number(process.env.FAKE_CLAUDE_MCP_TIMEOUT_MS) || 15_000;
 const PROOF_FILE = 'e2e-proof.txt';
+const DELIVERY_FILE = 'e2e-delivery.txt';
 
 // ---------------------------------------------------------------------------
 // Arguments
@@ -401,7 +405,35 @@ async function plan(ctx) {
   return 'The plan is submitted; waiting for approval.';
 }
 
-const SCENARIOS = { 'factory-write': factoryWrite, plan, text: async ctx => `Echo: ${ctx.prompt.trim().slice(0, 200)}` };
+// What a build run does at the end: commit its change in the checkout (as its Bash would), then push the
+// session branch and open the merge request through the Factory's brokered tools, never with credentials of its own.
+async function deliver(ctx) {
+  const file = join(ctx.cwd, DELIVERY_FILE);
+  writeFileSync(file, `delivered by the fake claude in session ${sessionId}\n`);
+  const git = args =>
+    execFileSync('git', ['-c', 'user.name=Fake Claude', '-c', 'user.email=fake-claude@factory.invalid', ...args], {
+      cwd: ctx.cwd,
+      encoding: 'utf8',
+    });
+  git(['add', DELIVERY_FILE]);
+  git(['commit', '-q', '-m', 'Add the delivery proof']);
+  const push = await callTool('mcp__factory__source_control_push_branch', {}, ctx);
+  if (push.outcome !== 'ok') return `The push failed (${push.outcome}): ${push.result ?? push.message ?? ''}`;
+  const mr = await callTool(
+    'mcp__factory__source_control_create_change_request',
+    { title: 'E2E delivery', body: 'Opened by the fake claude.' },
+    ctx,
+  );
+  if (mr.outcome !== 'ok') return `Opening the merge request failed (${mr.outcome}): ${mr.result ?? mr.message ?? ''}`;
+  return `Pushed and opened the merge request: ${mr.result ?? ''}`;
+}
+
+const SCENARIOS = {
+  'factory-write': factoryWrite,
+  plan,
+  deliver,
+  text: async ctx => `Echo: ${ctx.prompt.trim().slice(0, 200)}`,
+};
 
 // ---------------------------------------------------------------------------
 

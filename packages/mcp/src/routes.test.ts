@@ -94,6 +94,7 @@ function tokenAuth(): RouteAuth {
 async function setup(
   options: Pick<FactoryMcpRoutesDeps, 'sessionTokens' | 'allowUsers'> & {
     createBound?: FactoryMcpRoutesDeps['tools']['createBound'];
+    createSession?: FactoryMcpRoutesDeps['tools']['createSession'];
     createSupervisor?: FactoryMcpRoutesDeps['tools']['createSupervisor'];
   } = {},
 ) {
@@ -156,6 +157,7 @@ async function setup(
       ...tools,
       create: scope => createFactoryTools({ scope, deps: tools }) as Record<string, Tool<any, any, any, any>>,
       ...(options.createBound ? { createBound: options.createBound } : {}),
+      ...(options.createSession ? { createSession: options.createSession } : {}),
       ...(options.createSupervisor ? { createSupervisor: options.createSupervisor } : {}),
     },
     ...(options.sessionTokens ? { sessionTokens: options.sessionTokens } : {}),
@@ -984,6 +986,48 @@ describe('Factory MCP for a bound agent session (session tokens)', () => {
     // A Claude Code chat gets what a person's Mastra chat gets.
     expect(names).toEqual(expect.arrayContaining(['factory_create_work_item']));
     expect(createBound).not.toHaveBeenCalled();
+  });
+
+  it('serves every agent session, bound or not, the session tools a Mastra session has in-process', async () => {
+    const createSession = vi.fn(() => ({
+      source_control_push_branch: createTool({
+        id: 'source_control_push_branch',
+        description: 'Push.',
+        inputSchema: z.object({}),
+        execute: async () => ({ pushed: true }),
+      }),
+    }));
+    const seed = await setup({ sessionTokens: signer, createSession });
+    const bound = await boundSession(seed);
+    await seed.createSessions([{ sessionId: 'session-unbound', userId: 'alice', visibility: 'org' }]);
+    const unbound = signer.sign({
+      orgId: 'org-1',
+      factoryProjectId: seed.project.id,
+      sessionId: 'session-unbound',
+      threadId: 'session-unbound',
+      resourceId: seed.project.id,
+    });
+    for (const token of [bound, unbound]) {
+      const list = await sessionRequest(seed.url, 'tools/list', {}, token);
+      const names = (list.body?.result.tools as Array<{ name: string }>).map(tool => tool.name);
+      expect(names).toContain('source_control_push_branch');
+      const call = await sessionRequest(seed.url, 'tools/call', { name: 'source_control_push_branch', arguments: {} }, token);
+      expect(toolText(call.body?.result)).toEqual({ pushed: true });
+    }
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-claude', kind: 'worker' }));
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-unbound', kind: 'user' }));
+  });
+
+  it('never serves the session tools to a person reaching the endpoint without a session token', async () => {
+    const createSession = vi.fn(() => ({}));
+    const seed = await setup({ sessionTokens: signer, createSession });
+    const response = await fetch(seed.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+    });
+    expect(response.status).not.toBe(500);
+    expect(createSession).not.toHaveBeenCalled();
   });
 
   it('refuses a token for another Factory, or another org', async () => {

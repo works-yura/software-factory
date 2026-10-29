@@ -82,6 +82,7 @@ export const CLAUDE_FACTORY_SYSTEM_PROMPT = [
   `The Factory's tools are on the \`${CLAUDE_FACTORY_MCP_SERVER}\` MCP server (\`mcp__${CLAUDE_FACTORY_MCP_SERVER}__<tool>\`).`,
   `There is no factory-phase signal in this session: wherever instructions mention it, call \`mcp__${CLAUDE_FACTORY_MCP_SERVER}__factory_bound_work_item\` for the current stage and revision.`,
   'The Target repository is the one checked out in your working directory.',
+  `Your environment holds no source-control credentials, so \`git push\` and provider CLIs cannot reach the remote: wherever instructions say to push, open, update, comment on or review a pull or merge request, or publish a check, use the \`mcp__${CLAUDE_FACTORY_MCP_SERVER}__source_control_*\` tools (for example \`source_control_push_branch\`, \`source_control_create_change_request\`), which act for this session with the Factory's credentials.`,
 ].join(' ');
 
 /**

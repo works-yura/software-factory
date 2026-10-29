@@ -141,6 +141,14 @@ export interface FactoryMcpToolDependencies {
     scope: FactoryMcpAgentScope,
   ) => Record<string, Tool<any, any, any, any>> | Promise<Record<string, Tool<any, any, any, any>>>;
   /**
+   * Tools every agent session reaching the endpoint with its token gets (a
+   * Claude Code session), bound or not: the ones a Mastra session has
+   * in-process, such as the brokered source-control tools.
+   */
+  createSession?: (
+    scope: FactoryMcpAgentScope,
+  ) => Record<string, Tool<any, any, any, any>> | Promise<Record<string, Tool<any, any, any, any>>>;
+  /**
    * The supervisor's tools (health check, records, repairs) for the Factory's
    * chat on Claude Code, acting as `scope.userId`. Unset → supervisor tokens are refused.
    */
@@ -408,6 +416,7 @@ async function handleSessionMcp(
   }
   const scope = resolved.scope as FactoryMcpAgentScope;
   const tools = createFactoryMcpTools(scope, deps, { persistedSession: true });
+  Object.assign(tools, (await deps.tools.createSession?.(scope)) ?? {});
   if (scope.kind === 'worker') Object.assign(tools, (await deps.tools.createBound?.(scope)) ?? {});
   return serveTools(c, mcpPath, { factoryProjectId, projectName: resolved.projectName, tools });
 }

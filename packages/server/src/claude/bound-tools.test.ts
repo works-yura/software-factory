@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkItemsStorage } from '@factory/store';
 import { createBoardRegistry, createFactoryStorageForTests } from '@factory/testing';
 
-import { createClaudeBoundTools } from './bound-tools.ts';
+import { createClaudeBoundTools, createClaudeSessionTools } from './bound-tools.ts';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 const TEST_PATH = 'test/profile_test.js';
@@ -148,5 +148,66 @@ describe('Claude Code bound tools: failing tests in the session checkout', () =>
       }),
     ).resolves.toMatchObject({ status: 'rejected', reason: expect.stringContaining('could not be checked') });
     expect(transition).not.toHaveBeenCalled();
+  });
+});
+
+describe('Claude Code session tools', () => {
+  it("runs each tool with the session's own context and checkout sandbox, per call", async () => {
+    const sandbox = { executeCommand: vi.fn() };
+    const seen: unknown[] = [];
+    const sourceControlTools = vi.fn(async (requestContext: { get(key: string): unknown }) => ({
+      source_control_push_branch: {
+        id: 'source_control_push_branch',
+        description: 'Push.',
+        execute: async (input: unknown, context: { requestContext: typeof requestContext; workspace?: unknown; agent?: { toolCallId: string } }) => {
+          seen.push({
+            input,
+            sessionId: (context.requestContext.get('controller') as { sessionId: string }).sessionId,
+            user: context.requestContext.get('user'),
+            workspace: context.workspace,
+            toolCallId: context.agent?.toolCallId,
+          });
+          return { pushed: true };
+        },
+      },
+    }));
+    const sandboxFor = vi.fn(async (sessionId: string) => (sessionId === scope.sessionId ? sandbox : undefined));
+    const tools = await createClaudeSessionTools(scope as never, { sourceControlTools: sourceControlTools as never, sandboxFor });
+
+    expect(Object.keys(tools)).toEqual(['source_control_push_branch']);
+    expect(sourceControlTools).toHaveBeenCalledTimes(1);
+    // Nothing is resolved until a call needs it.
+    expect(sandboxFor).not.toHaveBeenCalled();
+    await expect(tools.source_control_push_branch!.execute!({ repository: 'a/b' } as never, {} as never)).resolves.toEqual({ pushed: true });
+    await tools.source_control_push_branch!.execute!({} as never, {} as never);
+    expect(sandboxFor).toHaveBeenCalledTimes(2);
+    expect(seen[0]).toEqual({
+      input: { repository: 'a/b' },
+      sessionId: scope.sessionId,
+      user: { workosId: scope.userId, organizationId: scope.orgId },
+      workspace: { sandbox },
+      toolCallId: expect.any(String),
+    });
+    // A fresh call id each time: the inner tools key idempotency on it.
+    expect((seen[1] as { toolCallId: string }).toolCallId).not.toBe((seen[0] as { toolCallId: string }).toolCallId);
+  });
+
+  it('passes no workspace when the session has no sandbox, so the tool says so', async () => {
+    let workspace: unknown = 'unset';
+    const tools = await createClaudeSessionTools(scope as never, {
+      sourceControlTools: async () => ({
+        source_control_push_branch: {
+          id: 'source_control_push_branch',
+          description: 'Push.',
+          execute: async (_input: unknown, context: { workspace?: unknown }) => {
+            workspace = context.workspace;
+            return {};
+          },
+        },
+      }),
+      sandboxFor: async () => undefined,
+    });
+    await tools.source_control_push_branch!.execute!({} as never, {} as never);
+    expect(workspace).toBeUndefined();
   });
 });

@@ -61,6 +61,7 @@ import { createFactorySessionTokenSigner } from '@factory/mcp';
 import {
   ClaudeStartCoordinator,
   createClaudeBoundTools,
+  createClaudeSessionTools,
   createClaudeCheckoutResolver,
   createClaudeCodeCredentials,
   createClaudeFactoryHarness,
@@ -127,7 +128,7 @@ import { FactoryTransitionService } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { CallbackFactorySandbox } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
-import { SessionRetirementCoordinator } from '@factory/sandbox';
+import { peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
@@ -1315,6 +1316,65 @@ export class MastraFactory {
         : [],
     );
 
+    // The brokered source-control tools (push, change requests, reviews, test checks): one build for both harnesses,
+    // a Mastra session's in-process and a Claude Code session's over MCP.
+    const sourceControlToolsFor = (requestContext: RequestContext) =>
+      createSourceControlTools({
+        requestContext,
+        providers: sourceControlToolProviders,
+        audit: auditDomain,
+        testChecksEnabled: async ({ orgId, factoryProjectId }) => {
+          await factoryProjectsStorage.ensureReady();
+          const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+          return project?.reviewTestChecksEnabled ?? false;
+        },
+        ...(workItemsStorage
+          ? {
+              selfReviewApprovedHead: async () => {
+                const resolution = await resolveFactorySessionAddress({
+                  requestContext,
+                  storage: workItemsStorage,
+                });
+                if (!resolution) return undefined;
+                const binding =
+                  resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                if (!binding) return undefined;
+                const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                // Self-review gates the change request on boards that ship them (Work, Bug).
+                if (!item || !this.#boards.get(boardForWorkItem(item))?.changeRequests) return undefined;
+                if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
+                // A verdict already recorded still binds the change request to its head.
+                if (item.metadata?.selfReviewVerdict === undefined) {
+                  await factoryProjectsStorage.ensureReady();
+                  const project = await factoryProjectsStorage.get({
+                    orgId: binding.orgId,
+                    id: binding.factoryProjectId,
+                  });
+                  if (!project?.selfReviewEnabled) return undefined;
+                }
+                const sha = item.metadata?.selfReviewedHeadSha;
+                return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string'
+                  ? sha
+                  : null;
+              },
+              boundChangeRequestId: async () => {
+                const resolution = await resolveFactorySessionAddress({
+                  requestContext,
+                  storage: workItemsStorage,
+                });
+                if (!resolution) return undefined;
+                const binding =
+                  resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                if (binding?.role !== 'review') return undefined;
+                const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                const source = item?.externalSource;
+                if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
+                return /(\d+)$/.exec(source.externalId)?.[1];
+              },
+            }
+          : {}),
+      });
+
     // The supervisor's tools (the Factory chat): its Mastra session gets them in-process, a Claude Code one over MCP.
     const supervisorReadTools = (scope: { orgId: string; factoryProjectId: string }) =>
       createFactorySupervisorReadTools({
@@ -1371,6 +1431,23 @@ export class MastraFactory {
           localDevelopment: claudeCodeConfig?.localDevelopment === true,
           credentials: modelCredentialsStorage,
         });
+    const claudeCheckout = claudeCodeConfig
+      ? (claudeCodeConfig.cwdFor ??
+        createClaudeCheckoutResolver({
+          sandbox: sandboxConfig,
+          sourceControls: () => sourceControlToolProviders,
+          projects: factoryProjectsStorage,
+        }))
+      : undefined;
+    // The sandbox a Claude Code session's checkout lives in, for the tools that run git there on its behalf.
+    // After a restart the memo is empty until the session's checkout is resolved again.
+    // The memo is keyed by the session's source-control row, as the checkout files it.
+    const claudeSessionSandbox = async (sessionId: string) => {
+      const row = await sourceControlSessions.getBySessionId(sessionId);
+      if (!row) return undefined;
+      if (!peekSessionSandbox(row.id) && claudeCheckout) await claudeCheckout(sessionId);
+      return peekSessionSandbox(row.id)?.sandbox;
+    };
     const claudeCode: ClaudeFactoryHarness | undefined = claudeCodeConfig
       ? createClaudeFactoryHarness({
           ...claudeCodeConfig,
@@ -1387,13 +1464,7 @@ export class MastraFactory {
               ? workItemsStorage.hasRunBindingForSession({ orgId, factoryProjectId, sessionId })
               : false,
           ...claudeCodeCredentials,
-          cwdFor:
-            claudeCodeConfig.cwdFor ??
-            createClaudeCheckoutResolver({
-              sandbox: sandboxConfig,
-              sourceControls: () => sourceControlToolProviders,
-              projects: factoryProjectsStorage,
-            }),
+          cwdFor: claudeCheckout!,
           mcp: {
             url: factoryProjectId =>
               `${(claudeCodeConfig.mcpOrigin ?? publicOrigin).replace(/\/+$/, '')}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/mcp`,
@@ -1660,61 +1731,7 @@ export class MastraFactory {
                 if (storage.isDomainReady('source-control')) {
                   mergeTools(
                     'source-control',
-                    await createSourceControlTools({
-                      requestContext,
-                      providers: sourceControlToolProviders,
-                      audit: auditDomain,
-                      testChecksEnabled: async ({ orgId, factoryProjectId }) => {
-                        await factoryProjectsStorage.ensureReady();
-                        const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                        return project?.reviewTestChecksEnabled ?? false;
-                      },
-                      ...(workItemsStorage
-                        ? {
-                            selfReviewApprovedHead: async () => {
-                              const resolution = await resolveFactorySessionAddress({
-                                requestContext,
-                                storage: workItemsStorage,
-                              });
-                              if (!resolution) return undefined;
-                              const binding =
-                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                              if (!binding) return undefined;
-                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                              // Self-review gates the change request on boards that ship them (Work, Bug).
-                              if (!item || !this.#boards.get(boardForWorkItem(item))?.changeRequests) return undefined;
-                              if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
-                              // A verdict already recorded still binds the change request to its head.
-                              if (item.metadata?.selfReviewVerdict === undefined) {
-                                await factoryProjectsStorage.ensureReady();
-                                const project = await factoryProjectsStorage.get({
-                                  orgId: binding.orgId,
-                                  id: binding.factoryProjectId,
-                                });
-                                if (!project?.selfReviewEnabled) return undefined;
-                              }
-                              const sha = item.metadata?.selfReviewedHeadSha;
-                              return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string'
-                                ? sha
-                                : null;
-                            },
-                            boundChangeRequestId: async () => {
-                              const resolution = await resolveFactorySessionAddress({
-                                requestContext,
-                                storage: workItemsStorage,
-                              });
-                              if (!resolution) return undefined;
-                              const binding =
-                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                              if (binding?.role !== 'review') return undefined;
-                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                              const source = item?.externalSource;
-                              if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
-                              return /(\d+)$/.exec(source.externalId)?.[1];
-                            },
-                          }
-                        : {}),
-                    }),
+                    await sourceControlToolsFor(requestContext),
                   );
                 }
                 if (workItemsStorage && transitionService) {
@@ -1890,6 +1907,15 @@ export class MastraFactory {
                   // The harness types its tools loosely (`ToolLike`); they are Mastra tools.
                   create: scope =>
                     createFactoryTools({ scope, deps: factoryToolDeps }) as Record<string, Tool<any, any, any, any>>,
+                  ...(claudeCode
+                    ? {
+                        createSession: scope =>
+                          createClaudeSessionTools(scope, {
+                            sourceControlTools: requestContext => sourceControlToolsFor(requestContext),
+                            sandboxFor: claudeSessionSandbox,
+                          }) as Promise<Record<string, Tool<any, any, any, any>>>,
+                      }
+                    : {}),
                   ...(transitionService
                     ? {
                         createBound: scope =>

@@ -37,7 +37,11 @@ export function boundRunRequestContext(scope: FactoryMcpToolScope): RequestConte
  * of which an MCP call carries, so each call gets the bound context and a
  * fresh call id.
  */
-function asMcpTool(tool: AnyTool, requestContext: RequestContext): AnyTool {
+function asMcpTool(
+  tool: AnyTool,
+  requestContext: RequestContext,
+  workspace?: () => Promise<{ sandbox: unknown } | undefined>,
+): AnyTool {
   return createTool({
     id: tool.id,
     description: tool.description,
@@ -46,10 +50,38 @@ function asMcpTool(tool: AnyTool, requestContext: RequestContext): AnyTool {
       if (!tool.execute) throw new Error(`Tool ${tool.id} cannot be executed.`);
       return tool.execute(input, {
         requestContext,
+        ...(workspace ? { workspace: await workspace() } : {}),
         agent: { agentId: 'claude-code', toolCallId: randomUUID(), messages: [], suspend: async () => {} },
       } as never);
     },
   }) as AnyTool;
+}
+
+/**
+ * The tools every Claude Code session gets on top of the Factory's own, the
+ * ones a Mastra session has in-process: the brokered source-control tools
+ * (push, change requests, reviews, test checks). They run git in the session's
+ * own checkout (its sandbox) with credentials the server holds, so none enter
+ * the agent's environment.
+ */
+export async function createClaudeSessionTools(
+  scope: FactoryMcpToolScope,
+  deps: {
+    sourceControlTools: (requestContext: RequestContext) => Promise<Record<string, unknown>>;
+    /** The sandbox the session's checkout lives in. */
+    sandboxFor: (sessionId: string) => Promise<unknown>;
+  },
+): Promise<Record<string, AnyTool>> {
+  const requestContext = boundRunRequestContext(scope);
+  const workspace = async () => {
+    const sandbox = await deps.sandboxFor(scope.sessionId);
+    return sandbox ? { sandbox } : undefined;
+  };
+  const tools: Record<string, AnyTool> = {};
+  for (const [name, tool] of Object.entries(await deps.sourceControlTools(requestContext))) {
+    tools[name] = asMcpTool(tool as AnyTool, requestContext, workspace);
+  }
+  return tools;
 }
 
 /** Git in a local checkout, for the reproduction-test recorder and guard; a failed command answers with its exit code. */

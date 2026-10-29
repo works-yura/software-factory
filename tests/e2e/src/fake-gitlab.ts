@@ -30,7 +30,19 @@ export interface FakeGitLab {
   bareRepo: string;
   /** Requests nothing here answers, for diagnosing a failed run. */
   unhandled: string[];
+  /** Merge requests opened through the API, newest last. */
+  mergeRequests: FakeMergeRequest[];
+  /** The bare repository's branches and their head commits (`git push` lands here). */
+  branches(): Record<string, string>;
   close(): Promise<void>;
+}
+
+export interface FakeMergeRequest {
+  iid: number;
+  title: string;
+  description: string | null;
+  source_branch: string;
+  target_branch: string;
 }
 
 const TOKEN = 'glpat-e2e-fake-token';
@@ -57,6 +69,20 @@ export function createBareRepo(root: string, path: string): string {
   git(['remote', 'add', 'origin', bare], work);
   git(['push', 'origin', 'main'], work);
   return bare;
+}
+
+/** Branch name to head commit, as the bare repository holds them. */
+function branchesOf(bareRepo: string): Record<string, string> {
+  const out = execFileSync('git', ['for-each-ref', '--format=%(refname:short) %(objectname)', 'refs/heads'], {
+    cwd: bareRepo,
+    encoding: 'utf8',
+  });
+  return Object.fromEntries(
+    out
+      .split('\n')
+      .filter(Boolean)
+      .map(line => line.split(' ') as [string, string]),
+  );
 }
 
 function json(res: ServerResponse, status: number, body: unknown) {
@@ -141,7 +167,34 @@ export async function startFakeGitLab({ root, projectPath = 'e2e/fixture' }: { r
   const bareRepo = createBareRepo(root, projectPath);
   const project = { id: 4242, path: projectPath, defaultBranch: 'main' };
   const unhandled: string[] = [];
+  const mergeRequests: FakeMergeRequest[] = [];
   let url = '';
+  const mergeRequestBody = (mr: FakeMergeRequest) => {
+    const now = new Date().toISOString();
+    return {
+      ...mr,
+      id: 9000 + mr.iid,
+      project_id: project.id,
+      state: 'opened',
+      web_url: `${url}/${projectPath}/-/merge_requests/${mr.iid}`,
+      sha: branchesOf(bareRepo)[mr.source_branch] ?? '',
+      draft: false,
+      created_at: now,
+      updated_at: now,
+    };
+  };
+  const readBody = (req: IncomingMessage) =>
+    new Promise<Record<string, unknown>>(resolve => {
+      let raw = '';
+      req.on('data', chunk => (raw += chunk));
+      req.on('end', () => {
+        try {
+          resolve(raw ? (JSON.parse(raw) as Record<string, unknown>) : {});
+        } catch {
+          resolve({});
+        }
+      });
+    });
   const projectBody = () => ({
     id: project.id,
     name: projectPath.split('/').at(-1),
@@ -184,6 +237,29 @@ export async function startFakeGitLab({ root, projectPath = 'e2e/fixture' }: { r
       if (req.method === 'GET' && rest === '') return json(res, 200, projectBody());
       // Lists the integration may read while syncing: nothing there.
       if (req.method === 'GET' && /^\/(issues|merge_requests|members\/all|labels|hooks)$/.test(rest)) return json(res, 200, []);
+      if (req.method === 'POST' && rest === '/merge_requests') {
+        void readBody(req).then(body => {
+          const mr: FakeMergeRequest = {
+            iid: mergeRequests.length + 1,
+            title: String(body.title ?? ''),
+            description: typeof body.description === 'string' ? body.description : null,
+            source_branch: String(body.source_branch ?? ''),
+            target_branch: String(body.target_branch ?? ''),
+          };
+          if (!branchesOf(bareRepo)[mr.source_branch]) {
+            json(res, 422, { message: [`Source branch ${mr.source_branch} does not exist`] });
+            return;
+          }
+          mergeRequests.push(mr);
+          json(res, 201, mergeRequestBody(mr));
+        });
+        return;
+      }
+      const mergeRequestRoute = /^\/merge_requests\/(\d+)$/.exec(rest);
+      if (req.method === 'GET' && mergeRequestRoute) {
+        const mr = mergeRequests.find(candidate => candidate.iid === Number(mergeRequestRoute[1]));
+        return mr ? json(res, 200, mergeRequestBody(mr)) : json(res, 404, { message: '404 Not found' });
+      }
       if (req.method === 'GET' && rest.startsWith('/repository/branches/')) {
         return json(res, 200, { name: decodeURIComponent(rest.split('/').at(-1)!), default: true });
       }
@@ -201,6 +277,8 @@ export async function startFakeGitLab({ root, projectPath = 'e2e/fixture' }: { r
     project,
     bareRepo,
     unhandled,
+    mergeRequests,
+    branches: () => branchesOf(bareRepo),
     close: () =>
       new Promise<void>(resolve => {
         server.closeAllConnections();

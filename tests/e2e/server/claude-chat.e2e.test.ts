@@ -135,4 +135,37 @@ describe('Claude Code chat through the dev server', () => {
     expect(turn.scenario).toBe('plan');
     expect(turn.toolCalls.map(call => call.tool)).toEqual(['mcp__factory_gate__submit_plan']);
   });
+
+  it('pushes the session branch and opens the merge request through the Factory, with no credentials of its own', async () => {
+    const before = stack.readClaudeLog().length;
+    const chat = await createChat(stack.baseUrl, factory.projectRepositoryId, 'Deliver it');
+    await sendMessage(stack.baseUrl, chat.sessionId, '[fake:deliver] Commit, push and open the merge request.');
+
+    const turn = await waitFor('the delivery run to finish', async () => {
+      const state = await displayState(stack.baseUrl, chat.sessionId);
+      const log = stack.readClaudeLog();
+      return log.length > before && !state.isRunning ? log[before] : undefined;
+    }).catch(error => {
+      throw new Error(`${error.message}\n--- server log ---\n${stack.tailServerLog(80)}`);
+    });
+    const calls = turn!.toolCalls.map(call => [call.tool, call.outcome, call.result?.slice(0, 300)]);
+    expect(turn!.mcp.find(server => server.name === 'factory')!.tools).toEqual(
+      expect.arrayContaining(['source_control_push_branch', 'source_control_create_change_request']),
+    );
+    expect(calls.map(([tool, outcome]) => [tool, outcome]), JSON.stringify(calls)).toEqual([
+      ['mcp__factory__source_control_push_branch', 'ok'],
+      ['mcp__factory__source_control_create_change_request', 'ok'],
+    ]);
+
+    // The branch reached the host with the agent's commit, and the merge request is open from it.
+    const branch = execFileSync('git', ['-C', turn!.cwd, 'branch', '--show-current'], { encoding: 'utf8' }).trim();
+    const head = execFileSync('git', ['-C', turn!.cwd, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    expect(stack.gitlab.branches()[branch]).toBe(head);
+    expect(stack.gitlab.mergeRequests).toEqual([
+      expect.objectContaining({ title: 'E2E delivery', source_branch: branch, target_branch: 'main' }),
+    ]);
+    // The checkout never held the token: the remote is the plain URL.
+    const remote = execFileSync('git', ['-C', turn!.cwd, 'remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim();
+    expect(remote).not.toContain(stack.gitlab.token);
+  });
 });
