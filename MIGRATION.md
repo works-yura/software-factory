@@ -54,6 +54,7 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 - з наскрізних тестів прибрано кейси, що їх кликали (`default-handlers` −3, `issue-reconciler` −1);
 - WorkOS-інтеграцію у v3 ніхто не імпортував; вхід через WorkOS лишається в `@factory/auth`;
 - Slack у v3 ставив хост (`apps/server`), не пакет.
+- UI підключення Slack і Connected Accounts прибрано разом із ClickUp-інтеграцією (коміт `962a7d5`): `SlackConnectionPage`, `ConnectedAccountsSection`, `channelAccounts` видалено з тестами, їхні пари прибрано з `test-pairs.tsv`; `IntakeSection` +5 тестів ClickUp, ще +1 на правила статусів ClickUp (`d85dd0c`).
 
 ### Словник Linear/Jira/incident.io
 

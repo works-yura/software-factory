@@ -142,6 +142,7 @@ describe('useLinkRepositoryMutation', () => {
       {
         github: { enabled: false, sourceIds: null },
         gitlab: { enabled: true, sourceIds: ['gitlab-project:encoded'] },
+        clickup: { enabled: false, sourceIds: null },
       },
     ]);
   });
@@ -167,6 +168,7 @@ describe('useLinkRepositoryMutation', () => {
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
         gitlab: { enabled: false, sourceIds: null },
+        clickup: { enabled: false, sourceIds: null },
       },
     ]);
     expect(result.current.intake.data?.github.sourceIds).toEqual(['octo/hello']);
@@ -189,6 +191,7 @@ describe('useLinkRepositoryMutation', () => {
       {
         github: { enabled: true, sourceIds: ['octo/other', 'octo/hello'] },
         gitlab: { enabled: false, sourceIds: null },
+        clickup: { enabled: false, sourceIds: null },
       },
     ]);
   });

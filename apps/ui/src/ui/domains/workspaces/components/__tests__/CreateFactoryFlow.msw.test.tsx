@@ -244,6 +244,7 @@ describe('Create Factory wizard', () => {
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
         gitlab: { enabled: false, sourceIds: null },
+        clickup: { enabled: false, sourceIds: null },
       },
     ]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');

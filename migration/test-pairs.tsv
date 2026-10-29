@@ -393,13 +393,12 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	+2	upstream 22084b780f (#28100): Memory found by its former page name (+1); 9173231506 (#28312): sidebar search button hands focus back (+1)
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/ConnectedAccountsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/ConnectedAccountsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	-28	Linear/Jira/incident.io UI cases dropped with the vocabulary
+../../../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	-22	Linear/Jira/incident.io UI cases dropped with the vocabulary (-28); ClickUp intake cases (+5); ClickUp status rules (+1)
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/OMSection.msw.test.tsx	+1	upstream 22084b780f (#28100): clicking the Attachments label keeps the setting
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/RepositoriesSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/RepositoriesSection.msw.test.tsx
@@ -408,7 +407,6 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/SettingsSubsection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/SettingsSubsection.msw.test.tsx	-6	upstream 22084b780f (#28100): scope switch removed, only the badge cases remain
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/UserGithubConnectionRow.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/UserGithubConnectionRow.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/environment/RepositoriesBlock.test.ts	../apps/ui/src/ui/domains/settings/components/environment/RepositoriesBlock.test.ts
-../../../apps/ui/src/ui/domains/settings/services/channelAccounts.test.ts	../apps/ui/src/ui/domains/settings/services/channelAccounts.test.ts
 ../../../apps/ui/src/ui/domains/settings/services/doneSound.test.ts	../apps/ui/src/ui/domains/settings/services/doneSound.test.ts
 ../../../apps/ui/src/ui/domains/supervisor/services/supervisor.test.ts	../apps/ui/src/ui/domains/supervisor/services/supervisor.test.ts
 ../../../apps/ui/src/ui/domains/telemetry/FactoryWebTelemetry.msw.test.tsx	../apps/ui/src/ui/domains/telemetry/FactoryWebTelemetry.msw.test.tsx
@@ -475,7 +473,6 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug skills stay generi
 ../../../apps/ui/src/ui/pages/__tests__/BoardPageFilters.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/BoardPageFilters.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/KnowledgePage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/KnowledgePage.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/PrivateSessionNotFound.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/PrivateSessionNotFound.msw.test.tsx
-../../../apps/ui/src/ui/pages/__tests__/SlackConnectionPage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/SlackConnectionPage.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/SupervisorPage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/SupervisorPage.msw.test.tsx	+1	the Factory chat on a Claude Code Factory runs on Claude Code
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageDocumentTitle.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageDocumentTitle.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageEagerRender.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageEagerRender.msw.test.tsx
