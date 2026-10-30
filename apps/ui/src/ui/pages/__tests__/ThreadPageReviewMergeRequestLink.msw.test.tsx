@@ -216,5 +216,23 @@ describe('ThreadPage merge request link placement', () => {
       expect(within(factorySession).queryByRole('link', { name: SUBSCRIBED_ACCESSIBLE_NAME })).not.toBeInTheDocument();
       expect(githubSubscriptionRequests).not.toHaveBeenCalled();
     });
+
+    it('names the repository of each merge request when the work spans several', async () => {
+      const otherUrl = 'https://gitlab.com/works_yura/test/-/merge_requests/9';
+      stubThreadRoute(createWireWorkItem('issue'), [
+        subscribedMergeRequest,
+        { id: 'subscription-2', repoFullName: 'works_yura/test', pullRequestNumber: 9, status: 'open', url: otherUrl },
+      ]);
+      renderThreadRoute();
+
+      const composer = await screen.findByRole('region', { name: 'Thread composer' });
+      const own = await within(composer).findByRole('link', { name: SUBSCRIBED_ACCESSIBLE_NAME });
+      const other = await within(composer).findByRole('link', { name: 'Open open works_yura/test merge request 9' });
+
+      // Both are !9; only the repository tells them apart.
+      expect(own).toHaveTextContent(`${PROJECT_PATH.split('/').at(-1)} MR !9`);
+      expect(other).toHaveTextContent('test MR !9');
+      expect(other).toHaveAttribute('href', otherUrl);
+    });
   });
 });

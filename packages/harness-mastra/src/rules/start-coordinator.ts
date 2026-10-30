@@ -6,6 +6,7 @@ import { boardForWorkItem } from '@factory/core';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { hydrateFactorySession, resolveFactorySessionModel } from '@factory/session';
 import { resolveWorkItemRepository } from '@factory/session';
+import type { EnvironmentRepositoryRef } from '@factory/session';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession, SourceControlStorageHandle } from '@factory/store';
 import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
@@ -124,6 +125,25 @@ export async function resolveSourceSession(
   return { ...session, projectRepositoryId };
 }
 
+/**
+ * What the agent is told about where it works. A card bound to one
+ * repository names it; a card that names none spans the environment, and the
+ * agent changes whichever repositories the task needs, one change request each.
+ */
+export function targetRepositoryInstructionFor(repository: {
+  slug: string;
+  environment?: EnvironmentRepositoryRef[];
+}): string {
+  if (repository.environment && repository.environment.length > 1) {
+    return `Workspace repositories: ${repository.environment.map(entry => entry.slug).join(', ')}. This task is not bound to one of them: change every repository the task needs, on this session's branch. Push and open a change request in each repository you changed, passing \`repository\` to the source-control tools; leave repositories you did not change alone.`;
+  }
+  return `Target repository: ${repository.slug}. Before editing files or creating a pull request, verify this session's checkout matches the target repository.`;
+}
+
+function isTargetRepositoryInstruction(instruction: string): boolean {
+  return instruction.startsWith('Target repository: ') || instruction.startsWith('Workspace repositories: ');
+}
+
 async function configureThread(session: FactorySession, request: FactoryStartRequest): Promise<string> {
   const threadId = session.thread.requireId();
   // Derived from the work item, not a user rename, so leave the title
@@ -134,9 +154,9 @@ async function configureThread(session: FactorySession, request: FactoryStartReq
 }
 
 /**
- * The repository a start works in: the card's, which must be the source
- * session's. A card linked to several repositories keeps the one an earlier
- * run of the same role already chose; a fresh session never chooses for it.
+ * The repository link a start is filed under: the card's, which must be the
+ * source session's. A card that names no repository runs across the
+ * environment, so a session filed under any environment repository fits it.
  */
 export async function resolveStartRepository({
   sourceControl,
@@ -148,7 +168,7 @@ export async function resolveStartRepository({
   request: Pick<FactoryStartRequest, 'orgId' | 'factoryProjectId' | 'workItem'>;
   sourceSession: SourceControlSession & { projectRepositoryId: string };
   storedItem: WorkItemRow | null;
-}): Promise<{ slug: string; projectRepositoryId: string }> {
+}): Promise<{ slug: string; projectRepositoryId: string; environment?: EnvironmentRepositoryRef[] }> {
   let repository = await resolveWorkItemRepository({
     sourceControl,
     orgId: request.orgId,
@@ -187,6 +207,14 @@ export async function resolveStartRepository({
   }
   if (repository.status === 'unlinked') {
     throw new WorkItemRepositoryError('repository_unlinked', repository.hint);
+  }
+  if (repository.projectRepositoryId !== sourceSession.projectRepositoryId && repository.environment) {
+    // A card that names no repository runs across the environment, so a
+    // session filed under any of its repositories is that card's workspace.
+    const filedUnder = repository.environment.find(
+      entry => entry.projectRepositoryId === sourceSession.projectRepositoryId,
+    );
+    if (filedUnder) return { ...filedUnder, environment: repository.environment };
   }
   if (repository.projectRepositoryId !== sourceSession.projectRepositoryId) {
     throw new WorkItemRepositoryError(
@@ -373,7 +401,7 @@ export class FactoryStartCoordinator {
     // caller created without them — so autonomous runs never depend on a
     // browser connecting to populate the state. `untrustedCheckout` is a
     // boolean so it rides only on state (tags are string-valued).
-    const targetRepositoryInstruction = `Target repository: ${repository.slug}. Before editing files or creating a pull request, verify this session's checkout matches the target repository.`;
+    const targetRepositoryInstruction = targetRepositoryInstructionFor(repository);
     const existingPluginInstructions = session.state.get()?.pluginInstructions ?? [];
     await session.state.set({
       ...sessionTags,
@@ -384,7 +412,9 @@ export class FactoryStartCoordinator {
       factoryModelScope: 'factory',
       factoryOwnerUserId: sourceSession.userId,
       pluginInstructions: [
-        ...existingPluginInstructions.filter(instruction => instruction !== targetRepositoryInstruction),
+        // Replace any earlier target line; the card may have moved between
+        // one repository and the whole environment.
+        ...existingPluginInstructions.filter(instruction => !isTargetRepositoryInstruction(instruction)),
         targetRepositoryInstruction,
       ],
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),

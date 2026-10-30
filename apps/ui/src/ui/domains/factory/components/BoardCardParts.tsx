@@ -188,6 +188,51 @@ export function MetadataLabels({ metadata }: { metadata: Record<string, unknown>
     </ScrollArea>
   );
 }
+type OpenChangeRequest = { repository: string; number: number; provider?: 'github' | 'gitlab' };
+
+/** The change requests a card has out, one per repository its work changed; a legacy single record has no repository. */
+export function openChangeRequests(metadata: Record<string, unknown>): OpenChangeRequest[] {
+  const list = metadata.openChangeRequests;
+  if (!Array.isArray(list)) return [];
+  return list.filter(
+    (entry): entry is OpenChangeRequest =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as OpenChangeRequest).repository === 'string' &&
+      (entry as OpenChangeRequest).repository !== '' &&
+      typeof (entry as OpenChangeRequest).number === 'number',
+  );
+}
+
+/**
+ * The change requests still open for work that spans several repositories:
+ * the card reaches Done only when each of them has merged.
+ */
+export function OpenChangeRequests({ metadata }: { metadata: Record<string, unknown> }) {
+  const entries = openChangeRequests(metadata);
+  if (entries.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" aria-label={tk('card.openChangeRequests')}>
+      {entries.map(entry => {
+        const name = entry.repository.split('/').at(-1) || entry.repository;
+        const number = `${entry.provider === 'gitlab' ? '!' : '#'}${entry.number}`;
+        return (
+          <Txt
+            as="span"
+            variant="meta"
+            tone="muted"
+            key={`${entry.repository}${number}`}
+            className="border-border inline-flex h-5 shrink-0 items-center rounded-full border px-1.5"
+            title={tk('card.openChangeRequest', { repository: entry.repository, number })}
+          >
+            {name} {number}
+          </Txt>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CardActions({
   actions,
   beforeStart,

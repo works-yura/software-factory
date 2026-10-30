@@ -280,8 +280,12 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       if (await isCardRun(session, tenant)) return { ...permissions, unattended: true };
       return permissions;
     },
-    appendSystemPromptFor: session =>
-      claudeSupervisorProjectId(session.id) ? CLAUDE_SUPERVISOR_SYSTEM_PROMPT : undefined,
+    appendSystemPromptFor: async session => {
+      if (claudeSupervisorProjectId(session.id)) return CLAUDE_SUPERVISOR_SYSTEM_PROMPT;
+      // The card's repository, or every workspace repository: the skills read it from the system prompt.
+      const target = await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.targetInstruction });
+      return typeof target === 'string' && target ? `${CLAUDE_FACTORY_SYSTEM_PROMPT}\n\n${target}` : undefined;
+    },
     trustedMcpServers: [CLAUDE_FACTORY_MCP_SERVER],
     ...(options.configDir ? { configDir: options.configDir } : {}),
     allowedTools: options.allowedTools ?? DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS,

@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
@@ -10,6 +12,7 @@ import type { BoardRegistry } from '@factory/core';
 import { createFactoryTransitionTools } from '@factory/harness-mastra';
 import type { SessionGit } from '@factory/harness-mastra';
 import type { FactoryMcpToolScope } from '@factory/mcp';
+import { repoDirUnder } from '@factory/sandbox';
 import type { FactoryTransitionService } from '@factory/runtime';
 import type { FactorySessionSourceLookup } from '@factory/session';
 import type { WorkItemsStorage } from '@factory/store';
@@ -53,6 +56,28 @@ function asMcpTool(tool: AnyTool, requestContext: RequestContext): AnyTool {
 }
 
 /** Git in a local checkout, for the reproduction-test recorder and guard; a failed command answers with its exit code. */
+/**
+ * The checkout of `repository` under a session's working directory. A session
+ * spanning several repositories runs in the directory holding them, one
+ * checkout per repository; a single-repository session runs in its checkout.
+ */
+export function repositoryCheckout(
+  cwd: string,
+  repository: string | undefined,
+  requireRepository = false,
+): string | undefined {
+  const spansSeveral = !existsSync(path.join(cwd, '.git'));
+  if (!repository) {
+    if (spansSeveral && requireRepository) {
+      throw new Error('This session spans several repositories; pass `repository` to name the one the test went into.');
+    }
+    return spansSeveral ? undefined : cwd;
+  }
+  if (!spansSeveral) return cwd;
+  const dir = repoDirUnder(cwd, repository);
+  return existsSync(dir) ? dir : undefined;
+}
+
 export function checkoutGit(cwd: string): SessionGit {
   return args =>
     new Promise(resolve => {
@@ -93,9 +118,10 @@ export async function createClaudeBoundTools(
     ...(deps.sessions ? { sessions: deps.sessions } : {}),
     ...(deps.checkoutFor
       ? {
-          sessionGit: async () => {
+          sessionGit: async ({ repository, requireRepository }) => {
             const cwd = await deps.checkoutFor!(scope.sessionId);
-            return cwd ? checkoutGit(cwd) : undefined;
+            const checkout = cwd ? repositoryCheckout(cwd, repository, requireRepository) : undefined;
+            return checkout ? checkoutGit(checkout) : undefined;
           },
         }
       : {}),

@@ -248,6 +248,8 @@
     "remove": "Remove"
   },
   "card": {
+    "openChangeRequests": "Open change requests",
+    "openChangeRequest": "{{repository}} {{number}} is still open",
     "detailsFor": "Details for {{title}}",
     "actionsFor": "Actions for {{title}}",
     "allActionsFor": "All actions for {{title}}",
@@ -271,8 +273,8 @@
     "refreshFailed": "Failed to refresh the board — try reloading the page",
     "cardGone": "This card no longer exists — the board may be out of date",
     "noMatchingRepository": "No repository matching this card's provider is linked to this Factory.",
-    "repositoryNotLinked": "Repository {{repository}} is not linked to this Factory with a provider matching this card",
-    "startFailed": "Unable to start the run"
+    "noEnvironmentRepository": "Turn a repository on under Settings → Environment: this Factory has several and none is in its environment.",
+    "repositoryNotLinked": "Repository {{repository}} is not linked to this Factory with a provider matching this card"
   },
   "repositoryPicker": {
     "label": "Choose repository",

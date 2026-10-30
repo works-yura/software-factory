@@ -26,7 +26,7 @@ Skip everything tied to a PR or MR: no `gh pr`/`glab mr` commands, no waiting fo
 ## Checkout
 
 1. Fetch the work branch the session is on (`git rev-parse --abbrev-ref HEAD`) from `origin` and reset the checkout to `origin/<branch>`. If it does not exist on `origin`, the builder never pushed: request changes saying so.
-2. Record the full head SHA (`git rev-parse HEAD`). That is the only head you review and test. Determine the base with `git merge-base HEAD origin/<default branch>` and review `base...HEAD`.
+2. Record the full head SHA (`git rev-parse HEAD`). That is the only head you review and test. Determine the base with `git merge-base HEAD origin/<default branch>` and review `base...HEAD`. When the workspace holds several repositories, do this in every repository whose branch has commits beyond its base: the work is one change across them, so review and test it together.
 3. If the factory-phase arguments say this is a later round, read the previous findings from the work item and confirm each one is fixed on this head before looking for new problems.
 4. On a Bug card, the tester committed a reproduction test before the fix (its commit and files are in the work item's history). Confirm those files are unchanged on this head, that the test fails at the test commit and passes on this head; request changes when it is missing, changed, or does not prove the bug.
 
@@ -42,6 +42,6 @@ Write the findings argument of the verdict call as Markdown the builder (on requ
 
 ## Verdict
 
-Call `factory_record_review_verdict` with `verdict` (`approve` or `request changes`), `reviewedHeadSha` (the head you tested), and `findings` (the report). Approve keeps the card in Review and wakes the builder to open the change request from that exact head. Request changes sends it back to Building with your report. After the round limit in the factory-phase arguments, a further request changes parks the card for a human, so make each round's requests complete.
+Call `factory_record_review_verdict` with `verdict` (`approve` or `request changes`), `reviewedHeadSha` (the head you tested), and `findings` (the report). When the work changed several repositories, also pass `reviewedHeads`: one `{ repository, sha }` per changed repository (owner/name and its full head SHA); `reviewedHeadSha` is then any one of them. Each change request opens only from the head you approved for its repository. Approve keeps the card in Review and wakes the builder to open the change request from that exact head. Request changes sends it back to Building with your report. After the round limit in the factory-phase arguments, a further request changes parks the card for a human, so make each round's requests complete.
 
 Then post the report as your final conversation message and stop.

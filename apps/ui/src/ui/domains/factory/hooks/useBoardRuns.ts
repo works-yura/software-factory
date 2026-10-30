@@ -5,11 +5,9 @@ import { useNavigate } from 'react-router';
 import { translator } from '../../../i18n/t';
 
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
-import { useCardRepositorySlug } from './useCardRepositorySlug';
 import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
-import { repositoryMatchesCardSource } from '../boardRepository';
-import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { sessionRepositoryFor } from '../boardRepository';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 const tk = translator('board');
@@ -25,16 +23,7 @@ export function useBoardRuns({
   refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
 }) {
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
-  const repositorySlugFor = useCardRepositorySlug(repositories);
   const navigate = useNavigate();
-  const [repositorySelection, setRepositorySelection] = useState<{
-    item: WorkItem;
-    branch: string;
-    threadTitle: string;
-  }>();
-  const repositoryChoices = repositorySelection
-    ? repositories.filter(repository => repositoryMatchesCardSource(repository, repositorySelection.item.source))
-    : [];
 
   // A card click refetches items before it can decide whether to open an
   // existing thread or mint a new session. That wait is a round trip long and
@@ -92,27 +81,22 @@ export function useBoardRuns({
         return;
       }
       const spec = itemSessionSpec(refreshed);
-      const compatibleRepositories = repositories.filter(repository =>
-        repositoryMatchesCardSource(repository, refreshed.source),
-      );
-      if (compatibleRepositories.length === 0) {
-        toast.error(tk('runs.noMatchingRepository'));
-        return;
-      }
-      const targetSlug = await repositorySlugFor(refreshed.source, refreshed.metadata);
-      const hasLinkedTarget = compatibleRepositories.some(repository => repository.slug === targetSlug);
-      if (!targetSlug && compatibleRepositories.length > 1) {
-        setRepositorySelection({ item: refreshed, ...spec });
-        return 'repository-selection-required' as const;
-      }
-      if (targetSlug && !hasLinkedTarget) {
-        toast.error(tk('runs.repositoryNotLinked', { repository: targetSlug }));
+      // The session spans the Factory's environment; nobody picks a
+      // repository unless the card itself names one.
+      const target = sessionRepositoryFor(repositories, refreshed);
+      if ('error' in target) {
+        toast.error(
+          target.error === 'unlinked'
+            ? tk('runs.repositoryNotLinked', { repository: target.slug })
+            : target.error === 'environment'
+              ? tk('runs.noEnvironmentRepository')
+              : tk('runs.noMatchingRepository'),
+        );
         return;
       }
       await start.mutateAsync({
         branch: spec.branch,
         threadTitle: spec.threadTitle,
-        repositorySlug: targetSlug ?? compatibleRepositories[0]?.slug,
         workItem: {
           id: refreshed.id,
           role: 'chat',
@@ -127,36 +111,9 @@ export function useBoardRuns({
     }
   };
 
-  const selectRepository = async (repository: LinkedRepositoryPayload) => {
-    if (!repositorySelection) return;
-    const { item, branch, threadTitle } = repositorySelection;
-    setRepositorySelection(undefined);
-    try {
-      await start.mutateAsync({
-        branch,
-        threadTitle,
-        repositorySlug: repository.slug,
-        workItem: {
-          id: item.id,
-          role: 'chat',
-          source: item.source,
-          sourceKey: item.sourceKey,
-          title: item.title,
-          metadata: item.metadata,
-        },
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : tk('runs.startFailed'));
-    }
-  };
-
   return {
     enabled,
     error: start.error,
-    repositoryChoices,
-    repositorySelection,
-    selectRepository,
-    closeRepositorySelection: () => setRepositorySelection(undefined),
     preparingFor: (itemId: string): string | undefined =>
       preparingItems[itemId] ?? (startingItemIds.includes(itemId) ? preparingSessionLabel() : undefined),
     openThread,

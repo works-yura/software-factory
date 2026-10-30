@@ -102,9 +102,50 @@ describe('resolveWorkItemRepository', () => {
     ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/only' });
   });
 
-  it('reports ambiguous and unlinked repository targets instead of choosing the first', async () => {
-    const { sourceControl, project } = await seedRepositories(['acme/one', 'acme/two']);
+  it('runs a card that names no repository across the whole environment', async () => {
+    const { sourceControl, project, repositories } = await seedRepositories(['acme/one', 'acme/two']);
     const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
+
+    // No repository is chosen for the card: the session is filed under the
+    // position-1 link and spans every environment repository.
+    await expect(resolveWorkItemRepository({ ...args, item: { metadata: null } })).resolves.toEqual({
+      status: 'resolved',
+      projectRepositoryId: repositories[0]!.projectRepository.id,
+      slug: 'acme/one',
+      environment: [
+        { projectRepositoryId: repositories[0]!.projectRepository.id, slug: 'acme/one' },
+        { projectRepositoryId: repositories[1]!.projectRepository.id, slug: 'acme/two' },
+      ],
+    });
+
+    // Reordered, the session row moves with position 1; still nothing to choose.
+    await sourceControl.projectRepositories.update({
+      orgId: 'org-1',
+      id: repositories[1]!.projectRepository.id,
+      input: { position: -1 },
+    });
+    await expect(resolveWorkItemRepository({ ...args, item: { metadata: null } })).resolves.toEqual({
+      status: 'resolved',
+      projectRepositoryId: repositories[1]!.projectRepository.id,
+      slug: 'acme/two',
+      environment: [
+        { projectRepositoryId: repositories[1]!.projectRepository.id, slug: 'acme/two' },
+        { projectRepositoryId: repositories[0]!.projectRepository.id, slug: 'acme/one' },
+      ],
+    });
+  });
+
+  it('reports ambiguous and unlinked repository targets instead of choosing the first', async () => {
+    const { sourceControl, project, repositories } = await seedRepositories(['acme/one', 'acme/two']);
+    const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
+    // With every repository out of the environment there is no workspace to run in.
+    for (const { projectRepository } of repositories) {
+      await sourceControl.projectRepositories.update({
+        orgId: 'org-1',
+        id: projectRepository.id,
+        input: { inEnvironment: false },
+      });
+    }
 
     await expect(resolveWorkItemRepository({ ...args, item: { metadata: null } })).resolves.toEqual({
       status: 'ambiguous',

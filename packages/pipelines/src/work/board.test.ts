@@ -198,4 +198,38 @@ describe('work board done policy', () => {
     expect(toDone({ type: 'system', id: 'factory-rule-dispatcher' }, null, 17)).toMatchObject({ type: 'allow' });
     expect(toDone({ type: 'human', id: 'user-1' }, null, 17)).toMatchObject({ type: 'allow' });
   });
+
+  it('keeps the builder from closing work spanning repositories until every change request merged', () => {
+    const builder = { type: 'agent', id: 'binding-1', role: 'work' };
+    const withOpen = (openChangeRequests: Array<{ repository: string; number: number }>) =>
+      workBoard.transitionPolicy!({
+        actor: builder,
+        fromStage: 'review',
+        toStage: 'done',
+        isHumanTransition: false,
+        plansAutoApproved: false,
+        planApproved: false,
+        item: {
+          ...executeContext('manual').item,
+          stages: ['review'],
+          triageType: 'bug',
+          metadata: { reviewVerdict: 'approve', openChangeRequests },
+        },
+      } as never);
+
+    expect(
+      withOpen([
+        { repository: 'works_yura/ai', number: 4 },
+        { repository: 'works_yura/test', number: 2 },
+      ]),
+    ).toMatchObject({
+      type: 'reject',
+      reason: expect.stringContaining('Pull requests works_yura/ai#4, works_yura/test#2 are still open'),
+    });
+    expect(withOpen([{ repository: 'works_yura/test', number: 2 }])).toMatchObject({
+      type: 'reject',
+      reason: expect.stringContaining('Pull request works_yura/test#2 is still open'),
+    });
+    expect(withOpen([])).toMatchObject({ type: 'allow' });
+  });
 });

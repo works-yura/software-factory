@@ -7,7 +7,13 @@ import {
   withChangeRequests,
 } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import { hasExplicitRuleOverride, selectEventRule } from '@factory/core';
+import {
+  changeRequestOpenedPatch,
+  changeRequestSettledPatch,
+  hasExplicitRuleOverride,
+  isOpenChangeRequest,
+  selectEventRule,
+} from '@factory/core';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
@@ -252,15 +258,19 @@ export class GitLabRules {
       orgId: target.target.orgId,
       integrationIds: ['gitlab'],
     });
-    if (!config.gitlab?.enabled || !config.gitlab.sourceIds?.includes(sourceId)) return { status: 'ignored' };
-    const binding = (
-      await this.options.intake.listBindings({ orgId: target.target.orgId, integrationId: 'gitlab' })
-    ).find(
-      candidate => candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
-    );
-    if (!binding) return { status: 'ignored' };
-    const board = this.options.boards.get(binding.board ?? 'work');
-    if (!board) return { status: 'ignored' };
+    // A project that is not an intake source still belongs to the Factory's
+    // workspace: a card spanning several repositories opens merge requests in
+    // it, and those must be tracked on the card even though nothing else here
+    // reacts to the project.
+    const intakeSelected = Boolean(config.gitlab?.enabled && config.gitlab.sourceIds?.includes(sourceId));
+    const binding = intakeSelected
+      ? (await this.options.intake.listBindings({ orgId: target.target.orgId, integrationId: 'gitlab' })).find(
+          candidate =>
+            candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
+        )
+      : undefined;
+    const board = binding ? this.options.boards.get(binding.board ?? 'work') : undefined;
+    if (!board && !event.startsWith('mergeRequest')) return { status: 'ignored' };
 
     const connectionIds = [
       ...new Set(
@@ -341,6 +351,34 @@ export class GitLabRules {
       authorTrusted(issueAuthor),
       authorTrusted(mergeRequestAuthor),
     ]);
+    // The authoring Work item records which merge requests it has out, so the
+    // Work transition policy keeps an agent from closing the work while one is
+    // open. Sessions carry no repository, so a branch shared by two Work cards
+    // is ambiguous and records nothing.
+    const branchOwners = headBranch
+      ? items.filter(
+          item =>
+            item.externalSource?.type !== 'pull-request' &&
+            Object.values(item.sessions).some(session => session.branch === headBranch),
+        )
+      : [];
+    const trackAuthoringMergeRequest = async () => {
+      if (!authoringItem || !mergeRequestIid || branchOwners.length !== 1) return;
+      await this.#trackOpenMergeRequest({
+        orgId: authoringItem.orgId,
+        id: authoringItem.id,
+        event,
+        projectPath,
+        mergeRequestIid,
+        eventAt: timestamp(mergeRequest?.updated_at),
+        opened: string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted),
+        headSha: string(object(mergeRequest?.last_commit)?.id)?.toLowerCase(),
+      });
+    };
+    if (!board) {
+      await trackAuthoringMergeRequest();
+      return { status: 'ignored' };
+    }
     const actor: FactoryRuleActor = {
       type: 'gitlab',
       username,
@@ -376,7 +414,7 @@ export class GitLabRules {
           id: parent.id,
           headSha,
           headAt,
-          ownedPullRequestNumber: mergeRequestIid,
+          ...(mergeRequestIid ? { ownedChangeRequest: { repository: projectPath, number: mergeRequestIid } } : {}),
         });
       }
       pushedReviewItem = (await this.options.storage.get({ orgId: reviewItem.orgId, id: reviewItem.id })) ?? reviewItem;
@@ -427,28 +465,7 @@ export class GitLabRules {
         }),
       );
     }
-    // The authoring Work item records which merge request it has out, so the
-    // Work transition policy keeps an agent from closing the work while it is
-    // open. Sessions carry no repository, so a branch shared by two Work cards
-    // is ambiguous and records nothing.
-    const branchOwners = headBranch
-      ? items.filter(
-          item =>
-            item.externalSource?.type !== 'pull-request' &&
-            Object.values(item.sessions).some(session => session.branch === headBranch),
-        )
-      : [];
-    if (authoringItem && mergeRequestIid && branchOwners.length === 1) {
-      await this.#trackOpenMergeRequest({
-        orgId: authoringItem.orgId,
-        id: authoringItem.id,
-        event,
-        mergeRequestIid,
-        eventAt: timestamp(mergeRequest?.updated_at),
-        opened: string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted),
-        headSha: string(object(mergeRequest?.last_commit)?.id)?.toLowerCase(),
-      });
-    }
+    await trackAuthoringMergeRequest();
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
     return results[0] ?? { status: 'ignored' };
@@ -464,6 +481,8 @@ export class GitLabRules {
     orgId: string;
     id: string;
     event: string;
+    /** `group/project`: an iid is only unique within its project. */
+    projectPath: string;
     mergeRequestIid: number;
     eventAt: number | undefined;
     opened: boolean;
@@ -471,18 +490,18 @@ export class GitLabRules {
   }): Promise<void> {
     const settling = input.event === 'mergeRequestMerged' || input.event === 'mergeRequestClosed';
     if (input.event !== 'mergeRequestOpened' && !settling) return;
-    const key = String(input.mergeRequestIid);
+    const key = `${input.projectPath}!${input.mergeRequestIid}`;
     for (let attempt = 0; attempt < 3; attempt++) {
       const item = await this.options.storage.get({ orgId: input.orgId, id: input.id });
       if (!item) return;
       const events = object(item.metadata?.mergeRequestEvents) ?? {};
-      const last = object(events[key]);
+      // Cards recorded before events were keyed by project use the bare iid.
+      const last = object(events[key]) ?? object(events[String(input.mergeRequestIid)]);
       const lastAt = number(last?.at);
       if (input.eventAt !== undefined && lastAt !== undefined && lastAt >= input.eventAt) return;
       // Without a timestamp, only an opening that no close has settled is trusted.
       if (input.eventAt === undefined && !settling && last?.open === false) return;
       if (!settling && !input.opened) return;
-      const recorded = item.metadata?.openPullRequestNumber;
       const patch: Record<string, unknown> = {
         mergeRequestEvents: { ...events, [key]: { at: input.eventAt ?? lastAt ?? null, open: !settling } },
       };
@@ -490,15 +509,28 @@ export class GitLabRules {
         // A head recorded for an earlier merge request must not mark this one's
         // verdict outdated. A replayed opening of the merge request already
         // recorded keeps the head its pushes left.
-        if (recorded !== input.mergeRequestIid) {
+        if (!isOpenChangeRequest(item.metadata, input.projectPath, input.mergeRequestIid)) {
           patch.pullRequestHeadSha = input.headSha ?? null;
           patch.pullRequestHeadAt = input.eventAt ?? null;
         }
-        patch.openPullRequestNumber = input.mergeRequestIid;
-      } else if (recorded === input.mergeRequestIid) {
-        patch.openPullRequestNumber = null;
-        if (input.event === 'mergeRequestMerged' && typeof item.metadata?.reviewVerdict === 'string') {
-          patch.reviewVerdict = null;
+        // A card spanning several repositories has one merge request out per
+        // repository it changed; this one joins the others.
+        Object.assign(
+          patch,
+          changeRequestOpenedPatch(item.metadata, input.projectPath, input.mergeRequestIid, 'gitlab'),
+        );
+      } else {
+        const cleared = changeRequestSettledPatch(item.metadata, input.projectPath, input.mergeRequestIid);
+        if (cleared) {
+          Object.assign(patch, cleared);
+          // The verdict covers the work as a whole: it settles with the last one out.
+          if (
+            cleared.openChangeRequests.length === 0 &&
+            input.event === 'mergeRequestMerged' &&
+            typeof item.metadata?.reviewVerdict === 'string'
+          ) {
+            patch.reviewVerdict = null;
+          }
         }
       }
       try {

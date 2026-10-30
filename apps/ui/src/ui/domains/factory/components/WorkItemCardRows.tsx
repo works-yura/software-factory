@@ -15,6 +15,7 @@ import {
   CardStatus,
   CommentCount,
   MetadataLabels,
+  OpenChangeRequests,
   SourceTitle,
   WorkItemSourceIcon,
 } from './BoardCardParts';
@@ -75,6 +76,7 @@ export function WorkItemCardRows({
         </div>
       </div>
       <MetadataLabels metadata={item.metadata} />
+      <OpenChangeRequests metadata={item.metadata} />
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (

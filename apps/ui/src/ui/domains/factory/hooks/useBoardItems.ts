@@ -5,7 +5,6 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import {
   useDeleteWorkItemMutation,
   useTransitionWorkItemMutation,
-  useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
   useWorkItemsQuery,
 } from '../../../../hooks/useWorkItems';
@@ -24,7 +23,6 @@ const tk = translator('board');
 interface MoveOptions {
   /** What the server records as the reason for the move; a drag says so, a card button does not. */
   cause?: string;
-  repositorySlug?: string;
 }
 
 /** The board's persisted cards: the query behind them and the moves that rewrite them. */
@@ -44,7 +42,6 @@ export function useBoardItems({
   const items = useWorkItemsQuery(factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
-  const update = useUpdateWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId, currentUserId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
@@ -98,21 +95,7 @@ export function useBoardItems({
     }
     movingRef.current.add(id);
     const release = () => movingRef.current.delete(id);
-    if (!options.repositorySlug) {
-      requestTransition(item, toStage, options, release);
-      return;
-    }
-    // The patch bumps the revision, so the move has to ride the item it returned.
-    void update
-      .mutateAsync({
-        id,
-        patch: { metadata: { ...item.metadata, repository: options.repositorySlug } },
-      })
-      .then(patched => requestTransition(patched, toStage, options, release))
-      .catch(error => {
-        release();
-        onFailure?.(error instanceof Error ? error.message : tk('errors.updateFailed'));
-      });
+    requestTransition(item, toStage, options, release);
   };
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {

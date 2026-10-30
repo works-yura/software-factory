@@ -1,11 +1,16 @@
 import type { VersionControl } from '@factory/capabilities';
+import path from 'node:path';
+
 import {
   checkoutSessionBranch,
   deriveLocalWorkdir,
   getSessionSandbox,
   materializeRepo,
+  repoDirUnder,
   requireExec,
+  syncEnvironmentRepository,
 } from '@factory/sandbox';
+import { resolveSessionRepositories } from '@factory/session';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from '@factory/pipelines';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { FactoryProjectsStorage, SourceControlStorageHandle } from '@factory/store';
@@ -22,7 +27,10 @@ export interface ClaudeCheckoutSourceControl {
  * on the session branch, materialized the way a Mastra session's workspace
  * does it (`materializeRepo`, `checkoutSessionBranch`) in the session's own
  * sandbox directory, which is shared with the Mastra sandbox memo so session
- * retirement finds and releases it.
+ * retirement finds and releases it. A Factory whose environment holds several
+ * repositories checks every one of them out beside it on the same branch
+ * (`syncEnvironmentRepository`), and the session runs in the directory that
+ * holds them all, as a Mastra session does.
  *
  * The CLI runs on this host, so only a local sandbox can hold its cwd; a remote
  * sandbox needs the CLI inside it (the sandbox phase) and is refused here.
@@ -65,17 +73,23 @@ export function createClaudeCheckoutResolver({
       : null;
     const getRepositoryAccess = () =>
       provider.versionControl.getRepositoryAccess({ orgId: session.orgId, repositoryId: repository.id });
-    const entry = getSessionSandbox(session.id, repository.slug, () =>
-      sandbox.create(
-        {
-          sessionId: session.id,
-          sandboxId: session.sandboxId ?? undefined,
-          repoFullName: repository.slug,
-          setupCommand: link.setupCommand ?? undefined,
-          getRepositoryAccess,
-        },
-        project?.sandboxSettings ?? {},
-      ),
+    const environment = await resolveSessionRepositories({ sourceControl: storage, session });
+    const siblings = environment.filter(candidate => candidate.link.id !== link.id);
+    const entry = getSessionSandbox(
+      session.id,
+      repository.slug,
+      () =>
+        sandbox.create(
+          {
+            sessionId: session.id,
+            sandboxId: session.sandboxId ?? undefined,
+            repoFullName: repository.slug,
+            setupCommand: link.setupCommand ?? undefined,
+            getRepositoryAccess,
+          },
+          project?.sandboxSettings ?? {},
+        ),
+      siblings.length > 0 ? [repository.slug, ...siblings.map(sibling => sibling.repository.slug)] : undefined,
     );
     // Only a local sandbox has a directory on this host; a remembered workdir of a remote one is a path on another machine.
     const workdir =
@@ -113,6 +127,41 @@ export function createClaudeCheckoutResolver({
       pullRequestNumber: pullRequestNumberFromBranch(session.branch),
       mergeRequestNumber: provider.id === 'gitlab' ? mergeRequestNumberFromBranch(session.branch) : undefined,
     });
-    return workdir;
+    if (siblings.length === 0) return workdir;
+    // Every other environment repository beside the session's own, on the
+    // same branch: the work may need changes in any of them.
+    const root = path.dirname(workdir);
+    for (const sibling of siblings) {
+      const dir = repoDirUnder(root, sibling.repository.slug);
+      const siblingAccess = await provider.versionControl.getRepositoryAccess({
+        orgId: session.orgId,
+        repositoryId: sibling.repository.id,
+      });
+      const siblingToken = siblingAccess.authorization?.token;
+      if (!siblingToken) throw new Error(`Repository access for ${sibling.repository.slug} did not include a bearer token`);
+      await materializeRepo({
+        row: { id: session.id, sandboxWorkdir: dir, materializedAt: null },
+        repoInfo: {
+          repoFullName: sibling.repository.slug,
+          defaultBranch: sibling.repository.defaultBranch,
+          cloneUrl: siblingAccess.cloneUrl,
+          authUsername: siblingAccess.authorization?.username,
+        },
+        sandbox: target,
+        token: siblingToken,
+        // `materialized_at` is the session's own repository's.
+        storage: { markMaterialized: async () => {} },
+      });
+      await syncEnvironmentRepository(target, dir, {
+        ...(provider.gitIdentity ? { identity: provider.gitIdentity } : {}),
+        branch: session.branch,
+        defaultBranch: sibling.link.branch || sibling.repository.defaultBranch,
+        token: siblingToken,
+        repoFullName: sibling.repository.slug,
+        cloneUrl: siblingAccess.cloneUrl,
+        authUsername: siblingAccess.authorization?.username,
+      });
+    }
+    return root;
   };
 }

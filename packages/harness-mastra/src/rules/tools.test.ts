@@ -6,7 +6,7 @@ import { createBoardRegistry } from '@factory/testing';
 import { createLifecycleTestRegistry } from '@factory/pipelines/testing';
 import type { WorkItemsStorage } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
-import { createFactoryTransitionTools } from './tools.ts';
+import { createFactoryTransitionTools, selfReviewedHeadFor } from './tools.ts';
 import { FactoryTransitionService } from '@factory/testing';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -708,6 +708,38 @@ describe('factory_transition_work_item', () => {
         selfReviewFindings: 'Result: done',
         selfReviewRounds: rounds,
       });
+    });
+
+    it('records the head approved in every repository of work spanning several', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const id = await selfReviewingItem(storage, {});
+      const context = requestContext();
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        transitionService: { transition: vi.fn().mockResolvedValue({ status: 'accepted' }) } as never,
+      });
+      const api = 'A'.repeat(40);
+      const app = 'b'.repeat(40);
+
+      await execute(tools.factory_record_review_verdict as ExecutableTool, context, {
+        verdict: 'approve',
+        reviewedHeadSha: api,
+        reviewedHeads: [
+          { repository: 'Acme/API', sha: api },
+          { repository: 'acme/app', sha: app },
+        ],
+        findings: 'Result: Approved',
+      });
+
+      const metadata = (await storage.get({ orgId: 'org-1', id }))?.metadata;
+      expect(metadata?.selfReviewedHeads).toEqual({ 'acme/api': 'a'.repeat(40), 'acme/app': app });
+      expect(selfReviewedHeadFor(metadata, 'ACME/app')).toBe(app);
+      // A repository the review did not cover has no approved head.
+      expect(selfReviewedHeadFor(metadata, 'acme/docs')).toBeNull();
+      // A verdict with one head covers the single repository of its card.
+      expect(selfReviewedHeadFor({ selfReviewedHeadSha: app }, 'acme/app')).toBe(app);
+      expect(selfReviewedHeadFor({}, 'acme/app')).toBeNull();
     });
 
     async function reviewingItem(storage: WorkItemsStorage, stage = 'review') {

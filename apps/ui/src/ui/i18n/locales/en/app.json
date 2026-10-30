@@ -25,7 +25,7 @@
     "threadNotFound": "Failed to switch thread: thread {{threadId}} was not found",
     "switchThreadFailed": "Failed to switch thread: {{reason}}",
     "noFactorySelected": "No Factory selected",
-    "chooseRepository": "Choose a repository before starting this Factory run",
+    "noEnvironmentRepository": "Turn a repository on under Settings → Environment before starting this Factory run",
     "connectRepository": "Connect a repository before creating a workspace"
   },
   "workspaces": {

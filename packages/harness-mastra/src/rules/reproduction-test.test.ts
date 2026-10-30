@@ -211,3 +211,99 @@ describe('factory_record_reproduction_test', () => {
     ).rejects.toThrow(`does not touch ${TEST_PATH}`);
   });
 });
+
+describe('reproduction tests across repositories', () => {
+  const boards = createBoardRegistry();
+  const API_SHA = 'a'.repeat(40);
+  const APP_SHA = 'b'.repeat(40);
+  const API_TEST = 'test/orders.test.ts';
+  const APP_TEST = 'lib/orders_test.dart';
+
+  it('records one test per repository and asks for the repository when the card names none', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await bindBugCard(storage, 'tests', 'tester');
+    const context = requestContext();
+    const asked: Array<{ repository?: string; requireRepository?: boolean }> = [];
+    const checkouts: Record<string, SessionGit> = {
+      'acme/api': fakeGit([], [API_TEST]),
+      'acme/app': fakeGit([], [APP_TEST]),
+    };
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition: vi.fn(accepted) },
+      boards,
+      sessionGit: async ({ repository, requireRepository }) => {
+        asked.push({ repository, requireRepository });
+        if (!repository) throw new Error('This session spans several repositories; pass `repository`.');
+        return checkouts[repository];
+      },
+    });
+    const tool = tools.factory_record_reproduction_test as ExecutableTool;
+
+    // The card names no repository, so the tester must say where the test went.
+    await expect(tool.execute({ commitSha: API_SHA, testPaths: [API_TEST] }, { requestContext: context })).rejects.toThrow(
+      'pass `repository`',
+    );
+    expect(asked[0]).toEqual({ repository: undefined, requireRepository: true });
+
+    await tool.execute({ commitSha: API_SHA, testPaths: [API_TEST], repository: 'acme/api' }, { requestContext: context });
+    await tool.execute({ commitSha: APP_SHA, testPaths: [APP_TEST], repository: 'acme/app' }, { requestContext: context });
+
+    expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))?.metadata).toMatchObject({
+      reproductionTests: [
+        { repository: 'acme/api', sha: API_SHA, paths: [API_TEST] },
+        { repository: 'acme/app', sha: APP_SHA, paths: [APP_TEST] },
+      ],
+      // The board policy reads the first record.
+      bugReproTestSha: API_SHA,
+      bugReproTestPaths: [API_TEST],
+    });
+
+    // Re-recording a repository replaces its own record only.
+    const newer = 'd'.repeat(40);
+    await tool.execute({ commitSha: newer, testPaths: [APP_TEST], repository: 'acme/app' }, { requestContext: context });
+    expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))?.metadata?.reproductionTests).toEqual([
+      { repository: 'acme/api', sha: API_SHA, paths: [API_TEST] },
+      { repository: 'acme/app', sha: newer, paths: [APP_TEST] },
+    ]);
+  });
+
+  it("checks every repository's recorded test in that repository's checkout before the fix seat moves on", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await bindBugCard(storage, 'execute', 'work', {
+      reproductionTests: [
+        { repository: 'acme/api', sha: API_SHA, paths: [API_TEST] },
+        { repository: 'acme/app', sha: APP_SHA, paths: [APP_TEST] },
+      ],
+      bugReproTestSha: API_SHA,
+      bugReproTestPaths: [API_TEST],
+    });
+    const transition = vi.fn(accepted);
+    const context = requestContext();
+    const changedIn: Record<string, string[]> = { 'acme/api': ['src/orders.ts'], 'acme/app': [APP_TEST] };
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+      boards,
+      sessionGit: async ({ repository }) => fakeGit(changedIn[repository!] ?? []),
+    });
+    const move = () =>
+      (tools.factory_transition_work_item as ExecutableTool).execute(
+        { stage: 'review', expectedRevision: prepared.item.revision, rationale: 'Fixed.' },
+        { requestContext: context, agent: { toolCallId: 'call-1' } },
+      );
+
+    // The app's test changed: the move is refused and names that repository.
+    await expect(move()).resolves.toMatchObject({
+      status: 'rejected',
+      reason: expect.stringContaining(`committed at ${APP_SHA} in acme/app`),
+    });
+    expect(transition).not.toHaveBeenCalled();
+
+    changedIn['acme/app'] = ['lib/orders.dart'];
+    await move();
+    expect(transition).toHaveBeenCalledWith(expect.objectContaining({ stage: 'review' }));
+  });
+});

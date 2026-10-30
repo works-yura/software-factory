@@ -1,3 +1,4 @@
+import { ownsChangeRequest } from '@factory/core';
 import { WorkItemUpdateConflictError } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 
@@ -16,18 +17,16 @@ export async function recordPullRequestHead(
     id: string;
     headSha: string;
     headAt: number | undefined;
-    /** Only write while the card has no open pull request or has this one out. */
-    ownedPullRequestNumber?: number;
+    /** Only write while the card has no open change request or has this one out (in this repository). */
+    ownedChangeRequest?: { repository: string; number: number };
   },
 ): Promise<void> {
   if (input.headAt === undefined) return;
   for (let attempt = 0; attempt < 3; attempt++) {
     const card = await storage.get({ orgId: input.orgId, id: input.id });
     if (!card) return;
-    if (input.ownedPullRequestNumber !== undefined) {
-      const recorded = card.metadata?.openPullRequestNumber;
-      if (typeof recorded === 'number' && recorded !== input.ownedPullRequestNumber) return;
-    }
+    const owned = input.ownedChangeRequest;
+    if (owned && !ownsChangeRequest(card.metadata, owned.repository, owned.number)) return;
     const recordedAt = card.metadata?.pullRequestHeadAt;
     if (typeof recordedAt === 'number' && recordedAt >= input.headAt) return;
     try {

@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { __clearSessionSandboxesForTests, checkoutSessionBranch, materializeRepo } from '@factory/sandbox';
+import {
+  __clearSessionSandboxesForTests,
+  checkoutSessionBranch,
+  materializeRepo,
+  sessionLayout,
+  getSessionSandbox,
+  syncEnvironmentRepository,
+} from '@factory/sandbox';
 
 import { createClaudeCheckoutResolver } from './checkout.ts';
 import type { ClaudeCheckoutSourceControl } from './checkout.ts';
@@ -9,7 +16,12 @@ import type { ClaudeCheckoutSourceControl } from './checkout.ts';
 // replaced so the resolver's choices — which repo, which branch, where — can be asserted.
 vi.mock('@factory/sandbox', async importOriginal => {
   const actual = await importOriginal<typeof import('@factory/sandbox')>();
-  return { ...actual, materializeRepo: vi.fn(async () => {}), checkoutSessionBranch: vi.fn(async () => {}) };
+  return {
+    ...actual,
+    materializeRepo: vi.fn(async () => {}),
+    checkoutSessionBranch: vi.fn(async () => {}),
+    syncEnvironmentRepository: vi.fn(async () => ({ outcome: 'created', branch: 'factory/work-1' })),
+  };
 });
 
 const ROOT = '/sandboxes/row-1';
@@ -50,6 +62,8 @@ interface FakeOptions {
   repositories?: Record<string, { orgId: string; id: string; slug: string; defaultBranch: string }>;
   access?: { cloneUrl?: string; authorization?: { token?: string; username?: string } };
   gitIdentity?: ClaudeCheckoutSourceControl['gitIdentity'];
+  /** The Factory's environment links in position order; none by default. */
+  environment?: string[];
 }
 
 function sourceControl(options: FakeOptions = {}) {
@@ -68,8 +82,22 @@ function sourceControl(options: FakeOptions = {}) {
   const projectRepositories = {
     get: vi.fn(async ({ orgId, id }: { orgId: string; id: string }) => {
       const link = links[id];
-      return link && link.orgId === orgId ? { id, ...link } : null;
+      return link && link.orgId === orgId ? { id, connectionId: 'connection-1', ...link } : null;
     }),
+    listByProject: vi.fn(async () =>
+      (options.environment ?? []).map((id, position) => ({
+        id,
+        connectionId: 'connection-1',
+        inEnvironment: true,
+        position,
+        createdAt: new Date(0),
+        ...links[id],
+      })),
+    ),
+  };
+  const connections = {
+    list: vi.fn(async () => [{ id: 'connection-1', integrationId: options.id ?? 'github' }]),
+    get: vi.fn(async () => ({ id: 'connection-1', integrationId: options.id ?? 'github' })),
   };
   const repositoriesStorage = {
     get: vi.fn(async ({ orgId, id }: { orgId: string; id: string }) => {
@@ -81,7 +109,13 @@ function sourceControl(options: FakeOptions = {}) {
   const provider = {
     id: options.id ?? 'github',
     versionControl: { getRepositoryAccess },
-    storage: { sessions: sessionsStorage, projectRepositories, repositories: repositoriesStorage },
+    storage: {
+      integrationId: options.id ?? 'github',
+      sessions: sessionsStorage,
+      projectRepositories,
+      repositories: repositoriesStorage,
+      connections,
+    },
     ...(options.gitIdentity ? { gitIdentity: options.gitIdentity } : {}),
   } as unknown as ClaudeCheckoutSourceControl;
   return { provider, sessionsStorage, projectRepositories, repositoriesStorage, getRepositoryAccess };
@@ -117,6 +151,7 @@ describe('createClaudeCheckoutResolver', () => {
     __clearSessionSandboxesForTests();
     materialize.mockClear();
     checkout.mockClear();
+    vi.mocked(syncEnvironmentRepository).mockClear();
   });
   afterEach(() => __clearSessionSandboxesForTests());
 
@@ -187,6 +222,51 @@ describe('createClaudeCheckoutResolver', () => {
       mergeRequestNumber: undefined,
     });
     expect(materialize.mock.invocationCallOrder[0]!).toBeLessThan(checkout.mock.invocationCallOrder[0]!);
+  });
+
+  it('checks out every environment repository beside the session’s own and runs in the directory holding them', async () => {
+    const owner = sourceControl({
+      id: 'gitlab',
+      sessions: { 'session-1': sessionRow() },
+      links: {
+        'link-1': { orgId: 'org-1', repositoryId: 'repo-1', branch: null, setupCommand: null },
+        'link-2': { orgId: 'org-1', repositoryId: 'repo-2', branch: 'develop', setupCommand: null },
+      },
+      repositories: {
+        'repo-1': { orgId: 'org-1', id: 'repo-1', slug: 'works_yura/ai', defaultBranch: 'main' },
+        'repo-2': { orgId: 'org-1', id: 'repo-2', slug: 'works_yura/test', defaultBranch: 'main' },
+      },
+      environment: ['link-1', 'link-2'],
+    });
+    const box = fakeSandbox();
+    const resolve = createClaudeCheckoutResolver({
+      sandbox: box.sandbox,
+      sourceControls: () => [owner.provider],
+      projects: projectsStore(),
+    });
+
+    await expect(resolve('session-1')).resolves.toBe(ROOT);
+
+    expect(checkout).toHaveBeenCalledWith(box.instance, `${ROOT}/ai`, expect.objectContaining({ branch: 'factory/work-1' }));
+    expect(materialize).toHaveBeenCalledTimes(2);
+    expect(materialize.mock.calls[1]![0]).toMatchObject({
+      row: { sandboxWorkdir: `${ROOT}/test`, materializedAt: null },
+      repoInfo: { repoFullName: 'works_yura/test' },
+    });
+    expect(owner.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-2' });
+    expect(vi.mocked(syncEnvironmentRepository)).toHaveBeenCalledWith(box.instance, `${ROOT}/test`, {
+      branch: 'factory/work-1',
+      defaultBranch: 'develop',
+      token: 'repo-token',
+      repoFullName: 'works_yura/test',
+      cloneUrl: 'https://git.test/acme/widgets.git',
+      authUsername: 'x-access-token',
+    });
+    // The sandbox memo knows both, so file readers lay the workspace out the same way.
+    const entry = getSessionSandbox('row-1', 'works_yura/ai', () => {
+      throw new Error('memoized');
+    });
+    expect(sessionLayout(entry)?.repos.map(repo => repo.dir)).toEqual([`${ROOT}/ai`, `${ROOT}/test`]);
   });
 
   it('stops at the first source control that knows the session', async () => {

@@ -11,7 +11,6 @@ import type { BoardCandidate } from '../../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../../domains/factory/components/BoardAutomationSettings';
-import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
 import { BoardStageCreateButton } from '../../domains/factory/components/BoardStageCreateButton';
@@ -24,7 +23,6 @@ import { useBoardIntake } from '../../domains/factory/hooks/useBoardIntake';
 import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../domains/factory/hooks/useBoardRuns';
-import { useRepositoryChoice } from '../../domains/factory/hooks/useRepositoryChoice';
 import { boardLabels, candidateMatchesLabels, workItemMatchesLabels } from '../../domains/factory/boardLabels';
 import {
   boardParticipants,
@@ -99,16 +97,9 @@ export function BoardContent({
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
   const items = useBoardItems({ factoryProjectId, kind, currentUserId });
-  const repositoryChoice = useRepositoryChoice(factory, definition);
-  const cardForDrop = (payload: DragPayload) => {
-    if (payload.kind === 'candidate') return payload.candidate;
-    return items.all.find(item => item.id === payload.id);
-  };
-  const dropWithRepository = (
-    payload: DragPayload,
-    stage: Parameters<typeof items.handleDrop>[1],
-    cause = 'board_drag',
-  ) => {
+  // No repository is chosen for a card: it runs across the Factory's
+  // environment, so a drop goes straight to the move.
+  const dropOnStage = (payload: DragPayload, stage: Parameters<typeof items.handleDrop>[1], cause = 'board_drag') => {
     if (payload.kind === 'work-item') {
       if (payload.fromStage === stage) return;
       const toPhaseKind = definition.phases.find(phase => phase.id === stage)?.kind;
@@ -117,26 +108,7 @@ export function BoardContent({
         return;
       }
     }
-    const card = cardForDrop(payload);
-    if (!card) return;
-    void repositoryChoice.choose(
-      card.source,
-      card.metadata,
-      stage,
-      slug => {
-        if (payload.kind === 'work-item') items.move(payload.id, stage, { cause, repositorySlug: slug });
-        else
-          items.handleDrop(
-            {
-              ...payload,
-              candidate: { ...payload.candidate, metadata: { ...payload.candidate.metadata, repository: slug } },
-            },
-            stage,
-            cause,
-          );
-      },
-      () => items.handleDrop(payload, stage, cause),
-    );
+    items.handleDrop(payload, stage, cause);
   };
   const intake = useBoardIntake({
     factoryProjectId,
@@ -343,15 +315,7 @@ export function BoardContent({
                 onDismissProposal={decisions.dismiss}
                 onRetryDecision={decisions.retry}
                 onCreateSession={() => void runs.openOrCreateSession(item)}
-                onMove={toStage =>
-                  void repositoryChoice.choose(
-                    item.source,
-                    item.metadata,
-                    toStage,
-                    slug => items.move(item.id, toStage, { repositorySlug: slug }),
-                    () => items.move(item.id, toStage),
-                  )
-                }
+                onMove={toStage => items.move(item.id, toStage)}
                 onRemove={() => items.remove(item.id)}
               />
             )}
@@ -365,7 +329,7 @@ export function BoardContent({
             }
             factoryProjectId={factoryProjectId}
             onRun={(candidate, move, prompt) =>
-              dropWithRepository(candidatePayload(candidate, prompt), move.stage, 'card_action')
+              dropOnStage(candidatePayload(candidate, prompt), move.stage, 'card_action')
             }
           />
         </BoardStageCards>
@@ -375,20 +339,6 @@ export function BoardContent({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {runs.repositorySelection && (
-        <RepositoryPickerDialog
-          repositories={runs.repositoryChoices}
-          onClose={runs.closeRepositorySelection}
-          onSelect={runs.selectRepository}
-        />
-      )}
-      {repositoryChoice.pending && (
-        <RepositoryPickerDialog
-          repositories={factory.repositories}
-          onClose={repositoryChoice.cancel}
-          onSelect={selectedRepository => repositoryChoice.select(selectedRepository.slug)}
-        />
-      )}
       {mutationError !== undefined && (
         <div className="shrink-0 p-4 pb-0">
           <Notice variant="destructive">
@@ -405,7 +355,7 @@ export function BoardContent({
             ? { cardKey: workItemCardKey(targetStages[0], targetItemId), commentId: targetCommentId }
             : undefined
         }
-        onDrop={dropWithRepository}
+        onDrop={dropOnStage}
         toolbar={
           <BoardViewControls
             kind={kind}

@@ -248,7 +248,7 @@ describe('Board card buttons move the card', () => {
     expect(transitions[0]?.body).not.toHaveProperty('reenter');
   });
 
-  it('chooses a repository before investigating an unattributed item in a multi-repository factory', async () => {
+  it('investigates an unattributed item in a multi-repository factory without choosing a repository', async () => {
     const { patches, transitions } = stubBoardEndpoints({
       multiRepository: true,
       workItems: [{ ...issueWorkItem, stages: ['intake'] }],
@@ -257,62 +257,39 @@ describe('Board card buttons move the card', () => {
 
     await moveFromCardDetails('Fix login bug', 'Investigate');
 
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    const user = userEvent.setup();
-    const search = within(dialog).getByRole('searchbox', { name: 'Search repositories' });
-    expect(within(dialog).getByRole('button', { name: /acme\/app/ })).toBeVisible();
-    expect(within(dialog).getByRole('button', { name: /acme\/other/ })).toBeVisible();
-
-    await user.type(search, '  ACME/OTHER  ');
-    await waitFor(() => expect(within(dialog).queryByRole('button', { name: /acme\/app/ })).not.toBeInTheDocument());
-    expect(within(dialog).getByRole('button', { name: /acme\/other/ })).toBeVisible();
-    expect(patches).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
-
-    await user.clear(search);
-    await user.type(search, 'missing');
-    expect(await within(dialog).findByText('No matching repositories')).toBeVisible();
-    expect(within(dialog).queryByRole('button', { name: /acme\/other/ })).not.toBeInTheDocument();
-    await user.clear(search);
-    expect(await within(dialog).findByRole('button', { name: /acme\/app/ })).toBeVisible();
-    const chosenRepository = within(dialog).getByRole('button', { name: /acme\/other/ });
-    chosenRepository.focus();
-    await user.keyboard('{Enter}');
-
+    // The card runs across the environment: no dialog, no repository written.
     await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(patches).toEqual([
-      { itemId: 'item-1', body: { metadata: { ...issueWorkItem.metadata, repository: 'acme/other' } } },
-    ]);
+    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+    expect(patches).toHaveLength(0);
     expect(transitions[0]).toMatchObject({
       itemId: 'item-1',
-      body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
+      body: { stage: 'triage', cause: 'card_action' },
     });
   });
 
-  it('cancels repository selection without changing an item and resets search on reopening', async () => {
-    const { patches, transitions } = stubBoardEndpoints({
+  it('shows each repository change request a card spanning the environment still has out', async () => {
+    stubBoardEndpoints({
       multiRepository: true,
-      workItems: [{ ...issueWorkItem, stages: ['intake'] }],
+      workItems: [
+        {
+          ...issueWorkItem,
+          stages: ['review'],
+          metadata: {
+            number: 7,
+            openChangeRequests: [
+              { repository: 'works_yura/ai', number: 4, provider: 'gitlab' },
+              { repository: 'works_yura/test', number: 2, provider: 'gitlab' },
+            ],
+            openPullRequestNumber: 2,
+          },
+        },
+      ],
     });
     renderWorkBoard();
-    const user = userEvent.setup();
-    await moveFromCardDetails('Fix login bug', 'Investigate');
 
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'not-linked');
-    expect(await within(dialog).findByText('No matching repositories')).toBeVisible();
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument());
-    expect(patches).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
-
-    await moveFromCardDetails('Fix login bug', 'Investigate');
-    const reopened = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    expect(within(reopened).getByRole('searchbox', { name: 'Search repositories' })).toHaveValue('');
-    expect(within(reopened).getByRole('button', { name: /acme\/app/ })).toBeVisible();
-    expect(within(reopened).getByRole('button', { name: /acme\/other/ })).toBeVisible();
-    expect(patches).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
+    const list = await screen.findByLabelText('Open change requests');
+    expect(within(list).getByText('ai !4')).toHaveAttribute('title', 'works_yura/ai !4 is still open');
+    expect(within(list).getByText('test !2')).toBeVisible();
   });
 
   it("re-enters the lane when the card's own lane button is clicked", async () => {

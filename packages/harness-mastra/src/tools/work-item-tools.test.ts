@@ -51,8 +51,8 @@ async function setup({
     pubsub,
   });
   const boards = createBoardRegistry();
-  // Two linked repositories, so a card that names neither is ambiguous. Only
-  // the reads the repository check makes are stubbed.
+  // Two linked repositories, so a card that names neither runs across both.
+  // Only the reads the repository check makes are stubbed.
   const linked = [
     { id: 'link-1', repositoryId: 'repo-1', externalId: '2', slug: 'mastra-ai/mastra' },
     { id: 'link-2', repositoryId: 'repo-2', externalId: '3', slug: 'mastra-ai/platform' },
@@ -64,6 +64,15 @@ async function setup({
     },
     projectRepositories: {
       list: async () => linked.map(({ id, repositoryId }) => ({ id, repositoryId, inEnvironment: true })),
+      listByProject: async () =>
+        linked.map(({ id, repositoryId }, position) => ({
+          id,
+          repositoryId,
+          connectionId: 'connection-1',
+          inEnvironment: true,
+          position,
+          createdAt: new Date(0),
+        })),
     },
     repositories: {
       get: async ({ id }: { id: string }) => {

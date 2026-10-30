@@ -1111,7 +1111,7 @@ describe('factory_start_session in work-item mode', () => {
     expect(env.prepare).not.toHaveBeenCalled();
   });
 
-  it('refuses an item with several repositories, listing them and creating nothing', async () => {
+  it('starts an item that names no repository across every environment repository', async () => {
     const env = await withItem();
     const second = await env.sourceControl.repositories.upsert({
       orgId: 'org-1',
@@ -1125,15 +1125,14 @@ describe('factory_start_session in work-item mode', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/sandbox/docs',
     });
-    const rowsBefore = await env.sessionRows();
 
-    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(
-      /several repositories \(.*mastra-ai\/mastra.*\); v1 can't choose one/,
-    );
-    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(/mastra-ai\/docs/);
-    expect(env.prepare).not.toHaveBeenCalled();
-    expect(await env.sessionRows()).toEqual(rowsBefore);
-    expect(await env.bindings()).toEqual([]);
+    // Nobody chooses: the session is filed under the first environment
+    // repository and its sandbox boots both.
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+      role: 'work',
+    });
+    expect(env.prepare).toHaveBeenCalledTimes(1);
   });
 
   it("refuses while the Factory runtime's coordinator isn't ready", async () => {

@@ -71,3 +71,49 @@ describe('GitHub rule resolution', () => {
     expect(() => resolveGithubRules(overrides)).toThrow();
   });
 });
+
+describe('GitHub merge of a card spanning several repositories', () => {
+  const merged = (metadata: Record<string, unknown>, repository = 'acme/api', number = 5) =>
+    ({
+      event: 'pullRequestMerged',
+      board: 'work',
+      ingress: { id: 'ingress-merge' },
+      actor: { type: 'github', login: 'maintainer', trusted: true, factoryAuthored: false },
+      repository: { id: 1, fullName: repository, installationId: 1 },
+      pullRequest: { number, merged: true },
+      item: { source: 'manual', stages: ['review'], metadata },
+    }) as unknown as Parameters<NonNullable<typeof defaultGithubRules.pullRequestMerged>>[0];
+
+  const both = {
+    openChangeRequests: [
+      { repository: 'acme/api', number: 5 },
+      { repository: 'acme/app', number: 5 },
+    ],
+    openPullRequestNumber: 5,
+  };
+
+  it('keeps the card in Review while the other repository still has its pull request out', () => {
+    expect(defaultGithubRules.pullRequestMerged?.(merged(both))).toMatchObject({
+      type: 'sendMessage',
+      message: expect.stringContaining('acme/app#5 is still open'),
+    });
+  });
+
+  it('moves the card to Done when the last pull request it has out merges', () => {
+    const lastOne = { openChangeRequests: [{ repository: 'acme/app', number: 5 }], openPullRequestNumber: 5 };
+    expect(defaultGithubRules.pullRequestMerged?.(merged(lastOne, 'acme/app'))).toMatchObject({
+      type: 'transition',
+      stage: 'done',
+    });
+  });
+
+  it('reads a card recorded before repositories were named by number alone', () => {
+    expect(defaultGithubRules.pullRequestMerged?.(merged({ openPullRequestNumber: 5 }))).toMatchObject({
+      type: 'transition',
+    });
+    expect(defaultGithubRules.pullRequestMerged?.(merged({ openPullRequestNumber: 6 }))).toMatchObject({
+      type: 'sendMessage',
+      message: expect.stringContaining('#6 is still open'),
+    });
+  });
+});

@@ -53,7 +53,7 @@ import {
 import { createBoardRegistry, isTerminalWorkItem } from '@factory/core';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
-import { boardForWorkItem } from '@factory/core';
+import { boardForWorkItem, namesRepository, openChangeRequests } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import { ClaudeCodeRunContext } from '@factory/harness-claude-code';
 import { createRoutingHarness } from '@factory/harness';
@@ -78,7 +78,7 @@ import type {
 } from './claude/index.ts';
 import type { ClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import { EnvironmentBuildRunner } from '@factory/harness-mastra';
-import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '@factory/harness-mastra';
+import { ENVIRONMENT_BUILD_WORKFLOW_ID, selfReviewedHeadFor } from '@factory/harness-mastra';
 import { touchFeed } from '@factory/feed';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from '@factory/integrations';
 import { reconcileGithubAcceptanceLabels } from '@factory/integration-github';
@@ -1671,7 +1671,7 @@ export class MastraFactory {
                       },
                       ...(workItemsStorage
                         ? {
-                            selfReviewApprovedHead: async () => {
+                            selfReviewApprovedHead: async ({ repository }) => {
                               const resolution = await resolveFactorySessionAddress({
                                 requestContext,
                                 storage: workItemsStorage,
@@ -1683,7 +1683,17 @@ export class MastraFactory {
                               const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
                               // Self-review gates the change request on boards that ship them (Work, Bug).
                               if (!item || !this.#boards.get(boardForWorkItem(item))?.changeRequests) return undefined;
-                              if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
+                              // A repository whose change request is already out is past
+                              // self-review; the others are still gated.
+                              if (
+                                openChangeRequests(item.metadata).some(
+                                  entry =>
+                                    entry.repository === '' ||
+                                    entry.repository.toLowerCase() === repository.toLowerCase(),
+                                )
+                              ) {
+                                return undefined;
+                              }
                               // A verdict already recorded still binds the change request to its head.
                               if (item.metadata?.selfReviewVerdict === undefined) {
                                 await factoryProjectsStorage.ensureReady();
@@ -1693,10 +1703,21 @@ export class MastraFactory {
                                 });
                                 if (!project?.selfReviewEnabled) return undefined;
                               }
-                              const sha = item.metadata?.selfReviewedHeadSha;
-                              return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string'
-                                ? sha
+                              return item.metadata?.selfReviewVerdict === 'approve'
+                                ? selfReviewedHeadFor(item.metadata, repository)
                                 : null;
+                            },
+                            workSpansEnvironment: async () => {
+                              const resolution = await resolveFactorySessionAddress({
+                                requestContext,
+                                storage: workItemsStorage,
+                              });
+                              if (!resolution) return false;
+                              const binding =
+                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                              if (!binding) return false;
+                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                              return item !== null && !namesRepository(item.metadata);
                             },
                             boundChangeRequestId: async () => {
                               const resolution = await resolveFactorySessionAddress({

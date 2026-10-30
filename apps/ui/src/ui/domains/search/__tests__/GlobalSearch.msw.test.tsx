@@ -336,7 +336,7 @@ afterEach(() => {
 describe('Global search', () => {
   describe.each(['board', 'search'] as const)('%s entry point', entryPoint => {
     describe.each(['github', 'gitlab'] as const)('%s source-provider repository choices', provider => {
-      it.each([0, 1, 2])('offers usable choices with %s matching repositories', async count => {
+      it.each([0, 1, 2])('starts without a repository choice with %s matching repositories', async count => {
         const sourceRepositories: LinkedRepositoryPayload[] = Array.from({ length: count }, (_, index) => ({
           projectRepositoryId: `${provider}-repo-${index}`,
           provider,
@@ -397,18 +397,11 @@ describe('Global search', () => {
           expect(starts).toEqual([]);
           return;
         }
-        if (count > 1) {
-          const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-          expect(within(picker).queryByRole('button', { name: /other-provider\/repo/ })).not.toBeInTheDocument();
-          expect(within(picker).getAllByRole('button', { name: new RegExp(`${provider}-org/repo-`) })).toHaveLength(
-            count,
-          );
-          expect(requests.createSessionRequests).toBe(0);
-          await user.click(within(picker).getByRole('button', { name: new RegExp(`${provider}-org/repo-0`) }));
-        }
+        // Several repositories ask nothing: the card spans the environment and
+        // its session is filed under the first one of the card's provider.
         await waitFor(() => expect(starts).toHaveLength(1));
         expect(requests.sessionsCreatedFor).toEqual([`${provider}-repo-0`]);
-        expect(patches).toEqual([{ metadata: { repository: `${provider}-org/repo-0` } }]);
+        expect(patches).toEqual([]);
         expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
         if (search) await waitFor(() => expect(search).not.toBeInTheDocument());
       });
@@ -570,7 +563,7 @@ describe('Global search', () => {
     expect(requests.workItemRequests).toBe(1);
   });
 
-  it('keeps search open while choosing a repository for an unattributed work item', async () => {
+  it('starts an unattributed work item across the environment and closes search', async () => {
     const item = {
       ...workItems[3],
       board: 'custom',
@@ -586,7 +579,7 @@ describe('Global search', () => {
       }),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
         starts.push(await request.json());
-        return HttpResponse.json({ threadId: 'thread-search' });
+        return HttpResponse.json({ prepared: { threadId: 'thread-search' } });
       }),
     );
     const user = userEvent.setup();
@@ -594,13 +587,11 @@ describe('Global search', () => {
     const search = await openWithShortcut();
     await user.click(await within(search).findByText(item.title));
 
-    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    expect(search).toBeInTheDocument();
-    expect(requests.createSessionRequests).toBe(0);
-    expect(patches).toHaveLength(0);
-    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
-    await waitFor(() => expect(patches).toEqual([{ metadata: { number: 777, repository: 'mastra-ai/docs' } }]));
     await waitFor(() => expect(starts).toHaveLength(1));
+    expect(requests.createSessionRequests).toBe(1);
+    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+    // The card stays unbound: no repository is written to it.
+    expect(patches).toHaveLength(0);
     await waitFor(() => expect(search).not.toBeInTheDocument());
   });
 
@@ -888,7 +879,7 @@ describe('Global search', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('refuses to open a second session while the session chosen through the repository picker is still starting', async () => {
+  it('refuses to open a second session while an environment session is still starting', async () => {
     const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     stubSearchApi({ workItems: [item] });
     const starts: unknown[] = [];
@@ -910,14 +901,11 @@ describe('Global search', () => {
     const { client } = renderSearchRoute();
     const search = await openWithShortcut();
     await user.click(await within(search).findByText(item.title));
-    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
     await waitFor(() => expect(starts).toHaveLength(1));
 
     await user.click(within(search).getByText(item.title));
 
     expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     releaseStart();
     await waitForMutationsIdle(client);
     expect(starts).toHaveLength(1);

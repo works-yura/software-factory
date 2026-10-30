@@ -1,3 +1,4 @@
+import { hasOpenChangeRequest } from '@factory/core';
 import type { FactoryToolResultRuleContext } from '@factory/core';
 
 import { isTestFirst } from './phase-rules.ts';
@@ -53,7 +54,7 @@ export function openApprovedChangeRequest(context: FactoryToolResultRuleContext)
     context.item.stages.length !== 1 ||
     context.item.stages[0] !== 'review' ||
     context.item.metadata?.selfReviewVerdict !== 'approve' ||
-    typeof context.item.metadata?.openPullRequestNumber === 'number'
+    hasOpenChangeRequest(context.item.metadata)
   ) {
     return;
   }

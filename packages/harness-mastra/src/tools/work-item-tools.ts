@@ -119,7 +119,11 @@ export function createFactoryWorkItemTools(
     }
     const linked = await resolve();
     const candidates =
-      linked.status === 'ambiguous' ? linked.candidates : linked.status === 'resolved' ? [linked.slug] : [];
+      linked.status === 'ambiguous'
+        ? linked.candidates
+        : linked.status === 'resolved'
+          ? (linked.environment?.map(entry => entry.slug) ?? [linked.slug])
+          : [];
     throw new Error(
       candidates.length > 0
         ? `${slug} is not linked to this Factory. Linked repositories: ${candidates.join(', ')}.`

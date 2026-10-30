@@ -115,7 +115,7 @@ async function resolveProviderSession(
 async function resolveSessionTarget(
   requestContext: RequestContext,
   providers: readonly SourceControlToolProvider[],
-  options: { repository?: string } = {},
+  options: { repository?: string; requireChoice?: boolean } = {},
 ): Promise<SessionTarget> {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   const { orgId, userId } = authIdentity(requestContext);
@@ -161,6 +161,16 @@ async function resolveSessionTarget(
     };
   }
 
+  if (options.requireChoice) {
+    // A session spanning several repositories has no default one: the link it
+    // is filed under is bookkeeping, not the repository the work is about.
+    const candidates = await resolveSessionRepositories({ sourceControl: provider.storage, session });
+    if (candidates.length > 1) {
+      throw new Error(
+        `This session spans several repositories; pass \`repository\`, one of: ${environmentSlugs(candidates).join(', ')}.`,
+      );
+    }
+  }
   const repository = await provider.storage.repositories.get({ orgId, id: ownRepository.repositoryId });
   if (!repository) throw new Error('The active source-control repository was not found.');
   return {
@@ -194,7 +204,13 @@ async function describeSessionRepositories(
   }
 }
 
-function repositoryArgumentDescription(described: { slugs: string[]; own: string | undefined } | undefined): string {
+function repositoryArgumentDescription(
+  described: { slugs: string[]; own: string | undefined } | undefined,
+  spansEnvironment: boolean,
+): string {
+  if (spansEnvironment && described && described.slugs.length > 1) {
+    return `Required \`repository\` (owner/name): this session's work spans ${described.slugs.join(', ')}, and none of them is the default.`;
+  }
   if (!described || described.slugs.length === 0) {
     return "Optional `repository` (owner/name) selects another repository of this Factory's environment; defaults to this session's repository.";
   }
@@ -213,19 +229,27 @@ function executableSandbox(value: unknown): WorkspaceSandbox & ExecutableSandbox
 }
 
 /**
- * Git in the active session's own checkout, for the reproduction-test guard and recorder. Resolves
- * the session's repository the way the source-control tools do and runs `git -C <workdir>` in the
- * workspace sandbox; undefined when the session has no repository or no executable sandbox.
+ * Git in one checkout of the active session, for the reproduction-test guard and recorder. Resolves
+ * the repository the way the source-control tools do and runs `git -C <workdir>` in the workspace
+ * sandbox; undefined when the session has no repository or no executable sandbox.
  */
 export async function resolveSessionGit(input: {
   requestContext?: RequestContext;
   workspace?: unknown;
+  /** The checkout of a session spanning several repositories; the session's own otherwise. */
+  repository?: string;
+  /** Without `repository`, refuse to pick one in a session spanning several. */
+  requireRepository?: boolean;
   providers: readonly SourceControlToolProvider[];
 }): Promise<((args: readonly string[]) => Promise<{ exitCode: number; stdout: string; stderr?: string }>) | undefined> {
   if (!input.requestContext || input.providers.length === 0) return undefined;
   const sandboxValue = (input.workspace as { sandbox?: unknown } | undefined)?.sandbox;
   if (!(sandboxValue as Partial<ExecutableSandbox> | undefined)?.executeCommand) return undefined;
-  const target = await resolveSessionTarget(input.requestContext, input.providers);
+  const target = await resolveSessionTarget(
+    input.requestContext,
+    input.providers,
+    input.repository ? { repository: input.repository } : { requireChoice: input.requireRepository === true },
+  );
   const sandbox = executableSandbox(sandboxValue);
   const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
   return async args => {
@@ -263,6 +287,7 @@ export async function createSourceControlTools({
   audit,
   testChecksEnabled,
   selfReviewApprovedHead,
+  workSpansEnvironment,
   boundChangeRequestId,
 }: {
   requestContext: RequestContext;
@@ -273,9 +298,15 @@ export async function createSourceControlTools({
   /**
    * Self-review gate for opening a change request. `undefined` means the session
    * is not gated (no Work item, or its change request predates Self-review);
-   * `null` means Self-review has not approved; a SHA is the approved head.
+   * `null` means Self-review has not approved; a SHA is the approved head of
+   * `repository`, the change request's own repository.
    */
-  selfReviewApprovedHead?: () => Promise<string | null | undefined>;
+  selfReviewApprovedHead?: (input: { repository: string }) => Promise<string | null | undefined>;
+  /**
+   * Whether the session's card names no repository and so runs across the environment; the tools
+   * then take no default repository. Absent or false keeps the session's own repository as default.
+   */
+  workSpansEnvironment?: () => Promise<boolean>;
   /**
    * The change request a Review-bound session reviews; test checks may only target it.
    * When provided, sessions that are not Review-bound (it resolves `undefined`) cannot publish.
@@ -289,12 +320,17 @@ export async function createSourceControlTools({
   const identity = authIdentity(requestContext);
   if (!controller?.sessionId || !identity.orgId || !identity.userId || providers.length === 0) return {};
 
+  // A card that names no repository runs across the environment: its session
+  // has no default repository, so every call names the one it acts on.
+  const spansEnvironment = (await workSpansEnvironment?.().catch(() => false)) ?? false;
   const repositoryArgument = repositoryArgumentDescription(
     await describeSessionRepositories(controller.sessionId, providers),
+    spansEnvironment,
   );
-  const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
+  const withTarget = (options?: { repository?: string; requireChoice?: boolean }) =>
+    resolveSessionTarget(requestContext, providers, options);
   const targetFor = (input: { repository?: string }) =>
-    withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
+    withTarget(input.repository !== undefined ? { repository: input.repository } : { requireChoice: spansEnvironment });
   const reference = async (target: SessionTarget) => ({
     ...(await target.provider.versionControl.getRepositoryTarget({
       orgId: target.orgId,
@@ -410,7 +446,9 @@ export async function createSourceControlTools({
       }),
       execute: async (input, execution) => {
         const target = await targetFor(input);
-        const approvedHead = target.ownRepository ? await selfReviewApprovedHead?.() : undefined;
+        // Self-review gates every repository's change request, not only the
+        // one the session row is filed under.
+        const approvedHead = await selfReviewApprovedHead?.({ repository: target.repository.slug });
         if (approvedHead === null) {
           throw new Error(
             'Self-review has not approved this branch. Move the work item to Self-review; the change request opens after it approves.',

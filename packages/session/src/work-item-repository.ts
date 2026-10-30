@@ -2,8 +2,23 @@ import { SourceControlConnectionNotFoundError } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { WorkItemRow } from '@factory/store';
 
+import { resolveEnvironmentRepositories } from './environment-repositories.ts';
+
+export interface EnvironmentRepositoryRef {
+  projectRepositoryId: string;
+  slug: string;
+}
+
+/**
+ * Where a card runs. A card that names a repository (an issue's, or one set
+ * by hand) resolves to it. A card that names none runs in the whole
+ * environment: `environment` lists every environment repository, and
+ * `projectRepositoryId` is only the link the session row is filed under
+ * (position 1). No repository of the environment is primary to such a card;
+ * each one gets the session branch and its own change request.
+ */
 export type WorkItemRepositoryResolution =
-  | { status: 'resolved'; projectRepositoryId: string; slug: string }
+  | { status: 'resolved'; projectRepositoryId: string; slug: string; environment?: EnvironmentRepositoryRef[] }
   | { status: 'unlinked'; hint: string }
   | { status: 'ambiguous'; candidates: string[] };
 
@@ -126,5 +141,30 @@ export async function resolveWorkItemRepository(args: {
   // Every link shares the one slug here, so prefer the environment link among them.
   const onlyRepository = candidates.length === 1 ? (pickLink(linked) ?? linked[0]) : undefined;
   if (onlyRepository) return resolvedRepository(onlyRepository);
+  // Several repositories: the card runs across the environment, none chosen.
+  const environment = await resolveEnvironmentRepositories(args);
+  const [anchor] = environment;
+  if (anchor) {
+    return {
+      status: 'resolved',
+      projectRepositoryId: anchor.link.id,
+      slug: anchor.repository.slug,
+      environment: environment.map(entry => ({ projectRepositoryId: entry.link.id, slug: entry.repository.slug })),
+    };
+  }
   return { status: 'ambiguous', candidates };
+}
+
+/**
+ * Whether a session filed under `projectRepositoryId` can run the card: its
+ * own repository, or, for a card spanning the environment, any of it.
+ */
+export function workItemRunsInLink(
+  resolution: Extract<WorkItemRepositoryResolution, { status: 'resolved' }>,
+  projectRepositoryId: string,
+): boolean {
+  return (
+    resolution.projectRepositoryId === projectRepositoryId ||
+    (resolution.environment ?? []).some(entry => entry.projectRepositoryId === projectRepositoryId)
+  );
 }

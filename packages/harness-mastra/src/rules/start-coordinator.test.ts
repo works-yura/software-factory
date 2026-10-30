@@ -108,6 +108,7 @@ function makeSourceControl(integrationId = 'github') {
         const suffix = connectionId.endsWith('2') ? '2' : '1';
         return [{ id: `project-repository-${suffix}`, repositoryId: `repository-${suffix}` }];
       }),
+      listByProject: vi.fn(async (): Promise<unknown[]> => []),
     },
     repositories: {
       get: vi.fn(async ({ id }: { id: string }) => ({
@@ -203,6 +204,63 @@ describe('FactoryStartCoordinator', () => {
       sessionId: 'session-1',
     });
     expect(controller.createSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts a card that names no repository in any environment session and lists every repository', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seed.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: { title: 'Fix both sides', stages: ['intake'], metadata: {} },
+    });
+    const sourceControl = makeSourceControl();
+    const environmentLink = (id: string, position: number) => ({
+      id,
+      connectionId: 'connection-project-repository-1',
+      repositoryId: id.replace('project-', ''),
+      inEnvironment: true,
+      position,
+      createdAt: new Date(0),
+    });
+    // The app repository sits first, so the session (filed under the backend)
+    // is not under position 1; it still runs the card.
+    sourceControl.projectRepositories.listByProject.mockResolvedValue([
+      environmentLink('project-repository-1', 1),
+      environmentLink('project-repository-2', 0),
+    ]);
+    sourceControl.projectRepositories.get.mockImplementation(async ({ id }) => ({
+      id,
+      connectionId: `connection-${id}`,
+    }));
+    sourceControl.projectRepositories.list.mockResolvedValue([
+      { id: 'project-repository-1', repositoryId: 'repository-1' },
+      { id: 'project-repository-2', repositoryId: 'repository-2' },
+    ]);
+    sourceControl.repositories.get.mockImplementation(async ({ id }) => ({
+      id,
+      externalId: id.endsWith('2') ? '2' : '1',
+      slug: id.endsWith('2') ? 'owner/app' : 'owner/backend',
+    }));
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      seed.workItems,
+      undefined,
+      sourceControl as never,
+    );
+
+    await expect(coordinator.prepare(startRequest({ id: item.item.id }))).resolves.toMatchObject({
+      sessionId: 'session-1',
+    });
+    const session = await vi.mocked(controller.createSession).mock.results[0]?.value;
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginInstructions: [
+          'Workspace repositories: owner/app, owner/backend. This task is not bound to one of them: change every repository the task needs, on this session\'s branch. Push and open a change request in each repository you changed, passing `repository` to the source-control tools; leave repositories you did not change alone.',
+        ],
+      }),
+    );
   });
 
   it('commits the item session, exact binding, and durable pending start', async () => {

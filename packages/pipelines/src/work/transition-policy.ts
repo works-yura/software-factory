@@ -1,4 +1,4 @@
-import { REPRODUCTION_TEST_SHA_KEY } from '@factory/core';
+import { describeChangeRequests, openChangeRequests, REPRODUCTION_TEST_SHA_KEY } from '@factory/core';
 import type { BoardTransitionPolicy, BoardTransitionPolicyContext, BoardTransitionPolicyResult } from '@factory/core';
 
 import { TEST_FIRST_TRIAGE_TYPES } from './phase-rules.ts';
@@ -88,11 +88,16 @@ function basePolicy(context: BoardTransitionPolicyContext): BoardTransitionPolic
     };
   }
   // The work ships when its pull request merges, and the merge closes the card.
-  if (toStage === 'done' && actor.type === 'agent' && typeof item.metadata?.openPullRequestNumber === 'number') {
+  // A card spanning several repositories waits for every change request it has out.
+  const stillOpen = openChangeRequests(item.metadata);
+  if (toStage === 'done' && actor.type === 'agent' && stillOpen.length > 0) {
     return {
       type: 'reject',
       code: 'invalid_transition',
-      reason: `Pull request #${item.metadata.openPullRequestNumber} is still open. The card moves to Done when it merges; a maintainer can still close the work.`,
+      reason:
+        stillOpen.length === 1
+          ? `Pull request ${describeChangeRequests(stillOpen)} is still open. The card moves to Done when it merges; a maintainer can still close the work.`
+          : `Pull requests ${describeChangeRequests(stillOpen)} are still open. The card moves to Done when every one of them merges; a maintainer can still close the work.`,
     };
   }
   // Self-review hit its round limit and parked the card for a person.
@@ -109,7 +114,7 @@ function basePolicy(context: BoardTransitionPolicyContext): BoardTransitionPolic
     fromStage === 'review' &&
     toStage === 'done' &&
     actor.type === 'agent' &&
-    typeof item.metadata?.openPullRequestNumber !== 'number' &&
+    stillOpen.length === 0 &&
     item.metadata?.reviewVerdict === undefined &&
     item.metadata?.selfReviewVerdict !== 'approve'
   ) {
