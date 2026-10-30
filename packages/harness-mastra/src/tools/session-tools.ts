@@ -77,7 +77,7 @@ export interface FactorySessionToolDependencies {
 const LISTED_MODELS = 8;
 
 function ambiguousRepository(candidates: readonly string[]): string {
-  return `This item has several repositories (${candidates.join(', ')}); v1 can't choose one.`;
+  return `This item has several repositories (${candidates.join(', ')}) and none is in the Factory's environment; turn the ones it needs on under Settings → Environment.`;
 }
 
 function startErrorMessage(error: unknown): string | null {

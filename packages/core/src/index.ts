@@ -74,6 +74,7 @@ export {
   needsApproval,
   NEEDS_APPROVAL_LABEL,
   REPRODUCTION_TEST_PATHS_KEY,
+  REPRODUCTION_TESTS_KEY,
   REPRODUCTION_TEST_SHA_KEY,
   WORK_CHANGE_REQUESTS,
   WORK_ITEM_SOURCES,
@@ -134,3 +135,14 @@ export {
   validateFactoryRuleDecision,
   validateFactoryRuleDecisions,
 } from './rules/validation.ts';
+export {
+  changeRequestOpenedPatch,
+  changeRequestSettledPatch,
+  describeChangeRequests,
+  hasOpenChangeRequest,
+  isOpenChangeRequest,
+  namesRepository,
+  openChangeRequests,
+  ownsChangeRequest,
+} from './change-requests.ts';
+export type { OpenChangeRequest } from './change-requests.ts';

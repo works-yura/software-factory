@@ -337,6 +337,15 @@ describe('createClaudeFactoryHarness', () => {
       expect(prompt).toContain('mcp__factory__<tool>');
       const other = await setup().factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
       expect(await config.appendSystemPromptFor!(other)).toBeUndefined();
+
+      // A card session is told where it works, after the Factory playbook.
+      await other.thread.setSetting({
+        key: 'factoryTargetInstruction',
+        value: 'Workspace repositories: works_yura/ai, works_yura/test.',
+      });
+      const cardPrompt = await config.appendSystemPromptFor!(other);
+      expect(cardPrompt).toContain(config.appendSystemPrompt!);
+      expect(cardPrompt?.endsWith('Workspace repositories: works_yura/ai, works_yura/test.')).toBe(true);
     });
 
     it('mints a supervisor token acting as the person behind the turn, and runs on their credentials', async () => {

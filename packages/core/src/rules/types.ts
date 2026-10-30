@@ -405,6 +405,11 @@ export const WORK_CHANGE_REQUESTS: FactoryRuleChangeRequests = Object.freeze({
  */
 export const REPRODUCTION_TEST_SHA_KEY = 'bugReproTestSha';
 export const REPRODUCTION_TEST_PATHS_KEY = 'bugReproTestPaths';
+/**
+ * Every recorded reproduction test as `{ repository, sha, paths }`, one per repository the tests
+ * went into; the two keys above mirror the first record.
+ */
+export const REPRODUCTION_TESTS_KEY = 'reproductionTests';
 
 /** The change-request flow a rule context's card follows: its board's declaration, else Work's for a Work card. */
 export function changeRequestFlow(context: {

@@ -18,7 +18,6 @@ import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
-import { RepositoryPickerDialog } from '../../factory/components/RepositoryPickerDialog';
 import { useGlobalSearchIntake } from '../hooks/useGlobalSearchIntake';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
@@ -96,16 +95,6 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
         rightSlot={<Kbd>Esc</Kbd>}
       />
 
-      {runs.repositorySelection && (
-        <RepositoryPickerDialog
-          repositories={runs.repositoryChoices}
-          onClose={runs.closeRepositorySelection}
-          onSelect={async repository => {
-            await runs.selectRepository(repository);
-            closeSearch();
-          }}
-        />
-      )}
       <CommandPaletteBody>
         <GlobalSearchRail activeScope={activeScope} counts={counts} onScopeChange={setActiveScope} />
         <CommandPaletteResults
@@ -159,9 +148,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 }
                 void runs
                   .openOrCreateSession(item)
-                  .then(result => {
-                    if (result !== 'repository-selection-required') closeSearch();
-                  })
+                  .then(() => closeSearch())
                   .catch(error =>
                     toast.error(error instanceof Error ? error.message : t('sessionStartFailed')),
                   );

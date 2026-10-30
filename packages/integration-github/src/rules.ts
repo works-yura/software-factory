@@ -10,7 +10,14 @@ import {
   workItemPhaseSemantics,
 } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import { cardLabels, moveCardToBoard } from '@factory/core';
+import {
+  cardLabels,
+  changeRequestOpenedPatch,
+  changeRequestSettledPatch,
+  isOpenChangeRequest,
+  moveCardToBoard,
+  ownsChangeRequest,
+} from '@factory/core';
 import { requestsChangesVerdict } from '@factory/session';
 import { selectEventRule } from '@factory/core';
 import type {
@@ -909,7 +916,7 @@ export class GithubRules {
           id: parent.id,
           headSha,
           headAt,
-          ownedPullRequestNumber: pullRequestNumber,
+          ownedChangeRequest: { repository: repositoryName ?? '', number: pullRequestNumber },
         });
       }
     };
@@ -975,7 +982,10 @@ export class GithubRules {
           // The head comes along so a head recorded for an earlier pull
           // request cannot mark this one's verdict outdated. A replayed opening
           // of the pull request already recorded keeps the head its pushes left.
-          const rebinding = authoringItem.metadata?.openPullRequestNumber !== pullRequestNumber;
+          // A card spanning several repositories has one pull request out per
+          // repository it changed; this one joins the others.
+          const repository = repositoryName ?? '';
+          const rebinding = !isOpenChangeRequest(authoringItem.metadata, repository, pullRequestNumber);
           const head = rebinding
             ? {
                 pullRequestHeadSha: string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null,
@@ -986,7 +996,12 @@ export class GithubRules {
             orgId: authoringItem.orgId,
             id: authoringItem.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { openPullRequestNumber: pullRequestNumber, ...head } },
+            patch: {
+              metadata: {
+                ...changeRequestOpenedPatch(authoringItem.metadata, repository, pullRequestNumber, 'github'),
+                ...head,
+              },
+            },
           });
         }
         return;
@@ -999,13 +1014,17 @@ export class GithubRules {
           // "request changes" no longer stops it from being closed.
           // Only the pull request the card has out settles it; an older one
           // merging must not clear a verdict that belongs to its successor.
-          const recorded = card.metadata?.openPullRequestNumber;
-          const ownsCard = typeof recorded !== 'number' || recorded === pullRequestNumber;
+          const repository = repositoryName ?? '';
+          const ownsCard = ownsChangeRequest(card.metadata, repository, pullRequestNumber);
+          const cleared = changeRequestSettledPatch(card.metadata, repository, pullRequestNumber);
+          // The verdict covers the work as a whole: it settles only with the
+          // last change request the card has out.
+          const lastOut = cleared ? cleared.openChangeRequests.length === 0 : ownsCard;
           const settled = {
-            ...(ownsCard && event === 'pullRequestMerged' && typeof card.metadata?.reviewVerdict === 'string'
+            ...(ownsCard && lastOut && event === 'pullRequestMerged' && typeof card.metadata?.reviewVerdict === 'string'
               ? { reviewVerdict: null }
               : {}),
-            ...(recorded === pullRequestNumber ? { openPullRequestNumber: null } : {}),
+            ...(cleared ?? {}),
           };
           if (Object.keys(settled).length > 0) {
             await this.options.storage.update({

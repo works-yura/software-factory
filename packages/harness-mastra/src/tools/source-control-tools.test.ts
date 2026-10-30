@@ -258,6 +258,34 @@ describe('createSourceControlTools', () => {
       await expect(run()).resolves.toMatchObject({ id: '17' });
       expect(setup.closePullRequest).not.toHaveBeenCalled();
     });
+
+    it("gates every repository's change request on the head approved for that repository", async () => {
+      const setup = await fixture();
+      const heads: Record<string, string | null> = { 'acme/repo': approved, 'acme/other': null };
+      const asked: string[] = [];
+      const original = setup.createPullRequest.getMockImplementation()!;
+      setup.createPullRequest.mockImplementation(async (input: any) => ({
+        ...(await original(input)),
+        headSha: approved,
+      }));
+      const tools = await createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+        selfReviewApprovedHead: async ({ repository }) => {
+          asked.push(repository);
+          return heads[repository];
+        },
+      });
+      const create = (repository: string) =>
+        (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it', repository });
+
+      // The second repository is not the session's own, and is still gated.
+      await expect(create('acme/other')).rejects.toThrow('Self-review has not approved');
+      await expect(create('acme/repo')).resolves.toMatchObject({ id: '17' });
+      expect(asked).toEqual(['acme/other', 'acme/repo']);
+      expect(setup.createPullRequest).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('creates brokered diff discussions and replies without accepting repository credentials', async () => {
@@ -619,6 +647,32 @@ describe('createSourceControlTools', () => {
       expect(pushes()).toHaveLength(0);
       expect(setup.getRepositoryAccess).not.toHaveBeenCalled();
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toEqual([]);
+    });
+
+    it('takes no default repository when the work spans the environment', async () => {
+      const setup = await fixture();
+      const built = await createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+        workSpansEnvironment: async () => true,
+      });
+      const { sandbox, pushes } = fakeSandbox();
+
+      expect(built.source_control_push_branch!.description).toContain(
+        'Required `repository` (owner/name): this session\'s work spans acme/repo, acme/other',
+      );
+      await expect((built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } })).rejects.toThrow(
+        'This session spans several repositories; pass `repository`, one of: acme/repo, acme/other.',
+      );
+      await expect(
+        (built.source_control_create_change_request!.execute as any)({ title: 'Ship it' }),
+      ).rejects.toThrow('pass `repository`');
+      expect(pushes()).toEqual([]);
+      expect(setup.createPullRequest).not.toHaveBeenCalled();
+
+      await (built.source_control_push_branch!.execute as any)({ repository: 'acme/other' }, { workspace: { sandbox } });
+      expect(pushes()).toHaveLength(1);
     });
 
     it('opens change requests in two repositories from one session with their own base branches', async () => {

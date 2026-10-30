@@ -281,6 +281,9 @@ export interface FactoryProjectPayload {
 interface ProjectRepositoryPayload {
   id: string;
   branch: string | null;
+  /** Whether the sandbox boots this repository; absent from older servers. */
+  inEnvironment?: boolean;
+  position?: number;
   sandboxWorkdir: string;
   repository: { externalId: string; slug: string; defaultBranch: string } | null;
 }
@@ -302,6 +305,10 @@ export interface LinkedRepositoryPayload {
   slug: string;
   gitBranch?: string;
   sandboxWorkdir?: string;
+  /** Whether every new session of the Factory checks this repository out. */
+  inEnvironment?: boolean;
+  /** Environment order; position 1 is the link a session row is filed under. */
+  position?: number;
 }
 
 /** A Factory project with its linked repositories flattened across connections. */
@@ -323,6 +330,8 @@ function toLinkedRepositoryPayload(
     slug: link.repository?.slug ?? project.name,
     gitBranch: link.branch ?? link.repository?.defaultBranch,
     sandboxWorkdir: link.sandboxWorkdir,
+    ...(link.inEnvironment === undefined ? {} : { inEnvironment: link.inEnvironment }),
+    ...(link.position === undefined ? {} : { position: link.position }),
   };
 }
 

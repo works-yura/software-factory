@@ -88,6 +88,8 @@ function isRepositorySession(requestContext: RequestContext): boolean {
 async function resolveSessionTarget(
   requestContext: RequestContext,
   gitlab: GitLabIntegrationBase,
+  /** A merge request URL's `group/project`: a session spanning several repositories subscribes in any of them. */
+  projectPath?: string,
 ): Promise<SessionTarget | undefined> {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   const orgId = sessionOrgId(requestContext);
@@ -98,13 +100,19 @@ async function resolveSessionTarget(
   const storage = gitlab.sourceControlStorage;
   if (!storage) throw new Error('GitLab source control is unavailable.');
 
-  // Merge requests stay bound to the link the session is filed under: the
-  // controller state names it for dispatched sessions, the session row for
-  // the rest. A session filed under no link cannot subscribe.
+  // A bare iid binds to the link the session is filed under: the controller
+  // state names it for dispatched sessions, the session row for the rest. A
+  // session filed under no link cannot subscribe.
+  const sessionRow = await storage.sessions.getBySessionId(context.sessionId);
+  const ownRepositoryId = context.getState().projectRepositoryId ?? sessionRow?.projectRepositoryId;
+  if (!ownRepositoryId) return undefined;
+  // Work spanning the environment opens a merge request in each repository it
+  // changed; one named by URL in another environment repository is this
+  // session's too.
   const projectRepositoryId =
-    context.getState().projectRepositoryId ??
-    (await storage.sessions.getBySessionId(context.sessionId))?.projectRepositoryId;
-  if (!projectRepositoryId) return undefined;
+    (projectPath && sessionRow?.factoryProjectId
+      ? await environmentLinkForPath(storage, orgId, sessionRow.factoryProjectId, projectPath)
+      : undefined) ?? ownRepositoryId;
 
   // The handle is scoped to GitLab rows, so a GitHub-linked repository is
   // simply absent here rather than misidentified.
@@ -130,11 +138,31 @@ async function resolveSessionTarget(
   };
 }
 
+/** The environment link of the Factory whose repository is `projectPath`, if any. */
+async function environmentLinkForPath(
+  storage: NonNullable<GitLabIntegrationBase['sourceControlStorage']>,
+  orgId: string,
+  factoryProjectId: string,
+  projectPath: string,
+): Promise<string | undefined> {
+  const links = await storage.projectRepositories.listByProject({ orgId, factoryProjectId });
+  for (const link of links.filter(candidate => candidate.inEnvironment)) {
+    const repository = await storage.repositories.get({ orgId, id: link.repositoryId });
+    if (repository && normalizePath(repository.slug) === normalizePath(projectPath)) return link.id;
+  }
+  return undefined;
+}
+
+function urlProjectPath(mergeRequest: number | string): string | undefined {
+  return typeof mergeRequest === 'string' ? parseMergeRequestUrl(mergeRequest)?.projectPath : undefined;
+}
+
 async function requireGitLabSessionTarget(
   requestContext: RequestContext,
   gitlab: GitLabIntegrationBase,
+  projectPath?: string,
 ): Promise<SessionTarget> {
-  const target = await resolveSessionTarget(requestContext, gitlab);
+  const target = await resolveSessionTarget(requestContext, gitlab, projectPath);
   if (!target) throw new Error('The active session is not backed by a GitLab repository.');
   return target;
 }
@@ -185,14 +213,14 @@ export async function subscribeCurrentSessionToMergeRequest(
   // "this session cannot subscribe" as an error.
   if (source === 'auto-create-change-request') {
     if (!isRepositorySession(requestContext)) return undefined;
-    const target = await resolveSessionTarget(requestContext, gitlab);
+    const target = await resolveSessionTarget(requestContext, gitlab, urlProjectPath(mergeRequest));
     if (!target) return undefined;
     const iid = parseMergeRequest(mergeRequest, target);
     await verifyMergeRequest(target, iid, gitlab);
     await subscribeToMergeRequest({ ...subscriptionInput(target, iid), source }, gitlab.integrationStorage);
     return iid;
   }
-  const target = await requireGitLabSessionTarget(requestContext, gitlab);
+  const target = await requireGitLabSessionTarget(requestContext, gitlab, urlProjectPath(mergeRequest));
   const iid = parseMergeRequest(mergeRequest, target);
   await verifyMergeRequest(target, iid, gitlab);
   await subscribeToMergeRequest({ ...subscriptionInput(target, iid), source }, gitlab.integrationStorage);
@@ -204,7 +232,7 @@ export async function unsubscribeCurrentSessionFromMergeRequest(
   mergeRequest: number | string,
   gitlab: GitLabIntegrationBase,
 ): Promise<number> {
-  const target = await requireGitLabSessionTarget(requestContext, gitlab);
+  const target = await requireGitLabSessionTarget(requestContext, gitlab, urlProjectPath(mergeRequest));
   const iid = parseMergeRequest(mergeRequest, target);
   await unsubscribeFromMergeRequest(subscriptionInput(target, iid), gitlab.integrationStorage);
   return iid;
@@ -217,7 +245,7 @@ export function createGitLabSubscriptionTools(requestContext: RequestContext, gi
     gitlab_subscribe_mr: createTool({
       id: 'gitlab_subscribe_mr',
       description:
-        'Subscribe this thread to GitLab merge request activity. You usually do not need this tool: successful source_control_create_change_request calls subscribe automatically. Use it for an existing MR or to recover when automatic subscription did not occur. Closed or merged MRs are unsubscribed automatically. Accepts an MR IID or canonical URL for the active project.',
+        'Subscribe this thread to GitLab merge request activity. You usually do not need this tool: successful source_control_create_change_request calls subscribe automatically. Use it for an existing MR or to recover when automatic subscription did not occur. Closed or merged MRs are unsubscribed automatically. Accepts an MR IID for the active project, or the canonical URL of an MR in any repository of this session.',
       inputSchema: mergeRequestInputSchema,
       execute: async ({ mergeRequest }) => {
         const iid = await subscribeCurrentSessionToMergeRequest(requestContext, mergeRequest, 'explicit-tool', gitlab);

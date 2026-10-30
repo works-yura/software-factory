@@ -48,3 +48,29 @@ export function cardProjectRepositoryId(
 ) {
   return findUniqueRepositoryByProviderId(repositories, card.source, card.metadata)?.projectRepositoryId ?? fallback;
 }
+
+/**
+ * The link a card's new session is filed under. A card that names a
+ * repository runs in it. A card that names none runs across the environment
+ * (every repository the sandbox boots), so nobody picks one: the row goes
+ * under the first environment repository, which is only where it is filed.
+ */
+export function sessionRepositoryFor(
+  repositories: LinkedRepositoryPayload[],
+  card: { source: string; metadata?: Record<string, unknown> },
+):
+  | { repository: LinkedRepositoryPayload; namedByCard: boolean }
+  | { error: 'none' | 'environment' | 'unlinked'; slug?: string } {
+  const compatible = repositories.filter(repository => repositoryMatchesCardSource(repository, card.source));
+  if (compatible.length === 0) return { error: 'none' };
+  const slug = cardRepositorySlug(card.source, card.metadata, repositories);
+  if (slug) {
+    const named = compatible.find(repository => repository.slug === slug);
+    return named ? { repository: named, namedByCard: true } : { error: 'unlinked', slug };
+  }
+  const environment = compatible
+    .filter(repository => repository.inEnvironment !== false)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const filedUnder = environment[0] ?? (compatible.length === 1 ? compatible[0] : undefined);
+  return filedUnder ? { repository: filedUnder, namedByCard: false } : { error: 'environment' };
+}

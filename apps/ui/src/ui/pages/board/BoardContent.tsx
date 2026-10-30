@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { InstalledBoardInfo } from '../../../api/types';
@@ -24,7 +26,6 @@ import { useBoardIntake } from '../../domains/factory/hooks/useBoardIntake';
 import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../domains/factory/hooks/useBoardRuns';
-import { useRepositoryChoice } from '../../domains/factory/hooks/useRepositoryChoice';
 import { boardLabels, candidateMatchesLabels, workItemMatchesLabels } from '../../domains/factory/boardLabels';
 import {
   boardParticipants,
@@ -99,16 +100,11 @@ export function BoardContent({
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
   const items = useBoardItems({ factoryProjectId, kind, currentUserId });
-  const repositoryChoice = useRepositoryChoice(factory, definition);
-  const cardForDrop = (payload: DragPayload) => {
-    if (payload.kind === 'candidate') return payload.candidate;
-    return items.all.find(item => item.id === payload.id);
-  };
-  const dropWithRepository = (
-    payload: DragPayload,
-    stage: Parameters<typeof items.handleDrop>[1],
-    cause = 'board_drag',
-  ) => {
+  // A run that could not tell which repository the card is about asks for it, then retries.
+  const [repositoryRetry, setRepositoryRetry] = useState<{ item: WorkItem; decisionId: string }>();
+  // No repository is chosen for a card: it runs across the Factory's
+  // environment, so a drop goes straight to the move.
+  const dropOnStage = (payload: DragPayload, stage: Parameters<typeof items.handleDrop>[1], cause = 'board_drag') => {
     if (payload.kind === 'work-item') {
       if (payload.fromStage === stage) return;
       const toPhaseKind = definition.phases.find(phase => phase.id === stage)?.kind;
@@ -117,26 +113,7 @@ export function BoardContent({
         return;
       }
     }
-    const card = cardForDrop(payload);
-    if (!card) return;
-    void repositoryChoice.choose(
-      card.source,
-      card.metadata,
-      stage,
-      slug => {
-        if (payload.kind === 'work-item') items.move(payload.id, stage, { cause, repositorySlug: slug });
-        else
-          items.handleDrop(
-            {
-              ...payload,
-              candidate: { ...payload.candidate, metadata: { ...payload.candidate.metadata, repository: slug } },
-            },
-            stage,
-            cause,
-          );
-      },
-      () => items.handleDrop(payload, stage, cause),
-    );
+    items.handleDrop(payload, stage, cause);
   };
   const intake = useBoardIntake({
     factoryProjectId,
@@ -342,24 +319,9 @@ export function BoardContent({
                 onApproveProposal={decisions.approve}
                 onDismissProposal={decisions.dismiss}
                 onRetryDecision={decisions.retry}
-                onChooseRepository={decisionId =>
-                  repositoryChoice.ask(slug =>
-                    void items
-                      .setRepository(item, slug)
-                      .then(() => decisions.retry(decisionId))
-                      .catch(error => toast.error(error instanceof Error ? error.message : tk('page.actionFailed'))),
-                  )
-                }
+                onChooseRepository={decisionId => setRepositoryRetry({ item, decisionId })}
                 onCreateSession={() => void runs.openOrCreateSession(item)}
-                onMove={toStage =>
-                  void repositoryChoice.choose(
-                    item.source,
-                    item.metadata,
-                    toStage,
-                    slug => items.move(item.id, toStage, { repositorySlug: slug }),
-                    () => items.move(item.id, toStage),
-                  )
-                }
+                onMove={toStage => items.move(item.id, toStage)}
                 onRemove={() => items.remove(item.id)}
               />
             )}
@@ -373,7 +335,7 @@ export function BoardContent({
             }
             factoryProjectId={factoryProjectId}
             onRun={(candidate, move, prompt) =>
-              dropWithRepository(candidatePayload(candidate, prompt), move.stage, 'card_action')
+              dropOnStage(candidatePayload(candidate, prompt), move.stage, 'card_action')
             }
           />
         </BoardStageCards>
@@ -383,18 +345,17 @@ export function BoardContent({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {runs.repositorySelection && (
-        <RepositoryPickerDialog
-          repositories={runs.repositoryChoices}
-          onClose={runs.closeRepositorySelection}
-          onSelect={runs.selectRepository}
-        />
-      )}
-      {repositoryChoice.pending && (
+      {repositoryRetry && (
         <RepositoryPickerDialog
           repositories={factory.repositories}
-          onClose={repositoryChoice.cancel}
-          onSelect={selectedRepository => repositoryChoice.select(selectedRepository.slug)}
+          onClose={() => setRepositoryRetry(undefined)}
+          onSelect={selected => {
+            setRepositoryRetry(undefined);
+            void items
+              .setRepository(repositoryRetry.item, selected.slug)
+              .then(() => decisions.retry(repositoryRetry.decisionId))
+              .catch((error: unknown) => toast.error(error instanceof Error ? error.message : tk('page.actionFailed')));
+          }}
         />
       )}
       {mutationError !== undefined && (
@@ -413,7 +374,7 @@ export function BoardContent({
             ? { cardKey: workItemCardKey(targetStages[0], targetItemId), commentId: targetCommentId }
             : undefined
         }
-        onDrop={dropWithRepository}
+        onDrop={dropOnStage}
         toolbar={
           <BoardViewControls
             kind={kind}

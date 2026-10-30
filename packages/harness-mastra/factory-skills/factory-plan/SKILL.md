@@ -24,6 +24,8 @@ The Factory system prompt identifies the **Target repository**. Before the first
 3. Compare the issue's requested file paths and project context with the target repository and checkout. A matching remote alone is not sufficient if the issue clearly targets a different repository or project.
 4. If the target is missing, the remote/root does not match, or the issue's paths contradict the checkout, stop without editing or pushing and report the expected target and observed remote/root.
 
+When the system prompt lists **Workspace repositories** instead, the working directory holds one checkout per repository and the task is not bound to one of them. Work in each repository the task needs: run steps 1-4 inside that repository's checkout before editing or pushing it, commit and push each changed repository on the session branch, and pass `repository` to every source-control tool call and to `factory_record_reproduction_test` (once per repository that got tests). Leave repositories the task does not touch unchanged.
+
 Repeat this check immediately before `git push`; do not rely on an earlier check because the active directory or checkout may have changed.
 
 ## Phase 1: Verify the Understanding

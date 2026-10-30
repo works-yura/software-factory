@@ -25,7 +25,7 @@
     "threadNotFound": "Не вдалося перейти до треду: тред {{threadId}} не знайдено",
     "switchThreadFailed": "Не вдалося перейти до треду: {{reason}}",
     "noFactorySelected": "Factory не вибрано",
-    "chooseRepository": "Виберіть репозиторій, перш ніж запускати Factory",
+    "noEnvironmentRepository": "Увімкніть репозиторій у Налаштуваннях → Середовище, перш ніж запускати Factory",
     "connectRepository": "Підключіть репозиторій, перш ніж створювати робочий простір"
   },
   "workspaces": {

@@ -26,7 +26,7 @@ import {
 } from '@factory/session';
 import type { EnsuredFactorySourceSession } from '@factory/session';
 import type { LiveSessions } from '@factory/session';
-import { resolveWorkItemRepository } from '@factory/session';
+import { resolveWorkItemRepository, workItemRunsInLink } from '@factory/session';
 import type { StateSigner } from '@factory/auth';
 import type { AuditEmitter, AuditRecorder } from '@factory/feed';
 import type { ChannelIdentityStorage } from '@factory/store';
@@ -244,7 +244,7 @@ async function inheritEarlierSession(
   input: FactoryBindingPreparationInput,
   board: { roleForPhase(phase: string): string | undefined } | undefined,
   branch: string,
-  projectRepositoryId: string,
+  runsInLink: (projectRepositoryId: string) => boolean,
 ): Promise<EnsuredFactorySourceSession | undefined> {
   if (input.role === 'review') return undefined;
   // The card's linked repository can change after an earlier role ran; only
@@ -262,7 +262,7 @@ async function inheritEarlierSession(
     if (
       session &&
       (session.branch === branch || session.branch === legacyGithubWorkItemBranch(branch)) &&
-      session.projectRepositoryId === projectRepositoryId
+      runsInLink(session.projectRepositoryId)
     ) {
       return session;
     }
@@ -356,18 +356,21 @@ export async function prepareFactoryRuleBinding(
     // the work item, flip the session's owner to the approver, and orphan the
     // previous sandbox.
     const approver = input.record.approvedBy ?? undefined;
-    if (boundSession && boundSession.projectRepositoryId !== repository.projectRepositoryId) {
+    if (boundSession && !workItemRunsInLink(repository, boundSession.projectRepositoryId)) {
       throw new FactoryDispatchError(
         'source_repository_ambiguous',
         `The existing session is bound to a different repository than ${repository.slug}. Choose the correct repository and retry.`,
       );
     }
-    // The session is filed under the card's repository: the sandbox holds
-    // every environment repository, but the coordinator, the PR tools and the
-    // subscriptions follow the session's link, and the card names which one.
+    // The session is filed under the card's repository, or, for a card that
+    // names none, under the environment's position-1 link. The sandbox holds
+    // every environment repository either way.
+    const resolvedRepository = repository;
     const preparedSession =
       boundSession ??
-      (await inheritEarlierSession(sourceControl, input, board, branch, repository.projectRepositoryId)) ??
+      (await inheritEarlierSession(sourceControl, input, board, branch, link =>
+        workItemRunsInLink(resolvedRepository, link),
+      )) ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,

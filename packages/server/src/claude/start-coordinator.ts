@@ -4,6 +4,7 @@ import {
   commitRunStart,
   resolveSourceSession,
   resolveStartRepository,
+  targetRepositoryInstructionFor,
   UntrustedSharedSessionError,
 } from '@factory/harness-mastra';
 import type { FactoryStartPreparedResult, FactoryStartRequest } from '@factory/harness-mastra';
@@ -16,6 +17,8 @@ export const CLAUDE_THREAD_SETTINGS = {
   workItemId: 'factoryWorkItemId',
   title: 'factoryThreadTitle',
   targetRepository: 'factoryTargetRepository',
+  /** What the agent is told about where it works: one target repository, or every workspace repository. */
+  targetInstruction: 'factoryTargetInstruction',
   /** The Factory chat (supervisor): the person whose message or answer started its latest turn. */
   actorUserId: 'factoryActorUserId',
   /** The checkout is a pull or merge request someone outside wrote: its turns read no settings file from it. */
@@ -101,6 +104,10 @@ export class ClaudeStartCoordinator {
     await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.sessionId, value: sessionId });
     await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.title, value: request.threadTitle });
     await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.targetRepository, value: repository.slug });
+    await session.thread.setSetting({
+      key: CLAUDE_THREAD_SETTINGS.targetInstruction,
+      value: targetRepositoryInstructionFor(repository),
+    });
     // Once untrusted, always: a later role on the same session still runs in that checkout.
     if (untrustedCheckout) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout, value: true });
 

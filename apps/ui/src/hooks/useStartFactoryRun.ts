@@ -7,8 +7,7 @@ import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { useFactoryQuery } from './useFactories';
-import { useCardRepositorySlug } from '../ui/domains/factory/hooks/useCardRepositorySlug';
-import { repositoryMatchesCardSource } from '../ui/domains/factory/boardRepository';
+import { sessionRepositoryFor } from '../ui/domains/factory/boardRepository';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../ui/domains/factory/services/workItems';
 import { translator } from '../ui/i18n/t';
@@ -30,7 +29,6 @@ export interface StartFactoryRunInput {
   branch: string;
   threadTitle: string;
   workItem: StartFactoryRunWorkItem;
-  repositorySlug?: string;
 }
 
 /**
@@ -42,27 +40,22 @@ export function useStartFactoryRun() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const repositories = factoryQuery.data?.repositories ?? [];
-  const repositorySlugFor = useCardRepositorySlug(repositories);
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
 
   const startMutationKey = ['factory', 'start-run', factoryId] as const;
   const mutation = useMutation({
     mutationKey: startMutationKey,
-    mutationFn: async ({ branch, threadTitle, workItem, repositorySlug }: StartFactoryRunInput) => {
+    mutationFn: async ({ branch, threadTitle, workItem }: StartFactoryRunInput) => {
       if (!factoryId) throw new Error('A Factory session needs a factory in the route');
-      const targetSlug = repositorySlug ?? (await repositorySlugFor(workItem.source, workItem.metadata));
-      const repositoriesForSource = repositories.filter(candidate =>
-        repositoryMatchesCardSource(candidate, workItem.source),
-      );
-      const repository = targetSlug
-        ? repositoriesForSource.find(candidate => candidate.slug === targetSlug)
-        : repositories.length === 1
-          ? repositoriesForSource[0]
-          : undefined;
-      if (!repository) throw new Error(tk('errors.chooseRepository'));
-      const metadata = { ...workItem.metadata, repository: repository.slug };
-      if (workItem.metadata?.repository !== repository.slug) {
+      // A card that names no repository runs across the environment: the
+      // session row is filed under its first repository and the card stays
+      // unbound, so every environment repository is equally its own.
+      const target = sessionRepositoryFor(repositories, workItem);
+      if ('error' in target) throw new Error(tk('errors.noEnvironmentRepository'));
+      const { repository, namedByCard } = target;
+      const metadata = namedByCard ? { ...workItem.metadata, repository: repository.slug } : { ...workItem.metadata };
+      if (namedByCard && workItem.metadata?.repository !== repository.slug) {
         await updateWorkItem(baseUrl, workItem.id, { metadata });
       }
       const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });

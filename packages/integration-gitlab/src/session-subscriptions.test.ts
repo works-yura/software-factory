@@ -197,6 +197,54 @@ describe('GitLab subscription entry points', () => {
     );
   });
 
+  it("subscribes to a merge request in another of the session's environment repositories", async () => {
+    const api = { id: 'repository-2', installationId: 'installation-1', externalId: '202', slug: 'acme/api' };
+    const stub = gitlabStub();
+    const storage = stub.sourceControlStorage as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>;
+    storage.sessions!.getBySessionId!.mockResolvedValue({ factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' });
+    storage.projectRepositories!.listByProject = vi.fn(async () => [
+      { id: 'project-repository-1', repositoryId: 'repository-1', inEnvironment: true },
+      { id: 'project-repository-2', repositoryId: 'repository-2', inEnvironment: true },
+      { id: 'project-repository-3', repositoryId: 'repository-3', inEnvironment: false },
+    ]);
+    storage.projectRepositories!.get!.mockImplementation(async ({ id }: { id: string }) => ({
+      id,
+      connectionId: 'connection-1',
+      repositoryId: id === 'project-repository-2' ? 'repository-2' : 'repository-1',
+    }));
+    storage.repositories!.get!.mockImplementation(async ({ id }: { id: string }) =>
+      id === 'repository-2' ? api : id === 'repository-3' ? { ...api, id, slug: 'acme/parked' } : rows.repository,
+    );
+    mocks.getPullRequest.mockResolvedValueOnce({
+      id: '17',
+      url: 'https://gitlab.example.com/acme/api/-/merge_requests/17',
+      state: 'open',
+    } as never);
+
+    await expect(
+      subscribeCurrentSessionToMergeRequest(
+        authenticatedRequestContext(),
+        'https://gitlab.example.com/acme/api/-/merge_requests/17',
+        'auto-create-change-request',
+        stub,
+      ),
+    ).resolves.toBe(17);
+    expect(mocks.subscribe).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: '202', projectPath: 'acme/api', projectRepositoryId: 'project-repository-2' }),
+      expect.anything(),
+    );
+
+    // A repository linked but out of the environment is not the session's.
+    await expect(
+      subscribeCurrentSessionToMergeRequest(
+        authenticatedRequestContext(),
+        'https://gitlab.example.com/acme/parked/-/merge_requests/3',
+        'explicit-tool',
+        stub,
+      ),
+    ).rejects.toThrow(/must belong to gitlab.example.com\/acme\/app/);
+  });
+
   it('silently skips the auto path outside a GitLab repository session', async () => {
     const localSession = new RequestContext();
     localSession.set('controller', { threadId: 'thread-1', getState: () => ({}) });

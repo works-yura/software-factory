@@ -1,7 +1,7 @@
 import { hasRecordedVerdict } from '@factory/pipelines';
 import { requestsChangesVerdict } from '@factory/session';
 import { recordExplicitRuleOverrides } from '@factory/core';
-import { changeRequestFlow, isTerminalFactoryRuleStage } from '@factory/core';
+import { changeRequestFlow, describeChangeRequests, isTerminalFactoryRuleStage, openChangeRequests } from '@factory/core';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '@factory/core';
 import { isFactoryApproveVerdict } from './stale-reviews.ts';
 
@@ -226,15 +226,26 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   // Provenance bound the event to the originating Work item instead: the merge
   // is what finishes the work, so it closes the Work card alongside its Review card —
   // unless the card has since opened another pull request, which is still out.
-  const openPullRequestNumber = context.item.metadata?.openPullRequestNumber;
-  if (typeof openPullRequestNumber === 'number' && openPullRequestNumber !== context.pullRequest.number) {
+  // A card spanning several repositories finishes only when every pull
+  // request it has out is merged.
+  const merged = { repository: context.repository.fullName, number: context.pullRequest.number };
+  const stillOpen = openChangeRequests(context.item.metadata).filter(
+    entry =>
+      !(
+        entry.number === merged.number &&
+        (entry.repository === '' || entry.repository.toLowerCase() === merged.repository.toLowerCase())
+      ),
+  );
+  if (stillOpen.length > 0) {
+    const plural = stillOpen.length > 1;
     return {
       type: 'sendMessage',
       idempotencyKey: `${context.ingress.id}:work-merged`,
       role: flow.builderRole,
       message:
-        `Pull request #${context.pullRequest.number} merged. Pull request #${openPullRequestNumber} is still open, ` +
-        `so this ${flow.boardTitle} card stays in ${flow.review.title} until it merges.`,
+        `Pull request ${merged.repository}#${merged.number} merged. Pull request${plural ? 's' : ''} ` +
+        `${describeChangeRequests(stillOpen)} ${plural ? 'are' : 'is'} still open, ` +
+        `so this ${flow.boardTitle} card stays in ${flow.review.title} until ${plural ? 'they merge' : 'it merges'}.`,
     } as const;
   }
   return {

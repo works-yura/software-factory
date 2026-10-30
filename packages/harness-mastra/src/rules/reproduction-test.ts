@@ -2,7 +2,13 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem, REPRODUCTION_TEST_PATHS_KEY, REPRODUCTION_TEST_SHA_KEY } from '@factory/core';
+import {
+  boardForWorkItem,
+  namesRepository,
+  REPRODUCTION_TEST_PATHS_KEY,
+  REPRODUCTION_TEST_SHA_KEY,
+  REPRODUCTION_TESTS_KEY,
+} from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import type { IntegrationTools } from '@factory/integrations';
 import { WorkItemUpdateConflictError } from '@factory/store';
@@ -16,11 +22,28 @@ import { resolveFactorySessionAddress } from '@factory/session';
  */
 export type SessionGit = (args: readonly string[]) => Promise<{ exitCode: number; stdout: string; stderr?: string }>;
 
-/** Resolves the session checkout's git for one tool execution; undefined when the session has none. */
+/**
+ * Resolves git in one checkout of the session for one tool execution; undefined when the session
+ * has none. `repository` names the checkout in a session spanning several repositories; without it
+ * the session's only repository (or, for records made before repositories were named, the one the
+ * session is filed under).
+ */
 export type SessionGitResolver = (execution: {
   requestContext?: RequestContext;
   workspace?: unknown;
+  repository?: string;
+  /** Refuse to pick a checkout when the session spans several repositories and `repository` is absent. */
+  requireRepository?: boolean;
 }) => Promise<SessionGit | undefined>;
+
+/** One recorded test: the commit that added it, its files, and the repository they live in. */
+export interface RecordedReproductionTest {
+  /** Empty for a record made before repositories were named. */
+  repository: string;
+  sha: string;
+  paths: string[];
+}
+
 
 type ReproductionPhases = { record: string; protect: string; recordRole: string; protectRole: string };
 
@@ -40,12 +63,25 @@ export function recordsReproductionTest(boards: BoardRegistry | undefined, item:
   return reproductionPhases(boards, item)?.recordRole === role;
 }
 
-function recordedTest(item: WorkItemRow): { sha: string; paths: string[] } | undefined {
-  const sha = item.metadata?.[REPRODUCTION_TEST_SHA_KEY];
-  const paths = item.metadata?.[REPRODUCTION_TEST_PATHS_KEY];
-  if (typeof sha !== 'string' || !Array.isArray(paths)) return undefined;
-  const strings = paths.filter((path): path is string => typeof path === 'string');
-  return strings.length > 0 ? { sha, paths: strings } : undefined;
+function stringPaths(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((path): path is string => typeof path === 'string') : [];
+}
+
+/** Every reproduction test recorded on the card, one per repository the tests went into. */
+export function recordedTests(metadata: Record<string, unknown> | null | undefined): RecordedReproductionTest[] {
+  const list = metadata?.[REPRODUCTION_TESTS_KEY];
+  if (Array.isArray(list)) {
+    return list.flatMap(entry => {
+      const record = entry as Record<string, unknown> | null;
+      const paths = stringPaths(record?.paths);
+      return typeof record?.repository === 'string' && typeof record.sha === 'string' && paths.length > 0
+        ? [{ repository: record.repository, sha: record.sha, paths }]
+        : [];
+    });
+  }
+  const sha = metadata?.[REPRODUCTION_TEST_SHA_KEY];
+  const paths = stringPaths(metadata?.[REPRODUCTION_TEST_PATHS_KEY]);
+  return typeof sha === 'string' && paths.length > 0 ? [{ repository: '', sha, paths }] : [];
 }
 
 function lines(stdout: string): string[] {
@@ -74,31 +110,43 @@ export async function reproductionTestGuard(input: {
   item: WorkItemRow;
   role: string;
   stage: string;
-  git: () => Promise<SessionGit | undefined>;
+  git: (repository: string | undefined) => Promise<SessionGit | undefined>;
 }): Promise<{ status: 'rejected'; code: 'invalid_transition'; reason: string } | undefined> {
   const phases = reproductionPhases(input.boards, input.item);
   const board = input.boards?.get(boardForWorkItem(input.item));
   if (!phases || !board) return undefined;
   if (input.item.stages.length !== 1 || input.item.stages[0] !== phases.protect) return undefined;
   if (input.role !== phases.protectRole || input.stage === phases.protect || !board.isWorking(input.stage)) return undefined;
-  const recorded = recordedTest(input.item);
-  if (!recorded) return undefined;
+  const recorded = recordedTests(input.item.metadata);
+  if (recorded.length === 0) return undefined;
   const reject = (reason: string) => ({ status: 'rejected' as const, code: 'invalid_transition' as const, reason });
-  let changed: string[];
-  try {
-    const git = await input.git();
-    if (!git) return reject('The reproduction test could not be checked: this session has no repository checkout.');
-    changed = await changedProtectedPaths(git, recorded.sha, recorded.paths);
-  } catch (error) {
-    return reject(
-      `The reproduction test could not be checked: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  const problems: string[] = [];
+  for (const test of recorded) {
+    const where = test.repository ? ` in ${test.repository}` : '';
+    let changed: string[];
+    try {
+      const git = await input.git(test.repository || undefined);
+      if (!git) {
+        return reject(`The reproduction test could not be checked: this session has no checkout${where}.`);
+      }
+      changed = await changedProtectedPaths(git, test.sha, test.paths);
+    } catch (error) {
+      return reject(
+        `The reproduction test${where} could not be checked: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (changed.length > 0) {
+      problems.push(
+        `the reproduction test committed at ${test.sha}${where} must stay as written, but the checkout changes ` +
+          `${changed.join(', ')} (restore with git checkout ${test.sha} -- <path>)`,
+      );
+    }
   }
-  if (changed.length === 0) return undefined;
+  if (problems.length === 0) return undefined;
+  const [first, ...rest] = problems;
   return reject(
-    `The reproduction test committed at ${recorded.sha} must stay as written, but this checkout changes ` +
-      `${changed.join(', ')}. Restore those files (git checkout ${recorded.sha} -- <path>), commit, push, and ` +
-      'request the move again. If the test itself is wrong, move the card to `intake` for a person.',
+    `${first!.charAt(0).toUpperCase()}${first!.slice(1)}${rest.map(problem => `; ${problem}`).join('')}. Restore those ` +
+      'files, commit, push, and request the move again. If the test itself is wrong, move the card to `intake` for a person.',
   );
 }
 
@@ -115,6 +163,14 @@ const recordInputSchema = z
       .string()
       .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i, 'Use the full SHA of the commit that added the failing test.'),
     testPaths: z.array(testPathSchema).min(1).max(50).describe('The test files that commit added or changed.'),
+    repository: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe(
+        'owner/name of the repository the test went into; required when the session spans several repositories. Record once per repository that got tests.',
+      ),
   })
   .strict();
 
@@ -139,7 +195,7 @@ export function createReproductionTestTool(
         'Record the commit that adds the failing reproduction test, and the test files it wrote, on the card bound to this thread. Call it after the test is committed and pushed and fails for the reason the plan predicts. The fix phase may not change these files afterwards.',
       inputSchema: recordInputSchema,
       requireApproval: false,
-      execute: async ({ commitSha, testPaths }, execution) => {
+      execute: async ({ commitSha, testPaths, repository }, execution) => {
         const resolution = await resolveFactorySessionAddress({
           requestContext: execution.requestContext as RequestContext,
           storage: options.storage,
@@ -158,6 +214,8 @@ export function createReproductionTestTool(
         const git = await options.sessionGit?.({
           requestContext: execution.requestContext as RequestContext,
           workspace: (execution as { workspace?: unknown }).workspace,
+          // A card spanning the environment has no default checkout to record in.
+          ...(repository ? { repository } : { requireRepository: !namesRepository(item.metadata) }),
         });
         if (!git) throw new Error('Recording a reproduction test needs this session’s repository checkout.');
         const sha = commitSha.toLowerCase();
@@ -176,6 +234,15 @@ export function createReproductionTestTool(
           throw new Error(`Commit ${sha} does not touch ${missing.join(', ')}. Name the test files that commit wrote.`);
         }
         const recordedAt = new Date().toISOString();
+        // One record per repository: tests for work spanning several repositories
+        // go into each repository they cover, and a re-record replaces its own.
+        const named = repository ?? '';
+        const tests = [
+          ...recordedTests(item.metadata).filter(
+            test => test.repository !== '' && test.repository.toLowerCase() !== named.toLowerCase(),
+          ),
+          { repository: named, sha, paths },
+        ];
         try {
           await options.storage.update({
             orgId: binding.orgId,
@@ -185,8 +252,10 @@ export function createReproductionTestTool(
             patch: {
               metadata: {
                 ...(item.metadata ?? {}),
-                [REPRODUCTION_TEST_SHA_KEY]: sha,
-                [REPRODUCTION_TEST_PATHS_KEY]: paths,
+                [REPRODUCTION_TESTS_KEY]: tests,
+                // The board policy and prompts read the first record's keys.
+                [REPRODUCTION_TEST_SHA_KEY]: tests[0]!.sha,
+                [REPRODUCTION_TEST_PATHS_KEY]: tests[0]!.paths,
                 bugReproTestRecordedAt: recordedAt,
               },
             },
@@ -195,7 +264,7 @@ export function createReproductionTestTool(
           if (!(error instanceof WorkItemUpdateConflictError)) throw error;
           throw new Error('The card changed while recording the test; call again to record it on the current card.');
         }
-        return { status: 'recorded', commitSha: sha, testPaths: paths, recordedAt };
+        return { status: 'recorded', commitSha: sha, testPaths: paths, ...(repository ? { repository } : {}), recordedAt };
       },
     }),
   };

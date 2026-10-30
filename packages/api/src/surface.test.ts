@@ -593,7 +593,7 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
-  it('blocks autonomous dispatch on an unattributed multi-repository item before creating a session', async () => {
+  it('dispatches an unattributed multi-repository item across the environment, filed under position 1', async () => {
     const { seeded, sourceControl, project, projectRepository, installation, github } =
       await seedFactoryWithRepository();
     const second = await sourceControl.repositories.upsert({
@@ -613,6 +613,44 @@ describe('prepareFactoryRuleBinding', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/sandbox/hydra',
     });
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    (input.item as { metadata: Record<string, unknown> | null }).metadata = null;
+
+    await prepareFactoryRuleBinding(github, { prepare }, seeded.projects, boards, input);
+
+    // Nobody chose a repository: the session row sits under the position-1
+    // link, and the sandbox boots every environment repository.
+    const [session] = await sourceControl.sessions.listByProjectRepository({
+      projectRepositoryId: projectRepository.id,
+    });
+    expect(session).toBeDefined();
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ sessionId: session!.sessionId }));
+  });
+
+  it('blocks an unattributed multi-repository item when no repository is in the environment', async () => {
+    const { seeded, sourceControl, project, projectRepository, installation, github } =
+      await seedFactoryWithRepository();
+    const second = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: '789',
+        slug: 'internetburrito/hydra',
+        defaultBranch: 'main',
+      },
+    });
+    const secondLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: second.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/hydra',
+    });
+    for (const id of [projectRepository.id, secondLink.id]) {
+      await sourceControl.projectRepositories.update({ orgId: 'org-1', id, input: { inEnvironment: false } });
+    }
     const createSession = vi.spyOn(sourceControl.sessions, 'create');
     const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
     const input = bindingInput(project.id);
@@ -629,7 +667,7 @@ describe('prepareFactoryRuleBinding', () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 
-  it('retries an unattributed role in its existing linked repository without choosing the first', async () => {
+  it('retries an unattributed role in its existing environment session instead of minting one', async () => {
     const { seeded, sourceControl, project, projectRepository, installation, github } =
       await seedFactoryWithRepository();
     const second = await sourceControl.repositories.upsert({

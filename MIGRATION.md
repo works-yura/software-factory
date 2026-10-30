@@ -198,6 +198,19 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 - **Тести:** `integration-github/src/token-integration.test.ts` (20, підроблений API GitHub і справжнє сховище в пам'яті: акаунт, заявка організації й рестарт, закріплена організація, відкликаний токен і 403, пагінація, clone, опитування, connect через змонтовані маршрути); `server/src/integrations/github-token-polling.test.ts` (3: issue власника токена стає довіреною карткою, а не «фабрикою»; issue стороннього — у `intake` без автостарту; відкликаний токен — невдалий прохід без карток); `routes.test.ts` +2; `apps/server/src/mastra/index.test.ts` +2 (вибір режиму, перевага App).
 - **Не перевірено:** UI-шлях зі справжнім токеном (Connect → пікер → картка з issue).
 
+### Кілька репозиторіїв без головного (2026-10-29)
+
+У v3 й в оригіналі Mastra сесія вже клонувала всі репо середовища, але картка без репо відкривала діалог «Виберіть репозиторій», а PR, гейти й тест відтворення трималися одного «свого» репо. Тепер картка без репо працює в усьому середовищі.
+
+- **Розв'язання репо:** `resolveWorkItemRepository` (session) для картки без репо при кількох репо повертає `environment` (усі репо середовища в порядку) і перше як місце запису; `ambiguous` лишився лише без середовища. `resolveStartRepository` і dispatch (`surface.ts`, `workItemRunsInLink`) приймають сесію під будь-яким репо середовища. Агент отримує `Workspace repositories: …` замість `Target repository`.
+- **UI:** прибрано `RepositoryPickerDialog` зі старту картки, переносу на дошці й глобального пошуку, а також хуки `useRepositoryChoice` і `useCardRepositorySlug`. `sessionRepositoryFor` бере репо картки або перше в середовищі (`inEnvironment`, `position` тепер є в payload репо), і `metadata.repository` для такої картки не пишеться.
+- **PR/MR по репо:** `@factory/core` `change-requests.ts`. `openChangeRequests: [{ repository, number, provider }]`; `openPullRequestNumber` лишився як «щось відкрито». GitHub/GitLab пишуть і знімають записи по репо, `mergeRequestEvents` у GitLab ключуються `project!iid` (старі ключі `iid` читаються). Злиття GitHub закриває картку лише з останнім PR, політика Work перелічує всі відкриті. GitLab відстежує MR картки і з проєкту, що не вибраний як джерело intake.
+- **Інструменти:** `workSpansEnvironment` (хост) робить `repository` обов'язковим у `source_control_*` для картки на все середовище (`namesRepository` з core). Self-review гейтить кожен репо: `reviewedHeads`, `selfReviewedHeads`, `selfReviewedHeadFor`. Тест відтворення — `reproductionTests: [{ repository, sha, paths }]` (`REPRODUCTION_TESTS_KEY`), `bugReproTestSha/Paths` дзеркалять перший запис; guard перевіряє кожен у його checkout. Підписка GitLab на MR за URL — у будь-якому репо середовища.
+- **Claude Code:** `createClaudeCheckoutResolver` клонує решту репо середовища поруч (`syncEnvironmentRepository`) і віддає теку з усіма. `repositoryCheckout` (bound-tools) шукає checkout репо для git тесту відтворення. Рядок `Target repository`/`Workspace repositories` тепер доходить і до агента Claude Code (налаштування `factoryTargetInstruction`, `appendSystemPromptFor`): раніше він зберігався в треді, але в промпт не потрапляв.
+- **Скіли:** `bug-*`, `factory-plan`, `factory-test` знають `Workspace repositories`; `factory-self-review` передає `reviewedHeads`.
+- **Тести:** `core/src/change-requests.test.ts` (5), `reproduction-test.test.ts` +2, `checkout.test.ts` +1, `bound-tools.test.ts` +1, `harness.test.ts` (промпт картки), решта — у `test-pairs.tsv`.
+- **Не зроблено:** різні провайдери в одному середовищі (GitHub разом з GitLab): сесія бачить репо лише свого провайдера. `pullRequestHeadSha` і дзеркальний вердикт рев'ю на картці лишились одні на картку. Діалог вибору лишився для автоматики, якій нема середовища.
+
 ## Далі
 
 Порядок і обсяг — у `README.md`, розділ «Що далі».

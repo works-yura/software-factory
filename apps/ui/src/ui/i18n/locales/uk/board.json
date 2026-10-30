@@ -253,6 +253,8 @@
     "remove": "Видалити"
   },
   "card": {
+    "openChangeRequests": "Відкриті PR/MR",
+    "openChangeRequest": "{{repository}} {{number}} ще відкритий",
     "detailsFor": "Подробиці: {{title}}",
     "actionsFor": "Дії: {{title}}",
     "allActionsFor": "Усі дії: {{title}}",
@@ -278,8 +280,8 @@
     "refreshFailed": "Не вдалося оновити дошку — спробуйте перезавантажити сторінку",
     "cardGone": "Цієї картки вже немає — можливо, дошка застаріла",
     "noMatchingRepository": "До цієї Factory не підключено репозиторію з провайдером цієї картки.",
-    "repositoryNotLinked": "Репозиторій {{repository}} не підключено до цієї Factory з провайдером цієї картки",
-    "startFailed": "Не вдалося запустити"
+    "noEnvironmentRepository": "Увімкніть репозиторій у Налаштуваннях → Середовище: у цієї Factory їх кілька, і жоден не входить у середовище.",
+    "repositoryNotLinked": "Репозиторій {{repository}} не підключено до цієї Factory з провайдером цієї картки"
   },
   "repositoryPicker": {
     "label": "Вибір репозиторію",

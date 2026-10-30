@@ -112,6 +112,8 @@ async function setup(
     installationHost?: string;
     platformOnly?: boolean;
     boards?: ReturnType<typeof createBoardRegistry>;
+    /** A second GitLab project linked to the same Factory, as `[id, path]`. */
+    secondProject?: [string, string];
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
@@ -155,6 +157,27 @@ async function setup(
   }
 
   await link(options.platformOnly ? 'platform-connection' : 'direct');
+  if (options.secondProject) {
+    const [installation] = await sourceControl.installations.list({ orgId: 'org-1' });
+    const [connection] = await sourceControl.connections.list({ orgId: 'org-1', factoryProjectId: project.id });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation!.id,
+        externalId: options.secondProject[0],
+        slug: options.secondProject[1],
+        defaultBranch: 'main',
+      },
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection!.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace/second',
+    });
+  }
   if (options.duplicateInstallation) await link('platform-connection');
   await seeded.intake.saveConfig({
     orgId: 'org-1',
@@ -828,6 +851,36 @@ describe('GitLabRules', () => {
 
       await service.ingest(mergeRequestEvent('d-close', 'close', '2030-01-01T01:00:00Z'));
       expect((await read())?.openPullRequestNumber).toBeNull();
+    });
+
+    it('keeps the card open until the merge requests of both repositories, sharing an iid, are settled', async () => {
+      const { seeded, project, service } = await setup({ secondProject: ['202', 'acme/api'] });
+      const work = await seedWork(seeded, project.id);
+      const read = async () => (await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata;
+      // The same session branch in another project: GitLab numbers it !17 too.
+      const inApi = (event: ReturnType<typeof mergeRequestEvent>) => ({
+        ...event,
+        payload: {
+          ...event.payload,
+          project: { id: 202, path_with_namespace: 'acme/api', web_url: 'https://gitlab.example.com/acme/api' },
+        },
+      });
+
+      await service.ingest(mergeRequestEvent('d-open-app', 'open', '2030-01-01T00:00:00Z'));
+      await service.ingest(inApi(mergeRequestEvent('d-open-api', 'open', '2030-01-01T00:10:00Z')));
+      expect((await read())?.openChangeRequests).toEqual([
+        { repository: PROJECT_PATH, number: 17, provider: 'gitlab' },
+        { repository: 'acme/api', number: 17, provider: 'gitlab' },
+      ]);
+
+      await service.ingest(mergeRequestEvent('d-merge-app', 'merge', '2030-01-01T01:00:00Z'));
+      expect(await read()).toMatchObject({
+        openChangeRequests: [{ repository: 'acme/api', number: 17, provider: 'gitlab' }],
+        openPullRequestNumber: 17,
+      });
+
+      await service.ingest(inApi(mergeRequestEvent('d-merge-api', 'merge', '2030-01-01T02:00:00Z')));
+      expect(await read()).toMatchObject({ openChangeRequests: [], openPullRequestNumber: null });
     });
 
     it('keeps the pushed head when an untimed opening of the recorded merge request is replayed', async () => {

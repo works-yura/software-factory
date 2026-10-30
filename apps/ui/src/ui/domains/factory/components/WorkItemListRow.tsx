@@ -16,6 +16,7 @@ import {
   CardStatus,
   CommentCount,
   MetadataLabels,
+  OpenChangeRequests,
   SourceTitle,
   WorkItemSourceIcon,
 } from './BoardCardParts';
@@ -85,6 +86,7 @@ export function WorkItemListRow({
           <span className="flex items-center gap-2">
             <CommentCount count={item.commentCount} />
             <MetadataLabels metadata={item.metadata} />
+            <OpenChangeRequests metadata={item.metadata} />
           </span>
         ),
         status: (status.kind !== 'idle' || verdict) && (

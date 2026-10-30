@@ -11,7 +11,7 @@ import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { FactorySessionSourceLookup } from '@factory/session';
 import { resolveFactorySessionAddress } from '@factory/session';
 import type { FactoryTransitionService } from '@factory/runtime';
-import { FACTORY_TRIAGE_TYPES } from '@factory/core';
+import { FACTORY_TRIAGE_TYPES, hasOpenChangeRequest } from '@factory/core';
 import { IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@factory/core';
 
 import { createReproductionTestTool, recordsReproductionTest, reproductionTestGuard } from './reproduction-test.ts';
@@ -155,10 +155,11 @@ export async function createFactoryTransitionTools(options: {
           item,
           role: binding.role,
           stage,
-          git: async () =>
+          git: async repository =>
             options.sessionGit?.({
               requestContext: execution.requestContext,
               workspace: (execution as { workspace?: unknown }).workspace,
+              ...(repository ? { repository } : {}),
             }),
         });
         if (guarded) return guarded;
@@ -188,13 +189,40 @@ export async function createFactoryTransitionTools(options: {
 
 export const REVIEW_VERDICTS = ['approve', 'request changes'] as const;
 
+/**
+ * The head self-review approved for `repository`. Work spanning several
+ * repositories records one head per repository; a verdict recorded with a
+ * single head covers the one repository a single-repository card has.
+ */
+export function selfReviewedHeadFor(metadata: Record<string, unknown> | null | undefined, repository: string) {
+  const heads = metadata?.selfReviewedHeads;
+  if (heads && typeof heads === 'object' && !Array.isArray(heads)) {
+    const head = (heads as Record<string, unknown>)[repository.toLowerCase()];
+    return typeof head === 'string' ? head : null;
+  }
+  const single = metadata?.selfReviewedHeadSha;
+  return typeof single === 'string' ? single : null;
+}
+
 const MAX_SELF_REVIEW_FINDINGS_LENGTH = 20_000;
+
+const FULL_COMMIT_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
 
 const reviewVerdictInputSchema = z.object({
   verdict: z.enum(REVIEW_VERDICTS),
-  reviewedHeadSha: z
-    .string()
-    .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i, 'Use the full commit SHA of the reviewed head.'),
+  reviewedHeadSha: z.string().regex(FULL_COMMIT_SHA, 'Use the full commit SHA of the reviewed head.'),
+  reviewedHeads: z
+    .array(
+      z.object({
+        repository: z.string().trim().min(1),
+        sha: z.string().regex(FULL_COMMIT_SHA, 'Use the full commit SHA of the reviewed head.'),
+      }),
+    )
+    .max(32)
+    .optional()
+    .describe(
+      'Self-review of work spanning several repositories: the branch head you reviewed in every repository the work changed (owner/name and full SHA). Each change request then opens only from its approved head.',
+    ),
   findings: z
     .string()
     .trim()
@@ -232,7 +260,7 @@ function createReviewVerdictTool(
         'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On a Review card it records the published PR verdict and the card stays in Reviewing. On a Work or Bug card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
       inputSchema: reviewVerdictInputSchema,
       requireApproval: false,
-      execute: async ({ verdict, reviewedHeadSha, findings }, execution) => {
+      execute: async ({ verdict, reviewedHeadSha, reviewedHeads, findings }, execution) => {
         const resolution = await resolveFactorySessionAddress({
           requestContext: execution.requestContext,
           storage: options.storage,
@@ -248,7 +276,7 @@ function createReviewVerdictTool(
         if (
           selfReview &&
           item.stages[0] === selfReview.review &&
-          typeof item.metadata?.openPullRequestNumber !== 'number'
+          !hasOpenChangeRequest(item.metadata)
         ) {
           return recordSelfReviewVerdict({
             storage: options.storage,
@@ -258,6 +286,7 @@ function createReviewVerdictTool(
             flow: selfReview,
             verdict,
             reviewedHeadSha: reviewedHeadSha.toLowerCase(),
+            reviewedHeads,
             findings,
             toolCallId: execution.agent?.toolCallId,
           });
@@ -323,10 +352,14 @@ async function recordSelfReviewVerdict(input: {
   flow: SelfReviewFlow;
   verdict: (typeof REVIEW_VERDICTS)[number];
   reviewedHeadSha: string;
+  reviewedHeads?: Array<{ repository: string; sha: string }>;
   findings: string | undefined;
   toolCallId: string | undefined;
 }) {
   const { storage, binding, item, verdict, reviewedHeadSha, findings } = input;
+  const reviewedHeads = input.reviewedHeads?.length
+    ? Object.fromEntries(input.reviewedHeads.map(head => [head.repository.toLowerCase(), head.sha.toLowerCase()]))
+    : null;
   if (!input.toolCallId) throw new Error('Self-review verdicts require an authenticated bound agent tool call.');
   const reviewedAt = new Date().toISOString();
   const previousRounds = typeof item.metadata?.selfReviewRounds === 'number' ? item.metadata.selfReviewRounds : 0;
@@ -345,6 +378,7 @@ async function recordSelfReviewVerdict(input: {
         metadata: {
           selfReviewVerdict: verdict,
           selfReviewedHeadSha: reviewedHeadSha,
+          selfReviewedHeads: reviewedHeads,
           selfReviewedAt: reviewedAt,
           selfReviewFindings: findings ?? null,
           selfReviewRounds: rounds,

@@ -41,9 +41,37 @@ describe('recordPullRequestHead', () => {
       id: 'card',
       headSha: 'a',
       headAt: 200,
-      ownedPullRequestNumber: 17,
+      ownedChangeRequest: { repository: 'acme/api', number: 17 },
     });
 
     expect(writes).toHaveLength(1);
+  });
+
+  it('tells change requests with the same number in different repositories apart', async () => {
+    const card = {
+      orgId: 'org-1',
+      id: 'card',
+      revision: 1,
+      metadata: { openChangeRequests: [{ repository: 'acme/app', number: 5 }], openPullRequestNumber: 5 },
+    };
+    const other = storageWith([card]);
+    await recordPullRequestHead(other.storage, {
+      orgId: 'org-1',
+      id: 'card',
+      headSha: 'a',
+      headAt: 200,
+      ownedChangeRequest: { repository: 'acme/api', number: 5 },
+    });
+    expect(other.writes).toHaveLength(0);
+
+    const own = storageWith([card]);
+    await recordPullRequestHead(own.storage, {
+      orgId: 'org-1',
+      id: 'card',
+      headSha: 'a',
+      headAt: 200,
+      ownedChangeRequest: { repository: 'acme/app', number: 5 },
+    });
+    expect(own.writes).toHaveLength(1);
   });
 });

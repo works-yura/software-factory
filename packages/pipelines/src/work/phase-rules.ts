@@ -1,4 +1,10 @@
-import { needsApproval, REPRODUCTION_TEST_PATHS_KEY, REPRODUCTION_TEST_SHA_KEY } from '@factory/core';
+import {
+  hasOpenChangeRequest,
+  needsApproval,
+  REPRODUCTION_TEST_PATHS_KEY,
+  REPRODUCTION_TEST_SHA_KEY,
+  REPRODUCTION_TESTS_KEY,
+} from '@factory/core';
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '@factory/core';
 
 import { changeRequestNoun, metadataString, sourceRef, untrustedSourceReference } from './references.ts';
@@ -117,14 +123,29 @@ export function writeTests(context: FactoryStageRuleContext) {
 
 /** The tests the tester recorded, for the builder's prompt; undefined when the card has none. */
 function recordedTest(item: FactoryRuleItemContext): string | undefined {
+  const quote = (paths: unknown[]) => paths.map(path => JSON.stringify(String(path))).join(', ');
+  const records = item.metadata?.[REPRODUCTION_TESTS_KEY];
+  const perRepository = Array.isArray(records)
+    ? records.filter(
+        (record): record is { repository: string; sha: string; paths: unknown[] } =>
+          typeof record?.repository === 'string' &&
+          record.repository !== '' &&
+          typeof record.sha === 'string' &&
+          Array.isArray(record.paths),
+      )
+    : [];
+  const guard =
+    'Do not modify, move, or delete those files: moving the card on is rejected when your checkout changes them ' +
+    'since that commit.';
+  if (perRepository.length > 0) {
+    return `The tests were committed in ${perRepository
+      .map(record => `${record.repository} at ${record.sha} (touching ${quote(record.paths)})`)
+      .join('; ')}. ${guard}`;
+  }
   const sha = item.metadata?.[REPRODUCTION_TEST_SHA_KEY];
   const paths = item.metadata?.[REPRODUCTION_TEST_PATHS_KEY];
   if (typeof sha !== 'string' || !Array.isArray(paths)) return undefined;
-  return (
-    `The tests were committed at ${sha} and touch: ${paths.map(path => JSON.stringify(String(path))).join(', ')}. ` +
-    'Do not modify, move, or delete those files: moving the card on is rejected when your checkout changes them ' +
-    'since that commit.'
-  );
+  return `The tests were committed at ${sha} and touch: ${quote(paths)}. ${guard}`;
 }
 
 /** Request-changes rounds from self-review before the card parks in Intake for a person. */
@@ -147,7 +168,7 @@ function returnedFromSelfReview(context: FactoryStageRuleContext): boolean {
   return (
     (context.fromStage === 'review' || parked) &&
     context.item.metadata?.selfReviewVerdict === 'request changes' &&
-    typeof context.item.metadata?.openPullRequestNumber !== 'number'
+    !hasOpenChangeRequest(context.item.metadata)
   );
 }
 
@@ -219,7 +240,7 @@ export function buildWorkItem(context: FactoryStageRuleContext) {
 export function selfReviewWorkItem(context: FactoryStageRuleContext) {
   // A card whose change request is already open is past self-review; the Review
   // board's reviewer covers it on the change request itself.
-  if (typeof context.item.metadata?.openPullRequestNumber === 'number') return;
+  if (hasOpenChangeRequest(context.item.metadata)) return;
   if (context.selfReviewEnabled !== true) return;
   return {
     type: 'invokeSkill',

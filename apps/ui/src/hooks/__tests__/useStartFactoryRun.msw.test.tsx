@@ -22,7 +22,14 @@ function RouteInner({ children }: { children: ReactNode }) {
 }
 
 function stubEndpoints(
-  repositories: Array<{ id: string; externalId: string; slug: string; provider?: 'github' | 'gitlab' }>,
+  repositories: Array<{
+    id: string;
+    externalId: string;
+    slug: string;
+    provider?: 'github' | 'gitlab';
+    inEnvironment?: boolean;
+    position?: number;
+  }>,
 ) {
   const sessionsCreatedFor: string[] = [];
   const patches: Array<Record<string, unknown>> = [];
@@ -42,6 +49,8 @@ function stubEndpoints(
               id: repository.id,
               branch: 'main',
               sandboxWorkdir: '/repo',
+              ...(repository.inEnvironment === undefined ? {} : { inEnvironment: repository.inEnvironment }),
+              ...(repository.position === undefined ? {} : { position: repository.position }),
               repository: { externalId: repository.externalId, slug: repository.slug, defaultBranch: 'main' },
             },
           ],
@@ -136,7 +145,7 @@ describe.each(['github-issue', 'github-pr', 'gitlab-issue', 'gitlab-pr'] as cons
     const provider = source.startsWith('github-') ? 'github' : 'gitlab';
     const otherProvider = provider === 'github' ? 'gitlab' : 'github';
 
-    it.each(['sole repository fallback', 'stored slug', 'explicit slug'])(
+    it.each(['sole repository fallback', 'stored slug'])(
       'rejects the other provider via %s before any writes',
       async selection => {
         const calls = stubEndpoints([
@@ -159,9 +168,8 @@ describe.each(['github-issue', 'github-pr', 'gitlab-issue', 'gitlab-pr'] as cons
             branch: 'factory/item-1',
             threadTitle: 'Fix login bug',
             workItem: providerWorkItem,
-            ...(selection === 'explicit slug' ? { repositorySlug: 'acme/other' } : {}),
           }),
-        ).rejects.toThrow('Choose a repository before starting this Factory run');
+        ).rejects.toThrow('Turn a repository on under Settings → Environment before starting this Factory run');
 
         expect(calls.sessionsCreatedFor).toEqual([]);
         expect(calls.patches).toEqual([]);
@@ -199,7 +207,10 @@ describe.each(['github-issue', 'github-pr', 'gitlab-issue', 'gitlab-pr'] as cons
       });
 
       expect(calls.sessionsCreatedFor).toEqual(['source-repo']);
-      expect(calls.started()).toMatchObject({ workItem: { input: { metadata: { repository: 'acme/source' } } } });
+      // The card names no repository and stays unbound: adding a second
+      // repository later widens its workspace instead of pinning it here.
+      expect(calls.patches).toEqual([]);
+      expect(calls.started()).toMatchObject({ workItem: { input: { metadata: {} } } });
     });
   },
 );
@@ -217,7 +228,49 @@ describe.each(['manual'] as const)('useStartFactoryRun fallback for %s', source 
     });
 
     expect(calls.sessionsCreatedFor).toEqual(['repo-1']);
-    expect(calls.started()).toMatchObject({ workItem: { input: { metadata: { repository: 'acme/one' } } } });
+    expect(calls.patches).toEqual([]);
+    expect(calls.started()).toMatchObject({ workItem: { input: { metadata: {} } } });
+  });
+
+  it('runs a card that names no repository across every environment repository, choosing none', async () => {
+    const calls = stubEndpoints([
+      { id: 'backend', provider: 'gitlab', externalId: '1', slug: 'works_yura/ai', inEnvironment: true, position: 1 },
+      { id: 'app', provider: 'gitlab', externalId: '2', slug: 'works_yura/test', inEnvironment: true, position: 0 },
+      { id: 'parked', provider: 'gitlab', externalId: '3', slug: 'works_yura/old', inEnvironment: false, position: -1 },
+    ]);
+    const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+
+    await result.current.start.mutateAsync({
+      branch: 'factory/item-1',
+      threadTitle: 'Fix login bug',
+      workItem: { ...workItem, source, metadata: undefined },
+    });
+
+    // Filed under the first environment repository; the card itself is not
+    // bound to it, the sandbox boots both.
+    expect(calls.sessionsCreatedFor).toEqual(['app']);
+    expect(calls.patches).toEqual([]);
+    const started = calls.started()?.workItem as { input: { metadata: Record<string, unknown> } };
+    expect(started.input.metadata).not.toHaveProperty('repository');
+  });
+
+  it('refuses to start when several repositories are linked but none is in the environment', async () => {
+    const calls = stubEndpoints([
+      { id: 'one', provider: 'gitlab', externalId: '1', slug: 'works_yura/ai', inEnvironment: false },
+      { id: 'two', provider: 'gitlab', externalId: '2', slug: 'works_yura/test', inEnvironment: false },
+    ]);
+    const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+
+    await expect(
+      result.current.start.mutateAsync({
+        branch: 'factory/item-1',
+        threadTitle: 'Fix login bug',
+        workItem: { ...workItem, source, metadata: undefined },
+      }),
+    ).rejects.toThrow('Turn a repository on under Settings → Environment before starting this Factory run');
+    expect(calls.sessionsCreatedFor).toEqual([]);
   });
 });
 

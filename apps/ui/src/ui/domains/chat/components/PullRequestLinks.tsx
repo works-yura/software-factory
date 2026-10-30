@@ -84,6 +84,9 @@ export function PullRequestLinks({ repository, reviewItem, threadId }: PullReque
   if (links.length === 0) return null;
   const prefix = CHANGE_REQUEST_PREFIX[provider];
   const noun = tk(`changeRequest.nouns.${provider}`);
+  // A session spanning several repositories opens one change request in each;
+  // the bare number no longer says which repository it is in.
+  const severalRepositories = new Set(links.map(link => link.repoFullName.toLowerCase())).size > 1;
 
   return (
     <div className="ml-auto flex items-center gap-2">
@@ -105,6 +108,7 @@ export function PullRequestLinks({ repository, reviewItem, threadId }: PullReque
         >
           <PullRequestStatusIcon status={subscription.status} size={13} decorative />
           <span>
+            {severalRepositories ? `${subscription.repoFullName.split('/').at(-1)} ` : ''}
             {prefix}
             {subscription.pullRequestNumber}
           </span>

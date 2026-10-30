@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkItemsStorage } from '@factory/store';
 import { createBoardRegistry, createFactoryStorageForTests } from '@factory/testing';
 
-import { createClaudeBoundTools, createClaudeSessionTools } from './bound-tools.ts';
+import { createClaudeBoundTools, createClaudeSessionTools, repositoryCheckout } from './bound-tools.ts';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 const TEST_PATH = 'test/profile_test.js';
@@ -209,5 +209,23 @@ describe('Claude Code session tools', () => {
     });
     await tools.source_control_push_branch!.execute!({} as never, {} as never);
     expect(workspace).toBeUndefined();
+  });
+});
+
+describe('repositoryCheckout', () => {
+  it('finds each repository of a session spanning several, and refuses to guess one', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'factory-workspace-'));
+    mkdirSync(join(root, 'ai', '.git'), { recursive: true });
+    mkdirSync(join(root, 'test', '.git'), { recursive: true });
+
+    expect(repositoryCheckout(root, 'works_yura/test')).toBe(`${root}/test`);
+    expect(repositoryCheckout(root, 'works_yura/missing')).toBeUndefined();
+    expect(repositoryCheckout(root, undefined)).toBeUndefined();
+    expect(() => repositoryCheckout(root, undefined, true)).toThrow('pass `repository`');
+
+    // A single-repository session runs in its checkout, named or not.
+    expect(repositoryCheckout(`${root}/ai`, undefined, true)).toBe(`${root}/ai`);
+    expect(repositoryCheckout(`${root}/ai`, 'works_yura/ai')).toBe(`${root}/ai`);
+    rmSync(root, { recursive: true, force: true });
   });
 });
