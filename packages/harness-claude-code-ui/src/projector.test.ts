@@ -359,6 +359,144 @@ describe('ClaudeTranscriptProjector', () => {
     expect(p.running).toBe(false);
   });
 
+  it('forwards a step’s token usage as the chat’s usage_update', () => {
+    const p = projector();
+    const out = p.event({
+      type: 'usage_update',
+      usage: { promptTokens: 15_817, completionTokens: 31, totalTokens: 15_848, cachedInputTokens: 15_813 },
+    });
+    expect(out.events).toEqual([
+      {
+        type: 'usage_update',
+        usage: { promptTokens: 15_817, completionTokens: 31, totalTokens: 15_848, cachedInputTokens: 15_813 },
+      },
+    ]);
+    // Counts Claude left out read as zero, as a Mastra step's do.
+    expect(p.event({ type: 'usage_update', usage: { completionTokens: 5 } }).events).toEqual([
+      { type: 'usage_update', usage: { promptTokens: 0, completionTokens: 5, totalTokens: 5 } },
+    ]);
+  });
+
+  it('shows TodoWrite as Mastra’s task_write and tells the task panel, keeping task ids across updates', () => {
+    const p = projector();
+    const first = play(p, [
+      { kind: 'input', source: 'signal', text: 'Plan it', id: 'sig-1' },
+      {
+        kind: 'tool_call',
+        toolCallId: 'toolu_todo1',
+        toolName: 'TodoWrite',
+        input: {
+          todos: [
+            { content: 'Read the code', status: 'in_progress', activeForm: 'Reading the code' },
+            { content: 'Fix the bug', status: 'pending', activeForm: 'Fixing the bug' },
+          ],
+        },
+      },
+      { kind: 'tool_result', toolCallId: 'toolu_todo1', content: 'Todos have been modified successfully.', isError: false },
+    ]);
+    const tasks = p.tasks;
+    expect(tasks).toEqual([
+      { id: expect.any(String), content: 'Read the code', status: 'in_progress', activeForm: 'Reading the code' },
+      { id: expect.any(String), content: 'Fix the bug', status: 'pending', activeForm: 'Fixing the bug' },
+    ]);
+    expect(first.events).toContainEqual({ type: 'tool_start', toolCallId: 'toolu_todo1', toolName: 'task_write', args: { tasks } });
+    expect(first.events).toContainEqual({ type: 'task_updated', tasks });
+    // Stored under the task tool's name, which the chat keeps out of the transcript.
+    expect(stored(first.writes).at(-1)?.content.parts[0]).toMatchObject({
+      toolInvocation: { toolName: 'task_write', args: { tasks }, state: 'result' },
+    });
+
+    const second = play(p, [
+      {
+        kind: 'tool_call',
+        toolCallId: 'toolu_todo2',
+        toolName: 'TodoWrite',
+        input: {
+          todos: [
+            { content: 'Read the code', status: 'completed', activeForm: 'Reading the code' },
+            { content: 'Fix the bug', status: 'in_progress', activeForm: 'Fixing the bug' },
+          ],
+        },
+      },
+    ]);
+    expect(p.tasks.map(task => [task.id, task.status])).toEqual([
+      [tasks[0]!.id, 'completed'],
+      [tasks[1]!.id, 'in_progress'],
+    ]);
+    expect(second.events).toContainEqual({ type: 'task_updated', tasks: p.tasks });
+  });
+
+  it('follows a Task subagent live as the chat’s subagent card, from its call to its result', () => {
+    let now = Date.parse('2026-10-28T10:00:00Z');
+    const p = new ClaudeTranscriptProjector({ resourceId: 'factory-1', now: () => new Date(now) });
+    const out = play(p, [
+      { kind: 'init', sessionId: 'claude-1', model: 'claude-sonnet-4-6' },
+      {
+        kind: 'tool_call',
+        toolCallId: 'toolu_task',
+        toolName: 'Task',
+        input: { description: 'Find the config', prompt: 'Find where the config is loaded.', subagent_type: 'Explore' },
+      },
+      { kind: 'text_delta', text: 'Looking', parentToolCallId: 'toolu_task' },
+      { kind: 'text', text: 'Looking', parentToolCallId: 'toolu_task' },
+      { kind: 'tool_call', toolCallId: 'toolu_sub', toolName: 'Grep', input: { pattern: 'config' }, parentToolCallId: 'toolu_task' },
+      { kind: 'tool_result', toolCallId: 'toolu_sub', content: 'src/config.ts', isError: false, parentToolCallId: 'toolu_task' },
+      { kind: 'text', text: 'Found it.', parentToolCallId: 'toolu_task' },
+    ]);
+    now += 4_000;
+    const done = play(p, [{ kind: 'tool_result', toolCallId: 'toolu_task', content: 'In src/config.ts.', isError: false }]);
+
+    expect(out.events.filter(event => event.type.startsWith('subagent_'))).toEqual([
+      {
+        type: 'subagent_start',
+        toolCallId: 'toolu_task',
+        agentType: 'Explore',
+        task: 'Find where the config is loaded.',
+        modelId: 'claude-sonnet-4-6',
+      },
+      { type: 'subagent_text_delta', toolCallId: 'toolu_task', agentType: 'Explore', textDelta: 'Looking' },
+      {
+        type: 'subagent_tool_start',
+        toolCallId: 'toolu_task',
+        agentType: 'Explore',
+        subToolName: 'Grep',
+        subToolArgs: { pattern: 'config' },
+      },
+      {
+        type: 'subagent_tool_end',
+        toolCallId: 'toolu_task',
+        agentType: 'Explore',
+        subToolName: 'Grep',
+        subToolResult: 'src/config.ts',
+        isError: false,
+      },
+      { type: 'subagent_text_delta', toolCallId: 'toolu_task', agentType: 'Explore', textDelta: 'Found it.' },
+    ]);
+    // The parent call still settles as before, then the card ends with its result.
+    expect(done.events.map(event => event.type)).toEqual(['message_update', 'tool_end', 'subagent_end']);
+    expect(done.events.at(-1)).toEqual({
+      type: 'subagent_end',
+      toolCallId: 'toolu_task',
+      agentType: 'Explore',
+      result: 'In src/config.ts.',
+      isError: false,
+      durationMs: 4_000,
+    });
+    // Nothing the subagent did is stored.
+    expect(stored([...out.writes, ...done.writes]).flatMap(message => message.content.parts)).toEqual([
+      expect.objectContaining({ toolInvocation: expect.objectContaining({ toolCallId: 'toolu_task', toolName: 'Task' }) }),
+    ]);
+  });
+
+  it('ends a subagent card cut off by an aborted run as failed', () => {
+    const p = projector();
+    play(p, [{ kind: 'tool_call', toolCallId: 'toolu_agent', toolName: 'Agent', input: { description: 'Look around' } }]);
+    const end = p.event({ type: 'agent_end', reason: 'aborted' });
+    expect(end.events).toContainEqual(
+      expect.objectContaining({ type: 'subagent_end', toolCallId: 'toolu_agent', agentType: 'general-purpose', result: INTERRUPTED, isError: true }),
+    );
+  });
+
   it('reports a failed run as an error event', () => {
     const p = projector();
     const out = p.event({ type: 'error', error: new Error('rate limited') });

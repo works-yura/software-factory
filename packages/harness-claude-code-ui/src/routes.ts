@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { defaultDisplayState } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { StorageListMessagesInput } from '@mastra/core/storage';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -336,6 +337,8 @@ export class ClaudeSessionUi {
     }
     const display = channel.displayState();
     const om = display.omProgress;
+    // The task list and the usage total are the session thread's; another thread has neither.
+    const own = !requested || requested === channel.threadId;
     return c.json({
       controllerId: this.#options.controllerId,
       sessionId: channel.session.id,
@@ -344,7 +347,7 @@ export class ClaudeSessionUi {
       modeId: channel.session.mode ?? 'default',
       modelId: channel.modelId ?? '',
       running: channel.running,
-      tasks: [],
+      tasks: own ? display.tasks : [],
       omProgress: {
         status: om.status,
         pendingTokens: om.pendingTokens,
@@ -356,7 +359,7 @@ export class ClaudeSessionUi {
         projectedMessageRemoval: om.buffered.observations.projectedMessageRemoval,
         projectedReflectionSavings: 0,
       },
-      tokenUsage: display.tokenUsage,
+      tokenUsage: own ? display.tokenUsage : defaultDisplayState().tokenUsage,
       settings: { yolo: false, notifications: 'off', smartEditing: true },
     });
   }

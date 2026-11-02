@@ -23,6 +23,7 @@ import { randomUUID } from 'node:crypto';
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
+import { resolveModel } from '@mastra/code-sdk/agents/model';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -74,6 +75,7 @@ import {
   claudeSupervisorProjectId,
   CLAUDE_THREAD_SETTINGS,
   createFactoryToolPermissions,
+  observeClaudeThreadTitle,
 } from './claude/index.ts';
 import type {
   ClaudeCodeCredentialFailureHook,
@@ -1628,6 +1630,35 @@ export class MastraFactory {
               { identity: { getId: () => session.id }, subscribe: listener => channel.subscribe(listener) },
               { sourceControl: { sessions: sourceControlSessions } },
             );
+            // Its thread is named as a Mastra session's is, and the session row follows the title.
+            observeClaudeThreadTitle(channel, {
+              sourceControl: { sessions: sourceControlSessions },
+              generate: async threadId => {
+                const controller = this.#prepared?.base.controller;
+                const row = await sourceControlSessions.getBySessionId(session.id);
+                if (!controller || !row) return undefined;
+                // The title model a Mastra session of the same Factory names its threads with.
+                const stored = row.factoryProjectId
+                  ? await memorySettingsStorage.get({
+                      orgId: row.orgId,
+                      userId: factoryMemorySettingsUserId(row.factoryProjectId),
+                    })
+                  : null;
+                const requestContext = new RequestContext();
+                requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+                const observerModelId = stored?.observerModelId;
+                return controller.generateThreadTitle({
+                  threadId,
+                  requestContext,
+                  ...(observerModelId
+                    ? {
+                        model: ({ requestContext }: { requestContext: RequestContext }) =>
+                          resolveModel(observerModelId, { remapForCodexOAuth: true, requestContext }),
+                      }
+                    : {}),
+                });
+              },
+            });
             // A permission request reaches whoever follows the session, as a Mastra session's approval does.
             channel.subscribe(event => {
               if (event.type !== 'tool_approval_required') return;

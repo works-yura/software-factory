@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentControllerEvent, MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import { assignTaskIds } from '@mastra/core/agent-controller';
+import type {
+  AgentControllerEvent,
+  MastraDBMessage,
+  MastraMessagePart,
+  TokenUsage,
+} from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 
-import type { AgentEvent, PlanDecision } from '@factory/harness';
+import type { AgentEvent, AgentTokenUsage, PlanDecision } from '@factory/harness';
 import {
   ASK_USER_QUESTION_TOOL,
   askUserPrompt,
@@ -18,6 +24,15 @@ import {
 export const UI_PLAN_TOOL_NAME = 'submit_plan';
 /** The tool name the chat UI draws a question card for; Claude asks with `AskUserQuestion`. */
 export const UI_QUESTION_TOOL_NAME = 'ask_user';
+/** Claude's task list tool; the chat shows it as the task panel, as it does Mastra's `task_write`. */
+export const TODO_WRITE_TOOL = 'TodoWrite';
+/** The task tool the chat UI keeps out of the transcript and reads the task panel from. */
+export const UI_TASK_TOOL_NAME = 'task_write';
+/** Claude's tools that start a subagent; the CLI renamed `Task` to `Agent`. */
+export const SUBAGENT_TOOLS: readonly string[] = ['Task', 'Agent'];
+
+/** A task in the chat's task panel, as Mastra's task tools keep it. */
+export type UiTask = ReturnType<typeof assignTaskIds>[number];
 
 /** What one transcript entry or session event changes: events for the live stream, messages to store. */
 export interface Projection {
@@ -72,6 +87,7 @@ interface StreamedPart {
 
 function displayToolName(toolName: string): string {
   if (toolName === ASK_USER_QUESTION_TOOL) return UI_QUESTION_TOOL_NAME;
+  if (toolName === TODO_WRITE_TOOL) return UI_TASK_TOOL_NAME;
   return PLAN_GATE_TOOL_IDS.includes(toolName) ? UI_PLAN_TOOL_NAME : toolName;
 }
 
@@ -81,6 +97,60 @@ function planArgs(input: unknown): { title?: string; plan?: string } {
     ...(typeof record.title === 'string' && record.title.trim() ? { title: record.title } : {}),
     ...(typeof record.plan === 'string' ? { plan: record.plan } : {}),
   };
+}
+
+const TASK_STATUSES = new Set(['pending', 'in_progress', 'completed']);
+
+/** `TodoWrite`'s `todos` as Mastra's task tools take them; items that are not tasks are dropped. */
+function todoTasks(input: unknown): Array<{ content: string; status: UiTask['status']; activeForm: string }> {
+  const todos = input && typeof input === 'object' ? (input as { todos?: unknown }).todos : undefined;
+  if (!Array.isArray(todos)) return [];
+  return todos.flatMap(todo => {
+    if (!todo || typeof todo !== 'object') return [];
+    const { content, status, activeForm } = todo as Record<string, unknown>;
+    if (typeof content !== 'string' || !content.trim()) return [];
+    return [
+      {
+        content,
+        status: (typeof status === 'string' && TASK_STATUSES.has(status) ? status : 'pending') as UiTask['status'],
+        activeForm: typeof activeForm === 'string' && activeForm.trim() ? activeForm : content,
+      },
+    ];
+  });
+}
+
+/** Usage as the chat reads it: the three counts always present, the cache counts when Claude reported them. */
+export function uiTokenUsage(usage: AgentTokenUsage): TokenUsage {
+  const result: TokenUsage = {
+    promptTokens: usage.promptTokens ?? 0,
+    completionTokens: usage.completionTokens ?? 0,
+    totalTokens: usage.totalTokens ?? (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0),
+  };
+  for (const key of [
+    'reasoningTokens',
+    'cachedInputTokens',
+    'cacheCreationInputTokens',
+    'cacheCreationInputTokens5m',
+    'cacheCreationInputTokens1h',
+  ] as const) {
+    if (usage[key] !== undefined) result[key] = usage[key];
+  }
+  return result;
+}
+
+/** A running subagent (a `Task`/`Agent` call), as the chat's subagent card follows it. */
+interface ActiveSubagent {
+  agentType: string;
+  startedAt: number;
+  /** Its tool calls still running, by id, for the name their end reports. */
+  tools: Map<string, string>;
+  /** Text streamed since its last full block, which then repeats it. */
+  streamed: boolean;
+}
+
+function stringField(input: unknown, key: string): string | undefined {
+  const value = input && typeof input === 'object' ? (input as Record<string, unknown>)[key] : undefined;
+  return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
 /** The result a tool call gets when its run ended before it did. */
@@ -117,8 +187,11 @@ function clone<T>(value: T): T {
  * gate is a `submit_plan` call (the UI's plan card) whose message carries the
  * pending suspension until a decision, or new work, settles it.
  *
- * Subagent output (entries with a `parentToolCallId`) stays out: the chat
- * shows the subagent as its parent tool call.
+ * Subagent output (entries with a `parentToolCallId`) stays out of the stored
+ * messages: the chat shows the subagent as its parent tool call, and live as
+ * the `subagent_*` events a Mastra subagent sends. `TodoWrite` is stored as
+ * Mastra's `task_write` and sends `task_updated`, so the chat shows the task
+ * panel instead of a tool row.
  */
 export class ClaudeTranscriptProjector {
   readonly #resourceId: string;
@@ -140,6 +213,9 @@ export class ClaudeTranscriptProjector {
   #pendingApproval: PendingApproval | undefined;
   #pendingQuestion: PendingQuestion | undefined;
   #modelId: string | undefined;
+  #tasks: UiTask[] = [];
+  /** Running subagents, by their `Task`/`Agent` call id. */
+  #subagents = new Map<string, ActiveSubagent>();
 
   constructor(options: ProjectorOptions) {
     this.#resourceId = options.resourceId;
@@ -154,6 +230,16 @@ export class ClaudeTranscriptProjector {
   /** The model Claude reported on the latest turn, e.g. `claude-sonnet-4-5`. */
   get modelId(): string | undefined {
     return this.#modelId;
+  }
+
+  /** The task list Claude keeps with `TodoWrite`, as the chat's task panel reads it. */
+  get tasks(): UiTask[] {
+    return clone(this.#tasks);
+  }
+
+  /** Picks up the task list stored before a restart (the latest `task_write` call's). */
+  adoptTasks(tasks: UiTask[]): void {
+    this.#tasks = clone(tasks);
   }
 
   /** The live assistant message, for a client that connects mid-run. */
@@ -237,7 +323,10 @@ export class ClaudeTranscriptProjector {
       }
       return out;
     }
-    if ('parentToolCallId' in entry && entry.parentToolCallId) return out;
+    if ('parentToolCallId' in entry && entry.parentToolCallId) {
+      this.#subagentEntry(entry, entry.parentToolCallId, out);
+      return out;
+    }
 
     switch (entry.kind) {
       case 'input':
@@ -298,6 +387,12 @@ export class ClaudeTranscriptProjector {
   event(event: AgentEvent | { type: string }, pendingPlan?: PlanGate, pendingPermission?: PermissionRequest): Projection {
     const out: Projection = { events: [], writes: [] };
     switch (event.type) {
+      case 'usage_update': {
+        // One step's usage, as Mastra sends it; the channel keeps the running total.
+        const { usage } = event as Extract<AgentEvent, { type: 'usage_update' }>;
+        out.events.push({ type: 'usage_update', usage: uiTokenUsage(usage) });
+        break;
+      }
       case 'tool_suspended': {
         const { toolCallId } = event as Extract<AgentEvent, { type: 'tool_suspended' }>;
         this.#closeCurrent(out);
@@ -438,12 +533,15 @@ export class ClaudeTranscriptProjector {
     const message = this.#ensureCurrent(threadId, out);
     this.#active = undefined;
     const toolName = displayToolName(entry.toolName);
+    const tasks = toolName === UI_TASK_TOOL_NAME ? assignTaskIds(todoTasks(entry.input), this.#tasks) : undefined;
     const args =
       toolName === UI_PLAN_TOOL_NAME
         ? planArgs(entry.input)
         : toolName === UI_QUESTION_TOOL_NAME
           ? askUserPrompt(entry.input)
-          : entry.input;
+          : tasks
+            ? { tasks }
+            : entry.input;
     const part: ToolInvocationPart = {
       type: 'tool-invocation',
       toolInvocation: { state: 'call', toolCallId: entry.toolCallId, toolName, args },
@@ -453,6 +551,88 @@ export class ClaudeTranscriptProjector {
     this.#openTools.set(entry.toolCallId, message);
     out.writes.push(clone(message));
     out.events.push({ type: 'tool_start', toolCallId: entry.toolCallId, toolName, args });
+    if (tasks) {
+      // As Mastra's `task_write` does: the call replaces the whole list and tells the panel.
+      this.#tasks = tasks;
+      out.events.push({ type: 'task_updated', tasks: clone(tasks) });
+    }
+    if (SUBAGENT_TOOLS.includes(entry.toolName)) this.#startSubagent(entry, out);
+  }
+
+  #startSubagent(entry: Extract<ClaudeTranscriptEntry, { kind: 'tool_call' }>, out: Projection) {
+    const agentType = stringField(entry.input, 'subagent_type') ?? 'general-purpose';
+    this.#subagents.set(entry.toolCallId, {
+      agentType,
+      startedAt: this.#now().getTime(),
+      tools: new Map(),
+      streamed: false,
+    });
+    out.events.push({
+      type: 'subagent_start',
+      toolCallId: entry.toolCallId,
+      agentType,
+      task: stringField(entry.input, 'prompt') ?? stringField(entry.input, 'description') ?? '',
+      modelId: stringField(entry.input, 'model') ?? this.#modelId ?? '',
+    });
+  }
+
+  /** What a subagent says and does, as a Mastra subagent streams it; none of it is stored. */
+  #subagentEntry(entry: ClaudeTranscriptEntry, parentToolCallId: string, out: Projection) {
+    const subagent = this.#subagents.get(parentToolCallId);
+    if (!subagent) return;
+    const { agentType } = subagent;
+    const toolCallId = parentToolCallId;
+    switch (entry.kind) {
+      case 'text_delta':
+        if (!entry.text) return;
+        subagent.streamed = true;
+        out.events.push({ type: 'subagent_text_delta', toolCallId, agentType, textDelta: entry.text });
+        return;
+      case 'text':
+        // The full block repeats what its deltas already streamed.
+        if (subagent.streamed) subagent.streamed = false;
+        else if (entry.text) out.events.push({ type: 'subagent_text_delta', toolCallId, agentType, textDelta: entry.text });
+        return;
+      case 'tool_call':
+        subagent.tools.set(entry.toolCallId, entry.toolName);
+        out.events.push({
+          type: 'subagent_tool_start',
+          toolCallId,
+          agentType,
+          subToolName: entry.toolName,
+          subToolArgs: entry.input,
+        });
+        return;
+      case 'tool_result': {
+        const subToolName = subagent.tools.get(entry.toolCallId);
+        if (subToolName === undefined) return;
+        subagent.tools.delete(entry.toolCallId);
+        out.events.push({
+          type: 'subagent_tool_end',
+          toolCallId,
+          agentType,
+          subToolName,
+          subToolResult: entry.content,
+          isError: entry.isError,
+        });
+        return;
+      }
+    }
+  }
+
+  /** The subagent card's end: with its call's result, or cut off with the run. */
+  #endSubagent(toolCallId: string, result: unknown, isError: boolean, out: Projection) {
+    const subagent = this.#subagents.get(toolCallId);
+    if (!subagent) return;
+    this.#subagents.delete(toolCallId);
+    out.events.push({
+      type: 'subagent_end',
+      toolCallId,
+      agentType: subagent.agentType,
+      result: typeof result === 'string' ? result : JSON.stringify(result),
+      isError,
+      durationMs: Math.max(0, this.#now().getTime() - subagent.startedAt),
+    });
   }
 
   #settleTool(message: MastraDBMessage, toolCallId: string, result: unknown, isError: boolean, out: Projection): boolean {
@@ -470,6 +650,7 @@ export class ClaudeTranscriptProjector {
     this.#openTools.delete(toolCallId);
     out.writes.push(clone(message));
     out.events.push({ type: 'tool_end', toolCallId, result, isError });
+    this.#endSubagent(toolCallId, result, isError, out);
     return true;
   }
 

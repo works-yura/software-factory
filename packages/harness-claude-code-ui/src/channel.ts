@@ -1,11 +1,62 @@
-import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
+import type {
+  AgentControllerEvent,
+  AgentControllerThread,
+  MastraDBMessage,
+  TokenUsage,
+} from '@mastra/core/agent-controller';
 import { defaultDisplayState } from '@mastra/core/agent-controller';
 import type { MemoryStorage } from '@mastra/core/storage';
 
 import type { ClaudeCodeSession } from '@factory/harness-claude-code';
 import { ASK_USER_QUESTION_TOOL, askUserPrompt } from '@factory/harness-claude-code';
 
-import { ClaudeTranscriptProjector, UI_QUESTION_TOOL_NAME, type Projection } from './projector.ts';
+import {
+  ClaudeTranscriptProjector,
+  UI_QUESTION_TOOL_NAME,
+  UI_TASK_TOOL_NAME,
+  type Projection,
+  type UiTask,
+} from './projector.ts';
+
+/** A memory thread row, as the store reads and writes it. */
+type StorageThreadType = Parameters<MemoryStorage['saveThread']>[0]['thread'];
+
+const USAGE_FIELDS = [
+  'promptTokens',
+  'completionTokens',
+  'totalTokens',
+  'reasoningTokens',
+  'cachedInputTokens',
+  'cacheCreationInputTokens',
+  'cacheCreationInputTokens5m',
+  'cacheCreationInputTokens1h',
+] as const;
+
+function emptyTokenUsage(): TokenUsage {
+  return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+}
+
+/** Folds one step's usage into a running total, as a Mastra session's tally does. */
+function addTokenUsage(total: TokenUsage, step: Partial<TokenUsage>): TokenUsage {
+  const sum: TokenUsage = { ...total };
+  for (const key of USAGE_FIELDS) {
+    const value = step[key];
+    if (typeof value === 'number' && Number.isFinite(value)) sum[key] = (sum[key] ?? 0) + value;
+  }
+  return sum;
+}
+
+/** The task list of the newest `task_write` call among messages ordered newest first. */
+function latestTasks(messages: MastraDBMessage[]): UiTask[] | undefined {
+  for (const message of messages) {
+    for (const part of [...message.content.parts].reverse()) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation.toolName !== UI_TASK_TOOL_NAME) continue;
+      const tasks = (part.toolInvocation.args as { tasks?: unknown } | undefined)?.tasks;
+      if (Array.isArray(tasks)) return tasks as UiTask[];
+    }
+  }
+  return undefined;
+}
 
 /** Where the chat history lives: the Mastra store's memory domain, as `storage.getStore('memory')` gives it. */
 export interface ClaudeUiStorage {
@@ -13,7 +64,6 @@ export interface ClaudeUiStorage {
 }
 
 export type MemoryStore = Pick<MemoryStorage, 'getThreadById' | 'saveThread' | 'saveMessages' | 'listMessages'>;
-
 export type ClaudeUiEventListener = (event: AgentControllerEvent) => void;
 
 export interface AttachClaudeSessionDeps {
@@ -21,7 +71,7 @@ export interface AttachClaudeSessionDeps {
   now?: () => Date;
 }
 
-/** How many of the newest stored messages are searched for a plan parked before a restart. */
+/** How many of the newest stored messages are searched for a plan parked, or the task list kept, before a restart. */
 const ADOPT_WINDOW = 50;
 
 /**
@@ -38,6 +88,10 @@ export class ClaudeSessionUiChannel {
   readonly #knownThreads = new Set<string>();
   #flushing: Promise<void> = Promise.resolve();
   #flushScheduled = false;
+  /** Writes to the thread row (its usage total, its title), one at a time. */
+  #threadWrites: Promise<void> = Promise.resolve();
+  /** The thread's token usage so far, as a Mastra session's tally (kept on the thread's metadata). */
+  #tokenUsage: TokenUsage = emptyTokenUsage();
   readonly #detach: Array<() => void>;
   /** Session state the UI merges in (`PUT /state`); kept so it reads back, never given to Claude. */
   readonly state: Record<string, unknown> = {};
@@ -79,6 +133,47 @@ export class ClaudeSessionUiChannel {
     return this.#projector.modelId;
   }
 
+  /** The thread's token usage so far, for the session state and `/cost`. */
+  get tokenUsage(): TokenUsage {
+    return { ...this.#tokenUsage };
+  }
+
+  /** The task list Claude keeps with `TodoWrite`, as the chat's task panel reads it. */
+  get tasks(): UiTask[] {
+    return this.#projector.tasks;
+  }
+
+  /**
+   * Names the session's thread, as a Mastra session's rename does: stores the
+   * title and tells the streams (`thread_title_updated`), so whoever mirrors
+   * titles (the session row) follows. Nothing happens when the title stands.
+   */
+  async nameThread(title: string): Promise<boolean> {
+    const name = title.trim();
+    if (!name) return false;
+    const threadId = this.threadId;
+    let changed = false;
+    await this.#writeThread(thread => {
+      if (thread.title === name) return undefined;
+      changed = true;
+      return { ...thread, title: name, updatedAt: new Date() };
+    });
+    if (changed) this.#apply({ events: [{ type: 'thread_title_updated', threadId, title: name }], writes: [] });
+    return changed;
+  }
+
+  /** The thread's stored title; empty while it has none. */
+  async threadTitle(): Promise<string> {
+    return (await this.getThread(this.threadId))?.title ?? '';
+  }
+
+  /** One of the session resource's threads, as the controller's `thread.getById` reads it. */
+  async getThread(threadId: string): Promise<AgentControllerThread | null> {
+    await this.ready;
+    const thread = await (await this.memory()).getThreadById({ threadId });
+    return thread && thread.resourceId === this.resourceId ? (thread as AgentControllerThread) : null;
+  }
+
   subscribe(listener: ClaudeUiEventListener): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -93,6 +188,8 @@ export class ClaudeSessionUiChannel {
     if (pending) state.pendingSuspensions.set(pending.toolCallId, { ...pending, threadId: this.threadId });
     const approval = this.#projector.pendingApproval ?? this.#sessionApproval();
     if (approval) state.pendingApprovals.set(approval.toolCallId, { ...approval, threadId: this.threadId });
+    state.tokenUsage = this.tokenUsage;
+    state.tasks = this.tasks;
     return state;
   }
 
@@ -101,6 +198,7 @@ export class ClaudeSessionUiChannel {
     await this.ready;
     while (this.#flushScheduled || this.#pending.size > 0) await this.#flushing;
     await this.#flushing;
+    await this.#threadWrites;
   }
 
   async memory(): Promise<MemoryStore> {
@@ -144,10 +242,12 @@ export class ClaudeSessionUiChannel {
 
   async #prepare(): Promise<void> {
     const memory = await this.memory();
-    await this.#ensureThread(memory, this.threadId);
+    const thread = await this.#ensureThread(memory, this.threadId);
+    // The total kept before a restart, plus anything this process counted while it was read.
+    const saved = thread?.metadata?.tokenUsage;
+    if (saved && typeof saved === 'object') this.#tokenUsage = addTokenUsage(this.#tokenUsage, saved as Partial<TokenUsage>);
     const gate = this.session.pendingPlan;
     const permission = this.session.pendingPermission;
-    if (!gate && !permission) return;
     const { messages } = await memory.listMessages({
       threadId: this.threadId,
       resourceId: this.resourceId,
@@ -155,6 +255,9 @@ export class ClaudeSessionUiChannel {
       page: 0,
       orderBy: { field: 'createdAt', direction: 'DESC' },
     });
+    // A `TodoWrite` already seen in this process is newer than anything stored.
+    const tasks = latestTasks(messages);
+    if (tasks && this.#projector.tasks.length === 0) this.#projector.adoptTasks(tasks);
     if (gate) {
       const holder = messages.find(message =>
         message.content.parts.some(
@@ -176,8 +279,9 @@ export class ClaudeSessionUiChannel {
     }
   }
 
-  async #ensureThread(memory: MemoryStore, threadId: string): Promise<void> {
-    if (this.#knownThreads.has(threadId)) return;
+  /** Makes sure the thread exists; the first time, also returns its stored row. */
+  async #ensureThread(memory: MemoryStore, threadId: string): Promise<StorageThreadType | undefined> {
+    if (this.#knownThreads.has(threadId)) return undefined;
     const existing = await memory.getThreadById({ threadId });
     if (existing && existing.resourceId !== this.resourceId) {
       throw new Error(`Thread ${threadId} belongs to another resource.`);
@@ -189,9 +293,38 @@ export class ClaudeSessionUiChannel {
       });
     }
     this.#knownThreads.add(threadId);
+    return existing ?? undefined;
+  }
+
+  /**
+   * Rewrites the session's thread row, one write at a time, always carrying
+   * the usage total along (a write made elsewhere from an older read may have
+   * dropped it). `change` returns the row to store, or `undefined` to keep it.
+   */
+  #writeThread(change: (thread: StorageThreadType) => StorageThreadType | undefined): Promise<void> {
+    const write = this.#threadWrites.then(async () => {
+      await this.ready;
+      const memory = await this.memory();
+      const thread = await memory.getThreadById({ threadId: this.threadId });
+      if (!thread) return;
+      const next = change(thread);
+      if (!next) return;
+      await memory.saveThread({ thread: { ...next, metadata: { ...next.metadata, tokenUsage: this.tokenUsage } } });
+    });
+    this.#threadWrites = write.catch(() => {});
+    return write;
+  }
+
+  #countUsage(usage: TokenUsage) {
+    this.#tokenUsage = addTokenUsage(this.#tokenUsage, usage);
+    // A turn reports a handful of steps at its end; each write stores the total as it then stands.
+    this.#writeThread(thread => thread).catch(error => {
+      console.warn('[claude-code ui] Unable to record the token usage.', error);
+    });
   }
 
   #apply(projection: Projection) {
+    for (const event of projection.events) if (event.type === 'usage_update') this.#countUsage(event.usage);
     for (const message of projection.writes) {
       // Re-inserting keeps the order messages first changed in, which is creation order for new ones.
       this.#pending.delete(message.id);
