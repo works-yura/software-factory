@@ -179,8 +179,22 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | `7cd42a5863` (#28179) | налаштування пам'яті чату з рядка того, хто платить (особистий рядок на особистих ключах, рядок Фабрики на ключах Фабрики), без накладання налаштувань відправника Slack, мітки «Used by» на сторінці Memory, модель у повідомленні `No usable … credential is available for <model>` | v4 уже читає лише рядок Фабрики для кожного запиту (сесія поза Фабрикою — на типових порогах), а `layerPersonalMemorySettings` прибрано разом з особистою пам'яттю; з ключами лише Фабрики «хто платить» — завжди Фабрика. Карток «Personal memory» / «Factory memory» з мітками «Used by» у v4 нема. Повідомлення про відсутній ключ — у `@mastra/code-sdk` (`agents/model.ts`), це залежність, не наш код. |
 | `ad0a79694c` (#28838), частина для CLI | `copyFactorySkills` у `mastra build` (копіює `src/mastra/factory-skills` у збірку) і хеш джерел у `source-hash` | це опублікований пакет `mastra` (`packages/cli`), у v4 збірки й CLI нема; зміну в ньому ми не можемо зробити |
 | `4eeccd5c51` (#28878) і `c4f1cb1d3e` (#29042), частини для CLI й README | `mastra api` (дескриптори, `factory-route-metadata.generated.ts`, команди `mastra api factory skills / skill update / revert`), розділи README «Stored boards» і про скіли | CLI `mastra` — опублікований пакет, його змінити не можемо; README upstream не переносили (опис змін — у рядках вище); API й UI працюють без CLI |
-| `c4f1cb1d3e` (#29042), `nameReadOnly` у `SkillSimpleForm` | зміна компонента спільного редактора скілів у `@mastra/playground-ui` (+ #28103, що виносить його) | опублікований пакет, змінити не можемо; в нас власний діалог редагування, див. рядок вище |
+| `c4f1cb1d3e` (#29042), `nameReadOnly` у `SkillSimpleForm` | зміна компонента спільного редактора скілів у `@mastra/playground-ui` (+ #28103, що виносить його) | лишається власний діалог редагування, див. рядок вище; після вендорингу `packages/playground-ui` (розділ «Власна копія playground-ui») пакет змінити можна, перенесення — окремим кроком |
 | `75a4a45478` (#28979), `lazyPage`/`PageSuspense` | `lazyPage().preload()`, предзавантаження `ThreadPage` у `router.tsx` | у нашому UI нема лазі-сторінок, роутер імпортує їх статично |
+
+## Власна копія playground-ui
+
+`@mastra/playground-ui` 65.0.0 більше не ставиться з реєстру з pnpm-патчем по скомпільованих файлах: його вихідники лежать у `packages/playground-ui` (приватний воркспейс-пакет з тією самою назвою, тож імпорти в `apps/ui` не змінились; `apps/ui` залежить від нього як `workspace:*`).
+
+| Що | Як |
+| --- | --- |
+| Джерело | `packages/playground-ui` upstream на `4c22623ea3` (версія в `package.json` 65.0.0; усі 1185 вихідників зі sourcemap опублікованого 65.0.0 збігаються побайтово). Ліцензія — `LICENSE.md` з опублікованого пакета |
+| Не скопійовано | `src/ee` (директорії `ee/` upstream ліцензує окремою Enterprise-ліцензією, не Apache-2.0; `apps/ui` їх не імпортує, експорт `./ee/*` прибрано), storybook (`.storybook`, `*.stories.*`, `.mdx`), `CHANGELOG.md`, файли інструкцій для агентів, stryker, oxlint/oxfmt, lint-staged; тести, що потребують storybook або `packages/core` монорепо (`storybook-coverage`, `color-foundations-coverage`, `composer-commands`, `schemes.parity`) |
+| Залежності | точні версії, до яких опублікований пакет розв'язувався в нашому lockfile; `zod` — з каталогу воркспейсу (4.6.7) замість 3.25.76, файли, що брали v3-API з кореня `zod`, імпортують `zod/v3` |
+| Збірка | `corepack pnpm --filter @mastra/playground-ui build` (`vite build` + `tsc` для `.d.ts`). `vite-plugin-dts`, `vite-plugin-lib-inject-css`, `rollup-plugin-node-externals` нема в lockfile, їхню роботу робить `vite.config.ts` пакета. `apps/ui` споживає `dist/`, тому `dev`, `build`, `typecheck`, `check` і тести `apps/ui` спершу запускають `packages/playground-ui/scripts/ensure-built.mjs` (збирає, лише коли `dist` застарів) |
+| Патч | `patches/@mastra__playground-ui@65.0.0.patch` (44 скомпільовані файли, 252 підписи) видалено; те саме робить `libText()` з `src/lib/lib-text.ts`: кожен англомовний підпис проходить через `globalThis.__factoryLibT`, яку виставляє `apps/ui/src/ui/i18n`. Додатково `viewDisplayName()` у `SavedViews` перекладає лише стандартну назву «Untitled view». Відповідність «хунк → файл» — у повідомленні коміту |
+| Типи в `apps/ui` | `paths` для `react`, `react-dom` і `class-variance-authority` в `apps/ui/src/ui/tsconfig.json` прибрано: `.d.ts` пакета тепер лежать у воркспейсі й бачать власні `node_modules` |
+| Правки типів | лише для версій, які закріплює воркспейс: `flame-graph`, `chart-frame`, `workflow-data-edge`, `field-wrapper`, `collapsible-panel`, `use-workflow-graph-runtime` (без зміни поведінки) |
 
 ## Нові дошки
 
