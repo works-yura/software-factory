@@ -8,7 +8,7 @@
  * write tools) would apply.
  */
 
-import { boardForWorkItem, workItemPhaseSemantics } from '@factory/core';
+import { boardForWorkItem, LEGACY_PLAN_ROLE, workItemPhaseSemantics } from '@factory/core';
 import type { BoardRegistry, PhaseSemantics } from '@factory/core';
 import { factoryRuleStage, NEEDS_APPROVAL_LABEL } from '@factory/core';
 import type {
@@ -204,12 +204,19 @@ export function computeFactoryHealth(
   }
   // A seat or run left behind by an earlier phase cannot carry this one, so only the phase's
   // own role counts. Decisions without a role (a queued transition) still move the card.
-  const seatedFor = (itemId: string, role: string | undefined) =>
-    (activeSeatsByItem.get(itemId) ?? []).some(binding => !role || binding.role === role);
-  const movingFor = (itemId: string, role: string | undefined) =>
+  // Planning shares Work's `work` context; cards planned before that still hold their planner as `plan`.
+  const rolesFor = (item: WorkItemRow, stage: string, role: string | undefined): readonly string[] | undefined =>
+    role === undefined
+      ? undefined
+      : boardForWorkItem(item) === 'work' && stage === 'planning'
+        ? [role, LEGACY_PLAN_ROLE]
+        : [role];
+  const seatedFor = (itemId: string, roles: readonly string[] | undefined) =>
+    (activeSeatsByItem.get(itemId) ?? []).some(binding => !roles || roles.includes(binding.role));
+  const movingFor = (itemId: string, roles: readonly string[] | undefined) =>
     (inFlightByItem.get(itemId) ?? []).some(decision => {
       const decided = decisionRole(decision);
-      return !role || decided === null || decided === role;
+      return !roles || decided === null || roles.includes(decided);
     });
   for (const item of inputs.items) {
     const stage = factoryRuleStage(item.stages);
@@ -238,7 +245,10 @@ export function computeFactoryHealth(
           suggestedRepair: { action: 'accept-work-item', workItemId: item.id },
         });
       }
-    } else if (!seatedFor(item.id, semantics.role) && !movingFor(item.id, semantics.role)) {
+    } else if (
+      !seatedFor(item.id, rolesFor(item, stage, semantics.role)) &&
+      !movingFor(item.id, rolesFor(item, stage, semantics.role))
+    ) {
       const role = semantics.role;
       const roleLabel = role ? `${role} ` : '';
       findings.push({

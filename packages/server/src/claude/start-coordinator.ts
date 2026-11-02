@@ -112,7 +112,7 @@ export class ClaudeStartCoordinator {
     if (untrustedCheckout) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout, value: true });
 
     const project = await projects.get({ orgId: request.orgId, id: request.factoryProjectId });
-    await this.#applyRoleMode(session, request.workItem.role, project?.autoApprovePlans === true);
+    await this.#applyRoleMode(session, request, project?.autoApprovePlans === true);
 
     return commitRunStart({
       storage,
@@ -125,8 +125,14 @@ export class ClaudeStartCoordinator {
     });
   }
 
-  async #applyRoleMode(session: ClaudeCodeSession, role: string, plansAutoApproved: boolean): Promise<void> {
-    if (role === 'plan') {
+  async #applyRoleMode(
+    session: ClaudeCodeSession,
+    request: FactoryStartRequest,
+    plansAutoApproved: boolean,
+  ): Promise<void> {
+    // Planning runs in the `work` context on the Work board, so the lane tells it apart from Building;
+    // cards planned before that still start their planner in the `plan` role.
+    if (request.workItem.role === 'plan' || request.destinationStage === 'planning') {
       // Auto-approved plans need no gate: the plan skill moves the card on itself.
       if (!plansAutoApproved && session.mode !== 'planning') await session.setMode('planning');
       return;

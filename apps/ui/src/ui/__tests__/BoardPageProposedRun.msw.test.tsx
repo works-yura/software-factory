@@ -63,6 +63,11 @@ const SESSION_ID = 'sess-1';
 const liveSessionWorkItem = {
   ...workItem,
   stages: ['planning'],
+  // Triage ran in its session before the card moved on; the lane it left is not offered again.
+  stageHistory: [
+    { stage: 'triage', enteredAt: '2026-08-10T00:00:00.000Z', exitedAt: '2026-08-10T00:01:00.000Z', by: 'agent' },
+    { stage: 'planning', enteredAt: '2026-08-10T00:01:00.000Z', by: 'agent' },
+  ],
   sessions: {
     triage: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' },
   },

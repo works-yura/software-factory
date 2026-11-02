@@ -110,7 +110,7 @@ export function WorkItemCard({
   const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? t('menu.starting') : preparing;
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
-  const primaryMove = primaryCardMove(moves, columnStage, sessions);
+  const primaryMove = primaryCardMove(moves, columnStage, { sessions, stageHistory: item.stageHistory });
   const threadSession = itemThreadSession(sessions);
   const nextPhase = nextBoardPhase(definition, columnStage);
   const sessionHref =
@@ -143,7 +143,7 @@ export function WorkItemCard({
     item,
     columnStage,
     move: primaryMove,
-    resumeStage: custom ? undefined : resumeStage(columnStage, sessions),
+    resumeStage: custom ? undefined : resumeStage(columnStage, { sessions, stageHistory: item.stageHistory }),
     nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,

@@ -19,7 +19,7 @@ import {
   waitForSessionRunAudit,
 } from './run-audit.ts';
 import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from './skills/service.ts';
-import { isHumanActorId } from '@factory/store';
+import { isAgentActor, isHumanActorId } from '@factory/store';
 import type { AuditRecorder } from './audit-recorder.ts';
 import { withWorkItemFeed } from '@factory/store';
 import type { FactoryFeedReader } from '@factory/store';
@@ -926,7 +926,11 @@ export class FactoryDecisionDispatcher {
         ) {
           throw new FactoryDecisionSuperseded();
         }
-        const binding = await this.#requireOrPrepareBinding(record, decision.role);
+        // A run that continues in its own context's session after a move is normally the agent's own
+        // hand-on and needs no new start. When somebody else moved the card, the start path still runs
+        // for the live session, so a harness can answer what the earlier phase left parked (a plan).
+        const refreshStart = decision.startsAfterOwnMove === true && !isAgentActor(record.approvedBy ?? undefined);
+        const binding = await this.#requireOrPrepareBinding(record, decision.role, refreshStart);
         await this.#withBindingSkillRun(binding.id, async () => {
           const item = record.workItemId
             ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
@@ -1496,11 +1500,12 @@ export class FactoryDecisionDispatcher {
   async #requireOrPrepareBinding(
     record: FactoryDeferredDecisionRecord,
     role: string,
+    refresh = false,
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
     if (binding) {
       const session = await this.#harness.getSession(binding.sessionId);
-      if (session) return binding;
+      if (session && !(refresh && this.#prepareBinding)) return binding;
     }
     if (!this.#prepareBinding) {
       throw new FactoryDispatchError(

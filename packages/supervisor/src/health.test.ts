@@ -266,7 +266,7 @@ describe('computeFactoryHealth', () => {
         kind: 'seat-missing',
         workItemId: 'stranded',
         beganAt: ago(2 * HOUR).toISOString(),
-        suggestedRepair: { action: 'start-run', workItemId: 'stranded', role: 'plan' },
+        suggestedRepair: { action: 'start-run', workItemId: 'stranded', role: 'work' },
       }),
     ]);
   });
@@ -295,15 +295,15 @@ describe('computeFactoryHealth', () => {
       expect.objectContaining({
         kind: 'seat-missing',
         workItemId: 'held-proposal',
-        suggestedRepair: { action: 'start-run', workItemId: 'held-proposal', role: 'plan' },
+        suggestedRepair: { action: 'start-run', workItemId: 'held-proposal', role: 'work' },
       }),
       expect.objectContaining({
         kind: 'seat-missing',
         workItemId: 'leftover-seat',
-        suggestedRepair: { action: 'start-run', workItemId: 'leftover-seat', role: 'plan' },
+        suggestedRepair: { action: 'start-run', workItemId: 'leftover-seat', role: 'work' },
       }),
     ]);
-    expect(report.findings[0]!.evidence).toContain('no active plan seat and no plan decision in flight');
+    expect(report.findings[0]!.evidence).toContain('no active work seat and no work decision in flight');
   });
 
   it('counts a seat or decision for the phase role, and any decision without a role, as moving the card', () => {
@@ -312,10 +312,15 @@ describe('computeFactoryHealth', () => {
         ...empty,
         items: [
           item({ id: 'plan-seat', stages: ['planning'] }),
+          item({ id: 'legacy-plan-seat', stages: ['planning'] }),
           item({ id: 'plan-decision', stages: ['planning'] }),
           item({ id: 'queued-transition', stages: ['planning'] }),
         ],
-        bindings: [binding({ id: 'b-plan', workItemId: 'plan-seat', role: 'plan' })],
+        // Planning runs in the `work` context; a card planned before that holds its planner as `plan`.
+        bindings: [
+          binding({ id: 'b-plan', workItemId: 'plan-seat', role: 'work' }),
+          binding({ id: 'b-legacy', workItemId: 'legacy-plan-seat', role: 'plan' }),
+        ],
         decisions: [
           decision({ id: 'd-plan', status: 'pending', workItemId: 'plan-decision', availableAt: ago(1_000) }),
           decision({

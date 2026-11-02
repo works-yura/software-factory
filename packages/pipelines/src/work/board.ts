@@ -71,7 +71,8 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
     planning: {
       name: 'Planning',
       kind: 'working',
-      runner: { context: 'plan' },
+      // Planning and Building share one session, so the builder keeps the plan's context.
+      runner: { context: 'work' },
       nextPhases: ALL_PHASES,
       onEnter: onEveryWorkSource(planWorkItem),
     },

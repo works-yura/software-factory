@@ -230,6 +230,8 @@ describe('defineBoard phase fields', () => {
       role: 'release',
       skillName: 'release-notes',
       arguments: 'Work item (https://github.test/acme/repo/issues/7)\n\nKeep it short.',
+      // Entering from another phase, the skill starts even when that phase's agent made the move.
+      startsAfterOwnMove: true,
     });
     expect(await board.rules.build!.manual!.onEnter!(stageContext('build'))).toMatchObject({
       prompt: 'Ship it.\n\nKeep it short.',

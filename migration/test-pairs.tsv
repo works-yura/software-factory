@@ -21,7 +21,7 @@ storage/domains/comments/activity.test.ts	store/src/comments/activity.test.ts
 storage/domains/comments/feed-context.test.ts	store/src/comments/feed-context.test.ts
 rules/transition-service.test.ts	runtime/src/transition-service.test.ts	+1	upstream #28604: a phase that auto-approves submit_plan lets the planner move on
 rules/terminal-cleanup.test.ts	runtime/src/terminal-cleanup.test.ts
-rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts
+rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts	+3	upstream #28721: decisions held for Work's shared context (+3)
 rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+4	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3)
 session/run-audit.test.ts	runtime/src/run-audit.test.ts
 skills/service.test.ts	runtime/src/skills/service.test.ts	-1	the two skill-cache rescan cases moved to harness-mastra/src/harness.test.ts with the Mastra harness adapter (-2); formatSkillMessage case ported from upstream a5a9179daa (+1)
@@ -110,7 +110,7 @@ routes/skills.test.ts	api/src/skills.test.ts	+2	upstream #28823: skills catalog 
 routes/source-control-sessions.test.ts	api/src/source-control-sessions.test.ts	+4	personal chats of a Claude Code Factory create Claude Code sessions
 routes/source-control-settings.test.ts	api/src/source-control-settings.test.ts
 routes/supervisor.test.ts	api/src/supervisor.test.ts
-routes/surface.test.ts	api/src/surface.test.ts	+1	work spanning several repositories: a card naming no repository dispatches across the environment; ambiguity only without one
+routes/surface.test.ts	api/src/surface.test.ts	+2	work spanning several repositories: a card naming no repository dispatches across the environment; ambiguity only without one; upstream #28721: a replacement work board has only its own lanes (+1)
 routes/telemetry.test.ts	api/src/telemetry.test.ts
 routes/tenant-credentials.test.ts	credentials/src/tenant-credentials.test.ts
 routes/work-items.test.ts	api/src/work-items.test.ts	+2	upstream #28604: the board catalog sends autoStart/exitTool conditions; upstream #28823: phase skill in the board catalog (+1)
@@ -174,7 +174,7 @@ tools/read-tools.test.ts	harness-mastra/src/tools/read-tools.test.ts
 tools/reports.test.ts	harness-mastra/src/tools/reports.test.ts
 tools/run-watch.test.ts	harness-mastra/src/tools/run-watch.test.ts
 tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
-tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	-2	hybrid scope cases removed with the personal model scope
+tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	-1	hybrid scope cases removed with the personal model scope; upstream #28721: the old plan role still starts (+1)
 tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts
 tools/work-item-tools.test.ts	harness-mastra/src/tools/work-item-tools.test.ts
 workspace.test.ts	harness-mastra/src/workspace.test.ts	+2	Bug and factory-test skills stay generic and defer the stack to the target repository (+1); upstream #28838: src/mastra/factory-skills (+1)

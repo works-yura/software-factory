@@ -124,14 +124,14 @@ describe('work board: test-first definition', () => {
 describe('work board: skills by triage type', () => {
   it('plans a bug with bug-plan and everything else with factory-plan', async () => {
     expect(await workBoard.rules.planning?.issue?.onEnter?.(entry('planning', 'triage'))).toMatchObject({
-      role: 'plan',
+      role: 'work',
       skillName: 'bug-plan',
     });
     for (const triageType of ['feature request', 'docs', null] as const) {
       expect(
         await workBoard.rules.planning?.issue?.onEnter?.(entry('planning', 'triage', { triageType })),
         String(triageType),
-      ).toMatchObject({ role: 'plan', skillName: 'factory-plan' });
+      ).toMatchObject({ role: 'work', skillName: 'factory-plan' });
     }
     const gitlab = await workBoard.rules.planning?.gitlabIssue?.onEnter?.(entry('planning', 'triage', { source: 'gitlab-issue' }));
     expect(invocation(gitlab)).toContain('gitlab_get_issue');
@@ -184,11 +184,12 @@ describe('work board: skills by triage type', () => {
   });
 
   it('advances an approved interactive plan to tests for test-first types and to Building otherwise', () => {
-    const approve = (triageType: FactoryRuleItemContext['triageType']) => {
+    // Planning runs in the `work` session; `plan` is the role of cards planned before that.
+    const approve = (triageType: FactoryRuleItemContext['triageType'], role = 'work') => {
       const context = entry('planning', 'triage', { triageType });
       return workBoard.tools.submit_plan!.onResult({
         ...context,
-        actor: { type: 'agent', bindingId: 'binding-1', role: 'plan' },
+        actor: { type: 'agent', bindingId: 'binding-1', role },
         toolName: 'submit_plan',
         threadId: 'thread-1',
         assistantMessageId: 'message-1',
@@ -197,6 +198,8 @@ describe('work board: skills by triage type', () => {
       });
     };
     expect(approve('bug')).toMatchObject({ type: 'transition', board: 'work', stage: 'tests' });
+    expect(approve('bug', 'plan')).toMatchObject({ type: 'transition', board: 'work', stage: 'tests' });
+    expect(approve('docs', 'triage')).toBeUndefined();
     expect(approve('feature request')).toMatchObject({ type: 'transition', stage: 'tests' });
     expect(approve('docs')).toMatchObject({ type: 'transition', stage: 'execute' });
     expect(approve(null)).toMatchObject({ type: 'transition', stage: 'execute' });

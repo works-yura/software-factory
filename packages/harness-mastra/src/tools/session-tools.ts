@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
+import { workLaneForRole } from '@factory/pipelines';
 import type { IntegrationTools } from '@factory/integrations';
 import { buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 import { USER_SESSION_BRANCH_PREFIX } from '@factory/session';
@@ -362,7 +363,10 @@ export function createFactorySessionTools(
     if (!item) throw workItemNotFound(workItem);
     const label = workItemLabel(item);
     const board = deps.boards.get(boardForWorkItem(item));
-    if (!board?.phaseForRole(role)) throw new Error(`${label}'s board has no ${role} role.`);
+    // Work's old `plan` role still names Planning, though no phase runs in a `plan` context any more.
+    if (!workLaneForRole(board, role) && !board?.phaseForRole(role)) {
+      throw new Error(`${label}'s board has no ${role} role.`);
+    }
     const seated = item.sessions[role];
     if (seated) {
       throw new Error(

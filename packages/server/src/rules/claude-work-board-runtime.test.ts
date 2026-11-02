@@ -315,7 +315,7 @@ async function runToPlanGate(nextTurnText: string) {
     const session = await claude.harness.getSession(sessionId);
     expect(session?.pendingPlan).toMatchObject({ toolCallId: 'toolu-plan' });
     // The card waits for a person: no agent can carry it on, and nothing else ran.
-    expect(await card()).toMatchObject({ stages: ['planning'], sessions: { plan: { sessionId } } });
+    expect(await card()).toMatchObject({ stages: ['planning'], sessions: { work: { sessionId } } });
     await drain();
     expect(fake.calls).toHaveLength(2);
 

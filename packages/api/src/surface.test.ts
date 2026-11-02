@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '@factory/testing';
+import { defineBoard } from '@factory/core';
 import { createTestBoard } from '@factory/pipelines/testing';
 import type { GithubIntegration } from '@factory/integration-github';
 import { FactoryDispatchError } from '@factory/store';
@@ -91,6 +92,40 @@ describe('prepareFactoryRuleBinding', () => {
         destinationStage: 'triage',
       }),
     );
+  });
+
+  it('gives a board installed as work in place of the built-in one only the lanes it declares', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const replacement = createBoardRegistry({
+      boards: [
+        defineBoard({
+          id: 'work',
+          name: 'Work',
+          initialPhase: 'intake',
+          phases: {
+            intake: { kind: 'resting', name: 'Intake', nextPhases: ['fixing', 'done'] },
+            fixing: { kind: 'working', name: 'Fixing', runner: { context: 'work' }, nextPhases: ['done'] },
+            done: { kind: 'terminal', name: 'Done' },
+          },
+        }),
+      ],
+      includeDefaultBoards: false,
+    });
+    const start = (role: string) =>
+      prepareFactoryRuleBinding(
+        github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        seeded.projects,
+        replacement,
+        bindingInput(project.id, ['intake'], { role }),
+      );
+
+    // No `execute` phase here, so the built-in Work lane does not apply.
+    await start('work');
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'fixing' }));
+    // Nor is there a Planning phase for the old `plan` role.
+    expect(await start('plan').catch(failure => failure)).toMatchObject({ code: 'unsupported_provider_item' });
   });
 
   it('leaves the model unset when the factory has no default', async () => {

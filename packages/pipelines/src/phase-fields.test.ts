@@ -12,8 +12,8 @@ const LOW_EFFORT: RuleGroup = {
 };
 
 describe('built-in board phase fields', () => {
-  it('keeps the built-in Work board contexts as the old role names', () => {
-    expect(workBoard.phases.planning).toMatchObject({ name: 'Planning', runner: { context: 'plan' } });
+  it('keeps the built-in Work board contexts: Planning shares the `work` session with Building', () => {
+    expect(workBoard.phases.planning).toMatchObject({ name: 'Planning', runner: { context: 'work' } });
     expect(workBoard.phases.intake.nextPhases).toEqual(workBoard.transitions.intake.map(({ to }) => to));
   });
 

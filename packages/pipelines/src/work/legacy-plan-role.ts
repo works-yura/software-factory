@@ -1,0 +1,33 @@
+import { factoryLaneForRole, LEGACY_PLAN_ROLE } from '@factory/core';
+
+import { workBoard } from './board.ts';
+
+/*
+ * Compatibility for the Work board's old `plan` role; see `@factory/core`'s
+ * `legacy-plan-role.ts`. Only the built-in Work board gets these rules. A board
+ * installed as `work` in place of it is matched by its own contexts, like any
+ * other board.
+ */
+
+/** Skills Planning runs: `factory-plan`, and `bug-plan` for a bug. */
+const PLANNING_SKILLS: ReadonlySet<string> = new Set(['factory-plan', 'bug-plan']);
+
+/** The built-in Work lane a role's run belongs to: `plan` plans, `work` builds. Undefined on other boards. */
+export function workLaneForRole(board: unknown, role: string): string | undefined {
+  return board === workBoard ? factoryLaneForRole(role) : undefined;
+}
+
+/**
+ * Whether a built-in Work stage carries a run decided for `role`. Planning,
+ * Building and Review share the `work` context, so the skill tells them apart:
+ * Planning carries the plan skills' runs (and runs for the old `plan` role),
+ * Building and Review the other `work` runs. The `tests` stage keeps its own
+ * `tester` context. Undefined on other boards.
+ */
+export function workStageCarries(board: unknown, stage: string, role: string, skillName: unknown): boolean | undefined {
+  if (board !== workBoard) return undefined;
+  if (role === LEGACY_PLAN_ROLE) return stage === 'planning';
+  if (role !== 'work') return workBoard.roleForPhase(stage) === role;
+  if (workBoard.roleForPhase(stage) !== 'work') return false;
+  return (stage === 'planning') === (typeof skillName === 'string' && PLANNING_SKILLS.has(skillName));
+}

@@ -264,6 +264,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'arguments',
           'precedingMessage',
           'cancelInFlight',
+          'startsAfterOwnMove',
           'resume',
         ],
         'Factory invoke skill decision',
@@ -282,6 +283,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       );
       if (value.cancelInFlight !== undefined && typeof value.cancelInFlight !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill cancelInFlight must be a boolean.');
+      }
+      if (value.startsAfterOwnMove !== undefined && typeof value.startsAfterOwnMove !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill startsAfterOwnMove must be a boolean.');
       }
       if (value.resume !== undefined && typeof value.resume !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill resume must be a boolean.');
@@ -304,6 +308,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
+        ...(value.startsAfterOwnMove === true ? { startsAfterOwnMove: true } : {}),
       };
     }
     case 'sendMessage': {

@@ -265,6 +265,81 @@ async function startFactory(board: ReturnType<typeof defineBoard>, skills?: Inli
   return { project, workItems, card, read, decisionsFor, close };
 }
 
+/**
+ * Planning and Building run in one `builder` context, like Work's Planning and Building. The
+ * planner moves the card to Building itself; Building's run must still start, in the same session.
+ */
+const delivery = defineBoard({
+  id: 'delivery',
+  name: 'Delivery',
+  initialPhase: 'backlog',
+  phases: {
+    backlog: {
+      name: 'Backlog',
+      kind: 'resting',
+      nextPhases: ['planning'],
+      onEnter: {
+        issue: context => ({
+          type: 'transition',
+          idempotencyKey: `${context.ingress.id}:plan`,
+          board: 'delivery',
+          stage: 'planning',
+        }),
+      },
+    },
+    planning: {
+      name: 'Planning',
+      kind: 'working',
+      runner: { context: 'builder' },
+      autoStart: true,
+      nextPhases: ['building'],
+      onEnter: {
+        issue: context => ({
+          type: 'invokeSkill',
+          idempotencyKey: `${context.ingress.id}:plan`,
+          role: 'builder',
+          prompt: `Plan ${context.item.title}.`,
+        }),
+      },
+    },
+    building: {
+      name: 'Building',
+      kind: 'working',
+      runner: { context: 'builder' },
+      autoStart: true,
+      nextPhases: ['delivered'],
+      onEnter: {
+        issue: context => ({
+          type: 'invokeSkill',
+          idempotencyKey: `${context.ingress.id}:build`,
+          role: 'builder',
+          prompt: `Build ${context.item.title}.`,
+          startsAfterOwnMove: true,
+        }),
+      },
+    },
+    delivered: { name: 'Delivered', kind: 'terminal' },
+  },
+});
+
+/** Plans by moving the card to Building, then builds by moving it to Delivered. */
+function builder(): (text: string) => ToolCall | undefined {
+  const moved = new Set<string>();
+  return text => {
+    const next = text.includes('Build the feature.')
+      ? 'delivered'
+      : text.includes('Plan the feature.')
+        ? 'building'
+        : undefined;
+    if (!next || moved.has(next)) return undefined;
+    moved.add(next);
+    return {
+      name: 'factory_transition_work_item',
+      args: { stage: next, expectedRevision: latestRevision(text), rationale: `Moved to ${next}.` },
+    };
+  };
+}
+
 describe('board phase fields at runtime', () => {
   it('starts a phase only for the cards its condition matches, and the agent moves the card after the exit tool', async () => {
     const requests: string[] = [];
@@ -299,6 +374,28 @@ describe('board phase fields at runtime', () => {
       );
       expect(await workItems.listRunBindings(ORG, project.id, large.id)).toEqual([]);
       expect(requests.some(text => text.includes('Publish large rewrite.'))).toBe(false);
+    } finally {
+      await runtime.close();
+    }
+  }, 60_000);
+
+  it("starts the next phase's run in the same session when the agent moves its own card within one context", async () => {
+    const requests: string[] = [];
+    fakeModel(requests, builder());
+    const runtime = await startFactory(delivery);
+    try {
+      const { project, workItems, card, read } = runtime;
+      const feature = await card('the feature', []);
+
+      await vi.waitFor(async () => expect((await read(feature)).stages).toEqual(['delivered']), { timeout: 15_000 });
+      // The build prompt reached the agent after the planner's own move, in the planner's thread.
+      const buildRequest = requests.find(text => text.includes('Build the feature.'));
+      expect(buildRequest).toContain('Plan the feature.');
+      const item = await read(feature);
+      expect(Object.keys(item.sessions)).toEqual(['builder']);
+      const bindings = await workItems.listRunBindings(ORG, project.id, feature.id);
+      expect(new Set(bindings.map(binding => binding.sessionId)).size).toBe(1);
+      expect(bindings.map(binding => binding.role)).toEqual(bindings.map(() => 'builder'));
     } finally {
       await runtime.close();
     }

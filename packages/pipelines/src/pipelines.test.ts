@@ -64,7 +64,8 @@ describe('factory pipelines', () => {
     expect(workBoard.rules.planning?.manual?.onEnter).toBeTypeOf('function');
     expect(workBoard.roleForPhase('execute')).toBe('work');
     expect(workBoard.roleForPhase('review')).toBe('work');
-    expect(workBoard.phaseForRole('work')).toBe('execute');
+    // The first phase of the `work` context; a run started on a resting Work card uses its role's lane instead.
+    expect(workBoard.phaseForRole('work')).toBe('planning');
     expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(workBoard.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
   });
@@ -76,9 +77,17 @@ describe('factory pipelines', () => {
     }
     for (const [role, stage] of Object.entries(FACTORY_ROLE_STAGES)) {
       const board = role === 'review' ? reviewBoard : workBoard;
-      expect(board.phaseForRole(role), `lane for ${role}`).toBe(stage);
-      expect(board.roleForPhase(stage), `role for ${stage}`).toBe(role);
+      // Each role's lane is a working phase. Planning runs in the `work` context; `plan` stays
+      // as the old role name for Planning's lane, so its phase reports the `work` context.
+      expect(board.isWorking(stage), `lane for ${role}`).toBe(true);
     }
+    expect(['triage', 'planning', 'execute', 'review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
+      'triage',
+      'work',
+      'work',
+      'work',
+    ]);
+    expect(reviewBoard.roleForPhase('review')).toBe('review');
   });
 
   it('rejects inherited property names as Work and Review phases', () => {
@@ -108,7 +117,7 @@ describe('factory pipelines', () => {
   });
 
   it('reads Work phase semantics, tool rules, and closure from the installed registry', () => {
-    expect(resolvePhaseSemantics(installed, 'work', 'planning')).toEqual({ kind: 'working', role: 'plan' });
+    expect(resolvePhaseSemantics(installed, 'work', 'planning')).toEqual({ kind: 'working', role: 'work' });
     expect(resolvePhaseSemantics(installed, 'work', 'done')).toEqual({ kind: 'terminal' });
     expect(resolveBoardToolRule(installed, 'work', 'submit_plan')).toBeTypeOf('function');
     expect(resolveBoardClosure(installed, { board: 'work', externalSource: null, stages: ['canceled'] })).toEqual({

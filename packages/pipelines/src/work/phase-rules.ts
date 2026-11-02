@@ -95,7 +95,7 @@ export function planWorkItem(context: FactoryStageRuleContext) {
     return {
       type: 'invokeSkill',
       idempotencyKey: `${context.ingress.id}:bug-plan`,
-      role: 'plan',
+      role: 'work',
       skillName: 'bug-plan',
       arguments: sourceArguments(context),
     } as const;
@@ -103,7 +103,7 @@ export function planWorkItem(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:factory-plan`,
-    role: 'plan',
+    role: 'work',
     skillName: 'factory-plan',
     arguments: context.item.url ? `Work item (${context.item.url})` : context.item.title,
   } as const;
@@ -225,6 +225,7 @@ export function buildWorkItem(context: FactoryStageRuleContext) {
       type: 'invokeSkill',
       idempotencyKey: `${context.ingress.id}:bug-build`,
       role: 'work',
+      ...(context.fromStage === 'planning' ? { startsAfterOwnMove: true } : {}),
       skillName: 'bug-build',
       arguments: tail,
     } as const;
@@ -233,6 +234,8 @@ export function buildWorkItem(context: FactoryStageRuleContext) {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:build`,
     role: 'work',
+    // Planning runs in the same session: the planner's own move hands it the build.
+    ...(context.fromStage === 'planning' ? { startsAfterOwnMove: true } : {}),
     prompt: tail,
   } as const;
 }
