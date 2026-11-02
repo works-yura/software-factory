@@ -4,7 +4,7 @@ import type { BoardPhaseDefinition, FactoryRuleHandler, FactoryRuleSource, Facto
 import {
   buildWorkItem,
   completeIssue,
-  investigateTriagedClickUpTask,
+  investigateTriagedImportedTask,
   investigateTriagedGitLabIssue,
   planWorkItem,
   selfReviewWorkItem,
@@ -65,7 +65,7 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       onEnter: {
         issue: triageIssueEntry,
         gitlabIssue: investigateTriagedGitLabIssue,
-        manual: investigateTriagedClickUpTask,
+        manual: investigateTriagedImportedTask,
       },
     },
     planning: {
