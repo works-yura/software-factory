@@ -98,7 +98,7 @@ routes/automation-runs.test.ts	api/src/automation-runs.test.ts
 routes/config.test.ts	api/src/config.test.ts	-1	personal default-model routes removed (7 cases), one case checks they are gone (-6); Factory fallback model cases ported from upstream a9f392e60e (+5)
 routes/contracts.test.ts	api/src/contracts.test.ts
 routes/custom-provider-source.test.ts	api/src/custom-provider-source.test.ts
-routes/fs.test.ts	api/src/fs.test.ts	-5	upstream 7573972d0c (#28274): /changes/diff and its truncation cases replaced by /changes/patches cases
+routes/fs.test.ts	api/src/fs.test.ts	-2	upstream 7573972d0c (#28274): /changes/diff and its truncation cases replaced by /changes/patches cases; upstream #28829: the host filesystem routes need a signed-in user (+3)
 routes/intake.test.ts	api/src/intake.test.ts	+2	upstream #28877: an unreadable project board source saves no binding or route (+2)
 routes/knowledge.test.ts	api/src/knowledge.test.ts
 routes/oauth.test.ts	api/src/oauth.test.ts

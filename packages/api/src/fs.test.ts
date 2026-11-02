@@ -32,6 +32,7 @@ import {
   readSessionWorkspaceFile,
   readWorkspaceFile,
 } from './fs.ts';
+import type { SessionFsDeps } from './fs.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -385,6 +386,101 @@ function attachHostSandbox(parent: string, slugs: string[]) {
   );
   return executeCommand;
 }
+
+describe('local filesystem routes auth', () => {
+  const localRoutes = ['/web/fs/list', '/web/artifacts/list', '/web/codebase/resolve'];
+
+  async function requestLocalRoute({
+    path,
+    root,
+    sessionFs,
+  }: {
+    path: string;
+    root: string;
+    sessionFs?: SessionFsDeps;
+  }) {
+    const route = buildFsRoutes({ root, sessionFs }).find(candidate => candidate.path === path);
+    if (!route || !('handler' in route)) throw new Error(`Missing route: ${path}`);
+
+    const app = new Hono<any>();
+    app.get('/', context => route.handler(context as never, async () => {}));
+    return app.request(`http://localhost/?path=${encodeURIComponent(root)}`);
+  }
+
+  it('rejects anonymous callers when an auth provider is active', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-auth-'));
+    await writeFile(join(root, 'secret.txt'), 'secret');
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => true,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    for (const path of localRoutes) {
+      const response = await requestLocalRoute({ path, root, sessionFs });
+      expect(response.status, path).toBe(401);
+      expect(await response.json(), path).toEqual({ error: 'unauthorized' });
+    }
+  });
+
+  it('rejects anonymous callers on the workspace fallback routes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-fallback-'));
+    await mkdir(join(root, 'ws'));
+    await writeFile(join(root, 'ws', 'README.md'), 'secret');
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => true,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      // An unresolved session must not fall through to the host workspace.
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    const request = async (path: string, query: string) => {
+      const route = buildFsRoutes({ root, sessionFs }).find(candidate => candidate.path === path);
+      if (!route || !('handler' in route)) throw new Error(`Missing route: ${path}`);
+      const app = new Hono<any>();
+      app.get('/', context => route.handler(context as never, async () => {}));
+      return app.request(`http://localhost/?${query}`);
+    };
+
+    const file = await request('/web/workspace/file', 'workspacePath=ws&path=README.md');
+    expect(file.status).toBe(401);
+    expect(await file.json()).toEqual({ error: 'unauthorized' });
+
+    const rendered = await request('/web/workspace/rendered/list', 'workspacePath=ws&root=output');
+    expect(rendered.status).toBe(401);
+    expect(await rendered.json()).toEqual({ error: 'unauthorized' });
+  });
+
+  it('serves local roots when no auth provider is configured', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-auth-off-'));
+    await mkdir(join(root, 'browsable'));
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => false,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    const response = await requestLocalRoute({ path: '/web/fs/list', root, sessionFs });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({
+        entries: [expect.objectContaining({ name: 'browsable' })],
+      }),
+    );
+  });
+});
 
 describe('live session file tree', () => {
   const names = (listing: { entries: Array<{ name: string; type: string }> }) =>
