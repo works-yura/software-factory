@@ -5,7 +5,10 @@ import { createSignal } from '@mastra/core/signals';
 
 import type { AgentEvent, PlanDecision } from '@factory/harness';
 import {
+  ASK_USER_QUESTION_TOOL,
+  askUserPrompt,
   PLAN_GATE_TOOL_IDS,
+  type AskUserPrompt,
   type ClaudeTranscriptEntry,
   type PermissionRequest,
   type PlanGate,
@@ -13,6 +16,8 @@ import {
 
 /** The tool name the chat UI draws the plan card for; Claude calls the gate under its MCP id. */
 export const UI_PLAN_TOOL_NAME = 'submit_plan';
+/** The tool name the chat UI draws a question card for; Claude asks with `AskUserQuestion`. */
+export const UI_QUESTION_TOOL_NAME = 'ask_user';
 
 /** What one transcript entry or session event changes: events for the live stream, messages to store. */
 export interface Projection {
@@ -37,6 +42,14 @@ interface PendingPlan {
   args: { title?: string; plan?: string };
 }
 
+/** A question waiting for the person's answer, as the chat UI keeps a pending `ask_user` suspension. */
+interface PendingQuestion {
+  toolCallId: string;
+  args: AskUserPrompt;
+  /** The message the question is stored on: the call's own, or its subagent's parent call's. */
+  holderId?: string;
+}
+
 /** A tool call waiting for a person's permission, as the chat UI keeps a pending tool approval. */
 interface PendingApproval {
   toolCallId: string;
@@ -58,6 +71,7 @@ interface StreamedPart {
 }
 
 function displayToolName(toolName: string): string {
+  if (toolName === ASK_USER_QUESTION_TOOL) return UI_QUESTION_TOOL_NAME;
   return PLAN_GATE_TOOL_IDS.includes(toolName) ? UI_PLAN_TOOL_NAME : toolName;
 }
 
@@ -124,6 +138,7 @@ export class ClaudeTranscriptProjector {
   #openTools = new Map<string, MastraDBMessage>();
   #pendingPlan: PendingPlan | undefined;
   #pendingApproval: PendingApproval | undefined;
+  #pendingQuestion: PendingQuestion | undefined;
   #modelId: string | undefined;
 
   constructor(options: ProjectorOptions) {
@@ -146,13 +161,20 @@ export class ClaudeTranscriptProjector {
     return this.#current ? clone(this.#current) : null;
   }
 
-  /** The plan the UI should offer approve/reject for, if any. */
+  /** The plan the UI should offer approve/reject for, or the question it should take an answer to, if any. */
   get pendingSuspension():
     | { toolCallId: string; toolName: string; args: unknown; suspendPayload: unknown }
     | undefined {
-    const pending = this.#pendingPlan;
-    if (!pending) return undefined;
-    return { toolCallId: pending.toolCallId, toolName: UI_PLAN_TOOL_NAME, args: pending.args, suspendPayload: pending.args };
+    const plan = this.#pendingPlan;
+    if (plan) return { toolCallId: plan.toolCallId, toolName: UI_PLAN_TOOL_NAME, args: plan.args, suspendPayload: plan.args };
+    const question = this.#pendingQuestion;
+    if (!question) return undefined;
+    return {
+      toolCallId: question.toolCallId,
+      toolName: UI_QUESTION_TOOL_NAME,
+      args: clone(question.args),
+      suspendPayload: clone(question.args),
+    };
   }
 
   /** The tool call the UI should offer allow/deny for, if any. */
@@ -172,6 +194,11 @@ export class ClaudeTranscriptProjector {
     const copy = clone(message);
     if (holds) this.#openTools.set(request.toolCallId, copy);
     else if (request.parentToolCallId) this.#openTools.set(request.parentToolCallId, copy);
+    if (request.toolName === ASK_USER_QUESTION_TOOL) {
+      this.#pendingQuestion = { toolCallId: request.toolCallId, args: askUserPrompt(request.input), holderId: message.id };
+      this.#lastCreatedAt = Math.max(this.#lastCreatedAt, new Date(message.createdAt).getTime());
+      return;
+    }
     this.#pendingApproval = {
       toolCallId: request.toolCallId,
       toolName: request.toolName,
@@ -203,7 +230,11 @@ export class ClaudeTranscriptProjector {
     }
     // A subagent's call needs the person too; its approval rides on the subagent's own call.
     if (entry.kind === 'permission') {
-      this.#pendingApproval = { toolCallId: entry.toolCallId, toolName: entry.toolName, args: entry.input };
+      if (entry.toolName === ASK_USER_QUESTION_TOOL) {
+        this.#pendingQuestion = { toolCallId: entry.toolCallId, args: askUserPrompt(entry.input) };
+      } else {
+        this.#pendingApproval = { toolCallId: entry.toolCallId, toolName: entry.toolName, args: entry.input };
+      }
       return out;
     }
     if ('parentToolCallId' in entry && entry.parentToolCallId) return out;
@@ -216,6 +247,10 @@ export class ClaudeTranscriptProjector {
       case 'plan_decision':
         this.#closeCurrent(out);
         this.#settlePlan(out, entry.toolCallId, entry.decision);
+        break;
+      case 'question_answer':
+        this.#closeCurrent(out);
+        this.#settleQuestion(out, entry.toolCallId, entry.answer, false);
         break;
       case 'permission_decision':
         this.#closeCurrent(out);
@@ -266,7 +301,12 @@ export class ClaudeTranscriptProjector {
       case 'tool_suspended': {
         const { toolCallId } = event as Extract<AgentEvent, { type: 'tool_suspended' }>;
         this.#closeCurrent(out);
-        if (pendingPermission?.toolCallId === toolCallId || this.#pendingApproval?.toolCallId === toolCallId) {
+        const question =
+          this.#pendingQuestion?.toolCallId === toolCallId ||
+          (pendingPermission?.toolCallId === toolCallId && pendingPermission.toolName === ASK_USER_QUESTION_TOOL);
+        if (question) {
+          this.#askQuestion(toolCallId, pendingPermission, out);
+        } else if (pendingPermission?.toolCallId === toolCallId || this.#pendingApproval?.toolCallId === toolCallId) {
           this.#requestApproval(toolCallId, pendingPermission, out);
         } else {
           this.#suspend(toolCallId, pendingPlan, out);
@@ -275,7 +315,9 @@ export class ClaudeTranscriptProjector {
       }
       case 'tool_suspension_cancelled': {
         const { toolCallId } = event as Extract<AgentEvent, { type: 'tool_suspension_cancelled' }>;
-        if (this.#pendingApproval?.toolCallId === toolCallId) {
+        if (this.#pendingQuestion?.toolCallId === toolCallId) {
+          this.#settleQuestion(out, toolCallId, PERMISSION_SUPERSEDED, true);
+        } else if (this.#pendingApproval?.toolCallId === toolCallId) {
           this.#settleApproval(out, toolCallId, PERMISSION_SUPERSEDED, true);
         } else {
           this.#settlePlan(out, toolCallId, undefined, 'superseded by new work');
@@ -293,7 +335,7 @@ export class ClaudeTranscriptProjector {
         this.#closeCurrent(out);
         this.#running = false;
         // A call cut off by an abort or a failure never gets its result; only a parked plan stays open.
-        const waiting = this.#pendingApproval;
+        const waiting = this.#pendingApproval ?? this.#pendingQuestion;
         for (const [toolCallId, message] of [...this.#openTools]) {
           if (toolCallId === this.#pendingPlan?.toolCallId) continue;
           if (waiting && (toolCallId === waiting.toolCallId || message.id === waiting.holderId)) continue;
@@ -396,7 +438,12 @@ export class ClaudeTranscriptProjector {
     const message = this.#ensureCurrent(threadId, out);
     this.#active = undefined;
     const toolName = displayToolName(entry.toolName);
-    const args = toolName === UI_PLAN_TOOL_NAME ? planArgs(entry.input) : entry.input;
+    const args =
+      toolName === UI_PLAN_TOOL_NAME
+        ? planArgs(entry.input)
+        : toolName === UI_QUESTION_TOOL_NAME
+          ? askUserPrompt(entry.input)
+          : entry.input;
     const part: ToolInvocationPart = {
       type: 'tool-invocation',
       toolInvocation: { state: 'call', toolCallId: entry.toolCallId, toolName, args },
@@ -472,6 +519,53 @@ export class ClaudeTranscriptProjector {
       out.writes.push(clone(message));
     }
     out.events.push({ type: 'tool_approval_required', ...approval } as AgentControllerEvent);
+  }
+
+  /** Parks the question card: the call's part becomes an `ask_user` waiting for the person's answer. */
+  #askQuestion(toolCallId: string, request: PermissionRequest | undefined, out: Projection) {
+    const pending: PendingQuestion =
+      this.#pendingQuestion?.toolCallId === toolCallId
+        ? this.#pendingQuestion
+        : { toolCallId, args: askUserPrompt(request?.input) };
+    const message = this.#approvalHolder(toolCallId);
+    pending.holderId = message?.id;
+    this.#pendingQuestion = pending;
+    const suspension = {
+      toolCallId,
+      toolName: UI_QUESTION_TOOL_NAME,
+      args: clone(pending.args),
+      suspendPayload: clone(pending.args),
+    };
+    if (message) {
+      message.content.metadata = {
+        ...message.content.metadata,
+        suspendedTools: { ...(message.content.metadata?.suspendedTools as object | undefined), [toolCallId]: suspension },
+      };
+      out.writes.push(clone(message));
+    }
+    out.events.push({ type: 'tool_suspended', ...suspension } as AgentControllerEvent);
+  }
+
+  /** Settles the question card: with the person's answer, or as superseded when new input came first. */
+  #settleQuestion(out: Projection, toolCallId: string, result: string, isError: boolean) {
+    const pending = this.#pendingQuestion?.toolCallId === toolCallId ? this.#pendingQuestion : undefined;
+    if (pending) this.#pendingQuestion = undefined;
+    const holder =
+      this.#openTools.get(toolCallId) ??
+      [...this.#openTools.values()].find(message => message.id === pending?.holderId);
+    if (holder?.content.metadata?.suspendedTools) {
+      const { suspendedTools, ...metadata } = holder.content.metadata as Record<string, unknown> & {
+        suspendedTools: Record<string, unknown>;
+      };
+      const { [toolCallId]: _settled, ...rest } = suspendedTools;
+      holder.content.metadata = Object.keys(rest).length ? { ...metadata, suspendedTools: rest } : metadata;
+      out.writes.push(clone(holder));
+    }
+    const message = this.#openTools.get(toolCallId);
+    if (message) this.#settleTool(message, toolCallId, result, isError, out);
+    else if (holder) {
+      for (const [id, open] of [...this.#openTools]) if (open === holder) this.#settleTool(open, id, INTERRUPTED, true, out);
+    }
   }
 
   /** Settles a call that waited for permission: allowed, denied, or superseded by new input. */

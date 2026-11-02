@@ -3,8 +3,9 @@ import { defaultDisplayState } from '@mastra/core/agent-controller';
 import type { MemoryStorage } from '@mastra/core/storage';
 
 import type { ClaudeCodeSession } from '@factory/harness-claude-code';
+import { ASK_USER_QUESTION_TOOL, askUserPrompt } from '@factory/harness-claude-code';
 
-import { ClaudeTranscriptProjector, type Projection } from './projector.ts';
+import { ClaudeTranscriptProjector, UI_QUESTION_TOOL_NAME, type Projection } from './projector.ts';
 
 /** Where the chat history lives: the Mastra store's memory domain, as `storage.getStore('memory')` gives it. */
 export interface ClaudeUiStorage {
@@ -122,14 +123,23 @@ export class ClaudeSessionUiChannel {
 
   #sessionPlan() {
     const gate = this.session.pendingPlan;
-    if (!gate) return undefined;
+    if (!gate) return this.#sessionQuestion();
     const args = { ...(gate.title ? { title: gate.title } : {}), ...(gate.plan !== undefined ? { plan: gate.plan } : {}) };
     return { toolCallId: gate.toolCallId, toolName: 'submit_plan', args, suspendPayload: args };
   }
 
+  /** The question the session is parked on, as the chat's `ask_user` card reads it. */
+  #sessionQuestion() {
+    const request = this.session.pendingPermission;
+    if (request?.toolName !== ASK_USER_QUESTION_TOOL) return undefined;
+    const args = askUserPrompt(request.input);
+    return { toolCallId: request.toolCallId, toolName: UI_QUESTION_TOOL_NAME, args, suspendPayload: args };
+  }
+
   #sessionApproval() {
     const request = this.session.pendingPermission;
-    return request ? { toolCallId: request.toolCallId, toolName: request.toolName, args: request.input } : undefined;
+    if (!request || request.toolName === ASK_USER_QUESTION_TOOL) return undefined;
+    return { toolCallId: request.toolCallId, toolName: request.toolName, args: request.input };
   }
 
   async #prepare(): Promise<void> {
@@ -154,9 +164,13 @@ export class ClaudeSessionUiChannel {
       if (holder) this.#projector.adopt(holder, gate);
     }
     if (permission) {
+      // A question parks as a suspension, any other call as an approval.
       const holder = messages.find(message => {
-        const approvals = message.content.metadata?.pendingToolApprovals;
-        return !!approvals && typeof approvals === 'object' && permission.toolCallId in approvals;
+        const pending =
+          permission.toolName === ASK_USER_QUESTION_TOOL
+            ? message.content.metadata?.suspendedTools
+            : message.content.metadata?.pendingToolApprovals;
+        return !!pending && typeof pending === 'object' && permission.toolCallId in pending;
       });
       if (holder) this.#projector.adoptPermission(holder, permission);
     }

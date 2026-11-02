@@ -5,7 +5,7 @@ import type { StorageListMessagesInput } from '@mastra/core/storage';
 import type { Context, MiddlewareHandler } from 'hono';
 
 import type { PlanDecision } from '@factory/harness';
-import { ClaudeCodeRunContext, type ClaudeCodeSession } from '@factory/harness-claude-code';
+import { ASK_USER_QUESTION_TOOL, ClaudeCodeRunContext, type ClaudeCodeSession } from '@factory/harness-claude-code';
 
 import { ClaudeSessionUiChannel, type ClaudeUiStorage } from './channel.ts';
 
@@ -76,6 +76,12 @@ export function toWireEvent(event: AgentControllerEvent | { type: 'display_state
     return { ...event, error: { name: event.error.name, message: event.error.message } };
   }
   return event;
+}
+
+/** An `ask_user` answer, as the chat sends it: the text, or the chosen options. */
+function isAnswer(value: unknown): value is string | string[] {
+  if (typeof value === 'string') return value.trim().length > 0;
+  return Array.isArray(value) && value.length > 0 && value.every(item => typeof item === 'string');
 }
 
 function isPlanDecision(value: unknown): value is PlanDecision {
@@ -256,6 +262,18 @@ export class ClaudeSessionUi {
         return c.json({ ok: true });
       case 'POST /tool-suspension': {
         const body = await jsonBody(c);
+        const question = session.pendingPermission;
+        if (!session.pendingPlan && question?.toolName === ASK_USER_QUESTION_TOOL) {
+          if (body.toolCallId !== question.toolCallId) return c.json({ ok: false, reason: 'stale_tool_call' });
+          if (!isAnswer(body.resumeData)) return c.json({ error: 'resumeData must be the answer text' }, 400);
+          if (session.run.isRunning()) return c.json({ ok: false, reason: 'not_pending' });
+          await this.#onPersonInput?.(c, session);
+          // Like a Mastra `ask_user`: acknowledged now, Claude's next turn arrives on the stream.
+          session.answerQuestion({ answer: body.resumeData, toolCallId: question.toolCallId }).catch(error => {
+            channel.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+          });
+          return c.json({ ok: true });
+        }
         const gate = session.pendingPlan;
         if (!gate) return c.json({ ok: false, reason: 'no_pending_suspension' });
         if (body.toolCallId !== gate.toolCallId) return c.json({ ok: false, reason: 'stale_tool_call' });

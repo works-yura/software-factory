@@ -278,6 +278,41 @@ describe('ClaudeCodeSession', () => {
       expect(flagValue(fake.calls[2]!.args, '--allowedTools')?.split(',')).toContain('Write');
     });
 
+    it('parks on a question Claude asks and sends the answer as the next turn, without running the question', async () => {
+      const context = await setup([{ lines: fixture('turn-question.jsonl') }, { lines: fixture('turn-complete.jsonl') }], {
+        permissions: () => ({ categories: { read: 'allow', edit: 'allow', execute: 'allow', other: 'allow' } }),
+      });
+      const { fake, session, transcript } = context;
+      const parked = nextEnd(session);
+      await context.signal('ask-1', 'Fix the bug.');
+      expect(await parked).toBe('suspended');
+      expect(session.pendingPermission).toMatchObject({ toolCallId: WRITE_CALL, toolName: 'AskUserQuestion' });
+
+      // Allowing it would only run it where nobody can answer.
+      await expect(session.respondToToolApproval({ approved: true })).rejects.toThrow('waiting on an answer');
+      const end = nextEnd(session);
+      await session.answerQuestion({ answer: ['Backend', 'the login returns 500'], toolCallId: WRITE_CALL });
+      expect(await end).toBe('complete');
+
+      const next = fake.calls[1]!;
+      expect(flagValue(next.args, '--resume')).toBe(CLAUDE_SESSION);
+      expect(next.stdin).toContain('Which bug should be fixed?');
+      expect(next.stdin).toContain('Their answer:\nBackend, the login returns 500');
+      expect(flagValue(next.args, '--allowedTools')?.split(',')).not.toContain('AskUserQuestion');
+      expect(session.pendingPermission).toBeUndefined();
+      expect(transcript).toContainEqual({
+        kind: 'question_answer',
+        toolCallId: WRITE_CALL,
+        answer: 'Backend, the login returns 500',
+      });
+      await expect(session.answerQuestion({ answer: 'again' })).rejects.toThrow('not waiting on a question');
+    });
+
+    it('takes no answer for a permission, and no empty answer', async () => {
+      const { session } = await parkOnPermission();
+      await expect(session.answerQuestion({ answer: 'yes' })).rejects.toThrow('not waiting on a question');
+    });
+
     it('tells Claude a denied call was denied, and grants nothing', async () => {
       const { fake, session } = await parkOnPermission([{ lines: fixture('turn-complete.jsonl') }]);
 

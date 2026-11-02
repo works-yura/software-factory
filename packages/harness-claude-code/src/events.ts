@@ -9,6 +9,59 @@ import type { ClaudeContentBlock, ClaudeStreamMessage, ClaudeUsage } from './str
  * still treated as a gate in case a future CLI does.
  */
 export const EXIT_PLAN_MODE_TOOL = 'ExitPlanMode';
+/**
+ * Claude Code's own tool for asking the person something. In `-p` it reaches
+ * the permission prompt like any tool; the harness parks it there as a
+ * question, and the answer goes back as the next turn instead of running it.
+ */
+export const ASK_USER_QUESTION_TOOL = 'AskUserQuestion';
+
+/** The question a person sees for an `AskUserQuestion` call, as the chat's `ask_user` card reads it. */
+export interface AskUserPrompt {
+  question: string;
+  options?: Array<{ label: string; description?: string }>;
+  selectionMode?: 'single_select' | 'multi_select';
+}
+
+/**
+ * Reads an `AskUserQuestion` input (`{ questions: [{ question, header?,
+ * options?, multiSelect? }] }`). One question keeps its options; several are
+ * listed together and answered in words.
+ */
+export function askUserPrompt(input: unknown): AskUserPrompt {
+  const record = input && typeof input === 'object' ? (input as { questions?: unknown }) : {};
+  const questions = (Array.isArray(record.questions) ? record.questions : []).flatMap(entry => {
+    if (!entry || typeof entry !== 'object') return [];
+    const { question, header, options, multiSelect } = entry as Record<string, unknown>;
+    if (typeof question !== 'string' || !question.trim()) return [];
+    const choices = (Array.isArray(options) ? options : []).flatMap(option => {
+      const { label, description } = (option ?? {}) as Record<string, unknown>;
+      return typeof label === 'string' && label.trim()
+        ? [{ label, ...(typeof description === 'string' && description.trim() ? { description } : {}) }]
+        : [];
+    });
+    return [{ question, header: typeof header === 'string' ? header : undefined, choices, multi: multiSelect === true }];
+  });
+  if (questions.length === 0) return { question: 'Claude has a question.' };
+  if (questions.length === 1) {
+    const [only] = questions;
+    return {
+      question: only!.question,
+      ...(only!.choices.length
+        ? { options: only!.choices, selectionMode: only!.multi ? ('multi_select' as const) : ('single_select' as const) }
+        : {}),
+    };
+  }
+  return {
+    question: questions
+      .map((entry, index) => {
+        const choices = entry.choices.length ? ` (${entry.choices.map(choice => choice.label).join(' / ')})` : '';
+        return `${index + 1}. ${entry.question}${choices}`;
+      })
+      .join('\n'),
+  };
+}
+
 /** Tool calls that mean "the plan is ready for review". */
 export const PLAN_GATE_TOOL_IDS: readonly string[] = [SUBMIT_PLAN_TOOL_ID, EXIT_PLAN_MODE_TOOL];
 /** The contract's name for a plan gate, so the dispatcher's plan handling applies unchanged. */
@@ -44,6 +97,8 @@ export type ClaudeTranscriptEntry =
   | ({ kind: 'permission' } & PermissionRequest)
   /** A person allowed or denied the call the thread was parked on; the next turn carries the answer. */
   | { kind: 'permission_decision'; toolCallId: string; toolName: string; approved: boolean }
+  /** A person answered the question (`AskUserQuestion`) the thread was parked on; the next turn carries the answer. */
+  | { kind: 'question_answer'; toolCallId: string; answer: string }
   | {
       kind: 'result';
       subtype: string;

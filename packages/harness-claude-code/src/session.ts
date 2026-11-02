@@ -29,7 +29,15 @@ import {
   type ClaudeSpawn,
 } from './cli.ts';
 import { ClaudeCodeError } from './errors.ts';
-import { TurnTranslator, type ClaudeTranscriptEntry, type PermissionRequest, type PlanGate, type TurnOutcome } from './events.ts';
+import {
+  ASK_USER_QUESTION_TOOL,
+  askUserPrompt,
+  TurnTranslator,
+  type ClaudeTranscriptEntry,
+  type PermissionRequest,
+  type PlanGate,
+  type TurnOutcome,
+} from './events.ts';
 import {
   GATE_SERVER_NAME,
   GATE_UNATTENDED_ARG,
@@ -304,6 +312,16 @@ function permissionPrompt(request: PermissionRequest, approved: boolean): string
     : `The person denied permission for the ${tool} call that was waiting. Do not retry it or work around it; go on without it, or say what you would need it for.`;
 }
 
+function answerPrompt(request: PermissionRequest, answer: string): string {
+  const prompt = askUserPrompt(request.input);
+  return [
+    `You asked the person (\`${ASK_USER_QUESTION_TOOL}\`, which does not run here):`,
+    prompt.question,
+    `Their answer:\n${answer}`,
+    'Go on with that answer; do not ask the same question again.',
+  ].join('\n\n');
+}
+
 function rejectionPrompt(decision: PlanDecision): string {
   const parts = ['The plan was not approved.'];
   if (decision.feedback?.trim()) parts.push(`Reviewer feedback:\n${decision.feedback.trim()}`);
@@ -543,6 +561,10 @@ export class ClaudeCodeSession implements AgentSession {
       throw new Error(`This session is waiting on ${request.toolCallId}, not ${toolCallId}.`);
     }
     if (this.#run) throw new Error('Cannot answer a permission while a run is in flight.');
+    // Allowing the question would only run it where nobody can answer; it takes an answer instead.
+    if (approved && request.toolName === ASK_USER_QUESTION_TOOL) {
+      throw new Error('This session is waiting on an answer to its question, not on a permission.');
+    }
     thread.pendingPermission = undefined;
     if (approved && request.once) thread.grantedOnce = [...new Set([...(thread.grantedOnce ?? []), request.toolName])];
     else if (approved) thread.grantedTools = [...new Set([...(thread.grantedTools ?? []), request.toolName])];
@@ -554,6 +576,29 @@ export class ClaudeCodeSession implements AgentSession {
       { kind: 'permission_decision', toolCallId: request.toolCallId, toolName: request.toolName, approved },
       accepted.run,
     );
+    await accepted.run.started;
+  }
+
+  /**
+   * Answers the question (`AskUserQuestion`) the thread is parked on. The call
+   * itself never runs: Claude gets the answer as the next turn, in a new run.
+   */
+  async answerQuestion({ answer, toolCallId }: { answer: string | string[]; toolCallId?: string }): Promise<void> {
+    const thread = this.#threadState();
+    const request = thread.pendingPermission;
+    if (!request || request.toolName !== ASK_USER_QUESTION_TOOL) throw new Error('This session is not waiting on a question.');
+    if (toolCallId && toolCallId !== request.toolCallId) {
+      throw new Error(`This session is waiting on ${request.toolCallId}, not ${toolCallId}.`);
+    }
+    if (this.#run) throw new Error('Cannot answer a question while a run is in flight.');
+    const text = (Array.isArray(answer) ? answer.join(', ') : answer).trim();
+    if (!text) throw new Error('The answer is empty.');
+    thread.pendingPermission = undefined;
+    const accepted = this.#accept([{ kind: 'signal', text: answerPrompt(request, text), gate: true }], true, {
+      keepGate: true,
+    });
+    if (accepted.action === 'persist') return;
+    this.#emitTranscript({ kind: 'question_answer', toolCallId: request.toolCallId, answer: text }, accepted.run);
     await accepted.run.started;
   }
 

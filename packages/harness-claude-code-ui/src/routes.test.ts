@@ -308,6 +308,55 @@ describe('Claude Code session routes', () => {
     });
   });
 
+  it('shows a question Claude asks as the chat’s question card, and resumes the session with the answer', async () => {
+    const { app, session, fake } = await setup([{ lines: fixture('turn-question.jsonl') }, { lines: fixture('turn-complete.jsonl') }]);
+    const stream = await openStream(app);
+    const parked = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'Fix the bug.' });
+    expect(await parked).toBe('suspended');
+    const call = 'toolu_01EeMtJW2FWqSJ5sKMZmuQub';
+    const question = {
+      question: 'Which bug should be fixed?',
+      options: [{ label: 'Frontend', description: 'A syncta_front bug.' }, { label: 'Backend' }],
+      selectionMode: 'single_select',
+    };
+    // The event a Mastra `ask_user` sends, so the chat draws a question with options, not an Allow / Deny card.
+    expect(await stream.until(event => event.type === 'tool_suspended')).toEqual({
+      type: 'tool_suspended',
+      toolCallId: call,
+      toolName: 'ask_user',
+      args: question,
+      suspendPayload: question,
+    });
+
+    const { messages } = (await (await app.request(`${BASE}/card-1/threads/card-1/messages?limit=100`)).json()) as {
+      messages: Array<Record<string, any>>;
+    };
+    const assistant = messages.find(message => message.role === 'assistant')!;
+    expect(assistant.content.parts[0].toolInvocation).toMatchObject({ state: 'call', toolName: 'ask_user', args: question });
+    expect(assistant.content.metadata.suspendedTools[call]).toMatchObject({ toolName: 'ask_user', args: question });
+    expect(assistant.content.metadata.pendingToolApprovals).toBeUndefined();
+    const fresh = await openStream(app);
+    const initial = (await fresh.until(() => true)) as { displayState: { pendingSuspensions: object; pendingApprovals: object } };
+    expect(initial.displayState.pendingSuspensions).toMatchObject({ [call]: { toolName: 'ask_user', args: question } });
+    expect(initial.displayState.pendingApprovals).toEqual({});
+
+    expect((await post(app, `${BASE}/card-1/tool-suspension`, { toolCallId: call, resumeData: '' })).status).toBe(400);
+    const resumed = nextEnd(session);
+    expect(await (await post(app, `${BASE}/card-1/tool-suspension`, { toolCallId: call, resumeData: 'Backend' })).json()).toEqual({
+      ok: true,
+    });
+    expect(await resumed).toBe('complete');
+    expect(fake.calls[1]!.stdin).toContain('Their answer:\nBackend');
+
+    const after = (await (await app.request(`${BASE}/card-1/threads/card-1/messages?limit=100`)).json()) as {
+      messages: Array<Record<string, any>>;
+    };
+    const settled = after.messages.find(message => message.id === assistant.id)!;
+    expect(settled.content.metadata?.suspendedTools).toBeUndefined();
+    expect(settled.content.parts[0].toolInvocation).toMatchObject({ state: 'result', toolName: 'ask_user', result: 'Backend' });
+  });
+
   it('tells the host who answered or wrote, before the session acts on it', async () => {
     const { app, ui, session } = await setup([{ lines: fixture('turn-permission.jsonl') }, { lines: fixture('turn-complete.jsonl') }]);
     const seen: Array<{ user: unknown; sessionId: string; running: boolean }> = [];
