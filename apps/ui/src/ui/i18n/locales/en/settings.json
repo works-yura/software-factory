@@ -277,6 +277,7 @@
     "manageGitlab": "Manage GitLab connection",
     "connectAnotherGitlab": "Connect another GitLab account",
     "connectGitlab": "Connect GitLab",
+    "githubFromEnv": "GitHub managed by the deployment's access token (GITHUB_ACCESS_TOKEN)",
     "gitlabFromEnv": "GitLab managed by deployment environment variables",
     "environmentHint": "Sandbox resources, repository order and setup commands live in <link>Environment</link>."
   },

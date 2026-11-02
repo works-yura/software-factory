@@ -57,6 +57,11 @@ export interface GithubFeatureDiagnostics {
 export interface GithubStatus {
   enabled: boolean;
   sandboxEnabled?: boolean;
+  /**
+   * `token`: the deployment's access token connects the org by itself, so
+   * there is no Connect or Manage step. Absent on older servers (App only).
+   */
+  mode?: 'app' | 'token';
   connected: boolean;
   installations: GithubInstallation[];
   /**

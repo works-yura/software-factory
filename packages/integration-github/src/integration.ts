@@ -383,6 +383,12 @@ export class GithubIntegration implements FactoryIntegration {
    * multi-replica deploy needs a deployment-stable state secret.
    */
   readonly requiresStableStateSigner: boolean = true;
+  /**
+   * `app`: an org connects through the GitHub App install and OAuth flow.
+   * `token`: the deployment's access token connects every allowed org
+   * without a round trip to GitHub, as a GitLab access token does.
+   */
+  readonly authMode: 'app' | 'token' = 'app';
 
   readonly #appId: string;
   readonly #privateKey: string;

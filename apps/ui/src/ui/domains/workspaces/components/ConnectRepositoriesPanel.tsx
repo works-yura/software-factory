@@ -73,28 +73,38 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
     return <SkeletonRows label={t('vcs.loadingStatus')} rows={3} rowClassName="h-10 w-full rounded-xl" />;
   }
 
+  // GitHub stays connectable while GitLab is configured or repositories are
+  // already linked: a server with both providers lists GitHub repositories
+  // only once the org has connected it. An access token connects by itself.
+  const githubConnectable =
+    !githubConnected &&
+    status !== undefined &&
+    status.enabled &&
+    status.mode !== 'token' &&
+    !status.authRequired &&
+    status.reason !== 'missing_config' &&
+    status.reason !== 'organization_required';
+
   return (
     <div className="flex min-w-0 flex-col" aria-label={t('connectRepos.label')}>
-      {status && !gitlabConfigured && (
+      {status && (!gitlabConfigured || status.mode === 'token') && (
         <StatusCallout
           status={status}
           connected={githubConnected}
-          empty={githubConnected && !reposQuery.isPending && repos.length === 0}
+          empty={githubConnected && !reposQuery.isPending && (reposQuery.data ?? []).length === 0}
         />
       )}
 
-      {!githubConnected && !gitlabConfigured && linked.length === 0 ? (
-        status &&
-        status.reason !== 'missing_config' &&
-        status.reason !== 'organization_required' && (
-          <div className="px-4 py-3">
-            <Button variant="primary" onClick={() => connectGithub(baseUrl)}>
-              <GithubIcon className="size-4" />
-              {t('vcs.connect', { host: 'GitHub' })}
-            </Button>
-          </div>
-        )
-      ) : (
+      {githubConnectable && (
+        <div className="px-4 py-3">
+          <Button variant="primary" onClick={() => connectGithub(baseUrl)}>
+            <GithubIcon className="size-4" />
+            {t('vcs.connect', { host: 'GitHub' })}
+          </Button>
+        </div>
+      )}
+
+      {(githubConnected || gitlabConfigured || linked.length > 0) && (
         <>
           <div className="flex items-center gap-2 px-4 py-2">
             <div className="min-w-0 flex-1">
@@ -281,6 +291,19 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
     return (
       <Txt as="p" variant="caption" tone="muted" className={calloutClass}>
         {t('connectRepos.callout.organizationRequired')}
+      </Txt>
+    );
+  }
+
+  // An access token connects by itself, so here it failed or its account sees no repository.
+  if (status.mode === 'token' && (empty || (!connected && status.reason === 'not_connected'))) {
+    return (
+      <Txt as="p" variant="caption" tone="muted" className={calloutClass}>
+        <Trans
+          t={t}
+          i18nKey={connected ? 'connectRepos.callout.tokenNoAccess' : 'connectRepos.callout.tokenNotConnected'}
+          components={markup}
+        />
       </Txt>
     );
   }

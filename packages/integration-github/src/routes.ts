@@ -43,7 +43,7 @@ import type {
 } from '@factory/store';
 import { listRepositoryCommits } from './commits.ts';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.ts';
-import type { GithubIntegration } from './integration.ts';
+import type { GithubIntegration, UserInstallation } from './integration.ts';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.ts';
 import type { GithubPatKind } from './pat.ts';
 import { polledPullRequestEvent } from './rules.ts';
@@ -460,6 +460,30 @@ export async function ingestLinkedRepositoryBacklog(args: {
 }
 
 /**
+ * Persists the installations `github` registers without the App install and
+ * OAuth flow. Undefined when it needs that flow; null when registering failed.
+ */
+async function registerDirectInstallations(
+  github: GithubIntegration,
+  tenant: { orgId: string; userId: string },
+): Promise<UserInstallation[] | null | undefined> {
+  const direct = await github.directInstallations({ orgId: tenant.orgId }).catch((error: unknown) => {
+    console.warn('[GitHub] Could not register the configured token account.', error);
+    return null;
+  });
+  for (const inst of direct ?? []) {
+    await github.sourceControlStorage.installations.upsert({
+      orgId: tenant.orgId,
+      connectedByUserId: tenant.userId,
+      externalId: inst.installationId.toString(),
+      accountName: inst.accountLogin,
+      accountType: inst.accountType,
+    });
+  }
+  return direct;
+}
+
+/**
  * Build the GitHub routes as Mastra `apiRoutes`. When the feature is disabled,
  * returns only the `status` route so the SPA can detect the disabled state.
  */
@@ -516,14 +540,21 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           });
         }
 
-        const rows = options.github
-          ? await options.github.sourceControlStorage.installations.list({ orgId: tenant.orgId })
-          : [];
+        const orgId = tenant.orgId;
+        const listInstallations = () => github.sourceControlStorage.installations.list({ orgId });
+        let rows = await listInstallations();
+        // An access token needs no Connect step: the org is connected as soon
+        // as it asks, the way a GitLab access token is.
+        if (rows.length === 0 && github.authMode === 'token') {
+          const direct = await registerDirectInstallations(github, { orgId, userId: tenant.userId });
+          if (direct?.length) rows = await listInstallations();
+        }
 
         const connected = rows.length > 0;
         return c.json({
           enabled: true,
           sandboxEnabled: !!sandbox,
+          mode: github.authMode,
           connected,
           installations: rows.map(r => ({
             installationId: Number(r.externalId),
@@ -628,23 +659,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if ('response' in resolved) return resolved.response;
         // A token-authenticated integration has no App to install: its
         // installation is the token's account, persisted as-is.
-        const direct = await github.directInstallations({ orgId: resolved.tenant.orgId }).catch((error: unknown) => {
-          console.warn('[GitHub] Connect could not register the configured token account.', error);
-          return null;
-        });
+        const direct = await registerDirectInstallations(github, resolved.tenant);
         if (direct === null) return c.redirect('/?github=error');
-        if (direct) {
-          for (const inst of direct) {
-            await github.sourceControlStorage.installations.upsert({
-              orgId: resolved.tenant.orgId,
-              connectedByUserId: resolved.tenant.userId,
-              externalId: inst.installationId.toString(),
-              accountName: inst.accountLogin,
-              accountType: inst.accountType,
-            });
-          }
-          return c.redirect('/?github=connected');
-        }
+        if (direct) return c.redirect('/?github=connected');
         const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
         if (c.req.query('manage')) return c.redirect(github.buildInstallUrl(state));
         return c.redirect(github.buildOAuthIdentifyUrl(state, redirectUri));

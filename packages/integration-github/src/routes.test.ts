@@ -349,6 +349,7 @@ const githubStub = {
   sourceControlStorage,
   integrationStorage,
   webhookSecret: undefined as string | undefined,
+  authMode: 'app' as 'app' | 'token',
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   directInstallations: vi.fn(async (): Promise<UserInstallation[] | undefined> => undefined),
@@ -1015,6 +1016,39 @@ describe('status route', () => {
     expect(json.enabled).toBe(true);
     expect(json.connected).toBe(true);
     expect(json.installations[0].installationId).toBe(7);
+  });
+
+  it('connects an access token without a Connect step, the way a GitLab token is', async () => {
+    githubStub.authMode = 'token';
+    githubStub.directInstallations.mockResolvedValue([
+      { installationId: 4242, accountLogin: 'yura', accountType: 'User' },
+    ]);
+    try {
+      const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
+      expect(await res.json()).toMatchObject({
+        mode: 'token',
+        connected: true,
+        installations: [{ installationId: 4242, accountLogin: 'yura' }],
+      });
+      expect(tables.installations).toEqual([
+        expect.objectContaining({ orgId: 'org1', externalId: '4242', accountName: 'yura' }),
+      ]);
+
+      // A token another org already claimed stays unconnected here.
+      tables.installations.length = 0;
+      githubStub.directInstallations.mockRejectedValueOnce(new Error('already connected by another org'));
+      const refused = await buildApp({ workosId: 'u1' }).request('/web/github/status');
+      expect(await refused.json()).toMatchObject({ mode: 'token', connected: false, reason: 'not_connected' });
+    } finally {
+      githubStub.authMode = 'app';
+      githubStub.directInstallations.mockResolvedValue(undefined);
+    }
+  });
+
+  it('leaves an App integration to its Connect flow', async () => {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
+    expect(await res.json()).toMatchObject({ mode: 'app', connected: false });
+    expect(githubStub.directInstallations).not.toHaveBeenCalled();
   });
 });
 

@@ -23,7 +23,10 @@ export function RepositoriesSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
-  const githubConnected = useGithubStatusQuery().data?.connected === true;
+  const githubStatus = useGithubStatusQuery().data;
+  const githubConnected = githubStatus?.connected === true;
+  // An access token is the deployment's connection: GitHub has nothing to manage per org.
+  const githubFromToken = githubStatus?.mode === 'token';
   const gitlabStatus = useGitLabStatusQuery().data;
   const activeFactory = factoryQuery.data;
 
@@ -50,10 +53,16 @@ export function RepositoriesSection() {
         description={t('repositories.description', { name: activeFactory.name })}
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {githubConnected && (
-              <Button size="sm" onClick={() => manageGithubConnection(baseUrl)}>
-                {t('repositories.manageGithub')}
-              </Button>
+            {githubFromToken ? (
+              <Txt as="span" variant="meta" tone="muted">
+                {t('repositories.githubFromEnv')}
+              </Txt>
+            ) : (
+              githubConnected && (
+                <Button size="sm" onClick={() => manageGithubConnection(baseUrl)}>
+                  {t('repositories.manageGithub')}
+                </Button>
+              )
             )}
             {gitlabStatus?.mode === 'platform' &&
               (gitlabReconnectTarget ? (

@@ -281,6 +281,7 @@
     "manageGitlab": "Керувати підключенням GitLab",
     "connectAnotherGitlab": "Підключити ще один акаунт GitLab",
     "connectGitlab": "Підключити GitLab",
+    "githubFromEnv": "GitHub налаштовано токеном доступу розгортання (GITHUB_ACCESS_TOKEN)",
     "gitlabFromEnv": "GitLab налаштовано через змінні середовища розгортання",
     "environmentHint": "Ресурси пісочниці, порядок репозиторіїв і команди налаштування задаються в розділі <link>Середовище</link>."
   },

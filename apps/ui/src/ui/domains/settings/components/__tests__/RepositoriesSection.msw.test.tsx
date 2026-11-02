@@ -143,4 +143,98 @@ describe('Repositories settings', () => {
     expect(manage).toHaveAttribute('href', 'https://projects.mastra.ai');
     expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
   });
+
+  it('offers to connect GitHub when the server has GitHub but GitLab repositories are already linked', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              integrationId: 'gitlab',
+              installationId: 'inst-1',
+              repositories: [
+                {
+                  id: 'repo-1',
+                  branch: 'main',
+                  sandboxWorkdir: '~/factory-gitlab-primary',
+                  repository: { slug: PRIMARY_PROJECT, defaultBranch: 'main' },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: true, configured: true, mode: 'direct', accounts: ['gitlab.com'], reason: 'ready' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects`, () => HttpResponse.json({ projects: [] })),
+    );
+
+    renderRepositoriesSettings();
+
+    expect((await screen.findAllByText(PRIMARY_PROJECT)).length).toBeGreaterThan(0);
+    expect(await screen.findByRole('button', { name: 'Connect GitHub' })).toBeInTheDocument();
+  });
+
+  it('lists GitHub repositories of an access token with no Connect or Manage step, beside GitLab', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          mode: 'token',
+          connected: true,
+          installations: [{ installationId: 4242, accountLogin: 'yura', accountType: 'User' }],
+          reason: 'ready',
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () =>
+        HttpResponse.json({
+          repos: [
+            {
+              id: 99,
+              fullName: 'yura/app',
+              name: 'app',
+              owner: 'yura',
+              defaultBranch: 'main',
+              private: true,
+              installationId: 4242,
+              installationStorageId: 'inst-gh',
+              sandboxProvider: 'custom',
+              sandboxWorkdir: '~/app',
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: true, configured: true, mode: 'direct', accounts: ['gitlab.com'], reason: 'ready' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects`, () => HttpResponse.json({ projects: [] })),
+    );
+
+    renderRepositoriesSettings();
+
+    expect(await screen.findByText('yura/app')).toBeInTheDocument();
+    expect(screen.getByText("GitHub managed by the deployment's access token (GITHUB_ACCESS_TOKEN)")).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Connect GitHub' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manage GitHub connection' })).not.toBeInTheDocument();
+  });
 });

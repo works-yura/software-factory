@@ -77,6 +77,7 @@ interface TokenAccount {
 
 export class GithubTokenIntegration extends GithubIntegration {
   override readonly requiresStableStateSigner = false;
+  override readonly authMode = 'token' as const;
   readonly #accessToken: string;
   readonly #octokit: Octokit;
   readonly #orgId: string | undefined;
