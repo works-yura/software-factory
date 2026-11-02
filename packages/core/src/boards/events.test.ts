@@ -112,12 +112,15 @@ describe('rulePhaseContext', () => {
     expect(rulePhaseContext(boards, item(['queued']))).toEqual({
       id: 'queued',
       kind: 'resting',
+      nextPhases: ['shipping', 'shipped'],
       outcomes: ['ship', 'skip'],
     });
     expect(rulePhaseContext(boards, item(['shipping']))).toEqual({
       id: 'shipping',
       kind: 'working',
+      context: 'release',
       role: 'release',
+      nextPhases: ['shipped'],
       outcomes: [],
     });
     expect(rulePhaseContext(boards, item(['execute'], null))).toBeUndefined();

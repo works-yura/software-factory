@@ -25,21 +25,21 @@ function onEveryWorkSource(
 
 export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'tests' | 'execute' | 'review' | 'done' | 'canceled';
 
-/** Work lets a card move between any two phases; the transition policy guards the moves. */
-const anyPhase = {
-  intake: 'intake',
-  triage: 'triage',
-  planning: 'planning',
-  tests: 'tests',
-  execute: 'execute',
-  review: 'review',
-  done: 'done',
-  canceled: 'canceled',
-} as const;
+/** Every Work phase: a card may move from any phase to any other; the transition policy guards the moves. */
+const ALL_PHASES: readonly WorkBoardPhase[] = [
+  'intake',
+  'triage',
+  'planning',
+  'tests',
+  'execute',
+  'review',
+  'done',
+  'canceled',
+];
 
 export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: 'work',
-  title: 'Work',
+  name: 'Work',
   initialPhase: 'intake',
   transitionPolicy: workTransitionPolicy,
   sourceClosed: { completed: 'done', canceled: 'canceled' },
@@ -53,15 +53,15 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
   },
   phases: {
     intake: {
-      title: 'Intake',
+      name: 'Intake',
       kind: 'resting',
-      outcomes: anyPhase,
+      nextPhases: ALL_PHASES,
     },
     triage: {
-      title: 'Triage',
+      name: 'Triage',
       kind: 'working',
-      role: 'triage',
-      outcomes: anyPhase,
+      runner: { context: 'triage' },
+      nextPhases: ALL_PHASES,
       onEnter: {
         issue: triageIssueEntry,
         gitlabIssue: investigateTriagedGitLabIssue,
@@ -69,47 +69,47 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       },
     },
     planning: {
-      title: 'Planning',
+      name: 'Planning',
       kind: 'working',
-      role: 'plan',
-      outcomes: anyPhase,
+      runner: { context: 'plan' },
+      nextPhases: ALL_PHASES,
       onEnter: onEveryWorkSource(planWorkItem),
     },
     tests: {
-      title: 'Tests',
+      name: 'Tests',
       // Its own seat: the tester writes and commits the failing tests, never the code that passes them.
       kind: 'working',
-      role: 'tester',
-      outcomes: anyPhase,
+      runner: { context: 'tester' },
+      nextPhases: ALL_PHASES,
       onEnter: onEveryWorkSource(writeTests),
     },
     execute: {
-      title: 'Building',
+      name: 'Building',
       kind: 'working',
-      role: 'work',
-      outcomes: anyPhase,
+      runner: { context: 'work' },
+      nextPhases: ALL_PHASES,
       onEnter: onEveryWorkSource(buildWorkItem),
     },
     review: {
-      title: 'Review',
+      name: 'Review',
       // The builder's seat carries Review: it answers feedback on its own change request.
       // With self-review on, entering Review first runs an independent reviewer in its own
       // review seat on the pushed branch; on approve the builder opens the change request here.
       kind: 'working',
-      role: 'work',
-      outcomes: anyPhase,
+      runner: { context: 'work' },
+      nextPhases: ALL_PHASES,
       onEnter: onEveryWorkSource(selfReviewWorkItem),
     },
     done: {
-      title: 'Done',
+      name: 'Done',
       kind: 'terminal',
-      outcomes: anyPhase,
+      nextPhases: ALL_PHASES,
       onEnter: { issue: completeIssue },
     },
     canceled: {
-      title: 'Canceled',
+      name: 'Canceled',
       kind: 'terminal',
-      outcomes: anyPhase,
+      nextPhases: ALL_PHASES,
     },
   },
 });

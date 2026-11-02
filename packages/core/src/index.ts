@@ -1,11 +1,16 @@
-export { BoardDefinitionError, defineBoard } from './boards/define-board.ts';
+export { BoardDefinitionError, DEFAULT_PHASE_CONTEXT, defineBoard, FACTORY_AGENT_ID } from './boards/define-board.ts';
+export { cardRuleFacts } from './boards/card-facts.ts';
+export { autoApprovedExitTool, startsInAutoPhase } from './boards/phase-automation.ts';
 export type {
   BoardChangeRequests,
   BoardDefinition,
   BoardEventIntegration,
   BoardEventRules,
+  BoardPhase,
   BoardPhaseDefinition,
+  BoardPhaseExitTool,
   BoardPhaseKind,
+  BoardPhaseRunner,
   BoardReproductionTest,
   BoardSourceClosed,
   BoardToolResultRuleHandler,
@@ -47,6 +52,8 @@ export {
   recordExplicitRuleOverrides,
   selectEventRule,
 } from './rules/event-rules.ts';
+export { cardRuleGroupSchema, evaluateRuleGroup, RULE_OPERATORS } from './rules/rule-group.ts';
+export type { RuleCondition, RuleFacts, RuleGroup, RuleOperator } from './rules/rule-group.ts';
 export { resolveFactoryStageRules } from './rules/resolve.ts';
 export type { ResolvedFactoryStageRule } from './rules/resolve.ts';
 export {
@@ -130,6 +137,7 @@ export {
   MAX_BOARD_IDENTIFIER_LENGTH,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   MAX_ROLE_LENGTH,
+  MAX_SKILL_NAME_LENGTH,
   MAX_TOOL_NAME_LENGTH,
   normalizeFactoryRuleJsonValue,
   validateFactoryRuleDecision,

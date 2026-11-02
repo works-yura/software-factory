@@ -1,4 +1,5 @@
 import {
+  autoApprovedExitTool,
   boardTransitionPolicyResultSchema,
   createBoardRegistry,
   immutablePolicySnapshot,
@@ -436,7 +437,7 @@ export class FactoryTransitionService {
         request,
         transitionId,
         'invalid_transition',
-        `The ${board.title} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
+        `The ${board.name} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
       );
     }
 
@@ -483,9 +484,12 @@ export class FactoryTransitionService {
         (async () => {
           // Resolve the project switch inside the timed block so a resolver rejection
           // surfaces as a committed rule_error and a slow lookup is bounded.
-          const plansAutoApproved = this.#autoApprovePlans
-            ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-            : false;
+          // A phase whose submit_plan exit tool is auto-approved for this card approves its plans too.
+          const plansAutoApproved =
+            autoApprovedExitTool(this.#boards, item) === 'submit_plan' ||
+            (this.#autoApprovePlans
+              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+              : false);
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
               immutablePolicySnapshot({

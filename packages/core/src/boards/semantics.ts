@@ -92,8 +92,14 @@ export function rulePhaseContext(boards: BoardLookup, item: PhaseCard): FactoryR
   const board = boards.get(boardId);
   const semantics = resolvePhaseSemantics(boards, boardId, stage);
   if (!board || !semantics) return undefined;
-  const outcomes = Object.freeze(Object.keys(board.phases[stage]?.outcomes ?? {}));
-  return Object.freeze({ id: stage, ...semantics, outcomes });
+  const phase = board.phases[stage];
+  return Object.freeze({
+    id: stage,
+    kind: semantics.kind,
+    ...(semantics.role === undefined ? {} : { context: semantics.role, role: semantics.role }),
+    nextPhases: Object.freeze([...(phase?.nextPhases ?? [])]),
+    outcomes: Object.freeze(Object.keys(phase?.outcomes ?? {})),
+  });
 }
 
 /**
@@ -125,9 +131,9 @@ export function resolveBoardClosure(boards: BoardLookup, item: PhaseCard): Facto
   if (!board?.sourceClosed) return undefined;
   const { completed, canceled } = board.sourceClosed;
   return {
-    boardTitle: board.title,
-    completed: { phase: completed, title: board.phases[completed]!.title },
-    canceled: { phase: canceled, title: board.phases[canceled]!.title },
+    boardTitle: board.name,
+    completed: { phase: completed, title: board.phases[completed]!.name },
+    canceled: { phase: canceled, title: board.phases[canceled]!.name },
     itemTerminal: item.stages.some(stage => board.isTerminal(stage)),
   };
 }
@@ -149,9 +155,9 @@ export function resolveBoardChangeRequests(
   const board = boards.get(boardForWorkItem(item));
   const flow = board?.changeRequests;
   if (!board || !flow) return undefined;
-  const phase = (id: string) => ({ phase: id, title: board.phases[id]!.title });
+  const phase = (id: string) => ({ phase: id, title: board.phases[id]!.name });
   return {
-    boardTitle: board.title,
+    boardTitle: board.name,
     build: phase(flow.build),
     review: phase(flow.review),
     merged: phase(flow.merged),

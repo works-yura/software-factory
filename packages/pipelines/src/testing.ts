@@ -11,7 +11,7 @@ import { workBoard } from './work/board.ts';
 export function createLifecycleTestRegistry(handlers: BoardDefinition<string, string>['rules']): BoardRegistry {
   const board = defineBoard({
     id: 'work',
-    title: 'Work lifecycle fixture',
+    name: 'Work lifecycle fixture',
     initialPhase: 'intake',
     sourceClosed: workBoard.sourceClosed,
     changeRequests: workBoard.changeRequests,
@@ -50,7 +50,7 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
 export function createToolRuleTestRegistry(tools: BoardDefinition<string, string>['tools']): BoardRegistry {
   const board = defineBoard({
     id: 'work',
-    title: 'Work tool-rule fixture',
+    name: 'Work tool-rule fixture',
     initialPhase: 'intake',
     phases: workBoard.phases,
     transitionPolicy: workBoard.transitionPolicy,

@@ -19,10 +19,10 @@ rules/dispatch-errors.test.ts	store/src/dispatch-errors.test.ts
 storage/domains/comments/base.test.ts	store/src/comments/base.test.ts
 storage/domains/comments/activity.test.ts	store/src/comments/activity.test.ts
 storage/domains/comments/feed-context.test.ts	store/src/comments/feed-context.test.ts
-rules/transition-service.test.ts	runtime/src/transition-service.test.ts
+rules/transition-service.test.ts	runtime/src/transition-service.test.ts	+1	upstream #28604: a phase that auto-approves submit_plan lets the planner move on
 rules/terminal-cleanup.test.ts	runtime/src/terminal-cleanup.test.ts
 rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts
-rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+1	a failure only a person can fix (the card's repository) stops at once
+rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+4	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3)
 session/run-audit.test.ts	runtime/src/run-audit.test.ts
 skills/service.test.ts	runtime/src/skills/service.test.ts	-1	the two skill-cache rescan cases moved to harness-mastra/src/harness.test.ts with the Mastra harness adapter (-2); formatSkillMessage case ported from upstream a5a9179daa (+1)
 storage/domains/channel-identity/base.test.ts	store/src/channel-identity/base.test.ts
@@ -113,7 +113,7 @@ routes/supervisor.test.ts	api/src/supervisor.test.ts
 routes/surface.test.ts	api/src/surface.test.ts	+1	work spanning several repositories: a card naming no repository dispatches across the environment; ambiguity only without one
 routes/telemetry.test.ts	api/src/telemetry.test.ts
 routes/tenant-credentials.test.ts	credentials/src/tenant-credentials.test.ts
-routes/work-items.test.ts	api/src/work-items.test.ts
+routes/work-items.test.ts	api/src/work-items.test.ts	+1	upstream #28604: the board catalog sends autoStart/exitTool conditions
 rules/automation-stamping.test.ts	runtime/src/automation-stamping.test.ts
 rules/binding-context.test.ts	session/src/binding-context.test.ts
 rules/bindings.test.ts	runtime/src/bindings.test.ts

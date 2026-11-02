@@ -9,27 +9,27 @@ type AcceptancePhase = 'queued' | 'verifying' | 'decision' | 'accepted';
 /** A separate, manual record of product acceptance after PR review. */
 export const acceptanceBoard = defineBoard<'acceptance', Record<AcceptancePhase, BoardPhaseDefinition<AcceptancePhase>>>({
   id: 'acceptance',
-  title: 'Acceptance',
+  name: 'Acceptance',
   initialPhase: 'queued',
   transitionPolicy: acceptanceTransitionPolicy,
   phases: {
     queued: {
-      title: 'Awaiting evidence',
+      name: 'Awaiting evidence',
       kind: 'resting',
       outcomes: { verify: 'verifying' },
     },
     verifying: {
-      title: 'Verifying criteria',
+      name: 'Verifying criteria',
       kind: 'working',
-      role: 'validator',
+      runner: { context: 'validator' },
       outcomes: { submit: 'decision', retry: 'queued' },
       onEnter: { manual: verifyAcceptanceCriteria },
     },
     decision: {
-      title: 'Product decision',
+      name: 'Product decision',
       kind: 'resting',
       outcomes: { accept: 'accepted', reject: 'queued' },
     },
-    accepted: { title: 'Accepted', kind: 'terminal' },
+    accepted: { name: 'Accepted', kind: 'terminal' },
   },
 });
