@@ -603,6 +603,12 @@ export const FACTORY_ROUTE_CONTRACTS = {
           /** @deprecated Use `name`. */
           title: z.string(),
           description: z.string().optional(),
+          /** Where the board came from: Factory's built-ins, the app's code, or created through the API. */
+          source: z.enum(['builtin', 'app', 'stored']).optional(),
+          /** False for built-in and app boards, which are defined in code and read-only. */
+          editable: z.boolean().optional(),
+          /** Problems with the board, such as a runner skill that does not exist. */
+          problems: z.array(z.string()).optional(),
           initialPhase: z.string(),
           phases: z.array(
             z.object({
@@ -635,6 +641,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
           ),
         }),
       ),
+      /** Stored boards that could not be loaded or are hidden by a code board with the same key, and why. */
+      problems: z.array(z.string()).optional(),
     }),
   },
   workItemList: {

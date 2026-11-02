@@ -18,7 +18,8 @@ import {
   hydrateFactorySession,
   resolveFactorySessionModel,
 } from '@factory/session';
-import { recordSessionRunStart } from '@factory/runtime';
+import { recordSessionRunStart, toBoardSource } from '@factory/runtime';
+import type { ProjectBoardSource } from '@factory/runtime';
 import { resolveWorkItemRepository } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
@@ -69,7 +70,8 @@ export interface FactorySessionToolDependencies {
     | 'listSessionSubscriptions'
     | 'listWorkItemSubscribers'
   >;
-  boards: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards: BoardRegistry | ProjectBoardSource;
   auditRecorder: AuditRecorder;
   /** The browser Start's coordinator; absent until the Factory runtime is ready. */
   startCoordinator: () => Pick<FactoryStartCoordinator, 'prepare'> | undefined;
@@ -362,7 +364,7 @@ export function createFactorySessionTools(
     const item = await findWorkItem(deps.workItems, scope, workItem);
     if (!item) throw workItemNotFound(workItem);
     const label = workItemLabel(item);
-    const board = deps.boards.get(boardForWorkItem(item));
+    const board = (await toBoardSource(deps.boards).load(scope)).get(boardForWorkItem(item));
     // Work's old `plan` role still names Planning, though no phase runs in a `plan` context any more.
     if (!workLaneForRole(board, role) && !board?.phaseForRole(role)) {
       throw new Error(`${label}'s board has no ${role} role.`);

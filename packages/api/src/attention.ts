@@ -7,6 +7,7 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { BoardRegistry } from '@factory/core';
+import type { ProjectBoardSource } from '@factory/runtime';
 
 import type { LiveSessions } from '@factory/session';
 import type { WorkItemCommentsStorage } from '@factory/store';
@@ -37,7 +38,7 @@ export { factoryDecisionType } from '@factory/runtime';
 
 interface AttentionRouteDependencies {
   workItems: WorkItemsStorage;
-  boards: BoardRegistry;
+  boards: BoardRegistry | ProjectBoardSource;
   comments: WorkItemCommentsStorage;
   liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn'>;
   resolveProject(context: unknown): Promise<AttentionScope | { response: Response }>;

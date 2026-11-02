@@ -127,7 +127,8 @@ import { createReviewSourceTool, resolveReviewSourceUiOrigin } from '@factory/ha
 import type { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { createTerminalStageCleanup } from '@factory/runtime';
 import { createFactoryTransitionTools, resolveSessionGit } from '@factory/harness-mastra';
-import { FactoryTransitionService } from '@factory/runtime';
+import { FactoryTransitionService, ProjectBoardCache, toBoardSource } from '@factory/runtime';
+import type { ProjectBoardSource } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { CallbackFactorySandbox } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
@@ -546,7 +547,10 @@ export class MastraFactory {
   /** The normalized sandbox, set by `prepare()`. Undefined until then and when sandboxes are disabled. */
   #sandbox: FactorySandbox | undefined;
   #sandboxDescription: FactorySandboxDescription | undefined;
+  /** The code boards (built-in and app boards), served to every project and never stored. */
   readonly #boards: BoardRegistry;
+  /** Each project's boards: the code boards plus the boards it stored. Undefined until `prepare()` or when the boards domain is down. */
+  #projectBoards: ProjectBoardCache | undefined;
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
@@ -719,10 +723,12 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
-    workItemsStorage.useTerminalPhasePredicate(item => isTerminalWorkItem(this.#boards, item));
+    workItemsStorage.useTerminalPhasePredicate(item =>
+      isTerminalWorkItem(this.#projectBoards?.forProject(item) ?? this.#boards, item),
+    );
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
-    storage.registerDomain(new StoredBoardsStorage());
+    const storedBoardsStorage = storage.registerDomain(new StoredBoardsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
@@ -805,6 +811,28 @@ export class MastraFactory {
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
     await timedPhase('prepare.storage.init', () => storage.init());
+
+    // Each project's boards are the code boards plus the boards it stored. Load every project
+    // before anything reads its boards; without the boards domain the code boards serve directly.
+    if (storage.isDomainReady('boards') && storage.isDomainReady('projects')) {
+      const projectBoards = new ProjectBoardCache({
+        codeRegistry: this.#boards,
+        storage: storedBoardsStorage,
+        projects: factoryProjectsStorage,
+        skillProblems: registry => findBoardSkillProblems(registry, this.#skills),
+      });
+      this.#projectBoards = projectBoards;
+      await timedPhase('prepare.boards.preload', () =>
+        projectBoards
+          .preload()
+          .catch(error =>
+            console.warn(
+              `[factory] loading project boards at startup failed; each project loads on first use: ${error instanceof Error ? error.message : error}`,
+            ),
+          ),
+      );
+    }
+    const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
 
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
@@ -1070,7 +1098,7 @@ export class MastraFactory {
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           configVersion,
-          boards: this.#boards,
+          boards,
           storage: workItemsStorage,
           audit: auditDomain,
           autoApprovePlans: async ({ orgId, factoryProjectId }) => {
@@ -1106,7 +1134,7 @@ export class MastraFactory {
       comments: workItemCommentsStorage,
       feed: commentsDomain,
       audit: auditStorage,
-      boards: this.#boards,
+      boards,
       transitionService,
       auditRecorder: auditDomain,
       sessions: sourceControlSessions,
@@ -1264,7 +1292,7 @@ export class MastraFactory {
       ? new FactoryPhaseStateProcessor({
           configVersion,
           storage: workItemsStorage,
-          boards: this.#boards,
+          boards,
           loadMemorySettings,
           factoryThinkingLevel: factoryProjectId => readFactoryThinkingLevel(factoryProjectsStorage, factoryProjectId),
           ...(transitionService ? { transitionService } : {}),
@@ -1380,7 +1408,9 @@ export class MastraFactory {
                 if (!binding) return undefined;
                 const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
                 // Self-review gates the change request on boards that ship them (Work, Bug).
-                if (!item || !this.#boards.get(boardForWorkItem(item))?.changeRequests) return undefined;
+                if (!item || !(await toBoardSource(boards).load(binding)).get(boardForWorkItem(item))?.changeRequests) {
+                  return undefined;
+                }
                 // A repository whose change request is already out is past
                 // self-review; the others are still gated.
                 if (
@@ -1620,7 +1650,7 @@ export class MastraFactory {
             requestContext,
             storage: workItemsStorage,
             transitionService,
-            boards: this.#boards,
+            boards,
             // The reproduction-test guard and recorder run git in the session checkout.
             sessionGit: execution =>
               resolveSessionGit({ ...execution, providers: sourceControlToolProviders }),
@@ -1895,7 +1925,7 @@ export class MastraFactory {
                     sessions: sourceControlSessions,
                     projects: factoryProjectsStorage,
                     workItems: workItemsStorage,
-                    boards: this.#boards,
+                    boards,
                     isRunning: async sessionId => {
                       const session = await this.#prepared?.base.controller.getSession(sessionId);
                       return session?.stream.isActive() ?? false;
@@ -2081,7 +2111,7 @@ export class MastraFactory {
             knowledgeKey: this.#config.knowledge?.key,
             skills: this.#skills,
             configVersion,
-            boardRegistry: this.#boards,
+            boardRegistry: boards,
             factoryTransitionService: transitionService,
             ...(claudeCode && transitionService
               ? {
@@ -2114,7 +2144,7 @@ export class MastraFactory {
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
-                boards: this.#boards,
+                boards,
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();

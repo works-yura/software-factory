@@ -2,6 +2,9 @@ import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { defineBoard } from '@factory/core';
+import { ProjectBoardCache } from '@factory/runtime';
+import type { ProjectBoardSource } from '@factory/runtime';
+import { StoredBoardsStorage } from '@factory/store';
 import { createBoardRegistry } from '@factory/testing';
 import type { Intake } from '@factory/capabilities';
 import type { AuditEmitter } from '@factory/feed';
@@ -62,7 +65,11 @@ const githubRepositories = {
   ),
 };
 
-function buildApp(user: { workosId: string; organizationId?: string } | null, intakeIntegrations = integrations) {
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  intakeIntegrations = integrations,
+  boards: typeof boardRegistry | ProjectBoardSource = boardRegistry,
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -76,7 +83,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null, in
       intake: seed.intake,
       projects: seed.projects,
       integrations: intakeIntegrations,
-      boardRegistry,
+      boardRegistry: boards,
       workItems: seed.workItems,
       githubRepositories,
     }).routes(),
@@ -104,6 +111,16 @@ const triageBoard = defineBoard({
 const boardRegistry = createBoardRegistry({ boards: [releaseBoard, triageBoard] });
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
+
+/** Project boards whose database can't be read: the boards domain was never attached to storage. */
+const unreadableProjectBoards = () =>
+  new ProjectBoardCache({ codeRegistry: boardRegistry, storage: new StoredBoardsStorage() });
+const putWithUnreadableBoards = (path: string, body: unknown) =>
+  buildApp(orgUser, integrations, unreadableProjectBoards()).request(path, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
@@ -181,6 +198,20 @@ describe('intake configuration', () => {
           metadata: { factoryProjectId: project.id, board: null },
         },
       ]);
+    });
+
+    it("saves nothing when the project's boards can't be read", async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const response = await putWithUnreadableBoards('/web/intake/bindings', {
+        integrationId: 'gitlab',
+        sourceId: 'team-1',
+        factoryProjectId: project.id,
+        board: 'release',
+      });
+
+      expect(response.status).toBe(500);
+      expect(await seed.intake.getBinding({ orgId: 'org1', integrationId: 'gitlab', sourceId: 'team-1' })).toBeNull();
+      expect(auditEvents).toEqual([]);
     });
 
     it('binds a source to an installed board and rebinding clears the board', async () => {
@@ -502,6 +533,20 @@ describe('intake configuration', () => {
     it('requires an authenticated organization', async () => {
       expect((await buildApp(null).request('/web/intake/label-routes')).status).toBe(401);
       expect((await buildApp({ workosId: 'u1' }).request('/web/intake/label-routes')).status).toBe(403);
+    });
+
+    it("saves no route when the project's boards can't be read", async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const response = await putWithUnreadableBoards('/web/intake/label-routes', {
+        integrationId: 'github',
+        factoryProjectId: project.id,
+        label: 'release',
+        board: 'release',
+      });
+
+      expect(response.status).toBe(500);
+      expect(await (await list(project.id)).json()).toEqual({ routes: [] });
+      expect(auditEvents).toEqual([]);
     });
 
     it('stores a normalized label route, reads it back per project, and clears it', async () => {

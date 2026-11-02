@@ -12,7 +12,8 @@ import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import type { IntegrationTools } from '@factory/integrations';
 import { transitionBodySchema } from '@factory/contracts';
-import type { FactoryTransitionService } from '@factory/runtime';
+import { toBoardSource } from '@factory/runtime';
+import type { FactoryTransitionService, ProjectBoardSource } from '@factory/runtime';
 import type { SourceControlSessionLookup } from '@factory/session';
 import { resolveWorkItemRepository } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
@@ -41,7 +42,8 @@ import type { FactoryToolScope } from './scope.ts';
 
 export interface FactoryWorkItemToolDependencies {
   workItems: WorkItemsStorage;
-  boards: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards: BoardRegistry | ProjectBoardSource;
   /** Governed stage moves; filing and moving items refuse while it is unavailable. */
   transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
@@ -162,7 +164,7 @@ export function createFactoryWorkItemTools(
         if (repository) await requireRepository(repository);
         const created = await createFactoryWorkItem({
           workItems: deps.workItems,
-          boards: deps.boards,
+          boards: await toBoardSource(deps.boards).load(project),
           transitionService: deps.transitionService,
           audit,
           ...project,
@@ -321,7 +323,14 @@ export function createFactoryWorkItemTools(
         'Retry one failed Factory run once its cause is fixed. Refused when the failure cannot be fixed by retrying or the item has moved on.',
       inputSchema: z.object({ decisionId }).strict(),
       execute: async ({ decisionId }) =>
-        settled(await retryFactoryDecision({ workItems: deps.workItems, boards: deps.boards, ...project, decisionId })),
+        settled(
+          await retryFactoryDecision({
+            workItems: deps.workItems,
+            boards: await toBoardSource(deps.boards).load(project),
+            ...project,
+            decisionId,
+          }),
+        ),
     }),
 
     factory_dismiss_decision: createTool({

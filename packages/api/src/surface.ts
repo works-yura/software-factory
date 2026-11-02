@@ -14,7 +14,8 @@ import { getGithubFeatureDiagnostics } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
 import { MaterializeError } from '@factory/sandbox';
 import { FactoryDispatchError } from '@factory/store';
-import type { FactoryBindingPreparationInput } from '@factory/runtime';
+import { toBoardSource } from '@factory/runtime';
+import type { FactoryBindingPreparationInput, ProjectBoardSource } from '@factory/runtime';
 import { createMastraHarness, FactoryStartCoordinator } from '@factory/harness-mastra';
 import { HarnessRoutingStartCoordinator } from './harness-start.ts';
 import type { HarnessStartCoordinators } from './harness-start.ts';
@@ -142,8 +143,8 @@ export interface FactoryApiRoutesDeps {
   knowledgeKey?: string;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
-  /** Boards installed for this Factory instance. */
-  boardRegistry: BoardRegistry;
+  /** Each project's boards; integrations use the code boards (`codeRegistry`). */
+  boardRegistry: BoardRegistry | ProjectBoardSource;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -286,7 +287,7 @@ export async function prepareFactoryRuleBinding(
   sourceControlProvider: SourceControlStorageHandle | Pick<GithubIntegration, 'sourceControlStorage'>,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
   projects: FactoryProjectsStorage,
-  boards: BoardRegistry,
+  boards: BoardRegistry | ProjectBoardSource,
   input: FactoryBindingPreparationInput,
 ): Promise<void> {
   try {
@@ -301,7 +302,7 @@ export async function prepareFactoryRuleBinding(
     // Both the current phase and the role's lane come from the installed board; an
     // unknown board or phase yields no destination rather than a guessed one.
     const boardId = boardForWorkItem(input.item);
-    const board = boards.get(boardId);
+    const board = (await toBoardSource(boards).load(input.record)).get(boardId);
     const currentStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
     const currentKind = currentStage === undefined ? undefined : board?.phaseKind(currentStage);
     const destinationStage =
@@ -607,6 +608,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     const context = buildIntegrationContext(
       {
         ...deps,
+        // Integrations evaluate code behaviors and place new cards with the code boards.
+        boardRegistry: toBoardSource(deps.boardRegistry).codeRegistry,
         stateSigner: deps.stateSigner,
         emitAudit,
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),

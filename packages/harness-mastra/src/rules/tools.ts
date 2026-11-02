@@ -10,7 +10,8 @@ import { WorkItemUpdateConflictError } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { FactorySessionSourceLookup } from '@factory/session';
 import { resolveFactorySessionAddress } from '@factory/session';
-import type { FactoryTransitionService } from '@factory/runtime';
+import { toBoardSource } from '@factory/runtime';
+import type { FactoryTransitionService, ProjectBoardSource } from '@factory/runtime';
 import { FACTORY_TRIAGE_TYPES, hasOpenChangeRequest } from '@factory/core';
 import { IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@factory/core';
 
@@ -74,10 +75,12 @@ export async function createFactoryTransitionTools(options: {
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   sessions?: FactorySessionSourceLookup;
-  boards?: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards?: BoardRegistry | ProjectBoardSource;
   /** Git in the session checkout, for boards that declare a reproduction test. */
   sessionGit?: SessionGitResolver;
 }): Promise<IntegrationTools> {
+  const boardSource = options.boards ? toBoardSource(options.boards) : undefined;
   const resolution = await resolveFactorySessionAddress({
     requestContext: options.requestContext,
     storage: options.storage,
@@ -96,26 +99,29 @@ export async function createFactoryTransitionTools(options: {
     const retired = await options.storage.findRunBindingBySession(resolution.address);
     if (retired && retired.status === 'revoked' && options.boards) {
       const item = await options.storage.get({ orgId: retired.orgId, id: retired.workItemId });
-      if (item && workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') {
+      if (item && boardSource && workItemPhaseSemantics(await boardSource.load(retired), item)?.kind === 'terminal') {
         return { factory_transition_work_item: createRetiredSessionTool(retired.workItemId, item.stages[0]) };
       }
     }
     return {};
   }
+  // The project's boards as they are now; the tools below read them for this run.
+  const boards = boardSource ? await boardSource.load(availableBinding) : undefined;
+  const bound = { ...options, boards };
   let isTriage = false;
   let recordsTest = false;
-  if (availableBinding.role === 'triage' || options.boards) {
+  if (availableBinding.role === 'triage' || boards) {
     const item = await options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
     if (!item && availableBinding.role === 'triage') return {};
     if (item) {
-      isTriage = availableBinding.role === 'triage' && classifiesTriage(options.boards, item);
-      recordsTest = recordsReproductionTest(options.boards, item, availableBinding.role);
+      isTriage = availableBinding.role === 'triage' && classifiesTriage(boards, item);
+      recordsTest = recordsReproductionTest(boards, item, availableBinding.role);
     }
   }
 
   return {
-    ...(availableBinding.role === 'review' ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
-    ...(recordsTest ? createReproductionTestTool(options, availableBinding.workItemId) : {}),
+    ...(availableBinding.role === 'review' ? createReviewVerdictTool(bound, availableBinding.workItemId) : {}),
+    ...(recordsTest ? createReproductionTestTool(bound, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: isTriage
@@ -146,12 +152,13 @@ export async function createFactoryTransitionTools(options: {
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        const currentBoards = boardSource ? await boardSource.load(binding) : undefined;
         const board = boardForWorkItem(item);
         // A board with a reproduction test keeps its fix seat from moving on while the checkout
         // changes the recorded test files. Checked here because it needs the session's sandbox;
         // board policies are pure.
         const guarded = await reproductionTestGuard({
-          boards: options.boards,
+          boards: currentBoards,
           item,
           role: binding.role,
           stage,
@@ -166,7 +173,7 @@ export async function createFactoryTransitionTools(options: {
         // Only a triage binding on a classifying board (Work, Bug) may classify; other roles can
         // echo the key from history.
         const triageType =
-          binding.role === 'triage' && classifiesTriage(options.boards, item) ? requestedTriageType : undefined;
+          binding.role === 'triage' && classifiesTriage(currentBoards, item) ? requestedTriageType : undefined;
 
         const result = await options.transitionService.transition({
           orgId: binding.orgId,

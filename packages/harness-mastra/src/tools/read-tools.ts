@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import type { IntegrationTools } from '@factory/integrations';
-import { decisionRetryable, overtakenDecisionIds } from '@factory/runtime';
+import { decisionRetryable, overtakenDecisionIds, toBoardSource } from '@factory/runtime';
+import type { ProjectBoardSource } from '@factory/runtime';
 import { factoryDispatchFailureMetadata } from '@factory/store';
 import type { AuditStorage } from '@factory/store';
 import type { WorkItemCommentsStorage } from '@factory/store';
@@ -38,7 +39,8 @@ export interface FactoryReadToolDependencies {
   >;
   comments: Pick<WorkItemCommentsStorage, 'listRecent'>;
   audit: Pick<AuditStorage, 'list'>;
-  boards: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards: BoardRegistry | ProjectBoardSource;
   /** The live controller, for whether a session is mid-run and when it last moved; absent before the mount is up. */
   messaging?: () => Promise<Pick<FactoryMessaging, 'controller'> | null>;
 }
@@ -223,7 +225,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         const itemDecisions = decisions.slice(-MAX_LIST);
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          deps.boards,
+          await toBoardSource(deps.boards).load(project),
           project,
           itemDecisions.filter(decision => decision.status === 'failed'),
         );
@@ -334,7 +336,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         // Check exactly the decisions this call returns, so every canRetry is real.
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          deps.boards,
+          await toBoardSource(deps.boards).load(project),
           project,
           incidents.flatMap(group => group.shown),
         );
