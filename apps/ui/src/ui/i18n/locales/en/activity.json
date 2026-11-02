@@ -247,6 +247,21 @@
         "title": "changed an intake label route on",
         "group": "changed an intake label route on",
         "none": "changed an intake label route"
+      },
+      "board_created": {
+        "title": "created the board",
+        "group": "created boards",
+        "none": "created a board"
+      },
+      "board_updated": {
+        "title": "changed the board",
+        "group": "changed boards",
+        "none": "changed a board"
+      },
+      "board_deleted": {
+        "title": "deleted the board",
+        "group": "deleted boards",
+        "none": "deleted a board"
       }
     },
     "moved": "moved",
@@ -273,7 +288,8 @@
       "run": "Runs",
       "git": "Git",
       "agent": "Agent",
-      "intake": "Intake"
+      "intake": "Intake",
+      "board": "Boards"
     },
     "all": "All",
     "kinds_one": "{{count}} kind",

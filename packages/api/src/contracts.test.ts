@@ -14,6 +14,7 @@ import {
 } from '../scripts/generate-api-cli-route-metadata.ts';
 import { buildAttentionRoutes } from './attention.ts';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
+import { BoardRoutes } from './boards.ts';
 import {
   attentionQuerySchema,
   createProjectBodySchema,
@@ -66,7 +67,15 @@ function registeredFactoryRoutes() {
     workItems,
     configVersion: 'test',
   } as never);
-  return [...projects, ...work, ...attention, ...supervisor, ...automationRuns];
+  const boards = new BoardRoutes({
+    auth: {},
+    audit: {},
+    projects: {},
+    workItems,
+    storage: {},
+    boards: {},
+  } as never).routes();
+  return [...projects, ...work, ...attention, ...supervisor, ...automationRuns, ...boards];
 }
 
 describe('Factory route contracts', () => {

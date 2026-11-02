@@ -37,6 +37,9 @@ const DEED_PHRASES: Record<AuditAction, string> = {
   'factory.intake.config_updated': 'intake_config_updated',
   'factory.intake.binding_updated': 'intake_binding_updated',
   'factory.intake.label_route_updated': 'intake_label_route_updated',
+  'factory.board.created': 'board_created',
+  'factory.board.updated': 'board_updated',
+  'factory.board.deleted': 'board_deleted',
 };
 
 /** What a sentence's verb points at: one card's title, a count of cards, or nothing at all (an intake setting has no title). */

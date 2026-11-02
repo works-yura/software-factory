@@ -8,6 +8,7 @@ import {
   GitCommitHorizontal,
   Hammer,
   Inbox,
+  LayoutDashboard,
   ListFilter,
   MapIcon,
   Play,
@@ -37,6 +38,7 @@ const DEED_GLYPHS: Record<AuditNamespace, LucideIcon> = {
   agent: Bot,
   intake: Inbox,
   work_item: SquarePen,
+  board: LayoutDashboard,
 };
 
 function entryTone(entry: ActivityEntry): BadgeVariant {

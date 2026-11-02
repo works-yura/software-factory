@@ -3,7 +3,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { RuleGroup } from '../rules/rule-group.ts';
 import type { FactoryStageRuleContext } from '../rules/types.ts';
 import { cardRuleFacts } from './card-facts.ts';
-import { BoardDefinitionError, defineBoard } from './define-board.ts';
+import { BoardDefinitionError, compileBoardDefinition, defineBoard, isDefinedBoard } from './define-board.ts';
 
 const LOW_EFFORT: RuleGroup = {
   operator: 'AND',
@@ -49,12 +49,12 @@ describe('defineBoard phase fields', () => {
 
     for (const board of [legacy, current]) {
       expect(board.name).toBe('Release');
-      expect(board).not.toHaveProperty('title');
-      expect(board.phases.build).not.toHaveProperty('title');
-      expect(board.phases.build).not.toHaveProperty('role');
-      expect(board.phases.backlog).not.toHaveProperty('next');
+      // The old names stay readable, always equal to the new ones.
+      expect(board.title).toBe('Release');
       expect(board.phases.build).toMatchObject({
         name: 'Build',
+        title: 'Build',
+        role: 'review',
         runner: { agentId: 'code-agent', context: 'review' },
         nextPhases: ['done'],
       });
@@ -64,6 +64,8 @@ describe('defineBoard phase fields', () => {
       expect(board.phaseForRole('review')).toBe('build');
     }
     expect(current.transitions).toEqual(legacy.transitions);
+    expect(legacy.phases.backlog.next).toBe('build');
+    expect(current.phases.backlog).not.toHaveProperty('next');
   });
 
   it('lists each next phase once when several outcomes lead to it', () => {
@@ -284,7 +286,7 @@ describe('defineBoard phase fields', () => {
     const copy = defineBoard({ id: 'copy', name: 'Copy', initialPhase: 'backlog', phases: base.phases });
     expect(copy.transitions).toEqual(base.transitions);
     expect(copy.phases.build).toMatchObject({ kind: 'working', runner: { context: 'work' } });
-    expect(copy.phases.build).not.toHaveProperty('role');
+    expect(copy.phases.build).toMatchObject({ role: 'work' });
   });
 
   it('stays quiet for new fields', () => {
@@ -308,5 +310,64 @@ describe('defineBoard phase fields', () => {
     });
 
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('still reads title, role and next from a defined board, so code written for older versions keeps working', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+
+    const base = release({
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+      build: { name: 'Build', kind: 'working', runner: { context: 'work' }, nextPhases: ['done'] },
+      done: { name: 'Done', kind: 'terminal' },
+    });
+    // How apps extended a built-in board before `name` replaced `title`.
+    const relaxed = defineBoard({
+      id: 'relaxed-release',
+      title: base.title,
+      initialPhase: base.initialPhase,
+      phases: base.phases as never,
+    });
+
+    expect(base.title).toBe('Release');
+    expect(relaxed).toMatchObject({ name: 'Release', title: 'Release' });
+    expect(relaxed.phases.build).toMatchObject({ name: 'Build', title: 'Build', role: 'work' });
+    // Only the board's own `title:` is reported; the re-declared phases are not.
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toContain('Board "relaxed-release" uses deprecated fields: title → name. ');
+
+    const legacy = defineBoard({
+      id: 'legacy-next',
+      title: 'Release',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { title: 'Backlog', kind: 'resting', next: 'build' },
+        build: { title: 'Build', kind: 'working', role: 'publisher', next: 'done' },
+        done: { title: 'Done', kind: 'terminal' },
+      },
+    });
+    expect(legacy.phases.backlog).toMatchObject({ title: 'Backlog', next: 'build', nextPhases: ['build'] });
+    expect(legacy.phases.build).toMatchObject({ role: 'publisher', runner: { context: 'publisher' } });
+    // Resolved phases carry each old field next to its replacement, so declaring them again stays quiet.
+    warn.mockClear();
+    defineBoard({ id: 'legacy-next-again', name: 'Release', initialPhase: 'backlog', phases: legacy.phases });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('recognises a board an app declared with defineBoard(), but not a copy of it or a compiled board', () => {
+    const config = {
+      id: 'release',
+      name: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped'] },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    } as const;
+    const board = defineBoard(config);
+
+    expect(isDefinedBoard(board)).toBe(true);
+    expect(isDefinedBoard({ ...board })).toBe(false);
+    expect(isDefinedBoard(compileBoardDefinition(config))).toBe(false);
   });
 });

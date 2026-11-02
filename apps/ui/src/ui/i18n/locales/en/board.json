@@ -143,7 +143,8 @@
     "run": "Runs",
     "git": "Git",
     "agent": "Agent",
-    "intake": "Intake"
+    "intake": "Intake",
+    "board": "Boards"
   },
   "sort": {
     "recent": "Recently moved",

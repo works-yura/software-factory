@@ -1,4 +1,11 @@
-export { BoardDefinitionError, compileBoardDefinition, DEFAULT_PHASE_CONTEXT, defineBoard, FACTORY_AGENT_ID } from './boards/define-board.ts';
+export {
+  BoardDefinitionError,
+  compileBoardDefinition,
+  DEFAULT_PHASE_CONTEXT,
+  defineBoard,
+  FACTORY_AGENT_ID,
+  isDefinedBoard,
+} from './boards/define-board.ts';
 export { cardRuleFacts } from './boards/card-facts.ts';
 export { holdsLegacyPlanner, LEGACY_PLAN_ROLE, legacyPlanRoleFor } from './boards/legacy-plan-role.ts';
 export { autoApprovedExitTool, startsInAutoPhase } from './boards/phase-automation.ts';

@@ -21,7 +21,7 @@ describe('built-in board phase fields', () => {
     const copy = defineBoard({ id: 'copy', name: 'Copy', initialPhase: 'intake', phases: workBoard.phases });
     expect(copy.transitions).toEqual(workBoard.transitions);
     expect(copy.phases.review).toMatchObject({ kind: 'working', runner: { context: 'work' } });
-    expect(copy.phases.review).not.toHaveProperty('role');
+    expect(copy.phases.review).toMatchObject({ role: 'work' });
   });
 
   it('lets a board that keeps the built-in Work tool rules end Planning with submit_plan', () => {

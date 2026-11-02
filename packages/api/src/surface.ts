@@ -15,7 +15,7 @@ import type { GithubIntegration } from '@factory/integration-github';
 import { MaterializeError } from '@factory/sandbox';
 import { FactoryDispatchError } from '@factory/store';
 import { toBoardSource } from '@factory/runtime';
-import type { FactoryBindingPreparationInput, ProjectBoardSource } from '@factory/runtime';
+import type { FactoryBindingPreparationInput, ProjectBoardCache, ProjectBoardSource } from '@factory/runtime';
 import { createMastraHarness, FactoryStartCoordinator } from '@factory/harness-mastra';
 import { HarnessRoutingStartCoordinator } from './harness-start.ts';
 import type { HarnessStartCoordinators } from './harness-start.ts';
@@ -31,7 +31,7 @@ import type { LiveSessions } from '@factory/session';
 import { resolveWorkItemRepository, workItemRunsInLink } from '@factory/session';
 import type { StateSigner } from '@factory/auth';
 import type { AuditEmitter, AuditRecorder } from '@factory/feed';
-import type { ChannelIdentityStorage } from '@factory/store';
+import type { ChannelIdentityStorage, StoredBoardsStorage } from '@factory/store';
 import type { WorkItemCommentsStorage } from '@factory/store';
 import type { CommentsDomain } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
@@ -66,6 +66,7 @@ import { IntakeRoutes } from './intake.ts';
 import { KnowledgeRoutes } from './knowledge.ts';
 import { OAuthRoutes } from './oauth.ts';
 import type { RouteAuth } from '@factory/http';
+import { BoardRoutes } from './boards.ts';
 import { SkillRoutes } from './skills.ts';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
 import type { ClaudeCodeUserSessions } from './source-control-sessions.ts';
@@ -145,6 +146,8 @@ export interface FactoryApiRoutesDeps {
   configVersion: string;
   /** Each project's boards; integrations use the code boards (`codeRegistry`). */
   boardRegistry: BoardRegistry | ProjectBoardSource;
+  /** Stored boards and their cache; mounts the board management routes when present. */
+  storedBoards?: { storage: StoredBoardsStorage; cache: ProjectBoardCache };
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -795,6 +798,17 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
             const memory = await deps.controller.getMastra()?.getStorage()?.getStore('memory');
             return (await memory?.getThreadById({ threadId }))?.title;
           },
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.storedBoards
+      ? new BoardRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
+          workItems: deps.domains.workItems,
+          storage: deps.storedBoards.storage,
+          boards: deps.storedBoards.cache,
+          ...(deps.skills ? { skills: deps.skills } : {}),
         }).routes()
       : []),
     ...(deps.factoryReady

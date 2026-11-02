@@ -21,6 +21,7 @@ const AUDIT_CATEGORY_STYLES: Record<AuditNamespace, AuditCategoryStyle> = {
   git: { tone: 'orange', dotClass: 'bg-chart-orange' },
   agent: { tone: 'blue', dotClass: 'bg-chart-amber' },
   intake: { tone: 'cyan', dotClass: 'bg-placeholder' },
+  board: { tone: 'blue', dotClass: 'bg-chart-blue' },
 };
 
 function auditCategoryLabel(namespace: AuditNamespace): string {
@@ -35,6 +36,8 @@ function auditCategoryLabel(namespace: AuditNamespace): string {
       return tk('auditCategories.agent');
     case 'intake':
       return tk('auditCategories.intake');
+    case 'board':
+      return tk('auditCategories.board');
   }
 }
 

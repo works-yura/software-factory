@@ -21,6 +21,8 @@ function categoryLabel(namespace: AuditNamespace): string {
       return ta('timeline.categories.agent');
     case 'intake':
       return ta('timeline.categories.intake');
+    case 'board':
+      return ta('timeline.categories.board');
   }
 }
 
