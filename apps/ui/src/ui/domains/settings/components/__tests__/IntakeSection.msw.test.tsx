@@ -6,122 +6,77 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type { GitLabProject, GitLabStatus } from '../../../factory/services/gitlab';
 import type { IntakeConfig } from '../../../factory/services/intake';
-import type { GithubStatus } from '../../../workspaces/services/github';
 import { IntakeSection } from '../IntakeSection';
 
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
 const BINDINGS_URL = `${TEST_BASE_URL}/web/intake/bindings`;
-const GITHUB_STATUS_URL = `${TEST_BASE_URL}/web/github/status`;
-const GITLAB_STATUS_URL = `${TEST_BASE_URL}/web/gitlab/status`;
-const GITLAB_PROJECTS_URL = `${TEST_BASE_URL}/web/gitlab/projects`;
+const LABEL_ROUTES_URL = `${TEST_BASE_URL}/web/intake/label-routes`;
 const CLICKUP_STATUS_URL = `${TEST_BASE_URL}/web/clickup/status`;
 const CLICKUP_LISTS_URL = `${TEST_BASE_URL}/web/clickup/lists`;
 const CLICKUP_SETTINGS_URL = `${TEST_BASE_URL}/web/clickup/settings`;
 const CLICKUP_STATUSES_URL = `${TEST_BASE_URL}/web/clickup/lists/L1/statuses`;
 const CLICKUP_RULES_URL = `${TEST_BASE_URL}/web/clickup/lists/L1/rules`;
 
-function baseConfig(): IntakeConfig {
-  return {
-    github: { enabled: true, sourceIds: null },
-    gitlab: { enabled: false, sourceIds: null },
-    clickup: { enabled: false, sourceIds: null },
-  };
-}
+type Binding = { integrationId: string; sourceId: string; factoryProjectId: string | null; board: string | null };
 
-const githubReadyStatus: GithubStatus = {
-  enabled: true,
-  connected: true,
-  installations: [{ installationId: 1, accountLogin: 'acme', accountType: 'Organization' }],
-  reason: 'ready',
+const readyStatus = { configured: true, connected: true, workspaces: ['Acme'], intervalSeconds: 60 };
+const lists = [
+  { id: 'L1', name: 'Backlog', path: 'Eng / Mobile', workspaceId: 'w1' },
+  { id: 'L2', name: 'Inbox', path: 'Support', workspaceId: 'w1' },
+];
+const bugBoard = {
+  id: 'bug',
+  title: 'Bug',
+  initialPhase: 'intake',
+  phases: [
+    { id: 'intake', title: 'Intake', kind: 'resting', transitions: [] },
+    { id: 'triage', title: 'Triage', kind: 'working', transitions: [] },
+    { id: 'done', title: 'Done', kind: 'terminal', transitions: [] },
+  ],
 };
 
-function seedGithubProject() {
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'conn-fp-1',
-            repositories: [
-              {
-                id: 'ghp-1',
-                branch: null,
-                sandboxWorkdir: null,
-                repository: { slug: 'mastra', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
-    ),
-  );
+function clickUpConfig(clickup: IntakeConfig['clickup']): IntakeConfig {
+  return { github: { enabled: false, sourceIds: null }, gitlab: { enabled: false, sourceIds: null }, clickup };
 }
 
-function useIntakeHandlers({
-  config = baseConfig(),
-  githubStatus = githubReadyStatus,
+/**
+ * Intake handlers for a signed-in ClickUp setup. Saved configs and bindings are returned so a test can
+ * assert what the UI wrote; `bindings` seeds what is already routed.
+ */
+function useClickUpHandlers({
+  config = clickUpConfig({ enabled: true, sourceIds: ['L1'] }),
+  bindings = [],
+  settings = {},
+  statuses = [
+    { name: 'TO DO', type: 'open' },
+    { name: 'BACKLOG', type: 'open' },
+    { name: 'DEV FIXED', type: 'closed' },
+  ],
 }: {
   config?: IntakeConfig;
-  githubStatus?: GithubStatus;
+  bindings?: Binding[];
+  settings?: Record<string, unknown>;
+  statuses?: { name: string; type: string }[];
 } = {}) {
-  const saved: IntakeConfig[] = [];
+  const savedConfigs: IntakeConfig[] = [];
+  const savedBindings: Binding[] = [...bindings];
+  const savedRules: unknown[] = [];
   server.use(
     http.get(CONFIG_URL, () => HttpResponse.json({ config })),
     http.put(CONFIG_URL, async ({ request }) => {
       const next = (await request.json()) as IntakeConfig;
-      saved.push(next);
+      savedConfigs.push(next);
       return HttpResponse.json({ config: next });
     }),
-    http.get(GITHUB_STATUS_URL, () => HttpResponse.json(githubStatus)),
-    // No ClickUp token on the server: the status route is not mounted.
-    http.get(CLICKUP_STATUS_URL, () => new HttpResponse(null, { status: 404 })),
-    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json({ boards: [] })),
-  );
-  return saved;
-}
-
-const gitlabReadyStatus: GitLabStatus = {
-  enabled: true,
-  configured: true,
-  connections: [{ id: 'a1b_acme', integrationId: 'gitlab', status: 'active', accountLabel: 'acme' }],
-  accounts: ['acme'],
-  reauthRequired: false,
-  reason: 'ready',
-};
-
-const gitlabProjects: GitLabProject[] = [
-  {
-    id: 'gitlab-project:encoded',
-    name: 'acme/app',
-    connectionId: 'a1b_acme',
-    accountLabel: 'acme',
-    defaultBranch: 'main',
-  },
-];
-
-function useGitLabHandlers(config: IntakeConfig, status: GitLabStatus = gitlabReadyStatus) {
-  const saved = useIntakeHandlers({ config });
-  const savedBindings: Array<{
-    integrationId: string;
-    sourceId: string;
-    factoryProjectId: string | null;
-    board: string | null;
-  }> = [];
-  server.use(
-    http.get(GITLAB_STATUS_URL, () => HttpResponse.json(status)),
-    http.get(GITLAB_PROJECTS_URL, () => HttpResponse.json({ projects: gitlabProjects })),
+    http.get(CLICKUP_STATUS_URL, () => HttpResponse.json(readyStatus)),
+    http.get(CLICKUP_LISTS_URL, () => HttpResponse.json({ lists })),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme Web' }] }),
     ),
     http.get(BINDINGS_URL, () => HttpResponse.json({ bindings: savedBindings })),
     http.put(BINDINGS_URL, async ({ request }) => {
-      const body = (await request.json()) as (typeof savedBindings)[number];
+      const body = (await request.json()) as Binding;
       const index = savedBindings.findIndex(
         binding => binding.integrationId === body.integrationId && binding.sourceId === body.sourceId,
       );
@@ -129,14 +84,22 @@ function useGitLabHandlers(config: IntakeConfig, status: GitLabStatus = gitlabRe
       else savedBindings[index] = body;
       return HttpResponse.json({ bindings: savedBindings });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
-      HttpResponse.json({
-        boards: [{ id: 'work', title: 'Work', initialPhase: 'intake', phases: [] }],
-      }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json({ boards: [bugBoard] })),
+    http.get(LABEL_ROUTES_URL, () => HttpResponse.json({ routes: [] })),
+    http.get(CLICKUP_SETTINGS_URL, () => HttpResponse.json({ lists: settings })),
+    http.get(CLICKUP_STATUSES_URL, () => HttpResponse.json({ statuses })),
+    http.put(CLICKUP_RULES_URL, async ({ request }) => {
+      const body = await request.json();
+      savedRules.push(body);
+      return HttpResponse.json({ lists: { L1: body } });
+    }),
   );
-  return { saved, savedBindings };
+  return { savedConfigs, savedBindings, savedRules };
 }
+
+const routedToBug: Binding[] = [
+  { integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: 'bug' },
+];
 
 function renderIntakeSection() {
   return renderWithProviders(
@@ -147,263 +110,54 @@ function renderIntakeSection() {
   );
 }
 
+/** Cards start folded; open the one for a List. */
+async function openCard(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
+  await user.click(await screen.findByRole('button', { name }));
+}
+
 describe('IntakeSection', () => {
-  describe('given a config with the default sources enabled', () => {
-    it('lists every work intake source and expands the configured pickers', async () => {
-      seedGithubProject();
-      useIntakeHandlers();
-
-      renderIntakeSection();
-
-      expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
-
-      expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
-    });
-
-    it('shows how many items are selected', async () => {
-      seedGithubProject();
-      useIntakeHandlers({
-        config: {
-          github: { enabled: true, sourceIds: ['mastra'] },
-          gitlab: { enabled: false, sourceIds: null },
-          clickup: { enabled: false, sourceIds: null },
-        },
-      });
-
-      renderIntakeSection();
-
-      // One count per source picker: the selected repository.
-      await waitFor(() => expect(screen.getAllByText('1 selected')).toHaveLength(1));
-    });
-  });
-
-  describe('when the GitHub source is toggled off', () => {
-    it('persists the config with github disabled', async () => {
-      seedGithubProject();
-      const saved = useIntakeHandlers();
-
-      renderIntakeSection();
-
-      await userEvent.click(await screen.findByRole('switch', { name: 'Sync GitHub issues' }));
-
-      await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0].github.enabled).toBe(false);
-      expect(await screen.findByText('Intake sources updated')).toBeInTheDocument();
-    });
-  });
-
-  describe('given GitHub is not configured on the server', () => {
-    it('disables GitHub intake and hides repository controls', async () => {
-      seedGithubProject();
-      useIntakeHandlers({
-        githubStatus: {
-          enabled: false,
-          connected: false,
-          installations: [],
-          reason: 'missing_config',
-        },
-      });
-
-      renderIntakeSection();
-
-      expect(await screen.findByText('GitHub is not configured on this server.')).toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Sync GitHub issues' })).toBeDisabled();
-      expect(screen.queryByRole('checkbox', { name: 'mastra' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'GitHub routing' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
-    });
-  });
-
-  describe('given the GitHub status endpoint fails', () => {
-    it('reports the status as unavailable with a retry instead of claiming GitHub is not configured', async () => {
-      seedGithubProject();
-      useIntakeHandlers();
-      const statusRequests: number[] = [];
+  describe('given the config endpoint fails', () => {
+    it('shows the unavailable notice', async () => {
       server.use(
-        http.get(GITHUB_STATUS_URL, () => {
-          statusRequests.push(statusRequests.length + 1);
-          // First call fails; the retry reaches a healthy server.
-          if (statusRequests.length === 1) return HttpResponse.json({ error: 'boom' }, { status: 500 });
-          return HttpResponse.json(githubReadyStatus);
-        }),
+        http.get(BINDINGS_URL, () => HttpResponse.json({ bindings: [] })),
+        http.get(CONFIG_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
       );
-
       renderIntakeSection();
 
-      expect(await screen.findByText('GitHub status could not be loaded.')).toBeInTheDocument();
-      expect(screen.queryByText('GitHub is not configured on this server.')).not.toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Sync GitHub issues' })).toBeDisabled();
-      expect(screen.queryByRole('checkbox', { name: 'mastra' })).not.toBeInTheDocument();
-      expect(statusRequests).toHaveLength(1);
-
-      await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
-
-      await waitFor(() => expect(statusRequests).toHaveLength(2));
-      expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Sync GitHub issues' })).toBeEnabled();
-      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
-    });
-  });
-
-  describe('when a GitHub repository is picked', () => {
-    it('persists an explicit repository selection under sourceIds', async () => {
-      seedGithubProject();
-      const saved = useIntakeHandlers();
-
-      renderIntakeSection();
-
-      await userEvent.click(await screen.findByRole('checkbox', { name: 'mastra' }));
-
-      await waitFor(() => expect(saved).toHaveLength(1));
-      // The board and intake integrations key GitHub sources by repo slug (owner/name).
-      expect(saved[0].github.sourceIds).toEqual(['mastra']);
-      expect(saved[0]).not.toHaveProperty('github.repositoryIds');
+      expect(await screen.findByText(/Intake settings are unavailable/)).toBeInTheDocument();
     });
   });
 
   describe('given the server omits unregistered integrations', () => {
     // The server returns a dynamic map keyed by integration id and drops keys
     // for integrations that aren't registered, so the config can arrive as `{}`.
-    // The fixed-shape reads must not crash on the missing `github`/`gitlab` keys.
-    it('renders both sources with default toggles instead of crashing', async () => {
-      seedGithubProject();
+    it('renders ClickUp with its switch off instead of crashing', async () => {
       server.use(
         http.get(CONFIG_URL, () => HttpResponse.json({ config: {} })),
-        http.get(GITHUB_STATUS_URL, () =>
-          HttpResponse.json({ enabled: false, connected: false, installations: [], reason: 'missing_config' }),
-        ),
-      );
-
-      renderIntakeSection();
-
-      // Missing provider entries stay off, and unavailable providers cannot be toggled on.
-      expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).not.toBeChecked();
-      expect(screen.getByRole('switch', { name: 'Sync GitHub issues' })).toBeDisabled();
-      expect(screen.getByRole('switch', { name: 'Sync GitLab issues' })).not.toBeChecked();
-    });
-  });
-
-  describe('given the config endpoint fails', () => {
-    it('shows the unavailable notice', async () => {
-      server.use(
         http.get(BINDINGS_URL, () => HttpResponse.json({ bindings: [] })),
-        http.get(CONFIG_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
-        http.get(GITHUB_STATUS_URL, () => HttpResponse.json(githubReadyStatus)),
+        http.get(CLICKUP_STATUS_URL, () => HttpResponse.json(readyStatus)),
       );
-
       renderIntakeSection();
 
-      expect(await screen.findByText(/Intake configuration is unavailable/)).toBeInTheDocument();
+      expect(await screen.findByRole('switch', { name: 'Import ClickUp tasks' })).not.toBeChecked();
     });
   });
 
-  describe('given GitLab is configured', () => {
-    it('does not offer a linked GitLab repository as a GitHub intake source', async () => {
-      useGitLabHandlers({
-        ...baseConfig(),
-        gitlab: { enabled: true, sourceIds: null },
-      });
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-          HttpResponse.json({
-            connections: [
-              {
-                id: 'gitlab-connection',
-                integrationId: 'gitlab',
-                installationId: 'gitlab-installation',
-                repositories: [
-                  {
-                    id: 'gitlab-link',
-                    branch: 'main',
-                    sandboxWorkdir: '~/app',
-                    repository: { slug: 'acme/app', defaultBranch: 'main' },
-                  },
-                ],
-              },
-            ],
-          }),
-        ),
-      );
-
+  describe('the page', () => {
+    it('shows only ClickUp: GitHub and GitLab have no intake settings', async () => {
+      useClickUpHandlers();
       renderIntakeSection();
 
-      const githubSection = await screen.findByRole('region', { name: 'GitHub issues' });
-      expect(await within(githubSection).findByText(/No linked repositories yet/)).toBeInTheDocument();
-      expect(within(githubSection).queryByRole('checkbox', { name: 'acme/app' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'GitHub routing' })).not.toBeInTheDocument();
-      const gitlabProjects = await screen.findByRole('group', { name: 'GitLab projects' });
-      expect(within(gitlabProjects).getByRole('checkbox', { name: 'acme/app' })).toBeInTheDocument();
-    });
-
-    it('selects a project and routes it to a Factory board', async () => {
-      const { saved, savedBindings } = useGitLabHandlers({
-        ...baseConfig(),
-        gitlab: { enabled: true, sourceIds: null },
-      });
-
-      renderIntakeSection();
-
-      expect(await screen.findByText('Connected to acme')).toBeInTheDocument();
-      const projects = await screen.findByRole('group', { name: 'GitLab projects' });
-      await userEvent.click(within(projects).getByRole('checkbox', { name: 'acme/app' }));
-
-      await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0].gitlab.sourceIds).toEqual(['gitlab-project:encoded']);
-      expect(await screen.findByText(/Not routed — this source's issues won't be picked up/)).toBeInTheDocument();
-
-      await userEvent.click(await screen.findByLabelText('Factory for acme/app'));
-      await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
-      await userEvent.click(await screen.findByLabelText('Board for acme/app'));
-      await userEvent.click(await screen.findByRole('option', { name: 'Work' }));
-
-      await waitFor(() =>
-        expect(savedBindings).toEqual([
-          {
-            integrationId: 'gitlab',
-            sourceId: 'gitlab-project:encoded',
-            factoryProjectId: 'fp-1',
-            board: 'work',
-          },
-        ]),
-      );
-      expect((await screen.findAllByText('GitLab routing updated')).length).toBeGreaterThan(0);
-    });
-
-    it('keeps healthy projects available when another Platform connection needs reauthorization', async () => {
-      useGitLabHandlers(
-        { ...baseConfig(), gitlab: { enabled: true, sourceIds: null } },
-        {
-          ...gitlabReadyStatus,
-          connections: [
-            ...gitlabReadyStatus.connections!,
-            { id: 'a1b_old', integrationId: 'gitlab', status: 'needs_reauth', accountLabel: 'old' },
-          ],
-          reauthRequired: true,
-        },
-      );
-
-      renderIntakeSection();
-
-      expect(
-        await screen.findByText('A GitLab account needs to be reconnected in Mastra Platform.'),
-      ).toBeInTheDocument();
-      expect(await screen.findByRole('checkbox', { name: 'acme/app' })).toBeInTheDocument();
+      expect(await screen.findByRole('switch', { name: 'Import ClickUp tasks' })).toBeInTheDocument();
+      expect(screen.queryByText(/GitHub/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/GitLab/)).not.toBeInTheDocument();
     });
   });
-  describe('ClickUp', () => {
-    const readyStatus = {
-      configured: true,
-      connected: true,
-      workspaces: ['Acme'],
-      intervalSeconds: 60,
-    };
-    const lists = [
-      { id: 'L1', name: 'Backlog', path: 'Eng / Mobile', workspaceId: 'w1' },
-      { id: 'L2', name: 'Inbox', path: 'Support', workspaceId: 'w1' },
-    ];
 
+  describe('ClickUp connection', () => {
     it('explains that the server has no token when the status route is missing', async () => {
-      useIntakeHandlers();
+      useClickUpHandlers();
+      server.use(http.get(CLICKUP_STATUS_URL, () => new HttpResponse(null, { status: 404 })));
       renderIntakeSection();
 
       expect(await screen.findByText(/Set CLICKUP_API_TOKEN and restart it/)).toBeInTheDocument();
@@ -411,17 +165,15 @@ describe('IntakeSection', () => {
     });
 
     it('treats the HTML app shell as "not configured", as the real server answers an unmounted route', async () => {
-      useIntakeHandlers();
-      server.use(
-        http.get(CLICKUP_STATUS_URL, () => HttpResponse.html('<!doctype html><html></html>')),
-      );
+      useClickUpHandlers();
+      server.use(http.get(CLICKUP_STATUS_URL, () => HttpResponse.html('<!doctype html><html></html>')));
       renderIntakeSection();
 
       expect(await screen.findByText(/Set CLICKUP_API_TOKEN and restart it/)).toBeInTheDocument();
     });
 
     it('reports a rejected token instead of showing an empty list', async () => {
-      useIntakeHandlers();
+      useClickUpHandlers();
       server.use(
         http.get(CLICKUP_STATUS_URL, () =>
           HttpResponse.json({ ...readyStatus, connected: false, workspaces: [], error: 'ClickUp request failed with 401.' }),
@@ -431,85 +183,188 @@ describe('IntakeSection', () => {
 
       expect(await screen.findByText(/ClickUp rejected the configured API token/)).toBeInTheDocument();
       expect(screen.getByText('ClickUp request failed with 401.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Add Lists' })).not.toBeInTheDocument();
     });
 
-    it('offers the Lists once sync is on, and saves a picked List', async () => {
-      const saved = useIntakeHandlers({ config: { ...baseConfig(), clickup: { enabled: true, sourceIds: null } } });
-      server.use(
-        http.get(CLICKUP_STATUS_URL, () => HttpResponse.json(readyStatus)),
-        http.get(CLICKUP_LISTS_URL, () => HttpResponse.json({ lists })),
-      );
+    it('turns import on and off', async () => {
+      const { savedConfigs } = useClickUpHandlers({ config: clickUpConfig({ enabled: false, sourceIds: null }) });
       const user = userEvent.setup();
       renderIntakeSection();
 
-      expect(await screen.findByText('Eng / Mobile')).toBeInTheDocument();
-      await user.click(await screen.findByRole('checkbox', { name: 'Backlog' }));
+      await user.click(await screen.findByRole('switch', { name: 'Import ClickUp tasks' }));
 
-      await waitFor(() => expect(saved.at(-1)?.clickup).toEqual({ enabled: true, sourceIds: ['L1'] }));
+      await waitFor(() => expect(savedConfigs.at(-1)?.clickup).toEqual({ enabled: true, sourceIds: null }));
+    });
+  });
+
+  describe('connected Lists', () => {
+    it('shows each connected List as a card that says where it is routed', async () => {
+      useClickUpHandlers({ bindings: routedToBug });
+      renderIntakeSection();
+
+      const card = await screen.findByRole('button', { name: /Eng \/ Mobile \/ Backlog/ });
+      await waitFor(() => expect(card).toHaveTextContent('Acme Web · Bug'));
+      // Folded: the status table is not rendered until the card opens.
+      expect(screen.queryByText('TO DO')).not.toBeInTheDocument();
     });
 
+    it('says so when no List is connected yet', async () => {
+      useClickUpHandlers({ config: clickUpConfig({ enabled: true, sourceIds: null }) });
+      renderIntakeSection();
+
+      expect(await screen.findByText(/No Lists connected yet/)).toBeInTheDocument();
+    });
+
+    it('connects a List from the picker dialog and saves it', async () => {
+      const { savedConfigs } = useClickUpHandlers({ config: clickUpConfig({ enabled: true, sourceIds: null }) });
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await user.click(await screen.findByRole('button', { name: 'Add Lists' }));
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByText('Eng / Mobile')).toBeInTheDocument();
+      await user.click(within(dialog).getByRole('checkbox', { name: 'Backlog' }));
+
+      await waitFor(() => expect(savedConfigs.at(-1)?.clickup).toEqual({ enabled: true, sourceIds: ['L1'] }));
+    });
+
+    it('lists the chosen Lists as chips in the picker and removes one from there', async () => {
+      const { savedConfigs } = useClickUpHandlers();
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await user.click(await screen.findByRole('button', { name: 'Add Lists' }));
+      const dialog = await screen.findByRole('dialog');
+      await user.click(await within(dialog).findByRole('button', { name: 'Remove Backlog' }));
+
+      await waitFor(() => expect(savedConfigs.at(-1)?.clickup).toEqual({ enabled: true, sourceIds: null }));
+    });
+
+    it('disconnects a List from its card', async () => {
+      const { savedConfigs } = useClickUpHandlers({ bindings: routedToBug });
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+      await user.click(await screen.findByRole('button', { name: /Disconnect Eng \/ Mobile \/ Backlog/ }));
+
+      await waitFor(() => expect(savedConfigs.at(-1)?.clickup).toEqual({ enabled: true, sourceIds: null }));
+    });
+  });
+
+  describe('routing a List', () => {
+    it('routes the List to a Factory and a board', async () => {
+      const { savedBindings } = useClickUpHandlers();
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+      await user.click(await screen.findByRole('combobox', { name: /Factory for Eng \/ Mobile \/ Backlog/ }));
+      await user.click(await screen.findByRole('option', { name: 'Acme Web' }));
+      await waitFor(() => expect(savedBindings).toEqual([{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: null }]));
+
+      await user.click(await screen.findByRole('combobox', { name: /Board for Eng \/ Mobile \/ Backlog/ }));
+      await user.click(await screen.findByRole('option', { name: 'Bug' }));
+      await waitFor(() => expect(savedBindings.at(-1)).toEqual({ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: 'bug' }));
+    });
+
+    it('asks for a board before offering status rules', async () => {
+      useClickUpHandlers();
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+
+      expect(await screen.findByText(/Choose a factory and a board for this List above/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Typical set' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('status rules', () => {
     it('maps a ClickUp status to a board column and saves the rule', async () => {
-      useIntakeHandlers({ config: { ...baseConfig(), clickup: { enabled: true, sourceIds: ['L1'] } } });
-      const bodies: unknown[] = [];
+      const { savedRules } = useClickUpHandlers({ bindings: routedToBug });
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+      await user.click(await screen.findByRole('combobox', { name: 'Action for status TO DO' }));
+      await user.click(await screen.findByRole('option', { name: 'Into "Triage"' }));
+
+      await waitFor(() => expect(savedRules).toEqual([{ statuses: { 'to do': { action: 'phase', phase: 'triage' } } }]));
+    });
+
+    it('fills in a typical set: open statuses to Triage, finished ones close the card', async () => {
+      const { savedRules } = useClickUpHandlers({ bindings: routedToBug });
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+      await user.click(await screen.findByRole('button', { name: 'Typical set' }));
+
+      await waitFor(() =>
+        expect(savedRules).toEqual([
+          {
+            statuses: {
+              'to do': { action: 'phase', phase: 'triage' },
+              backlog: { action: 'phase', phase: 'triage' },
+              'dev fixed': { action: 'close' },
+            },
+          },
+        ]),
+      );
+    });
+
+    it('offers only the board’s working columns, never the terminal one', async () => {
+      useClickUpHandlers({ bindings: routedToBug });
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+      await user.click(await screen.findByRole('combobox', { name: 'Action for status TO DO' }));
+
+      expect(await screen.findByRole('option', { name: 'Into "Intake"' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'Into "Done"' })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Close the card' })).toBeInTheDocument();
+    });
+
+    it('tells the user when the bound board is not installed', async () => {
+      useClickUpHandlers({
+        bindings: [{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: 'gone' }],
+      });
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+
+      expect(await screen.findByText(/The "gone" board is not installed/)).toBeInTheDocument();
+    });
+  });
+
+  describe('tag routes', () => {
+    it('keeps them folded away as an optional extra, and adds a route when opened', async () => {
+      useClickUpHandlers({ bindings: routedToBug });
+      const saved: unknown[] = [];
       server.use(
-        http.get(CLICKUP_STATUS_URL, () => HttpResponse.json(readyStatus)),
-        http.get(CLICKUP_LISTS_URL, () => HttpResponse.json({ lists })),
-        http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-          HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme Web' }] }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
-          HttpResponse.json({
-            bindings: [{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: 'bug' }],
-          }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
-          HttpResponse.json({
-            boards: [
-              {
-                id: 'bug',
-                title: 'Bug',
-                initialPhase: 'intake',
-                phases: [
-                  { id: 'intake', title: 'Intake', kind: 'resting', transitions: [] },
-                  { id: 'triage', title: 'Triage', kind: 'working', transitions: [] },
-                  { id: 'done', title: 'Done', kind: 'terminal', transitions: [] },
-                ],
-              },
-            ],
-          }),
-        ),
-        http.get(CLICKUP_SETTINGS_URL, () => HttpResponse.json({ lists: {} })),
-        http.get(CLICKUP_STATUSES_URL, () =>
-          HttpResponse.json({ statuses: [{ name: 'TO DO', type: 'open' }, { name: 'BACKLOG', type: 'open' }] }),
-        ),
-        http.put(CLICKUP_RULES_URL, async ({ request }) => {
-          const body = await request.json();
-          bodies.push(body);
-          return HttpResponse.json({ lists: { L1: body } });
+        http.put(LABEL_ROUTES_URL, async ({ request }) => {
+          saved.push(await request.json());
+          return HttpResponse.json({ routes: [] });
         }),
       );
       const user = userEvent.setup();
       renderIntakeSection();
 
-      await user.click(await screen.findByRole('combobox', { name: 'Action for status TO DO' }));
-      await user.click(await screen.findByRole('option', { name: 'Into "Triage"' }));
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+      expect(screen.queryByRole('textbox', { name: /Tag for/ })).not.toBeInTheDocument();
+
+      await user.click(await screen.findByRole('button', { name: /Tag routes for Acme Web \(optional\)/ }));
+      await user.type(await screen.findByRole('textbox', { name: 'Tag for Acme Web' }), 'bug');
+      await user.click(screen.getByRole('combobox', { name: 'Board for new tag in Acme Web' }));
+      await user.click(await screen.findByRole('option', { name: 'Bug' }));
+      await user.click(screen.getByRole('button', { name: 'Add' }));
 
       await waitFor(() =>
-        expect(bodies).toEqual([{ statuses: { 'to do': { action: 'phase', phase: 'triage' } } }]),
+        expect(saved).toEqual([{ factoryProjectId: 'fp-1', integrationId: 'clickup', label: 'bug', board: 'bug' }]),
       );
-    });
-
-    it('asks for a board before offering status rules', async () => {
-      useIntakeHandlers({ config: { ...baseConfig(), clickup: { enabled: true, sourceIds: ['L1'] } } });
-      server.use(
-        http.get(CLICKUP_STATUS_URL, () => HttpResponse.json(readyStatus)),
-        http.get(CLICKUP_LISTS_URL, () => HttpResponse.json({ lists })),
-        http.get(CLICKUP_SETTINGS_URL, () => HttpResponse.json({ lists: {} })),
-        http.get(CLICKUP_STATUSES_URL, () => HttpResponse.json({ statuses: [] })),
-      );
-      renderIntakeSection();
-
-      expect(await screen.findByText(/First choose a factory and a board/)).toBeInTheDocument();
     });
   });
 });
