@@ -14,18 +14,21 @@ interface ChatModelsProviderProps {
   children: ReactNode;
 }
 
-export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
+export function ChatModelsProvider({
+  children,
+  initialDraftModelId,
+}: ChatModelsProviderProps & { initialDraftModelId?: string }) {
   const { draftSessionId } = useChatSessionContext();
   return draftSessionId ? (
-    <DraftChatModelsProvider>{children}</DraftChatModelsProvider>
+    <DraftChatModelsProvider initialModelId={initialDraftModelId}>{children}</DraftChatModelsProvider>
   ) : (
     <LiveChatModelsProvider>{children}</LiveChatModelsProvider>
   );
 }
 
-function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
+function DraftChatModelsProvider({ children, initialModelId }: ChatModelsProviderProps & { initialModelId?: string }) {
   const { projectQuery: factoryProjectQuery, catalogTarget } = useChatModelCatalog();
-  const [draftModelId, setDraftModelId] = useState<string>();
+  const [draftModelId, setDraftModelId] = useState(initialModelId);
   const defaultModelId = factoryProjectQuery.data?.defaultModelId ?? undefined;
   // No Factory default: the draft starts on the server's built-in pick, as the session will.
   const usesFallback = factoryProjectQuery.isSuccess && !defaultModelId;

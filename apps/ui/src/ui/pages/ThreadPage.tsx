@@ -6,7 +6,7 @@ import { MessageSquareOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router';
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
@@ -21,7 +21,9 @@ import { TeammateSessionLine } from '../domains/chat/components/TeammateSessionL
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
+import { DraftSessionCreateError } from '../domains/workspaces/services/user-sessions';
+import { opensWithPrompt, useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
+import { failedDraftState } from '../domains/chat/services/handoffFiles';
 import { FactorySessionPage } from '../domains/factory/components/RelatedFactorySessions';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
@@ -43,11 +45,21 @@ export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const workspace = useThreadWorkspacePath();
-  const resolvingSession = factoryQuery.isPending || workspace.isPending;
+  const location = useLocation();
+  // A thread opened with its first prompt renders while its session is created,
+  // so the prompt shows straight away instead of a loader.
+  const opening = opensWithPrompt(location.state);
+  const resolvingSession = factoryQuery.isPending || (workspace.isPending && !opening);
 
   return (
     <>
-      {workspace.error ? (
+      {workspace.error instanceof DraftSessionCreateError ? (
+        <Navigate
+          replace
+          to={workspace.error.draftPath}
+          state={failedDraftState(workspace.error.draft, workspace.error.message)}
+        />
+      ) : workspace.error ? (
         <SessionUnavailableMain error={workspace.error} factoryId={factoryId} onRetry={workspace.retry} />
       ) : resolvingSession ? (
         <ResolvingSessionMain />

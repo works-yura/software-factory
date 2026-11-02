@@ -93,6 +93,7 @@
     "steerPlaceholder": "Steer the agent…",
     "placeholder": "Ask Mastra Code…",
     "initializingSession": "Initializing session…",
+    "startingSession": "Starting session…",
     "initializingWorkSession": "Initializing work session",
     "sendFailed": "The message could not be sent.",
     "commandNeedsSession": "This command needs a session. Send a prompt to create one first.",

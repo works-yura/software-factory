@@ -15,8 +15,8 @@ export interface ChatCommandsApi {
 
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
-export function ChatCommandsProvider({ children }: { children: ReactNode }) {
-  const [composerDraft, setComposerDraft] = useState('');
+export function ChatCommandsProvider({ children, initialDraft = '' }: { children: ReactNode; initialDraft?: string }) {
+  const [composerDraft, setComposerDraft] = useState(initialDraft);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const prefillComposer = (draft: string) => {
     setComposerDraft(draft);

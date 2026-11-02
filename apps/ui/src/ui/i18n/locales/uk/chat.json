@@ -93,6 +93,7 @@
     "steerPlaceholder": "Скеруйте агента…",
     "placeholder": "Запитайте Mastra Code…",
     "initializingSession": "Ініціалізація сесії…",
+    "startingSession": "Запуск сесії…",
     "initializingWorkSession": "Ініціалізація робочої сесії",
     "sendFailed": "Не вдалося надіслати повідомлення.",
     "commandNeedsSession": "Для цієї команди потрібна сесія. Спершу надішліть промпт, щоб її створити.",

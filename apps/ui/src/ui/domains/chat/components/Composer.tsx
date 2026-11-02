@@ -14,6 +14,7 @@ import type { ComposerInputProps } from '@mastra/playground-ui/components/Compos
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMatch, useNavigate, useParams } from 'react-router';
@@ -55,7 +56,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
-  const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
+  const { isLoading: modelLoading, error: modelError } = useChatModels();
   const {
     commands,
     composerDraft: draft,
@@ -76,17 +77,20 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
-  const liveRun = phase === 'working' && !preparingThreadId;
-  const createDraftSessionMutation = useCreateUserSessionFromDraft();
+  const liveRun = phase === 'working' && !preparingThreadId && sessionEnabled;
+  const createSessionFromDraft = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
+  // A draft send waits for a model still loading, so only a model that failed to load holds it back.
   // A Claude Code draft runs on its Factory's Claude model: the Mastra model list has no say.
-  const draftConfigNotReady = onUserDraft && !claudeCode && (modelLoading || modelError !== undefined);
-  const attachDisabled = blocked || chatPreparing || planFeedback.pending;
+  const draftModelFailed = onUserDraft && !claudeCode && modelError !== undefined;
+  const [heldDraftText, setHeldDraftText] = useState<string>();
+  const startingDraft = heldDraftText !== undefined;
+  const attachDisabled = blocked || chatPreparing || planFeedback.pending || startingDraft;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
-    disabled: chatPreparing || planFeedback.pending,
+    disabled: chatPreparing || planFeedback.pending || startingDraft,
   });
-  const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
-  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
+  const composerDisabled = startingDraft || blocked || planFeedback.isSubmitting;
+  const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading;
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -97,7 +101,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         ? t('claudeCode.placeholder')
         : t('composer.placeholder');
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
-  const sendTitle = chatPreparing ? t('composer.initializingSession') : undefined;
+  const sendTitle = chatPreparing
+    ? t('composer.initializingSession')
+    : startingDraft
+      ? t('composer.startingSession')
+      : undefined;
 
   const updateDraft = setComposerDraft;
 
@@ -169,6 +177,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const submitInput = (text: string) => {
+    if (onUserDraft && !claudeCode && modelLoading && !text.startsWith('/')) {
+      setHeldDraftText(text);
+      return;
+    }
     updateDraft('');
     void handleInput(text).catch(error => {
       if (planFeedback.pending) updateDraft(text);
@@ -176,6 +188,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       pushNotice(error instanceof Error ? error.message : t('composer.sendFailed'), 'error');
     });
   };
+
+  const sendHeldDraft = useEffectEvent((text: string) => {
+    setHeldDraftText(undefined);
+    if (modelError) pushNotice(modelError.message, 'error');
+    else submitInput(text);
+  });
+  useEffect(() => {
+    if (heldDraftText !== undefined && !modelLoading) sendHeldDraft(heldDraftText);
+  }, [heldDraftText, modelLoading]);
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
@@ -222,7 +243,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (onUserDraft) {
       try {
-        await withPendingImages(files => createDraftSessionMutation.mutateAsync({ prompt: text, files }));
+        await withPendingImages(async files => createSessionFromDraft({ prompt: text, files }));
       } catch (error) {
         updateDraft(text);
         throw error;
@@ -244,7 +265,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerRing busy={busy || chatPreparing}>
+      <ComposerRing busy={busy || chatPreparing || startingDraft}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />

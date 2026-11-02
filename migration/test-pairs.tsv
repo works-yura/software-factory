@@ -302,7 +302,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ChatPageLayout.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ChatPageLayout.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ComposerAttachmentSupport.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ComposerAttachmentSupport.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ComposerDraftSession.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ComposerDraftSession.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/__tests__/ComposerDraftSessionImages.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ComposerDraftSessionImages.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/__tests__/ComposerDraftSessionImages.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ComposerDraftSessionImages.msw.test.tsx	+2	upstream #28979: a send held while the model loads, and its failure (+2)
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ComposerImageAttachments.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ComposerImageAttachments.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ComposerLoginCommand.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ComposerLoginCommand.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ComposerPlanFeedback.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ComposerPlanFeedback.msw.test.tsx
@@ -483,5 +483,5 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageReviewPullRequestLink.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageReviewPullRequestLink.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageRevisit.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageRevisit.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageTeammateSession.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageTeammateSession.msw.test.tsx	+3	locked model and thinking cases ported from upstream 8fb8a82428
-../../../apps/ui/src/ui/pages/__tests__/UserSessionDraftHandoff.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/UserSessionDraftHandoff.msw.test.tsx
+../../../apps/ui/src/ui/pages/__tests__/UserSessionDraftHandoff.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/UserSessionDraftHandoff.msw.test.tsx	+7	upstream #28979: the thread opens with the prompt while the session is created (+7)
 ../../../apps/ui/src/ui/ui/__tests__/SkeletonRows.msw.test.tsx	../apps/ui/src/ui/ui/__tests__/SkeletonRows.msw.test.tsx
