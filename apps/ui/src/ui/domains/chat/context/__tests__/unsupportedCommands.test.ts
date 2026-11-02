@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CLAUDE_CODE_HARNESS, MASTRA_HARNESS } from '@factory/contracts';
+import { CLAUDE_CODE_HARNESS, MASTRA_HARNESS } from '@factory/contracts/harnesses';
 
 import { unsupportedCommands } from '../useChatCommandRegistry';
 

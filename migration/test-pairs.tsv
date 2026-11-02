@@ -50,7 +50,7 @@ integrations/github/app-identity.test.ts	integration-github/src/app-identity.tes
 integrations/github/commits.test.ts	integration-github/src/commits.test.ts
 integrations/github/config.test.ts	integration-github/src/config.test.ts
 integrations/github/default-rules.test.ts	integration-github/src/default-rules.test.ts	+3	work spanning several repositories: a merge closes the card only with the last pull request out
-integrations/github/integration.test.ts	integration-github/src/integration.test.ts
+integrations/github/integration.test.ts	integration-github/src/integration.test.ts	+2	agent reads of the API and issue edits
 integrations/github/org-isolation-scenario.test.ts	integration-github/src/org-isolation-scenario.test.ts
 integrations/github/provenance.test.ts	integration-github/src/provenance.test.ts
 integrations/github/reconcile-worker.test.ts	integration-github/src/reconcile-worker.test.ts
@@ -66,7 +66,7 @@ integrations/github/stale-reviews.test.ts	integration-github/src/stale-reviews.t
 integrations/github/subscriptions.test.ts	integration-github/src/subscriptions.test.ts
 integrations/github/webhook.test.ts	integration-github/src/webhook.test.ts
 integrations/gitlab/agent-tools.test.ts	integration-gitlab/src/agent-tools.test.ts
-integrations/gitlab/api.test.ts	integration-gitlab/src/api.test.ts
+integrations/gitlab/api.test.ts	integration-gitlab/src/api.test.ts	+1	agent reads of the API and issue edits
 integrations/gitlab/default-rules.test.ts	integration-gitlab/src/default-rules.test.ts
 integrations/gitlab/integration.test.ts	integration-gitlab/src/integration.test.ts
 integrations/gitlab/issue-reconciler.test.ts	integration-gitlab/src/issue-reconciler.test.ts
@@ -89,13 +89,13 @@ integrations/platform/github/integration.test.ts	integration-github/src/platform
 integrations/platform/gitlab/event-worker.test.ts	integration-gitlab/src/platform/event-worker.test.ts
 integrations/pull-request-head.test.ts	integrations/src/pull-request-head.test.ts	+1	work spanning several repositories: same number in two repositories
 integrations/reconciliation-config.test.ts	integrations/src/reconciliation-config.test.ts
-integrations/subscription-session.test.ts	integrations/src/subscription-session.test.ts
+integrations/subscription-session.test.ts	integrations/src/subscription-session.test.ts	+2	provider events reach a session another harness runs
 mcp/routes.test.ts	mcp/src/routes.test.ts	+25	connector support and factory.activity events ported from upstream f3bc1caddb; plus 7 cases for the session-scoped tokens Claude Code sessions use; plus 2 for unbound user-scope and Factory chat (supervisor) tokens; plus 3 for the session tools a Claude Code session gets over MCP
 platform-auth-host.test.ts	auth/src/platform-auth-host.test.ts
 routes/apply-default-model.scenario.test.ts	api/src/apply-default-model.scenario.test.ts
 routes/attention.test.ts	api/src/attention.test.ts
 routes/automation-runs.test.ts	api/src/automation-runs.test.ts
-routes/config.test.ts	api/src/config.test.ts	-1	personal default-model routes removed (7 cases), one case checks they are gone (-6); Factory fallback model cases ported from upstream a9f392e60e (+5)
+routes/config.test.ts	api/src/config.test.ts	0	personal default-model routes removed (7 cases), one case checks they are gone (-6); Factory fallback model cases ported from upstream a9f392e60e (+5); harness descriptors in the features
 routes/contracts.test.ts	api/src/contracts.test.ts
 routes/custom-provider-source.test.ts	api/src/custom-provider-source.test.ts
 routes/fs.test.ts	api/src/fs.test.ts	-2	upstream 7573972d0c (#28274): /changes/diff and its truncation cases replaced by /changes/patches cases; upstream #28829: the host filesystem routes need a signed-in user (+3)
@@ -167,7 +167,7 @@ supervisor/session.test.ts	supervisor/src/session.test.ts
 supervisor/write-tools.test.ts	supervisor/src/write-tools.test.ts
 timing.test.ts	observability/src/timing.test.ts
 tools/approval-tools.test.ts	harness-mastra/src/tools/approval-tools.test.ts
-tools/deliver.test.ts	harness-mastra/src/tools/deliver.test.ts
+tools/deliver.test.ts	harness-mastra/src/tools/deliver.test.ts	+1	notices reach a session another harness runs
 tools/messaging-tools.test.ts	harness-mastra/src/tools/messaging-tools.test.ts
 tools/permissions.test.ts	harness-mastra/src/tools/permissions.test.ts
 tools/read-tools.test.ts	harness-mastra/src/tools/read-tools.test.ts
@@ -318,9 +318,9 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ShortcutsOverlay.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ShortcutsOverlay.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/SubmitPlanCard.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/SubmitPlanCard.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TaskPanelPersistence.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TaskPanelPersistence.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/__tests__/ToolCardBody.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ToolCardBody.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/__tests__/ToolCardBody.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ToolCardBody.msw.test.tsx	+3	Claude Code tools shown as their Mastra equivalents
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ToolCardRunEnd.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ToolCardRunEnd.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptApprovals.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptApprovals.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptApprovals.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptApprovals.msw.test.tsx	+2	Claude Code tool approvals shown as their Mastra equivalents
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptAttachments.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptAttachments.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptEntryMemo.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptEntryMemo.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptMessageMeta.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptMessageMeta.msw.test.tsx
@@ -329,7 +329,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptRevealOrder.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptRevealOrder.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSender.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSender.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSignalRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSignalRows.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	+1	typed skill signal row ported from upstream a5a9179daa
+../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	+2	typed skill signal row ported from upstream a5a9179daa; a Claude Code Skill call is a skill row
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolBurst.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolBurst.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolOutcomes.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolOutcomes.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx
@@ -412,7 +412,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/domains/telemetry/FactoryWebTelemetry.msw.test.tsx	../apps/ui/src/ui/domains/telemetry/FactoryWebTelemetry.msw.test.tsx
 ../../../apps/ui/src/ui/domains/telemetry/telemetry-page.test.ts	../apps/ui/src/ui/domains/telemetry/telemetry-page.test.ts
 ../../../apps/ui/src/ui/domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion.msw.test.tsx
-../../../apps/ui/src/ui/domains/workspace-viewer/useRefreshWorkspaceFilesOnToolCalls.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/useRefreshWorkspaceFilesOnToolCalls.msw.test.tsx
+../../../apps/ui/src/ui/domains/workspace-viewer/useRefreshWorkspaceFilesOnToolCalls.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/useRefreshWorkspaceFilesOnToolCalls.msw.test.tsx	+2	Claude Code file tools refresh the Files tab
 ../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceFeedPanel.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceFeedPanel.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceFiles.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceFiles.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceRecreateSandbox.msw.test.tsx	../apps/ui/src/ui/domains/workspace-viewer/components/__tests__/WorkspaceRecreateSandbox.msw.test.tsx

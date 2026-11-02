@@ -34,7 +34,7 @@ import { useChatModels } from './useChatModels';
 import { useChatModelCatalog } from './useChatModelCatalog';
 import { useChatPermissions } from './useChatPermissions';
 import { useChatSessionContext } from './useChatSessionContext';
-import type { HarnessDescriptor } from '@factory/contracts';
+import type { HarnessDescriptor } from '@factory/contracts/harnesses';
 import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 

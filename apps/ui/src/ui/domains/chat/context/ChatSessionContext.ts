@@ -1,6 +1,6 @@
 import type { ClaudeCodeModel } from '../../workspaces/services/github';
 import { createContext } from 'react';
-import type { HarnessDescriptor } from '@factory/contracts';
+import type { HarnessDescriptor } from '@factory/contracts/harnesses';
 
 import type { ThreadOwner } from '../services/reply-credential';
 

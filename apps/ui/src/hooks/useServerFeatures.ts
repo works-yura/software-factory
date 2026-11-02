@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import type { HarnessDescriptor } from '@factory/contracts';
+import type { HarnessDescriptor } from '@factory/contracts/harnesses';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';

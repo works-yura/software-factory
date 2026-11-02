@@ -1,5 +1,5 @@
-import { harnessById } from '@factory/contracts';
-import type { HarnessDescriptor } from '@factory/contracts';
+import { harnessById } from '@factory/contracts/harnesses';
+import type { HarnessDescriptor } from '@factory/contracts/harnesses';
 
 import { useServerFeatures } from './useServerFeatures';
 
