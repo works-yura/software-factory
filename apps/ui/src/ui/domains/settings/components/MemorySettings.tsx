@@ -11,6 +11,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { settingsSectionPath } from '../settingsSections';
+import { useFactoryHarness } from './models/harness/HarnessSettings';
 import { IconTile } from './models/routing/IconTile';
 import {
   MODEL_DEFAULTS_ICONS,
@@ -25,7 +26,26 @@ import { OMSection } from './OMSection';
 
 export function MemorySettings({ factoryId }: { factoryId: string }) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
+  const { harness } = useFactoryHarness(factoryId);
   const { t } = useTranslation('settings');
+
+  // Observational memory is Mastra's; Claude Code compacts its own context. The nav hides the
+  // section on such a Factory, so only a direct link lands here.
+  if (harness === 'claude-code') {
+    return (
+      <EmptyState
+        as="h2"
+        iconSlot={<Brain />}
+        titleSlot={t('memory.claudeCode.title')}
+        descriptionSlot={t('memory.claudeCode.description')}
+        actionSlot={
+          <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'default' })}>
+            {t('memory.claudeCode.action')}
+          </Link>
+        }
+      />
+    );
+  }
 
   if (providersKnown && !anyConnected) {
     return (

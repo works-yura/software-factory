@@ -19,6 +19,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { useCloseSettings } from '../hooks/useCloseSettings';
+import { useFactoryHarness } from './models/harness/HarnessSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
 import type { SettingsSection } from '../settingsSections';
@@ -165,11 +166,16 @@ export function SettingsNavigation() {
   const { t } = useTranslation('settings');
   const { state } = useSidebar();
   const [query, setQuery] = useState('');
+  // Observational memory is Mastra's; a Factory on Claude Code has nothing to set there.
+  const { harness } = useFactoryHarness(factoryId ?? '');
   const normalizedQuery = query.trim().toLowerCase();
-  const filteredGroups = SETTINGS_GROUPS.map(group => ({
-    ...group,
-    items: normalizedQuery ? group.items.filter(({ searchText }) => searchText.includes(normalizedQuery)) : group.items,
-  })).filter(group => group.items.length > 0);
+  const filteredGroups = SETTINGS_GROUPS.map(group => {
+    const items = group.items.filter(({ id }) => id !== 'memory' || harness !== 'claude-code');
+    return {
+      ...group,
+      items: normalizedQuery ? items.filter(({ searchText }) => searchText.includes(normalizedQuery)) : items,
+    };
+  }).filter(group => group.items.length > 0);
 
   if (!factoryId) return null;
 

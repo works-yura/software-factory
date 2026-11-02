@@ -1,11 +1,13 @@
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { SettingsNavigation } from '../SettingsNavigation';
-import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 
 const STORAGE_KEY = 'settings-navigation-test';
 
@@ -45,6 +47,19 @@ describe('SettingsNavigation', () => {
     expect(linksIn('Factory')).toEqual(['Repositories', 'Environment', 'Work Intake', 'Manage Factory']);
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');
+  });
+
+  it('leaves Memory out for a Factory on Claude Code', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+        HttpResponse.json({ project: { id: 'fp-1', name: 'Factory', harness: 'claude-code', claudeCodeModel: 'opus' } }),
+      ),
+    );
+    renderNavigation();
+
+    const agent = screen.getByRole('region', { name: 'Agent' });
+    await waitFor(() => expect(within(agent).queryByRole('link', { name: 'Memory' })).not.toBeInTheDocument());
+    expect(within(agent).getAllByRole('link').map(link => link.textContent)).toEqual(['Models', 'Skills', 'Behavior']);
   });
 
   it('keeps legacy terms searchable while showing the clearer destination label', async () => {

@@ -655,6 +655,11 @@
       "description": "Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first.",
       "action": "Open Models settings"
     },
+    "claudeCode": {
+      "title": "Claude Code manages its own context",
+      "description": "Observational memory belongs to the Mastra harness. This Factory starts its sessions on Claude Code, which compacts its context itself, so these settings do not apply. Sessions that already run on Mastra keep using them.",
+      "action": "Open Models settings"
+    },
     "loading": "Loading observational-memory settings",
     "tokens": "tokens",
     "credentialsRequired": "Model credentials required",

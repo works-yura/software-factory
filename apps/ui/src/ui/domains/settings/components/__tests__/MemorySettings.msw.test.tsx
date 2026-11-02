@@ -77,6 +77,23 @@ describe('MemorySettings', () => {
     await waitFor(() => expect(factoryWrite).toEqual({ factoryId: 'fp-1', observationThreshold: 60_000 }));
   });
 
+  it('explains that a Claude Code Factory has no observational memory to set', async () => {
+    stubProviders([{ provider: 'openai', source: 'stored-org' }]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+        HttpResponse.json({ project: { id: 'fp-1', name: 'Factory', harness: 'claude-code', claudeCodeModel: 'opus' } }),
+      ),
+    );
+    renderMemory();
+
+    expect(await screen.findByRole('heading', { name: 'Claude Code manages its own context' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Factory memory' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/models',
+    );
+  });
+
   it('points to Models settings while no provider is connected', async () => {
     stubProviders([{ provider: 'openai', source: 'none' }]);
     renderMemory();
