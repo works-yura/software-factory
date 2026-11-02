@@ -127,7 +127,6 @@
       "signIn": {
         "heading": "Sign-in",
         "loading": "Checking Claude Code sign-in",
-        "localLogin": "Uses your `claude` login on this machine.",
         "accounts_one": "Runs on your organization’s Claude Code account.",
         "accounts_other": "Runs on your organization’s {{count}} Claude Code accounts.",
         "none": "Claude Code needs an account to run: a Claude subscription or API key, or the organization’s Anthropic key.",

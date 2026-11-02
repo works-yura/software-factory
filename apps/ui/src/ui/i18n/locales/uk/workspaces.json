@@ -129,7 +129,6 @@
       "signIn": {
         "heading": "Вхід",
         "loading": "Перевірка входу Claude Code",
-        "localLogin": "Використовує ваш вхід `claude` на цьому комп’ютері.",
         "accounts_one": "Працює на {{count}} акаунті Claude Code вашої організації.",
         "accounts_few": "Працює на {{count}} акаунтах Claude Code вашої організації.",
         "accounts_many": "Працює на {{count}} акаунтах Claude Code вашої організації.",

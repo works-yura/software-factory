@@ -137,8 +137,6 @@ export interface FactoryApiRoutesDeps {
   mcpEnabled: boolean;
   /** The Claude Code harness is configured, so new factories may pick `harness: 'claude-code'`. */
   claudeCodeEnabled?: boolean;
-  /** Claude Code turns fall back to the server machine's own `claude` login (local development). */
-  claudeCodeLocalLogin?: boolean;
   /** Claude sign-in on this host (local development): `claude auth login`, kept as the person's account. */
   claudeSignIn?: ClaudeSignInFlows;
   /** Personal sessions of Claude Code Factories start in the Claude Code harness (see the session routes). */
@@ -156,6 +154,8 @@ export interface FactoryApiRoutesDeps {
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('@factory/sandbox').SessionRetirementCoordinator;
+  /** Told when a session is deleted without a retirement coordinator (see `SourceControlSessionRoutes`). */
+  onSessionDeleted?: (sessionId: string) => Promise<void> | void;
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
   /** Start paths of the other harnesses a factory may be created with (see `HarnessRoutingStartCoordinator`). */
@@ -649,6 +649,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           controller: deps.controller,
           memorySettings: deps.domains.memorySettings,
           sessionRetirement: deps.sessionRetirement,
+          ...(deps.onSessionDeleted ? { onSessionDeleted: deps.onSessionDeleted } : {}),
           // A local sandbox's destroy keeps the session directory, so recreate
           // couldn't deliver the fresh checkout it promises there.
           sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',
@@ -749,7 +750,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         knowledge: deps.knowledgeEnabled,
         mcp: deps.mcpEnabled,
         claudeCode: deps.claudeCodeEnabled ?? false,
-        claudeCodeLocalLogin: deps.claudeCodeLocalLogin ?? false,
         claudeSignIn: deps.claudeSignIn !== undefined,
       },
       deploymentProviders: deps.deploymentModelProviders,

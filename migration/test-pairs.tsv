@@ -107,7 +107,7 @@ routes/projects.test.ts	api/src/projects.test.ts	+1	harness and Claude Code mode
 routes/session-access.test.ts	session/src/session-access.test.ts	+2	model-switch guard and multipart body cases ported from upstream 8fb8a82428
 routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts	-1	user and hybrid scope catalogs removed; one Factory-catalog case remains
 routes/skills.test.ts	api/src/skills.test.ts	+12	upstream #28823: skills catalog origin (+2); upstream #29042: frontmatter in the catalog, project skill edit routes (+10)
-routes/source-control-sessions.test.ts	api/src/source-control-sessions.test.ts	+4	personal chats of a Claude Code Factory create Claude Code sessions
+routes/source-control-sessions.test.ts	api/src/source-control-sessions.test.ts	+5	personal chats of a Claude Code Factory create Claude Code sessions; a delete without a retirement coordinator tells the host (+1)
 routes/source-control-settings.test.ts	api/src/source-control-settings.test.ts
 routes/supervisor.test.ts	api/src/supervisor.test.ts
 routes/surface.test.ts	api/src/surface.test.ts	+2	work spanning several repositories: a card naming no repository dispatches across the environment; ambiguity only without one; upstream #28721: a replacement work board has only its own lanes (+1)

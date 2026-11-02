@@ -598,7 +598,7 @@ describe('harness choice in onboarding', () => {
   function serveClaudeCode(claudeCode: boolean) {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/features`, () =>
-        HttpResponse.json({ knowledge: false, mcp: false, claudeCode, claudeCodeLocalLogin: true }),
+        HttpResponse.json({ knowledge: false, mcp: false, claudeCode }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts`, () =>
         HttpResponse.json({ accounts: [], canAddOrgKeys: true }),
@@ -623,7 +623,9 @@ describe('harness choice in onboarding', () => {
 
     // Claude Code's sign-in and Claude model rows, no Mastra provider list.
     expect(await screen.findByRole('heading', { name: 'Choose your Claude model.' })).toBeInTheDocument();
-    expect(screen.getByText(/Uses your `claude` login on this machine/)).toBeInTheDocument();
+    // No machine login to fall back on: an account is asked for.
+    expect(await screen.findByText(/Claude Code needs an account to run/)).toBeInTheDocument();
+    expect(screen.queryByText(/`claude` login/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'OpenAI' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('option', { name: /Sonnet/ }));
 

@@ -375,7 +375,8 @@ export const factory = new MastraFactory({
   ...(localDevAuthEnabled ? { mcp: { tokenless: true } } : {}),
   sandbox,
   // Factories created with `harness: 'claude-code'` run their agents on the
-  // `claude` CLI. Under local dev auth it uses the person's own `claude` login.
+  // `claude` CLI, each session in its own config dir, signed in only with the
+  // organization's Claude accounts (local dev auth adds "Sign in with Claude").
   claudeCode: {
     storeDir:
       process.env.FACTORY_CLAUDE_CODE_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'claude-code-sessions'),

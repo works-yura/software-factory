@@ -868,12 +868,14 @@ describe('ClaudeCodeSession', () => {
       expect(call.args).not.toContain('--settings');
     });
 
-    it('sets the session’s config dir; a config dir from the credentials hook wins', async () => {
+    it('sets the session’s config dir, its stored sign-in with it; a config dir from the credentials hook wins', async () => {
       const call = await firstCall({ configDir: session => `/srv/claude-config/${session.id}` });
       expect(call.env).toEqual({
         PATH: '/usr/bin',
         ANTHROPIC_API_KEY: 'sk-for-card-1',
         CLAUDE_CONFIG_DIR: '/srv/claude-config/card-1',
+        // Never the default `~/.claude` credentials or Keychain item.
+        CLAUDE_SECURESTORAGE_CONFIG_DIR: '/srv/claude-config/card-1',
         CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1',
       });
 
@@ -881,10 +883,17 @@ describe('ClaudeCodeSession', () => {
         configDir: () => '/srv/claude-config/card-1',
         credentials: async () => ({ CLAUDE_CODE_OAUTH_TOKEN: 'oauth', CLAUDE_CONFIG_DIR: '/pool/a' }),
       });
-      expect(pooled.env).toEqual({ PATH: '/usr/bin', CLAUDE_CODE_OAUTH_TOKEN: 'oauth', CLAUDE_CONFIG_DIR: '/pool/a', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' });
+      expect(pooled.env).toEqual({
+        PATH: '/usr/bin',
+        CLAUDE_CODE_OAUTH_TOKEN: 'oauth',
+        CLAUDE_CONFIG_DIR: '/pool/a',
+        CLAUDE_SECURESTORAGE_CONFIG_DIR: '/srv/claude-config/card-1',
+        CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1',
+      });
 
       const unset = await firstCall({ configDir: () => undefined });
       expect(unset.env).not.toHaveProperty('CLAUDE_CONFIG_DIR');
+      expect(unset.env).not.toHaveProperty('CLAUDE_SECURESTORAGE_CONFIG_DIR');
     });
   });
 

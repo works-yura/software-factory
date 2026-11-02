@@ -100,10 +100,10 @@ export interface ClaudeCodeSessionConfig
   /**
    * The CLI's config dir for this session (`CLAUDE_CONFIG_DIR`), so its session
    * files and anything else the CLI writes stay out of the person's `~/.claude`.
-   * Unset (or `undefined`) keeps the default dir. The subscription login of the
-   * default dir does not carry over: with a custom dir the credentials hook must
-   * return `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or
-   * `ANTHROPIC_API_KEY`. Keep it stable per session, or `--resume` cannot find
+   * Unset (or `undefined`) keeps the default dir. The CLI's stored sign-in moves
+   * with it (`CLAUDE_SECURESTORAGE_CONFIG_DIR`), so nothing of the default dir's
+   * login carries over: the credentials hook must return `CLAUDE_CODE_OAUTH_TOKEN`
+   * or `ANTHROPIC_API_KEY`. Keep it stable per session, or `--resume` cannot find
    * the session's files.
    */
   configDir?: (session: ClaudeCodeSession) => string | undefined;
@@ -861,7 +861,9 @@ export class ClaudeCodeSession implements AgentSession {
       buildClaudeEnv(
         this.#config.env ?? process.env,
         {
-          ...(configDir ? { CLAUDE_CONFIG_DIR: configDir } : {}),
+          // The stored sign-in moves with the config dir: the CLI never falls back to the default
+          // `~/.claude` credentials or Keychain item, so the credentials hook is its only login.
+          ...(configDir ? { CLAUDE_CONFIG_DIR: configDir, CLAUDE_SECURESTORAGE_CONFIG_DIR: configDir } : {}),
           ...turn.env,
         },
         this.#config.passEnv,

@@ -404,7 +404,10 @@ export interface MastraFactoryClaudeCodeConfig
   /** Where session records live; required unless `store` is given. */
   storeDir?: string;
   store?: ClaudeFactoryHarnessOptions['store'];
-  /** Local development: turns run on the person's own `claude` login, with no credentials passed. */
+  /**
+   * Local development: the server and the person's browser share a machine, so Claude sign-in
+   * (which opens the CLI's browser page here) is offered. Turns still use only the stored accounts.
+   */
   localDevelopment?: boolean;
   /** Replaces the default credentials (`createClaudeCodeCredentials`: the organization's Anthropic accounts). */
   credentials?: ClaudeCodeCredentialsHook;
@@ -1546,10 +1549,7 @@ export class MastraFactory {
           credentials: claudeCodeConfig.credentials,
           ...(claudeCodeConfig.onCredentialFailure ? { onCredentialFailure: claudeCodeConfig.onCredentialFailure } : {}),
         }
-      : createClaudeCodeCredentials({
-          localDevelopment: claudeCodeConfig?.localDevelopment === true,
-          credentials: modelCredentialsStorage,
-        });
+      : createClaudeCodeCredentials({ credentials: modelCredentialsStorage });
     const claudeCheckout = claudeCodeConfig
       ? (claudeCodeConfig.cwdFor ??
         createClaudeCheckoutResolver({
@@ -2132,6 +2132,8 @@ export class MastraFactory {
             sandbox: sandboxConfig,
             ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
             sessionRetirement,
+            // Without a retirement coordinator, the delete route removes a session's CLI config dir itself.
+            onSessionDeleted: sessionId => removeClaudeSessionConfig?.(sessionId),
             moveThread: async ({ threadId, resourceId }) => {
               // The sessions' own Memory, so a moved thread takes its observation vectors along.
               const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector);
@@ -2163,9 +2165,6 @@ export class MastraFactory {
                   }),
                 }
               : {}),
-            // A replaced credentials hook decides on its own; only the default one falls back to the local login.
-            claudeCodeLocalLogin:
-              claudeCode !== undefined && !claudeCodeConfig?.credentials && claudeCodeConfig?.localDevelopment === true,
             // Signing in opens the CLI's browser page on this machine: only where it is the person's own.
             ...(claudeCode !== undefined && claudeCodeConfig?.localDevelopment === true && modelCredentialsStorage
               ? { claudeSignIn: createClaudeSignInService({ credentials: modelCredentialsStorage }) }
