@@ -127,7 +127,7 @@ export const queryKeys = {
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
   om: (sessionId: string | undefined, factoryId?: string) => ['om', sessionId ?? null, factoryId ?? null] as const,
-  factorySkills: () => ['factory', 'skills'] as const,
+  factorySkills: (factoryProjectId?: string) => ['factory', 'skills', factoryProjectId ?? null] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>

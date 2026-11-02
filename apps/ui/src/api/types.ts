@@ -116,12 +116,20 @@ export interface FactorySkillInfo {
   origin?: 'bundled' | 'folder' | 'code';
   /** True for a skill Factory ships, including when the app overrides it. Absent from older servers. */
   builtIn?: boolean;
+  /** Frontmatter fields besides `name` and `description`, kept when the skill is saved. */
+  frontmatter?: Record<string, unknown>;
   /** Set when the SKILL.md fails runtime parsing/validation; the agent will not be able to load the skill. */
   error?: string;
+  /** Set when the Factory has its own edited copy; `description` and `content` are then the edit's. */
+  edited?: { updatedBy: string; updatedAt: string };
+  /** True when the original SKILL.md changed since the Factory's edit was made. */
+  originalChanged?: boolean;
 }
 
 export interface FactorySkillsResponse {
   skills: FactorySkillInfo[];
+  /** With a Factory: whether the caller may edit its skills (organization admins). */
+  canEdit?: boolean;
 }
 
 // ── Mutation request bodies ────────────────────────────────────────────────

@@ -10,7 +10,7 @@ const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...stri
 const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   description: string;
   pathSchema?: z.ZodType;
@@ -500,6 +500,27 @@ const attentionActionPathSchema = z
     { message: 'Invalid attention source id', path: ['sourceId'] },
   );
 
+/** Largest SKILL.md a project may save as an edit. */
+export const MAX_SKILL_OVERRIDE_LENGTH = 200_000;
+
+const skillNameSchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const skillPathSchema = z.object({ id: uuidSchema, name: skillNameSchema });
+const skillResponseSchema = z.object({ skill: entitySchema });
+
+export const skillContentSchema = z.string().min(1).max(MAX_SKILL_OVERRIDE_LENGTH);
+
+/**
+ * The shape of a save. The SKILL.md must also load under the skill's own name, exactly as the runtime
+ * validates it; the route checks that (`skillOverrideSaveRequestSchema` in `@factory/api`), because
+ * the validator is `@mastra/core`'s and this package does not depend on it.
+ */
+export const skillOverrideBodySchema = z.object({ content: skillContentSchema }).strict();
+
+export { skillPathSchema };
+
 export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
@@ -851,6 +872,28 @@ export const FACTORY_ROUTE_CONTRACTS = {
       findings: z.array(entitySchema),
       counts: z.record(z.string(), z.number().int().nonnegative()),
     }),
+  },
+  skillList: {
+    method: 'GET',
+    path: '/web/factory/skills',
+    description: "List Factory skills, with a project's edits when a project is given",
+    querySchema: z.object({ projectId: uuidSchema.optional() }),
+    responseSchema: z.object({ skills: z.array(entitySchema), canEdit: z.boolean().optional() }),
+  },
+  skillOverrideSave: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/skills/:name',
+    description: "Save a project's edited SKILL.md for a Factory skill",
+    pathSchema: skillPathSchema,
+    bodySchema: skillOverrideBodySchema,
+    responseSchema: skillResponseSchema,
+  },
+  skillOverrideRevert: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/skills/:name',
+    description: "Revert a project's edited Factory skill to its original SKILL.md",
+    pathSchema: skillPathSchema,
+    responseSchema: skillResponseSchema,
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

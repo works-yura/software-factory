@@ -231,7 +231,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
   }
 
   #route(
-    contract: { path: string; method: 'GET' | 'POST' | 'PATCH' | 'DELETE' },
+    contract: { path: string; method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' },
     handle: (c: Context) => Promise<Response>,
   ): ApiRoute {
     return registerApiRoute(contract.path, {

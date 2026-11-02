@@ -262,6 +262,16 @@
         "title": "deleted the board",
         "group": "deleted boards",
         "none": "deleted a board"
+      },
+      "skill_updated": {
+        "title": "edited the skill",
+        "group": "edited skills",
+        "none": "edited a skill"
+      },
+      "skill_reverted": {
+        "title": "reverted the skill to its original",
+        "group": "reverted skills to their originals",
+        "none": "reverted a skill to its original"
       }
     },
     "moved": "moved",
@@ -289,7 +299,8 @@
       "git": "Git",
       "agent": "Agent",
       "intake": "Intake",
-      "board": "Boards"
+      "board": "Boards",
+      "skill": "Skills"
     },
     "all": "All",
     "kinds_one": "{{count}} kind",

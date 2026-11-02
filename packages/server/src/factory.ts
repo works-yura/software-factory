@@ -174,7 +174,7 @@ import { CustomProvidersStorage } from '@factory/store';
 import { FilesystemStorage } from '@factory/store';
 import { IntakeStorage } from '@factory/store';
 import { IntegrationStorage } from '@factory/store';
-import { factoryMemorySettingsUserId, MemorySettingsStorage, StoredBoardsStorage } from '@factory/store';
+import { factoryMemorySettingsUserId, MemorySettingsStorage, SkillOverridesStorage, StoredBoardsStorage } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
 import { FactoryProjectsStorage } from '@factory/store';
 import { QueueHealthStorage } from '@factory/store';
@@ -764,6 +764,7 @@ export class MastraFactory {
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
+    const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -777,6 +778,7 @@ export class MastraFactory {
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
       comments: workItemCommentsStorage,
+      skillOverrides: skillOverridesStorage,
     };
     const auditDomain = new AuditDomain({
       auth: routeAuth,
@@ -1387,6 +1389,7 @@ export class MastraFactory {
     // harnesses: a Mastra session's tools work in it, a Claude Code session's CLI runs in it.
     const sessionWorkspaces = createWorkspaceFactory({
       skills: this.#skills,
+      ...(storage.isDomainReady('skill-overrides') ? { skillOverrides: skillOverridesStorage } : {}),
       ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
       ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
       sourceControls: integrations.flatMap(integration =>

@@ -144,7 +144,8 @@
     "git": "Git",
     "agent": "Agent",
     "intake": "Intake",
-    "board": "Boards"
+    "board": "Boards",
+    "skill": "Skills"
   },
   "sort": {
     "recent": "Recently moved",

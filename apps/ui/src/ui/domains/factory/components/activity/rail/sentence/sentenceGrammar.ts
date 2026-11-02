@@ -40,6 +40,8 @@ const DEED_PHRASES: Record<AuditAction, string> = {
   'factory.board.created': 'board_created',
   'factory.board.updated': 'board_updated',
   'factory.board.deleted': 'board_deleted',
+  'factory.skill.updated': 'skill_updated',
+  'factory.skill.reverted': 'skill_reverted',
 };
 
 /** What a sentence's verb points at: one card's title, a count of cards, or nothing at all (an intake setting has no title). */

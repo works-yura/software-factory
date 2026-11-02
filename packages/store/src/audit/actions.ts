@@ -20,6 +20,7 @@ export const AUDIT_ACTIONS = {
   agent: ['commit', 'push', 'pr_opened', 'signaled'],
   intake: ['config_updated', 'binding_updated', 'label_route_updated'],
   board: ['created', 'updated', 'deleted'],
+  skill: ['updated', 'reverted'],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;

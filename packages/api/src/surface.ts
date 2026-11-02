@@ -31,7 +31,7 @@ import type { LiveSessions } from '@factory/session';
 import { resolveWorkItemRepository, workItemRunsInLink } from '@factory/session';
 import type { StateSigner } from '@factory/auth';
 import type { AuditEmitter, AuditRecorder } from '@factory/feed';
-import type { ChannelIdentityStorage, StoredBoardsStorage } from '@factory/store';
+import type { ChannelIdentityStorage, SkillOverridesStorage, StoredBoardsStorage } from '@factory/store';
 import type { WorkItemCommentsStorage } from '@factory/store';
 import type { CommentsDomain } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
@@ -126,6 +126,7 @@ export interface FactoryApiRoutesDeps {
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
     comments: WorkItemCommentsStorage;
+    skillOverrides: SkillOverridesStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -768,6 +769,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
       ...(deps.skills ? { skills: deps.skills } : {}),
+      overrides: { projects: deps.domains.projects, storage: deps.domains.skillOverrides, audit: deps.audit },
     }).routes(),
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),

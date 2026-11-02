@@ -6,8 +6,8 @@ import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureCh
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Code as CodeIcon, FileText } from 'lucide-react';
-import { useState } from 'react';
+import { Code as CodeIcon, FileText, Pencil } from 'lucide-react';
+import { createContext, useContext, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -15,8 +15,12 @@ import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { FactorySkillEditorDialog } from './FactorySkillEditorDialog';
 import { SettingsSubsection } from './SettingsSubsection';
 import { translator } from '../../../i18n/t';
+
+/** Which Factory's copy of each skill the cards edit, and whether the viewer may. */
+const SkillEditingContext = createContext<{ factoryId?: string; canEdit: boolean }>({ canEdit: false });
 
 interface DisplayedSkill {
   name: string;
@@ -81,9 +85,13 @@ function SkillContent({ content }: { content: string }) {
 
 function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo }) {
   const { t } = useTranslation('settings');
+  const [editing, setEditing] = useState(false);
+  const { factoryId, canEdit } = useContext(SkillEditingContext);
+  const editable = factoryId !== undefined && canEdit;
   return (
     <SettingsContainer>
       <Collapsible>
+        <div className="flex items-center gap-2 pr-4">
         <CollapsibleTrigger className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="flex items-center gap-2">
@@ -97,6 +105,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
               {skill.builtIn && skill.origin !== undefined && skill.origin !== 'bundled' && (
                 <Badge>{t('skills.overriddenBadge')}</Badge>
               )}
+              {skill.edited && <Badge>{t('skills.editedBadge')}</Badge>}
             </span>
             {skill.error ? (
               <Txt as="span" variant="caption" className="text-destructive-foreground whitespace-pre-wrap">
@@ -110,10 +119,27 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
           </div>
           <DisclosureChevron direction="right" className="text-muted-foreground size-4" />
         </CollapsibleTrigger>
+          <Button
+            size="sm"
+            icon={editable ? <Pencil /> : <FileText />}
+            aria-label={t(editable ? 'skills.editAria' : 'skills.viewAria', { name: skill.name })}
+            onClick={() => setEditing(true)}
+          >
+            {t(editable ? 'skills.edit' : 'skills.view')}
+          </Button>
+        </div>
         <CollapsibleContent>
           <SkillContent content={skill.content} />
         </CollapsibleContent>
       </Collapsible>
+      {editing && (
+        <FactorySkillEditorDialog
+          skill={skill}
+          factoryId={factoryId}
+          canEdit={canEdit}
+          onClose={() => setEditing(false)}
+        />
+      )}
     </SettingsContainer>
   );
 }
@@ -272,14 +298,16 @@ function OtherAppSkills({ skills, boards }: { skills: FactorySkillInfo[]; boards
 
 export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
   const { t } = useTranslation('settings');
-  const skillsQuery = useFactorySkillsQuery();
+  const skillsQuery = useFactorySkillsQuery(factoryId);
   const catalog = useBoardCatalog(factoryId);
-  const skills = skillsQuery.data ?? [];
+  const skills = skillsQuery.data?.skills ?? [];
+  const canEdit = skillsQuery.data?.canEdit ?? false;
   const boards = catalog.data === undefined ? undefined : orderedBoards(catalog.data);
 
   return (
+    <SkillEditingContext.Provider value={{ factoryId, canEdit }}>
     <SettingsSubsection
-      scope="deployment"
+      scope="factory"
       title={t('skills.title')}
       description={t('skills.description')}
     >
@@ -316,5 +344,6 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
         </div>
       )}
     </SettingsSubsection>
+    </SkillEditingContext.Provider>
   );
 }

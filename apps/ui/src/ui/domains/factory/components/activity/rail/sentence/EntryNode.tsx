@@ -2,6 +2,7 @@ import { parseAuditAction } from '@factory/store/audit/actions';
 import type { AuditNamespace } from '@factory/store/audit/actions';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import {
+  BookOpen,
   Bot,
   Check,
   Eye,
@@ -39,6 +40,7 @@ const DEED_GLYPHS: Record<AuditNamespace, LucideIcon> = {
   intake: Inbox,
   work_item: SquarePen,
   board: LayoutDashboard,
+  skill: BookOpen,
 };
 
 function entryTone(entry: ActivityEntry): BadgeVariant {

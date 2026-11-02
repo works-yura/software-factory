@@ -23,6 +23,7 @@ import { MemorySettingsStorage } from './memory-settings/base.ts';
 import { ModelDefaultsStorage } from './model-defaults/base.ts';
 import { FactoryProjectsStorage } from './projects/base.ts';
 import { QueueHealthStorage } from './queue-health/base.ts';
+import { SkillOverridesStorage } from './skill-overrides/base.ts';
 import { SourceControlStorage } from './source-control/base.ts';
 import { WorkItemsStorage } from './work-items/base.ts';
 
@@ -43,6 +44,7 @@ export interface FactoryStorageTestSeed {
   comments: WorkItemCommentsStorage;
   /** The projects' stored boards (named apart from the `boards` registries tests spread beside the seed). */
   storedBoards: StoredBoardsStorage;
+  skillOverrides: SkillOverridesStorage;
 }
 
 /**
@@ -70,6 +72,7 @@ export async function createFactoryStorageForTests(
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
   const storedBoards = storage.registerDomain(new StoredBoardsStorage());
+  const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -88,5 +91,6 @@ export async function createFactoryStorageForTests(
     channelIdentity,
     comments,
     storedBoards,
+    skillOverrides,
   };
 }
