@@ -1,0 +1,180 @@
+import { Plus, X, Component } from 'lucide-react';
+import * as React from 'react';
+
+import type { Rule, RuleGroup, RuleGroupDepth1 } from '../types';
+import { isRule, createDefaultRule, createDefaultRuleGroup } from '../utils';
+
+import { RuleRow } from './rule-row';
+import type { RuleBuilderProps, RuleGroupViewProps } from './types';
+import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/lib/utils';
+
+const DEFAULT_MAX_DEPTH = 3;
+
+/**
+ * Internal recursive component that renders one level of a rule group.
+ */
+const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, onRemove, depth, maxDepth }) => {
+  const isRoot = depth === 0;
+
+  const handleToggleOperator = () => {
+    onChange({ ...group, operator: group.operator === 'AND' ? 'OR' : 'AND' });
+  };
+
+  const handleConditionChange = (index: number, condition: Rule | RuleGroup) => {
+    onChange({
+      ...group,
+      // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built core declarations distinguish the recursive group's depth from its children.
+      conditions: group.conditions.map((c, i) => (i === index ? (condition as Rule | RuleGroupDepth1) : c)),
+    });
+  };
+
+  const handleRemoveCondition = (index: number) => {
+    const newConditions = group.conditions.filter((_, i) => i !== index);
+    if (newConditions.length === 0 && onRemove) {
+      onRemove();
+    } else {
+      onChange({ ...group, conditions: newConditions });
+    }
+  };
+
+  const handleAddRule = () => {
+    onChange({ ...group, conditions: [...group.conditions, createDefaultRule()] });
+  };
+
+  const handleAddGroup = () => {
+    onChange({
+      ...group,
+      conditions: [
+        ...group.conditions,
+        createDefaultRuleGroup(group.operator === 'AND' ? 'OR' : 'AND') as RuleGroupDepth1,
+      ],
+    });
+  };
+
+  return (
+    <div className={cn(isRoot ? 'bg-background' : 'bg-card pl-6')}>
+      {/* Non-root group header */}
+      {!isRoot && (
+        <div className="flex items-center justify-between border-b border-dashed border-border py-1.5 pr-4 pl-3">
+          <Txt as="span" variant="meta" tone="muted">
+            Group
+          </Txt>
+          {onRemove && (
+            <Button type="button" onClick={onRemove} tooltip="Remove group" size="icon-sm" variant="ghost">
+              <X />
+            </Button>
+          )}
+        </div>
+      )}
+
+      {group.conditions.map((condition, index) => (
+        <div key={index} className="border-b border-dashed border-border last:border-b-0">
+          <div className={cn('relative', isRule(condition) && 'border-l-4 border-border p-4')}>
+            {index > 0 && (
+              <button
+                type="button"
+                onClick={handleToggleOperator}
+                className={cn(
+                  'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5',
+                  group.operator === 'OR'
+                    ? 'bg-badge-amber-subtle text-badge-amber-foreground hover:bg-badge-amber-strong'
+                    : 'bg-badge-blue-subtle text-badge-blue-foreground hover:bg-badge-blue-strong',
+                )}
+              >
+                <Txt as="span" variant="meta" className="block">
+                  {group.operator.toLowerCase()}
+                </Txt>
+              </button>
+            )}
+
+            {isRule(condition) ? (
+              <RuleRow
+                schema={schema}
+                rule={condition}
+                onChange={updatedRule => handleConditionChange(index, updatedRule)}
+                onRemove={() => handleRemoveCondition(index)}
+              />
+            ) : (
+              <RuleGroupView
+                schema={schema}
+                group={condition}
+                onChange={updatedGroup => handleConditionChange(index, updatedGroup)}
+                onRemove={() => handleRemoveCondition(index)}
+                depth={depth + 1}
+                maxDepth={maxDepth}
+              />
+            )}
+          </div>
+        </div>
+      ))}
+
+      <div className="flex gap-1 p-2">
+        <Button type="button" onClick={handleAddRule} variant="ghost" size="sm" icon={<Plus />}>
+          Add rule
+        </Button>
+        {depth < maxDepth - 1 && (
+          <Button type="button" onClick={handleAddGroup} variant="ghost" size="sm" icon={<Component />}>
+            Add group
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Rule builder component for creating and managing a recursive set of rules
+ * based on a JSON Schema defining available fields.
+ *
+ * Supports nested rule groups with AND/OR operators at each level.
+ */
+export const RuleBuilder: React.FC<RuleBuilderProps> = ({
+  schema,
+  ruleGroup,
+  onChange,
+  maxDepth = DEFAULT_MAX_DEPTH,
+  className,
+}) => {
+  const handleGroupChange = React.useCallback(
+    (group: RuleGroup) => {
+      onChange(group);
+    },
+    [onChange],
+  );
+
+  const handleAddFirstRule = React.useCallback(() => {
+    onChange({ operator: 'AND', conditions: [createDefaultRule()] });
+  }, [onChange]);
+
+  if (!ruleGroup) {
+    return (
+      <button
+        type="button"
+        onClick={handleAddFirstRule}
+        className={cn(
+          quietTextHover,
+          controlStateColorTransition,
+          'flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border p-2',
+        )}
+      >
+        <Icon>
+          <Plus />
+        </Icon>
+        <Txt as="span" variant="caption" className="block">
+          Add conditional rule
+        </Txt>
+      </button>
+    );
+  }
+
+  return (
+    <div className={className}>
+      <RuleGroupView schema={schema} group={ruleGroup} onChange={handleGroupChange} depth={0} maxDepth={maxDepth} />
+    </div>
+  );
+};

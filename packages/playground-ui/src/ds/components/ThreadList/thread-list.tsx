@@ -1,0 +1,137 @@
+import { X } from 'lucide-react';
+import { createElement } from 'react';
+import type { ElementType, MouseEvent, ReactNode } from 'react';
+
+import { cn } from '../../../lib/utils';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { Button } from '../Button';
+import type { ButtonProps } from '../Button';
+import { Txt } from '../Txt';
+
+export interface ThreadListProps {
+  children: ReactNode;
+  'aria-label'?: string;
+  /**
+   * When true, drops the standalone block chrome (background, border, rounded corners, inset)
+   * so the list can render flush inside an outer container without nesting a second box.
+   */
+  embedded?: boolean;
+}
+
+export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads', embedded = false }: ThreadListProps) => {
+  return (
+    <div className={cn('size-full', !embedded && 'pb-2 pl-2')}>
+      <nav
+        aria-label={ariaLabel}
+        className={cn(
+          'flex h-full flex-col gap-1 overflow-y-auto p-1',
+          !embedded && cn(raisedSurfaceStyle, 'rounded-studio-panel'),
+        )}
+      >
+        {children}
+      </nav>
+    </div>
+  );
+};
+
+export interface ThreadListNewItemProps {
+  render?: ButtonProps['render'];
+  children: ReactNode;
+}
+
+export const ThreadListNewItem = ({ render, children }: ThreadListNewItemProps) => {
+  return (
+    <Button render={render} variant="ghost" className="w-full justify-start rounded-xl px-3">
+      {children}
+    </Button>
+  );
+};
+
+export const ThreadListSeparator = () => (
+  <div role="separator" aria-orientation="horizontal" className="-mx-1 h-px shrink-0 bg-border/40" />
+);
+
+export interface ThreadListItemsProps {
+  children: ReactNode;
+}
+
+export const ThreadListItems = ({ children }: ThreadListItemsProps) => (
+  <ol className="flex flex-col gap-1" data-testid="thread-list">
+    {children}
+  </ol>
+);
+
+export interface ThreadListItemProps {
+  as?: ElementType;
+  href?: string;
+  to?: string;
+  isActive?: boolean;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onDelete?: () => void;
+  deleteLabel?: string;
+  /** Trailing controls (e.g. a menu trigger) shown on hover/focus, and kept visible while a popup they own is open. */
+  actions?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}
+
+export const ThreadListItem = ({
+  as,
+  href,
+  to,
+  isActive,
+  onClick,
+  onDelete,
+  deleteLabel = 'delete',
+  actions,
+  className,
+  children,
+}: ThreadListItemProps) => {
+  return (
+    <li className="group relative">
+      <Button
+        render={as ? createElement(as, { href, to }) : undefined}
+        onClick={onClick}
+        variant="ghost"
+        className={cn(
+          'w-full min-w-0 justify-start rounded-xl px-3 text-left',
+          (onDelete || actions) && 'pr-9',
+          isActive && 'bg-fill-hover text-foreground',
+          className,
+        )}
+      >
+        <span className="min-w-0 flex-1">{children}</span>
+      </Button>
+
+      {onDelete && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+          onClick={onDelete}
+          aria-label={deleteLabel}
+        >
+          <X />
+        </Button>
+      )}
+
+      {actions && (
+        <div className="absolute top-1/2 right-px flex -translate-y-1/2 items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-data-popup-open:opacity-100">
+          {actions}
+        </div>
+      )}
+    </li>
+  );
+};
+
+export interface ThreadListEmptyProps {
+  children: ReactNode;
+}
+
+export const ThreadListEmpty = ({ children }: ThreadListEmptyProps) => {
+  return (
+    <Txt as="p" variant="caption" tone="muted" className="px-3 py-2">
+      {children}
+    </Txt>
+  );
+};

@@ -1,0 +1,68 @@
+import { cva } from 'class-variance-authority';
+import type { VariantProps } from 'class-variance-authority';
+import * as React from 'react';
+
+import {
+  deprecatedErrorAria,
+  fieldErrorRim,
+  inputSurfaceAndFocusStyle,
+  resolveFieldVariant,
+  sharedFormElementDisabledStyle,
+  unstyledFormElementStyle,
+} from '@/ds/primitives/form-element';
+import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
+import { TextareaControl } from '@/ds/primitives/textarea-control';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
+
+const textareaVariants = cva(
+  cn(
+    'flex w-full text-foreground',
+    controlStateColorTransition,
+    'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
+    'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
+    // Textarea specific
+    'min-h-20 resize-y',
+  ),
+  {
+    variants: {
+      variant: {
+        default: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
+        unstyled: unstyledFormElementStyle,
+      },
+      // Text roles mirror the Input size scale so a Textarea reads at the same size as a
+      // sibling Input: a field value is 400 weight at every height.
+      size: {
+        sm: 'px-2 py-1.5 text-caption',
+        md: 'px-2.5 py-1.5 text-body-sm',
+        lg: 'px-3 py-2 text-body',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+      size: 'md',
+    },
+  },
+);
+
+export type TextareaProps = Omit<React.ComponentProps<'textarea'>, 'size'> &
+  Omit<VariantProps<typeof textareaVariants>, 'variant'> & {
+    /** `filled` is a deprecated alias for `default`; both render the filled surface. */
+    variant?: VariantProps<typeof textareaVariants>['variant'] | DeprecatedFilledVariant;
+    testId?: string;
+    /** @deprecated Wrap the control in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
+    error?: boolean;
+  };
+
+function Textarea({ className, size, testId, variant, error, ...props }: TextareaProps) {
+  return (
+    <TextareaControl
+      className={cn(textareaVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
+      data-testid={testId}
+      {...deprecatedErrorAria(error)}
+      {...props}
+    />
+  );
+}
+
+export { Textarea };

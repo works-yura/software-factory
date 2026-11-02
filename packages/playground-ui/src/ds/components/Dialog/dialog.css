@@ -1,0 +1,46 @@
+/* Transitions, not keyframes: a close mid-open retargets instead of jumping. */
+
+.dialog-backdrop-motion,
+.dialog-popup-motion {
+  --dialog-ease: cubic-bezier(0.23, 1, 0.32, 1);
+
+  transition-timing-function: var(--dialog-ease);
+  transition-duration: var(--duration-normal);
+}
+
+.dialog-backdrop-motion {
+  transition-property: opacity;
+}
+
+.dialog-popup-motion {
+  transition-property: opacity, scale;
+}
+
+.dialog-backdrop-motion[data-starting-style],
+.dialog-backdrop-motion[data-ending-style] {
+  opacity: 0;
+}
+
+.dialog-popup-motion[data-starting-style] {
+  opacity: 0;
+  scale: 0.96;
+}
+
+.dialog-popup-motion[data-ending-style] {
+  opacity: 0;
+  scale: 0.98;
+}
+
+.dialog-backdrop-motion[data-ending-style],
+.dialog-popup-motion[data-ending-style] {
+  transition-duration: var(--duration-fast);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-popup-motion,
+  .dialog-popup-motion[data-starting-style],
+  .dialog-popup-motion[data-ending-style] {
+    scale: none;
+    transition-property: opacity;
+  }
+}

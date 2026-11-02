@@ -13,7 +13,7 @@ export default defineConfig({
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['**/node_modules/**', '**/dist/**'],
-          // The published playground-ui dist imports CSS; let Vite transform it.
+          // playground-ui's dist (packages/playground-ui, a workspace link) imports CSS; let Vite transform it.
           server: { deps: { inline: [/@mastra\/playground-ui/] } },
         },
       },
