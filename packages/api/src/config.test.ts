@@ -43,28 +43,36 @@ describe('GET /web/config/features', () => {
   it.each([
     {
       features: undefined,
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeCodeLocalLogin: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeCodeLocalLogin: false, claudeSignIn: false },
     },
     {
       features: { knowledge: true },
-      expected: { knowledge: true, mcp: false, claudeCode: false, claudeCodeLocalLogin: false },
+      expected: { knowledge: true, mcp: false, claudeCode: false, claudeCodeLocalLogin: false, claudeSignIn: false },
     },
     {
       features: { knowledge: false, mcp: true },
-      expected: { knowledge: false, mcp: true, claudeCode: false, claudeCodeLocalLogin: false },
+      expected: { knowledge: false, mcp: true, claudeCode: false, claudeCodeLocalLogin: false, claudeSignIn: false },
     },
     {
       features: { knowledge: false, claudeCode: true },
-      expected: { knowledge: false, mcp: false, claudeCode: true, claudeCodeLocalLogin: false },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeCodeLocalLogin: false, claudeSignIn: false },
     },
     {
       features: { knowledge: false, claudeCode: true, claudeCodeLocalLogin: true },
-      expected: { knowledge: false, mcp: false, claudeCode: true, claudeCodeLocalLogin: true },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeCodeLocalLogin: true, claudeSignIn: false },
     },
-    // No Claude Code, no local login to speak of.
+    {
+      features: { knowledge: false, claudeCode: true, claudeSignIn: true },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeCodeLocalLogin: false, claudeSignIn: true },
+    },
+    // No Claude Code, no local login or sign-in to speak of.
+    {
+      features: { knowledge: false, claudeSignIn: true },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeCodeLocalLogin: false, claudeSignIn: false },
+    },
     {
       features: { knowledge: false, claudeCodeLocalLogin: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeCodeLocalLogin: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeCodeLocalLogin: false, claudeSignIn: false },
     },
   ])('reports the server-side feature gates as $expected', async ({ features, expected }) => {
     const app = new Hono();

@@ -8,6 +8,10 @@
  * - `subscription`: a person's own subscription token (`claude setup-token`).
  *   It records whose it is (`ownerUserId`) and only that person's runs use it:
  *   a subscription is never shared with, or pooled for, other people.
+ * - `claude_login`: a person's Claude sign-in (`claude auth login`), owned like
+ *   a subscription. It keeps the OAuth pair, which only the server refreshes:
+ *   a run gets the access token alone, so no copy of the rotating refresh
+ *   token lives anywhere else to fall out of step.
  *
  * Secrets are encrypted at rest with the domain's encryption and never leave
  * the server; listings carry a four-character hint instead.
@@ -15,7 +19,25 @@
 
 import type { CollectionSchema } from '@mastra/core/storage';
 
-export type CredentialAccountKind = 'api_key' | 'subscription';
+export type CredentialAccountKind = 'api_key' | 'subscription' | 'claude_login';
+
+/** Kinds that belong to one person and serve only that person's runs. */
+export function isPersonalCredentialKind(kind: CredentialAccountKind): boolean {
+  return kind !== 'api_key';
+}
+
+/** A Claude sign-in: the OAuth pair the server refreshes, and who signed in (not secret, but kept with it). */
+export interface ClaudeLoginOAuth {
+  accessToken: string;
+  refreshToken: string;
+  /** When the access token expires, in epoch milliseconds. */
+  expiresAt: number;
+  scopes: string[];
+  subscriptionType?: string;
+  email?: string;
+  accountUuid?: string;
+  organizationUuid?: string;
+}
 
 export interface CredentialAccount {
   id: string;
@@ -47,7 +69,10 @@ export interface AddCredentialAccountInput {
   label: string;
   kind: CredentialAccountKind;
   ownerUserId?: string;
+  /** For a `claude_login`, the access token of {@link oauth}. */
   secret: string;
+  /** A `claude_login`'s OAuth pair. */
+  oauth?: ClaudeLoginOAuth;
   createdBy: string;
   priority?: number;
 }
@@ -58,6 +83,8 @@ export interface UpdateCredentialAccountInput {
   disabled?: boolean;
   /** A new secret also clears the account's limit and error, and turns it back on. */
   secret?: string;
+  /** A new sign-in for a `claude_login`; like a new secret, it turns the account back on. */
+  oauth?: ClaudeLoginOAuth;
 }
 
 export const CREDENTIAL_ACCOUNTS = 'model_credential_accounts';
@@ -108,10 +135,16 @@ export interface CredentialAccountDbRow extends Record<string, unknown> {
 /** The encrypted payload of a row. */
 export interface CredentialAccountSecret {
   secret: string;
+  oauth?: ClaudeLoginOAuth;
 }
 
 /** How long a stored error message may be. */
 const MAX_ERROR_LENGTH = 500;
+
+/** A sign-in's access token changes on every refresh, so it has no stable hint; its label names the account. */
+export function accountSecretHint(kind: CredentialAccountKind, secret: string): string {
+  return kind === 'claude_login' ? '' : secretHint(secret);
+}
 
 export function secretHint(secret: string): string {
   return secret.length > 8 ? secret.slice(-4) : '';

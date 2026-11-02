@@ -2,16 +2,17 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Plus, Sparkles } from 'lucide-react';
+import { LogIn, Plus, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ApiRequestError } from '../../../../../api/client';
-import { useCredentialAccountsQuery } from '../../../../../hooks/useCredentialAccounts';
+import { useClaudeSignIn, useCredentialAccountsQuery } from '../../../../../hooks/useCredentialAccounts';
 import { useServerFeatures } from '../../../../../hooks/useServerFeatures';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { CLAUDE_ACCOUNTS_PROVIDER } from '../../../settings/components/models/accounts/accountErrors';
 import { ClaudeAccountDialog } from '../../../settings/components/models/accounts/ClaudeAccountDialog';
+import { ClaudeSignInStatus } from '../../../settings/components/models/accounts/ClaudeSignIn';
 import type { ClaudeAccountDialogMode } from '../../../settings/components/models/accounts/ClaudeAccountDialog';
 import { CLAUDE_CODE_MODELS } from '../../services/github';
 import type { ClaudeCodeModel } from '../../services/github';
@@ -85,8 +86,11 @@ function ClaudeCodeSignIn({ disabled }: { disabled: boolean }) {
   const features = useServerFeatures();
   const accountsQuery = useCredentialAccountsQuery(CLAUDE_ACCOUNTS_PROVIDER);
   const [dialog, setDialog] = useState<ClaudeAccountDialogMode | null>(null);
+  const signIn = useClaudeSignIn(CLAUDE_ACCOUNTS_PROVIDER);
   const localLogin = features.data?.claudeCodeLocalLogin === true;
   const accounts = accountsQuery.data?.accounts ?? [];
+  // With no account yet, signing in to Claude is the quickest way to give the Factory its own.
+  const offerSignIn = features.data?.claudeSignIn === true && accountsQuery.data !== undefined && accounts.length === 0;
   const needsSignIn =
     accountsQuery.error instanceof ApiRequestError && accountsQuery.error.code === 'accounts_need_sign_in';
 
@@ -126,6 +130,21 @@ function ClaudeCodeSignIn({ disabled }: { disabled: boolean }) {
     <>
       <CommandGroup heading={t('createFactory.claudeCode.signIn.heading')}>
         {status}
+        {offerSignIn && (
+          <CommandPaletteItem
+            icon={signIn.status === 'pending' ? <Spinner size="sm" aria-hidden /> : <LogIn />}
+            title={t('createFactory.claudeCode.signIn.signInWithClaude')}
+            subtitle={t('createFactory.claudeCode.signIn.signInWithClaudeDescription')}
+            value="claude-signin-claude"
+            disabled={disabled || signIn.status === 'pending'}
+            onSelect={signIn.start}
+          />
+        )}
+        {offerSignIn && (
+          <div className="px-2">
+            <ClaudeSignInStatus signIn={signIn} />
+          </div>
+        )}
         {accountsQuery.data && (
           <CommandPaletteItem
             icon={<Plus />}

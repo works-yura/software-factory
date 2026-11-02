@@ -143,4 +143,73 @@ describe('ModelCredentialsStorage accounts', () => {
     const [account] = await domain.listAccounts('org1');
     expect(await domain.getAccountSecret('org1', account!.id)).toBe(apiKey);
   });
+
+  it('keeps a Claude sign-in’s OAuth pair encrypted, owned by its person, and refreshes it only when it is not fresh', async () => {
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: new Uint8Array(32).fill(7) } });
+    const { domain, backend } = await makeStore(encryption);
+    const oauth = {
+      accessToken: 'fake-access-1',
+      refreshToken: 'fake-refresh-1',
+      expiresAt: 1_000,
+      scopes: ['user:inference'],
+      email: 'alice@example.com',
+    };
+    await expect(
+      domain.addAccount({ orgId: 'org1', provider: 'anthropic', label: 'x', kind: 'claude_login', secret: 'x', createdBy: 'alice', oauth }),
+    ).rejects.toThrow('the person it belongs to');
+    await expect(
+      domain.addAccount({ orgId: 'org1', provider: 'anthropic', label: 'x', kind: 'claude_login', ownerUserId: 'alice', secret: 'x', createdBy: 'alice' }),
+    ).rejects.toThrow('OAuth tokens');
+    const account = await domain.addAccount({
+      orgId: 'org1',
+      provider: 'anthropic',
+      label: 'alice@example.com',
+      kind: 'claude_login',
+      ownerUserId: 'alice',
+      secret: oauth.accessToken,
+      oauth,
+      createdBy: 'alice',
+    });
+    expect(account).toMatchObject({ kind: 'claude_login', ownerUserId: 'alice', hint: '' });
+    expect(await domain.getAccountSecret('org1', account.id)).toBe('fake-access-1');
+    const row = await backend.ops.findOne<{ data: unknown }>('model_credential_accounts', { id: account.id });
+    expect(JSON.stringify(row!.data)).not.toContain('fake-refresh-1');
+
+    const fresh = await domain.refreshAccountOAuth('org1', account.id, {
+      isFresh: () => true,
+      refresh: async () => {
+        throw new Error('must not refresh a fresh pair');
+      },
+    });
+    expect(fresh).toMatchObject({ refreshToken: 'fake-refresh-1' });
+
+    const refreshed = await domain.refreshAccountOAuth('org1', account.id, {
+      isFresh: () => false,
+      refresh: async current => ({ ...current, accessToken: 'fake-access-2', refreshToken: 'fake-refresh-2', expiresAt: 9_000 }),
+    });
+    expect(refreshed).toMatchObject({ accessToken: 'fake-access-2', refreshToken: 'fake-refresh-2', email: 'alice@example.com' });
+    expect(await domain.getAccountSecret('org1', account.id)).toBe('fake-access-2');
+    expect(await domain.getAccountOAuth('org1', account.id)).toMatchObject({ refreshToken: 'fake-refresh-2', expiresAt: 9_000 });
+
+    // A failed refresh leaves the stored pair as it was.
+    await expect(
+      domain.refreshAccountOAuth('org1', account.id, {
+        isFresh: () => false,
+        refresh: async () => {
+          throw new Error('endpoint down');
+        },
+      }),
+    ).rejects.toThrow('endpoint down');
+    expect(await domain.getAccountOAuth('org1', account.id)).toMatchObject({ refreshToken: 'fake-refresh-2' });
+
+    // A new sign-in replaces the pair and turns a refused account back on; other kinds and other orgs have no pair.
+    await domain.markAccountFailed('org1', account.id, 'sign in again');
+    await domain.updateAccount('org1', account.id, { oauth: { ...oauth, refreshToken: 'fake-refresh-3' } });
+    expect(await domain.getAccount('org1', account.id)).toMatchObject({ disabled: false });
+    expect(await domain.getAccountOAuth('org1', account.id)).toMatchObject({ refreshToken: 'fake-refresh-3' });
+    expect(await domain.getAccountOAuth('org2', account.id)).toBeUndefined();
+    const key = await domain.addAccount({ orgId: 'org1', provider: 'anthropic', label: 'k', kind: 'api_key', secret: apiKey, createdBy: 'a' });
+    expect(await domain.getAccountOAuth('org1', key.id)).toBeUndefined();
+    await expect(domain.refreshAccountOAuth('org1', key.id, { isFresh: () => false, refresh: async c => c })).resolves.toBeUndefined();
+  });
 });

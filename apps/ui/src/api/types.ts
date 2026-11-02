@@ -73,8 +73,8 @@ export interface ProvidersResponse {
 export interface CredentialAccountInfo {
   id: string;
   label: string;
-  kind: 'api_key' | 'subscription';
-  /** The caller's own subscription. */
+  kind: 'api_key' | 'subscription' | 'claude_login';
+  /** The caller's own subscription or Claude sign-in. */
   mine: boolean;
   priority: number;
   status: 'active' | 'limited' | 'disabled';
@@ -85,7 +85,22 @@ export interface CredentialAccountInfo {
   hint: string;
   canManage: boolean;
   canReplaceSecret: boolean;
+  /** A Claude sign-in that stopped working: its owner signs in again. Absent from older servers. */
+  needsSignIn?: boolean;
   createdAt: string;
+}
+
+/** A Claude sign-in a person started on this server (`claude auth login`). */
+export interface ClaudeSignInInfo {
+  id: string;
+  status: 'pending' | 'done' | 'error';
+  error?: string;
+  /** The account the sign-in was filed as, once done. */
+  account?: CredentialAccountInfo;
+}
+
+export interface ClaudeSignInResponse {
+  signIn: ClaudeSignInInfo;
 }
 
 export interface CredentialAccountsResponse {

@@ -446,6 +446,27 @@ describe('SessionRetirementCoordinator', () => {
     expect(await storage.sessions.getBySessionId(session.sessionId)).not.toBeNull();
   });
 
+  it('tells the host once the row is deleted, and a failing cleanup neither throws nor undoes the delete', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const kept = await seedSession(storage);
+    const deleted: string[] = [];
+    const warn = vi.fn();
+    const onSessionDeleted = vi.fn(async (sessionId: string) => {
+      deleted.push(sessionId);
+      throw new Error('disk full');
+    });
+    const coordinator = new SessionRetirementCoordinator({ invalidateSession: vi.fn(), onSessionDeleted, warn });
+
+    await coordinator.retireSession({ sourceControl: storage, orgId: 'org-1', sessionId: kept.sessionId, deleteSession: false });
+    expect(onSessionDeleted).not.toHaveBeenCalled();
+
+    await coordinator.retireSession({ sourceControl: storage, orgId: 'org-1', sessionId: kept.sessionId, deleteSession: true });
+    expect(deleted).toEqual([kept.sessionId]);
+    expect(await storage.sessions.getBySessionId(kept.sessionId)).toBeNull();
+    expect(warn).toHaveBeenCalledWith('Factory session cleanup after delete failed', expect.objectContaining({ sessionId: kept.sessionId }));
+  });
+
   it('still invalidates and deletes when this process holds no sandbox for the session', async () => {
     const storage = new SourceControlStorageInMemory();
     seedRepositoryLink(storage);

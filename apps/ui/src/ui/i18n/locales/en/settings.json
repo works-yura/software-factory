@@ -699,13 +699,16 @@
     "kind": {
       "mySubscription": "Your subscription",
       "memberSubscription": "Member’s subscription",
-      "orgKey": "Organization key"
+      "orgKey": "Organization key",
+      "mySignIn": "Your Claude sign-in",
+      "memberSignIn": "Member’s Claude sign-in"
     },
     "status": {
       "active": "Active",
       "limited": "Limited",
       "limitedUntil": "Limited until {{time}}",
-      "off": "Off"
+      "off": "Off",
+      "needsSignIn": "Sign in again"
     },
     "lastUsed": "Last used {{time}}",
     "neverUsed": "Not used yet",
@@ -738,6 +741,12 @@
       "forbidden": "You can’t change this account.",
       "needSignIn": "Sign in to an organization to add Claude Code accounts.",
       "failed": "Something went wrong. Try again."
+    },
+    "signIn": {
+      "button": "Sign in with Claude",
+      "pending": "Finish signing in on the Claude page that opened in your browser…",
+      "done": "Signed in as {{label}}.",
+      "failed": "Claude sign-in failed."
     }
   },
   "tagRouting": {

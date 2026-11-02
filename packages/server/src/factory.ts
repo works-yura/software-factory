@@ -67,6 +67,7 @@ import {
   createClaudeCheckoutResolver,
   createClaudeCodeCredentials,
   createClaudeFactoryHarness,
+  createClaudeSignInService,
   createClaudeUserSessions,
   createClaudeSupervisorSessions,
   claudeLiveSession,
@@ -969,10 +970,13 @@ export class MastraFactory {
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     );
     const workItemsReady = storage.isDomainReady('work-items');
+    // Set once the Claude Code harness exists (below): a deleted session's CLI config dir goes with it.
+    let removeClaudeSessionConfig: ((sessionId: string) => Promise<void>) | undefined;
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+            onSessionDeleted: sessionId => removeClaudeSessionConfig?.(sessionId),
             sandbox: sandboxConfig,
           })
         : undefined;
@@ -1625,6 +1629,7 @@ export class MastraFactory {
         },
       });
       this.#claudeSessionUi.setSessionResolver(sessionId => supervisorSessions.resolve(sessionId));
+      removeClaudeSessionConfig = sessionId => claudeCode.removeSessionConfig(sessionId);
       // The Factory chat is shared by the Factory's organization: its next turn runs as whoever wrote or answered.
       this.#claudeSessionUi.setPersonInputHook(async (c, session) => {
         if (!claudeSupervisorProjectId(session.id)) return;
@@ -2133,6 +2138,10 @@ export class MastraFactory {
             // A replaced credentials hook decides on its own; only the default one falls back to the local login.
             claudeCodeLocalLogin:
               claudeCode !== undefined && !claudeCodeConfig?.credentials && claudeCodeConfig?.localDevelopment === true,
+            // Signing in opens the CLI's browser page on this machine: only where it is the person's own.
+            ...(claudeCode !== undefined && claudeCodeConfig?.localDevelopment === true && modelCredentialsStorage
+              ? { claudeSignIn: createClaudeSignInService({ credentials: modelCredentialsStorage }) }
+              : {}),
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
             skills: this.#skills,

@@ -276,3 +276,80 @@ describe('ClaudeAccountsSection', () => {
     expect(await screen.findByRole('status', { name: 'Loading Claude Code accounts' })).toBeInTheDocument();
   });
 });
+
+describe('ClaudeAccountsSection sign-in with Claude', () => {
+  const SIGN_IN_URL = `${ACCOUNTS_URL}/sign-in`;
+  const signedIn = account({ id: 'login-1', label: 'alice@example.com', kind: 'claude_login', hint: '', canReplaceSecret: false });
+
+  function stubSignIn({ finish }: { finish: 'done' | 'error' | 'never' }) {
+    let polls = 0;
+    const calls: string[] = [];
+    server.use(
+      http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false, claudeCode: true, claudeSignIn: true })),
+      http.post(SIGN_IN_URL, () => {
+        calls.push('start');
+        return HttpResponse.json({ signIn: { id: 'flow-1', status: 'pending' } }, { status: 202 });
+      }),
+      http.get(`${SIGN_IN_URL}/:id`, () => {
+        polls += 1;
+        if (finish === 'never' || polls < 2) return HttpResponse.json({ signIn: { id: 'flow-1', status: 'pending' } });
+        return finish === 'done'
+          ? HttpResponse.json({ signIn: { id: 'flow-1', status: 'done', account: signedIn } })
+          : HttpResponse.json({ signIn: { id: 'flow-1', status: 'error', error: 'Claude sign-in did not finish.' } });
+      }),
+      http.delete(`${SIGN_IN_URL}/:id`, () => {
+        calls.push('cancel');
+        return HttpResponse.json({ cancelled: true });
+      }),
+    );
+    return calls;
+  }
+
+  it('signs in, waits while the person finishes in the browser, then lists the new sign-in', async () => {
+    const accounts: CredentialAccountInfo[] = [];
+    stubAccounts(accounts);
+    stubSignIn({ finish: 'done' });
+    // The list the server returns once the sign-in is filed.
+    let listed = 0;
+    server.use(
+      http.get(ACCOUNTS_URL, () =>
+        HttpResponse.json({ accounts: listed++ === 0 ? [] : [signedIn], canAddOrgKeys: false } satisfies CredentialAccountsResponse),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ClaudeAccountsSection />);
+
+    await user.click(await screen.findByRole('button', { name: 'Sign in with Claude' }));
+    expect(await screen.findByText(/Finish signing in on the Claude page/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in with Claude' })).toBeDisabled();
+
+    expect(await screen.findByText('Signed in as alice@example.com.', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByRole('listitem', { name: 'alice@example.com' })).toBeInTheDocument();
+    expect(within(row('alice@example.com')).getByText('Your Claude sign-in')).toBeInTheDocument();
+    expect(within(row('alice@example.com')).queryByText(/^…/)).not.toBeInTheDocument();
+  });
+
+  it('shows why a sign-in failed, and cancels one still waiting', async () => {
+    stubAccounts([]);
+    stubSignIn({ finish: 'error' });
+    const user = userEvent.setup();
+    const { unmount } = renderWithProviders(<ClaudeAccountsSection />);
+    await user.click(await screen.findByRole('button', { name: 'Sign in with Claude' }));
+    expect(await screen.findByText('Claude sign-in did not finish.', {}, { timeout: 5000 })).toBeInTheDocument();
+    unmount();
+
+    const calls = stubSignIn({ finish: 'never' });
+    renderWithProviders(<ClaudeAccountsSection />);
+    await user.click(await screen.findByRole('button', { name: 'Sign in with Claude' }));
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(calls).toEqual(['start', 'cancel']));
+  });
+
+  it('asks the owner of a refused sign-in to sign in again, and hides sign-in where the server does not offer it', async () => {
+    stubAccounts([{ ...signedIn, status: 'disabled', needsSignIn: true, lastError: 'sign in to Claude again' }]);
+    renderWithProviders(<ClaudeAccountsSection />);
+    expect(await screen.findByRole('listitem', { name: 'alice@example.com' })).toBeInTheDocument();
+    expect(within(row('alice@example.com')).getByText('Sign in again')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in with Claude' })).not.toBeInTheDocument();
+  });
+});

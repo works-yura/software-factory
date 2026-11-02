@@ -134,7 +134,9 @@
         "needSignIn": "Sign in to an organization to use its Claude Code accounts.",
         "addHint": "You can add accounts any time in Settings → Models → Claude Code accounts.",
         "add": "Add a Claude Code account",
-        "addDescription": "A Claude subscription token or an Anthropic API key"
+        "addDescription": "A Claude subscription token or an Anthropic API key",
+        "signInWithClaude": "Sign in with Claude",
+        "signInWithClaudeDescription": "Opens the Claude sign-in page; the Factory keeps its own login"
       },
       "models": {
         "heading": "Claude model",

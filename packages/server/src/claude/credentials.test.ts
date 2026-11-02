@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '@factory/testing';
+import type { ClaudeLoginOAuth } from '@factory/store';
 
 import { ClaudeCodeError } from '@factory/harness-claude-code';
 
@@ -11,11 +12,12 @@ import {
   createClaudeCodeCredentialsHook,
   DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS,
 } from './credentials.ts';
+import { CLAUDE_OAUTH_CLIENT_ID, CLAUDE_OAUTH_REFRESH_MARGIN_MS, CLAUDE_OAUTH_TOKEN_URL } from './oauth.ts';
 
 describe('Claude Code credentials hook', () => {
-  it('passes nothing in local development, so the CLI uses the person’s own login', async () => {
+  it('points the CLI at the person’s own login in local development', async () => {
     const hook = createClaudeCodeCredentialsHook({ localDevelopment: true, credentials: undefined });
-    await expect(hook({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual({});
+    await expect(hook({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual({ CLAUDE_SECURESTORAGE_CONFIG_DIR: '' });
   });
 
   it('maps the factory’s Anthropic API key and setup token to the CLI’s env', async () => {
@@ -172,6 +174,291 @@ describe('Claude Code credential accounts', () => {
   it('runs on the person’s own login in local development when no account fits them', async () => {
     const { add, credentials } = await pool({ localDevelopment: true });
     await add('Alice Max', 'subscription', aliceToken, 'alice');
-    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).resolves.toEqual({});
+    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).resolves.toEqual({ CLAUDE_SECURESTORAGE_CONFIG_DIR: '' });
+  });
+});
+
+describe('Claude sign-in accounts', () => {
+  const now = new Date('2026-10-28T12:00:00Z');
+  const signIn = (overrides: Partial<ClaudeLoginOAuth> = {}): ClaudeLoginOAuth => ({
+    accessToken: 'fake-access-1',
+    refreshToken: 'fake-refresh-1',
+    expiresAt: now.getTime() + 60 * 60_000,
+    scopes: ['user:inference'],
+    email: 'alice@example.com',
+    ...overrides,
+  });
+
+  async function signInPool(fetchImpl: typeof fetch) {
+    const seeded = await createFactoryStorageForTests();
+    const accounts = seeded.credentials;
+    const addSignIn = (oauth: ClaudeLoginOAuth, ownerUserId = 'alice') =>
+      accounts.addAccount({
+        orgId: 'org-1',
+        provider: 'anthropic',
+        label: oauth.email ?? 'Claude',
+        kind: 'claude_login',
+        ownerUserId,
+        secret: oauth.accessToken,
+        oauth,
+        createdBy: ownerUserId,
+      });
+    const hooks = createClaudeCodeCredentials({ localDevelopment: false, credentials: accounts, now: () => now, fetch: fetchImpl });
+    return { accounts, addSignIn, ...hooks };
+  }
+
+  const tokenEndpoint = (respond: () => Response) => {
+    const calls: URLSearchParams[] = [];
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe(CLAUDE_OAUTH_TOKEN_URL);
+      calls.push(new URLSearchParams(String(init?.body)));
+      return respond();
+    }) as typeof fetch;
+    return { calls, fetchImpl };
+  };
+
+  it('hands a fresh sign-in’s access token to the run without refreshing it', async () => {
+    const endpoint = tokenEndpoint(() => Response.json({}));
+    const { addSignIn, credentials } = await signInPool(endpoint.fetchImpl);
+    const account = await addSignIn(signIn());
+
+    await expect(credentials({ orgId: 'org-1', userId: 'alice' })).resolves.toEqual({
+      env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-1' },
+      accountId: account.id,
+    });
+    expect(endpoint.calls).toHaveLength(0);
+  });
+
+  it('refreshes a sign-in about to expire, keeps the rotated pair, and never hands out the refresh token', async () => {
+    const endpoint = tokenEndpoint(() =>
+      Response.json({ access_token: 'fake-access-2', refresh_token: 'fake-refresh-2', expires_in: 3600, scope: 'user:inference user:profile' }),
+    );
+    const { accounts, addSignIn, credentials } = await signInPool(endpoint.fetchImpl);
+    const account = await addSignIn(signIn({ expiresAt: now.getTime() + CLAUDE_OAUTH_REFRESH_MARGIN_MS - 1 }));
+
+    const turn = await credentials({ orgId: 'org-1', userId: 'alice' });
+    expect(turn).toEqual({ env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-2' }, accountId: account.id });
+    expect(JSON.stringify(turn)).not.toContain('fake-refresh');
+    expect(endpoint.calls).toHaveLength(1);
+    expect(Object.fromEntries(endpoint.calls[0]!)).toEqual({
+      grant_type: 'refresh_token',
+      refresh_token: 'fake-refresh-1',
+      client_id: CLAUDE_OAUTH_CLIENT_ID,
+    });
+    await expect(accounts.getAccountOAuth('org-1', account.id)).resolves.toMatchObject({
+      accessToken: 'fake-access-2',
+      refreshToken: 'fake-refresh-2',
+      expiresAt: now.getTime() + 3_600_000,
+      scopes: ['user:inference', 'user:profile'],
+      email: 'alice@example.com',
+    });
+  });
+
+  it('refreshes once when two turns race for the same expiring sign-in', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const calls: string[] = [];
+    const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push(new URLSearchParams(String(init?.body)).get('refresh_token')!);
+      await gate;
+      return Response.json({ access_token: 'fake-access-2', refresh_token: 'fake-refresh-2', expires_in: 3600 });
+    }) as typeof fetch;
+    const { addSignIn, credentials } = await signInPool(fetchImpl);
+    await addSignIn(signIn({ expiresAt: now.getTime() - 1 }));
+
+    const first = credentials({ orgId: 'org-1', userId: 'alice' });
+    const second = credentials({ orgId: 'org-1', userId: 'alice' });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    release();
+
+    const turns = await Promise.all([first, second]);
+    expect(calls).toEqual(['fake-refresh-1']);
+    for (const turn of turns) expect(turn).toMatchObject({ env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-2' } });
+  });
+
+  it('turns a refused sign-in off with a sign-in-again message and goes on with the next account', async () => {
+    const endpoint = tokenEndpoint(() => Response.json({ error: 'invalid_grant' }, { status: 400 }));
+    const { accounts, addSignIn, credentials } = await signInPool(endpoint.fetchImpl);
+    const expired = await addSignIn(signIn({ expiresAt: now.getTime() - 1 }));
+    const key = await accounts.addAccount({
+      orgId: 'org-1',
+      provider: 'anthropic',
+      label: 'Team key',
+      kind: 'api_key',
+      secret: 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111',
+      createdBy: 'admin',
+    });
+
+    await expect(credentials({ orgId: 'org-1', userId: 'alice' })).resolves.toEqual({
+      env: { ANTHROPIC_API_KEY: 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111' },
+      accountId: key.id,
+    });
+    expect(await accounts.getAccount('org-1', expired.id)).toMatchObject({
+      disabled: true,
+      lastError: expect.stringContaining('sign in to Claude again'),
+    });
+    // Turned off: the next turn does not ask the token endpoint again.
+    await credentials({ orgId: 'org-1', userId: 'alice' });
+    expect(endpoint.calls).toHaveLength(1);
+  });
+
+  it('fails the turn when the only sign-in was refused, and on a transient endpoint error keeps the account', async () => {
+    const refused = await signInPool(tokenEndpoint(() => Response.json({ error: 'invalid_grant' }, { status: 401 })).fetchImpl);
+    await refused.addSignIn(signIn({ expiresAt: now.getTime() - 1 }));
+    await expect(refused.credentials({ orgId: 'org-1', userId: 'alice' })).rejects.toMatchObject({ kind: 'auth' });
+
+    const flaky = await signInPool(tokenEndpoint(() => new Response('busy', { status: 503 })).fetchImpl);
+    const account = await flaky.addSignIn(signIn({ expiresAt: now.getTime() - 1 }));
+    await expect(flaky.credentials({ orgId: 'org-1', userId: 'alice' })).rejects.toThrow('HTTP 503');
+    expect(await flaky.accounts.getAccount('org-1', account.id)).toMatchObject({ disabled: false });
+  });
+
+  it('serves only its owner’s runs', async () => {
+    const endpoint = tokenEndpoint(() => Response.json({}));
+    const { addSignIn, credentials } = await signInPool(endpoint.fetchImpl);
+    await addSignIn(signIn());
+    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).rejects.toBeInstanceOf(ClaudeCodeCredentialMissingError);
+  });
+});
+
+describe('Claude Code credentials: edges', () => {
+  const now = new Date('2026-10-28T12:00:00Z');
+  const apiKey = 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111';
+
+  /** The storage with some methods replaced, the rest bound to it. */
+  function overriding<T extends object>(target: T, overrides: Partial<Record<keyof T, unknown>>): T {
+    return new Proxy(target, {
+      get: (object, key) => {
+        if (key in overrides) return overrides[key as keyof T];
+        const value = Reflect.get(object, key, object) as unknown;
+        return typeof value === 'function' ? value.bind(object) : value;
+      },
+    });
+  }
+
+  async function seeded() {
+    const storage = await createFactoryStorageForTests();
+    const accounts = storage.credentials;
+    const addKey = (label: string, secret = apiKey) =>
+      accounts.addAccount({ orgId: 'org-1', provider: 'anthropic', label, kind: 'api_key', secret, createdBy: 'admin' });
+    return { accounts, addKey };
+  }
+
+  it('gives a run the account it asked for by id', async () => {
+    const { accounts, addKey } = await seeded();
+    await addKey('First');
+    const second = await addKey('Second', 'sk-ant-api03-dddddddddddddddddddd4444');
+    const { credentials } = createClaudeCodeCredentials({ localDevelopment: false, credentials: accounts, now: () => now });
+    await expect(
+      credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [], preferredAccountId: second.id }),
+    ).resolves.toEqual({ env: { ANTHROPIC_API_KEY: 'sk-ant-api03-dddddddddddddddddddd4444' }, accountId: second.id });
+  });
+
+  it('goes on with the next account when a sign-in vanished while it was being refreshed', async () => {
+    const { accounts, addKey } = await seeded();
+    await accounts.addAccount({
+      orgId: 'org-1',
+      provider: 'anthropic',
+      label: 'alice@example.com',
+      kind: 'claude_login',
+      ownerUserId: 'alice',
+      secret: 'fake-access-1',
+      oauth: { accessToken: 'fake-access-1', refreshToken: 'fake-refresh-1', expiresAt: now.getTime() + 3_600_000, scopes: [] },
+      createdBy: 'alice',
+    });
+    const key = await addKey('Team key');
+    const vanishing = overriding(accounts, { refreshAccountOAuth: async () => undefined });
+    const { credentials } = createClaudeCodeCredentials({ localDevelopment: false, credentials: vanishing, now: () => now });
+    await expect(credentials({ orgId: 'org-1', userId: 'alice' })).resolves.toEqual({
+      env: { ANTHROPIC_API_KEY: apiKey },
+      accountId: key.id,
+    });
+  });
+
+  it('fails the turn when an account’s secret is gone between listing it and reading it', async () => {
+    const { accounts, addKey } = await seeded();
+    await addKey('Team key');
+    const gone = overriding(accounts, { getAccountSecret: async () => undefined });
+    const { credentials } = createClaudeCodeCredentials({ localDevelopment: false, credentials: gone, now: () => now });
+    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).rejects.toMatchObject({
+      kind: 'auth',
+      message: 'Claude account Team key is no longer available.',
+    });
+  });
+
+  it('runs on the person’s own login in local development without any storage', async () => {
+    const { credentials, onCredentialFailure } = createClaudeCodeCredentials({ localDevelopment: true, credentials: undefined });
+    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).resolves.toEqual({ CLAUDE_SECURESTORAGE_CONFIG_DIR: '' });
+    await expect(
+      onCredentialFailure({ orgId: 'org-1', userId: 'bob' }, { accountId: 'a-1', error: new ClaudeCodeError('auth', 'x') }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('says which account it took out of rotation, and stays quiet about failures that are not the account’s', async () => {
+    const { accounts, addKey } = await seeded();
+    const first = await addKey('First');
+    const { onCredentialFailure } = createClaudeCodeCredentials({ localDevelopment: false, credentials: accounts, now: () => now });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await onCredentialFailure({ orgId: 'org-1', userId: 'bob' }, { accountId: first.id, error: new ClaudeCodeError('failed', 'boom') });
+      expect(warn).not.toHaveBeenCalled();
+
+      const resetsAt = new Date(now.getTime() + 60_000);
+      await onCredentialFailure(
+        { orgId: 'org-1', userId: 'bob' },
+        { accountId: first.id, error: new ClaudeCodeError('rate_limit', 'limit', { resetsAt, now }) },
+      );
+      expect(warn).toHaveBeenLastCalledWith('[factory] Claude account taken out of rotation', {
+        orgId: 'org-1',
+        accountId: first.id,
+        kind: 'rate_limit',
+        resetsAt: resetsAt.toISOString(),
+      });
+      await onCredentialFailure({ orgId: 'org-1', userId: 'bob' }, { accountId: first.id, error: new ClaudeCodeError('auth', 'bad') });
+      expect(warn).toHaveBeenLastCalledWith('[factory] Claude account taken out of rotation', {
+        orgId: 'org-1',
+        accountId: first.id,
+        kind: 'auth',
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('measures a cooldown from the real clock by default', async () => {
+    const { accounts, addKey } = await seeded();
+    const first = await addKey('First');
+    const { onCredentialFailure } = createClaudeCodeCredentials({ localDevelopment: false, credentials: accounts });
+    const before = Date.now();
+    await onCredentialFailure({ orgId: 'org-1', userId: 'bob' }, { accountId: first.id, error: new ClaudeCodeError('rate_limit', 'limit') });
+    const until = (await accounts.getAccount('org-1', first.id))!.limitedUntil!.getTime();
+    expect(until).toBeGreaterThanOrEqual(before + DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS);
+    expect(until).toBeLessThanOrEqual(Date.now() + DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS);
+  });
+
+  it('logs a refused sign-in by organization and account only', async () => {
+    const { accounts } = await seeded();
+    const signIn = await accounts.addAccount({
+      orgId: 'org-1',
+      provider: 'anthropic',
+      label: 'alice@example.com',
+      kind: 'claude_login',
+      ownerUserId: 'alice',
+      secret: 'fake-access-1',
+      oauth: { accessToken: 'fake-access-1', refreshToken: 'fake-refresh-1', expiresAt: now.getTime() - 1, scopes: [] },
+      createdBy: 'alice',
+    });
+    const fetchImpl = (async () => Response.json({ error: 'invalid_grant' }, { status: 400 })) as unknown as typeof fetch;
+    const { credentials } = createClaudeCodeCredentials({ localDevelopment: true, credentials: accounts, now: () => now, fetch: fetchImpl });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(credentials({ orgId: 'org-1', userId: 'alice' })).rejects.toMatchObject({ kind: 'auth' });
+      expect(warn).toHaveBeenCalledWith('[factory] Claude sign-in refused by the token endpoint; it needs a new sign-in', {
+        orgId: 'org-1',
+        accountId: signIn.id,
+      });
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

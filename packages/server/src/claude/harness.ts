@@ -21,6 +21,7 @@ import type { FactorySessionTokenSigner } from '@factory/mcp';
 import type { SourceControlSessionLookup } from '@factory/session';
 import type { FactoryProjectsStorage } from '@factory/store';
 
+import { createClaudeSessionConfigDirs } from './config-dir.ts';
 import type { ClaudeCodeCredentialFailureHook, ClaudeCodeCredentialsHook } from './credentials.ts';
 import { CLAUDE_THREAD_SETTINGS } from './start-coordinator.ts';
 import {
@@ -133,8 +134,13 @@ export interface ClaudeFactoryHarnessOptions {
   cwdFor: (sessionId: string) => string | Promise<string>;
   /** The Factory MCP endpoint for a factory, and the signer for the session tokens it accepts. */
   mcp?: { url: (factoryProjectId: string) => string; tokens: Pick<FactorySessionTokenSigner, 'sign'> };
-  /** `CLAUDE_CONFIG_DIR` per session; unset keeps the person's own (and their login, for local dev). */
+  /**
+   * `CLAUDE_CONFIG_DIR` per session. Unset: each session gets its own dir
+   * under {@link sessionConfigRoot} (see `createClaudeSessionConfigDirs`).
+   */
   configDir?: (session: ClaudeCodeSession) => string | undefined;
+  /** Where sessions' own config dirs live; `<storeDir>-config` by default. */
+  sessionConfigRoot?: string;
   allowedTools?: string[];
   approvedPermissionMode?: ClaudePermissionMode;
   turnTimeoutMs?: number;
@@ -150,6 +156,8 @@ export interface ClaudeFactoryHarnessOptions {
 export interface ClaudeFactoryHarness {
   harness: ClaudeCodeHarness;
   store: ClaudeSessionStore;
+  /** Remove a deleted session's own config dir (its transcripts and memory); a no-op without one. */
+  removeSessionConfig(sessionId: string): Promise<void>;
   /** For the routing harness: a session is Claude's when its store has it. */
   route: HarnessRoute;
 }
@@ -210,6 +218,12 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       true
     );
   };
+
+  const configRoot =
+    options.sessionConfigRoot ?? (options.storeDir ? `${options.storeDir.replace(/\/+$/, '')}-config` : undefined);
+  const configDirs = configRoot ? createClaudeSessionConfigDirs(configRoot) : undefined;
+  const configDir =
+    options.configDir ?? (configDirs ? (session: ClaudeCodeSession) => configDirs.dirFor(session) : undefined);
 
   const supervisorWorkdir = createClaudeSupervisorWorkdir(
     options.supervisorWorkdirRoot ?? (options.storeDir ? `${options.storeDir.replace(/\/+$/, '')}-supervisor` : undefined),
@@ -297,7 +311,7 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       return typeof target === 'string' && target ? `${CLAUDE_FACTORY_SYSTEM_PROMPT}\n\n${target}` : undefined;
     },
     trustedMcpServers: [CLAUDE_FACTORY_MCP_SERVER],
-    ...(options.configDir ? { configDir: options.configDir } : {}),
+    ...(configDir ? { configDir } : {}),
     allowedTools: options.allowedTools ?? DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS,
     appendSystemPrompt: CLAUDE_FACTORY_SYSTEM_PROMPT,
     planningPrompt: CLAUDE_FACTORY_PLANNING_PROMPT,
@@ -314,6 +328,9 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
   return {
     harness,
     store,
+    removeSessionConfig: async sessionId => {
+      await configDirs?.remove(sessionId);
+    },
     route: { harness, owns: async sessionId => (await store.get(sessionId)) !== undefined },
   };
 }

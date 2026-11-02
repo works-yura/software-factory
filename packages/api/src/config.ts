@@ -295,8 +295,10 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server).
    * `claudeCodeLocalLogin`: Claude Code turns with no pooled account run on the `claude` login of the
    * machine the server runs on (local development), so no account or key is needed to start.
+   * `claudeSignIn`: a person can sign in to Claude from the settings, the CLI's browser page opening on
+   * this machine (see `CredentialAccountRoutes`).
    */
-  features?: { knowledge: boolean; mcp?: boolean; claudeCode?: boolean; claudeCodeLocalLogin?: boolean };
+  features?: { knowledge: boolean; mcp?: boolean; claudeCode?: boolean; claudeCodeLocalLogin?: boolean; claudeSignIn?: boolean };
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -400,6 +402,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             claudeCode: options.features?.claudeCode ?? false,
             claudeCodeLocalLogin:
               (options.features?.claudeCode ?? false) && (options.features?.claudeCodeLocalLogin ?? false),
+            claudeSignIn: (options.features?.claudeCode ?? false) && (options.features?.claudeSignIn ?? false),
           }),
       }),
 

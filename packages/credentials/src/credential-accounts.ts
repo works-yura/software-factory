@@ -4,16 +4,17 @@
  * Rules, in order:
  * 1. Disabled accounts, accounts the run already tried, and accounts out of
  *    usage (`limitedUntil` in the future) are skipped.
- * 2. A subscription is used only by its owner's runs; organization API keys by
- *    any run.
+ * 2. A subscription or Claude sign-in is used only by its owner's runs;
+ *    organization API keys by any run.
  * 3. The account the session used last goes first while it is usable, so the
  *    provider's prompt cache keeps working; then the caller's own
- *    subscriptions; then organization keys; each by priority, then age.
+ *    subscriptions and sign-ins; then organization keys; each by priority, then age.
  *
  * When nothing is usable because every candidate is out of usage, the earliest
  * reset tells the caller when to try again.
  */
 
+import { isPersonalCredentialKind } from '@factory/store';
 import type { CredentialAccount, CredentialAccountKind } from '@factory/store';
 
 /** `claude setup-token` and subscription OAuth tokens start with this; API keys with `sk-ant-api`. */
@@ -56,7 +57,7 @@ export function pickCredentialAccount(
   const eligible = accounts.filter(account => !account.disabled && usableBy(account, userId));
   const ready = eligible.filter(account => !excluded.has(account.id)).filter(account => !account.limitedUntil || account.limitedUntil.getTime() <= now.getTime());
   const rank = (account: CredentialAccount) =>
-    account.id === preferredId ? 0 : account.kind === 'subscription' ? 1 : 2;
+    account.id === preferredId ? 0 : isPersonalCredentialKind(account.kind) ? 1 : 2;
   const [best] = [...ready].sort(
     (a, b) =>
       rank(a) - rank(b) || a.priority - b.priority || a.createdAt.getTime() - b.createdAt.getTime(),

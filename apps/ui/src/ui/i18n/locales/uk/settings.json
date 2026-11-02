@@ -713,13 +713,16 @@
     "kind": {
       "mySubscription": "Ваша підписка",
       "memberSubscription": "Підписка учасника",
-      "orgKey": "Ключ організації"
+      "orgKey": "Ключ організації",
+      "mySignIn": "Ваш вхід Claude",
+      "memberSignIn": "Вхід Claude учасника"
     },
     "status": {
       "active": "Активний",
       "limited": "Обмежений",
       "limitedUntil": "Обмежений до {{time}}",
-      "off": "Вимкнений"
+      "off": "Вимкнений",
+      "needsSignIn": "Увійдіть знову"
     },
     "lastUsed": "Востаннє використано {{time}}",
     "neverUsed": "Ще не використовувався",
@@ -752,6 +755,12 @@
       "forbidden": "Ви не можете змінити цей акаунт.",
       "needSignIn": "Увійдіть в організацію, щоб додавати акаунти Claude Code.",
       "failed": "Щось пішло не так. Спробуйте ще раз."
+    },
+    "signIn": {
+      "button": "Увійти через Claude",
+      "pending": "Завершіть вхід на сторінці Claude, що відкрилася у браузері…",
+      "done": "Ви увійшли як {{label}}.",
+      "failed": "Не вдалося увійти в Claude."
     }
   },
   "tagRouting": {
