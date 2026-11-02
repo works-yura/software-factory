@@ -4,6 +4,7 @@ import { useSidebar } from './sidebar-context';
 import { focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type SidebarMobileTriggerProps = ComponentPropsWithoutRef<'button'> & {
   icon?: React.ReactNode;
@@ -12,7 +13,7 @@ export type SidebarMobileTriggerProps = ComponentPropsWithoutRef<'button'> & {
 export function SidebarMobileTrigger({
   className,
   icon,
-  'aria-label': ariaLabel = 'Open navigation menu',
+  'aria-label': ariaLabel = libText('Open navigation menu'),
   onClick,
   ...props
 }: SidebarMobileTriggerProps) {

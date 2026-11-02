@@ -3,6 +3,7 @@ import { useId } from 'react';
 import { cn } from '@/lib/utils';
 
 import './brand-loader.css';
+import { libText } from '@/lib/lib-text';
 
 export type BrandLoaderProps = {
   className?: string;
@@ -30,7 +31,7 @@ const bubbleBySize = {
   lg: 4.498,
 };
 
-function BrandLoader({ className, size = 'md', 'aria-label': ariaLabel = 'Loading' }: BrandLoaderProps) {
+function BrandLoader({ className, size = 'md', 'aria-label': ariaLabel = libText('Loading') }: BrandLoaderProps) {
   const reactId = useId();
   const filterId = `brand-loader-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const r = bubbleBySize[size];

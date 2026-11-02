@@ -6,6 +6,7 @@ import { Button } from '@/ds/components/Button';
 import { Field, FieldError } from '@/ds/components/Field';
 import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export interface CommentEditorProps {
   initialBody: string;
@@ -27,7 +28,7 @@ export function CommentEditor({
   onClose,
   isPending = false,
   error,
-  'aria-label': ariaLabel = 'Edit comment',
+  'aria-label': ariaLabel = libText('Edit comment'),
   className,
 }: CommentEditorProps) {
   const [draft, setDraft] = useState(initialBody);
@@ -66,10 +67,10 @@ export function CommentEditor({
         />
         <div className="absolute inset-x-px bottom-px flex items-center justify-end gap-1 rounded-b-lg bg-background px-1.5 pt-1 pb-1.5">
           <Button icon={<X />} type="button" variant="ghost" size="sm" disabled={isPending} onClick={onClose}>
-            Cancel
+            {libText('Cancel')}
           </Button>
           <Button icon={<Check />} type="button" size="sm" disabled={!canSave} onClick={save}>
-            {isPending ? 'Saving…' : 'Save'}
+            {isPending ? libText('Saving…') : libText('Save')}
           </Button>
         </div>
       </div>

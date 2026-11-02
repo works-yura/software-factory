@@ -9,6 +9,7 @@ import { SidebarOptionalLink } from './sidebar-optional-link';
 import type { OptionalSidebarLink, SidebarLinkPlacement } from './sidebar-visibility';
 import { getDefaultPlacement, getSidebarLinkKey } from './sidebar-visibility';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { libText } from '@/lib/lib-text';
 
 export type SidebarMoreLinksProps = {
   links: OptionalSidebarLink[];
@@ -74,15 +75,15 @@ export function SidebarMoreLinks({
       {hasMoreRow ? (
         <DropdownMenu modal={false}>
           <SidebarNavLink
-            link={{ name: 'More', url: '', icon: <MoreHorizontalIcon /> }}
+            link={{ name: libText('More'), url: '', icon: <MoreHorizontalIcon /> }}
             render={
-              <DropdownMenu.Trigger ref={moreTriggerRef} render={<button type="button" />} aria-label="More">
+              <DropdownMenu.Trigger ref={moreTriggerRef} render={<button type="button" />} aria-label={libText('More')}>
                 <MoreHorizontalIcon aria-hidden="true" />
-                <SidebarNavLabel>More</SidebarNavLabel>
+                <SidebarNavLabel>{libText('More')}</SidebarNavLabel>
               </DropdownMenu.Trigger>
             }
           />
-          <DropdownMenu.Content align="start" aria-label="More navigation" className="min-w-44">
+          <DropdownMenu.Content align="start" aria-label={libText('More navigation')} className="min-w-44">
             {moreMenuLinks.map(link => renderMenuLink(link))}
             {moreMenuLinks.length > 0 && <DropdownMenu.Separator />}
             <DropdownMenu.Item onClick={() => onCustomize(moreTriggerRef.current, () => moreTriggerRef.current)}>

@@ -5,6 +5,7 @@ import type { ComponentPropsWithoutRef } from 'react';
 import { cn } from '@/lib/utils';
 
 import './spinner.css';
+import { libText } from '@/lib/lib-text';
 
 const spinnerVariants = cva('spinner inline-block text-foreground', {
   variants: {
@@ -39,7 +40,7 @@ function Spinner({
   size = 'md',
   variant = 'default',
   fill = false,
-  'aria-label': ariaLabel = 'Loading',
+  'aria-label': ariaLabel = libText('Loading'),
   role = 'status',
   ...props
 }: SpinnerProps) {

@@ -4,6 +4,7 @@ import { SidebarSectionLink } from './sidebar-section-link';
 import type { OptionalSidebarLink, SidebarLinkPlacement } from './sidebar-visibility';
 import { isSidebarLinkPlacement, sidebarLinkPlacementLabels, sidebarLinkPlacements } from './sidebar-visibility';
 import { ContextMenu } from '@/ds/components/ContextMenu';
+import { libText } from '@/lib/lib-text';
 
 export type SidebarOptionalLinkProps = {
   link: OptionalSidebarLink;
@@ -47,7 +48,7 @@ export function SidebarOptionalLink({
         </ContextMenu.RadioGroup>
         <ContextMenu.Separator />
         <ContextMenu.Item onClick={() => onCustomize(itemRef.current?.querySelector('a') ?? null)}>
-          Customize sidebar…
+          {libText('Customize sidebar…')}
         </ContextMenu.Item>
       </ContextMenu.Content>
     </ContextMenu>

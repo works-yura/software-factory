@@ -3,6 +3,7 @@ import { ArrowLeft, Check } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { ScrollArea, ScrollAreaViewport } from '../../ScrollArea';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export interface ComposerSuggestionItem {
   id: string;
@@ -30,7 +31,7 @@ export function ComposerSuggestions({
 }: ComposerSuggestionsProps) {
   const activeOption = useRef<HTMLButtonElement>(null);
   const activeItemId = items[activeIndex]?.id;
-  const label = contextLabel ? `${contextLabel} options` : 'Slash commands';
+  const label = contextLabel ? `${contextLabel} options` : libText('Slash commands');
 
   useEffect(() => {
     activeOption.current?.scrollIntoView({ block: 'nearest' });
@@ -45,7 +46,7 @@ export function ComposerSuggestions({
               <button
                 type="button"
                 className="flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-caption text-muted-foreground transition-colors duration-normal ease-out-custom hover:bg-fill-subtle hover:text-foreground motion-reduce:transition-none"
-                aria-label="Back to slash commands"
+                aria-label={libText('Back to slash commands')}
                 onMouseDown={event => event.preventDefault()}
                 onClick={onBack}
               >

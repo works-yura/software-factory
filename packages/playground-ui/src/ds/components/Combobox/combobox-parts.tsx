@@ -17,6 +17,7 @@ import { usePopupAnchor } from '@/ds/primitives/popup-anchor';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import type { PortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 /**
  * Root. Same props as Base UI's `Combobox.Root` (`items`, `value`, `onValueChange`, `multiple`,
@@ -96,7 +97,7 @@ function ComboboxFieldTrigger() {
   return (
     <BaseCombobox.Trigger
       data-slot="combobox-field-trigger"
-      aria-label="Show options"
+      aria-label={libText('Show options')}
       // A round button target: the circle fills on hover, the chevron keeps its color.
       className="flex size-5.5 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground not-data-disabled:hover:bg-fill"
     >
@@ -166,7 +167,7 @@ function ComboboxClear({ className, ...props }: BaseCombobox.Clear.Props) {
   return (
     <BaseCombobox.Clear
       data-slot="combobox-clear"
-      aria-label="Clear"
+      aria-label={libText('Clear')}
       className={cn(
         'flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground',
         className,
@@ -457,7 +458,7 @@ function ComboboxChip({
       {showRemove ? (
         <BaseCombobox.ChipRemove
           data-slot="combobox-chip-remove"
-          aria-label={typeof children === 'string' ? `Remove ${children}` : 'Remove'}
+          aria-label={typeof children === 'string' ? `Remove ${children}` : libText('Remove')}
           // The whole right end is the hit area: full height, from the gap to the chip's edge. The ×'s
           // ink sits 2.5px inside its 12px icon, so 3.5px / 5.5px padding put it 6px / 8px out.
           className="flex h-full cursor-pointer items-center rounded-r-full pr-[5.5px] pl-[3.5px] text-muted-foreground not-data-disabled:hover:text-foreground"

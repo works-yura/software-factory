@@ -11,6 +11,7 @@ import { Button } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type FilterBarAdvancedChipProps = {
   group: FilterBarGroup;
@@ -87,10 +88,10 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
           render={<button type="button" />}
           data-filter-bar-segment="field"
           className={cn(editableSegmentClass, 'gap-1.5')}
-          title="Edit advanced filter"
+          title={libText('Edit advanced filter')}
         >
           <BracesIcon className="size-[1.1em] shrink-0" aria-hidden />
-          <span className="truncate">Advanced filter</span>
+          <span className="truncate">{libText('Advanced filter')}</span>
           {count > 0 && (
             <Txt as="span" variant="column" tone="muted" aria-hidden>
               {count}
@@ -106,8 +107,8 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
             type="button"
             ref={el => ctx.registerSegment(group.id, 'remove', el)}
             data-filter-bar-segment="remove"
-            aria-label="Remove advanced filter"
-            title="Remove advanced filter"
+            aria-label={libText('Remove advanced filter')}
+            title={libText('Remove advanced filter')}
             className={cn(editableSegmentClass, 'px-1.5')}
             onClick={remove}
           >
@@ -124,7 +125,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
           <BracesIcon className="size-3.5 text-muted-foreground" />
           <Txt as="span" variant="label" tone="ink">
-            Advanced filter
+            {libText('Advanced filter')}
           </Txt>
           <Txt as="span" variant="column" tone="muted" className="rounded-md bg-fill-subtle px-1.5">
             {count}
@@ -133,7 +134,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
             variant="ghost"
             size="icon-sm"
             className="ml-auto"
-            tooltip="Close"
+            tooltip={libText('Close')}
             onClick={() => ctx.setOpenGroup(null)}
           >
             <XIcon />
@@ -142,7 +143,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         <FilterBarGroupEditor
           group={group}
           depth={1}
-          removeLabel="Remove advanced filter"
+          removeLabel={libText('Remove advanced filter')}
           onRemove={() => {
             ctx.setOpenGroup(null);
             remove();

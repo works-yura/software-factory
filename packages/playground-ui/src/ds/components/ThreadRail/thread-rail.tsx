@@ -10,6 +10,7 @@ import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRing } from '@/ds/primitives/transitions';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 type ThreadRailPreviewPhase = 'hidden' | 'entering' | 'visible' | 'exiting';
 
@@ -49,7 +50,7 @@ export function ThreadRail({
   turns,
   currentAnchorId,
   visibleMessageIds,
-  label = 'Conversation timeline',
+  label = libText('Conversation timeline'),
   className,
   maxHeight = 'calc(100dvh - 12rem)',
   scrollAreaClassName,

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 
 // Swipe/stack transforms live in drawer.css — unreadable as Tailwind arbitrary values.
 import './drawer.css';
+import { libText } from '@/lib/lib-text';
 
 export type DrawerSide = 'top' | 'right' | 'bottom' | 'left';
 
@@ -425,7 +426,7 @@ DrawerContent.displayName = 'DrawerContent';
 
 const DrawerDefaultCloseButton = () => (
   <DrawerClose asChild>
-    <Button type="button" variant="ghost" size="icon-sm" className="absolute top-3 right-3 z-10" aria-label="Close">
+    <Button type="button" variant="ghost" size="icon-sm" className="absolute top-3 right-3 z-10" aria-label={libText('Close')}>
       <XIcon />
     </Button>
   </DrawerClose>

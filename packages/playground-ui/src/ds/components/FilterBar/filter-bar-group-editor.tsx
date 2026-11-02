@@ -11,6 +11,7 @@ import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 const connectorClass =
   'flex h-control-sm w-14 shrink-0 items-center justify-center rounded-md text-column tracking-wide text-muted-foreground uppercase';
@@ -51,7 +52,7 @@ function FilterBarLogicSwitch({ groupId, logic }: { groupId: string; logic: Filt
   return (
     <div
       role="radiogroup"
-      aria-label="Group logic"
+      aria-label={libText('Group logic')}
       className="flex h-control-sm items-center gap-0.5 rounded-md border border-border bg-fill-subtle p-0.5"
     >
       {(['and', 'or'] as const).map(value => (
@@ -148,7 +149,7 @@ export function FilterBarGroupEditor({
         {connector('input')}
         <FilterBarInput
           groupId={group.id}
-          placeholder="Add condition…"
+          placeholder={libText('Add condition…')}
           onLeave={() => {
             focusAddFilter.current = true;
           }}
@@ -180,7 +181,7 @@ export function FilterBarGroupEditor({
             icon={<PlusIcon />}
             onClick={() => ctx.openGroupInput(group.id)}
           >
-            Condition
+            {libText('Condition')}
           </Button>
         )}
         <Button
@@ -192,7 +193,7 @@ export function FilterBarGroupEditor({
           disabled={!canNest}
           onClick={() => ctx.addGroup(group.id, group.logic === 'and' ? 'or' : 'and')}
         >
-          Group
+          {libText('Group')}
         </Button>
         {onRemove && (
           <Button
@@ -203,7 +204,7 @@ export function FilterBarGroupEditor({
             aria-label={removeLabel}
             onClick={onRemove}
           >
-            Clear all
+            {libText('Clear all')}
           </Button>
         )}
       </div>
@@ -232,7 +233,7 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
       <div className="flex items-center gap-2 border-b border-border px-2 py-1">
         <FolderIcon className="size-3.5 text-muted-foreground" />
         <Txt as="span" variant="label" tone="ink">
-          Group
+          {libText('Group')}
         </Txt>
         <Txt as="span" variant="label" tone="muted">
           · {count} {count === 1 ? 'condition' : 'conditions'}
@@ -242,7 +243,7 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
           <Button
             variant="ghost"
             size="icon-sm"
-            tooltip="Remove group"
+            tooltip={libText('Remove group')}
             disabled={leaving}
             onClick={() => ctx.removeGroup(group.id)}
           >

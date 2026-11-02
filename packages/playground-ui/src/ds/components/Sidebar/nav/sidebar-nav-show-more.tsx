@@ -4,6 +4,7 @@ import { useMaybeSidebarState } from '../root/sidebar-context';
 import { textStyle } from '@/ds/primitives/text';
 import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type SidebarNavShowMoreProps = Omit<ComponentPropsWithoutRef<'button'>, 'children' | 'onClick'> & {
   foldedCount: number;
@@ -38,7 +39,7 @@ export function SidebarNavShowMore({
       )}
       {...props}
     >
-      {expanded ? 'Show less' : `Show ${foldedCount} more`}
+      {expanded ? libText('Show less') : `Show ${foldedCount} more`}
     </button>
   );
 }

@@ -11,6 +11,7 @@ import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRing, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type TaskListItem = TaskItem;
 
@@ -37,7 +38,7 @@ export const TaskListProgress = ({ tasks, className, ...props }: TaskListProgres
           render={
             <span
               role="progressbar"
-              aria-label="Task completion"
+              aria-label={libText('Task completion')}
               aria-valuemin={0}
               aria-valuemax={tasks.length}
               aria-valuenow={completed}
@@ -66,9 +67,9 @@ export const TaskListProgress = ({ tasks, className, ...props }: TaskListProgres
 };
 
 const statusLabels: Record<TaskListItem['status'], string> = {
-  completed: 'Completed',
-  in_progress: 'In progress',
-  pending: 'Pending',
+  completed: libText('Completed'),
+  in_progress: libText('In progress'),
+  pending: libText('Pending'),
 };
 
 const ringClasses: Record<TaskListItem['status'], string> = {
@@ -218,7 +219,7 @@ export const TaskList = ({
 
   return (
     <TaskListContainer
-      aria-label="Task list"
+      aria-label={libText('Task list')}
       data-testid="task-list"
       data-collapsed={open ? undefined : ''}
       onClick={open ? undefined : () => changeOpen(true)}
@@ -264,7 +265,7 @@ export const TaskList = ({
         </div>
         <button
           type="button"
-          aria-label={open ? 'Collapse tasks' : 'Show all tasks'}
+          aria-label={open ? libText('Collapse tasks') : libText('Show all tasks')}
           aria-expanded={open}
           aria-controls={listId}
           onClick={event => {

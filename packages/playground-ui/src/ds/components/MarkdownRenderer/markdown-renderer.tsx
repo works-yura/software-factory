@@ -14,6 +14,7 @@ import { CodeBlock } from '@/ds/components/CodeBlock';
 import { cn } from '@/lib/utils';
 
 import './markdown-renderer.css';
+import { libText } from '@/lib/lib-text';
 
 export type MarkdownExternalLinkTarget = 'tab' | 'window';
 
@@ -184,7 +185,7 @@ function MarkdownCodeBlock({
       lang={fenced.language}
       overflow="scroll"
       className={cn('my-3 bg-sidebar', className)}
-      copyMessage="Copied code to clipboard"
+      copyMessage={libText('Copied code to clipboard')}
     />
   );
 }

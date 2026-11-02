@@ -11,6 +11,7 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 const PlanContext = createContext<CollapsibleBoxState | null>(null);
 
@@ -56,7 +57,7 @@ export function PlanHeader({ children, className, ...props }: PlanHeaderProps) {
 
 export type PlanLabelProps = ComponentProps<'div'>;
 
-export function PlanLabel({ children = 'Plan', className, ...props }: PlanLabelProps) {
+export function PlanLabel({ children = libText('Plan'), className, ...props }: PlanLabelProps) {
   return (
     <div data-slot="plan-label" className={cn('flex min-w-0 items-center gap-2', className)} {...props}>
       <Icon size="xs" className="text-muted-foreground">
@@ -109,8 +110,8 @@ export function PlanCopyButton({ content, ...props }: PlanCopyButtonProps) {
       type="button"
       variant="ghost"
       size="icon-sm"
-      tooltip="Copy plan"
-      aria-label="Copy plan"
+      tooltip={libText('Copy plan')}
+      aria-label={libText('Copy plan')}
       onClick={handleCopy}
     >
       {isCopied ? <CheckIcon /> : <CopyIcon />}
@@ -212,7 +213,7 @@ export function PlanFile({ children, className, ...props }: PlanFileProps) {
   return (
     <div data-slot="plan-file" className={className} {...props}>
       <Txt as="p" variant="meta" tone="muted" className="mb-2">
-        Plan file
+        {libText('Plan file')}
       </Txt>
       <Txt as="p" variant="caption" tone="ink" font="mono" className="break-all">
         {children}
@@ -269,11 +270,11 @@ export function PlanExpandButton({ className, variant = 'default', ...props }: P
       type="button"
       variant={variant}
       size="sm"
-      aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
+      aria-label={isExpanded ? libText('Collapse plan') : libText('Expand plan')}
       onClick={toggleExpanded}
       icon={isExpanded ? <Minimize2 /> : <Maximize2 />}
     >
-      {isExpanded ? 'Collapse plan' : 'Expand plan'}
+      {isExpanded ? libText('Collapse plan') : libText('Expand plan')}
     </Button>
   );
 }

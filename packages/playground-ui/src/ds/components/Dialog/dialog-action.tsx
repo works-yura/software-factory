@@ -4,6 +4,7 @@ import { dialogActionLayoutClasses, dialogActionSizeClasses, useDialogContext } 
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 type DialogActionButtonProps = Omit<ComponentProps<typeof Button>, 'onClick' | 'variant' | 'as' | 'type' | 'size'> & {
   size?: TextButtonSize;
@@ -172,7 +173,7 @@ function HoldAction({
         twice.
       </span>
       <span role="status" className="sr-only">
-        {armed ? 'Activate again to confirm.' : ''}
+        {armed ? libText('Activate again to confirm.') : ''}
       </span>
     </>
   );

@@ -16,6 +16,7 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/lib/utils';
 
 import './dialog.css';
+import { libText } from '@/lib/lib-text';
 
 type DialogOpenChangeDetails = Parameters<NonNullable<DialogPrimitive.Root.Props['onOpenChange']>>[1];
 type DrawerOpenChangeDetails = Parameters<NonNullable<DrawerProps['onOpenChange']>>[1];
@@ -129,7 +130,7 @@ function DialogContent({
       data-slot="dialog-close"
       className={cn('absolute right-4', isDrawer ? 'top-1.5' : 'top-4')}
       render={
-        <Button variant="ghost" size="icon-sm" aria-label="Close">
+        <Button variant="ghost" size="icon-sm" aria-label={libText('Close')}>
           <X />
         </Button>
       }

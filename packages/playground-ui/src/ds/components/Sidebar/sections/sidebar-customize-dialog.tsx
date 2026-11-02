@@ -18,6 +18,7 @@ import {
 } from '@/ds/components/Dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
+import { libText } from '@/lib/lib-text';
 
 export type SidebarCustomizeDialogProps = {
   open: boolean;
@@ -43,7 +44,7 @@ export function SidebarCustomizeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md" finalFocus={returnFocusRef}>
         <DialogHeader>
-          <DialogTitle>Customize sidebar</DialogTitle>
+          <DialogTitle>{libText('Customize sidebar')}</DialogTitle>
           <DialogDescription>
             Choose where each optional link appears. Changes save automatically in this browser.
           </DialogDescription>

@@ -6,6 +6,7 @@ import { toast as sonnerToast, Toaster as SonnerToaster } from 'sonner';
 import { cn } from '@/lib/utils';
 
 import './toast.css';
+import { libText } from '@/lib/lib-text';
 
 // All theming lives in `.mastra-toaster` (see toast.css) — sonner reads --success-bg / --error-bg / etc.
 // from richColors mode. `rest` is spread first so callers can't override the closeButton / richColors
@@ -62,7 +63,7 @@ toast.promise = <T,>({
   options?: ExternalToast;
 }) =>
   sonnerToast.promise(myPromise, {
-    loading: loadingMessage ?? 'Loading...',
+    loading: loadingMessage ?? libText('Loading...'),
     success: (data: T) => {
       onSuccess?.(data);
       return successMessage;

@@ -11,6 +11,7 @@ import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitiv
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { heightTransition, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
@@ -103,8 +104,8 @@ const CommandDialog = ({
   children,
   variant = 'default',
   footer,
-  title = 'Command Palette',
-  description = 'Search for commands and actions',
+  title = libText('Command Palette'),
+  description = libText('Search for commands and actions'),
   size,
   contentClassName,
   commandClassName,

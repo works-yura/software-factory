@@ -8,6 +8,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '
 import type { InputGroupButtonProps, InputGroupInputProps } from '@/ds/components/InputGroup';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type CommentComposerProps = ComponentPropsWithoutRef<'form'>;
 
@@ -45,7 +46,7 @@ CommentComposerInput.displayName = 'CommentComposerInput';
 export type CommentComposerSendProps = Omit<InputGroupButtonProps, 'children'>;
 
 export const CommentComposerSend = forwardRef<HTMLButtonElement, CommentComposerSendProps>(
-  ({ 'aria-label': ariaLabel = 'Send comment', type = 'submit', ...props }, ref) => (
+  ({ 'aria-label': ariaLabel = libText('Send comment'), type = 'submit', ...props }, ref) => (
     <InputGroupAddon align="inline-end">
       <InputGroupButton ref={ref} data-slot="comment-composer-send" type={type} aria-label={ariaLabel} {...props}>
         <ArrowUp />

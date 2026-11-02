@@ -7,6 +7,7 @@ import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 type ActivityStatus = 'idle' | 'running' | 'error';
 
@@ -258,7 +259,7 @@ export const ActivityHeadline = ({
       <ActivitySpacer className={cn(hasBadges && 'flex-none')} />
       {status === 'error' && (
         <ActivityTrailing>
-          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />
+          <X size={13} role="img" aria-label={libText('Failed')} className="shrink-0 text-destructive-foreground" />
         </ActivityTrailing>
       )}
       <ActivityDisclosure />

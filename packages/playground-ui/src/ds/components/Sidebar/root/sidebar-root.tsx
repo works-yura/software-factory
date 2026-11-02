@@ -3,6 +3,7 @@ import type { SidebarPanelProps } from './sidebar-panel';
 import { SidebarPanel } from './sidebar-panel';
 import { frameSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type SidebarRootProps = SidebarPanelProps & {
   'aria-label'?: string;
@@ -10,7 +11,7 @@ export type SidebarRootProps = SidebarPanelProps & {
 };
 
 export function SidebarRoot({
-  'aria-label': ariaLabel = 'Sidebar',
+  'aria-label': ariaLabel = libText('Sidebar'),
   mobileMode = 'takeover',
   variant = 'default',
   children,

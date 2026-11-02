@@ -1,3 +1,4 @@
+import { libText } from '@/lib/lib-text';
 /* eslint-disable react-refresh/only-export-components */
 import type { BaseUIEvent } from '@base-ui/react/types';
 import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
@@ -289,7 +290,7 @@ export function FilterBarChip({
         {readOnly && (
           <span
             className={cn(segmentClass, 'pr-0 text-muted-foreground [--filter-bar-segment-padding:0.5rem_0]')}
-            title="This filter is locked"
+            title={libText('This filter is locked')}
           >
             <LockIcon className="size-[1.1em]" />
           </span>
@@ -482,7 +483,7 @@ function FieldEditor() {
   return (
     <SegmentCombobox<FilterBarField>
       segment="field"
-      ariaLabel="Field"
+      ariaLabel={libText('Field')}
       label={chip.field?.label ?? chip.item.fieldId}
       items={ctx.fields}
       itemToString={fieldLabel}
@@ -492,12 +493,12 @@ function FieldEditor() {
       onQueryChange={setQuery}
       onSelect={onSelect}
     >
-      <SegmentSearchInput placeholder="Change field…" />
+      <SegmentSearchInput placeholder={libText('Change field…')} />
       <FilterBarOptionList<FilterBarField>
-        aria-label="Fields"
+        aria-label={libText('Fields')}
         getKey={f => f.id}
         renderOption={f => <FilterBarFieldLabel field={f} />}
-        emptyText="No matching field."
+        emptyText={libText('No matching field.')}
       />
     </SegmentCombobox>
   );
@@ -524,7 +525,7 @@ function OperatorEditor() {
   return (
     <SegmentCombobox<FilterBarOperator>
       segment="operator"
-      ariaLabel="Operator"
+      ariaLabel={libText('Operator')}
       label={chip.operator?.label ?? chip.item.operatorId}
       items={options}
       itemToString={operatorLabel}
@@ -534,12 +535,12 @@ function OperatorEditor() {
       onQueryChange={setQuery}
       onSelect={onSelect}
     >
-      <SegmentSearchInput placeholder="Change operator…" />
+      <SegmentSearchInput placeholder={libText('Change operator…')} />
       <FilterBarOptionList<FilterBarOperator>
-        aria-label="Operators"
+        aria-label={libText('Operators')}
         getKey={o => o.id}
         renderOption={o => o.label}
-        emptyText="No matching operator."
+        emptyText={libText('No matching operator.')}
       />
     </SegmentCombobox>
   );
@@ -575,7 +576,7 @@ function ValueEditor() {
   return (
     <SegmentCombobox<FilterBarOption>
       segment="value"
-      ariaLabel="Value"
+      ariaLabel={libText('Value')}
       label={formatValueCompact(chip.item.value, chip.field) || '…'}
       fullLabel={formatValue(chip.item.value, chip.field) || '…'}
       items={step.options}
@@ -607,20 +608,20 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
     <>
       {step.hasOptions && (
         <FilterBarOptionList<FilterBarOption>
-          aria-label="Values"
+          aria-label={libText('Values')}
           aria-multiselectable={step.isMany || undefined}
           getKey={o => o.value}
           renderOption={option => <FilterBarOptionLabel option={option} />}
           isSelected={o => (step.isMany ? step.selected.includes(o.value) : String(chip.item.value) === o.value)}
           isLoading={step.isLoading}
           error={step.error}
-          emptyText={step.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'}
+          emptyText={step.allowFreeText ? 'No suggestions — press Enter to use your text.' : libText('No matching value.')}
         />
       )}
       {step.isMany && (
         <div className="flex items-center justify-end gap-1 border-t border-border p-1">
           <Button size="sm" variant="ghost" onClick={onCancel}>
-            Cancel
+            {libText('Cancel')}
           </Button>
           <Button size="sm" variant="default" onClick={() => step.commitDone()}>
             Done

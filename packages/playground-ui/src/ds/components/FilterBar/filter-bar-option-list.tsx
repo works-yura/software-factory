@@ -7,6 +7,7 @@ import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Spinner } from '@/ds/components/Spinner/spinner';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type FilterBarOptionListProps<T> = {
   getKey: (option: T) => string;
@@ -46,7 +47,7 @@ export function FilterBarOptionList<T>({
   isSelected,
   isLoading,
   error,
-  emptyText = 'No results.',
+  emptyText = libText('No results.'),
   'aria-label': ariaLabel,
   'aria-multiselectable': multiselectable,
 }: FilterBarOptionListProps<T>) {
@@ -58,12 +59,12 @@ export function FilterBarOptionList<T>({
       {isLoading && (
         <ComboboxPrimitive.Status className={comboboxStyles.empty}>
           <Spinner size="sm" />
-          <span>Loading…</span>
+          <span>{libText('Loading…')}</span>
         </ComboboxPrimitive.Status>
       )}
       {!isLoading && error !== undefined && (
         <ComboboxPrimitive.Status className={comboboxStyles.empty}>
-          {describeSuggestionsError?.(error) ?? "Couldn't load values."}
+          {describeSuggestionsError?.(error) ?? libText("Couldn't load values.")}
         </ComboboxPrimitive.Status>
       )}
       <ComboboxPrimitive.Empty className={comboboxStyles.empty}>{idle ? emptyText : null}</ComboboxPrimitive.Empty>

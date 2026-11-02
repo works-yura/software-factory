@@ -15,6 +15,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { libText } from '@/lib/lib-text';
 
 export interface ToolPresentation {
   icon: LucideIcon;
@@ -68,31 +69,31 @@ interface ToolStyle {
 }
 
 const TOOL_STYLES: Record<string, ToolStyle> = {
-  view: { icon: Eye, label: 'Read', detailKeys: ['path'] },
-  read_file: { icon: Eye, label: 'Read', detailKeys: ['path'] },
-  write_file: { icon: SquarePen, label: 'Write', detailKeys: ['path'] },
-  create_file: { icon: SquarePen, label: 'Write', detailKeys: ['path'] },
-  edit_file: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  string_replace: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  str_replace: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  ast_edit: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
-  execute_command: { icon: SquareTerminal, label: 'Run', detailKeys: ['command'], isCommand: true },
-  get_process_output: { icon: ScrollText, label: 'Process output', detailKeys: ['pid'] },
-  kill_process: { icon: CircleStop, label: 'Stop process', detailKeys: ['pid'] },
-  find_files: { icon: FolderSearch, label: 'Find files', detailKeys: ['pattern', 'path'] },
-  list_files: { icon: FolderSearch, label: 'List files', detailKeys: ['pattern', 'path'] },
-  grep: { icon: Search, label: 'Search', detailKeys: ['pattern', 'path'] },
-  search_content: { icon: Search, label: 'Search', detailKeys: ['pattern', 'query'] },
-  search: { icon: Search, label: 'Search', detailKeys: ['query'] },
-  web_search: { icon: Globe, label: 'Search the web', detailKeys: ['query'] },
-  lsp_inspect: { icon: Braces, label: 'Inspect code', detailKeys: ['path'] },
-  file_stat: { icon: FileSearch, label: 'File info', detailKeys: ['path'] },
-  delete: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
-  delete_file: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
-  mkdir: { icon: FolderPlus, label: 'New folder', detailKeys: ['path'] },
-  skill: { icon: BookOpen, label: 'Skill', detailKeys: ['name'] },
-  skill_search: { icon: BookOpen, label: 'Search skills', detailKeys: ['query'] },
-  skill_read: { icon: BookOpen, label: 'Skill file', detailKeys: ['path'] },
+  view: { icon: Eye, label: libText('Read'), detailKeys: ['path'] },
+  read_file: { icon: Eye, label: libText('Read'), detailKeys: ['path'] },
+  write_file: { icon: SquarePen, label: libText('Write'), detailKeys: ['path'] },
+  create_file: { icon: SquarePen, label: libText('Write'), detailKeys: ['path'] },
+  edit_file: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
+  string_replace: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
+  str_replace: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
+  ast_edit: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
+  execute_command: { icon: SquareTerminal, label: libText('Run'), detailKeys: ['command'], isCommand: true },
+  get_process_output: { icon: ScrollText, label: libText('Process output'), detailKeys: ['pid'] },
+  kill_process: { icon: CircleStop, label: libText('Stop process'), detailKeys: ['pid'] },
+  find_files: { icon: FolderSearch, label: libText('Find files'), detailKeys: ['pattern', 'path'] },
+  list_files: { icon: FolderSearch, label: libText('List files'), detailKeys: ['pattern', 'path'] },
+  grep: { icon: Search, label: libText('Search'), detailKeys: ['pattern', 'path'] },
+  search_content: { icon: Search, label: libText('Search'), detailKeys: ['pattern', 'query'] },
+  search: { icon: Search, label: libText('Search'), detailKeys: ['query'] },
+  web_search: { icon: Globe, label: libText('Search the web'), detailKeys: ['query'] },
+  lsp_inspect: { icon: Braces, label: libText('Inspect code'), detailKeys: ['path'] },
+  file_stat: { icon: FileSearch, label: libText('File info'), detailKeys: ['path'] },
+  delete: { icon: Trash2, label: libText('Delete'), detailKeys: ['path'] },
+  delete_file: { icon: Trash2, label: libText('Delete'), detailKeys: ['path'] },
+  mkdir: { icon: FolderPlus, label: libText('New folder'), detailKeys: ['path'] },
+  skill: { icon: BookOpen, label: libText('Skill'), detailKeys: ['name'] },
+  skill_search: { icon: BookOpen, label: libText('Search skills'), detailKeys: ['query'] },
+  skill_read: { icon: BookOpen, label: libText('Skill file'), detailKeys: ['path'] },
 };
 
 function prettifyToolName(toolName: string): string {

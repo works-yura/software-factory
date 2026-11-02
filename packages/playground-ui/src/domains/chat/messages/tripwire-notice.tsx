@@ -5,6 +5,7 @@ import { Badge } from '@/ds/components/Badge';
 import { Code } from '@/ds/components/Code';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { libText } from '@/lib/lib-text';
 
 export interface TripwireNoticeProps {
   reason: string;
@@ -19,7 +20,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
   );
 
   return (
-    <Notice variant="warning" title="Content Blocked" icon={<ShieldAlert />}>
+    <Notice variant="warning" title={libText('Content Blocked')} icon={<ShieldAlert />}>
       <div className="flex flex-col gap-3">
         <Notice.Message className="break-words whitespace-pre-wrap">{reason}</Notice.Message>
 
@@ -32,7 +33,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
             >
               {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
               <Txt as="span" variant="caption">
-                Details
+                {libText('Details')}
               </Txt>
             </button>
 
@@ -42,10 +43,10 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                   <div className="flex items-center gap-2">
                     <RefreshCw className="size-3.5 shrink-0 opacity-70" />
                     <Txt as="span" variant="caption">
-                      Retry
+                      {libText('Retry')}
                     </Txt>
                     <Badge size="xs" variant={tripwire.retry ? 'success' : 'destructive'}>
-                      {tripwire.retry ? 'Allowed' : 'Not allowed'}
+                      {tripwire.retry ? libText('Allowed') : libText('Not allowed')}
                     </Badge>
                   </div>
                 )}
@@ -54,7 +55,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                   <div className="flex items-center gap-2">
                     <Tag className="size-3.5 shrink-0 opacity-70" />
                     <Txt as="span" variant="caption">
-                      Processor
+                      {libText('Processor')}
                     </Txt>
                     <Badge size="xs" variant="warning">
                       {tripwire.processorId}
@@ -65,7 +66,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                 {tripwire.metadata !== undefined && tripwire.metadata !== null && (
                   <div className="flex flex-col gap-1.5">
                     <Txt as="span" variant="caption" className="opacity-70">
-                      Metadata
+                      {libText('Metadata')}
                     </Txt>
                     <Code
                       className="overflow-x-auto rounded-lg bg-current/10 p-2 text-caption"

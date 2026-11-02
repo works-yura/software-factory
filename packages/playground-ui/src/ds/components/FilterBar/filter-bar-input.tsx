@@ -23,6 +23,7 @@ import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-aut
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 type Step = 'field' | 'operator' | 'value';
 
@@ -35,7 +36,7 @@ const EMPTY_ITEMS: readonly Item[] = [];
 const ADVANCED_FIELD_ID = '__filter-bar-advanced__';
 const ADVANCED_FIELD: FilterBarField = {
   id: ADVANCED_FIELD_ID,
-  label: 'Advanced filter…',
+  label: libText('Advanced filter…'),
   icon: BracesIcon,
   operators: [],
 };
@@ -64,9 +65,9 @@ export function FilterBarInput(props: FilterBarInputProps) {
 }
 
 function FilterBarInputImpl({
-  placeholder = 'Filter…',
+  placeholder = libText('Filter…'),
   className,
-  'aria-label': ariaLabel = 'Add filter',
+  'aria-label': ariaLabel = libText('Add filter'),
   groupId,
   onLeave,
 }: FilterBarInputProps) {
@@ -283,12 +284,12 @@ function FilterBarInputImpl({
     step === 'field'
       ? placeholder
       : step === 'operator'
-        ? 'Operator…'
+        ? libText('Operator…')
         : valueStep.hasSuggestions && valueStep.allowFreeText
-          ? 'Search or type a value…'
+          ? libText('Search or type a value…')
           : field?.type === 'number'
-            ? 'Number…'
-            : 'Value…';
+            ? libText('Number…')
+            : libText('Value…');
 
   return (
     <>
@@ -382,7 +383,7 @@ function FilterBarInputImpl({
             >
               {step === 'field' && (
                 <FilterBarOptionList<FilterBarField>
-                  aria-label="Fields"
+                  aria-label={libText('Fields')}
                   getKey={f => f.id}
                   renderOption={f => (
                     <>
@@ -394,20 +395,20 @@ function FilterBarInputImpl({
                       )}
                     </>
                   )}
-                  emptyText="No matching field."
+                  emptyText={libText('No matching field.')}
                 />
               )}
               {step === 'operator' && (
                 <FilterBarOptionList<FilterBarOperator>
-                  aria-label="Operators"
+                  aria-label={libText('Operators')}
                   getKey={o => o.id}
                   renderOption={o => o.label}
-                  emptyText="No matching operator."
+                  emptyText={libText('No matching operator.')}
                 />
               )}
               {step === 'value' && valueStep.hasOptions && (
                 <FilterBarOptionList<FilterBarOption>
-                  aria-label="Values"
+                  aria-label={libText('Values')}
                   aria-multiselectable={valueStep.isMany || undefined}
                   getKey={o => o.value}
                   renderOption={option => <FilterBarOptionLabel option={option} />}
@@ -415,14 +416,14 @@ function FilterBarInputImpl({
                   isLoading={valueStep.isLoading}
                   error={valueStep.error}
                   emptyText={
-                    valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'
+                    valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : libText('No matching value.')
                   }
                 />
               )}
               {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
                   <Txt variant="caption" tone="muted">
-                    Type a value
+                    {libText('Type a value')}
                   </Txt>
                   <Button
                     size="sm"

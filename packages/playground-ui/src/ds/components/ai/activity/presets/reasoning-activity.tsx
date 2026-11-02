@@ -3,6 +3,7 @@ import { ActivityItem } from '../activity';
 import { hasVisibleReasoning } from './reasoning-visibility';
 import type { ReasoningContent } from './reasoning-visibility';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { libText } from '@/lib/lib-text';
 
 export interface ReasoningActivityProps extends ReasoningContent {
   defaultOpen?: boolean;
@@ -12,15 +13,15 @@ export function ReasoningActivity({ defaultOpen = true, ...content }: ReasoningA
   if (!hasVisibleReasoning(content)) return null;
 
   const { text, redacted, streaming } = content;
-  const body = redacted ? 'Reasoning was redacted by the provider.' : text;
+  const body = redacted ? libText('Reasoning was redacted by the provider.') : text;
 
   return (
     <ActivityItem
       icon={<Brain aria-hidden />}
-      label="Reasoning"
+      label={libText('Reasoning')}
       status={streaming ? 'running' : 'idle'}
       defaultOpen={defaultOpen}
-      aria-label="Reasoning"
+      aria-label={libText('Reasoning')}
     >
       {body.trim().length > 0 && (
         <MarkdownRenderer

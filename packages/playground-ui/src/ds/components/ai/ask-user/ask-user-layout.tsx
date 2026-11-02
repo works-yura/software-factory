@@ -10,6 +10,7 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>) => (
   <div
@@ -19,7 +20,7 @@ export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>)
   />
 );
 
-export const AskUserLabel = ({ children = 'Question', className, ...props }: ComponentProps<'div'>) => (
+export const AskUserLabel = ({ children = libText('Question'), className, ...props }: ComponentProps<'div'>) => (
   <div data-slot="ask-user-label" className={cn('flex min-h-10 items-center gap-2 px-4 pt-3', className)} {...props}>
     <Icon size="xs" className="text-muted-foreground">
       <MessageCircleQuestion />
@@ -98,13 +99,13 @@ export const AskUserOptionRow = ({
 
 export type AskUserSubmitButtonProps = Omit<ComponentProps<typeof Button>, 'children'> & { children?: ReactNode };
 
-export const AskUserSubmitButton = ({ children = 'Submit answer', ...props }: AskUserSubmitButtonProps) => (
+export const AskUserSubmitButton = ({ children = libText('Submit answer'), ...props }: AskUserSubmitButtonProps) => (
   <Button icon={<Check />} type="button" size="sm" variant="primary" {...props}>
     {children}
   </Button>
 );
 
-export const AskUserPending = ({ children = 'Submitting…', ...props }: ComponentProps<typeof Txt>) => (
+export const AskUserPending = ({ children = libText('Submitting…'), ...props }: ComponentProps<typeof Txt>) => (
   <Txt as="span" role="status" variant="caption" tone="muted" {...props}>
     {children}
   </Txt>
@@ -122,7 +123,7 @@ export const AskUserOutput = ({ result, className, ...props }: AskUserOutputProp
     {...props}
   >
     <Badge size="xs" variant={result.isError ? 'destructive' : 'success'} className="justify-self-start">
-      {result.isError ? 'Error' : 'Answered'}
+      {result.isError ? libText('Error') : libText('Answered')}
     </Badge>
     <Txt as="p" variant="body" tone="ink" className={cn(result.isError && 'text-destructive-foreground')}>
       {result.content}

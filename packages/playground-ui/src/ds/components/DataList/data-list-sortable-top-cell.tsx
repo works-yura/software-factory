@@ -4,6 +4,7 @@ import { DataListTopCell } from './data-list-top-cell';
 import type { DataListTopCellProps } from './data-list-top-cell';
 import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type DataListSort = 'asc' | 'desc';
 
@@ -24,9 +25,9 @@ const sortAnimations = {
 };
 
 const sortTooltips = {
-  asc: 'Asc',
-  desc: 'Desc',
-  none: 'Sort',
+  asc: libText('Asc'),
+  desc: libText('Desc'),
+  none: libText('Sort'),
 };
 
 export type DataListSortableTopCellProps<K extends string = string> = Omit<

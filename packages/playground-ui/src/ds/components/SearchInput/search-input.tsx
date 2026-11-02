@@ -5,6 +5,7 @@ import { Field, FieldLabel } from '@/ds/components/Field';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import type { InputGroupInputProps, InputGroupProps } from '@/ds/components/InputGroup';
 import { mergeRefs } from '@/lib/merge-refs';
+import { libText } from '@/lib/lib-text';
 
 export type SearchInputProps = Omit<InputGroupInputProps, 'value' | 'onChange' | 'type' | 'ref' | 'error'> & {
   label: string;
@@ -54,7 +55,7 @@ export function SearchInput({
         />
         {(onClose || value) && (
           <InputGroupAddon align="inline-end">
-            <InputGroupButton aria-label={onClose ? 'Close search' : 'Clear search'} onClick={onClose ? close : clear}>
+            <InputGroupButton aria-label={onClose ? libText('Close search') : libText('Clear search')} onClick={onClose ? close : clear}>
               <XIcon />
             </InputGroupButton>
           </InputGroupAddon>

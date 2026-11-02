@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MastraDBMessageMetadata } from '@mastra/react';
+import { libText } from '@/lib/lib-text';
 
 const SUMMARY_MAX_LENGTH = 120;
 const FILE_PREVIEW_LIMIT = 2;
@@ -126,7 +127,7 @@ export const buildThreadRailTurns = (messages: MastraDBMessage[]): ThreadRailTur
       {
         key: getClientMessageKey(message),
         messageId: message.id,
-        prompt: normalizeSummary(getTextFromParts(message), files.length > 0 ? 'Attached file' : 'User message'),
+        prompt: normalizeSummary(getTextFromParts(message), files.length > 0 ? libText('Attached file') : libText('User message')),
         reply: getNextAssistantReply(messages, index),
         files: visibleFiles,
         hiddenFileCount: files.length - visibleFiles.length,

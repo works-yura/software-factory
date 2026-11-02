@@ -4,6 +4,7 @@ import { useSidebar } from './sidebar-context';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type SidebarTriggerProps = Omit<ButtonProps, 'variant' | 'size' | 'tooltip' | 'children'>;
 
@@ -18,9 +19,9 @@ export function SidebarTrigger({ className, onClick, ...props }: SidebarTriggerP
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label="Toggle sidebar"
+      aria-label={libText('Toggle sidebar')}
       aria-expanded={!isCollapsed}
-      tooltip={<SidebarButtonHint label="Toggle Sidebar" shortcut="[" />}
+      tooltip={<SidebarButtonHint label={libText('Toggle Sidebar')} shortcut="[" />}
       tooltipPosition="bottom"
       {...props}
       onClick={event => {

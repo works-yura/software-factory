@@ -7,6 +7,7 @@ import { FieldAriaContext, useFieldAriaIds } from './field-control-aria';
 import { InfoTooltip } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 type FieldProps = Omit<FieldPrimitive.Root.Props, 'className'> & {
   className?: string;
@@ -101,7 +102,7 @@ function infoTooltipName({ label, labelId, aboutId }: { label: React.ReactNode; 
   const labelText = plainText(label);
   if (labelText) return { 'aria-label': `About ${labelText}` };
   if (labelId) return { 'aria-labelledby': `${aboutId} ${labelId}` };
-  return { 'aria-label': 'About this field' };
+  return { 'aria-label': libText('About this field') };
 }
 
 /** The info icon after a label. Outside the `<label>`, so hovering or clicking it never focuses the field. */
@@ -123,7 +124,7 @@ function FieldLabelInfo({
       <InfoTooltip {...name}>{children}</InfoTooltip>
       {isNamedByLabel ? (
         <span id={aboutId} hidden>
-          About
+          {libText('About')}
         </span>
       ) : null}
     </>

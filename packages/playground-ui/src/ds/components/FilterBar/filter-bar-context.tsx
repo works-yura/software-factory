@@ -1,3 +1,4 @@
+import { libText } from '@/lib/lib-text';
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -399,7 +400,7 @@ export function FilterBarProvider({
       setLastCommit(null);
       setDraftState(null);
       setInputTarget(group.id);
-      announce(parentId ? 'Nested group added' : 'Advanced filter added');
+      announce(parentId ? libText('Nested group added') : libText('Advanced filter added'));
       return group.id;
     },
     [emit, announce],

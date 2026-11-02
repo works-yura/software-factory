@@ -8,6 +8,7 @@ import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
 import { quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type SidebarPanelProps = {
   children: React.ReactNode;
@@ -208,7 +209,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
             <DrawerClose asChild>
               <button
                 type="button"
-                aria-label="Close"
+                aria-label={libText('Close')}
                 className="group absolute top-2 -right-12 z-10 inline-flex size-11 touch-manipulation items-center justify-center transition-opacity duration-fast group-data-[ending-style]/popup:opacity-0 focus-visible:outline-hidden motion-reduce:duration-0"
               >
                 <span
@@ -225,10 +226,10 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
             </DrawerClose>
           ) : null}
           <VisuallyHidden asChild>
-            <DrawerTitle>Navigation</DrawerTitle>
+            <DrawerTitle>{libText('Navigation')}</DrawerTitle>
           </VisuallyHidden>
           <VisuallyHidden asChild>
-            <DrawerDescription>Primary site navigation drawer</DrawerDescription>
+            <DrawerDescription>{libText('Primary site navigation drawer')}</DrawerDescription>
           </VisuallyHidden>
           <div
             onClick={closeOnAnchor}

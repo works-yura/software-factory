@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export interface CommentQuoteProps {
   authorName?: string;
@@ -35,7 +36,7 @@ export function CommentQuote({ authorName, quote, onDismiss, className }: Commen
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="Remove quote"
+          aria-label={libText('Remove quote')}
           onClick={onDismiss}
           className="shrink-0"
         >

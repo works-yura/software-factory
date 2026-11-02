@@ -3,8 +3,14 @@ import { parseSavedViews, savedViewNameSchema, serializeSavedViews } from './sav
 import type { SavedView, SavedViewSettingsSchema } from './saved-view-schema';
 import { readSavedViewsRaw, savedViewsSubscriber, writeSavedViewsRaw } from './saved-views-storage';
 import type { FilterBarItem } from '@/ds/components/FilterBar/types';
+import { libText } from '@/lib/lib-text';
 
 const NEW_SAVED_VIEW_NAME = 'Untitled view';
+
+/** The default view name is stored in English; show it translated while the stored name stays unchanged. */
+export function viewDisplayName(name: string): string {
+  return name === NEW_SAVED_VIEW_NAME ? libText(name) : name;
+}
 
 export type SavedViewContent<TSettings> = {
   filters: FilterBarItem[];
@@ -99,7 +105,7 @@ export function useSavedViews<TSettings>({
     unsaved,
     storageError:
       failedStorageKey === storageKey
-        ? 'Could not save changes. Check your browser storage settings and try again.'
+        ? libText('Could not save changes. Check your browser storage settings and try again.')
         : undefined,
     applied: draft ?? activeView,
     select: viewId => {
@@ -107,7 +113,7 @@ export function useSavedViews<TSettings>({
       setDraft(undefined);
       onActiveViewChange(viewId);
     },
-    create: (settings, filters = []) => setDraft({ name: NEW_SAVED_VIEW_NAME, filters, settings }),
+    create: (settings, filters = []) => setDraft({ name: libText(NEW_SAVED_VIEW_NAME), filters, settings }),
     edit: viewId => {
       if (draft?.viewId === viewId) return;
       const view = views.find(candidate => candidate.id === viewId);
@@ -131,7 +137,7 @@ export function useSavedViews<TSettings>({
       const saved: SavedView<TSettings> = {
         ...content,
         id: viewId ?? createSavedViewId(),
-        name: validViewName(content.name) ?? views.find(view => view.id === viewId)?.name ?? NEW_SAVED_VIEW_NAME,
+        name: validViewName(content.name) ?? views.find(view => view.id === viewId)?.name ?? libText(NEW_SAVED_VIEW_NAME),
       };
       if (!write(viewId ? views.map(view => (view.id === viewId ? saved : view)) : [...views, saved])) return;
       setDraft(undefined);

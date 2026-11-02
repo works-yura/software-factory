@@ -2,10 +2,11 @@ import type { ComponentPropsWithoutRef } from 'react';
 import { useMaybeSidebarState } from '../root/sidebar-context';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type SidebarNavProps = ComponentPropsWithoutRef<'nav'>;
 
-export function SidebarNav({ 'aria-label': ariaLabel = 'Main', children, className, ...props }: SidebarNavProps) {
+export function SidebarNav({ 'aria-label': ariaLabel = libText('Main'), children, className, ...props }: SidebarNavProps) {
   const isMobile = useMaybeSidebarState()?.isMobile ?? false;
 
   return (

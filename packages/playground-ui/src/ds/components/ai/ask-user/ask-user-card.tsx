@@ -12,6 +12,7 @@ import { AskUserBody, AskUserOutput, AskUserPending, AskUserQuestion } from './a
 import { AskUserRoot } from './ask-user-root';
 import type { AskUserAnswer, AskUserOption, AskUserPayload, AskUserResult } from './ask-user-types';
 import { Badge } from '@/ds/components/Badge';
+import { libText } from '@/lib/lib-text';
 
 export interface AskUserProps extends Omit<ComponentProps<typeof AskUserContainer>, 'children' | 'onSubmit'> {
   payload: AskUserPayload;
@@ -64,7 +65,7 @@ interface AskUserCardContentProps extends Pick<AskUserProps, 'result' | 'isAnswe
 
 function AskUserCardContent({ result, isAnswered, isSubmitting, options, footer }: AskUserCardContentProps) {
   if (result) return <AskUserOutput result={result} />;
-  if (isAnswered) return <Badge variant="success">Answered</Badge>;
+  if (isAnswered) return <Badge variant="success">{libText('Answered')}</Badge>;
 
   return (
     <>

@@ -2,6 +2,7 @@ import { CopyIcon, LayersIcon, LayersPlusIcon, PencilIcon, TextCursorInputIcon, 
 import { Fragment, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SavedViewNameInput } from './saved-view-name-input';
+import { viewDisplayName } from './use-saved-views';
 import type { SavedView } from './saved-view-schema';
 import { SavedViewSummary } from './saved-view-summary';
 import type { SavedViewsController } from './use-saved-views';
@@ -15,6 +16,7 @@ import { Icon } from '@/ds/icons/Icon';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 const restingTabClass = buttonVariants({ variant: 'default', size: 'sm' });
 const selectedTabClass = buttonVariants({ variant: 'subtle', size: 'sm' });
@@ -42,7 +44,7 @@ export function SavedViewTabs<TSettings>({
   defaultLabel,
   newViewSettings,
   describeSettings,
-  'aria-label': ariaLabel = 'Views',
+  'aria-label': ariaLabel = libText('Views'),
   className,
 }: SavedViewTabsProps<TSettings>) {
   const [renamingViewId, setRenamingViewId] = useState<string>();
@@ -65,7 +67,7 @@ export function SavedViewTabs<TSettings>({
           return (
             <RenamingViewTab
               key={view.id}
-              name={view.name}
+              name={viewDisplayName(view.name)}
               onCommit={name => {
                 setRenamingViewId(undefined);
                 views.rename(view.id, name);
@@ -101,7 +103,7 @@ export function SavedViewTabs<TSettings>({
         <Button
           type="button"
           size="icon-sm"
-          tooltip="New view"
+          tooltip={libText('New view')}
           disabled={draft !== undefined}
           onClick={() => views.create(newViewSettings)}
         >
@@ -139,14 +141,14 @@ function EditingViewTab({
           {unsaved && (
             <>
               <span className="size-1.5 shrink-0 rounded-full bg-warning-indicator" aria-hidden />
-              <VisuallyHidden>Unsaved changes</VisuallyHidden>
+              <VisuallyHidden>{libText('Unsaved changes')}</VisuallyHidden>
             </>
           )}
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            tooltip="Rename view"
+            tooltip={libText('Rename view')}
             className="-mr-2 size-6"
             onClick={() => setRenaming(true)}
           >
@@ -201,10 +203,10 @@ function SavedViewTab<TSettings>({
   onDelete: () => void;
 }) {
   const actions: ViewAction[] = [
-    { label: 'Edit view', icon: <PencilIcon aria-hidden />, onClick: onEdit },
-    { label: 'Rename', icon: <TextCursorInputIcon aria-hidden />, onClick: onRename },
-    { label: 'Duplicate', icon: <CopyIcon aria-hidden />, onClick: onDuplicate },
-    { label: 'Delete view', icon: <Trash2Icon aria-hidden />, onClick: onDelete, destructive: true },
+    { label: libText('Edit view'), icon: <PencilIcon aria-hidden />, onClick: onEdit },
+    { label: libText('Rename'), icon: <TextCursorInputIcon aria-hidden />, onClick: onRename },
+    { label: libText('Duplicate'), icon: <CopyIcon aria-hidden />, onClick: onDuplicate },
+    { label: libText('Delete view'), icon: <Trash2Icon aria-hidden />, onClick: onDelete, destructive: true },
   ];
   const [menuOpen, setMenuOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -242,7 +244,7 @@ function SavedViewTab<TSettings>({
             }
           >
             <SavedViewTabIcon />
-            <span className="max-w-48 truncate">{view.name}</span>
+            <span className="max-w-48 truncate">{viewDisplayName(view.name)}</span>
             {unsaved && <span className="size-1.5 shrink-0 rounded-full bg-warning-indicator" aria-hidden />}
           </ContextMenu.Trigger>
           <HoverCardContent side="bottom" align="start" showArrow={false}>

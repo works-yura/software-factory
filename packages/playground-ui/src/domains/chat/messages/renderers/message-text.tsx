@@ -9,6 +9,7 @@ import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import type { MarkdownExternalLinkTarget } from '@/ds/components/MarkdownRenderer';
 import { Notice } from '@/ds/components/Notice';
 import { Icon } from '@/ds/icons/Icon';
+import { libText } from '@/lib/lib-text';
 
 export interface MessageTextProps {
   text: string;
@@ -32,14 +33,14 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming, tab
 
     case 'warning':
       return (
-        <Notice variant="warning" title="Warning">
+        <Notice variant="warning" title={libText('Warning')}>
           <Notice.Message>{text}</Notice.Message>
         </Notice>
       );
 
     case 'error':
       return (
-        <Notice variant="destructive" title="Error">
+        <Notice variant="destructive" title={libText('Error')}>
           <Notice.Message>{errorMessage(text)}</Notice.Message>
         </Notice>
       );
@@ -56,11 +57,11 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming, tab
               <DisclosureChevron direction="right" />
             </Icon>
             <Badge variant="blue" icon={<CheckCircleIcon />}>
-              {collapsedCompletionCheck ? 'Show' : 'Hide'} completion check
+              {collapsedCompletionCheck ? libText('Show') : libText('Hide')} completion check
             </Badge>
           </button>
           {!collapsedCompletionCheck && (
-            <Notice variant="info" title={metadata?.completionResult?.passed ? 'Complete' : 'Not Complete'}>
+            <Notice variant="info" title={metadata?.completionResult?.passed ? libText('Complete') : libText('Not Complete')}>
               <MarkdownRenderer externalLinkTarget={externalLinkTarget}>{text}</MarkdownRenderer>
             </Notice>
           )}

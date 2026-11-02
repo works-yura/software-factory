@@ -4,6 +4,7 @@ import { CodeBlock } from '@/ds/components/CodeBlock';
 import { languageForPath } from '@/ds/components/CodeEditor/highlight';
 import { truncateString } from '@/lib/truncate-string';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 const DIFF_MAX_LINES = 200;
 const WRITTEN_FILE_MAX_CHARS = 2000;
@@ -51,7 +52,7 @@ export function ToolCallEdit({ edit, showFullContent = false }: { edit: ToolEdit
       <CodeBlock
         code={showFullContent ? edit.content : truncateString(edit.content, WRITTEN_FILE_MAX_CHARS)}
         lang={lang}
-        fileName={edit.path ?? 'Change'}
+        fileName={edit.path ?? libText('Change')}
         overflow="scroll"
       />
     );
@@ -68,7 +69,7 @@ export function ToolCallEdit({ edit, showFullContent = false }: { edit: ToolEdit
         showFullContent && 'max-h-60 overflow-y-auto',
       )}
       role="group"
-      aria-label="File change"
+      aria-label={libText('File change')}
     >
       <DiffSide lines={removed.lines} side="removed" lang={lang} />
       <DiffSide lines={added.lines} side="added" lang={lang} />

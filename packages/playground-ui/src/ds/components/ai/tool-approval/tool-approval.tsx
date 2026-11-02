@@ -7,13 +7,14 @@ import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { libText } from '@/lib/lib-text';
 
 type ToolApprovalDecision = 'approved' | 'declined';
 
 const approvalStates = {
-  pending: { label: 'Approval required', variant: 'warning', icon: ShieldCheck },
-  approved: { label: 'Approved', variant: 'success', icon: Check },
-  declined: { label: 'Declined', variant: 'neutral', icon: X },
+  pending: { label: libText('Approval required'), variant: 'warning', icon: ShieldCheck },
+  approved: { label: libText('Approved'), variant: 'success', icon: Check },
+  declined: { label: libText('Declined'), variant: 'neutral', icon: X },
 } satisfies Record<'pending' | ToolApprovalDecision, { label: string; variant: BadgeVariant; icon: LucideIcon }>;
 
 export interface ToolApprovalStatusProps {
@@ -58,7 +59,7 @@ export function ToolApprovalActions({
         disabled={disabled}
         onClick={onApprove}
       >
-        Approve
+        {libText('Approve')}
       </Button>
       <Button
         type="button"
@@ -68,7 +69,7 @@ export function ToolApprovalActions({
         disabled={disabled}
         onClick={onDecline}
       >
-        Decline
+        {libText('Decline')}
       </Button>
     </div>
   );

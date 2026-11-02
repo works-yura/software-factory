@@ -23,6 +23,7 @@ import { formatJSON } from '@/lib/formatting';
 import type { JsonSchema } from '@/lib/json-schema';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
 type CodeEditorFont = 'body' | 'mono';
@@ -222,7 +223,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     ref,
   ) => {
     const fieldAria = useFieldControlAria({ 'aria-label': ariaLabelProp });
-    const ariaLabel = ariaLabelProp ?? 'Code editor';
+    const ariaLabel = ariaLabelProp ?? libText('Code editor');
     const controlId = id ?? fieldAria.id;
     const ariaLabelledBy = ariaLabelledByProp ?? fieldAria['aria-labelledby'];
     const ariaDescribedBy = ariaDescribedByProp ?? fieldAria['aria-describedby'];
@@ -289,7 +290,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         {(showCopyButton || canFormat) && (
           <div className="absolute top-2 right-2 z-20 flex gap-1">
             {canFormat && (
-              <Button type="button" size="sm" tooltip="Format JSON" aria-label="Format JSON" onClick={handleFormat}>
+              <Button type="button" size="sm" tooltip={libText('Format JSON')} aria-label={libText('Format JSON')} onClick={handleFormat}>
                 <Braces />
               </Button>
             )}

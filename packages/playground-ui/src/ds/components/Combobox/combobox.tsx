@@ -25,6 +25,7 @@ import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-
 import { deprecatedErrorAria } from '@/ds/primitives/form-element';
 import type { PortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type { ComboboxVariant } from './combobox-styles';
 
@@ -160,7 +161,7 @@ function useOptionFilter() {
 /** Names the control when nothing else does: an `id` or a `Field` links a label to it instead. */
 function getFallbackAriaLabel({ hasLabel, multiple }: { hasLabel: boolean; multiple: boolean }) {
   if (hasLabel) return undefined;
-  return multiple ? 'Select options' : 'Select option';
+  return multiple ? libText('Select options') : libText('Select option');
 }
 
 function getControlProps({
@@ -358,9 +359,9 @@ function SingleCombobox({
   options,
   value,
   onValueChange,
-  placeholder = 'Select option...',
+  placeholder = libText('Select option...'),
   searchPlaceholder = 'Search...',
-  emptyText = 'No option found.',
+  emptyText = libText('No option found.'),
   className,
   disabled = false,
   variant = 'default',
@@ -435,9 +436,9 @@ function MultipleCombobox({
   value = EMPTY_VALUES,
   onValueChange,
   clearLabel,
-  placeholder = 'Select options...',
+  placeholder = libText('Select options...'),
   searchPlaceholder = 'Search...',
-  emptyText = 'No option found.',
+  emptyText = libText('No option found.'),
   className,
   disabled = false,
   variant = 'default',

@@ -40,6 +40,7 @@ import type { TripAnimation } from './message-scroller-trip';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type {
   MessageScrollerButtonDirection,
@@ -920,7 +921,7 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
         {children ?? (
           <>
             <ArrowDownIcon className="size-4" aria-hidden />
-            <span className="sr-only">{direction === 'end' ? 'Scroll to end' : 'Scroll to start'}</span>
+            <span className="sr-only">{direction === 'end' ? libText('Scroll to end') : libText('Scroll to start')}</span>
           </>
         )}
       </button>

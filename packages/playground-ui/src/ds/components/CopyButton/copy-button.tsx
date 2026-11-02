@@ -3,6 +3,7 @@ import { CopyIcon, CheckIcon } from 'lucide-react';
 import type { ButtonProps } from '../Button';
 import { Button } from '../Button';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { libText } from '@/lib/lib-text';
 
 export type CopyButtonProps = {
   content: string;
@@ -18,7 +19,7 @@ export function CopyButton({
   content,
   copyMessage,
   showToast,
-  tooltip = 'Copy to clipboard',
+  tooltip = libText('Copy to clipboard'),
   size = 'sm',
   variant,
   className,
@@ -36,8 +37,8 @@ export function CopyButton({
       size={size}
       variant={variant}
       className={className}
-      tooltip={isCopied ? 'Copied!' : tooltip}
-      aria-label={isCopied ? 'Copied!' : tooltip}
+      tooltip={isCopied ? libText('Copied!') : tooltip}
+      aria-label={isCopied ? libText('Copied!') : tooltip}
     >
       {isCopied ? <CheckIcon /> : <CopyIcon />}
     </Button>

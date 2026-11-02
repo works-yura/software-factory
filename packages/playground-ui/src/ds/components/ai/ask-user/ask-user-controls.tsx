@@ -7,6 +7,7 @@ import { Input } from '@/ds/components/Input';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 // Keep the UI-only custom choice separate from suggested answer values.
 const customAnswerValue = 'custom';
@@ -30,7 +31,7 @@ export function AskUserOptions({ children, className, ...props }: ComponentProps
 
   if (context.selectionMode === 'multi_select') {
     return (
-      <Fieldset aria-label="Answer options" {...props} className={cn('gap-2', className)}>
+      <Fieldset aria-label={libText('Answer options')} {...props} className={cn('gap-2', className)}>
         {children}
       </Fieldset>
     );
@@ -125,7 +126,7 @@ export function AskUserTextAnswer({ disabled = false, ...props }: AskUserTextAns
     <Input
       type="text"
       aria-labelledby={props['aria-label'] ? undefined : context.questionId}
-      placeholder="Type your answer..."
+      placeholder={libText('Type your answer...')}
       size="sm"
       {...props}
       disabled={context.disabled || disabled}
@@ -144,7 +145,7 @@ export interface AskUserCustomAnswerProps {
 
 export function AskUserCustomAnswer({
   className,
-  label = 'Other…',
+  label = libText('Other…'),
   inputLabel = 'Your answer',
 }: AskUserCustomAnswerProps) {
   const context = useAskUserContext();
@@ -166,7 +167,7 @@ export function AskUserCustomAnswer({
   return (
     <FieldItem
       role="group"
-      aria-label="Custom answer"
+      aria-label={libText('Custom answer')}
       aria-disabled={context.disabled || undefined}
       disabled={context.disabled}
       onClick={handleRowClick}

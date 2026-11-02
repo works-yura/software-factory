@@ -1,13 +1,14 @@
 import { z } from 'zod/v4';
 import type { SidebarLink } from '../nav/sidebar-nav-link';
+import { libText } from '@/lib/lib-text';
 
 export const sidebarLinkPlacements = ['sidebar', 'more', 'hidden'] as const;
 export type SidebarLinkPlacement = (typeof sidebarLinkPlacements)[number];
 
 export const sidebarLinkPlacementLabels: Record<SidebarLinkPlacement, string> = {
-  sidebar: 'Always show',
-  more: 'Hide in More menu',
-  hidden: 'Never show',
+  sidebar: libText('Always show'),
+  more: libText('Hide in More menu'),
+  hidden: libText('Never show'),
 };
 
 export const placementsSchema = z.record(z.string(), z.enum(sidebarLinkPlacements));

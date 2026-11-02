@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type ActivityStatus = 'initializing' | 'working' | 'ready';
 
@@ -8,9 +9,9 @@ import './activity.css';
 const PILLS = [0, 1, 2, 3, 4];
 
 const STATUS_TITLE: Record<ActivityStatus, string> = {
-  initializing: 'Initializing',
-  working: 'Working',
-  ready: 'Waiting on you',
+  initializing: libText('Initializing'),
+  working: libText('Working'),
+  ready: libText('Waiting on you'),
 };
 
 function statusAttributes(status: ActivityStatus, label: string | undefined) {

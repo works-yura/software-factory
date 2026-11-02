@@ -7,6 +7,7 @@ import { quietTextHover } from '@/ds/primitives/typography';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 type Orientation = 'vertical' | 'horizontal' | 'both';
 type ScrollButtonDirection = 'left' | 'right';
@@ -179,8 +180,8 @@ const ScrollButtons = ({ areaRef, scrollButtons }: ScrollButtonsProps) => {
     DEFAULT_SCROLL_BUTTON_INTERVAL_TIME,
     MIN_SCROLL_BUTTON_INTERVAL_TIME,
   );
-  const leftScrollButtonLabel = scrollButtonOptions?.leftLabel ?? 'Scroll left';
-  const rightScrollButtonLabel = scrollButtonOptions?.rightLabel ?? 'Scroll right';
+  const leftScrollButtonLabel = scrollButtonOptions?.leftLabel ?? libText('Scroll left');
+  const rightScrollButtonLabel = scrollButtonOptions?.rightLabel ?? libText('Scroll right');
 
   const stopScrollButtonScrolling = React.useCallback(() => {
     if (!scrollButtonInterval.current) return;

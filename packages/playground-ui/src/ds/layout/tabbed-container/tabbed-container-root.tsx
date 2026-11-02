@@ -18,6 +18,7 @@ import type { TabProps } from '@/ds/components/Tabs/tabs-tab';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
+import { libText } from '@/lib/lib-text';
 
 export type TabbedContainerSearchProps = Pick<
   ListSearchProps,
@@ -86,14 +87,14 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
                       </Txt>
                     ) : null}
                     {filter.multiple ? (
-                      <Combobox {...filter} clearLabel="Clear" size="md" variant="default" />
+                      <Combobox {...filter} clearLabel={libText('Clear')} size="md" variant="default" />
                     ) : (
                       <Combobox {...filter} size="md" variant="default" />
                     )}
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
-                  {filterCount > 0 ? `Filter, ${filterCount} selected` : 'Filter'}
+                  {filterCount > 0 ? `Filter, ${filterCount} selected` : libText('Filter')}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

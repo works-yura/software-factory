@@ -6,16 +6,17 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { libText } from '@/lib/lib-text';
 
 export function MarkdownTable({ node, children }: ComponentProps<'table'> & ExtraProps) {
   const markdown = node?.properties.tableMarkdown;
   const csv = node?.properties.tableCsv;
-  const { isCopied, copyToClipboard } = useCopyToClipboard({ copyMessage: 'Copied table markdown' });
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copyMessage: libText('Copied table markdown') });
 
   return (
     <div className="my-3 w-fit max-w-full min-w-0">
       <div className="flex justify-end">
-        <ButtonsGroup size="sm" aria-label="Table actions">
+        <ButtonsGroup size="sm" aria-label={libText('Table actions')}>
           <Button
             type="button"
             variant="ghost"
@@ -23,16 +24,16 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
             onClick={() => {
               if (typeof markdown === 'string') copyToClipboard(markdown);
             }}
-            aria-label="Copy table as markdown"
+            aria-label={libText('Copy table as markdown')}
           >
             {isCopied ? <CheckIcon /> : <CopyIcon />}
-            {isCopied ? 'Copied!' : 'Copy table as markdown'}
+            {isCopied ? libText('Copied!') : libText('Copy table as markdown')}
           </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger
               disabled={typeof csv !== 'string'}
               render={
-                <Button type="button" size="icon-sm" variant="ghost" aria-label="More table options">
+                <Button type="button" size="icon-sm" variant="ghost" aria-label={libText('More table options')}>
                   <ChevronDownIcon />
                 </Button>
               }

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { FilterBarFieldLabel, formatValue } from '@/ds/components/FilterBar/filter-bar-chip';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
 import { Txt } from '@/ds/components/Txt';
+import { libText } from '@/lib/lib-text';
 
 type SavedViewSummaryProps = {
   filters: readonly FilterBarItem[];
@@ -15,10 +16,10 @@ export function SavedViewSummary({ filters, fields, operators, settings }: Saved
     <div className="flex min-w-48 flex-col gap-2">
       {filters.length === 0 ? (
         <Txt variant="caption" tone="muted">
-          No filters
+          {libText('No filters')}
         </Txt>
       ) : (
-        <ul aria-label="Filters" className="flex flex-col gap-1.5">
+        <ul aria-label={libText('Filters')} className="flex flex-col gap-1.5">
           {filters.map(filter => {
             const field = fields.find(candidate => candidate.id === filter.fieldId);
             const operatorStated = (field?.operators?.length ?? operators.length) > 1;

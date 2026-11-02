@@ -4,6 +4,7 @@ import { attachmentInfo, attachmentName, textAttachment } from './message-attach
 import { MessageImageAttachment } from './message-image-attachment';
 import { AttachmentCard } from '@/ds/components/AttachmentCard';
 import { isBrowserFetchableUrl } from '@/lib/file';
+import { libText } from '@/lib/lib-text';
 
 export interface MessageAttachmentProps {
   type: 'image' | 'document' | 'file';
@@ -19,7 +20,7 @@ export function MessageAttachment({ type, contentType, src, data, name }: Messag
   const isPdf = type === 'document' && contentType === 'application/pdf';
   const text = textAttachment(data ?? '', name);
   const fallback =
-    type === 'image' ? 'Image' : isPdf ? 'PDF document' : type === 'document' ? 'Text attachment' : 'File';
+    type === 'image' ? libText('Image') : isPdf ? libText('PDF document') : type === 'document' ? libText('Text attachment') : libText('File');
   const filename = attachmentName(type === 'document' && !isPdf ? text.name : name, src, fallback);
   const { Icon, label } = attachmentInfo(filename, contentType ?? (type === 'image' ? 'image/*' : undefined));
   const href = src && isBrowserFetchableUrl(src) ? src : undefined;
@@ -30,7 +31,7 @@ export function MessageAttachment({ type, contentType, src, data, name }: Messag
 
   if (type === 'image') {
     return (
-      <MessageImageAttachment key={src} src={src ?? ''} name={filename} typeLabel={label === '*' ? 'Image' : label} />
+      <MessageImageAttachment key={src} src={src ?? ''} name={filename} typeLabel={label === '*' ? libText('Image') : label} />
     );
   }
   return (

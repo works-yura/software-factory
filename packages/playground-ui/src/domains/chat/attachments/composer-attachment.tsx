@@ -6,6 +6,7 @@ import { Button } from '@/ds/components/Button/Button';
 import { ContextMenu } from '@/ds/components/ContextMenu/context-menu';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/utils/cn';
+import { libText } from '@/lib/lib-text';
 
 // Dark attachments need a fill above the muted composer. Light attachments keep
 // the white card material and use the shared rim and shadow for elevation.
@@ -184,19 +185,19 @@ export function ComposerAttachment({
         {onPreview && (
           <ContextMenu.Item className="min-h-11" onSelect={() => runMenuAction(onPreview)}>
             <Eye />
-            <span>Preview</span>
+            <span>{libText('Preview')}</span>
           </ContextMenu.Item>
         )}
         {onEdit && (
           <ContextMenu.Item className="min-h-11" onSelect={() => runMenuAction(onEdit)}>
             <Pencil />
-            <span>Edit</span>
+            <span>{libText('Edit')}</span>
           </ContextMenu.Item>
         )}
         {(onPreview || onEdit) && <ContextMenu.Separator />}
         <ContextMenu.Item className="min-h-11" variant="destructive" onSelect={() => runMenuAction(onRemove)}>
           <X />
-          <span>Remove</span>
+          <span>{libText('Remove')}</span>
         </ContextMenu.Item>
       </ContextMenu.Content>
     </ContextMenu>

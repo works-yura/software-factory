@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { matchesQuery } from './match-query';
 import type { FilterBarField, FilterBarOption } from './types';
+import { libText } from '@/lib/lib-text';
 
 const DEBOUNCE_MS = 150;
 
 const BOOLEAN_OPTIONS: FilterBarOption[] = [
-  { value: 'true', label: 'True' },
-  { value: 'false', label: 'False' },
+  { value: 'true', label: libText('True') },
+  { value: 'false', label: libText('False') },
 ];
 
 /** The field's suggestions, defaulting to True/False for boolean fields. */
