@@ -18,12 +18,14 @@ import {
   useRemoveCredentialAccount,
   useUpdateCredentialAccount,
 } from '../../../../../../hooks/useCredentialAccounts';
+import { useServerFeatures } from '../../../../../../hooks/useServerFeatures';
 import { currentLanguage } from '../../../../../i18n';
 import { translator } from '../../../../../i18n/t';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import { SettingsSubsection } from '../../SettingsSubsection';
 import { accountErrorMessage, CLAUDE_ACCOUNTS_PROVIDER } from './accountErrors';
 import { ClaudeAccountDialog } from './ClaudeAccountDialog';
+import { ClaudeSignInButton } from './ClaudeSignIn';
 import type { ClaudeAccountDialogMode } from './ClaudeAccountDialog';
 
 const tk = translator('settings');
@@ -35,12 +37,14 @@ export function formatAccountTime(iso: string): string {
 /**
  * Accounts Claude Code sessions run on: when one runs out of usage the session
  * continues on the next, a limited one returns after its reset, a refused one
- * stays off until fixed. Subscriptions serve only their owner's runs;
- * organization API keys serve everyone.
+ * stays off until fixed. Subscriptions and Claude sign-ins serve only their
+ * owner's runs; organization API keys serve everyone. Where the server offers
+ * it, a person signs in to Claude here instead of pasting a token.
  */
 export function ClaudeAccountsSection() {
   const { t } = useTranslation('settings');
   const accountsQuery = useCredentialAccountsQuery(CLAUDE_ACCOUNTS_PROVIDER);
+  const features = useServerFeatures();
   const updateMutation = useUpdateCredentialAccount(CLAUDE_ACCOUNTS_PROVIDER);
   const removeMutation = useRemoveCredentialAccount(CLAUDE_ACCOUNTS_PROVIDER);
   const [dialog, setDialog] = useState<ClaudeAccountDialogMode | null>(null);
@@ -71,6 +75,7 @@ export function ClaudeAccountsSection() {
       action={addButton}
     >
       <SettingsContainer className="flex flex-col gap-3 p-4">
+        {features.data?.claudeSignIn === true && data && <ClaudeSignInButton disabled={busy} />}
         {accountsQuery.isPending && <SkeletonRows label={t('claudeAccounts.loading')} rows={2} />}
         {needsSignIn && <Notice variant="info">{t('claudeAccounts.errors.needSignIn')}</Notice>}
         {accountsQuery.isError && !needsSignIn && (
@@ -126,6 +131,9 @@ export function ClaudeAccountsSection() {
 }
 
 function statusPresentation(account: CredentialAccountInfo): StatusPresentation {
+  if (account.needsSignIn) {
+    return { label: tk('claudeAccounts.status.needsSignIn'), tone: 'neutral', description: '' } satisfies StatusPresentation;
+  }
   if (account.status === 'disabled') {
     return { label: tk('claudeAccounts.status.off'), tone: 'neutral', description: '' } satisfies StatusPresentation;
   }
@@ -157,9 +165,13 @@ function AccountRow({
   const kindLabel =
     account.kind === 'api_key'
       ? t('claudeAccounts.kind.orgKey')
-      : account.mine
-        ? t('claudeAccounts.kind.mySubscription')
-        : t('claudeAccounts.kind.memberSubscription');
+      : account.kind === 'claude_login'
+        ? account.mine
+          ? t('claudeAccounts.kind.mySignIn')
+          : t('claudeAccounts.kind.memberSignIn')
+        : account.mine
+          ? t('claudeAccounts.kind.mySubscription')
+          : t('claudeAccounts.kind.memberSubscription');
 
   return (
     <li aria-label={account.label} className="flex items-start gap-2.5 py-2">
@@ -171,9 +183,11 @@ function AccountRow({
           <Badge size="xs" variant={account.kind === 'api_key' ? 'blue' : 'neutral'}>
             {kindLabel}
           </Badge>
-          <Txt as="span" variant="meta" tone="muted" font="mono" className="shrink-0">
-            …{account.hint}
-          </Txt>
+          {account.hint && (
+            <Txt as="span" variant="meta" tone="muted" font="mono" className="shrink-0">
+              …{account.hint}
+            </Txt>
+          )}
         </div>
         {account.lastError && (
           <Txt as="p" variant="meta" className="text-destructive-foreground break-words">

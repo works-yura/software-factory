@@ -677,10 +677,10 @@ function seedDraft(step: 'vcs' | 'model-provider') {
 }
 
 /** Report the Claude Code harness as configured (or not) on this server, and whether it runs on the local login. */
-function serveClaudeCodeFeature(claudeCode: boolean, { claudeCodeLocalLogin = false } = {}) {
+function serveClaudeCodeFeature(claudeCode: boolean, { claudeCodeLocalLogin = false, claudeSignIn = false } = {}) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/features`, () =>
-      HttpResponse.json({ knowledge: false, mcp: false, claudeCode, claudeCodeLocalLogin }),
+      HttpResponse.json({ knowledge: false, mcp: false, claudeCode, claudeCodeLocalLogin, claudeSignIn }),
     ),
   );
 }
@@ -888,6 +888,31 @@ describe('harness step', () => {
       expect(screen.queryByText(/`claude` login/)).not.toBeInTheDocument();
     });
 
+    it('offers signing in with Claude when there is no account, and reports the sign-in', async () => {
+      serveClaudeCodeFeature(true, { claudeCodeLocalLogin: true, claudeSignIn: true });
+      serveClaudeAccounts(0);
+      seedDraft('model-provider');
+      sessionStorage.setItem(HARNESS_KEY, 'claude-code');
+      stubModelStepEndpoints([]);
+      const started: string[] = [];
+      server.use(
+        http.post(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts/sign-in`, () => {
+          started.push('start');
+          return HttpResponse.json({ signIn: { id: 'flow-1', status: 'pending' } }, { status: 202 });
+        }),
+        http.get(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts/sign-in/:id`, () =>
+          HttpResponse.json({ signIn: { id: 'flow-1', status: 'error', error: 'Claude sign-in did not finish.' } }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderFlow();
+
+      await user.click(await screen.findByRole('option', { name: /Sign in with Claude/ }));
+      expect(await screen.findByText('Claude sign-in did not finish.')).toBeInTheDocument();
+      expect(started).toEqual(['start']);
+    });
+
     it('counts the organization’s accounts and adds another from the step', async () => {
       serveClaudeCodeFeature(true);
       serveClaudeAccounts(2);
@@ -899,6 +924,8 @@ describe('harness step', () => {
       renderFlow();
 
       expect(await screen.findByText(/Runs on your organization’s 2 Claude Code accounts\./)).toBeInTheDocument();
+      // Accounts already there: no sign-in offered on top of them.
+      expect(screen.queryByRole('option', { name: /Sign in with Claude/ })).not.toBeInTheDocument();
       await user.click(screen.getByRole('option', { name: /Add a Claude Code account/ }));
       expect(await screen.findByRole('dialog')).toBeInTheDocument();
     });

@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -565,6 +565,50 @@ describe('createClaudeFactoryHarness', () => {
     expect(config.onSession).toBe(onSession);
     expect(config.configDir).toBe(configDir);
     expect(config.skillsDir).toBeTruthy();
+  });
+
+  describe('session config dirs', () => {
+    let root: string | undefined;
+    afterEach(async () => {
+      if (root) await rm(root, { recursive: true, force: true });
+      root = undefined;
+    });
+
+    it('gives each session its own seeded config dir, stable across turns, and removes it with the session', async () => {
+      root = await mkdtemp(join(tmpdir(), 'claude-config-'));
+      const { config, factory } = setup({ sessionConfigRoot: root });
+      const first = config.configDir!({ id: 'session-a', cwd: undefined } as unknown as ClaudeCodeSession)!;
+      const other = config.configDir!({ id: 'factory-supervisor:f1', cwd: undefined } as unknown as ClaudeCodeSession)!;
+
+      expect(first.startsWith(root)).toBe(true);
+      expect(other).not.toBe(first);
+      expect(other).not.toContain(':');
+      expect(JSON.parse(await readFile(join(first, '.claude.json'), 'utf8'))).toEqual({ hasCompletedOnboarding: true });
+      expect((await stat(first)).mode & 0o777).toBe(0o700);
+      // Later turns (the session has run by now) keep the same dir, so `--resume` finds its files.
+      expect(config.configDir!({ id: 'session-a', cwd: '/work' } as unknown as ClaudeCodeSession)).toBe(first);
+
+      await factory.removeSessionConfig('session-a');
+      await expect(stat(first)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await readdir(root)).toHaveLength(1);
+      // Removing a session that never had a dir is fine.
+      await factory.removeSessionConfig('session-never');
+    });
+
+    it('leaves a session that ran before it had a dir on the default one, where its transcript is', async () => {
+      root = await mkdtemp(join(tmpdir(), 'claude-config-'));
+      const { config } = setup({ sessionConfigRoot: root });
+      expect(config.configDir!({ id: 'session-old', cwd: '/work' } as unknown as ClaudeCodeSession)).toBeUndefined();
+      expect(await readdir(root)).toEqual([]);
+    });
+
+    it('puts the dirs next to the session store by default', async () => {
+      root = await mkdtemp(join(tmpdir(), 'claude-store-'));
+      const { config } = setup({ store: undefined, storeDir: join(root, 'sessions') });
+      expect(config.configDir!({ id: 'session-a', cwd: undefined } as unknown as ClaudeCodeSession)).toContain(
+        join(root, 'sessions-config'),
+      );
+    });
   });
 
   it('makes planning read-only by permission: no edits, no shell, no Factory tool that changes anything', () => {

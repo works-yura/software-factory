@@ -99,7 +99,10 @@ export const CREDENTIAL_ENV_KEYS = [
   'ANTHROPIC_AUTH_TOKEN',
   'CLAUDE_CODE_OAUTH_TOKEN',
   'ANTHROPIC_BASE_URL',
+  'AWS_BEARER_TOKEN_BEDROCK',
   'CLAUDE_CONFIG_DIR',
+  // Where the CLI reads its stored sign-in; only the credentials hook may point it somewhere.
+  'CLAUDE_SECURESTORAGE_CONFIG_DIR',
 ] as const;
 
 /** Set inside a Claude Code session; a nested `claude` refuses to start when it sees them. */

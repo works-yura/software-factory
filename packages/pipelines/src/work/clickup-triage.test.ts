@@ -22,7 +22,7 @@ function entering(source: string): FactoryStageRuleContext {
   } as unknown as FactoryStageRuleContext;
 }
 
-describe('Work triage entry for ClickUp tasks', () => {
+describe('Work triage entry for imported tasks', () => {
   const handler = workBoard.phases.triage.onEnter?.manual;
 
   it('starts the triage skill for a ClickUp card, with the task text as untrusted data', async () => {

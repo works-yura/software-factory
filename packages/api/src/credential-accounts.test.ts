@@ -5,13 +5,14 @@ import { createFactoryStorageForTests } from '@factory/testing';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 import { CredentialAccountRoutes } from './credential-accounts.ts';
+import type { ClaudeSignInFlows, ClaudeSignInFlowView } from './credential-accounts.ts';
 
 const apiKey = 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111';
 const aliceToken = 'sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb2222';
 const now = new Date('2026-10-28T12:00:00Z');
 const BASE = '/web/config/providers/anthropic/accounts';
 
-async function setup() {
+async function setup(claudeSignIn?: ClaudeSignInFlows) {
   const seed = await createFactoryStorageForTests();
   const admins = new Set(['admin']);
   const app = (userId: string | null, orgId = 'org1') => {
@@ -25,6 +26,7 @@ async function setup() {
       new CredentialAccountRoutes({
         auth: fakeRouteAuth({ isOrganizationAdmin: async (_org, user) => admins.has(user) }),
         modelCredentials: seed.credentials,
+        ...(claudeSignIn ? { claudeSignIn } : {}),
         now: () => now,
       }).routes(),
     );
@@ -126,5 +128,107 @@ describe('credential account routes', () => {
     expect((await send('alice', 'DELETE', `${BASE}/00000000-0000-4000-8000-000000000000`)).status).toBe(404);
     expect((await send('alice', 'DELETE', path)).status).toBe(200);
     expect((await send('alice', 'GET', BASE)).body.accounts).toEqual([]);
+  });
+});
+
+describe('Claude sign-in routes', () => {
+  /** Sign-in flows that finish when the test says so, filing the account the way the server does. */
+  function flows(seed: () => Awaited<ReturnType<typeof setup>>['seed']) {
+    const all = new Map<string, ClaudeSignInFlowView>();
+    let next = 0;
+    const signIn: ClaudeSignInFlows = {
+      start: owner => {
+        const flow: ClaudeSignInFlowView = { id: `flow-${++next}`, ...owner, status: 'pending' };
+        all.set(flow.id, flow);
+        return flow;
+      },
+      get: id => all.get(id),
+      cancel: id => {
+        const flow = all.get(id);
+        if (!flow || flow.status !== 'pending') return false;
+        all.set(id, { ...flow, status: 'error', error: 'Claude sign-in was cancelled.' });
+        return true;
+      },
+    };
+    const finish = async (id: string) => {
+      const flow = all.get(id)!;
+      const account = await seed().credentials.addAccount({
+        orgId: flow.orgId,
+        provider: 'anthropic',
+        label: 'alice@example.com',
+        kind: 'claude_login',
+        ownerUserId: flow.userId,
+        secret: 'fake-access',
+        oauth: { accessToken: 'fake-access', refreshToken: 'fake-refresh', expiresAt: 0, scopes: [] },
+        createdBy: flow.userId,
+      });
+      all.set(id, { ...flow, status: 'done', accountId: account.id });
+      return account;
+    };
+    return { signIn, finish };
+  }
+
+  it('starts a person’s sign-in, reports it until done, and shows the account it filed without its tokens', async () => {
+    let seedRef!: Awaited<ReturnType<typeof setup>>['seed'];
+    const fake = flows(() => seedRef);
+    const { seed, send } = await setup(fake.signIn);
+    seedRef = seed;
+
+    const started = await send('alice', 'POST', `${BASE}/sign-in`);
+    expect(started.status).toBe(202);
+    expect(started.body.signIn).toEqual({ id: 'flow-1', status: 'pending' });
+
+    await fake.finish('flow-1');
+    const done = await send('alice', 'GET', `${BASE}/sign-in/flow-1`);
+    expect(done.body.signIn).toMatchObject({
+      status: 'done',
+      account: { kind: 'claude_login', mine: true, canManage: true, canReplaceSecret: false, needsSignIn: false, hint: '' },
+    });
+    expect(JSON.stringify(done.body)).not.toContain('fake-');
+
+    // Someone else's sign-in is not there for bob.
+    expect((await send('bob', 'GET', `${BASE}/sign-in/flow-1`)).status).toBe(404);
+    expect((await send('bob', 'DELETE', `${BASE}/sign-in/flow-1`)).status).toBe(404);
+  });
+
+  it('cancels a pending sign-in and refuses a signed-out caller', async () => {
+    let seedRef!: Awaited<ReturnType<typeof setup>>['seed'];
+    const fake = flows(() => seedRef);
+    const { seed, send } = await setup(fake.signIn);
+    seedRef = seed;
+
+    await send('alice', 'POST', `${BASE}/sign-in`);
+    expect((await send('alice', 'DELETE', `${BASE}/sign-in/flow-1`)).body).toEqual({ cancelled: true });
+    expect((await send('alice', 'GET', `${BASE}/sign-in/flow-1`)).body.signIn).toMatchObject({
+      status: 'error',
+      error: 'Claude sign-in was cancelled.',
+    });
+    expect((await send(null, 'POST', `${BASE}/sign-in`)).status).toBeGreaterThanOrEqual(400);
+  });
+
+  it('says where sign-in works when this host does not offer it', async () => {
+    const { send } = await setup();
+    const refused = await send('alice', 'POST', `${BASE}/sign-in`);
+    expect(refused.status).toBe(404);
+    expect(refused.body).toMatchObject({ error: 'sign_in_unavailable' });
+  });
+
+  it('marks a refused sign-in as needing a new sign-in', async () => {
+    const { seed, send } = await setup();
+    const account = await seed.credentials.addAccount({
+      orgId: 'org1',
+      provider: 'anthropic',
+      label: 'alice@example.com',
+      kind: 'claude_login',
+      ownerUserId: 'alice',
+      secret: 'fake-access',
+      oauth: { accessToken: 'fake-access', refreshToken: 'fake-refresh', expiresAt: 0, scopes: [] },
+      createdBy: 'alice',
+    });
+    await seed.credentials.markAccountFailed('org1', account.id, 'sign in to Claude again');
+    const listed = await send('alice', 'GET', BASE);
+    expect(listed.body.accounts[0]).toMatchObject({ status: 'disabled', needsSignIn: true, lastError: 'sign in to Claude again' });
+    // A sign-in has no secret to paste over.
+    expect((await send('alice', 'PATCH', `${BASE}/${account.id}`, { secret: 'sk-ant-oat01-cccccccccccccccccccc3333' })).status).toBe(403);
   });
 });

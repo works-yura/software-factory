@@ -50,6 +50,12 @@ describe('pickCredentialAccount', () => {
     expect(ids(pickCredentialAccount(accounts, { userId: 'bob', now }))).toBe('org-key');
   });
 
+  it('treats a Claude sign-in like a subscription: its owner’s alone, ahead of organization keys', () => {
+    const accounts = [account('team-key'), account('alice-login', { kind: 'claude_login', ownerUserId: 'alice' })];
+    expect(ids(pickCredentialAccount(accounts, { userId: 'alice', now }))).toBe('alice-login');
+    expect(ids(pickCredentialAccount(accounts, { userId: 'bob', now }))).toBe('team-key');
+  });
+
   it('orders equal accounts by priority, then age', () => {
     const accounts = [account('b', { priority: 2 }), account('c', { priority: 1 }), account('d', { priority: 1 })];
     expect(ids(pickCredentialAccount(accounts, { userId: 'u', now }))).toBe('c');

@@ -14,6 +14,8 @@ export interface ServerFeatures {
    * runs on (local development), so nothing has to be added before the first run. Absent from older servers.
    */
   claudeCodeLocalLogin?: boolean;
+  /** People can sign in to Claude from here; the sign-in page opens on the server's machine. Absent from older servers. */
+  claudeSignIn?: boolean;
 }
 
 export function useServerFeatures() {

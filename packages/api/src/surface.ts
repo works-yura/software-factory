@@ -60,6 +60,7 @@ import {
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
 import { CredentialAccountRoutes } from './credential-accounts.ts';
+import type { ClaudeSignInFlows } from './credential-accounts.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
 import { buildFsRoutes } from './fs.ts';
 import { IntakeRoutes } from './intake.ts';
@@ -138,6 +139,8 @@ export interface FactoryApiRoutesDeps {
   claudeCodeEnabled?: boolean;
   /** Claude Code turns fall back to the server machine's own `claude` login (local development). */
   claudeCodeLocalLogin?: boolean;
+  /** Claude sign-in on this host (local development): `claude auth login`, kept as the person's account. */
+  claudeSignIn?: ClaudeSignInFlows;
   /** Personal sessions of Claude Code Factories start in the Claude Code harness (see the session routes). */
   claudeCodeUserSessions?: ClaudeCodeUserSessions;
   /** Providers the operator opted in to run on the server process's own credentials. */
@@ -747,6 +750,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         mcp: deps.mcpEnabled,
         claudeCode: deps.claudeCodeEnabled ?? false,
         claudeCodeLocalLogin: deps.claudeCodeLocalLogin ?? false,
+        claudeSignIn: deps.claudeSignIn !== undefined,
       },
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
@@ -755,6 +759,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     ...new CredentialAccountRoutes({
       auth: deps.auth,
       modelCredentials: deps.domains.modelCredentials,
+      ...(deps.claudeSignIn ? { claudeSignIn: deps.claudeSignIn } : {}),
     }).routes(),
     ...new OAuthRoutes({
       auth: deps.auth,

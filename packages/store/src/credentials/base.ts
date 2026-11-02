@@ -29,19 +29,28 @@ import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mast
 import { createPlaintextFactorySecretEncryption } from '../secret-encryption.ts';
 import type { FactorySecretEncryption } from '../secret-encryption.ts';
 import {
+  accountSecretHint,
   boundedError,
   CREDENTIAL_ACCOUNTS,
   CREDENTIAL_ACCOUNTS_SCHEMA,
+  isPersonalCredentialKind,
   secretHint,
   toCredentialAccount,
 } from './accounts.ts';
 import type {
   AddCredentialAccountInput,
+  ClaudeLoginOAuth,
+  CredentialAccountKind,
   CredentialAccount,
   CredentialAccountDbRow,
   CredentialAccountSecret,
   UpdateCredentialAccountInput,
 } from './accounts.ts';
+
+/** What a new account row encrypts: a sign-in keeps its OAuth pair, with the access token as its secret. */
+function accountSecret(kind: CredentialAccountKind, secret: string, oauth: ClaudeLoginOAuth | undefined): CredentialAccountSecret {
+  return kind === 'claude_login' && oauth ? { secret: oauth.accessToken, oauth } : { secret };
+}
 
 /** Owning tenant of a credential row. `userId` absent = org-scoped row. */
 export interface CredentialTenant {
@@ -401,9 +410,51 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     return (await this.encryption.decrypt<CredentialAccountSecret>(row.data)).value.secret;
   }
 
+  /** A `claude_login`'s OAuth pair, for the server that refreshes it; never handed to a run. */
+  async getAccountOAuth(orgId: string, id: string): Promise<ClaudeLoginOAuth | undefined> {
+    const row = await this.#db.findOne<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, { org_id: orgId, id });
+    if (!row) return undefined;
+    return (await this.encryption.decrypt<CredentialAccountSecret>(row.data)).value.oauth;
+  }
+
+  /**
+   * Refresh a `claude_login`'s OAuth pair under the backend's atomic
+   * read-modify-write, like {@link refreshOAuth}: the token endpoint rotates
+   * the refresh token, so two replicas refreshing the same pair would leave
+   * one holding a dead token. Under the lock the pair is read again: when
+   * `isFresh` says another replica refreshed it already, that pair is returned
+   * and `refresh` is not called. Returns `undefined` for an account that is
+   * gone or is not a sign-in; a failed `refresh` throws and changes nothing.
+   */
+  async refreshAccountOAuth(
+    orgId: string,
+    id: string,
+    { isFresh, refresh }: { isFresh: (current: ClaudeLoginOAuth) => boolean; refresh: (current: ClaudeLoginOAuth) => Promise<ClaudeLoginOAuth> },
+  ): Promise<ClaudeLoginOAuth | undefined> {
+    let result: ClaudeLoginOAuth | undefined;
+    await this.#db.updateAtomic<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, { org_id: orgId, id }, async row => {
+      const current = (await this.encryption.decrypt<CredentialAccountSecret>(row.data)).value.oauth;
+      if (!current) return null;
+      if (isFresh(current)) {
+        result = current;
+        return null;
+      }
+      const next = await refresh(current);
+      result = next;
+      return {
+        data: await this.encryption.encrypt<CredentialAccountSecret>({ secret: next.accessToken, oauth: next }),
+        updated_at: new Date(),
+      };
+    });
+    return result;
+  }
+
   async addAccount(input: AddCredentialAccountInput): Promise<CredentialAccount> {
-    if (input.kind === 'subscription' && !input.ownerUserId) {
+    if (isPersonalCredentialKind(input.kind) && !input.ownerUserId) {
       throw new Error('A subscription account needs the person it belongs to.');
+    }
+    if (input.kind === 'claude_login' && !input.oauth) {
+      throw new Error('A Claude sign-in needs its OAuth tokens.');
     }
     const now = new Date();
     const row = await this.#db.insertOne<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, {
@@ -411,9 +462,9 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       provider: input.provider,
       label: input.label,
       kind: input.kind,
-      owner_user_id: input.kind === 'subscription' ? (input.ownerUserId ?? null) : null,
-      data: await this.encryption.encrypt<CredentialAccountSecret>({ secret: input.secret }),
-      secret_hint: secretHint(input.secret),
+      owner_user_id: isPersonalCredentialKind(input.kind) ? (input.ownerUserId ?? null) : null,
+      data: await this.encryption.encrypt<CredentialAccountSecret>(accountSecret(input.kind, input.secret, input.oauth)),
+      secret_hint: accountSecretHint(input.kind, input.secret),
       priority: input.priority ?? 0,
       disabled: false,
       limited_until: null,
@@ -439,7 +490,15 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       // Turning an account back on is a person saying it works again.
       if (!patch.disabled) Object.assign(set, { limited_until: null, last_error: null });
     }
-    if (patch.secret !== undefined) {
+    if (patch.oauth !== undefined) {
+      Object.assign(set, {
+        data: await this.encryption.encrypt<CredentialAccountSecret>({ secret: patch.oauth.accessToken, oauth: patch.oauth }),
+        secret_hint: '',
+        disabled: patch.disabled ?? false,
+        limited_until: null,
+        last_error: null,
+      });
+    } else if (patch.secret !== undefined) {
       Object.assign(set, {
         data: await this.encryption.encrypt<CredentialAccountSecret>({ secret: patch.secret }),
         secret_hint: secretHint(patch.secret),

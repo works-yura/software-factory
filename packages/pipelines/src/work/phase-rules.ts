@@ -51,15 +51,16 @@ function investigateTriagedSource(provider: string, fetchHint: string) {
 }
 
 /**
- * Triage for a ClickUp task. The card carries the task text in its metadata (the agent has no
- * ClickUp tool), so the reference alone is enough. ClickUp cards ride the `manual` rule source, so
- * cards a person made by hand stay as they were: nothing starts for them.
+ * Triage for a card imported from a task tracker that has no rule source of its own (today ClickUp).
+ * Such a card carries the task text in its metadata, so the agent needs no provider tool: the
+ * reference alone is enough. These cards ride the `manual` rule source, so a card a person made by
+ * hand (item source `manual`) stays as it was and nothing starts for it.
  */
-export function investigateTriagedClickUpTask(context: FactoryStageRuleContext) {
-  if (context.item.source !== 'clickup-task') return undefined;
+export function investigateTriagedImportedTask(context: FactoryStageRuleContext) {
+  if (context.item.source === 'manual') return undefined;
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-triage-clickup`,
+    idempotencyKey: `${context.ingress.id}:factory-triage-task`,
     role: 'triage',
     skillName: 'factory-triage',
     arguments: untrustedSourceReference(context.item),

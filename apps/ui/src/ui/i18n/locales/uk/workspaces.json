@@ -138,7 +138,9 @@
         "needSignIn": "Увійдіть в організацію, щоб користуватися її акаунтами Claude Code.",
         "addHint": "Акаунти можна будь-коли додати в Налаштування → Моделі → Акаунти Claude Code.",
         "add": "Додати акаунт Claude Code",
-        "addDescription": "Токен підписки Claude або API-ключ Anthropic"
+        "addDescription": "Токен підписки Claude або API-ключ Anthropic",
+        "signInWithClaude": "Увійти через Claude",
+        "signInWithClaudeDescription": "Відкриває сторінку входу Claude; Фабрика тримає власний вхід"
       },
       "models": {
         "heading": "Модель Claude",

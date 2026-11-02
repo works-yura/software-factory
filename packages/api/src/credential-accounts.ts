@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { anthropicSecretKind, resolveCredentialContext } from '@factory/credentials';
 import { Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
+import { isPersonalCredentialKind } from '@factory/store';
 import type { CredentialAccount, CredentialAccountKind, ModelCredentialsStorage } from '@factory/store';
 
 /** Providers whose runs rotate through several accounts; Claude Code turns read `anthropic`. */
@@ -50,14 +51,35 @@ export interface CredentialAccountView {
   hint: string;
   /** Whether the caller may change or remove it. */
   canManage: boolean;
-  /** Whether the caller may replace its secret (only the owner of a subscription). */
+  /** Whether the caller may replace its secret (only the owner of a subscription; a sign-in is replaced by signing in again). */
   canReplaceSecret: boolean;
+  /** A Claude sign-in the token endpoint refused: its owner must sign in again. */
+  needsSignIn: boolean;
   createdAt: string;
+}
+
+/** One Claude sign-in a person started (see the server's `createClaudeSignInService`). */
+export interface ClaudeSignInFlowView {
+  id: string;
+  orgId: string;
+  userId: string;
+  status: 'pending' | 'done' | 'error';
+  error?: string;
+  accountId?: string;
+}
+
+/** Runs `claude auth login` on this host for a person; offered only where this host is the person's own machine. */
+export interface ClaudeSignInFlows {
+  start(owner: { orgId: string; userId: string }): ClaudeSignInFlowView;
+  get(id: string): ClaudeSignInFlowView | undefined;
+  cancel(id: string): boolean;
 }
 
 export interface CredentialAccountRoutesDeps extends RouteDependencies {
   auth: RouteAuth;
   modelCredentials?: ModelCredentialsStorage;
+  /** Claude sign-in on this host; unset where the CLI's browser would open on a machine nobody sits at. */
+  claudeSignIn?: ClaudeSignInFlows;
   now?: () => Date;
 }
 
@@ -81,10 +103,15 @@ function statusOf(account: CredentialAccount, now: Date): CredentialAccountStatu
  *   - `PATCH  /web/config/providers/:provider/accounts/:id`  `{ label?, secret?, priority?, disabled? }`
  *   - `DELETE /web/config/providers/:provider/accounts/:id`
  *
+ *   - `POST   /web/config/providers/anthropic/accounts/sign-in`      start a Claude sign-in
+ *   - `GET    /web/config/providers/anthropic/accounts/sign-in/:id`  its status
+ *   - `DELETE /web/config/providers/anthropic/accounts/sign-in/:id`  cancel it
+ *
  * Who may do what: any member adds their own subscription (a `sk-ant-oat`
- * setup token) and manages it; organization API keys, and switching off or
- * removing anyone's account, take an organization admin; only a
- * subscription's owner replaces its secret.
+ * setup token) or signs in to Claude, and manages it; organization API keys,
+ * and switching off or removing anyone's account, take an organization admin;
+ * only a subscription's owner replaces its secret; a sign-in is renewed by
+ * signing in again.
  */
 export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> {
   routes(): ApiRoute[] {
@@ -111,7 +138,7 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
     };
 
     const view = (account: CredentialAccount, caller: { userId: string; admin: boolean }): CredentialAccountView => {
-      const mine = account.kind === 'subscription' && account.ownerUserId === caller.userId;
+      const mine = isPersonalCredentialKind(account.kind) && account.ownerUserId === caller.userId;
       return {
         id: account.id,
         label: account.label,
@@ -124,7 +151,8 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
         ...(account.lastUsedAt ? { lastUsedAt: account.lastUsedAt.toISOString() } : {}),
         hint: account.hint,
         canManage: mine || caller.admin,
-        canReplaceSecret: account.kind === 'subscription' ? mine : caller.admin,
+        canReplaceSecret: account.kind === 'claude_login' ? false : account.kind === 'subscription' ? mine : caller.admin,
+        needsSignIn: account.kind === 'claude_login' && account.disabled && account.lastError !== undefined,
         createdAt: account.createdAt.toISOString(),
       };
     };
@@ -140,7 +168,76 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
     const invalid = (c: Context, error: z.ZodError) =>
       c.json({ error: 'invalid_request', message: error.issues.map(issue => issue.message).join('; ') }, 400);
 
+    /** The caller's own sign-in flow, or the response that refuses it. */
+    const signInFlow = async (c: Context) => {
+      const ctx = await context(c);
+      if ('response' in ctx) return ctx;
+      const flows = this.deps.claudeSignIn;
+      if (!flows || ctx.provider !== 'anthropic') {
+        return {
+          response: c.json(
+            {
+              error: 'sign_in_unavailable',
+              message: 'Signing in to Claude here works only where the Factory server runs on your own machine.',
+            },
+            404,
+          ),
+        };
+      }
+      return { ...ctx, flows };
+    };
+
+    const flowView = async (
+      flow: ClaudeSignInFlowView,
+      ctx: { storage: ModelCredentialsStorage; orgId: string; userId: string; admin: boolean },
+    ) => {
+      const account = flow.accountId ? await ctx.storage.getAccount(ctx.orgId, flow.accountId) : undefined;
+      return {
+        id: flow.id,
+        status: flow.status,
+        ...(flow.error ? { error: flow.error } : {}),
+        ...(account ? { account: view(account, ctx) } : {}),
+      };
+    };
+
     return [
+      registerApiRoute('/web/config/providers/:provider/accounts/sign-in', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await signInFlow(c);
+          if ('response' in ctx) return ctx.response;
+          const flow = ctx.flows.start({ orgId: ctx.orgId, userId: ctx.userId });
+          return c.json({ signIn: await flowView(flow, ctx) }, 202);
+        },
+      }),
+
+      registerApiRoute('/web/config/providers/:provider/accounts/sign-in/:id', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await signInFlow(c);
+          if ('response' in ctx) return ctx.response;
+          const flow = ctx.flows.get(c.req.param('id') ?? '');
+          // Another person's sign-in is not there for this caller.
+          if (!flow || flow.orgId !== ctx.orgId || flow.userId !== ctx.userId) return c.json({ error: 'not_found' }, 404);
+          return c.json({ signIn: await flowView(flow, ctx) });
+        },
+      }),
+
+      registerApiRoute('/web/config/providers/:provider/accounts/sign-in/:id', {
+        method: 'DELETE',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await signInFlow(c);
+          if ('response' in ctx) return ctx.response;
+          const id = c.req.param('id') ?? '';
+          const flow = ctx.flows.get(id);
+          if (!flow || flow.orgId !== ctx.orgId || flow.userId !== ctx.userId) return c.json({ error: 'not_found' }, 404);
+          return c.json({ cancelled: ctx.flows.cancel(id) });
+        },
+      }),
+
       registerApiRoute('/web/config/providers/:provider/accounts', {
         method: 'GET',
         requiresAuth: false,

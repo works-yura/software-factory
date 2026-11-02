@@ -16,6 +16,8 @@ type WarningLogger = (message: string, details: Record<string, unknown>) => void
 
 export interface SessionRetirementCoordinatorOptions {
   invalidateSession?: (sessionId: string) => Promise<void> | void;
+  /** Told after a session's row is deleted, to drop what else the host keeps for it (a CLI config dir, say). */
+  onSessionDeleted?: (sessionId: string) => Promise<void> | void;
   /**
    * The deploy's sandbox configuration. Used to destroy a deleted session's
    * VM by identity when this process never attached to it (after a restart,
@@ -77,6 +79,7 @@ function boundedError(error: unknown): string {
  */
 export class SessionRetirementCoordinator {
   readonly #invalidateSession: NonNullable<SessionRetirementCoordinatorOptions['invalidateSession']>;
+  readonly #onSessionDeleted: SessionRetirementCoordinatorOptions['onSessionDeleted'];
   readonly #sandbox: FactorySandbox | undefined;
   readonly #warn: WarningLogger;
   readonly #destroyTimeoutMs: number;
@@ -84,6 +87,7 @@ export class SessionRetirementCoordinator {
 
   constructor(options: SessionRetirementCoordinatorOptions = {}) {
     this.#invalidateSession = options.invalidateSession ?? (() => {});
+    this.#onSessionDeleted = options.onSessionDeleted;
     this.#sandbox = options.sandbox;
     this.#warn = options.warn ?? ((message, details) => console.warn(`[Mastra Factory] ${message}`, details));
     this.#destroyTimeoutMs = options.destroyTimeoutMs ?? DEFAULT_DESTROY_TIMEOUT_MS;
@@ -185,6 +189,15 @@ export class SessionRetirementCoordinator {
         // Refs first: clearing again is a no-op, but refs on a deleted row would dangle forever.
         await input.workItems?.clearSessionReferences({ orgId: input.orgId, sessionId: input.sessionId });
         await input.sourceControl.sessions.delete(session.id);
+        try {
+          await this.#onSessionDeleted?.(session.sessionId);
+        } catch (error) {
+          this.#warn('Factory session cleanup after delete failed', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            error: boundedError(error),
+          });
+        }
       }
     }
   }

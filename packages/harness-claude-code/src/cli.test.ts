@@ -207,13 +207,21 @@ describe('buildClaudeEnv inheritance', () => {
       'ANTHROPIC_AUTH_TOKEN',
       'CLAUDE_CODE_OAUTH_TOKEN',
       'ANTHROPIC_BASE_URL',
+      'AWS_BEARER_TOKEN_BEDROCK',
       'CLAUDE_CONFIG_DIR',
+      'CLAUDE_SECURESTORAGE_CONFIG_DIR',
       'CLAUDECODE',
       'CLAUDE_CODE_ENTRYPOINT',
       'CLAUDE_CODE_SSE_PORT',
     ];
     const base = Object.fromEntries(blocked.map(name => [name, 'server']));
     expect(buildClaudeEnv({ ...base, PATH: '/bin' }, {}, blocked)).toEqual({ PATH: '/bin', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' });
+  });
+
+  it('keeps the credentials the hook chose, an empty sign-in dir included', () => {
+    expect(
+      buildClaudeEnv({ PATH: '/bin', CLAUDE_SECURESTORAGE_CONFIG_DIR: '/server/own' }, { CLAUDE_SECURESTORAGE_CONFIG_DIR: '' }),
+    ).toEqual({ PATH: '/bin', CLAUDE_SECURESTORAGE_CONFIG_DIR: '', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' });
   });
 
   it('leaves out names that are unset', () => {
