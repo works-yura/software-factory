@@ -100,7 +100,7 @@ import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/inte
 import { buildPlatformConnectRoutes } from '@factory/integrations';
 import { PlatformGithubIntegration } from '@factory/integration-github';
 import { PlatformGitLabIntegration } from '@factory/integration-gitlab';
-import { createSessionAsRowOwner, prepareSessionRunContext } from '@factory/integrations';
+import { createSessionAsRowOwner, prepareSessionRunContext, routeExternalSessions } from '@factory/integrations';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/mcp';
 import type { FactoryMcpConfig } from '@factory/mcp';
 import { resolveDeploymentModelProviders } from '@factory/api';
@@ -1801,7 +1801,17 @@ export class MastraFactory {
               'factory-supervisor-write',
               supervisorWriteTools(supervisorScope, userId, ({ sessionId, message, delivery }) =>
                 messageWorkerSession({
-                  controller: prepared.base.controller,
+                  // A worker on Claude Code is not the Mastra controller's; its own session takes the message.
+                  controller: {
+                    getSession: async (id, context) => {
+                      const mastra = await prepared.base.controller.getSession(id, context);
+                      if (mastra) return mastra;
+                      const claude = await claudeCode?.harness.getSession(id);
+                      if (!claude) return undefined;
+                      const send = (input: { content: string }) => claude.sendMessage({ content: input.content });
+                      return { sendMessage: send, queueMessage: send };
+                    },
+                  },
                   sessionId,
                   message,
                   delivery,
@@ -1896,6 +1906,8 @@ export class MastraFactory {
                   return failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['organization-unresolved']);
                 }
                 if (await controller.getSession(sessionId)) return;
+                // A Claude Code session wakes itself; a Mastra session on its thread would be a second agent.
+                if (await claudeCode?.harness.getSession(sessionId)) return;
                 await createSessionAsRowOwner(controller, {
                   sessionId,
                   ownerResourceId: resourceId,
@@ -2364,6 +2376,20 @@ export class MastraFactory {
         },
       }),
     );
+
+    if (claudeCode) {
+      // Webhook subscriptions and Factory notices deliver through the Mastra controller; a Claude Code
+      // session takes them itself, and woken as a Mastra one would be, instead of a Mastra run on its thread.
+      const claudeHarness = claudeCode.harness;
+      routeExternalSessions(prepared.base.controller, async sessionId => {
+        const session = await claudeHarness.getSession(sessionId);
+        if (!session) return undefined;
+        return {
+          sendNotificationSignal: (input, options) =>
+            session.sendNotificationSignal(input, { ifIdle: { behavior: options?.ifIdle?.behavior ?? 'wake' } }),
+        };
+      });
+    }
 
     prepared.base.controller.onSessionCreated(session => {
       observeSessionFilesystem(session, {

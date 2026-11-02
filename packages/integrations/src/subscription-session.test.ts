@@ -18,7 +18,9 @@ vi.mock('@factory/credentials', async importOriginal => ({
 
 import {
   prepareSessionRunContext,
+  resolveSubscriptionNotificationTarget,
   resolveSubscriptionSession,
+  routeExternalSessions,
   subscriptionRunContext,
 } from './subscription-session.ts';
 import type { SubscriptionSessionRow } from './subscription-session.ts';
@@ -94,6 +96,34 @@ describe('resolveSubscriptionSession', () => {
     expect(session?.thread.getId()).toBe('thread-1');
     expect(session?.state.get()).toMatchObject({ factoryOrgId: 'org-1' });
     if (!cold) expect(session).toBe(original);
+  });
+});
+
+describe('resolveSubscriptionNotificationTarget', () => {
+  it("hands a session another harness runs its own target, and never asks the Mastra controller", async () => {
+    const external = { sendNotificationSignal: vi.fn(async () => ({})) };
+    const controller = {
+      queryThreadById: vi.fn(),
+      getSession: vi.fn(),
+      createSession: vi.fn(),
+    };
+    routeExternalSessions(controller, async sessionId => (sessionId === 'session-1' ? external : undefined));
+
+    await expect(
+      resolveSubscriptionNotificationTarget(controller as never, row(), { label: 'GitHub' }),
+    ).resolves.toBe(external);
+    expect(controller.queryThreadById).not.toHaveBeenCalled();
+    expect(controller.getSession).not.toHaveBeenCalled();
+    expect(controller.createSession).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the Mastra session when no other harness runs it', async () => {
+    const controller = { queryThreadById: vi.fn(async () => null), getSession: vi.fn() };
+    routeExternalSessions(controller, async () => undefined);
+    // No thread here: this deployment does not hold it, so nothing is delivered and nothing is created.
+    await expect(resolveSubscriptionNotificationTarget(controller as never, row(), { label: 'GitHub' })).resolves.toBeUndefined();
+    expect(controller.queryThreadById).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    expect(controller.getSession).not.toHaveBeenCalled();
   });
 });
 

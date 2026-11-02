@@ -1,7 +1,7 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 
-import { resolveSubscriptionSession, subscriptionRunContext } from '@factory/integrations';
+import { resolveSubscriptionNotificationTarget, subscriptionRunContext } from '@factory/integrations';
 import type { SubscriptionSessionLookup } from '@factory/integrations';
 import { GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.ts';
 import {
@@ -307,7 +307,7 @@ export async function dispatchGitLabWebhook(
         rejected = true;
         continue;
       }
-      const session = await resolveSubscriptionSession(dependencies.controller, subscription, {
+      const session = await resolveSubscriptionNotificationTarget(dependencies.controller, subscription, {
         label: 'GitLab',
         sourceControl: dependencies.gitlab?.sourceControlStorage,
       });

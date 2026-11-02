@@ -13,6 +13,51 @@ export interface SubscriptionSessionLookup {
 }
 
 /**
+ * A session another harness runs (Claude Code). The Mastra controller does not
+ * hold it, so a provider event or a Factory notice reaches it through its own
+ * notification signal instead of a Mastra session created on its thread.
+ */
+export interface ExternalNotificationSession {
+  sendNotificationSignal(
+    input: {
+      source: string;
+      kind: string;
+      summary: string;
+      priority?: 'low' | 'medium' | 'high' | 'urgent';
+      payload?: unknown;
+      dedupeKey?: string;
+      sourceId?: string;
+      coalesceKey?: string;
+      metadata?: Record<string, unknown>;
+    },
+    /** `ifIdle: persist` keeps an idle session asleep: the notice waits for its next turn. Otherwise it wakes. */
+    options?: { requestContext?: RequestContext; ifIdle?: { behavior?: 'persist' | 'wake' } },
+  ): Promise<{ persisted?: Promise<unknown>; accepted?: Promise<unknown> }>;
+}
+
+export type ExternalSessionLookup = (sessionId: string) => Promise<ExternalNotificationSession | undefined>;
+
+const externalSessions = new WeakMap<object, ExternalSessionLookup>();
+
+/**
+ * Tells everything that delivers through `controller` (webhook subscriptions,
+ * Factory notices) which sessions another harness runs, so none of them starts
+ * a Mastra run on such a session's thread. The host registers it once per
+ * controller.
+ */
+export function routeExternalSessions(controller: object, lookup: ExternalSessionLookup): void {
+  externalSessions.set(controller, lookup);
+}
+
+/** The session another harness runs under this id, if the host registered one for `controller`. */
+export async function externalSessionFor(
+  controller: object,
+  sessionId: string,
+): Promise<ExternalNotificationSession | undefined> {
+  return externalSessions.get(controller)?.(sessionId);
+}
+
+/**
  * Bring the session that owns a subscribed thread online so a provider event
  * can be delivered to it. Provider-neutral: GitHub and GitLab subscriptions
  * carry the same session binding and differ only in their target data.
@@ -193,5 +238,22 @@ export async function resolveSubscriptionSession(
   if (session.thread.getId() !== threadId) {
     throw new Error(`Session ${sessionId} did not bind thread ${threadId}.`);
   }
+  return session;
+}
+
+/**
+ * Where a subscription's provider event goes: the session another harness runs
+ * under its id, or the Mastra session brought online for its thread
+ * ({@link resolveSubscriptionSession}). `undefined` when this deployment does
+ * not hold the subscribed thread.
+ */
+export async function resolveSubscriptionNotificationTarget(
+  controller: MountedMastraCode['controller'],
+  subscription: SubscriptionSessionRow,
+  options: { label: string; sourceControl?: SubscriptionSessionLookup },
+): Promise<ExternalNotificationSession | undefined> {
+  const external = subscription.sessionId ? await externalSessionFor(controller, subscription.sessionId) : undefined;
+  if (external) return external;
+  const session: ExternalNotificationSession | undefined = await resolveSubscriptionSession(controller, subscription, options);
   return session;
 }

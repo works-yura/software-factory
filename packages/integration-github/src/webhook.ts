@@ -3,7 +3,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
 import { requestsChangesVerdict } from '@factory/session';
-import { resolveSubscriptionSession, subscriptionRunContext } from '@factory/integrations';
+import { resolveSubscriptionNotificationTarget, subscriptionRunContext } from '@factory/integrations';
 import type { FactorySessionOwner } from '@factory/integrations';
 import type { GithubAppIdentity } from './app-identity.ts';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.ts';
@@ -528,7 +528,7 @@ export async function dispatchGithubWebhook(
       continue;
     }
     try {
-      const session = await resolveSubscriptionSession(dependencies.controller, subscription, {
+      const session = await resolveSubscriptionNotificationTarget(dependencies.controller, subscription, {
         label: 'GitHub',
         sourceControl: dependencies.github?.sourceControlStorage,
       });

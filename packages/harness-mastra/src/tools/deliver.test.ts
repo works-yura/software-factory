@@ -3,6 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import { routeExternalSessions } from '@factory/integrations';
 import type { SourceControlSession } from '@factory/store';
 import { deliverFactorySessionNotification, resolveSessionThread } from './deliver.ts';
 import type { FactoryDeliveryController } from './deliver.ts';
@@ -150,6 +151,21 @@ describe('deliverFactorySessionNotification', () => {
       resourceId: 'project-1',
       threadId: 'thread-stored',
     });
+  });
+
+  it('hands the notice to a session another harness runs, creating no Mastra session on its thread', async () => {
+    const { controller, agent, deliver } = setup({ offline: true });
+    const external = { sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve() })) };
+    routeExternalSessions(controller, async sessionId => (sessionId === 'session-b' ? external : undefined));
+
+    await expect(deliver()).resolves.toEqual({ delivered: 'woken', notificationId: expect.any(String) });
+    expect(external.sendNotificationSignal).toHaveBeenCalledWith({ ...MESSAGE, source: 'factory-session' }, {});
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+
+    // A stage notice leaves it asleep, as it skips an offline Mastra session.
+    await expect(deliver({ onlyIfLive: true })).resolves.toMatchObject({ delivered: 'persisted' });
+    expect(external.sendNotificationSignal).toHaveBeenLastCalledWith(expect.anything(), { ifIdle: { behavior: 'persist' } });
   });
 
   it('skips a missing thread without creating or sending', async () => {

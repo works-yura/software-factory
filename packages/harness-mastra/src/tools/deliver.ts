@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 
-import { createSessionAsRowOwner } from '@factory/integrations';
+import { createSessionAsRowOwner, externalSessionFor } from '@factory/integrations';
 import type { SourceControlSessionLookup } from '@factory/session';
 import { listFactorySessionThreads, sessionMemoryResourceId, sessionStampCounts } from '@factory/session';
 import type { FactorySessionOwnership, SessionRunBindings } from '@factory/session';
@@ -83,6 +84,19 @@ export async function deliverFactorySessionNotification({
     return { delivered: 'skipped', reason: 'thread-not-owned' };
   }
   const ownerResourceId = thread.resourceId || target.sessionId;
+
+  // A session another harness runs (Claude Code) takes the notice itself: a Mastra session on its thread would
+  // start a second agent there. A stage notice keeps it asleep, as `onlyIfLive` keeps an offline Mastra one.
+  const external = await externalSessionFor(controller, target.sessionId);
+  if (external) {
+    const result = await external.sendNotificationSignal(
+      { ...notification, source: FACTORY_SESSION_NOTIFICATION_SOURCE },
+      onlyIfLive ? { ifIdle: { behavior: 'persist' } } : {},
+    );
+    await Promise.all([result.persisted, result.accepted].filter(Boolean));
+    // That harness keeps no notification record; the delivery is named for this call.
+    return { delivered: onlyIfLive ? 'persisted' : 'woken', notificationId: randomUUID() };
+  }
 
   // No request context: without a user the controller's access check is a no-op,
   // and this is a server-side lookup on the target's behalf, not the sender's.
