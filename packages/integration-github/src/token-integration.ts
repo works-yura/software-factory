@@ -35,6 +35,9 @@ import type { GitIdentity } from '@factory/sandbox';
 
 import { GithubIntegration } from './integration.ts';
 import type { GithubIntegrationSharedConfig, RepoSummary, UserInstallation } from './integration.ts';
+import { createGithubPullRequestActivitySweep, octokitPullRequestActivitySource } from './pull-request-activity.ts';
+import { githubRulesOptions } from './rules.ts';
+import type { GithubPullRequestReconciler, ReconcileRepository } from './rules.ts';
 
 /** Polling replaces webhooks here, so sweeps run far more often than the hourly App default. */
 export const GITHUB_TOKEN_RECONCILE_INTERVAL_MS = 2 * 60_000;
@@ -158,6 +161,54 @@ export class GithubTokenIntegration extends GithubIntegration {
 
   protected override get defaultReconcileIntervalMs(): number {
     return GITHUB_TOKEN_RECONCILE_INTERVAL_MS;
+  }
+
+  /**
+   * Only the repositories an org selected as a GitHub intake source. The
+   * sweep files every open issue it finds without a card, so reading every
+   * repository the environment links would turn a repository's whole issue
+   * list into cards for an org that takes its work from elsewhere.
+   */
+  protected override async issueSweepRepositories(
+    ctx: IntegrationContext,
+    repositories: ReconcileRepository[],
+  ): Promise<ReconcileRepository[]> {
+    const intake = ctx.storage.intake;
+    const selected: ReconcileRepository[] = [];
+    for (const repository of repositories) {
+      const projects = await ctx.storage.sourceControl.projectRepositories.listByExternalRepository({
+        installationExternalId: String(repository.installationId),
+        repositoryExternalId: String(repository.id),
+      });
+      for (const project of projects) {
+        const selection = (await intake.getConfig({ orgId: project.orgId, integrationIds: [this.id] }))[this.id];
+        const sourceIds = selection?.enabled ? (selection.sourceIds ?? []) : [];
+        if (
+          sourceIds.some(
+            id =>
+              id === project.projectRepository.repositoryId || id.toLowerCase() === repository.fullName.toLowerCase(),
+          )
+        ) {
+          selected.push(repository);
+          break;
+        }
+      }
+    }
+    return selected;
+  }
+
+  /** No webhooks reach this mode, so pull-request activity is read on each sweep. */
+  protected override pullRequestActivitySweep(ctx: IntegrationContext): GithubPullRequestReconciler | undefined {
+    const options = githubRulesOptions(this, ctx);
+    if (!options) return undefined;
+    return createGithubPullRequestActivitySweep({
+      source: octokitPullRequestActivitySource(() => this.#octokit),
+      sourceControl: options.sourceControl,
+      integrationStorage: options.integrationStorage,
+      storage: options.storage,
+      selfLogin: async () => (await this.account()).login,
+      deliver: event => this.deliverPolledEvent(ctx, event),
+    });
   }
 
   /** The token's account, for `orgId` only: see the module note on which org may connect. */

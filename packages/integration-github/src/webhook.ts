@@ -602,12 +602,25 @@ export async function handleGithubWebhook(
   const metadata = normalizeGithubWebhookMetadata(parsed);
   console.info('[GitHub Webhook]', metadata);
 
+  const { ignored } = await deliverGithubEvent(parsed, options);
+  return { status: 202, body: { ok: true, ...(ignored ? { ignored: true as const } : {}) } };
+}
+
+/**
+ * Runs one delivery through the rules ingress, then to the sessions subscribed
+ * to its pull request. Shared by the webhook route and the polling that stands
+ * in for webhooks where GitHub cannot send them.
+ */
+export async function deliverGithubEvent(
+  parsed: ParsedGithubWebhook,
+  options: GithubWebhookHandlerOptions & Partial<Omit<GithubWebhookDispatchDependencies, 'github'>>,
+): Promise<{ ignored: boolean }> {
   if (options.ingestFactoryEvent) {
     await options.ingestFactoryEvent(parsed);
   }
 
   if (!options.controller) {
-    return { status: 202, body: { ok: true } };
+    return { ignored: false };
   }
 
   const result = await dispatchGithubWebhook(parsed, {
@@ -624,5 +637,5 @@ export async function handleGithubWebhook(
   if (result.failed > 0) {
     console.warn(`[GitHub Webhook] ${result.failed} subscribed target(s) failed for delivery ${parsed.deliveryId}.`);
   }
-  return { status: 202, body: { ok: true, ...(result.ignored ? { ignored: true as const } : {}) } };
+  return { ignored: result.ignored };
 }

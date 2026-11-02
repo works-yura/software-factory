@@ -431,6 +431,98 @@ describe('GithubTokenIntegration: repositories and access', () => {
     } as never;
     expect(integration.workers(context).map(worker => worker.name)).toEqual(['github-pull-request-reconcile']);
   });
+
+  it('reads issues only from repositories an org selected as a GitHub intake source', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const sourceControl = seeded.sourceControl.forIntegration('github');
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '4242',
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const linked: Record<string, string> = {};
+    for (const [externalId, slug] of [
+      ['10', 'acme/app'],
+      ['11', 'acme/api'],
+    ] as const) {
+      const stored = await sourceControl.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, externalId, slug, defaultBranch: 'main' },
+      });
+      linked[slug] = stored.id;
+      await sourceControl.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: stored.id,
+        createdByUserId: 'user-1',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace',
+      });
+    }
+    const integration = new GithubTokenIntegration({ accessToken: TOKEN });
+    const context = { storage: { sourceControl, intake: seeded.intake } } as never;
+    const scope = (repositories: Array<{ id: number; fullName: string; installationId: number }>) =>
+      (
+        integration as unknown as {
+          issueSweepRepositories(ctx: unknown, repositories: unknown[]): Promise<unknown[]>;
+        }
+      ).issueSweepRepositories(context, repositories);
+    const app = { id: 10, fullName: 'acme/app', installationId: 4242 };
+    const api = { id: 11, fullName: 'acme/api', installationId: 4242 };
+
+    // Cards come from another source: no GitHub repository's issues are read.
+    await expect(scope([app, api])).resolves.toEqual([]);
+
+    await seeded.intake.saveConfig({
+      orgId: 'org-1',
+      config: { github: { enabled: true, sourceIds: [linked['acme/api']!] } },
+    });
+    await expect(scope([app, api])).resolves.toEqual([api]);
+
+    // A switched-off selection reads nothing.
+    await seeded.intake.saveConfig({
+      orgId: 'org-1',
+      config: { github: { enabled: false, sourceIds: [linked['acme/api']!] } },
+    });
+    await expect(scope([app, api])).resolves.toEqual([]);
+  });
+
+  it('reads pull-request activity on each sweep, standing in for the webhooks it never gets', async () => {
+    const github = fakeGithub({ 'GET /user': account, 'GET /repos/acme/app/pulls': [] });
+    const integration = new GithubTokenIntegration({ accessToken: TOKEN, fetchImpl: github.fetchImpl });
+    const context = {
+      controller: {},
+      storage: {
+        generic: { subscriptions: { listByTarget: async () => [] }, settings: { get: async () => null } },
+        sourceControl: {
+          projectRepositories: {
+            listByExternalRepository: async () => [{ orgId: 'org-1', factoryProjectId: 'project-1' }],
+          },
+        },
+        projects: {},
+        intake: {},
+      },
+      runtime: { configVersion: 'test-v1', workItems: { list: async () => [] }, boards: {} },
+    } as never;
+    const sweep = (
+      integration as unknown as {
+        pullRequestActivitySweep(ctx: unknown): ((repositories: unknown[]) => Promise<unknown>) | undefined;
+      }
+    ).pullRequestActivitySweep(context);
+
+    await expect(sweep?.([{ id: 10, fullName: 'acme/app', installationId: 4242 }])).resolves.toMatchObject({
+      repositories: 1,
+      failed: 0,
+    });
+    expect(github.calls.map(call => `${call.method} ${call.url.pathname}`)).toContain('GET /repos/acme/app/pulls');
+  });
 });
 
 describe('GithubTokenIntegration: connect through the mounted routes', () => {

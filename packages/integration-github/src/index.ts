@@ -9,6 +9,7 @@ export * from './pat.ts';
 export * from './platform/event-worker.ts';
 export * from './platform/integration.ts';
 export * from './provenance.ts';
+export * from './pull-request-activity.ts';
 export * from './reconcile-worker.ts';
 export * from './reconciliation-config.ts';
 export * from './routes.ts';

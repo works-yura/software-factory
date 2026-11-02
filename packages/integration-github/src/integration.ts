@@ -51,11 +51,19 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.ts';
 import { resolveGithubRules } from './default-rules.ts';
 import { attachGithubIssueReconciler } from './issue-reconciler.ts';
+import type { GithubIssueReconciler } from './issue-reconciler.ts';
 import { GithubReconcileWorker } from './reconcile-worker.ts';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.ts';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.ts';
-import { attachGithubReconciler, attachGithubRules } from './rules.ts';
-import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.ts';
+import { attachGithubReconciler, attachGithubRules, RECONCILE_ERROR_SAMPLE_LIMIT } from './rules.ts';
+import type {
+  GithubPullRequestReconciler,
+  ReconcileIssueState,
+  ReconcilePullRequestState,
+  ReconcileRepository,
+} from './rules.ts';
+import { deliverGithubEvent } from './webhook.ts';
+import type { ParsedGithubWebhook } from './webhook.ts';
 import type { GitIdentity } from '@factory/sandbox';
 import {
   createGithubSubscriptionTools,
@@ -1336,6 +1344,37 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   /**
+   * The repositories whose issues the issue sweep reads. All of them here:
+   * webhooks deliver every linked repository's issues to the rules anyway.
+   */
+  protected async issueSweepRepositories(
+    _ctx: IntegrationContext,
+    repositories: ReconcileRepository[],
+  ): Promise<ReconcileRepository[]> {
+    return repositories;
+  }
+
+  /**
+   * A sweep that reads pull-request activity webhooks would otherwise deliver.
+   * Undefined here: the App receives webhooks.
+   */
+  protected pullRequestActivitySweep(_ctx: IntegrationContext): GithubPullRequestReconciler | undefined {
+    return undefined;
+  }
+
+  /**
+   * Runs a delivery read by polling through the webhook pipeline: the rules
+   * ingress, then the sessions subscribed to its pull request.
+   */
+  protected async deliverPolledEvent(ctx: IntegrationContext, event: ParsedGithubWebhook): Promise<void> {
+    await deliverGithubEvent(event, {
+      github: this,
+      ...(this.#ingestFactoryEvent ? { ingestFactoryEvent: this.#ingestFactoryEvent } : {}),
+      ...(ctx.controller ? { controller: ctx.controller } : {}),
+    });
+  }
+
+  /**
    * Installations this integration can register without the App install and
    * OAuth flow, or undefined when it needs that flow. Connect persists these
    * directly.
@@ -1359,16 +1398,37 @@ export class GithubIntegration implements FactoryIntegration {
     );
     if (!pullRequestEnabled && !issueEnabled) return [];
 
-    const reconcile = pullRequestEnabled
+    const merges = pullRequestEnabled
       ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
       : undefined;
-    const issues = issueEnabled
+    const activity = pullRequestEnabled ? this.pullRequestActivitySweep(ctx) : undefined;
+    const reconcile: GithubPullRequestReconciler | undefined =
+      merges && activity
+        ? async repositories => {
+            // Activity first: it records the pull requests Factory opened, which
+            // the merge reconcile then finds on their cards.
+            const polled = await activity(repositories);
+            const reconciled = await merges(repositories);
+            return {
+              repositories: reconciled.repositories,
+              checked: polled.checked + reconciled.checked,
+              merged: polled.merged + reconciled.merged,
+              closed: polled.closed + reconciled.closed,
+              failed: polled.failed + reconciled.failed,
+              errors: [...polled.errors, ...reconciled.errors].slice(0, RECONCILE_ERROR_SAMPLE_LIMIT),
+            };
+          }
+        : (merges ?? activity);
+    const issueSweep = issueEnabled
       ? attachGithubIssueReconciler(
           this,
           ctx,
           input => this.fetchIssueState(input),
           input => this.listOpenIssueStates(input),
         )
+      : undefined;
+    const issues: GithubIssueReconciler | undefined = issueSweep
+      ? async repositories => issueSweep(await this.issueSweepRepositories(ctx, repositories))
       : undefined;
     if (!reconcile && !issues) return [];
 

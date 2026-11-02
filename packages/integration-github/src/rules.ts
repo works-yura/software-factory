@@ -201,7 +201,7 @@ function legacySourceKey(repositoryId: number, kind: 'issue' | 'pull-request', i
   return `github:${repositoryId}:${kind}:${itemNumber}`;
 }
 
-function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
+export function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
   return `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
 }
 
