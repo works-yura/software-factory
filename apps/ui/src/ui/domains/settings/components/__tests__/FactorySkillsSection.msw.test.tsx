@@ -403,6 +403,10 @@ describe('FactorySkillsSection', () => {
       await user.click(await screen.findByRole('button', { name: 'Edit factory-triage' }));
       const dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
       expect(within(dialog).getByDisplayValue('factory-triage')).toBeDisabled();
+      const editor = within(dialog).getByTestId('skill-instructions-input').querySelector('.cm-content');
+      expect(editor).toHaveAttribute('contenteditable', 'true');
+      expect(editor).toHaveTextContent('# Triage');
+      expect(editor).toHaveTextContent('Trace history and diagnose the root cause.');
       const save = within(dialog).getByRole('button', { name: 'Save' });
       expect(save).toBeDisabled();
       const description = within(dialog).getByRole('textbox', { name: 'Description' });
@@ -530,6 +534,9 @@ describe('FactorySkillsSection', () => {
       const dialog = await screen.findByRole('dialog', { name: 'View skill' });
       expect(within(dialog).getByText('Only organization admins can edit skills.')).toBeInTheDocument();
       expect(within(dialog).getByDisplayValue(catalog.skills[1]!.description)).toBeDisabled();
+      // Instructions render as formatted markdown, not as an editor.
+      expect(within(dialog).getByRole('heading', { name: 'Plan' })).toBeInTheDocument();
+      expect(dialog.querySelector('.cm-content')).toBeNull();
       expect(within(dialog).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
       expect(within(dialog).queryByRole('button', { name: 'Revert to original' })).not.toBeInTheDocument();
       expect(writes).toEqual([]);

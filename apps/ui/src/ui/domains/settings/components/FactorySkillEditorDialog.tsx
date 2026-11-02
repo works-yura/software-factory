@@ -9,9 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SkillSimpleForm } from '@mastra/playground-ui/domains/skills/skill-simple-form';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -56,7 +55,7 @@ function errorText(error: Error): string {
 }
 
 /**
- * Opens a Factory skill in an editor. Admins save the edit for this Factory
+ * Opens a Factory skill in the shared skill editor. Admins save the edit for this Factory
  * project or revert it to the original; everyone else views it.
  */
 export function FactorySkillEditorDialog({ skill, factoryId, canEdit, onClose }: FactorySkillEditorDialogProps) {
@@ -86,41 +85,22 @@ export function FactorySkillEditorDialog({ skill, factoryId, canEdit, onClose }:
           <DialogDescription>{readOnlyReason ?? t('skills.editor.description')}</DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <div className="flex flex-col gap-3">
+          <div className="flex h-[60vh] flex-col gap-3">
             {skill.edited && skill.originalChanged && (
               <Txt as="p" variant="caption" tone="muted" role="note">
                 {t('skills.editor.originalChanged')}
               </Txt>
             )}
-            <label className="flex flex-col gap-1">
-              <Txt as="span" variant="caption" tone="muted">
-                {t('skills.editor.name')}
-              </Txt>
-              <Input value={skill.name} disabled readOnly aria-label={t('skills.editor.name')} />
-            </label>
-            <label className="flex flex-col gap-1">
-              <Txt as="span" variant="caption" tone="muted">
-                {t('skills.editor.descriptionField')}
-              </Txt>
-              <Input
-                value={description}
-                disabled={readOnly}
-                aria-label={t('skills.editor.descriptionField')}
-                onChange={event => setDescription(event.target.value)}
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <Txt as="span" variant="caption" tone="muted">
-                {t('skills.editor.instructions')}
-              </Txt>
-              <Textarea
-                className="h-[45vh] font-mono"
-                value={instructions}
-                disabled={readOnly}
-                aria-label={t('skills.editor.instructions')}
-                onChange={event => setInstructions(event.target.value)}
-              />
-            </label>
+            <SkillSimpleForm
+              name={skill.name}
+              onNameChange={() => {}}
+              nameReadOnly
+              description={description}
+              onDescriptionChange={setDescription}
+              instructions={instructions}
+              onInstructionsChange={setInstructions}
+              readOnly={readOnly}
+            />
           </div>
         </DialogBody>
         <DialogFooter>
