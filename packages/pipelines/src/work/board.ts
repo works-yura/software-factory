@@ -1,4 +1,4 @@
-import { defineBoard } from '@factory/core';
+import { compileBoardDefinition } from '@factory/core';
 import type { BoardPhaseDefinition, FactoryRuleHandler, FactoryRuleSource, FactoryStageRuleContext } from '@factory/core';
 
 import {
@@ -37,7 +37,7 @@ const ALL_PHASES: readonly WorkBoardPhase[] = [
   'canceled',
 ];
 
-export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
+export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: 'work',
   name: 'Work',
   initialPhase: 'intake',

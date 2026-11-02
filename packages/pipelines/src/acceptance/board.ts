@@ -1,4 +1,4 @@
-import { defineBoard } from '@factory/core';
+import { compileBoardDefinition } from '@factory/core';
 import type { BoardPhaseDefinition } from '@factory/core';
 
 import { verifyAcceptanceCriteria } from './phase-rules.ts';
@@ -7,7 +7,7 @@ import { acceptanceTransitionPolicy } from './transition-policy.ts';
 type AcceptancePhase = 'queued' | 'verifying' | 'decision' | 'accepted';
 
 /** A separate, manual record of product acceptance after PR review. */
-export const acceptanceBoard = defineBoard<'acceptance', Record<AcceptancePhase, BoardPhaseDefinition<AcceptancePhase>>>({
+export const acceptanceBoard = compileBoardDefinition<'acceptance', Record<AcceptancePhase, BoardPhaseDefinition<AcceptancePhase>>>({
   id: 'acceptance',
   name: 'Acceptance',
   initialPhase: 'queued',

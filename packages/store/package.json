@@ -16,10 +16,13 @@
   "dependencies": {
     "@factory/core": "workspace:*",
     "@mastra/core": "1.79.0",
-    "@mastra/code-sdk": "1.15.0"
+    "@mastra/code-sdk": "1.15.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@factory/pipelines": "workspace:*",
     "@mastra/libsql": "1.27.0",
+    "@mastra/pg": "1.32.0",
     "@types/node": "22.20.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -173,7 +173,7 @@ import { CustomProvidersStorage } from '@factory/store';
 import { FilesystemStorage } from '@factory/store';
 import { IntakeStorage } from '@factory/store';
 import { IntegrationStorage } from '@factory/store';
-import { factoryMemorySettingsUserId, MemorySettingsStorage } from '@factory/store';
+import { factoryMemorySettingsUserId, MemorySettingsStorage, StoredBoardsStorage } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
 import { FactoryProjectsStorage } from '@factory/store';
 import { QueueHealthStorage } from '@factory/store';
@@ -722,6 +722,7 @@ export class MastraFactory {
     workItemsStorage.useTerminalPhasePredicate(item => isTerminalWorkItem(this.#boards, item));
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
+    storage.registerDomain(new StoredBoardsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the

@@ -12,6 +12,7 @@ import { onTestFinished } from 'vitest';
 import { createBoardRegistry, workItemPhaseSemantics } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import { AuditStorage } from './audit/base.ts';
+import { StoredBoardsStorage } from './boards/base.ts';
 import { ChannelIdentityStorage } from './channel-identity/base.ts';
 import { WorkItemCommentsStorage } from './comments/base.ts';
 import { ModelCredentialsStorage } from './credentials/base.ts';
@@ -40,6 +41,8 @@ export interface FactoryStorageTestSeed {
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
   comments: WorkItemCommentsStorage;
+  /** The projects' stored boards (named apart from the `boards` registries tests spread beside the seed). */
+  storedBoards: StoredBoardsStorage;
 }
 
 /**
@@ -54,8 +57,8 @@ export async function createFactoryStorageForTests(
   const intake = storage.registerDomain(new IntakeStorage());
   const audit = storage.registerDomain(new AuditStorage());
   const workItems = storage.registerDomain(new WorkItemsStorage());
-  const boards = options.boards ?? createBoardRegistry();
-  workItems.useTerminalPhasePredicate(item => workItemPhaseSemantics(boards, item)?.kind === 'terminal');
+  const boardRegistry = options.boards ?? createBoardRegistry();
+  workItems.useTerminalPhasePredicate(item => workItemPhaseSemantics(boardRegistry, item)?.kind === 'terminal');
   const credentials = storage.registerDomain(new ModelCredentialsStorage());
   const integrations = storage.registerDomain(new IntegrationStorage());
   const projects = storage.registerDomain(new FactoryProjectsStorage());
@@ -66,6 +69,7 @@ export async function createFactoryStorageForTests(
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
+  const storedBoards = storage.registerDomain(new StoredBoardsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -83,5 +87,6 @@ export async function createFactoryStorageForTests(
     queueHealth,
     channelIdentity,
     comments,
+    storedBoards,
   };
 }

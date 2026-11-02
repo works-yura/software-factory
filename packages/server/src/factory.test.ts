@@ -843,6 +843,7 @@ describe('MastraFactory.prepare', () => {
       'model-credentials',
       // No 'model-defaults': personal default models are gone; the table stays untouched.
       'memory-settings',
+      'boards',
       'custom-providers',
       'queue-health',
       'integrations',
