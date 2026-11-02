@@ -219,6 +219,7 @@ async function runToPlanGate(nextTurnText: string) {
 
     const claude = createClaudeFactoryHarness({
       store: createInMemorySessionStore(),
+      sessionConfigRoot: join(cwd, '.claude-config'),
       sessions,
       credentials: async () => ({}),
       cwdFor: () => cwd,

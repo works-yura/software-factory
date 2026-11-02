@@ -5,11 +5,12 @@
  * finds the session's files there) and removed with the session.
  *
  * Credentials are not kept here: a turn gets them as env from the credentials
- * hook, and local development points the CLI's stored sign-in back at the
- * default place (`CLAUDE_SECURESTORAGE_CONFIG_DIR=''`).
+ * hook, and the CLI's stored sign-in is pointed at this dir too, so nothing of
+ * the person's own login (`~/.claude`, its Keychain item) is ever read.
  *
- * A session that already ran before it had a dir keeps the default one, where
- * its transcript lives: giving it a new, empty dir would lose its context.
+ * A session that ran on the default `~/.claude` before it had a dir gets one
+ * too: its `--resume` id is not found there, so the harness starts it a fresh
+ * Claude conversation (the Factory thread keeps its history).
  */
 
 import { createHash } from 'node:crypto';
@@ -21,8 +22,8 @@ import { join } from 'node:path';
 export const CLAUDE_SESSION_CONFIG_SEED = { hasCompletedOnboarding: true } as const;
 
 export interface ClaudeSessionConfigDirs {
-  /** The session's dir, created and seeded on its first turn; `undefined` for a session that ran before it had one. */
-  dirFor(session: { id: string; cwd: string | undefined }): string | undefined;
+  /** The session's dir, created and seeded on its first turn. */
+  dirFor(session: { id: string }): string;
   /** Remove a deleted session's dir; a missing dir is fine. */
   remove(sessionId: string): Promise<void>;
 }
@@ -40,8 +41,6 @@ export function createClaudeSessionConfigDirs(root: string): ClaudeSessionConfig
     dirFor(session) {
       const dir = pathOf(session.id);
       if (existsSync(dir)) return dir;
-      // Ran already on the default dir: its transcript is there, so it stays there.
-      if (session.cwd !== undefined) return undefined;
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       try {
         writeFileSync(join(dir, '.claude.json'), `${JSON.stringify(CLAUDE_SESSION_CONFIG_SEED, null, 2)}\n`, {

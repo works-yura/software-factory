@@ -63,6 +63,11 @@ export interface SourceControlSessionRoutesOptions {
   controller?: MountedMastraCode['controller'];
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
   sessionRetirement?: SessionRetirementCoordinator;
+  /**
+   * Told when a session is deleted without a retirement coordinator (which tells its own
+   * `onSessionDeleted`), e.g. so the Claude Code CLI config dir of the session goes with it.
+   */
+  onSessionDeleted?: (sessionId: string) => Promise<void> | void;
   /** Whether the host sandbox can recreate a session's sandbox (false for local). */
   sandboxRecreateSupported?: boolean;
   /** Turn-end file listings, cleared on recreate so the panel stops showing the old sandbox's files. */
@@ -739,6 +744,12 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         } else {
           await options.workItems?.clearSessionReferences({ orgId: session.orgId, sessionId: session.sessionId });
           await match.sourceControl.sessions.delete(session.id);
+          await Promise.resolve(options.onSessionDeleted?.(session.sessionId)).catch((error: unknown) => {
+            console.warn('[Factory Sessions] Failed to clean up after deleted session', {
+              sessionId: session.sessionId,
+              error,
+            });
+          });
           void reclaimDeletedSessionSandbox({ session }).catch((error: unknown) => {
             console.error('[Factory Sessions] Failed to reclaim sandbox for deleted session', {
               sessionId: session.sessionId,

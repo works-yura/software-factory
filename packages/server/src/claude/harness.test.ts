@@ -64,6 +64,7 @@ function setup(
   const store = claudeCode.createInMemorySessionStore();
   const factory = createClaudeFactoryHarness({
     store,
+    sessionConfigRoot: join(tmpdir(), 'claude-factory-harness-test-config'),
     sessions,
     credentials,
     onCredentialFailure,
@@ -102,6 +103,17 @@ describe('createClaudeFactoryHarness', () => {
     await factory.harness.createSession({ sessionId: 'session-a', threadId: 'thread-1' });
     const reopened = claudeCode.createJsonFileSessionStore(dir);
     expect(await reopened.get('session-a')).toMatchObject({ sessionId: 'session-a', threadId: 'thread-1' });
+  });
+
+  it('refuses to start without a place for its sessions’ config dirs: never the person’s ~/.claude', () => {
+    expect(() =>
+      createClaudeFactoryHarness({
+        store: claudeCode.createInMemorySessionStore(),
+        sessions: { getBySessionId: async () => null },
+        credentials: async () => ({}),
+        cwdFor: () => '/nowhere',
+      }),
+    ).toThrow('The Claude Code harness needs a store directory or a session config root for its config dirs.');
   });
 
   it('prefers an explicit store over storeDir', () => {
@@ -574,16 +586,17 @@ describe('createClaudeFactoryHarness', () => {
       await factory.removeSessionConfig('session-never');
     });
 
-    it('leaves a session that ran before it had a dir on the default one, where its transcript is', async () => {
+    it('gives a session that ran on the default ~/.claude its own dir too', async () => {
       root = await mkdtemp(join(tmpdir(), 'claude-config-'));
       const { config } = setup({ sessionConfigRoot: root });
-      expect(config.configDir!({ id: 'session-old', cwd: '/work' } as unknown as ClaudeCodeSession)).toBeUndefined();
-      expect(await readdir(root)).toEqual([]);
+      const dir = config.configDir!({ id: 'session-old', cwd: '/work' } as unknown as ClaudeCodeSession);
+      expect(dir.startsWith(root)).toBe(true);
+      expect(await readdir(root)).toHaveLength(1);
     });
 
     it('puts the dirs next to the session store by default', async () => {
       root = await mkdtemp(join(tmpdir(), 'claude-store-'));
-      const { config } = setup({ store: undefined, storeDir: join(root, 'sessions') });
+      const { config } = setup({ store: undefined, storeDir: join(root, 'sessions'), sessionConfigRoot: undefined });
       expect(config.configDir!({ id: 'session-a', cwd: undefined } as unknown as ClaudeCodeSession)).toContain(
         join(root, 'sessions-config'),
       );

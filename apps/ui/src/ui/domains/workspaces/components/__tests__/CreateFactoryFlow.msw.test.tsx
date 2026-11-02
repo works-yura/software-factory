@@ -677,10 +677,10 @@ function seedDraft(step: 'vcs' | 'model-provider') {
 }
 
 /** Report the Claude Code harness as configured (or not) on this server, and whether it runs on the local login. */
-function serveClaudeCodeFeature(claudeCode: boolean, { claudeCodeLocalLogin = false, claudeSignIn = false } = {}) {
+function serveClaudeCodeFeature(claudeCode: boolean, { claudeSignIn = false } = {}) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/features`, () =>
-      HttpResponse.json({ knowledge: false, mcp: false, claudeCode, claudeCodeLocalLogin, claudeSignIn }),
+      HttpResponse.json({ knowledge: false, mcp: false, claudeCode, claudeSignIn }),
     ),
   );
 }
@@ -856,8 +856,8 @@ describe('harness step', () => {
   });
 
   describe('Claude Code sign-in on the model step', () => {
-    it('says it runs on the local claude login in local development', async () => {
-      serveClaudeCodeFeature(true, { claudeCodeLocalLogin: true });
+    it('asks for an account in local development too: the machine’s own claude login is never used', async () => {
+      serveClaudeCodeFeature(true, { claudeSignIn: true });
       serveClaudeAccounts(0);
       seedDraft('model-provider');
       sessionStorage.setItem(HARNESS_KEY, 'claude-code');
@@ -865,9 +865,9 @@ describe('harness step', () => {
 
       renderFlow();
 
-      expect(await screen.findByText(/Uses your `claude` login on this machine\./)).toBeInTheDocument();
-      expect(screen.getByText(/Settings → Models → Claude Code accounts/)).toBeInTheDocument();
-      expect(screen.queryByText(/needs an account/)).not.toBeInTheDocument();
+      expect(await screen.findByText(/Claude Code needs an account to run/)).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: /Sign in with Claude/ })).toBeInTheDocument();
+      expect(screen.queryByText(/`claude` login/)).not.toBeInTheDocument();
       expectNoProviderRows();
     });
 
@@ -889,7 +889,7 @@ describe('harness step', () => {
     });
 
     it('offers signing in with Claude when there is no account, and reports the sign-in', async () => {
-      serveClaudeCodeFeature(true, { claudeCodeLocalLogin: true, claudeSignIn: true });
+      serveClaudeCodeFeature(true, { claudeSignIn: true });
       serveClaudeAccounts(0);
       seedDraft('model-provider');
       sessionStorage.setItem(HARNESS_KEY, 'claude-code');

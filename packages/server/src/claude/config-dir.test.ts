@@ -45,7 +45,7 @@ describe('createClaudeSessionConfigDirs', () => {
 
   it('makes a new session’s dir, owner-only, seeded so the CLI skips onboarding', () => {
     const dirs = createClaudeSessionConfigDirs(root);
-    const dir = dirs.dirFor({ id: 'session-1', cwd: undefined });
+    const dir = dirs.dirFor({ id: 'session-1' });
 
     expect(dir).toBe(join(root, claudeSessionConfigName('session-1')));
     expect(statSync(dir!).mode & 0o777).toBe(0o700);
@@ -54,27 +54,28 @@ describe('createClaudeSessionConfigDirs', () => {
     expect(CLAUDE_SESSION_CONFIG_SEED).toEqual({ hasCompletedOnboarding: true });
     expect(statSync(seed).mode & 0o777).toBe(0o600);
     // The same dir on every later turn.
-    expect(dirs.dirFor({ id: 'session-1', cwd: '/work' })).toBe(dir);
+    expect(dirs.dirFor({ id: 'session-1' })).toBe(dir);
   });
 
-  it('leaves a session that already ran on the default dir there', () => {
+  it('gives a session that already ran on the default ~/.claude its own seeded dir too', () => {
     const dirs = createClaudeSessionConfigDirs(root);
-    expect(dirs.dirFor({ id: 'session-old', cwd: '/work' })).toBeUndefined();
-    expect(existsSync(join(root, claudeSessionConfigName('session-old')))).toBe(false);
+    const dir = dirs.dirFor({ id: 'session-old' });
+    expect(dir).toBe(join(root, claudeSessionConfigName('session-old')));
+    expect(existsSync(join(dir, '.claude.json'))).toBe(true);
   });
 
   it('accepts a seed another turn wrote first, and fails on any other write error', () => {
     const dirs = createClaudeSessionConfigDirs(root);
     fsControl.writeError = Object.assign(new Error('exists'), { code: 'EEXIST' });
-    expect(dirs.dirFor({ id: 'session-race', cwd: undefined })).toBe(join(root, claudeSessionConfigName('session-race')));
+    expect(dirs.dirFor({ id: 'session-race' })).toBe(join(root, claudeSessionConfigName('session-race')));
 
     fsControl.writeError = Object.assign(new Error('disk full'), { code: 'ENOSPC' });
-    expect(() => dirs.dirFor({ id: 'session-full', cwd: undefined })).toThrow('disk full');
+    expect(() => dirs.dirFor({ id: 'session-full' })).toThrow('disk full');
   });
 
   it('removes a deleted session’s dir, and a missing one is fine', async () => {
     const dirs = createClaudeSessionConfigDirs(root);
-    const dir = dirs.dirFor({ id: 'session-1', cwd: undefined })!;
+    const dir = dirs.dirFor({ id: 'session-1' })!;
     mkdirSync(join(dir, 'projects'), { recursive: true });
 
     await dirs.remove('session-1');

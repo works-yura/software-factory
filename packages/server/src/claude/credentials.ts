@@ -35,19 +35,11 @@ const OAUTH_TOKEN_PREFIX = 'sk-ant-oat';
 export class ClaudeCodeCredentialMissingError extends Error {
   constructor(orgId: string) {
     super(
-      `No Anthropic credential is set for organization ${orgId}. Add an Anthropic API key or a Claude setup token under Settings → Models to run Claude Code sessions.`,
+      `No Claude account is set for organization ${orgId}. Sign in to Claude, or add an Anthropic API key or a Claude setup token, under Settings → Models → Claude Code accounts to run Claude Code sessions.`,
     );
     this.name = 'ClaudeCodeCredentialMissingError';
   }
 }
-
-/**
- * Local development with no account: the CLI keeps its sessions in the
- * session's own config dir, but reads its credentials from the default place
- * (`~/.claude` and its Keychain item), i.e. the person's own `claude` login.
- * The CLI takes an empty `CLAUDE_SECURESTORAGE_CONFIG_DIR` as that default.
- */
-export const LOCAL_LOGIN_CREDENTIAL_ENV: Readonly<Record<string, string>> = { CLAUDE_SECURESTORAGE_CONFIG_DIR: '' };
 
 /** The env for one Anthropic credential: an API key, or an OAuth/setup token. */
 export function claudeCodeCredentialEnv(credential: {
@@ -77,28 +69,25 @@ export interface ClaudeCodeCredentials {
  *   account row's lock; the turn gets the access token alone. A sign-in the
  *   token endpoint refuses is turned off with a message asking for a new
  *   sign-in, and the turn goes on with the next account.
- * - With no account this run may use, the old single credential applies: in
- *   local development the CLI reads the person's own `claude` login (see
- *   {@link LOCAL_LOGIN_CREDENTIAL_ENV}); otherwise the organization's Anthropic credential (an API
- *   key as `ANTHROPIC_API_KEY`, an OAuth or setup token as
- *   `CLAUDE_CODE_OAUTH_TOKEN`, refreshed first like a Mastra run's).
+ * - With no account this run may use, the organization's single Anthropic
+ *   credential applies (an API key as `ANTHROPIC_API_KEY`, an OAuth or setup
+ *   token as `CLAUDE_CODE_OAUTH_TOKEN`, refreshed first like a Mastra run's);
+ *   with none, the turn fails asking for a sign-in. The person's own `claude`
+ *   login (`~/.claude`, its Keychain item) is never used, locally either.
  * - When every account the run may use is out of usage, the turn fails with a
  *   `rate_limit` error that says when the first one comes back.
  */
 export function createClaudeCodeCredentials({
-  localDevelopment,
   credentials,
   now = () => new Date(),
   fetch: fetchImpl,
 }: {
-  localDevelopment: boolean;
   credentials: ModelCredentialsStorage | undefined;
   now?: () => Date;
   /** The OAuth refresh's transport; the global `fetch` by default. */
   fetch?: typeof fetch;
 }): ClaudeCodeCredentials {
   const single = async ({ orgId, userId }: ClaudeCodeCredentialTenant): Promise<Record<string, string>> => {
-    if (localDevelopment) return { ...LOCAL_LOGIN_CREDENTIAL_ENV };
     const store = new TenantCredentialStore(orgId, userId, credentials, 'factory');
     await store.ensureFresh();
     const stored = store.get(CLAUDE_CODE_ACCOUNT_PROVIDER);
@@ -196,7 +185,6 @@ export function createClaudeCodeCredentials({
  * organization; see {@link createClaudeCodeCredentials}.
  */
 export function createClaudeCodeCredentialsHook(options: {
-  localDevelopment: boolean;
   credentials: ModelCredentialsStorage | undefined;
 }): ClaudeCodeCredentialsHook {
   return createClaudeCodeCredentials(options).credentials;

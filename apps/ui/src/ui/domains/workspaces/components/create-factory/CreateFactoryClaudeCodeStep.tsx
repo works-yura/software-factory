@@ -80,14 +80,13 @@ export function CreateFactoryClaudeCodeStep({ query, saving, error, onPick }: Cr
   );
 }
 
-/** How Claude Code turns sign in: the local `claude` login, or the organization's Claude Code accounts. */
+/** How Claude Code turns sign in: the organization's Claude Code accounts, never the machine's own `claude` login. */
 function ClaudeCodeSignIn({ disabled }: { disabled: boolean }) {
   const { t } = useTranslation('workspaces');
   const features = useServerFeatures();
   const accountsQuery = useCredentialAccountsQuery(CLAUDE_ACCOUNTS_PROVIDER);
   const [dialog, setDialog] = useState<ClaudeAccountDialogMode | null>(null);
   const signIn = useClaudeSignIn(CLAUDE_ACCOUNTS_PROVIDER);
-  const localLogin = features.data?.claudeCodeLocalLogin === true;
   const accounts = accountsQuery.data?.accounts ?? [];
   // With no account yet, signing in to Claude is the quickest way to give the Factory its own.
   const offerSignIn = features.data?.claudeSignIn === true && accountsQuery.data !== undefined && accounts.length === 0;
@@ -95,19 +94,13 @@ function ClaudeCodeSignIn({ disabled }: { disabled: boolean }) {
     accountsQuery.error instanceof ApiRequestError && accountsQuery.error.code === 'accounts_need_sign_in';
 
   let status;
-  if (features.isPending || (!localLogin && accountsQuery.isPending)) {
+  if (features.isPending || accountsQuery.isPending) {
     status = (
       <SkeletonRows
         label={t('createFactory.claudeCode.signIn.loading')}
         rows={1}
         rowClassName="mx-2 my-1 h-8 rounded-xl"
       />
-    );
-  } else if (localLogin) {
-    status = (
-      <CreateFactoryPaletteMessage>
-        {t('createFactory.claudeCode.signIn.localLogin')} {t('createFactory.claudeCode.signIn.addHint')}
-      </CreateFactoryPaletteMessage>
     );
   } else if (accounts.length > 0) {
     status = (

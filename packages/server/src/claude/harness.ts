@@ -137,8 +137,9 @@ export interface ClaudeFactoryHarnessOptions {
   /**
    * `CLAUDE_CONFIG_DIR` per session. Unset: each session gets its own dir
    * under {@link sessionConfigRoot} (see `createClaudeSessionConfigDirs`).
+   * Never the person's `~/.claude`: without either, the harness refuses to start.
    */
-  configDir?: (session: ClaudeCodeSession) => string | undefined;
+  configDir?: (session: ClaudeCodeSession) => string;
   /** Where sessions' own config dirs live; `<storeDir>-config` by default. */
   sessionConfigRoot?: string;
   allowedTools?: string[];
@@ -219,11 +220,14 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     );
   };
 
+  // Every session gets its own config dir: never the person's `~/.claude`.
   const configRoot =
     options.sessionConfigRoot ?? (options.storeDir ? `${options.storeDir.replace(/\/+$/, '')}-config` : undefined);
+  if (!configRoot && !options.configDir) {
+    throw new Error('The Claude Code harness needs a store directory or a session config root for its config dirs.');
+  }
   const configDirs = configRoot ? createClaudeSessionConfigDirs(configRoot) : undefined;
-  const configDir =
-    options.configDir ?? (configDirs ? (session: ClaudeCodeSession) => configDirs.dirFor(session) : undefined);
+  const configDir = options.configDir ?? ((session: ClaudeCodeSession) => configDirs!.dirFor(session));
 
   const supervisorWorkdir = createClaudeSupervisorWorkdir(
     options.supervisorWorkdirRoot ?? (options.storeDir ? `${options.storeDir.replace(/\/+$/, '')}-supervisor` : undefined),
@@ -311,7 +315,7 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       return typeof target === 'string' && target ? `${CLAUDE_FACTORY_SYSTEM_PROMPT}\n\n${target}` : undefined;
     },
     trustedMcpServers: [CLAUDE_FACTORY_MCP_SERVER],
-    ...(configDir ? { configDir } : {}),
+    configDir,
     allowedTools: options.allowedTools ?? DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS,
     appendSystemPrompt: CLAUDE_FACTORY_SYSTEM_PROMPT,
     planningPrompt: CLAUDE_FACTORY_PLANNING_PROMPT,

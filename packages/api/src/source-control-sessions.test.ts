@@ -1513,3 +1513,60 @@ describe('personal sessions of a Claude Code Factory', () => {
     expect(sandbox.status).toBe(409);
   });
 });
+
+describe('deleting a session without a retirement coordinator', () => {
+  it('tells the host, so per-session state such as the Claude Code config dir goes with it', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const create = (sessionId: string) =>
+      sourceControl.sessions.create({
+        sessionId,
+        projectRepositoryId: projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: `user/${sessionId}`,
+        baseBranch: 'main',
+        visibility: 'private',
+      });
+    await create('session-gone');
+    await create('session-cleanup-fails');
+    const deleted: string[] = [];
+    const onSessionDeleted = vi.fn(async (sessionId: string) => {
+      deleted.push(sessionId);
+      if (sessionId === 'session-cleanup-fails') throw new Error('disk busy');
+    });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, user as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      buildSourceControlSessionRoutes({
+        auth: fakeRouteAuth(),
+        sourceControls: [sourceControl],
+        projects: seed.projects,
+        memorySettings: seed.memorySettings,
+        onSessionDeleted,
+      }),
+    );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const removed = await app.request('/web/user-sessions/session-gone', { method: 'DELETE' });
+      expect(removed.status).toBe(200);
+      await expect(removed.json()).resolves.toEqual({ removed: true });
+      await expect(sourceControl.sessions.getBySessionId('session-gone')).resolves.toBeNull();
+
+      // A failed cleanup is reported but never blocks the delete.
+      const stillRemoved = await app.request('/web/user-sessions/session-cleanup-fails', { method: 'DELETE' });
+      expect(stillRemoved.status).toBe(200);
+      await expect(sourceControl.sessions.getBySessionId('session-cleanup-fails')).resolves.toBeNull();
+      expect(warn).toHaveBeenCalledWith('[Factory Sessions] Failed to clean up after deleted session', {
+        sessionId: 'session-cleanup-fails',
+        error: expect.objectContaining({ message: 'disk busy' }),
+      });
+    } finally {
+      warn.mockRestore();
+    }
+    expect(deleted).toEqual(['session-gone', 'session-cleanup-fails']);
+  });
+});

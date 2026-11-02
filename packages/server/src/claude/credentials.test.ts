@@ -15,14 +15,18 @@ import {
 import { CLAUDE_OAUTH_CLIENT_ID, CLAUDE_OAUTH_REFRESH_MARGIN_MS, CLAUDE_OAUTH_TOKEN_URL } from './oauth.ts';
 
 describe('Claude Code credentials hook', () => {
-  it('points the CLI at the person’s own login in local development', async () => {
-    const hook = createClaudeCodeCredentialsHook({ localDevelopment: true, credentials: undefined });
-    await expect(hook({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual({ CLAUDE_SECURESTORAGE_CONFIG_DIR: '' });
+  it('never falls back to the person’s own claude login: with nothing stored it asks for a sign-in', async () => {
+    const hook = createClaudeCodeCredentialsHook({ credentials: undefined });
+    const failure = hook({ orgId: 'org-1', userId: 'user-1' });
+    await expect(failure).rejects.toBeInstanceOf(ClaudeCodeCredentialMissingError);
+    await expect(failure).rejects.toThrow(
+      'No Claude account is set for organization org-1. Sign in to Claude, or add an Anthropic API key or a Claude setup token, under Settings → Models → Claude Code accounts to run Claude Code sessions.',
+    );
   });
 
   it('maps the factory’s Anthropic API key and setup token to the CLI’s env', async () => {
     const seeded = await createFactoryStorageForTests();
-    const hook = createClaudeCodeCredentialsHook({ localDevelopment: false, credentials: seeded.credentials });
+    const hook = createClaudeCodeCredentialsHook({ credentials: seeded.credentials });
 
     await seeded.credentials.setCredential({ orgId: 'org-1' }, 'anthropic', { type: 'api_key', key: 'sk-ant-api03-x' });
     await expect(hook({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual({ ANTHROPIC_API_KEY: 'sk-ant-api03-x' });
@@ -39,7 +43,7 @@ describe('Claude Code credentials hook', () => {
       type: 'api_key',
       key: 'sk-ant-api03-personal',
     });
-    const hook = createClaudeCodeCredentialsHook({ localDevelopment: false, credentials: seeded.credentials });
+    const hook = createClaudeCodeCredentialsHook({ credentials: seeded.credentials });
     await expect(hook({ orgId: 'org-1', userId: 'user-1' })).rejects.toBeInstanceOf(ClaudeCodeCredentialMissingError);
   });
 
@@ -55,7 +59,7 @@ describe('Claude Code credential accounts', () => {
   const apiKey = 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111';
   const aliceToken = 'sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb2222';
 
-  async function pool(options: { localDevelopment?: boolean } = {}) {
+  async function pool() {
     const seeded = await createFactoryStorageForTests();
     const accounts = seeded.credentials;
     const add = (label: string, kind: 'api_key' | 'subscription', secret: string, ownerUserId?: string) =>
@@ -68,11 +72,7 @@ describe('Claude Code credential accounts', () => {
         createdBy: ownerUserId ?? 'admin',
         ...(ownerUserId ? { ownerUserId } : {}),
       });
-    const hooks = createClaudeCodeCredentials({
-      localDevelopment: options.localDevelopment ?? false,
-      credentials: accounts,
-      now: () => now,
-    });
+    const hooks = createClaudeCodeCredentials({ credentials: accounts, now: () => now });
     return { accounts, add, ...hooks };
   }
 
@@ -171,10 +171,10 @@ describe('Claude Code credential accounts', () => {
     });
   });
 
-  it('runs on the person’s own login in local development when no account fits them', async () => {
-    const { add, credentials } = await pool({ localDevelopment: true });
+  it('asks for a sign-in rather than the person’s own login when no account fits them', async () => {
+    const { add, credentials } = await pool();
     await add('Alice Max', 'subscription', aliceToken, 'alice');
-    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).resolves.toEqual({ CLAUDE_SECURESTORAGE_CONFIG_DIR: '' });
+    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).rejects.toBeInstanceOf(ClaudeCodeCredentialMissingError);
   });
 });
 
@@ -203,7 +203,7 @@ describe('Claude sign-in accounts', () => {
         oauth,
         createdBy: ownerUserId,
       });
-    const hooks = createClaudeCodeCredentials({ localDevelopment: false, credentials: accounts, now: () => now, fetch: fetchImpl });
+    const hooks = createClaudeCodeCredentials({ credentials: accounts, now: () => now, fetch: fetchImpl });
     return { accounts, addSignIn, ...hooks };
   }
 
@@ -348,7 +348,7 @@ describe('Claude Code credentials: edges', () => {
     const { accounts, addKey } = await seeded();
     await addKey('First');
     const second = await addKey('Second', 'sk-ant-api03-dddddddddddddddddddd4444');
-    const { credentials } = createClaudeCodeCredentials({ localDevelopment: false, credentials: accounts, now: () => now });
+    const { credentials } = createClaudeCodeCredentials({ credentials: accounts, now: () => now });
     await expect(
       credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [], preferredAccountId: second.id }),
     ).resolves.toEqual({ env: { ANTHROPIC_API_KEY: 'sk-ant-api03-dddddddddddddddddddd4444' }, accountId: second.id });
@@ -368,7 +368,7 @@ describe('Claude Code credentials: edges', () => {
     });
     const key = await addKey('Team key');
     const vanishing = overriding(accounts, { refreshAccountOAuth: async () => undefined });
-    const { credentials } = createClaudeCodeCredentials({ localDevelopment: false, credentials: vanishing, now: () => now });
+    const { credentials } = createClaudeCodeCredentials({ credentials: vanishing, now: () => now });
     await expect(credentials({ orgId: 'org-1', userId: 'alice' })).resolves.toEqual({
       env: { ANTHROPIC_API_KEY: apiKey },
       accountId: key.id,
@@ -379,16 +379,16 @@ describe('Claude Code credentials: edges', () => {
     const { accounts, addKey } = await seeded();
     await addKey('Team key');
     const gone = overriding(accounts, { getAccountSecret: async () => undefined });
-    const { credentials } = createClaudeCodeCredentials({ localDevelopment: false, credentials: gone, now: () => now });
+    const { credentials } = createClaudeCodeCredentials({ credentials: gone, now: () => now });
     await expect(credentials({ orgId: 'org-1', userId: 'bob' })).rejects.toMatchObject({
       kind: 'auth',
       message: 'Claude account Team key is no longer available.',
     });
   });
 
-  it('runs on the person’s own login in local development without any storage', async () => {
-    const { credentials, onCredentialFailure } = createClaudeCodeCredentials({ localDevelopment: true, credentials: undefined });
-    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).resolves.toEqual({ CLAUDE_SECURESTORAGE_CONFIG_DIR: '' });
+  it('fails without any storage, and a failure report then has nothing to update', async () => {
+    const { credentials, onCredentialFailure } = createClaudeCodeCredentials({ credentials: undefined });
+    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).rejects.toBeInstanceOf(ClaudeCodeCredentialMissingError);
     await expect(
       onCredentialFailure({ orgId: 'org-1', userId: 'bob' }, { accountId: 'a-1', error: new ClaudeCodeError('auth', 'x') }),
     ).resolves.toBeUndefined();
@@ -397,7 +397,7 @@ describe('Claude Code credentials: edges', () => {
   it('says which account it took out of rotation, and stays quiet about failures that are not the account’s', async () => {
     const { accounts, addKey } = await seeded();
     const first = await addKey('First');
-    const { onCredentialFailure } = createClaudeCodeCredentials({ localDevelopment: false, credentials: accounts, now: () => now });
+    const { onCredentialFailure } = createClaudeCodeCredentials({ credentials: accounts, now: () => now });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       await onCredentialFailure({ orgId: 'org-1', userId: 'bob' }, { accountId: first.id, error: new ClaudeCodeError('failed', 'boom') });
@@ -428,7 +428,7 @@ describe('Claude Code credentials: edges', () => {
   it('measures a cooldown from the real clock by default', async () => {
     const { accounts, addKey } = await seeded();
     const first = await addKey('First');
-    const { onCredentialFailure } = createClaudeCodeCredentials({ localDevelopment: false, credentials: accounts });
+    const { onCredentialFailure } = createClaudeCodeCredentials({ credentials: accounts });
     const before = Date.now();
     await onCredentialFailure({ orgId: 'org-1', userId: 'bob' }, { accountId: first.id, error: new ClaudeCodeError('rate_limit', 'limit') });
     const until = (await accounts.getAccount('org-1', first.id))!.limitedUntil!.getTime();
@@ -449,7 +449,7 @@ describe('Claude Code credentials: edges', () => {
       createdBy: 'alice',
     });
     const fetchImpl = (async () => Response.json({ error: 'invalid_grant' }, { status: 400 })) as unknown as typeof fetch;
-    const { credentials } = createClaudeCodeCredentials({ localDevelopment: true, credentials: accounts, now: () => now, fetch: fetchImpl });
+    const { credentials } = createClaudeCodeCredentials({ credentials: accounts, now: () => now, fetch: fetchImpl });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       await expect(credentials({ orgId: 'org-1', userId: 'alice' })).rejects.toMatchObject({ kind: 'auth' });
