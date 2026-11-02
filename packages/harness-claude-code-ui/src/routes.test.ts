@@ -86,6 +86,54 @@ function nextEnd(session: ClaudeCodeSession): Promise<AgentRunEndReason | undefi
   });
 }
 
+/** Waits until everything recorded so far is stored (the history route flushes first). */
+async function recorded(app: Hono) {
+  await app.request(`${BASE}/card-1/threads/card-1/messages?limit=1`);
+}
+
+/** A turn in which Claude writes a two-item task list with `TodoWrite`. */
+function todoTurn(): string[] {
+  const session_id = 'todo-session';
+  return [
+    { type: 'system', subtype: 'init', cwd: '/work/card-1', session_id, tools: ['TodoWrite'], model: 'claude-sonnet-4-6' },
+    {
+      type: 'assistant',
+      message: {
+        id: 'msg_todo',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-4-6',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_todo',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'Read the code', status: 'in_progress', activeForm: 'Reading the code' },
+                { content: 'Fix the bug', status: 'pending', activeForm: 'Fixing the bug' },
+              ],
+            },
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 20 },
+      },
+      parent_tool_use_id: null,
+      session_id,
+    },
+    {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ tool_use_id: 'toolu_todo', type: 'tool_result', content: 'Todos have been modified successfully.', is_error: false }],
+      },
+      parent_tool_use_id: null,
+      session_id,
+    },
+    { type: 'result', subtype: 'success', is_error: false, result: 'Planned.', session_id, usage: { input_tokens: 5, output_tokens: 20 } },
+  ].map(line => JSON.stringify(line));
+}
+
 function post(app: Hono, path: string, body: unknown = {}) {
   return app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 }
@@ -393,6 +441,90 @@ describe('Claude Code session routes', () => {
       { runId: expect.any(String), threadId: 'card-1', resourceId: 'factory-1' },
     ]);
     await post(app, `${BASE}/card-1/abort`);
+  });
+
+  it('reports the turns’ token usage live and as the session’s running total, which outlives a restart', async () => {
+    const { app, session, storage } = await setup([
+      { lines: fixture('turn-complete.jsonl') },
+      { lines: fixture('turn-complete.jsonl') },
+    ]);
+    const stream = await openStream(app);
+    for (const message of ['one', 'two']) {
+      const end = nextEnd(session);
+      await post(app, `${BASE}/card-1/messages`, { message });
+      await end;
+    }
+    await stream.until(event => event.type === 'agent_end' && stream.events.filter(e => e.type === 'agent_end').length === 2);
+    const steps = stream.events.filter(event => event.type === 'usage_update') as Array<{ usage: Record<string, number> }>;
+    expect(steps.length).toBeGreaterThanOrEqual(2);
+    for (const { usage } of steps) {
+      expect(usage).toMatchObject({ promptTokens: expect.any(Number), completionTokens: expect.any(Number), totalTokens: expect.any(Number) });
+    }
+    const sum = (key: string) => steps.reduce((total, { usage }) => total + (usage[key] ?? 0), 0);
+    expect(sum('totalTokens')).toBeGreaterThan(0);
+
+    const state = (await (await app.request(`${BASE}/card-1`)).json()) as { tokenUsage: Record<string, number> };
+    expect(state.tokenUsage).toMatchObject({
+      promptTokens: sum('promptTokens'),
+      completionTokens: sum('completionTokens'),
+      totalTokens: sum('totalTokens'),
+    });
+
+    // Kept on the thread, as a Mastra session keeps it: a new process reads the same total.
+    await recorded(app);
+    const restarted = createClaudeSessionUi({ controllerId: 'code', storage, heartbeatMs: 60_000 }).attach(session);
+    await restarted.ready;
+    expect(restarted.tokenUsage).toMatchObject({ totalTokens: sum('totalTokens'), promptTokens: sum('promptTokens') });
+  });
+
+  it('shows Claude’s TodoWrite list as the task panel, live and in the session state, and keeps it across a restart', async () => {
+    const { app, session, storage } = await setup([{ lines: todoTurn() }]);
+    const stream = await openStream(app);
+    const end = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'Plan the fix.' });
+    await end;
+    const updated = (await stream.until(event => event.type === 'task_updated')) as { tasks: unknown[] };
+    const tasks = [
+      { id: expect.any(String), content: 'Read the code', status: 'in_progress', activeForm: 'Reading the code' },
+      { id: expect.any(String), content: 'Fix the bug', status: 'pending', activeForm: 'Fixing the bug' },
+    ];
+    expect(updated.tasks).toEqual(tasks);
+
+    const state = (await (await app.request(`${BASE}/card-1`)).json()) as { tasks: unknown[] };
+    expect(state.tasks).toEqual(updated.tasks);
+
+    // Stored as the task tool the chat keeps out of the transcript.
+    const { messages } = (await (await app.request(`${BASE}/card-1/threads/card-1/messages?limit=100`)).json()) as {
+      messages: Array<{ content: { parts: Array<Record<string, any>> } }>;
+    };
+    const names = messages.flatMap(message => message.content.parts.filter(part => part.type === 'tool-invocation').map(part => part.toolInvocation.toolName));
+    expect(names).toEqual(['task_write']);
+
+    const restarted = createClaudeSessionUi({ controllerId: 'code', storage, heartbeatMs: 60_000 }).attach(session);
+    await restarted.ready;
+    expect(restarted.tasks).toEqual(updated.tasks);
+  });
+
+  it('names the thread for the chat and its title mirror, as a Mastra rename does', async () => {
+    const { app, ui } = await setup([]);
+    const stream = await openStream(app);
+    await stream.until(() => true);
+    const channel = ui.channel('card-1')!;
+    expect(await channel.threadTitle()).toBe('');
+
+    await channel.nameThread('  Fix the login bug ');
+    expect(await stream.until(event => event.type === 'thread_title_updated')).toEqual({
+      type: 'thread_title_updated',
+      threadId: 'card-1',
+      title: 'Fix the login bug',
+    });
+    expect(await channel.threadTitle()).toBe('Fix the login bug');
+    const threads = (await (await app.request(`${BASE}/card-1/threads`)).json()) as { threads: unknown[] };
+    expect(threads.threads).toEqual([expect.objectContaining({ id: 'card-1', title: 'Fix the login bug' })]);
+
+    // The same title again changes nothing and tells nobody.
+    await channel.nameThread('Fix the login bug');
+    expect(stream.events.filter(event => event.type === 'thread_title_updated')).toHaveLength(1);
   });
 
   it('answers what a Claude session has no counterpart for without reaching Mastra', async () => {
