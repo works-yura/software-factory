@@ -59,6 +59,28 @@ describe('GitLabApiClient', () => {
     expect(requestOf(fetchMock).url).toBe('https://gitlab.example.com/gitlab/api/v4/user');
   });
 
+  it('reads below the API root and edits an issue for agents', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json([{ id: 1 }]))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: 'Label already exists' }), { status: 409 }))
+      .mockResolvedValueOnce(json({ id: 7, iid: 42, state: 'closed', labels: ['bug'] }));
+    const api = new GitLabApiClient({ baseUrl: 'https://gitlab.com', accessToken: 'token', fetchImpl: fetchMock });
+
+    await expect(api.read('projects/acme%2Fapp/merge_requests/3/diffs', { page: '2' })).resolves.toEqual([{ id: 1 }]);
+    await api.ensureLabel('acme/app', { name: 'bug', color: 'd73a4a' });
+    await api.editIssue('acme/app', 42, { addLabels: ['bug', 'p1'], removeLabels: ['triage'], stateEvent: 'close' });
+
+    expect(requestOf(fetchMock, 0).url).toBe('https://gitlab.com/api/v4/projects/acme%2Fapp/merge_requests/3/diffs?page=2');
+    expect(JSON.parse(String(requestOf(fetchMock, 1).init.body))).toEqual({ name: 'bug', color: '#d73a4a' });
+    expect(requestOf(fetchMock, 2).init.method).toBe('PUT');
+    expect(JSON.parse(String(requestOf(fetchMock, 2).init.body))).toEqual({
+      add_labels: 'bug,p1',
+      remove_labels: 'triage',
+      state_event: 'close',
+    });
+  });
+
   it('posts commit statuses to the project statuses endpoint', async () => {
     const fetchMock = vi.fn(async () => json({ id: 5, sha: 'abc', name: 'n', status: 'running', target_url: null }));
     const api = new GitLabApiClient({ baseUrl: 'https://gitlab.com', accessToken: 'token', fetchImpl: fetchMock });

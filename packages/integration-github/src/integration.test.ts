@@ -572,6 +572,71 @@ describe('GithubIntegration capability surface', () => {
     });
   });
 
+  it('reads the API for agents: REST, a pull request diff and GraphQL', async () => {
+    const github = new GithubIntegration(validConfig());
+    const request = vi.fn(async () => ({ data: { number: 34 } }));
+    const graphql = vi.fn(async () => ({ repository: { id: 'R_1' } }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ request, graphql } as any);
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+
+    await expect(
+      github.versionControl.readApi!({ connection, path: 'repos/acme/app/pulls/34', query: { per_page: '5' } }),
+    ).resolves.toEqual({ number: 34 });
+    await github.versionControl.readApi!({ connection, path: 'repos/acme/app/pulls/34', accept: 'diff' });
+    await github.versionControl.readApi!({
+      connection,
+      graphql: { query: 'query { repository(owner: "acme", name: "app") { id } }' },
+    });
+
+    expect(request).toHaveBeenNthCalledWith(1, 'GET /repos/acme/app/pulls/34', { per_page: '5' });
+    expect(request).toHaveBeenNthCalledWith(2, 'GET /repos/acme/app/pulls/34', {
+      headers: { accept: 'application/vnd.github.diff' },
+    });
+    expect(graphql).toHaveBeenCalledWith('query { repository(owner: "acme", name: "app") { id } }', {});
+  });
+
+  it('edits an issue: creates missing labels, adds and removes labels, closes it and comments', async () => {
+    const github = new GithubIntegration(validConfig());
+    const createLabel = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error('already_exists'), { status: 422 }))
+      .mockResolvedValueOnce({ data: {} });
+    const addLabels = vi.fn(async () => ({ data: [] }));
+    const removeLabel = vi.fn().mockRejectedValueOnce(Object.assign(new Error('Not Found'), { status: 404 }));
+    const update = vi.fn(async () => ({ data: { state: 'closed', labels: [{ name: 'severity:high' }, 'bug'] } }));
+    const createComment = vi.fn(async () => ({ data: { html_url: 'https://github.com/acme/app/issues/12#c1' } }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      issues: { createLabel, addLabels, removeLabel, update, createComment },
+    } as any);
+
+    await expect(
+      github.versionControl.editIssue!({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        issueId: '12',
+        createLabels: [{ name: 'bug' }, { name: 'severity:high', color: '#D93F0B', description: 'High' }],
+        addLabels: ['severity:high'],
+        removeLabels: ['status: needs triage'],
+        state: 'closed',
+        comment: 'Done.',
+      }),
+    ).resolves.toEqual({
+      labels: ['severity:high', 'bug'],
+      state: 'closed',
+      commentUrl: 'https://github.com/acme/app/issues/12#c1',
+    });
+    expect(createLabel).toHaveBeenLastCalledWith({
+      owner: 'acme',
+      repo: 'app',
+      name: 'severity:high',
+      color: 'D93F0B',
+      description: 'High',
+    });
+    expect(addLabels).toHaveBeenCalledWith({ owner: 'acme', repo: 'app', issue_number: 12, labels: ['severity:high'] });
+    expect(update).toHaveBeenCalledWith({ owner: 'acme', repo: 'app', issue_number: 12, state: 'closed' });
+    expect(createComment).toHaveBeenCalledWith({ owner: 'acme', repo: 'app', issue_number: 12, body: 'Done.' });
+  });
+
   it('implements the full pull-request lifecycle through VersionControl', async () => {
     const github = new GithubIntegration(validConfig());
     const get = vi.fn(async () => ({ data: pullRequestData() }));

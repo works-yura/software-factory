@@ -27,6 +27,8 @@ import { mergeRequestNumberFromBranch } from '@factory/pipelines';
 import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from '@factory/session';
 import { updateSessionEnvironmentRepository } from '@factory/sandbox';
 
+import { githubApiReadScope, gitlabApiReadScope } from './source-control-api-scope.ts';
+
 type RepositorySessionState = {
   factoryProjectId?: string;
   projectRepositoryId?: string;
@@ -277,6 +279,8 @@ async function emitAgentAudit(
 export const FACTORY_TEST_CHECK_NAME = 'Factory Review / tests';
 
 const repositorySchema = z.object({ repository: z.string().trim().min(1).optional() });
+/** A read of the provider API answers at most this many characters, so one diff cannot flood the context. */
+const MAX_API_READ_CHARS = 200_000;
 const changeRequestSchema = repositorySchema.extend({
   changeRequestId: z.union([z.string().trim().min(1), z.number().int().positive()]),
 });
@@ -323,10 +327,8 @@ export async function createSourceControlTools({
   // A card that names no repository runs across the environment: its session
   // has no default repository, so every call names the one it acts on.
   const spansEnvironment = (await workSpansEnvironment?.().catch(() => false)) ?? false;
-  const repositoryArgument = repositoryArgumentDescription(
-    await describeSessionRepositories(controller.sessionId, providers),
-    spansEnvironment,
-  );
+  const environment = await describeSessionRepositories(controller.sessionId, providers);
+  const repositoryArgument = repositoryArgumentDescription(environment, spansEnvironment);
   const withTarget = (options?: { repository?: string; requireChoice?: boolean }) =>
     resolveSessionTarget(requestContext, providers, options);
   const targetFor = (input: { repository?: string }) =>
@@ -515,6 +517,113 @@ export async function createSourceControlTools({
           ...(input.body !== undefined ? { body: input.body } : {}),
           ...(input.baseBranch !== undefined ? { baseBranch: input.baseBranch } : {}),
           ...(input.state !== undefined ? { state: input.state } : {}),
+        });
+      },
+    }),
+    source_control_api_read: createTool({
+      id: 'source_control_api_read',
+      description:
+        "Read the source-control provider's API with the Factory's credentials, for what the other source_control_* tools do not cover: a pull request's diff, files, commits, checks and review threads, issues, labels, releases, workflow runs, searches. " +
+        'GitHub: a REST `path` below `repos/<owner>/<repo>/` (or `search/issues` with a `repo:<owner>/<repo>` qualifier, `users/<login>`, `user`, `rate_limit`), `accept: "diff"` for a pull request diff, or a `graphql` query inside `repository(owner: "...", name: "...")`. ' +
+        'GitLab: a REST `path` below `projects/<group%2Fproject>/` (or `user`). ' +
+        "Only this session's repositories can be read; nothing is written. Long answers are cut and say so.",
+      inputSchema: z.object({
+        path: z.string().trim().min(1).max(500).optional(),
+        query: z.record(z.string(), z.string()).optional(),
+        accept: z.enum(['json', 'diff']).optional(),
+        graphql: z
+          .object({ query: z.string().trim().min(1).max(20_000), variables: z.record(z.string(), z.unknown()).optional() })
+          .optional(),
+        repository: z.string().trim().min(1).optional(),
+      }),
+      execute: async input => {
+        const slugs = environment?.slugs ?? [];
+        const own = await withTarget(input.repository !== undefined ? { repository: input.repository } : {});
+        const gitlab = own.provider.id === 'gitlab' ? gitlabApiReadScope(input, slugs) : undefined;
+        const repository = gitlab ? gitlab.repository : githubApiReadScope(input, slugs).repository;
+        const target =
+          repository && repository.toLowerCase() !== own.repository.slug.toLowerCase()
+            ? await withTarget({ repository })
+            : own;
+        const readApi = target.provider.versionControl.readApi;
+        if (!readApi) throw new Error(`Reading the ${target.provider.id} API is not available on this connection.`);
+        const ref = await reference(target);
+        // A GitLab project read goes to the project the Factory resolved for that repository.
+        const path = !gitlab
+          ? input.path
+          : gitlab.repository === undefined
+            ? gitlab.path
+            : `projects/${encodeURIComponent(ref.sourceId)}${gitlab.suffix}`;
+        const data = await readApi({
+          connection: ref.connection,
+          ...(input.graphql ? { graphql: input.graphql } : { path: path ?? '' }),
+          ...(input.query ? { query: input.query } : {}),
+          ...(input.accept ? { accept: input.accept } : {}),
+        });
+        const text = typeof data === 'string' ? data : JSON.stringify(data);
+        if (text.length <= MAX_API_READ_CHARS) return typeof data === 'string' ? { text: data } : { data };
+        return {
+          truncated: true,
+          note: `The answer has ${text.length} characters; only the first ${MAX_API_READ_CHARS} are shown. Read a narrower path or page (\`per_page\`, \`page\`).`,
+          text: text.slice(0, MAX_API_READ_CHARS),
+        };
+      },
+    }),
+    source_control_update_issue: createTool({
+      id: 'source_control_update_issue',
+      description: `Change an issue in the active repository: add or remove labels (creating missing ones first with \`createLabels\`), close or reopen it, and post a comment. On GitHub a pull request number works too, for its labels. ${repositoryArgument}`,
+      inputSchema: repositorySchema.extend({
+        issue: z.union([z.string().trim().min(1), z.number().int().positive()]),
+        addLabels: z.array(z.string().trim().min(1)).max(50).optional(),
+        removeLabels: z.array(z.string().trim().min(1)).max(50).optional(),
+        createLabels: z
+          .array(
+            z.object({
+              name: z.string().trim().min(1),
+              color: z.string().trim().regex(/^#?[0-9a-fA-F]{6}$/).optional(),
+              description: z.string().trim().max(100).optional(),
+            }),
+          )
+          .max(50)
+          .optional(),
+        state: z.enum(['open', 'closed']).optional(),
+        comment: z.string().trim().min(1).optional(),
+      }),
+      execute: async input => {
+        if (!input.addLabels?.length && !input.removeLabels?.length && !input.createLabels?.length && !input.state && !input.comment) {
+          throw new Error('Nothing to change: pass labels, a state or a comment.');
+        }
+        const target = await targetFor(input);
+        const editIssue = target.provider.versionControl.editIssue;
+        if (!editIssue) throw new Error(`Editing ${target.provider.id} issues is not available on this connection.`);
+        const ref = await reference(target);
+        return editIssue({
+          connection: ref.connection,
+          sourceId: ref.sourceId,
+          actingUserId: ref.actingUserId,
+          issueId: changeRequestId(input.issue),
+          ...(input.addLabels ? { addLabels: input.addLabels } : {}),
+          ...(input.removeLabels ? { removeLabels: input.removeLabels } : {}),
+          ...(input.createLabels ? { createLabels: input.createLabels } : {}),
+          ...(input.state ? { state: input.state } : {}),
+          ...(input.comment ? { comment: input.comment } : {}),
+        });
+      },
+    }),
+    source_control_update_review: createTool({
+      id: 'source_control_update_review',
+      description: `Replace the body of a review already submitted on a pull request (its state stays), so a later pass updates its verdict instead of stacking a new one. GitLab has no editable reviews; edit the verdict comment there. ${repositoryArgument}`,
+      inputSchema: changeRequestSchema.extend({
+        reviewId: z.string().trim().min(1),
+        body: z.string().trim().min(1),
+      }),
+      execute: async input => {
+        const target = await targetFor(input);
+        return target.provider.versionControl.updateReview({
+          ...(await reference(target)),
+          pullRequestId: changeRequestId(input.changeRequestId),
+          reviewId: input.reviewId,
+          body: input.body,
         });
       },
     }),

@@ -117,6 +117,17 @@ export interface ClaudeFactoryHarnessOptions {
    */
   cardRun?: (session: { orgId: string; factoryProjectId: string; sessionId: string }) => boolean | Promise<boolean>;
   /**
+   * The `factory-phase` signal a bound Mastra run sees (`describeFactoryPhase`),
+   * for the work item this session's thread is bound to; `undefined` when none is.
+   */
+  phaseFor?: (session: {
+    orgId: string;
+    factoryProjectId: string;
+    sessionId: string;
+    threadId: string;
+    resourceId: string;
+  }) => Promise<string | undefined>;
+  /**
    * Where the Factory chats (supervisor sessions) on Claude Code get their
    * private empty working folders; `<storeDir>-supervisor`, or one under the
    * OS temp dir, by default.
@@ -285,10 +296,25 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     // A pull or merge request checkout reads no settings file: its hooks would run on this host.
     settingSourcesFor: async session =>
       (await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout })) === true ? [] : undefined,
-    // What a Mastra session's environment signal says: the repositories its workspace holds, where, on which branch.
-    turnContextFor: session => {
+    // What a Mastra session's signals say: the repositories its workspace holds, where, on which branch;
+    // and, for a card run, the bound work item's phase.
+    turnContextFor: async session => {
       const environment = peekSessionEnvironment(session.id);
-      return environment ? `<factory-environment>\n${renderSessionEnvironment(environment)}\n</factory-environment>` : undefined;
+      const signals = environment
+        ? [`<factory-environment>\n${renderSessionEnvironment(environment)}\n</factory-environment>`]
+        : [];
+      if (options.phaseFor && !claudeSupervisorProjectId(session.id) && session.thread.getId()) {
+        const tenant = await tenantOf(session);
+        const phase = await options.phaseFor({
+          orgId: tenant.orgId,
+          factoryProjectId: tenant.factoryProjectId,
+          sessionId: session.id,
+          threadId: session.thread.requireId(),
+          resourceId: session.resourceId ?? tenant.factoryProjectId,
+        });
+        if (phase) signals.push(`<factory-phase>\n${phase}\n</factory-phase>`);
+      }
+      return signals.length > 0 ? signals.join('\n') : undefined;
     },
     appendSystemPromptFor: async session => {
       if (claudeSupervisorProjectId(session.id)) return CLAUDE_SUPERVISOR_SYSTEM_PROMPT;

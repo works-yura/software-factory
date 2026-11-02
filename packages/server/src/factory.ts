@@ -121,7 +121,7 @@ import {
 import { readFactorySessionScope, resolveFactorySessionAddress } from '@factory/session';
 import { FactoryDecisionDispatcher } from '@factory/runtime';
 import type { FactoryRuleActor } from '@factory/harness-mastra';
-import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from '@factory/harness-mastra';
+import { describeFactoryPhase, FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from '@factory/harness-mastra';
 import { asAgentSession, createMastraHarness } from '@factory/harness-mastra';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from '@factory/harness-mastra';
 import type { FactoryStartCoordinator } from '@factory/harness-mastra';
@@ -1577,6 +1577,34 @@ export class MastraFactory {
             workItemsReady
               ? workItemsStorage.hasRunBindingForSession({ orgId, factoryProjectId, sessionId })
               : false,
+          // The factory-phase signal a bound Mastra run gets, so the skills read the same stage and revision.
+          ...(workItemsReady
+            ? {
+                phaseFor: async ({ orgId, factoryProjectId, sessionId, threadId, resourceId }) => {
+                  const binding = await workItemsStorage.findActiveRunBindingByThread({
+                    orgId,
+                    threadId,
+                    resourceId,
+                    sessionId,
+                  });
+                  if (!binding) return undefined;
+                  const described = await describeFactoryPhase({
+                    storage: workItemsStorage,
+                    boards,
+                    configVersion,
+                    binding,
+                    runtime: async () => {
+                      const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                      return {
+                        modelId: `claude-code/${project?.claudeCodeModel ?? 'default'}`,
+                        thinkingLevel: 'claude-code-default',
+                      };
+                    },
+                  });
+                  return described?.contents;
+                },
+              }
+            : {}),
           ...claudeCodeCredentials,
           cwdFor: claudeCheckout!,
           mcp: {

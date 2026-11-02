@@ -85,6 +85,27 @@ describe('createClaudeFactoryHarness', () => {
     await Promise.all(dirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
   });
 
+  it("tells a card run its phase the way a Mastra run's factory-phase signal does, and the supervisor none", async () => {
+    const phaseFor = vi.fn(async ({ threadId }: { threadId: string }) =>
+      threadId === 'thread-bound' ? 'Factory work phase: Build (build)\nRevision: 4' : undefined,
+    );
+    const { factory, config } = setup({ phaseFor });
+    const bound = await factory.harness.createSession({ sessionId: 'session-a', threadId: 'thread-bound' });
+    const unbound = await factory.harness.createSession({ sessionId: 'session-b', threadId: 'thread-free' });
+
+    expect(await config.turnContextFor!(bound)).toBe(
+      '<factory-phase>\nFactory work phase: Build (build)\nRevision: 4\n</factory-phase>',
+    );
+    expect(phaseFor).toHaveBeenCalledWith({
+      orgId: 'org-a',
+      factoryProjectId: 'factory-a',
+      sessionId: 'session-a',
+      threadId: 'thread-bound',
+      resourceId: 'factory-a',
+    });
+    expect(await config.turnContextFor!(unbound)).toBeUndefined();
+  });
+
   it('needs a session store or a store directory', () => {
     expect(() =>
       createClaudeFactoryHarness({

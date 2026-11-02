@@ -261,6 +261,81 @@ export function reportMemorySettingsUnavailable(
   });
 }
 
+/**
+ * The `factory-phase` signal's text for an active run binding: the board and
+ * stage, the work item, the role and revision, and what ends the phase. A
+ * Mastra session sees it as a state signal; a Claude Code session gets the same
+ * text ahead of each turn.
+ */
+export async function describeFactoryPhase(input: {
+  storage: WorkItemsStorage;
+  boards: BoardRegistry | ProjectBoardSource;
+  configVersion: string;
+  binding: FactoryRunBindingRecord;
+  /**
+   * The model and reasoning setting a Review run reports in its published
+   * review; a harness without Mastra thinking levels names its own setting.
+   */
+  runtime?: () => Promise<{ modelId: string; thinkingLevel: ThinkingLevel | (string & {}) } | undefined>;
+}): Promise<{ value: ActivePhaseSnapshotValue; contents: string; linked: WorkItemRow[] } | undefined> {
+  const { binding } = input;
+  const item = await input.storage.get({ orgId: binding.orgId, id: binding.workItemId });
+  const boards = await toBoardSource(input.boards).load(binding);
+  const stage = ruleStage(boards, item);
+  if (!item || !stage) return undefined;
+  const allItems = await input.storage.list({
+    orgId: binding.orgId,
+    factoryProjectId: binding.factoryProjectId,
+  });
+  const linked = allItems
+    .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
+    .slice(0, MAX_LINKED_ITEMS);
+  const board = boardForWorkItem(item);
+  const baseValue: ActivePhaseSnapshotBase = {
+    status: 'active',
+    bindingId: binding.id,
+    itemId: item.id,
+    revision: item.revision,
+    stage,
+    role: binding.role,
+    configVersion: input.configVersion,
+  };
+  const value: ActivePhaseSnapshotValue =
+    board === 'review'
+      ? {
+          ...baseValue,
+          board,
+          ...((await input.runtime?.()) as RuntimeSnapshot | undefined),
+        }
+      : { ...baseValue, board };
+
+  const linkedText = linked.length
+    ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
+    : '';
+  const phase = boards.get(board)?.phases[stage];
+  const phaseLabel = phase?.name ?? stage;
+  const exitText =
+    phase?.kind === 'working' && phase.exitTool
+      ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
+      : '';
+  const runtime =
+    value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
+  const contents =
+    `Factory ${board} phase: ${escapeText(phaseLabel)} (${escapeText(stage)})\n` +
+    `Work item: ${escapeText(item.title)} (${item.id})\n` +
+    `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nConfig: ${escapeText(input.configVersion)}\n` +
+    (runtime
+      ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
+      : '') +
+    // Review and every board that ships change requests (Work, Bug) park cards in Intake.
+    ((board === 'review' || boards.get(board)?.changeRequests !== undefined) && stage === 'intake'
+      ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
+      : '') +
+    exitText +
+    `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
+  return { value, contents, linked };
+}
+
 export interface FactoryPhaseStateProcessorOptions {
   configVersion: string;
   storage: WorkItemsStorage;
@@ -402,66 +477,25 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       };
     }
 
-    const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    const boards = await this.boards.load(binding);
-    const stage = ruleStage(boards, item);
-    if (!item || !stage) return;
-    const allItems = await this.options.storage.list({
-      orgId: binding.orgId,
-      factoryProjectId: binding.factoryProjectId,
-    });
-    const linked = allItems
-      .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
-      .slice(0, MAX_LINKED_ITEMS);
-    const board = boardForWorkItem(item);
-    const baseValue: ActivePhaseSnapshotBase = {
-      status: 'active',
-      bindingId: binding.id,
-      itemId: item.id,
-      revision: item.revision,
-      stage,
-      role: binding.role,
+    const described = await describeFactoryPhase({
+      storage: this.options.storage,
+      boards: this.boards,
       configVersion: this.options.configVersion,
-    };
-    const value: ActivePhaseSnapshotValue =
-      board === 'review'
-        ? {
-            ...baseValue,
-            board,
-            ...reviewRuntimeFromRequestContext(
-              args.requestContext,
-              await this.options.factoryThinkingLevel?.(binding.factoryProjectId),
-            ),
-          }
-        : { ...baseValue, board };
+      binding,
+      runtime: async () =>
+        reviewRuntimeFromRequestContext(
+          args.requestContext,
+          await this.options.factoryThinkingLevel?.(binding.factoryProjectId),
+        ),
+    });
+    if (!described) return;
+    const { value, contents: snapshotContents, linked } = described;
+    const { board, stage } = value;
     const cacheKey = await phaseCacheKey(value, linked);
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
-
-    const linkedText = linked.length
-      ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
-      : '';
-    const phase = boards.get(board)?.phases[stage];
-    const phaseLabel = phase?.name ?? stage;
-    const exitText =
-      phase?.kind === 'working' && phase.exitTool
-        ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
-        : '';
     const runtime =
       value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
-    const snapshotContents =
-      `Factory ${board} phase: ${escapeText(phaseLabel)} (${escapeText(stage)})\n` +
-      `Work item: ${escapeText(item.title)} (${item.id})\n` +
-      `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nConfig: ${escapeText(this.options.configVersion)}\n` +
-      (runtime
-        ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
-        : '') +
-      // Review and every board that ships change requests (Work, Bug) park cards in Intake.
-      ((board === 'review' || boards.get(board)?.changeRequests !== undefined) && stage === 'intake'
-        ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
-        : '') +
-      exitText +
-      `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
     const isDelta = hasBase && prior?.status === 'active';
     return {
       id: STATE_ID,
@@ -476,7 +510,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         board,
         stage,
         role: binding.role,
-        revision: item.revision,
+        revision: value.revision,
         ...(runtime ?? {}),
       },
       metadata: { value: { phase: value } },

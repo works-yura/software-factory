@@ -403,6 +403,27 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     );
   };
 
+  const readApi: NonNullable<VersionControl['readApi']> = async input => {
+    if (input.graphql) throw new Error('GraphQL reads are not available for GitLab; use a REST path.');
+    if (!input.path) throw new Error('A GitLab API read needs a path.');
+    if (input.accept === 'diff') throw new Error('Read a merge request diff from `projects/<id>/merge_requests/<iid>/diffs`.');
+    const context = await deps.contextForConnection(input.connection);
+    return context.api.read(input.path, input.query);
+  };
+
+  const editIssue: NonNullable<VersionControl['editIssue']> = async input => {
+    const context = await deps.contextForConnection(input.connection);
+    const iid = requirePositiveId(input.issueId, 'issue');
+    for (const label of input.createLabels ?? []) await context.api.ensureLabel(input.sourceId, label);
+    const issue = await context.api.editIssue(input.sourceId, iid, {
+      ...(input.addLabels ? { addLabels: input.addLabels } : {}),
+      ...(input.removeLabels ? { removeLabels: input.removeLabels } : {}),
+      ...(input.state ? { stateEvent: input.state === 'closed' ? 'close' : 'reopen' } : {}),
+    });
+    if (input.comment) await context.api.createNote(input.sourceId, iid, input.comment);
+    return { labels: issue.labels ?? [], state: issue.state === 'opened' ? 'open' : issue.state };
+  };
+
   const publishCommitCheck: NonNullable<VersionControl['publishCommitCheck']> = async input => {
     const context = await deps.contextForConnection(input.connection);
     const body = {
@@ -573,6 +594,8 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     requestReviewers,
     removeRequestedReviewers,
     publishCommitCheck,
+    readApi,
+    editIssue,
   };
 }
 

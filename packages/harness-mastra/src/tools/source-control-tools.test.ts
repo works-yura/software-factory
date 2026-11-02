@@ -191,6 +191,121 @@ describe('createSourceControlTools', () => {
     });
   });
 
+  it("reads the provider API of the session's repositories only, on the repository the read names", async () => {
+    for (const provider of ['github', 'gitlab'] as const) {
+      const setup = await fixture(provider);
+      const readApi = vi.fn(async (input: { path?: string; accept?: string }) =>
+        input.accept === 'diff' ? 'diff --git a/x b/x' : { number: 7 },
+      );
+      const tools = await createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: provider, storage: setup.storage, versionControl: { ...setup.versionControl, readApi } }],
+        audit: setup.audit,
+      });
+      const read = (input: Record<string, unknown>) => (tools.source_control_api_read!.execute as any)(input);
+
+      if (provider === 'github') {
+        await expect(read({ path: 'repos/acme/other/pulls/7' })).resolves.toEqual({ data: { number: 7 } });
+        expect(readApi).toHaveBeenLastCalledWith({
+          connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
+          path: 'repos/acme/other/pulls/7',
+        });
+        // The connection comes from the repository the path names, not the session's own.
+        expect(setup.getRepositoryTarget).toHaveBeenLastCalledWith({ orgId: 'org-1', repositoryId: 'repo-2' });
+        await expect(read({ path: 'repos/acme/repo/pulls/7', accept: 'diff' })).resolves.toEqual({
+          text: 'diff --git a/x b/x',
+        });
+        await expect(read({ path: 'repos/acme/private/contents/a' })).rejects.toThrow('acme/private is not one');
+      } else {
+        await read({ path: 'projects/acme%2Fother/merge_requests/3/diffs', query: { page: '2' } });
+        expect(readApi).toHaveBeenLastCalledWith({
+          connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
+          path: 'projects/acme%2Fother/merge_requests/3/diffs',
+          query: { page: '2' },
+        });
+        await expect(read({ path: 'groups/acme' })).rejects.toThrow('does not read');
+      }
+    }
+  });
+
+  it('cuts a long API answer and says so', async () => {
+    const setup = await fixture('github');
+    const readApi = vi.fn(async () => 'x'.repeat(250_000));
+    const tools = await createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: 'github', storage: setup.storage, versionControl: { ...setup.versionControl, readApi } }],
+      audit: setup.audit,
+    });
+    const result = await (tools.source_control_api_read!.execute as any)({ path: 'repos/acme/repo/pulls/1', accept: 'diff' });
+    expect(result.truncated).toBe(true);
+    expect(result.text).toHaveLength(200_000);
+    expect(result.note).toContain('250000 characters');
+  });
+
+  it('says so when the connection cannot read the API or edit issues', async () => {
+    const setup = await fixture('github');
+    const tools = await createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: 'github', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+    await expect((tools.source_control_api_read!.execute as any)({ path: 'repos/acme/repo' })).rejects.toThrow(
+      'Reading the github API is not available on this connection.',
+    );
+    await expect((tools.source_control_update_issue!.execute as any)({ issue: 3, state: 'closed' })).rejects.toThrow(
+      'Editing github issues is not available on this connection.',
+    );
+  });
+
+  it('replaces the body of a submitted review', async () => {
+    const setup = await fixture('github');
+    const updateReview = vi.fn(async () => ({ id: '9', body: 'Verdict: approve' }));
+    const tools = await createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: 'github', storage: setup.storage, versionControl: { ...setup.versionControl, updateReview } }],
+      audit: setup.audit,
+    });
+    await (tools.source_control_update_review!.execute as any)({ changeRequestId: 7, reviewId: '9', body: 'Verdict: approve' });
+    expect(updateReview).toHaveBeenCalledWith({
+      connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
+      sourceId: 'acme/repo',
+      actingUserId: 'user-1',
+      pullRequestId: '7',
+      reviewId: '9',
+      body: 'Verdict: approve',
+    });
+  });
+
+  it('edits an issue in the session repository: labels, state and a comment', async () => {
+    const setup = await fixture('github');
+    const editIssue = vi.fn(async () => ({ labels: ['status: auto-triaged'], state: 'open' }));
+    const tools = await createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: 'github', storage: setup.storage, versionControl: { ...setup.versionControl, editIssue } }],
+      audit: setup.audit,
+    });
+    const update = (input: Record<string, unknown>) => (tools.source_control_update_issue!.execute as any)(input);
+
+    await expect(
+      update({
+        issue: 12,
+        addLabels: ['status: auto-triaged', 'severity:high'],
+        removeLabels: ['status: needs triage'],
+        createLabels: [{ name: 'severity:high', color: '#D93F0B', description: 'Triage severity: high' }],
+      }),
+    ).resolves.toEqual({ labels: ['status: auto-triaged'], state: 'open' });
+    expect(editIssue).toHaveBeenCalledWith({
+      connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
+      sourceId: 'acme/repo',
+      actingUserId: 'user-1',
+      issueId: '12',
+      addLabels: ['status: auto-triaged', 'severity:high'],
+      removeLabels: ['status: needs triage'],
+      createLabels: [{ name: 'severity:high', color: '#D93F0B', description: 'Triage severity: high' }],
+    });
+    await expect(update({ issue: 12 })).rejects.toThrow('Nothing to change');
+  });
+
   it('creates a change request only for the active persisted session target', async () => {
     const setup = await fixture();
     const tools = await createSourceControlTools({

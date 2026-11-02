@@ -265,6 +265,44 @@ export interface CommitCheck {
 }
 
 /** Fixed repository, pull-request lifecycle, review, comment, and reviewer contract. */
+/**
+ * A read of the provider's API on the connection's credentials: a REST `GET`
+ * relative to the API root (`repos/<owner>/<repo>/pulls/1` on GitHub,
+ * `projects/<id>/merge_requests/1` on GitLab), or a GraphQL query. The caller
+ * decides which paths an agent may read.
+ */
+export interface ReadApiInput {
+  connection: IntegrationConnection;
+  /** REST path relative to the API root, without a leading slash; ignored for `graphql`. */
+  path?: string;
+  query?: Record<string, string>;
+  /** `diff` asks for a pull request's unified diff (GitHub) instead of JSON. */
+  accept?: 'json' | 'diff';
+  /** A GraphQL query (no mutations); GitHub only. */
+  graphql?: { query: string; variables?: Record<string, unknown> };
+}
+
+/** An issue's (or a GitHub pull request's) labels, state and a comment, changed on the provider. */
+export interface EditIssueInput {
+  connection: IntegrationConnection;
+  sourceId: string;
+  /** Repository-local number (GitHub) or IID (GitLab). */
+  issueId: string;
+  addLabels?: string[];
+  removeLabels?: string[];
+  /** Labels to create first when the repository has none by that name; existing ones are left as they are. */
+  createLabels?: Array<{ name: string; color?: string; description?: string }>;
+  state?: 'open' | 'closed';
+  comment?: string;
+  actingUserId?: string;
+}
+
+export interface EditedIssue {
+  labels: string[];
+  state: string;
+  commentUrl?: string;
+}
+
 export interface VersionControl {
   initialize(input: { storage: SourceControlStorageHandle }): void;
   registerInstallation(input: {
@@ -316,4 +354,8 @@ export interface VersionControl {
   removeRequestedReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
   /** Optional because not every provider (or connection type) can publish commit checks. */
   publishCommitCheck?(input: PublishCommitCheckInput): Promise<CommitCheck>;
+  /** Optional: agent reads of the provider API beyond the typed methods (see `ReadApiInput`). */
+  readApi?(input: ReadApiInput): Promise<unknown>;
+  /** Optional: labels, state and a comment on an issue. */
+  editIssue?(input: EditIssueInput): Promise<EditedIssue>;
 }

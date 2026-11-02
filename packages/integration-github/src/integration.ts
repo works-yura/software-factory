@@ -41,10 +41,12 @@ import type {
 } from '@factory/capabilities';
 import type {
   CommitCheck,
+  EditIssueInput,
   PullRequest,
   PullRequestComment,
   Review,
   ReviewComment,
+  ReadApiInput,
   VersionControl,
 } from '@factory/capabilities';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
@@ -385,6 +387,8 @@ export class GithubIntegration implements FactoryIntegration {
     requestReviewers: input => this.#requestReviewers(input),
     removeRequestedReviewers: input => this.#removeReviewers(input),
     publishCommitCheck: input => this.publishCommitCheck(input),
+    readApi: input => this.#readApi(input),
+    editIssue: input => this.#editIssue(input),
   };
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
@@ -962,6 +966,54 @@ export class GithubIntegration implements FactoryIntegration {
   async #deleteComment(input: InputOf<'deleteComment'>) {
     const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
     await octokit.issues.deleteComment({ ...parts, comment_id: requirePositiveId(input.commentId, 'comment') });
+  }
+
+  async #readApi(input: ReadApiInput): Promise<unknown> {
+    const octokit = this.getInstallationOctokit(getGithubInstallationId(input.connection));
+    if (input.graphql) return octokit.graphql(input.graphql.query, input.graphql.variables ?? {});
+    if (!input.path) throw new Error('A GitHub API read needs a path or a GraphQL query.');
+    const { data } = await octokit.request(`GET /${input.path}`, {
+      ...input.query,
+      ...(input.accept === 'diff' ? { headers: { accept: 'application/vnd.github.diff' } } : {}),
+    });
+    return data;
+  }
+
+  async #editIssue(input: EditIssueInput) {
+    const { octokit, parts } = this.repositoryClient(input.connection, input.sourceId);
+    const issue_number = requirePositiveId(input.issueId, 'issue');
+    for (const label of input.createLabels ?? []) {
+      try {
+        await octokit.issues.createLabel({
+          ...parts,
+          name: label.name,
+          ...(label.color ? { color: label.color.replace(/^#/, '') } : {}),
+          ...(label.description ? { description: label.description } : {}),
+        });
+      } catch (err) {
+        // 422: the repository already has it, which is what the caller wants.
+        if (!(typeof err === 'object' && err !== null && 'status' in err && err.status === 422)) throw err;
+      }
+    }
+    if (input.addLabels?.length) await octokit.issues.addLabels({ ...parts, issue_number, labels: input.addLabels });
+    for (const name of input.removeLabels ?? []) {
+      try {
+        await octokit.issues.removeLabel({ ...parts, issue_number, name });
+      } catch (err) {
+        if (!isNotFoundError(err)) throw err;
+      }
+    }
+    const { data } = input.state
+      ? await octokit.issues.update({ ...parts, issue_number, state: input.state })
+      : await octokit.issues.get({ ...parts, issue_number });
+    const comment = input.comment
+      ? (await octokit.issues.createComment({ ...parts, issue_number, body: input.comment })).data
+      : undefined;
+    return {
+      labels: data.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
+      state: data.state,
+      ...(comment ? { commentUrl: comment.html_url } : {}),
+    };
   }
 
   async #listReviews(input: InputOf<'listReviews'>) {

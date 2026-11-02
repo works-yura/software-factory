@@ -297,6 +297,40 @@ export class GitLabApiClient {
     );
   }
 
+  /** A `GET` below `/api/v4/`, for agent reads the typed methods do not cover. */
+  async read(path: string, query?: Record<string, string>): Promise<unknown> {
+    return this.#request<unknown>('GET', `/api/v4/${path.replace(/^\/+/, '')}`, query ? { query } : {});
+  }
+
+  async editIssue(
+    projectId: string,
+    issueIid: number,
+    edit: { addLabels?: string[]; removeLabels?: string[]; stateEvent?: 'close' | 'reopen' },
+  ): Promise<GitLabIssue> {
+    return this.#request<GitLabIssue>('PUT', `/api/v4/projects/${encodeURIComponent(projectId)}/issues/${issueIid}`, {
+      body: {
+        ...(edit.addLabels?.length ? { add_labels: edit.addLabels.join(',') } : {}),
+        ...(edit.removeLabels?.length ? { remove_labels: edit.removeLabels.join(',') } : {}),
+        ...(edit.stateEvent ? { state_event: edit.stateEvent } : {}),
+      },
+    });
+  }
+
+  /** Creates a project label; one that already exists (409) is left as it is. */
+  async ensureLabel(projectId: string, label: { name: string; color?: string; description?: string }): Promise<void> {
+    try {
+      await this.#request<unknown>('POST', `/api/v4/projects/${encodeURIComponent(projectId)}/labels`, {
+        body: {
+          name: label.name,
+          color: label.color ? `#${label.color.replace(/^#/, '')}` : '#428BCA',
+          ...(label.description ? { description: label.description } : {}),
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof GitLabApiError && error.status === 409)) throw error;
+    }
+  }
+
   async updateIssueState(projectId: string, issueIid: number, stateEvent: 'close' | 'reopen'): Promise<GitLabIssue> {
     return this.#request<GitLabIssue>('PUT', `/api/v4/projects/${encodeURIComponent(projectId)}/issues/${issueIid}`, {
       body: { state_event: stateEvent },
