@@ -18,24 +18,26 @@ export interface FactoryToolPermissionsStore {
 }
 
 /**
- * The Factory's tool permissions as Settings → Behavior writes them: the
- * Factory's own agent-controller session (its id is the Factory id) keeps
- * them in its state, `permissionRules.categories` and `yolo` (auto-approve).
- * The session holds them only in memory; `persistFactoryToolPermissions`
- * keeps a copy on the Factory and puts it back when the session is created.
- * Before that (a restarted server nobody has opened the Factory on yet) the
- * Factory's copy is read; with neither, every category asks.
+ * The Factory's tool permissions as Settings → Behavior writes them, read from
+ * the Factory's stored copy first: Claude Code's Behavior settings write it
+ * directly, and Mastra's (the Factory's own agent-controller session, whose id
+ * is the Factory id, keeps `permissionRules.categories` and `yolo` in memory)
+ * copy theirs there through `persistFactoryToolPermissions`. A Factory with no
+ * stored copy yet falls back to that session's state; with neither, every
+ * category asks.
  */
 export function createFactoryToolPermissions(
   getSession: (sessionId: string) => Promise<FactorySettingsSession | undefined>,
   projects?: FactoryToolPermissionsStore,
 ): ClaudeFactoryPermissionsHook {
   return async ({ orgId, factoryProjectId }) => {
+    const stored = await storedPermissions(projects, orgId, factoryProjectId);
+    if (stored) return stored;
     const session = await getSession(factoryProjectId).catch(() => undefined);
     const state = session?.state.get() as
       | { factoryOrgId?: unknown; yolo?: unknown; permissionRules?: { categories?: Record<string, unknown> } }
       | undefined;
-    if (!state) return storedPermissions(projects, orgId, factoryProjectId);
+    if (!state) return undefined;
     // Never another organization's settings, should ids ever collide.
     if (typeof state.factoryOrgId === 'string' && state.factoryOrgId !== orgId) return undefined;
     return toPermissions(state.permissionRules?.categories, state.yolo === true);

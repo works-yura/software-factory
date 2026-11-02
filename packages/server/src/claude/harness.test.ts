@@ -490,13 +490,20 @@ describe('createClaudeFactoryHarness', () => {
       await expect(yolo({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toEqual({ categories: {}, yolo: true });
     });
 
-    it('prefers the live session over the stored copy, and survives a failing store', async () => {
+    it('prefers the stored copy over a stale live session, and survives a failing store', async () => {
+      // Claude Code's Behavior settings write only the stored copy; a Mastra Factory session left in
+      // memory (the Factory switched harness) still holds the rules from before.
       const get = vi.fn(async () => ({ toolPermissions: { categories: { read: 'deny' }, yolo: false } }));
-      const live = createFactoryToolPermissions(async () => state({ permissionRules: { categories: { read: 'allow' } } }), {
+      const stale = createFactoryToolPermissions(async () => state({ permissionRules: { categories: { read: 'allow' } } }), {
         get,
       } as never);
-      await expect(live({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toEqual({ categories: { read: 'allow' } });
-      expect(get).not.toHaveBeenCalled();
+      await expect(stale({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toEqual({ categories: { read: 'deny' } });
+      // Nothing stored yet: the live session's rules apply.
+      const unstored = createFactoryToolPermissions(
+        async () => state({ permissionRules: { categories: { read: 'allow' } } }),
+        { get: async () => ({ toolPermissions: null }) },
+      );
+      await expect(unstored({ orgId: 'org-a', factoryProjectId: 'factory-a' })).resolves.toEqual({ categories: { read: 'allow' } });
       const broken = createFactoryToolPermissions(async () => undefined, {
         get: async () => {
           throw new Error('db down');
