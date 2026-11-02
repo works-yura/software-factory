@@ -228,14 +228,29 @@ describe('GithubTokenIntegration', () => {
     expect(await integration.mintInstallationToken(4242)).toBe(TOKEN);
   });
 
-  it('has no App flow to fall into', () => {
+  it('has no App flow to fall into', async () => {
     const integration = new GithubTokenIntegration({ accessToken: TOKEN });
     expect(() => integration.getAppOctokit()).toThrow('no GitHub App');
     expect(() => integration.buildInstallUrl('state')).toThrow('no GitHub App');
     expect(() => integration.buildOAuthIdentifyUrl('state', 'http://localhost')).toThrow('no GitHub App');
-    void expect(integration.listUserInstallations('user-token')).rejects.toThrow('no GitHub App');
+    await expect(integration.listUserInstallations('user-token')).rejects.toThrow('no GitHub App');
+    await expect(integration.exchangeOAuthCode('code', 'http://localhost')).rejects.toThrow('no GitHub App');
     expect(integration.webhookSecret).toBeUndefined();
     expect(integration.requiresStableStateSigner).toBe(false);
+    expect(integration.authMode).toBe('token');
+  });
+
+  it('warns at mount when GitHub cannot confirm the token, and still serves its routes', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const github = fakeGithub({ 'GET /user': { status: 401, body: { message: 'Bad credentials' } } });
+    const { routes, integration } = await mounted({ accessToken: TOKEN, fetchImpl: github.fetchImpl });
+
+    expect(routes.length).toBeGreaterThan(0);
+    await vi.waitFor(() =>
+      expect(warn).toHaveBeenCalledWith('[GitHub] The configured GITHUB_ACCESS_TOKEN could not be verified.', expect.anything()),
+    );
+    expect(integration.tokenRejected).toBe(true);
   });
 
   it('polls every two minutes unless an interval is configured', () => {

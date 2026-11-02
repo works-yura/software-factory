@@ -301,6 +301,63 @@ describe('pull-request activity read by polling', () => {
     ]);
   });
 
+  it('replays a close without merge, and stops following the pull request once it is closed', async () => {
+    const run = await setup();
+    await run.authored(app, 5);
+    run.state.open.set('acme/app', [pull(5)]);
+    await run.sweep([app]);
+    await run.workItems.update({
+      orgId: 'org-1',
+      id: run.work.id,
+      userId: 'user-1',
+      patch: { metadata: { openChangeRequests: [{ repository: 'acme/app', number: 5 }], openPullRequestNumber: 5 } },
+    });
+
+    run.state.open.set('acme/app', []);
+    run.state.pulls.set('acme/app#5', pull(5, { state: 'closed', merged: false }));
+    await expect(run.sweep([app])).resolves.toMatchObject({ merged: 0, closed: 1, failed: 0 });
+    expect(run.delivered.at(-1)).toMatchObject({
+      deliveryId: 'reconcile:10:pull-request:5:closed',
+      payload: { action: 'closed', sender: { login: 'yura' }, pull_request: { merged: false } },
+    });
+    expect(await run.integrations.forIntegration('github').settings.get('__github_pull_request_activity__', '10:5')).toMatchObject(
+      { closed: true },
+    );
+
+    // Still closed on the next sweep: replayed with the same id, so the ingress dedupes it.
+    await run.sweep([app]);
+    expect(run.ids().slice(-2)).toEqual(['reconcile:10:pull-request:5:closed', 'reconcile:10:pull-request:5:closed']);
+  });
+
+  it('leaves a pull request a card has out alone while it is still open elsewhere in the list or unreadable', async () => {
+    const run = await setup();
+    await run.workItems.update({
+      orgId: 'org-1',
+      id: run.work.id,
+      userId: 'user-1',
+      patch: {
+        metadata: {
+          openChangeRequests: [
+            { repository: 'acme/app', number: 5 },
+            { repository: 'acme/app', number: 6 },
+          ],
+          openPullRequestNumber: 6,
+        },
+      },
+    });
+    // #5 is gone from the open list but GitHub cannot read it; #6 reads as reopened.
+    run.state.pulls.set('acme/app#6', pull(6, { state: 'open' }));
+
+    await expect(run.sweep([app])).resolves.toMatchObject({
+      checked: 1,
+      merged: 0,
+      closed: 0,
+      failed: 1,
+      errors: [{ repository: 'acme/app', pullRequestNumber: 5, error: 'Not Found' }],
+    });
+    expect(run.delivered).toEqual([]);
+  });
+
   it('keeps its place when a delivery fails, so the next sweep retries it', async () => {
     const run = await setup();
     await run.authored(app, 5);
