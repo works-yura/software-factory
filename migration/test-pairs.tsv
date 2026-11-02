@@ -120,7 +120,7 @@ rules/bindings.test.ts	runtime/src/bindings.test.ts
 rules/custom-board-lifecycle.test.ts	server/src/rules/custom-board-lifecycle.test.ts
 rules/custom-board-runtime.test.ts	server/src/rules/custom-board-runtime.test.ts
 rules/default-handlers.test.ts	server/src/rules/default-handlers.test.ts	-1	Linear integration cases dropped with the integration (-3); Linear triage entry cases dropped with the vocabulary (-2); change-request flow on a custom board (+4)
-rules/processor.test.ts	harness-mastra/src/rules/processor.test.ts
+rules/processor.test.ts	harness-mastra/src/rules/processor.test.ts	+1	upstream #29104: a tool rule re-entering the current stage runs onEnter (+1)
 rules/review-source-tool.test.ts	harness-mastra/src/rules/review-source-tool.test.ts
 rules/start-coordinator.scenario.test.ts	harness-mastra/src/rules/start-coordinator.scenario.test.ts
 rules/start-coordinator.test.ts	harness-mastra/src/rules/start-coordinator.test.ts	0	owner-default (user scope) case removed with the personal model scope; a card naming no repository runs in any environment session (+1)
