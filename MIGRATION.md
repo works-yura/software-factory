@@ -243,6 +243,16 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 - **Тести:** `SupervisorPage.msw.test.tsx` вмикає прапорець (+1 на редирект), `RulesPage.msw.test.tsx` +1, `AppLayout.msw.test.tsx` +1.
 - **Пакет:** сесія Supervisor (`resolveSupervisorScope`, `hydrateSupervisorSession`, тип `SupervisorScope`) перейшла з `session/src/supervisor-session.ts` у `supervisor/src/session.ts`, маршрути `/supervisor/session` і `/supervisor/health` — з `api/src/supervisor.ts` у `supervisor/src/routes.ts` (монтує їх і далі `WorkItemRoutes`). У `session` лишились тільки адресні функції (`supervisorResourceId`, `parseSupervisorResourceId`, `supervisorThreadId`, `supervisorProjectIdFromContext`): їх читають доступ до сесій, ключі й дозволи інструментів, а `supervisor` залежить від `session`. Claude Code-варіант (`server/src/claude/supervisor.ts`) лишився в `server`, щоб `supervisor` не тягнув `harness-claude-code`. Тест `supervisor-session.test.ts` переїхав як `supervisor/src/session.test.ts`.
 
+### Активність прибрано, код у `@factory/activity` (2026-11-02)
+
+Upstream Mastra прибрала сторінку Activity 2026-10-23 (`63d7d5cbd4`, #28257), причину не пояснила. v4 робить те саме, але код не видаляє, а складає в один пакет `packages/activity`.
+
+- **Бекенд (живий):** `api/src/attention.ts`, `attention-activity.ts`, `attention-parked.ts`, `attention-proposed.ts` переїхали в `activity/src/`. Маршрути уваги й далі монтує `WorkItemRoutes`; `api` і `server` залежать від `@factory/activity`. Тест маршрутів лишився в `api/src/attention.test.ts`, бо ганяє їх через `WorkItemRoutes`.
+- **UI (паркований):** 45 файлів, які upstream видалив повністю (сторінка, `SidebarActivityLink` з лічильником і звуком, Needs you, стрічка, Codebase, хуки `useFactoryAttention`/`useRepositoryCommits`, сервіси `attentionSound`/`commits`, тести, `e2e/ui/attention.ts`), плюс `useFeedRoster` — у `activity/ui/` з тими самими шляхами, що в `apps/ui/`. Тека не збирається й не тестується. Там же повні копії до спрощення: `activity.ts` (+тест), `auditPresentation.ts`, `services/attention.ts`, `services/audit.ts`, `useAuditEvents.ts`.
+- **UI app:** як upstream — нема пункту в панелі, лічильника, звуку, пошуку Activity/Audit log; `/activity`, `/overview`, `/attention`, `/metrics`, `/audit` ведуть на дошку. Спрощено `activity.ts` (лише `startOfLocalDay`, `groupByDay`, `dayHeading`), `auditPresentation.ts`, `services/attention.ts` (лише `factoryAttentionTargetPath`), `services/audit.ts`, `useAuditEvents.ts`, ключі запитів, `FeedEventsProvider`, `useFactoryDecisions`, `factoryPaths`. `nav.footer` — «Account and settings».
+- **Тести:** `activity.test.ts` 20 → 3, `FeedEventsProvider.msw.test.tsx` −1, `GlobalSearch.msw.test.tsx` +1 (старі адреси ведуть на дошку), `AppLayout.msw.test.tsx` перевіряє, що Activity нема. Паркованих 8 v3-парних тестів у `test-pairs.tsv` вказують на `activity/ui/...`.
+- **Повернення:** `packages/activity/README.md`.
+
 ## Далі
 
 Порядок і обсяг — у `README.md`, розділ «Що далі».

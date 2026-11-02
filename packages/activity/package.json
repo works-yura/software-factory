@@ -1,0 +1,26 @@
+{
+  "name": "@factory/activity",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Activity: the attention inbox routes (needs-you items, read, archive, restore) and the parked Activity page UI.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@factory/contracts": "workspace:*",
+    "@factory/core": "workspace:*",
+    "@factory/runtime": "workspace:*",
+    "@factory/session": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/core": "1.79.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:"
+  }
+}

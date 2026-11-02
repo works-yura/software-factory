@@ -108,18 +108,3 @@ export async function fetchAuditEvents(
   if (!isAuditEventPage(data)) throw new Error(tk('errors.invalidAuditEvents'));
   return data;
 }
-
-export async function fetchAuditPortalLink(baseUrl: string): Promise<string | null> {
-  const res = await fetch(`${baseUrl}/web/audit/portal-link`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) return throwRequestError(res);
-
-  const data: unknown = await res.json();
-  if (typeof data !== 'object' || data === null || !('url' in data) || typeof data.url !== 'string') {
-    throw new Error(tk('errors.invalidAuditPortal'));
-  }
-  return data.url;
-}

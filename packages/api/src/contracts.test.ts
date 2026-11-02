@@ -12,7 +12,7 @@ import {
   generateFactoryApiCliRouteMetadata,
   inferFactoryResponseShape,
 } from '../scripts/generate-api-cli-route-metadata.ts';
-import { buildAttentionRoutes } from './attention.ts';
+import { buildAttentionRoutes } from '@factory/activity';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { BoardRoutes } from './boards.ts';
 import {

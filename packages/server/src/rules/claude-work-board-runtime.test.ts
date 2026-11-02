@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { HarnessRoutingStartCoordinator, ParkedRunAttentionProvider, prepareFactoryRuleBinding } from '@factory/api';
+import { ParkedRunAttentionProvider } from '@factory/activity';
+import { HarnessRoutingStartCoordinator, prepareFactoryRuleBinding } from '@factory/api';
 import { createRoutingHarness } from '@factory/harness';
 import { createInMemorySessionStore } from '@factory/harness-claude-code';
 import { deferred, fakeClaude } from '@factory/harness-claude-code/__fixtures__/fake-claude';

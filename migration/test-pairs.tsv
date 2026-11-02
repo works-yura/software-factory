@@ -245,7 +245,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/hooks/__tests__/useAgentControllerSessionSeam.msw.test.tsx	../apps/ui/src/hooks/__tests__/useAgentControllerSessionSeam.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useAvailableModels.msw.test.tsx	../apps/ui/src/hooks/__tests__/useAvailableModels.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useFactories.msw.test.tsx	../apps/ui/src/hooks/__tests__/useFactories.msw.test.tsx
-../../../apps/ui/src/hooks/__tests__/useFactoryAttention.msw.test.tsx	../apps/ui/src/hooks/__tests__/useFactoryAttention.msw.test.tsx
+../../../apps/ui/src/hooks/__tests__/useFactoryAttention.msw.test.tsx	activity/ui/src/hooks/__tests__/useFactoryAttention.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useFactoryAuth.msw.test.tsx	../apps/ui/src/hooks/__tests__/useFactoryAuth.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useFactoryData.msw.test.tsx	../apps/ui/src/hooks/__tests__/useFactoryData.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useGitLabData.msw.test.tsx	../apps/ui/src/hooks/__tests__/useGitLabData.msw.test.tsx
@@ -354,8 +354,8 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/message-author.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/message-author.test.ts
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/runtime.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/runtime.test.ts
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	+6	run error notice cases ported from upstream 38ff787998
-../../../apps/ui/src/ui/domains/factory/activity.test.ts	../apps/ui/src/ui/domains/factory/activity.test.ts
-../../../apps/ui/src/ui/domains/factory/auditPresentation.test.ts	../apps/ui/src/ui/domains/factory/auditPresentation.test.ts
+../../../apps/ui/src/ui/domains/factory/activity.test.ts	../apps/ui/src/ui/domains/factory/activity.test.ts	-17	Activity retired as upstream 63d7d5cbd4 (#28257): only the day helpers stay in the app; the full suite is parked in packages/activity/ui
+../../../apps/ui/src/ui/domains/factory/auditPresentation.test.ts	activity/ui/src/ui/domains/factory/auditPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardCardState.test.ts	../apps/ui/src/ui/domains/factory/boardCardState.test.ts	+1	a card whose run needs its repository asks for it
 ../../../apps/ui/src/ui/domains/factory/boardItems.test.ts	../apps/ui/src/ui/domains/factory/boardItems.test.ts	-2	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/factory/boardLabels.test.ts	../apps/ui/src/ui/domains/factory/boardLabels.test.ts
@@ -373,24 +373,24 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/domains/factory/components/FactoryBoardLanding.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/FactoryBoardLanding.msw.test.tsx
 ../../../apps/ui/src/ui/domains/factory/components/WorkItemMenuItems.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/WorkItemMenuItems.msw.test.tsx
 ../../../apps/ui/src/ui/domains/factory/components/reviewVerdict.test.ts	../apps/ui/src/ui/domains/factory/components/reviewVerdict.test.ts
-../../../apps/ui/src/ui/domains/factory/components/__tests__/SidebarActivityLink.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/__tests__/SidebarActivityLink.msw.test.tsx
-../../../apps/ui/src/ui/domains/factory/components/activity/codebase/CommitRail.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/activity/codebase/CommitRail.msw.test.tsx
-../../../apps/ui/src/ui/domains/factory/components/activity/feed/FactoryFeed.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/activity/feed/FactoryFeed.msw.test.tsx
-../../../apps/ui/src/ui/domains/factory/components/activity/needs-you/NeedsYou.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/activity/needs-you/NeedsYou.msw.test.tsx
+../../../apps/ui/src/ui/domains/factory/components/__tests__/SidebarActivityLink.msw.test.tsx	activity/ui/src/ui/domains/factory/components/__tests__/SidebarActivityLink.msw.test.tsx
+../../../apps/ui/src/ui/domains/factory/components/activity/codebase/CommitRail.msw.test.tsx	activity/ui/src/ui/domains/factory/components/activity/codebase/CommitRail.msw.test.tsx
+../../../apps/ui/src/ui/domains/factory/components/activity/feed/FactoryFeed.msw.test.tsx	activity/ui/src/ui/domains/factory/components/activity/feed/FactoryFeed.msw.test.tsx
+../../../apps/ui/src/ui/domains/factory/components/activity/needs-you/NeedsYou.msw.test.tsx	activity/ui/src/ui/domains/factory/components/activity/needs-you/NeedsYou.msw.test.tsx
 ../../../apps/ui/src/ui/domains/factory/components/feed/mentions.test.ts	../apps/ui/src/ui/domains/factory/components/feed/mentions.test.ts
 ../../../apps/ui/src/ui/domains/factory/components/feed/__tests__/CommentComposer.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/feed/__tests__/CommentComposer.msw.test.tsx
 ../../../apps/ui/src/ui/domains/factory/components/feed/__tests__/CommentList.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/feed/__tests__/CommentList.msw.test.tsx
 ../../../apps/ui/src/ui/domains/factory/components/knowledge/graphDiff.test.ts	../apps/ui/src/ui/domains/factory/components/knowledge/graphDiff.test.ts
 ../../../apps/ui/src/ui/domains/factory/components/knowledge/graphModel.test.ts	../apps/ui/src/ui/domains/factory/components/knowledge/graphModel.test.ts
 ../../../apps/ui/src/ui/domains/factory/components/knowledge/useInteractionIdle.test.ts	../apps/ui/src/ui/domains/factory/components/knowledge/useInteractionIdle.test.ts
-../../../apps/ui/src/ui/domains/factory/context/__tests__/FeedEventsProvider.msw.test.tsx	../apps/ui/src/ui/domains/factory/context/__tests__/FeedEventsProvider.msw.test.tsx
+../../../apps/ui/src/ui/domains/factory/context/__tests__/FeedEventsProvider.msw.test.tsx	../apps/ui/src/ui/domains/factory/context/__tests__/FeedEventsProvider.msw.test.tsx	-1	upstream 63d7d5cbd4 (#28257): no attention list to refresh (-1)
 ../../../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	-10	Linear/Jira/incident.io UI cases dropped with the vocabulary
-../../../apps/ui/src/ui/domains/factory/services/attention.test.ts	../apps/ui/src/ui/domains/factory/services/attention.test.ts
+../../../apps/ui/src/ui/domains/factory/services/attention.test.ts	activity/ui/src/ui/domains/factory/services/attention.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/boardViews.test.ts	../apps/ui/src/ui/domains/factory/services/boardViews.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/relationships.test.ts	../apps/ui/src/ui/domains/factory/services/relationships.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts	../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/workItems.test.ts	../apps/ui/src/ui/domains/factory/services/workItems.test.ts	1	added: a stored card from a dropped integration reads as manual
-../../../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	+2	upstream 22084b780f (#28100): Memory found by its former page name (+1); 9173231506 (#28312): sidebar search button hands focus back (+1)
+../../../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	+3	upstream 22084b780f (#28100): Memory found by its former page name (+1); 9173231506 (#28312): sidebar search button hands focus back (+1); 63d7d5cbd4 (#28257): retired Activity URLs open the board (+1)
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AccountSettingsSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/AddApiKeyDialog.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx
@@ -469,7 +469,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/lib/pwa/platform.test.ts	../apps/ui/src/ui/lib/pwa/platform.test.ts
 ../../../apps/ui/src/ui/lib/pwa/standalone.test.ts	../apps/ui/src/ui/lib/pwa/standalone.test.ts
 ../../../apps/ui/src/ui/lib/pwa/usePwaInstall.msw.test.tsx	../apps/ui/src/ui/lib/pwa/usePwaInstall.msw.test.tsx
-../../../apps/ui/src/ui/pages/__tests__/ActivityPage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ActivityPage.msw.test.tsx
+../../../apps/ui/src/ui/pages/__tests__/ActivityPage.msw.test.tsx	activity/ui/src/ui/pages/__tests__/ActivityPage.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/BoardPageFilters.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/BoardPageFilters.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/KnowledgePage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/KnowledgePage.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/PrivateSessionNotFound.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/PrivateSessionNotFound.msw.test.tsx

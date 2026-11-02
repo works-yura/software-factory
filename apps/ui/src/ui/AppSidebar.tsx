@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 
 import { SidebarUserMenu } from './domains/auth/components/SidebarUserMenu';
 import { FactorySection } from './domains/factory/components/FactorySection';
-import { SidebarActivityLink } from './domains/factory/components/SidebarActivityLink';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useSettingsOpen } from './domains/settings/hooks/useSettingsOpen';
@@ -40,7 +39,6 @@ export function AppSidebar() {
       </Sidebar.Nav>
       <Sidebar.Footer aria-label={t('footer')}>
         <Sidebar.NavList>
-          <SidebarActivityLink />
           <SidebarUserMenu />
         </Sidebar.NavList>
       </Sidebar.Footer>

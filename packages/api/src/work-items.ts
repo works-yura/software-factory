@@ -48,7 +48,7 @@ import {
 import { computeFactoryMetrics, parseMetricsRange } from './metrics.ts';
 import { createFactoryWorkItem } from '@factory/work-items';
 import { resolveFactoryProposal, retryFactoryDecision } from '@factory/work-items';
-import { buildAttentionRoutes, factoryDecisionType } from './attention.ts';
+import { buildAttentionRoutes, factoryDecisionType } from '@factory/activity';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';

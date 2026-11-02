@@ -150,20 +150,16 @@ describe('AppLayout', () => {
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebarBeforeNavigation);
   });
 
-  it('links Activity from the sidebar and leaves retired Factory pages out of the Factory nav', async () => {
+  it('leaves retired Factory pages out of the sidebar', async () => {
     stubFactory();
     renderApp();
 
     const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
-    expect(await within(sidebar).findByRole('link', { name: /^Activity/ })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/activity`,
-    );
-    const nav = within(sidebar).getByRole('navigation', { name: 'Factory' });
+    const nav = await within(sidebar).findByRole('navigation', { name: 'Factory' });
     // The supervisor chat is shared by the whole organization, so it stays out of the nav.
     expect(within(nav).queryByRole('link', { name: 'Chat' })).not.toBeInTheDocument();
-    for (const retired of ['Overview', 'Audit log']) {
-      expect(within(nav).queryByRole('link', { name: retired })).not.toBeInTheDocument();
+    for (const retired of ['Activity', 'Overview', 'Audit log']) {
+      expect(within(sidebar).queryByRole('link', { name: new RegExp(`^${retired}`) })).not.toBeInTheDocument();
     }
   });
 
