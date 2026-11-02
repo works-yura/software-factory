@@ -1,7 +1,7 @@
 import type { PlanResume } from '@mastra/client-js';
 import { AskUser } from '@mastra/playground-ui/components/ai/ask-user';
 import type { AskUserAnswer, AskUserOption, AskUserPayload } from '@mastra/playground-ui/components/ai/ask-user';
-import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
+import { isTaskTool, presentedToolCall } from '@mastra/playground-ui/components/ai/tool-call';
 import { memo } from 'react';
 import type { ReactNode } from 'react';
 
@@ -99,8 +99,9 @@ function ToolFactoryComponent({
 
   if (isTaskTool(toolName)) return null;
 
-  if (toolName === 'skill') {
-    const name = stringValue(record(input)?.name);
+  const presented = presentedToolCall(toolName, input);
+  if (presented.toolName === 'skill') {
+    const name = stringValue(record(presented.args)?.name);
     const instructions = stringValue(output);
     if (name && instructions) return <SkillMessage activation={{ name, instructions }} />;
   }

@@ -65,6 +65,49 @@ describe('ToolApproval', () => {
     expect(screen.getByText(/End of requested change/).textContent).toContain(content);
   });
 
+  it("previews a Claude Code Edit as the diff it would make, under the tool's real name", () => {
+    render(
+      <ToolApproval
+        toolName="Edit"
+        args={{ file_path: 'src/agent.ts', old_string: 'const a = 1', new_string: 'const a = 2' }}
+        onApprove={noop}
+        onDecline={noop}
+      />,
+    );
+
+    const diff = screen.getByRole('group', { name: 'File change' });
+    expect(diff.textContent).toContain('-const a = 1');
+    expect(diff.textContent).toContain('+const a = 2');
+    expect(screen.queryByText(/"file_path"/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Approve Edit' })).toBeTruthy();
+  });
+
+  it('previews a Claude Code Write as the file it would write', () => {
+    render(
+      <ToolApproval
+        toolName="Write"
+        args={{ file_path: 'src/new.ts', content: 'export const fresh = true;' }}
+        onApprove={noop}
+        onDecline={noop}
+      />,
+    );
+
+    expect(screen.getByText('src/new.ts')).toBeTruthy();
+    expect(screen.queryByText(/"file_path"/)).toBeNull();
+  });
+
+  it('names an MCP tool without its prefix, keeping a server other than the Factory', () => {
+    const { rerender } = render(
+      <ToolApproval toolName="mcp__factory__source_control_push" onApprove={noop} onDecline={noop} />,
+    );
+    expect(screen.getByRole('group', { name: 'Tool approval for source_control_push' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Approve source_control_push' })).toBeTruthy();
+
+    rerender(<ToolApproval toolName="mcp__github__create_issue" onApprove={noop} onDecline={noop} />);
+    expect(screen.getByRole('group', { name: 'Tool approval for github · create_issue' })).toBeTruthy();
+    expect(screen.queryByText(/mcp__/)).toBeNull();
+  });
+
   it('allows custom details to replace the argument preview', () => {
     render(
       <ToolApproval toolName="write_file" args={{ path: 'hidden.ts' }} onApprove={noop} onDecline={noop}>

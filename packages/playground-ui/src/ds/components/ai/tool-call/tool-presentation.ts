@@ -75,8 +75,10 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   create_file: { icon: SquarePen, label: libText('Write'), detailKeys: ['path'] },
   edit_file: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
   string_replace: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
+  string_replace_lsp: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
   str_replace: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
   ast_edit: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
+  ast_smart_edit: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
   execute_command: { icon: SquareTerminal, label: libText('Run'), detailKeys: ['command'], isCommand: true },
   get_process_output: { icon: ScrollText, label: libText('Process output'), detailKeys: ['pid'] },
   kill_process: { icon: CircleStop, label: libText('Stop process'), detailKeys: ['pid'] },
@@ -86,6 +88,7 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   search_content: { icon: Search, label: libText('Search'), detailKeys: ['pattern', 'query'] },
   search: { icon: Search, label: libText('Search'), detailKeys: ['query'] },
   web_search: { icon: Globe, label: libText('Search the web'), detailKeys: ['query'] },
+  web_fetch: { icon: Globe, label: libText('Fetch'), detailKeys: ['url'] },
   lsp_inspect: { icon: Braces, label: libText('Inspect code'), detailKeys: ['path'] },
   file_stat: { icon: FileSearch, label: libText('File info'), detailKeys: ['path'] },
   delete: { icon: Trash2, label: libText('Delete'), detailKeys: ['path'] },
@@ -106,9 +109,94 @@ function withoutCdPrefix(command: string): string {
   return command.replace(/^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s&|;]+)\s*&&\s*/, '') || command;
 }
 
-export function presentTool(toolName: string, args: unknown): ToolPresentation {
-  const style = TOOL_STYLES[toolName.replace(/^mastra_workspace_/, '')];
-  if (!style) return { icon: Wrench, label: prettifyToolName(toolName) };
+type ToolArgs = Record<string, unknown>;
+
+function isArgsRecord(value: unknown): value is ToolArgs {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+interface ClaudeCodeTool {
+  /** The Mastra tool this one presents as: same icon, title, summary, diff and file refresh. */
+  as: string;
+  /** Rewrites Claude Code's argument shape into that tool's; omitted where the shapes already match. */
+  args?: (args: ToolArgs) => ToolArgs;
+}
+
+/** MultiEdit's edits read as one replacement: every old side, then every new side. */
+function joinedEdits(edits: unknown): ToolArgs {
+  if (!Array.isArray(edits)) return {};
+  const sides = edits.filter(isArgsRecord);
+  const side = (key: string) => sides.map(edit => (typeof edit[key] === 'string' ? edit[key] : '')).join('\n');
+  return { old_string: side('old_string'), new_string: side('new_string') };
+}
+
+/**
+ * Claude Code's tools, by the name the CLI gives them, and the Mastra tool each presents as.
+ * Projected Claude sessions keep the real names (approval grants depend on them), so only the
+ * presentation reads them as their Mastra twin. Tools missing here keep the generic rendering.
+ */
+export const CLAUDE_CODE_TOOLS: Readonly<Record<string, ClaudeCodeTool>> = {
+  Bash: { as: 'execute_command' },
+  BashOutput: { as: 'get_process_output', args: ({ bash_id }) => ({ pid: bash_id }) },
+  KillShell: { as: 'kill_process', args: ({ shell_id }) => ({ pid: shell_id }) },
+  KillBash: { as: 'kill_process', args: ({ shell_id }) => ({ pid: shell_id }) },
+  Read: { as: 'view', args: ({ file_path, ...rest }) => ({ ...rest, path: file_path }) },
+  Edit: {
+    as: 'string_replace_lsp',
+    args: ({ file_path, old_string, new_string }) => ({ path: file_path, old_string, new_string }),
+  },
+  MultiEdit: { as: 'string_replace_lsp', args: ({ file_path, edits }) => ({ path: file_path, ...joinedEdits(edits) }) },
+  NotebookEdit: { as: 'string_replace_lsp', args: ({ notebook_path }) => ({ path: notebook_path }) },
+  Write: { as: 'write_file', args: ({ file_path, content }) => ({ path: file_path, content }) },
+  Grep: { as: 'search_content' },
+  Glob: { as: 'find_files' },
+  LS: { as: 'list_files' },
+  WebFetch: { as: 'web_fetch' },
+  WebSearch: { as: 'web_search' },
+  Skill: { as: 'skill', args: ({ skill, ...rest }) => ({ ...rest, name: skill }) },
+};
+
+/** The MCP server carrying the Factory's own tools, which Mastra runs call by their bare name. */
+const FACTORY_MCP_SERVER = 'factory';
+
+function mcpTool(toolName: string): { server: string; tool: string } | undefined {
+  const [, server, tool] = /^mcp__(.+?)__(.+)$/.exec(toolName) ?? [];
+  return server && tool ? { server, tool } : undefined;
+}
+
+export interface PresentedToolCall {
+  /** The tool the call draws as: the Mastra twin of a Claude Code tool, the bare name of an MCP tool. */
+  toolName: string;
+  /** The arguments in that tool's shape. */
+  args: unknown;
+  /** The server of an MCP tool that is not the Factory's. */
+  server?: string;
+}
+
+/** Reads a call the way the presentation draws it; the call itself keeps its real name for approvals. */
+export function presentedToolCall(toolName: string, args?: unknown): PresentedToolCall {
+  const mcp = mcpTool(toolName);
+  if (mcp) {
+    return mcp.server === FACTORY_MCP_SERVER
+      ? { toolName: mcp.tool, args }
+      : { toolName: mcp.tool, args, server: mcp.server };
+  }
+  const claude = Object.hasOwn(CLAUDE_CODE_TOOLS, toolName) ? CLAUDE_CODE_TOOLS[toolName] : undefined;
+  if (!claude) return { toolName, args };
+  return { toolName: claude.as, args: claude.args && isArgsRecord(args) ? claude.args(args) : args };
+}
+
+/** A tool's name for people: an MCP tool without its `mcp__<server>__` prefix, naming the server unless it is the Factory's. */
+export function displayToolName(toolName: string): string {
+  const mcp = mcpTool(toolName);
+  if (!mcp) return toolName;
+  return mcp.server === FACTORY_MCP_SERVER ? mcp.tool : `${mcp.server} · ${mcp.tool}`;
+}
+
+export function presentTool(toolName: string, rawArgs: unknown): ToolPresentation {
+  const { toolName: name, args, server } = presentedToolCall(toolName, rawArgs);
+  const style = server ? undefined : TOOL_STYLES[name.replace(/^mastra_workspace_/, '')];
+  if (!style) return { icon: Wrench, label: server ? `${server} · ${prettifyToolName(name)}` : prettifyToolName(name) };
 
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;
   if (!detail) return { icon: style.icon, label: style.label };
@@ -126,7 +214,8 @@ function stringField(args: unknown, key: string): string | undefined {
   return typeof args[key] === 'string' ? args[key] : undefined;
 }
 
-export function toolEdit(toolName: string, args: unknown): ToolEdit | undefined {
+export function toolEdit(rawToolName: string, rawArgs: unknown): ToolEdit | undefined {
+  const { toolName, args } = presentedToolCall(rawToolName, rawArgs);
   const path = stringField(args, 'path');
   const newText = stringField(args, 'new_string');
   if (/string_replace|str_replace|edit_file/i.test(toolName) && newText !== undefined) {

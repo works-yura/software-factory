@@ -1,9 +1,16 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
 import { ToolCard } from '../tool/ToolCard';
-import { commandTool, editTool, longResultTool } from './fixtures/tool-bodies';
+import {
+  claudeBashTool,
+  claudeEditTool,
+  claudeFactoryMcpTool,
+  commandTool,
+  editTool,
+  longResultTool,
+} from './fixtures/tool-bodies';
 
 describe('Factory tool body', () => {
   describe('when a command streams shell output', () => {
@@ -55,6 +62,41 @@ describe('Factory tool body', () => {
 
       expect(screen.getByRole('group', { name: 'Tool: list_agents' })).toBeVisible();
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when a Claude Code session calls its own tools', () => {
+    it('draws Bash as a Run row showing its command', async () => {
+      renderWithProviders(<ToolCard tool={claudeBashTool} />);
+
+      const row = screen.getByRole('group', { name: 'Tool: Bash' });
+      expect(within(row).getByText('Run')).toBeVisible();
+      expect(within(row).getByText('pnpm test --filter ui')).toBeVisible();
+
+      await userEvent.click(within(row).getByRole('button', { name: /Run/ }));
+      expect(within(row).getByText('All tests passed')).toBeVisible();
+      expect(within(row).queryByText(/"timeout"/)).not.toBeInTheDocument();
+    });
+
+    it('draws Edit as an Edit row on its file with the diff, not raw arguments', async () => {
+      renderWithProviders(<ToolCard tool={claudeEditTool} />);
+
+      const row = screen.getByRole('group', { name: 'Tool: Edit' });
+      expect(within(row).getByText('src/file.ts')).toBeVisible();
+
+      await userEvent.click(within(row).getByRole('button', { name: /Edit/ }));
+      const diff = within(row).getByRole('group', { name: 'File change' });
+      expect(diff).toHaveTextContent('-before');
+      expect(diff).toHaveTextContent('+after');
+      expect(within(row).queryByText(/"file_path"/)).not.toBeInTheDocument();
+    });
+
+    it("names a Factory MCP tool without the server's prefix", () => {
+      renderWithProviders(<ToolCard tool={claudeFactoryMcpTool} />);
+
+      const row = screen.getByRole('group', { name: 'Tool: source_control_push' });
+      expect(within(row).getByText('Source control push')).toBeVisible();
+      expect(screen.queryByText(/mcp__factory__/)).not.toBeInTheDocument();
     });
   });
 

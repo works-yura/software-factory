@@ -230,6 +230,41 @@ describe('TranscriptEntries skill rows', () => {
     expect(within(row).getByText(/Investigate the issue/)).toBeInTheDocument();
   });
 
+  it("renders a Claude Code session's Skill call as the same row", async () => {
+    renderEntries([
+      {
+        kind: 'message',
+        id: 'msg-claude-skill',
+        message: {
+          id: 'msg-claude-skill',
+          role: 'assistant',
+          createdAt: CREATED_AT,
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-claude-skill',
+                  toolName: 'Skill',
+                  args: { skill: 'understand-issue' },
+                  result: SKILL_BODY,
+                },
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Skill: understand-issue' });
+    expect(within(row).queryByText(/"skill"/)).not.toBeInTheDocument();
+
+    await userEvent.click(within(row).getByRole('button'));
+    expect(within(row).getByText(/Investigate the issue/)).toBeInTheDocument();
+  });
+
   it('draws nothing for a message whose only part is a step marker', () => {
     renderEntries([
       {
