@@ -177,7 +177,7 @@ tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
 tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	-2	hybrid scope cases removed with the personal model scope
 tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts
 tools/work-item-tools.test.ts	harness-mastra/src/tools/work-item-tools.test.ts
-workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug and factory-test skills stay generic and defer the stack to the target repository (+1)
+workspace.test.ts	harness-mastra/src/workspace.test.ts	+2	Bug and factory-test skills stay generic and defer the stack to the target repository (+1); upstream #28838: src/mastra/factory-skills (+1)
 ../../internal-workspace/src/file-commands.test.ts	internal-workspace/src/file-commands.test.ts
 ../../internal-workspace/src/repo-clone.test.ts	internal-workspace/src/repo-clone.test.ts
 ../../internal-workspace/src/setup-marker.test.ts	internal-workspace/src/setup-marker.test.ts

@@ -87,7 +87,9 @@ export const BUNDLED_FACTORY_SKILLS_PATH =
  */
 export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): string | undefined {
   const candidates = [
+    join(cwd, 'src', 'mastra', 'factory-skills'),
     join(cwd, 'src', 'mastra', 'public', 'factory-skills'),
+    ...(path.basename(cwd) === 'public' ? [join(cwd, '..', 'factory-skills')] : []),
     join(cwd, 'public', 'factory-skills'),
     join(cwd, 'factory-skills'),
   ];
