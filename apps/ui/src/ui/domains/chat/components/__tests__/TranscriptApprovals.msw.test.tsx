@@ -1,9 +1,9 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
 import { TranscriptEntries } from '../Transcript';
-import { toolApproval } from './fixtures/tool-approval';
+import { claudeEditApproval, claudeFactoryMcpApproval, toolApproval } from './fixtures/tool-approval';
 
 describe('transcript approvals', () => {
   describe('when a tool requires a decision', () => {
@@ -19,6 +19,33 @@ describe('transcript approvals', () => {
       await userEvent.click(screen.getByRole('button', { name: `${label} write_file` }));
 
       expect(onApprove).toHaveBeenCalledExactlyOnceWith('call-1', approved, 'approval-1');
+    });
+  });
+
+  describe('when a Claude Code session asks to run its own tools', () => {
+    it('shows an Edit as the diff it would make, granting the real tool', async () => {
+      const onApprove = vi.fn();
+      renderWithProviders(
+        <TranscriptEntries entries={[claudeEditApproval]} onApprove={onApprove} onRespond={vi.fn()} />,
+      );
+
+      const card = screen.getByRole('group', { name: 'Tool approval for Edit' });
+      const diff = within(card).getByRole('group', { name: 'File change' });
+      expect(diff).toHaveTextContent('-const a = 1');
+      expect(diff).toHaveTextContent('+const a = 2');
+      expect(within(card).queryByText(/"file_path"/)).not.toBeInTheDocument();
+
+      await userEvent.click(within(card).getByRole('button', { name: 'Approve Edit' }));
+      expect(onApprove).toHaveBeenCalledExactlyOnceWith('call-edit', true, 'approval-edit');
+    });
+
+    it('names a Factory MCP tool without its prefix', () => {
+      renderWithProviders(
+        <TranscriptEntries entries={[claudeFactoryMcpApproval]} onApprove={vi.fn()} onRespond={vi.fn()} />,
+      );
+
+      expect(screen.getByRole('group', { name: 'Tool approval for source_control_push' })).toBeInTheDocument();
+      expect(screen.queryByText(/mcp__factory__/)).not.toBeInTheDocument();
     });
   });
 

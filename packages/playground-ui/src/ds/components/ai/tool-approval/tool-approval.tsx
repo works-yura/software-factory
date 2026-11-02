@@ -2,7 +2,7 @@ import { Check, ShieldCheck, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Activity, ActivityContent, ActivityHeader, ActivityIcon, ActivityTrigger } from '../activity';
-import { presentTool, ToolCallArguments } from '../tool-call';
+import { displayToolName, presentTool, ToolCallArguments } from '../tool-call';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
@@ -84,23 +84,24 @@ export interface ToolApprovalProps extends ToolApprovalActionsProps, ToolApprova
 
 export function ToolApproval({ toolName, args, status, children, ...actions }: ToolApprovalProps) {
   const { icon: ToolIcon } = presentTool(toolName, args);
+  const name = displayToolName(toolName);
 
   return (
-    <Activity open foldable={false} className="my-2" aria-label={`Tool approval for ${toolName}`}>
+    <Activity open foldable={false} className="my-2" aria-label={`Tool approval for ${name}`}>
       <ActivityTrigger>
         <ActivityHeader className="flex-wrap">
           <ActivityIcon>
             <ToolIcon aria-hidden />
           </ActivityIcon>
           <Txt as="span" variant="caption" tone="muted" font="mono" className="min-w-0 break-all">
-            {toolName}
+            {name}
           </Txt>
           <ToolApprovalStatus status={status} />
         </ActivityHeader>
       </ActivityTrigger>
       <ActivityContent>
         {children ?? <ToolCallArguments toolName={toolName} args={args} showFullContent />}
-        {!status && <ToolApprovalActions toolName={toolName} {...actions} />}
+        {!status && <ToolApprovalActions toolName={name} {...actions} />}
       </ActivityContent>
     </Activity>
   );

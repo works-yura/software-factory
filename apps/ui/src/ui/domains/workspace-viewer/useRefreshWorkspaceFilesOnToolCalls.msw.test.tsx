@@ -68,6 +68,33 @@ describe('useRefreshWorkspaceFilesOnToolCalls', () => {
     expect(stale()).toEqual([true, true]);
   });
 
+  it.each(['Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Bash'])(
+    'refreshes when a Claude Code %s call finishes, as its Mastra twin does',
+    toolName => {
+      const { client, rerender } = renderHookWithProviders(
+        ({ entries }) => useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries),
+        { initialProps: { entries: [] as TimelineEntry[] } },
+      );
+      const { stale } = seed(client);
+
+      rerender({ entries: [toolMessage('t1', toolName, 'result')] });
+
+      expect(stale()).toEqual([true, true]);
+    },
+  );
+
+  it('ignores Claude Code reads and searches', () => {
+    const { client, rerender } = renderHookWithProviders(
+      ({ entries }) => useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries),
+      { initialProps: { entries: [] as TimelineEntry[] } },
+    );
+    const { stale } = seed(client);
+
+    rerender({ entries: [toolMessage('t1', 'Read', 'result'), toolMessage('t2', 'Grep', 'result')] });
+
+    expect(stale()).toEqual([false, false]);
+  });
+
   it('ignores reads, and tool calls already finished when the thread opened', () => {
     const { client, rerender } = renderHookWithProviders(
       ({ entries }) => useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries),

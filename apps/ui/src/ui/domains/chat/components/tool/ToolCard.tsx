@@ -8,6 +8,7 @@ import {
   ToolCallArguments,
   ToolCallCommand,
   ToolCallOutput,
+  displayToolName,
   hasToolArguments,
   presentTool,
   stringifyToolValue,
@@ -76,7 +77,7 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
     <Activity
       foldable={toolHasBody(tool, command)}
       status={toolCallStatus(tool.status)}
-      aria-label={tk('messages.tool', { name: tool.toolName })}
+      aria-label={tk('messages.tool', { name: displayToolName(tool.toolName) })}
       aria-busy={tool.status === 'running'}
     >
       <ActivityTrigger>

@@ -1,4 +1,4 @@
-import { groupConsecutive, isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
+import { groupConsecutive, isTaskTool, presentedToolCall } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ConsecutiveGroups } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolInvocationPart } from '@mastra/react/ui';
 import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages/reasoning-content';
@@ -100,7 +100,7 @@ export function collectToolGroups(
     key: part => part.toolInvocation.toolCallId,
     joins: (part): part is ToolPart =>
       part.type === 'tool-invocation' &&
-      !UNGROUPABLE_TOOLS.has(part.toolInvocation.toolName) &&
+      !UNGROUPABLE_TOOLS.has(presentedToolCall(part.toolInvocation.toolName).toolName) &&
       !suspensions.has(part.toolInvocation.toolCallId),
   });
 }

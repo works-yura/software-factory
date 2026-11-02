@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { hasToolArguments, isTaskTool, presentTool, stringifyToolValue, toolEdit } from './tool-presentation';
+import {
+  displayToolName,
+  hasToolArguments,
+  isTaskTool,
+  presentedToolCall,
+  presentTool,
+  stringifyToolValue,
+  toolEdit,
+} from './tool-presentation';
 
 describe('presentTool', () => {
   it('maps stable workspace aliases to humanized actions with their salient argument', () => {
@@ -63,6 +71,83 @@ describe('presentTool', () => {
 
   it('omits the detail when the salient argument has not streamed yet', () => {
     expect(presentTool('execute_command', undefined).detail).toBeUndefined();
+  });
+});
+
+describe('Claude Code tools', () => {
+  it.each([
+    ['Bash', { command: 'git status', description: 'Show status' }, 'execute_command', { command: 'git status' }],
+    ['Read', { file_path: 'src/a.ts', offset: 10 }, 'view', { path: 'src/a.ts' }],
+    ['Edit', { file_path: 'src/a.ts', old_string: 'a', new_string: 'b' }, 'string_replace_lsp', { path: 'src/a.ts' }],
+    ['MultiEdit', { file_path: 'src/a.ts', edits: [] }, 'string_replace_lsp', { path: 'src/a.ts' }],
+    ['NotebookEdit', { notebook_path: 'n.ipynb', new_source: 'x' }, 'string_replace_lsp', { path: 'n.ipynb' }],
+    ['Write', { file_path: 'src/a.ts', content: 'x' }, 'write_file', { path: 'src/a.ts' }],
+    ['Grep', { pattern: 'useChat', path: 'src', glob: '*.ts' }, 'search_content', { pattern: 'useChat' }],
+    ['Glob', { pattern: '**/*.ts', path: 'src' }, 'find_files', { pattern: '**/*.ts' }],
+    ['LS', { path: 'src' }, 'list_files', { path: 'src' }],
+    ['WebFetch', { url: 'https://example.com', prompt: 'Summarize' }, 'web_fetch', { url: 'https://example.com' }],
+    ['WebSearch', { query: 'vitest projects' }, 'web_search', { query: 'vitest projects' }],
+    ['Skill', { skill: 'triage-issue' }, 'skill', { name: 'triage-issue' }],
+  ])('presents %s exactly as its Mastra twin', (claudeName, claudeArgs, mastraName, mastraArgs) => {
+    expect(presentedToolCall(claudeName, claudeArgs)).toMatchObject({ toolName: mastraName, args: mastraArgs });
+    const { icon, label, detail } = presentTool(mastraName, mastraArgs);
+    expect(presentTool(claudeName, claudeArgs)).toMatchObject({ icon, label, detail });
+  });
+
+  it('shows a Bash command, its description and the command body like execute_command', () => {
+    const command = 'cd packages/core && pnpm build';
+    expect(presentTool('Bash', { command, description: 'Build core', run_in_background: false })).toEqual({
+      icon: presentTool('execute_command', { command }).icon,
+      label: 'Run',
+      detail: 'pnpm build',
+      description: 'Build core',
+      command,
+    });
+  });
+
+  it('reads an Edit, a MultiEdit and a Write as file changes', () => {
+    expect(toolEdit('Edit', { file_path: 'a.ts', old_string: 'x', new_string: 'y', replace_all: true })).toEqual({
+      path: 'a.ts',
+      oldText: 'x',
+      newText: 'y',
+    });
+    expect(
+      toolEdit('MultiEdit', {
+        file_path: 'a.ts',
+        edits: [
+          { old_string: 'a', new_string: 'b' },
+          { old_string: 'c', new_string: 'd' },
+        ],
+      }),
+    ).toEqual({ path: 'a.ts', oldText: 'a\nc', newText: 'b\nd' });
+    expect(toolEdit('Write', { file_path: 'a.ts', content: 'x' })).toEqual({ path: 'a.ts', content: 'x' });
+    expect(toolEdit('Read', { file_path: 'a.ts' })).toBeUndefined();
+  });
+
+  it('presents a call whose arguments have not streamed yet without a detail', () => {
+    const presentation = presentTool('Read', undefined);
+    expect(presentation.label).toBe('Read');
+    expect(presentation.detail).toBeUndefined();
+  });
+
+  it('presents a Factory MCP tool as the bare tool Mastra runs call', () => {
+    expect(presentedToolCall('mcp__factory__skill', { name: 'x' })).toEqual({ toolName: 'skill', args: { name: 'x' } });
+    expect(presentTool('mcp__factory__source_control_push', {})).toMatchObject({ label: 'Source control push' });
+    expect(displayToolName('mcp__factory__source_control_push')).toBe('source_control_push');
+  });
+
+  it('keeps the server of a foreign MCP tool, and never borrows a workspace style for it', () => {
+    expect(presentTool('mcp__github__search', { query: 'bug' })).toEqual({
+      icon: presentTool('unknown_tool', {}).icon,
+      label: 'github · Search',
+    });
+    expect(displayToolName('mcp__github__create_issue')).toBe('github · create_issue');
+  });
+
+  it('leaves unknown tools to the generic rendering', () => {
+    expect(presentedToolCall('TodoWrite', { todos: [] })).toEqual({ toolName: 'TodoWrite', args: { todos: [] } });
+    expect(presentTool('TodoWrite', { todos: [] })).toMatchObject({ label: 'TodoWrite' });
+    expect(displayToolName('TodoWrite')).toBe('TodoWrite');
   });
 });
 

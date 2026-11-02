@@ -1,3 +1,4 @@
+import { presentedToolCall } from '@mastra/playground-ui/components/ai/tool-call';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
@@ -8,7 +9,9 @@ import type { TimelineEntry } from '../chat/services/transcript';
 /**
  * Tools that can change files in the sandbox, by the name the agent sees
  * (Mastra Code names, then the core workspace names they remap). A shell
- * command can touch anything, so it counts too.
+ * command can touch anything, so it counts too. Claude Code calls are read
+ * as their Mastra twin (`Edit` as `string_replace_lsp`, `Bash` as
+ * `execute_command`…) through the presentation's mapping table.
  */
 const FILE_CHANGING_TOOLS = new Set([
   'write_file',
@@ -32,7 +35,9 @@ function finishedFileChanges(transcript: readonly TimelineEntry[]): string[] {
     for (const part of entry.message.content.parts ?? []) {
       if (part.type !== 'tool-invocation') continue;
       const tool = toolFromInvocationPart(part, entry.runtimeTools?.[part.toolInvocation.toolCallId]);
-      if (tool.status !== 'running' && FILE_CHANGING_TOOLS.has(tool.toolName)) ids.push(tool.toolCallId);
+      if (tool.status !== 'running' && FILE_CHANGING_TOOLS.has(presentedToolCall(tool.toolName).toolName)) {
+        ids.push(tool.toolCallId);
+      }
     }
   }
   return ids;
