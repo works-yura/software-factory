@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { CredentialAccount } from '@factory/store';
 
-import { anthropicSecretKind, pickCredentialAccount } from './credential-accounts.ts';
+import { pickCredentialAccount } from './credential-accounts.ts';
 
 const now = new Date('2026-10-28T12:00:00Z');
 let created = 0;
@@ -28,11 +28,6 @@ function account(id: string, overrides: Partial<CredentialAccount> = {}): Creden
 const ids = (picked: ReturnType<typeof pickCredentialAccount>) => picked.account?.id;
 
 describe('pickCredentialAccount', () => {
-  it('tells setup tokens from API keys', () => {
-    expect(anthropicSecretKind(' sk-ant-oat01-abc')).toBe('subscription');
-    expect(anthropicSecretKind('sk-ant-api03-abc')).toBe('api_key');
-  });
-
   it('never gives one person’s subscription to another person’s run', () => {
     const accounts = [account('alice-max', { kind: 'subscription', ownerUserId: 'alice' })];
     expect(ids(pickCredentialAccount(accounts, { userId: 'alice', now }))).toBe('alice-max');

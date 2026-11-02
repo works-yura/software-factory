@@ -1,6 +1,8 @@
 /**
- * The Claude Code accounts section lists the accounts Claude Code sessions
- * rotate through and lets members add, switch off, rename and remove them.
+ * The Claude Code accounts section lists the Claude sign-ins Claude Code
+ * sessions rotate through and lets members switch off, rename and remove them.
+ * Signing in is the only way to add one: there is no token or key to paste,
+ * and a pasted one left from before shows as old, only to be removed.
  * Drives the real hooks + api client through MSW.
  */
 import { screen, waitFor, within } from '@testing-library/react';
@@ -17,31 +19,24 @@ const ACCOUNTS_URL = `${TEST_BASE_URL}/web/config/providers/anthropic/accounts`;
 
 function account(overrides: Partial<CredentialAccountInfo> & Pick<CredentialAccountInfo, 'id' | 'label'>) {
   return {
-    kind: 'subscription',
+    kind: 'claude_login',
     mine: true,
     priority: 0,
     status: 'active',
-    hint: 'abcd',
+    hint: '',
     canManage: true,
-    canReplaceSecret: true,
+    legacy: false,
     createdAt: '2026-10-01T10:00:00.000Z',
     ...overrides,
   } satisfies CredentialAccountInfo;
 }
 
 /** A stateful accounts store: GET reflects every write made through the stubs. */
-function stubAccounts(initial: CredentialAccountInfo[], canAddOrgKeys = false) {
+function stubAccounts(initial: CredentialAccountInfo[]) {
   let accounts = [...initial];
   const writes: Array<{ method: string; id?: string; body?: unknown }> = [];
   server.use(
-    http.get(ACCOUNTS_URL, () => HttpResponse.json({ accounts, canAddOrgKeys } satisfies CredentialAccountsResponse)),
-    http.post(ACCOUNTS_URL, async ({ request }) => {
-      const body = (await request.json()) as { label: string; secret: string };
-      writes.push({ method: 'POST', body });
-      const created = account({ id: `acc-${accounts.length + 1}`, label: body.label, hint: body.secret.slice(-4) });
-      accounts = [...accounts, created];
-      return HttpResponse.json({ account: created }, { status: 201 });
-    }),
+    http.get(ACCOUNTS_URL, () => HttpResponse.json({ accounts } satisfies CredentialAccountsResponse)),
     http.patch(`${ACCOUNTS_URL}/:id`, async ({ params, request }) => {
       const body = (await request.json()) as { disabled?: boolean; label?: string };
       writes.push({ method: 'PATCH', id: String(params.id), body });
@@ -72,136 +67,87 @@ async function openMenu(user: ReturnType<typeof userEvent.setup>, label: string)
 }
 
 describe('ClaudeAccountsSection', () => {
-  it('lists each account with its kind, hint, status, last error and last use', async () => {
+  it('lists each sign-in with whose it is, its status, last error and last use', async () => {
     const limitedUntil = '2026-10-28T18:30:00.000Z';
     const lastUsedAt = '2026-10-28T12:00:00.000Z';
     stubAccounts([
-      account({ id: 'a1', label: 'My Max', lastUsedAt }),
-      account({ id: 'a2', label: 'Olena Pro', mine: false, canManage: false, canReplaceSecret: false, status: 'limited', limitedUntil }),
-      account({
-        id: 'a3',
-        label: 'Team key',
-        kind: 'api_key',
-        mine: false,
-        hint: 'wxyz',
-        status: 'disabled',
-        lastError: 'invalid x-api-key',
-      }),
+      account({ id: 'a1', label: 'alice@example.com', lastUsedAt }),
+      account({ id: 'a2', label: 'olena@example.com', mine: false, canManage: false, status: 'limited', limitedUntil }),
+      account({ id: 'a3', label: 'bob@example.com', mine: false, status: 'disabled', lastError: 'sign in to Claude again' }),
     ]);
 
     renderWithProviders(<ClaudeAccountsSection />);
 
-    expect(await screen.findByRole('listitem', { name: 'My Max' })).toBeInTheDocument();
-    expect(within(row('My Max')).getByText('Your subscription')).toBeInTheDocument();
-    expect(within(row('My Max')).getByText('…abcd')).toBeInTheDocument();
-    expect(within(row('My Max')).getByText('Active')).toBeInTheDocument();
-    expect(within(row('My Max')).getByText(`Last used ${formatAccountTime(lastUsedAt)}`)).toBeInTheDocument();
+    expect(await screen.findByRole('listitem', { name: 'alice@example.com' })).toBeInTheDocument();
+    expect(within(row('alice@example.com')).getByText('Your Claude sign-in')).toBeInTheDocument();
+    expect(within(row('alice@example.com')).getByText('Active')).toBeInTheDocument();
+    expect(within(row('alice@example.com')).getByText(`Last used ${formatAccountTime(lastUsedAt)}`)).toBeInTheDocument();
 
-    expect(within(row('Olena Pro')).getByText('Member’s subscription')).toBeInTheDocument();
-    expect(within(row('Olena Pro')).getByText(`Limited until ${formatAccountTime(limitedUntil)}`)).toBeInTheDocument();
-    expect(within(row('Olena Pro')).queryByRole('button', { name: 'Actions for Olena Pro' })).not.toBeInTheDocument();
+    expect(within(row('olena@example.com')).getByText('Member’s Claude sign-in')).toBeInTheDocument();
+    expect(within(row('olena@example.com')).getByText(`Limited until ${formatAccountTime(limitedUntil)}`)).toBeInTheDocument();
+    expect(within(row('olena@example.com')).queryByRole('button', { name: 'Actions for olena@example.com' })).not.toBeInTheDocument();
 
-    expect(within(row('Team key')).getByText('Organization key')).toBeInTheDocument();
-    expect(within(row('Team key')).getByText('Off')).toBeInTheDocument();
-    expect(within(row('Team key')).getByText('invalid x-api-key')).toBeInTheDocument();
-    expect(within(row('Team key')).getByText('Not used yet')).toBeInTheDocument();
+    expect(within(row('bob@example.com')).getByText('Off')).toBeInTheDocument();
+    expect(within(row('bob@example.com')).getByText('sign in to Claude again')).toBeInTheDocument();
+    expect(within(row('bob@example.com')).getByText('Not used yet')).toBeInTheDocument();
   });
 
-  it('explains what accounts are for when there are none', async () => {
+  it('offers no way to paste a token or key', async () => {
+    stubAccounts([account({ id: 'a1', label: 'alice@example.com' })]);
+    const user = userEvent.setup();
+    renderWithProviders(<ClaudeAccountsSection />);
+
+    await openMenu(user, 'alice@example.com');
+    expect(await screen.findByRole('menuitem', { name: 'Rename' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /secret/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add account' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/setup-token/)).not.toBeInTheDocument();
+  });
+
+  it('marks a pasted token left from before as old, and only lets it be removed', async () => {
+    const writes = stubAccounts([
+      account({ id: 'old', label: 'Team key', kind: 'api_key', mine: false, hint: 'wxyz', legacy: true }),
+    ]);
+    const user = userEvent.setup();
+    renderWithProviders(<ClaudeAccountsSection />);
+
+    expect(await screen.findByRole('listitem', { name: 'Team key' })).toBeInTheDocument();
+    expect(within(row('Team key')).getByText('Old token: remove it')).toBeInTheDocument();
+    expect(within(row('Team key')).queryByText('Active')).not.toBeInTheDocument();
+    // Nothing runs on it, so the section still says there is no sign-in.
+    expect(screen.getByText(/No Claude sign-ins yet/)).toBeInTheDocument();
+
+    await openMenu(user, 'Team key');
+    expect(screen.queryByRole('menuitem', { name: 'Turn off' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Rename' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove' }));
+
+    await waitFor(() => expect(screen.queryByRole('listitem', { name: 'Team key' })).not.toBeInTheDocument());
+    expect(writes).toEqual([{ method: 'DELETE', id: 'old' }]);
+  });
+
+  it('explains what sign-ins are for when there are none', async () => {
     stubAccounts([]);
 
     renderWithProviders(<ClaudeAccountsSection />);
 
-    expect(await screen.findByText(/No accounts yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No Claude sign-ins yet/)).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Claude Code accounts' })).not.toBeInTheDocument();
   });
 
-  it('adds the caller’s subscription token', async () => {
-    const writes = stubAccounts([]);
+  it('switches a sign-in off and back on', async () => {
+    const writes = stubAccounts([account({ id: 'a1', label: 'alice@example.com' })]);
     const user = userEvent.setup();
     renderWithProviders(<ClaudeAccountsSection />);
 
-    await user.click(await screen.findByRole('button', { name: 'Add account' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText(/claude setup-token/)).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('Token or API key')).toHaveAttribute('type', 'password');
-
-    await user.type(within(dialog).getByLabelText('Name'), 'My Max');
-    await user.type(within(dialog).getByLabelText('Token or API key'), 'sk-ant-oat01-0123456789abcdefWXYZ');
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-
-    expect(await screen.findByRole('listitem', { name: 'My Max' })).toBeInTheDocument();
-    expect(within(row('My Max')).getByText('…WXYZ')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(writes).toEqual([
-      { method: 'POST', body: { label: 'My Max', secret: 'sk-ant-oat01-0123456789abcdefWXYZ' } },
-    ]);
-  });
-
-  it('tells a member that organization keys need an admin, and shows the refusal', async () => {
-    stubAccounts([]);
-    server.use(
-      http.post(ACCOUNTS_URL, () => HttpResponse.json({ error: 'organization_admin_required' }, { status: 403 })),
-    );
-    const user = userEvent.setup();
-    renderWithProviders(<ClaudeAccountsSection />);
-
-    await user.click(await screen.findByRole('button', { name: 'Add account' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(
-      within(dialog).getByText(/Organization API keys can only be added by an organization admin\./),
-    ).toBeInTheDocument();
-
-    await user.type(within(dialog).getByLabelText('Name'), 'Team key');
-    await user.type(within(dialog).getByLabelText('Token or API key'), 'sk-ant-api03-0123456789abcdef');
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'Only organization admins can add organization API keys. You can add your own subscription token.',
-    );
-  });
-
-  it('tells an admin that organization keys serve everyone', async () => {
-    stubAccounts([], true);
-    const user = userEvent.setup();
-    renderWithProviders(<ClaudeAccountsSection />);
-
-    await user.click(await screen.findByRole('button', { name: 'Add account' }));
-
-    expect(within(await screen.findByRole('dialog')).getByText(/serves everyone’s runs/)).toBeInTheDocument();
-  });
-
-  it('shows the server’s message when it rejects the input', async () => {
-    stubAccounts([]);
-    server.use(
-      http.post(ACCOUNTS_URL, () =>
-        HttpResponse.json({ error: 'invalid_request', message: 'secret is too short' }, { status: 400 }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderWithProviders(<ClaudeAccountsSection />);
-
-    await user.click(await screen.findByRole('button', { name: 'Add account' }));
-    const dialog = await screen.findByRole('dialog');
-    await user.type(within(dialog).getByLabelText('Name'), 'Short');
-    await user.type(within(dialog).getByLabelText('Token or API key'), 'sk-ant-oat01');
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('secret is too short');
-  });
-
-  it('switches an account off and back on', async () => {
-    const writes = stubAccounts([account({ id: 'a1', label: 'My Max' })]);
-    const user = userEvent.setup();
-    renderWithProviders(<ClaudeAccountsSection />);
-
-    await openMenu(user, 'My Max');
+    await openMenu(user, 'alice@example.com');
     await user.click(await screen.findByRole('menuitem', { name: 'Turn off' }));
-    expect(await within(row('My Max')).findByText('Off')).toBeInTheDocument();
+    expect(await within(row('alice@example.com')).findByText('Off')).toBeInTheDocument();
 
-    await openMenu(user, 'My Max');
+    await openMenu(user, 'alice@example.com');
     await user.click(await screen.findByRole('menuitem', { name: 'Turn on' }));
-    expect(await within(row('My Max')).findByText('Active')).toBeInTheDocument();
+    expect(await within(row('alice@example.com')).findByText('Active')).toBeInTheDocument();
 
     expect(writes).toEqual([
       { method: 'PATCH', id: 'a1', body: { disabled: true } },
@@ -209,40 +155,64 @@ describe('ClaudeAccountsSection', () => {
     ]);
   });
 
-  it('offers replacing the secret only when allowed', async () => {
-    stubAccounts([account({ id: 'a1', label: 'Olena Pro', mine: false, canReplaceSecret: false })]);
+  it('renames a sign-in, and shows the server’s message when it refuses the name', async () => {
+    const writes = stubAccounts([account({ id: 'a1', label: 'alice@example.com' })]);
     const user = userEvent.setup();
     renderWithProviders(<ClaudeAccountsSection />);
 
-    await openMenu(user, 'Olena Pro');
+    await openMenu(user, 'alice@example.com');
+    await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+    const dialog = await screen.findByRole('dialog');
+    const name = within(dialog).getByLabelText('Name');
+    expect(name).toHaveValue('alice@example.com');
+    await user.clear(name);
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
+    await user.type(name, 'Work Max');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByRole('menuitem', { name: 'Turn off' })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Replace secret' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('listitem', { name: 'Work Max' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(writes).toEqual([{ method: 'PATCH', id: 'a1', body: { label: 'Work Max' } }]);
+
+    server.use(
+      http.patch(`${ACCOUNTS_URL}/:id`, () =>
+        HttpResponse.json({ error: 'invalid_request', message: 'label is required' }, { status: 400 }),
+      ),
+    );
+    await openMenu(user, 'Work Max');
+    await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+    const again = await screen.findByRole('dialog');
+    await user.type(within(again).getByLabelText('Name'), '!');
+    await user.keyboard('{Enter}');
+    expect(await within(again).findByRole('alert')).toHaveTextContent('label is required');
   });
 
-  it('removes an account after confirming', async () => {
-    const writes = stubAccounts([account({ id: 'a1', label: 'My Max' }), account({ id: 'a2', label: 'Spare' })]);
+  it('removes a sign-in after confirming', async () => {
+    const writes = stubAccounts([
+      account({ id: 'a1', label: 'alice@example.com' }),
+      account({ id: 'a2', label: 'spare@example.com' }),
+    ]);
     const user = userEvent.setup();
     renderWithProviders(<ClaudeAccountsSection />);
 
-    await openMenu(user, 'My Max');
+    await openMenu(user, 'alice@example.com');
     await user.click(await screen.findByRole('menuitem', { name: 'Remove' }));
     const confirm = await screen.findByRole('alertdialog');
-    expect(within(confirm).getByText('Remove My Max?')).toBeInTheDocument();
+    expect(within(confirm).getByText('Remove alice@example.com?')).toBeInTheDocument();
     await user.click(within(confirm).getByRole('button', { name: 'Remove' }));
 
-    await waitFor(() => expect(screen.queryByRole('listitem', { name: 'My Max' })).not.toBeInTheDocument());
-    expect(row('Spare')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('listitem', { name: 'alice@example.com' })).not.toBeInTheDocument());
+    expect(row('spare@example.com')).toBeInTheDocument();
     expect(writes).toEqual([{ method: 'DELETE', id: 'a1' }]);
   });
 
   it('shows the refusal when an action is not allowed', async () => {
-    stubAccounts([account({ id: 'a1', label: 'My Max' })]);
+    stubAccounts([account({ id: 'a1', label: 'alice@example.com' })]);
     server.use(http.patch(`${ACCOUNTS_URL}/:id`, () => HttpResponse.json({ error: 'forbidden' }, { status: 403 })));
     const user = userEvent.setup();
     renderWithProviders(<ClaudeAccountsSection />);
 
-    await openMenu(user, 'My Max');
+    await openMenu(user, 'alice@example.com');
     await user.click(await screen.findByRole('menuitem', { name: 'Turn off' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('You can’t change this account.');
@@ -258,14 +228,12 @@ describe('ClaudeAccountsSection', () => {
     renderWithProviders(<ClaudeAccountsSection />);
 
     expect(await screen.findByText('Credential storage is not available')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add account' })).not.toBeInTheDocument();
   });
 
   it('asks to sign in to an organization when there is none', async () => {
     renderWithProviders(<ClaudeAccountsSection />);
 
-    expect(await screen.findByText('Sign in to an organization to add Claude Code accounts.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add account' })).not.toBeInTheDocument();
+    expect(await screen.findByText('Sign in to an organization to use Claude Code accounts.')).toBeInTheDocument();
   });
 
   it('shows a loading state while the list is on its way', async () => {
@@ -279,7 +247,7 @@ describe('ClaudeAccountsSection', () => {
 
 describe('ClaudeAccountsSection sign-in with Claude', () => {
   const SIGN_IN_URL = `${ACCOUNTS_URL}/sign-in`;
-  const signedIn = account({ id: 'login-1', label: 'alice@example.com', kind: 'claude_login', hint: '', canReplaceSecret: false });
+  const signedIn = account({ id: 'login-1', label: 'alice@example.com' });
 
   function stubSignIn({ finish }: { finish: 'done' | 'error' | 'never' }) {
     let polls = 0;
@@ -313,7 +281,7 @@ describe('ClaudeAccountsSection sign-in with Claude', () => {
     let listed = 0;
     server.use(
       http.get(ACCOUNTS_URL, () =>
-        HttpResponse.json({ accounts: listed++ === 0 ? [] : [signedIn], canAddOrgKeys: false } satisfies CredentialAccountsResponse),
+        HttpResponse.json({ accounts: listed++ === 0 ? [] : [signedIn] } satisfies CredentialAccountsResponse),
       ),
     );
     const user = userEvent.setup();

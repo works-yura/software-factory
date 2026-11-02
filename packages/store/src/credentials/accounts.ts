@@ -3,15 +3,15 @@
  * organization, so a run that hits one account's usage limit can go on with
  * another (see `@factory/credentials` `pickCredentialAccount`).
  *
- * Two kinds, with different owners:
- * - `api_key`: an organization key; any run of the organization may use it.
- * - `subscription`: a person's own subscription token (`claude setup-token`).
- *   It records whose it is (`ownerUserId`) and only that person's runs use it:
- *   a subscription is never shared with, or pooled for, other people.
- * - `claude_login`: a person's Claude sign-in (`claude auth login`), owned like
- *   a subscription. It keeps the OAuth pair, which only the server refreshes:
- *   a run gets the access token alone, so no copy of the rotating refresh
- *   token lives anywhere else to fall out of step.
+ * Kinds, with different owners:
+ * - `claude_login`: a person's Claude sign-in (`claude auth login`). It records
+ *   whose it is (`ownerUserId`) and only that person's runs use it. It keeps
+ *   the OAuth pair, which only the server refreshes: a run gets the access
+ *   token alone, so no copy of the rotating refresh token lives anywhere else
+ *   to fall out of step. Claude Code runs on these alone.
+ * - `api_key` (an organization key) and `subscription` (a person's pasted
+ *   `claude setup-token`): no longer added and never used by a run; rows left
+ *   from before are kept only so they can be listed as legacy and removed.
  *
  * Secrets are encrypted at rest with the domain's encryption and never leave
  * the server; listings carry a four-character hint instead.

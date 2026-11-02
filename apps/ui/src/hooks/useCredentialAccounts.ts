@@ -28,25 +28,9 @@ function useInvalidateAccounts(provider: string) {
   return () => queryClient.invalidateQueries({ queryKey: queryKeys.credentialAccounts(provider) });
 }
 
-export interface AddCredentialAccountArgs {
-  label: string;
-  secret: string;
-}
-
-export function useAddCredentialAccount(provider: string) {
-  const { client } = useApiConfig();
-  const invalidate = useInvalidateAccounts(provider);
-  return useMutation({
-    mutationFn: (args: AddCredentialAccountArgs) =>
-      client.post<CredentialAccountResponse>(accountsPath(provider), args),
-    onSuccess: invalidate,
-  });
-}
-
 export interface UpdateCredentialAccountArgs {
   id: string;
   label?: string;
-  secret?: string;
   disabled?: boolean;
 }
 

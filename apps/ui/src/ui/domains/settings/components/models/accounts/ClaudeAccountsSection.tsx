@@ -7,7 +7,7 @@ import { Status } from '@mastra/playground-ui/components/StatusIndicators';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
-import { MoreHorizontal, Plus } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -26,7 +26,6 @@ import { SettingsSubsection } from '../../SettingsSubsection';
 import { accountErrorMessage, CLAUDE_ACCOUNTS_PROVIDER } from './accountErrors';
 import { ClaudeAccountDialog } from './ClaudeAccountDialog';
 import { ClaudeSignInButton } from './ClaudeSignIn';
-import type { ClaudeAccountDialogMode } from './ClaudeAccountDialog';
 
 const tk = translator('settings');
 
@@ -35,11 +34,11 @@ export function formatAccountTime(iso: string): string {
 }
 
 /**
- * Accounts Claude Code sessions run on: when one runs out of usage the session
- * continues on the next, a limited one returns after its reset, a refused one
- * stays off until fixed. Subscriptions and Claude sign-ins serve only their
- * owner's runs; organization API keys serve everyone. Where the server offers
- * it, a person signs in to Claude here instead of pasting a token.
+ * The Claude sign-ins Claude Code sessions run on: when one runs out of usage
+ * the session continues on the next, a limited one returns after its reset, a
+ * refused one stays off until its owner signs in again. A sign-in serves only
+ * its owner's runs. Signing in is the only way to add one; a pasted token or
+ * key left from before is marked old and can only be removed.
  */
 export function ClaudeAccountsSection() {
   const { t } = useTranslation('settings');
@@ -47,7 +46,7 @@ export function ClaudeAccountsSection() {
   const features = useServerFeatures();
   const updateMutation = useUpdateCredentialAccount(CLAUDE_ACCOUNTS_PROVIDER);
   const removeMutation = useRemoveCredentialAccount(CLAUDE_ACCOUNTS_PROVIDER);
-  const [dialog, setDialog] = useState<ClaudeAccountDialogMode | null>(null);
+  const [renaming, setRenaming] = useState<CredentialAccountInfo | null>(null);
   const [removing, setRemoving] = useState<CredentialAccountInfo | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -61,19 +60,8 @@ export function ClaudeAccountsSection() {
     action.catch(error => setActionError(accountErrorMessage(error)));
   };
 
-  const addButton = data && (
-    <Button size="sm" disabled={busy} onClick={() => setDialog({ kind: 'add', canAddOrgKeys: data.canAddOrgKeys })}>
-      <Plus size={13} /> {t('claudeAccounts.add')}
-    </Button>
-  );
-
   return (
-    <SettingsSubsection
-      scope="org"
-      title={t('claudeAccounts.title')}
-      description={t('claudeAccounts.description')}
-      action={addButton}
-    >
+    <SettingsSubsection scope="org" title={t('claudeAccounts.title')} description={t('claudeAccounts.description')}>
       <SettingsContainer className="flex flex-col gap-3 p-4">
         {features.data?.claudeSignIn === true && data && <ClaudeSignInButton disabled={busy} />}
         {accountsQuery.isPending && <SkeletonRows label={t('claudeAccounts.loading')} rows={2} />}
@@ -81,7 +69,7 @@ export function ClaudeAccountsSection() {
         {accountsQuery.isError && !needsSignIn && (
           <Notice variant="destructive">{accountErrorMessage(accountsQuery.error)}</Notice>
         )}
-        {data && data.accounts.length === 0 && (
+        {data && data.accounts.every(account => account.legacy === true) && (
           <Txt as="p" variant="caption" tone="muted">
             {t('claudeAccounts.empty')}
           </Txt>
@@ -96,8 +84,7 @@ export function ClaudeAccountsSection() {
                 onToggle={() =>
                   run(updateMutation.mutateAsync({ id: account.id, disabled: account.status !== 'disabled' }))
                 }
-                onRename={() => setDialog({ kind: 'rename', account })}
-                onReplaceSecret={() => setDialog({ kind: 'replaceSecret', account })}
+                onRename={() => setRenaming(account)}
                 onRemove={() => setRemoving(account)}
               />
             ))}
@@ -110,7 +97,7 @@ export function ClaudeAccountsSection() {
         )}
       </SettingsContainer>
 
-      {dialog && <ClaudeAccountDialog mode={dialog} onClose={() => setDialog(null)} />}
+      {renaming && <ClaudeAccountDialog account={renaming} onClose={() => setRenaming(null)} />}
 
       <AlertDialog open={removing !== null} onOpenChange={open => !open && setRemoving(null)}>
         <AlertDialog.Content>
@@ -151,27 +138,22 @@ function AccountRow({
   disabled,
   onToggle,
   onRename,
-  onReplaceSecret,
   onRemove,
 }: {
   account: CredentialAccountInfo;
   disabled: boolean;
   onToggle: () => void;
   onRename: () => void;
-  onReplaceSecret: () => void;
   onRemove: () => void;
 }) {
   const { t } = useTranslation('settings');
-  const kindLabel =
-    account.kind === 'api_key'
-      ? t('claudeAccounts.kind.orgKey')
-      : account.kind === 'claude_login'
-        ? account.mine
-          ? t('claudeAccounts.kind.mySignIn')
-          : t('claudeAccounts.kind.memberSignIn')
-        : account.mine
-          ? t('claudeAccounts.kind.mySubscription')
-          : t('claudeAccounts.kind.memberSubscription');
+  // A pasted token or key from before sign-ins: no session uses it, so it is only there to be removed.
+  const legacy = account.legacy === true;
+  const kindLabel = legacy
+    ? t('claudeAccounts.kind.legacy')
+    : account.mine
+      ? t('claudeAccounts.kind.mySignIn')
+      : t('claudeAccounts.kind.memberSignIn');
 
   return (
     <li aria-label={account.label} className="flex items-start gap-2.5 py-2">
@@ -180,7 +162,7 @@ function AccountRow({
           <Txt as="span" variant="caption" className="truncate">
             {account.label}
           </Txt>
-          <Badge size="xs" variant={account.kind === 'api_key' ? 'blue' : 'neutral'}>
+          <Badge size="xs" variant={legacy ? 'orange' : 'neutral'}>
             {kindLabel}
           </Badge>
           {account.hint && (
@@ -200,10 +182,12 @@ function AccountRow({
             : t('claudeAccounts.neverUsed')}
         </Txt>
       </div>
-      <Txt as="span" variant="meta" tone="muted" className="shrink-0 pt-0.5">
-        <Status presentation={statusPresentation(account)} />
-      </Txt>
-      {account.canManage || account.canReplaceSecret ? (
+      {!legacy && (
+        <Txt as="span" variant="meta" tone="muted" className="shrink-0 pt-0.5">
+          <Status presentation={statusPresentation(account)} />
+        </Txt>
+      )}
+      {account.canManage ? (
         <DropdownMenu>
           <DropdownMenu.Trigger
             render={
@@ -218,20 +202,15 @@ function AccountRow({
             }
           />
           <DropdownMenu.Content align="end">
-            {account.canManage && (
+            {!legacy && (
               <DropdownMenu.Item onClick={onToggle}>
                 {account.status === 'disabled' ? t('claudeAccounts.turnOn') : t('claudeAccounts.turnOff')}
               </DropdownMenu.Item>
             )}
-            {account.canManage && <DropdownMenu.Item onClick={onRename}>{t('claudeAccounts.rename')}</DropdownMenu.Item>}
-            {account.canReplaceSecret && (
-              <DropdownMenu.Item onClick={onReplaceSecret}>{t('claudeAccounts.replaceSecret')}</DropdownMenu.Item>
-            )}
-            {account.canManage && (
-              <DropdownMenu.Item variant="destructive" onClick={onRemove}>
-                {t('claudeAccounts.remove')}
-              </DropdownMenu.Item>
-            )}
+            {!legacy && <DropdownMenu.Item onClick={onRename}>{t('claudeAccounts.rename')}</DropdownMenu.Item>}
+            <DropdownMenu.Item variant="destructive" onClick={onRemove}>
+              {t('claudeAccounts.remove')}
+            </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu>
       ) : (

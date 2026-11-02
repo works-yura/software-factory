@@ -35,7 +35,7 @@ function stubFactory(initial: Partial<FactoryProjectPayload>, { claudeCode = tru
     ),
     http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
     http.get(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts`, () =>
-      HttpResponse.json({ accounts: [], canAddOrgKeys: true }),
+      HttpResponse.json({ accounts: [] }),
     ),
   );
   return { patches };

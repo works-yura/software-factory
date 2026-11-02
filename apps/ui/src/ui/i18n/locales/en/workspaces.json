@@ -129,11 +129,9 @@
         "loading": "Checking Claude Code sign-in",
         "accounts_one": "Runs on your organization’s Claude Code account.",
         "accounts_other": "Runs on your organization’s {{count}} Claude Code accounts.",
-        "none": "Claude Code needs an account to run: a Claude subscription or API key, or the organization’s Anthropic key.",
+        "none": "Claude Code needs a Claude sign-in to run.",
         "needSignIn": "Sign in to an organization to use its Claude Code accounts.",
-        "addHint": "You can add accounts any time in Settings → Models → Claude Code accounts.",
-        "add": "Add a Claude Code account",
-        "addDescription": "A Claude subscription token or an Anthropic API key",
+        "addHint": "You can sign in any time in Settings → Models → Claude Code accounts.",
         "signInWithClaude": "Sign in with Claude",
         "signInWithClaudeDescription": "Opens the Claude sign-in page; the Factory keeps its own login"
       },

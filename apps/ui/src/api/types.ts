@@ -74,7 +74,7 @@ export interface CredentialAccountInfo {
   id: string;
   label: string;
   kind: 'api_key' | 'subscription' | 'claude_login';
-  /** The caller's own subscription or Claude sign-in. */
+  /** The caller's own Claude sign-in. */
   mine: boolean;
   priority: number;
   status: 'active' | 'limited' | 'disabled';
@@ -84,7 +84,8 @@ export interface CredentialAccountInfo {
   /** Last characters of the secret. */
   hint: string;
   canManage: boolean;
-  canReplaceSecret: boolean;
+  /** A pasted setup token or API key from before sign-ins: no session uses it, it is listed to be removed. */
+  legacy?: boolean;
   /** A Claude sign-in that stopped working: its owner signs in again. Absent from older servers. */
   needsSignIn?: boolean;
   createdAt: string;
@@ -105,8 +106,6 @@ export interface ClaudeSignInResponse {
 
 export interface CredentialAccountsResponse {
   accounts: CredentialAccountInfo[];
-  /** Whether the caller may add organization API keys (an organization admin). */
-  canAddOrgKeys: boolean;
 }
 
 export interface CredentialAccountResponse {

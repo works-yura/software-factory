@@ -3,7 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
-import { anthropicSecretKind, resolveCredentialContext } from '@factory/credentials';
+import { resolveCredentialContext } from '@factory/credentials';
 import { Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
 import { isPersonalCredentialKind } from '@factory/store';
@@ -13,22 +13,13 @@ import type { CredentialAccount, CredentialAccountKind, ModelCredentialsStorage 
 export const CREDENTIAL_ACCOUNT_PROVIDERS: ReadonlySet<string> = new Set(['anthropic']);
 
 const MAX_LABEL_LENGTH = 100;
-const MAX_SECRET_LENGTH = 4096;
 
-const secretSchema = z
-  .string()
-  .trim()
-  .min(20, 'secret is too short')
-  .max(MAX_SECRET_LENGTH)
-  .refine(value => !/\s/.test(value), 'secret must not contain whitespace');
 const labelSchema = z.string().trim().min(1, 'label is required').max(MAX_LABEL_LENGTH);
 const prioritySchema = z.number().int().min(-1000).max(1000);
 
-const createSchema = z.object({ label: labelSchema, secret: secretSchema, priority: prioritySchema.optional() }).strict();
 const updateSchema = z
   .object({
     label: labelSchema.optional(),
-    secret: secretSchema.optional(),
     priority: prioritySchema.optional(),
     disabled: z.boolean().optional(),
   })
@@ -41,7 +32,7 @@ export interface CredentialAccountView {
   id: string;
   label: string;
   kind: CredentialAccountKind;
-  /** The caller's own subscription. */
+  /** The caller's own sign-in. */
   mine: boolean;
   priority: number;
   status: CredentialAccountStatus;
@@ -51,8 +42,11 @@ export interface CredentialAccountView {
   hint: string;
   /** Whether the caller may change or remove it. */
   canManage: boolean;
-  /** Whether the caller may replace its secret (only the owner of a subscription; a sign-in is replaced by signing in again). */
-  canReplaceSecret: boolean;
+  /**
+   * A pasted setup token or API key from before Claude Code took only Claude sign-ins: no turn uses it any
+   * more, and it is listed only so it can be removed.
+   */
+  legacy: boolean;
   /** A Claude sign-in the token endpoint refused: its owner must sign in again. */
   needsSignIn: boolean;
   createdAt: string;
@@ -83,10 +77,6 @@ export interface CredentialAccountRoutesDeps extends RouteDependencies {
   now?: () => Date;
 }
 
-function kindOf(provider: string, secret: string): CredentialAccountKind {
-  return provider === 'anthropic' ? anthropicSecretKind(secret) : 'api_key';
-}
-
 function statusOf(account: CredentialAccount, now: Date): CredentialAccountStatus {
   if (account.disabled) return 'disabled';
   if (account.limitedUntil && account.limitedUntil.getTime() > now.getTime()) return 'limited';
@@ -94,24 +84,24 @@ function statusOf(account: CredentialAccount, now: Date): CredentialAccountStatu
 }
 
 /**
- * Credential accounts for a provider: the organization's API keys and its
- * members' own subscriptions, which Claude Code turns rotate through when one
- * runs out of usage.
+ * Claude Code accounts: the members' own Claude sign-ins, which Claude Code
+ * turns rotate through when one runs out of usage. A sign-in is the only way
+ * to add one; a pasted setup token or API key is refused (410), and such
+ * accounts left from before are listed as `legacy` only so they can be
+ * removed: no turn uses them.
  *
  *   - `GET    /web/config/providers/:provider/accounts`
- *   - `POST   /web/config/providers/:provider/accounts`      `{ label, secret, priority? }`
- *   - `PATCH  /web/config/providers/:provider/accounts/:id`  `{ label?, secret?, priority?, disabled? }`
+ *   - `POST   /web/config/providers/:provider/accounts`      refused: sign in instead
+ *   - `PATCH  /web/config/providers/:provider/accounts/:id`  `{ label?, priority?, disabled? }`
  *   - `DELETE /web/config/providers/:provider/accounts/:id`
  *
  *   - `POST   /web/config/providers/anthropic/accounts/sign-in`      start a Claude sign-in
  *   - `GET    /web/config/providers/anthropic/accounts/sign-in/:id`  its status
  *   - `DELETE /web/config/providers/anthropic/accounts/sign-in/:id`  cancel it
  *
- * Who may do what: any member adds their own subscription (a `sk-ant-oat`
- * setup token) or signs in to Claude, and manages it; organization API keys,
- * and switching off or removing anyone's account, take an organization admin;
- * only a subscription's owner replaces its secret; a sign-in is renewed by
- * signing in again.
+ * Who may do what: any member signs in to Claude and manages their own
+ * sign-in; switching off or removing anyone's account takes an organization
+ * admin. A sign-in is renewed by signing in again.
  */
 export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> {
   routes(): ApiRoute[] {
@@ -151,7 +141,7 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
         ...(account.lastUsedAt ? { lastUsedAt: account.lastUsedAt.toISOString() } : {}),
         hint: account.hint,
         canManage: mine || caller.admin,
-        canReplaceSecret: account.kind === 'claude_login' ? false : account.kind === 'subscription' ? mine : caller.admin,
+        legacy: account.kind !== 'claude_login',
         needsSignIn: account.kind === 'claude_login' && account.disabled && account.lastError !== undefined,
         createdAt: account.createdAt.toISOString(),
       };
@@ -245,32 +235,24 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
           const ctx = await context(c);
           if ('response' in ctx) return ctx.response;
           const accounts = await ctx.storage.listAccounts(ctx.orgId, ctx.provider);
-          return c.json({ accounts: accounts.map(account => view(account, ctx)), canAddOrgKeys: ctx.admin });
+          return c.json({ accounts: accounts.map(account => view(account, ctx)) });
         },
       }),
 
+      // Claude Code runs only on Claude sign-ins: a pasted setup token or API key is refused.
       registerApiRoute('/web/config/providers/:provider/accounts', {
         method: 'POST',
         requiresAuth: false,
         handler: async c => {
           const ctx = await context(c);
           if ('response' in ctx) return ctx.response;
-          const parsed = createSchema.safeParse(await body(c));
-          if (!parsed.success) return invalid(c, parsed.error);
-          const kind = kindOf(ctx.provider, parsed.data.secret);
-          // A subscription is personal and always the caller's own; organization keys are an admin's call.
-          if (kind === 'api_key' && !ctx.admin) return c.json({ error: 'organization_admin_required' }, 403);
-          const account = await ctx.storage.addAccount({
-            orgId: ctx.orgId,
-            provider: ctx.provider,
-            label: parsed.data.label,
-            kind,
-            ...(kind === 'subscription' ? { ownerUserId: ctx.userId } : {}),
-            secret: parsed.data.secret,
-            createdBy: ctx.userId,
-            ...(parsed.data.priority !== undefined ? { priority: parsed.data.priority } : {}),
-          });
-          return c.json({ account: view(account, ctx) }, 201);
+          return c.json(
+            {
+              error: 'claude_sign_in_required',
+              message: 'Claude Code accounts are added by signing in to Claude; tokens and API keys are not accepted.',
+            },
+            410,
+          );
         },
       }),
 
@@ -287,15 +269,6 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
           if (!existing || existing.provider !== ctx.provider) return c.json({ error: 'not_found' }, 404);
           const current = view(existing, ctx);
           if (!current.canManage) return c.json({ error: 'forbidden' }, 403);
-          if (parsed.data.secret !== undefined) {
-            if (!current.canReplaceSecret) return c.json({ error: 'forbidden' }, 403);
-            if (kindOf(ctx.provider, parsed.data.secret) !== existing.kind) {
-              return c.json(
-                { error: 'invalid_request', message: 'The new secret must be of the same kind as the old one.' },
-                400,
-              );
-            }
-          }
           const updated = await ctx.storage.updateAccount(ctx.orgId, id, parsed.data);
           if (!updated) return c.json({ error: 'not_found' }, 404);
           return c.json({ account: view(updated, ctx) });

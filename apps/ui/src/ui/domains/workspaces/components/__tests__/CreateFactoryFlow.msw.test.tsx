@@ -685,24 +685,27 @@ function serveClaudeCodeFeature(claudeCode: boolean, { claudeSignIn = false } = 
   );
 }
 
-/** The organization's Claude Code accounts. */
-function serveClaudeAccounts(count: number) {
+/** The organization's Claude sign-ins, and pasted tokens left from before (which run nothing). */
+function serveClaudeAccounts(count: number, legacy = 0) {
+  const row = (index: number, old: boolean) => ({
+    id: `acct-${old ? 'old-' : ''}${index}`,
+    label: `Account ${old ? 'old ' : ''}${index}`,
+    kind: old ? 'api_key' : 'claude_login',
+    mine: true,
+    priority: index,
+    status: 'active',
+    hint: '',
+    canManage: true,
+    legacy: old,
+    createdAt: '2026-10-01T10:00:00.000Z',
+  });
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts`, () =>
       HttpResponse.json({
-        accounts: Array.from({ length: count }, (_, index) => ({
-          id: `acct-${index}`,
-          label: `Account ${index}`,
-          kind: 'api_key',
-          mine: false,
-          priority: index,
-          status: 'active',
-          hint: 'abcd',
-          canManage: true,
-          canReplaceSecret: true,
-          createdAt: '2026-10-01T10:00:00.000Z',
-        })),
-        canAddOrgKeys: true,
+        accounts: [
+          ...Array.from({ length: count }, (_, index) => row(index, false)),
+          ...Array.from({ length: legacy }, (_, index) => row(index, true)),
+        ],
       }),
     ),
   );
@@ -865,13 +868,13 @@ describe('harness step', () => {
 
       renderFlow();
 
-      expect(await screen.findByText(/Claude Code needs an account to run/)).toBeInTheDocument();
+      expect(await screen.findByText(/Claude Code needs a Claude sign-in to run/)).toBeInTheDocument();
       expect(screen.getByRole('option', { name: /Sign in with Claude/ })).toBeInTheDocument();
       expect(screen.queryByText(/`claude` login/)).not.toBeInTheDocument();
       expectNoProviderRows();
     });
 
-    it('says an account or the organization’s Anthropic key is needed when there is none', async () => {
+    it('says a Claude sign-in is needed when there is none, and offers no token to paste', async () => {
       serveClaudeCodeFeature(true);
       serveClaudeAccounts(0);
       seedDraft('model-provider');
@@ -880,11 +883,9 @@ describe('harness step', () => {
 
       renderFlow();
 
-      expect(
-        await screen.findByText(/Claude Code needs an account to run: .*the organization’s Anthropic key\./),
-      ).toBeInTheDocument();
-      expect(screen.getByText(/Settings → Models → Claude Code accounts/)).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /Add a Claude Code account/ })).toBeInTheDocument();
+      expect(await screen.findByText(/Claude Code needs a Claude sign-in to run\./)).toBeInTheDocument();
+      expect(screen.getByText(/sign in any time in Settings → Models → Claude Code accounts/)).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: /Add a Claude Code account/ })).not.toBeInTheDocument();
       expect(screen.queryByText(/`claude` login/)).not.toBeInTheDocument();
     });
 
@@ -913,21 +914,32 @@ describe('harness step', () => {
       expect(started).toEqual(['start']);
     });
 
-    it('counts the organization’s accounts and adds another from the step', async () => {
-      serveClaudeCodeFeature(true);
-      serveClaudeAccounts(2);
+    it('counts the organization’s sign-ins, leaving old pasted tokens out', async () => {
+      serveClaudeCodeFeature(true, { claudeSignIn: true });
+      serveClaudeAccounts(2, 1);
       seedDraft('model-provider');
       sessionStorage.setItem(HARNESS_KEY, 'claude-code');
       stubModelStepEndpoints([]);
-      const user = userEvent.setup();
 
       renderFlow();
 
       expect(await screen.findByText(/Runs on your organization’s 2 Claude Code accounts\./)).toBeInTheDocument();
-      // Accounts already there: no sign-in offered on top of them.
+      // Sign-ins already there: no sign-in offered on top of them, and nothing to paste.
       expect(screen.queryByRole('option', { name: /Sign in with Claude/ })).not.toBeInTheDocument();
-      await user.click(screen.getByRole('option', { name: /Add a Claude Code account/ }));
-      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: /Add a Claude Code account/ })).not.toBeInTheDocument();
+    });
+
+    it('offers signing in when only old pasted tokens are left', async () => {
+      serveClaudeCodeFeature(true, { claudeSignIn: true });
+      serveClaudeAccounts(0, 2);
+      seedDraft('model-provider');
+      sessionStorage.setItem(HARNESS_KEY, 'claude-code');
+      stubModelStepEndpoints([]);
+
+      renderFlow();
+
+      expect(await screen.findByText(/Claude Code needs a Claude sign-in to run/)).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: /Sign in with Claude/ })).toBeInTheDocument();
     });
   });
 

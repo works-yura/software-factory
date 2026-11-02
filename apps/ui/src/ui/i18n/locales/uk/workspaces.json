@@ -133,11 +133,9 @@
         "accounts_few": "Працює на {{count}} акаунтах Claude Code вашої організації.",
         "accounts_many": "Працює на {{count}} акаунтах Claude Code вашої організації.",
         "accounts_other": "Працює на {{count}} акаунтах Claude Code вашої організації.",
-        "none": "Для роботи Claude Code потрібен акаунт: підписка Claude чи API-ключ або ключ Anthropic організації.",
+        "none": "Для роботи Claude Code потрібен вхід Claude.",
         "needSignIn": "Увійдіть в організацію, щоб користуватися її акаунтами Claude Code.",
-        "addHint": "Акаунти можна будь-коли додати в Налаштування → Моделі → Акаунти Claude Code.",
-        "add": "Додати акаунт Claude Code",
-        "addDescription": "Токен підписки Claude або API-ключ Anthropic",
+        "addHint": "Увійти можна будь-коли в Налаштування → Моделі → Акаунти Claude Code.",
         "signInWithClaude": "Увійти через Claude",
         "signInWithClaudeDescription": "Відкриває сторінку входу Claude; Фабрика тримає власний вхід"
       },

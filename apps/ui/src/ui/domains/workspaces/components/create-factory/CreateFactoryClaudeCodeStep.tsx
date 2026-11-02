@@ -2,8 +2,7 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { LogIn, Plus, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { LogIn, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { ApiRequestError } from '../../../../../api/client';
@@ -11,9 +10,7 @@ import { useClaudeSignIn, useCredentialAccountsQuery } from '../../../../../hook
 import { useServerFeatures } from '../../../../../hooks/useServerFeatures';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { CLAUDE_ACCOUNTS_PROVIDER } from '../../../settings/components/models/accounts/accountErrors';
-import { ClaudeAccountDialog } from '../../../settings/components/models/accounts/ClaudeAccountDialog';
 import { ClaudeSignInStatus } from '../../../settings/components/models/accounts/ClaudeSignIn';
-import type { ClaudeAccountDialogMode } from '../../../settings/components/models/accounts/ClaudeAccountDialog';
 import { CLAUDE_CODE_MODELS } from '../../services/github';
 import type { ClaudeCodeModel } from '../../services/github';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
@@ -80,14 +77,14 @@ export function CreateFactoryClaudeCodeStep({ query, saving, error, onPick }: Cr
   );
 }
 
-/** How Claude Code turns sign in: the organization's Claude Code accounts, never the machine's own `claude` login. */
+/** How Claude Code turns sign in: the members' Claude sign-ins, never the machine's own `claude` login. */
 function ClaudeCodeSignIn({ disabled }: { disabled: boolean }) {
   const { t } = useTranslation('workspaces');
   const features = useServerFeatures();
   const accountsQuery = useCredentialAccountsQuery(CLAUDE_ACCOUNTS_PROVIDER);
-  const [dialog, setDialog] = useState<ClaudeAccountDialogMode | null>(null);
   const signIn = useClaudeSignIn(CLAUDE_ACCOUNTS_PROVIDER);
-  const accounts = accountsQuery.data?.accounts ?? [];
+  // A pasted token or key from before sign-ins runs nothing, so it does not count.
+  const accounts = (accountsQuery.data?.accounts ?? []).filter(account => account.legacy !== true);
   // With no account yet, signing in to Claude is the quickest way to give the Factory its own.
   const offerSignIn = features.data?.claudeSignIn === true && accountsQuery.data !== undefined && accounts.length === 0;
   const needsSignIn =
@@ -138,18 +135,7 @@ function ClaudeCodeSignIn({ disabled }: { disabled: boolean }) {
             <ClaudeSignInStatus signIn={signIn} />
           </div>
         )}
-        {accountsQuery.data && (
-          <CommandPaletteItem
-            icon={<Plus />}
-            title={t('createFactory.claudeCode.signIn.add')}
-            subtitle={t('createFactory.claudeCode.signIn.addDescription')}
-            value="claude-signin-add"
-            disabled={disabled}
-            onSelect={() => setDialog({ kind: 'add', canAddOrgKeys: accountsQuery.data.canAddOrgKeys })}
-          />
-        )}
       </CommandGroup>
-      {dialog && <ClaudeAccountDialog mode={dialog} onClose={() => setDialog(null)} />}
     </>
   );
 }

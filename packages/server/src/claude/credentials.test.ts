@@ -7,7 +7,6 @@ import { ClaudeCodeError } from '@factory/harness-claude-code';
 
 import {
   ClaudeCodeCredentialMissingError,
-  claudeCodeCredentialEnv,
   createClaudeCodeCredentials,
   createClaudeCodeCredentialsHook,
   DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS,
@@ -15,108 +14,140 @@ import {
 import { CLAUDE_OAUTH_CLIENT_ID, CLAUDE_OAUTH_REFRESH_MARGIN_MS, CLAUDE_OAUTH_TOKEN_URL } from './oauth.ts';
 
 describe('Claude Code credentials hook', () => {
+  const now = new Date('2026-10-28T12:00:00Z');
+  const missing = 'No Claude sign-in is set for organization org-1. Sign in to Claude under Settings → Models → Claude Code accounts to run Claude Code sessions.';
+
   it('never falls back to the person’s own claude login: with nothing stored it asks for a sign-in', async () => {
     const hook = createClaudeCodeCredentialsHook({ credentials: undefined });
     const failure = hook({ orgId: 'org-1', userId: 'user-1' });
     await expect(failure).rejects.toBeInstanceOf(ClaudeCodeCredentialMissingError);
-    await expect(failure).rejects.toThrow(
-      'No Claude account is set for organization org-1. Sign in to Claude, or add an Anthropic API key or a Claude setup token, under Settings → Models → Claude Code accounts to run Claude Code sessions.',
-    );
+    await expect(failure).rejects.toThrow(missing);
   });
 
-  it('maps the factory’s Anthropic API key and setup token to the CLI’s env', async () => {
+  it('never runs on the organization’s or a person’s Anthropic key for Mastra runs', async () => {
     const seeded = await createFactoryStorageForTests();
-    const hook = createClaudeCodeCredentialsHook({ credentials: seeded.credentials });
-
     await seeded.credentials.setCredential({ orgId: 'org-1' }, 'anthropic', { type: 'api_key', key: 'sk-ant-api03-x' });
-    await expect(hook({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual({ ANTHROPIC_API_KEY: 'sk-ant-api03-x' });
-
-    await seeded.credentials.setCredential({ orgId: 'org-2' }, 'anthropic', { type: 'api_key', key: 'sk-ant-oat01-y' });
-    await expect(hook({ orgId: 'org-2', userId: 'user-1' })).resolves.toEqual({
-      CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-y',
-    });
-  });
-
-  it('never uses a person’s own credential for a factory run, and says what is missing', async () => {
-    const seeded = await createFactoryStorageForTests();
     await seeded.credentials.setCredential({ orgId: 'org-1', userId: 'user-1' }, 'anthropic', {
       type: 'api_key',
-      key: 'sk-ant-api03-personal',
+      key: 'sk-ant-oat01-personal',
     });
     const hook = createClaudeCodeCredentialsHook({ credentials: seeded.credentials });
-    await expect(hook({ orgId: 'org-1', userId: 'user-1' })).rejects.toBeInstanceOf(ClaudeCodeCredentialMissingError);
+    await expect(hook({ orgId: 'org-1', userId: 'user-1' })).rejects.toThrow(missing);
   });
 
-  it('sends OAuth access tokens as CLAUDE_CODE_OAUTH_TOKEN', () => {
-    expect(claudeCodeCredentialEnv({ type: 'oauth', secret: 'access-1' })).toEqual({
-      CLAUDE_CODE_OAUTH_TOKEN: 'access-1',
+  it('ignores pasted setup tokens and API keys left from before, and runs on a sign-in alone', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const accounts = seeded.credentials;
+    for (const [label, kind, secret] of [
+      ['Old key', 'api_key', 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111'],
+      ['Old Max', 'subscription', 'sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb2222'],
+    ] as const) {
+      await accounts.addAccount({
+        orgId: 'org-1',
+        provider: 'anthropic',
+        label,
+        kind,
+        secret,
+        priority: -100,
+        createdBy: 'alice',
+        ...(kind === 'subscription' ? { ownerUserId: 'alice' } : {}),
+      });
+    }
+    const { credentials } = createClaudeCodeCredentials({ credentials: accounts, now: () => now });
+    await expect(credentials({ orgId: 'org-1', userId: 'alice' })).rejects.toBeInstanceOf(ClaudeCodeCredentialMissingError);
+
+    const signIn = await accounts.addAccount({
+      orgId: 'org-1',
+      provider: 'anthropic',
+      label: 'alice@example.com',
+      kind: 'claude_login',
+      ownerUserId: 'alice',
+      secret: 'fake-access-1',
+      oauth: { accessToken: 'fake-access-1', refreshToken: 'fake-refresh-1', expiresAt: now.getTime() + 3_600_000, scopes: [] },
+      createdBy: 'alice',
+    });
+    await expect(credentials({ orgId: 'org-1', userId: 'alice' })).resolves.toEqual({
+      env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-1' },
+      accountId: signIn.id,
     });
   });
 });
 
 describe('Claude Code credential accounts', () => {
   const now = new Date('2026-10-28T12:00:00Z');
-  const apiKey = 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111';
-  const aliceToken = 'sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb2222';
 
   async function pool() {
     const seeded = await createFactoryStorageForTests();
     const accounts = seeded.credentials;
-    const add = (label: string, kind: 'api_key' | 'subscription', secret: string, ownerUserId?: string) =>
+    const add = (label: string, ownerUserId: string, priority = 0) =>
       accounts.addAccount({
         orgId: 'org-1',
         provider: 'anthropic',
         label,
-        kind,
-        secret,
-        createdBy: ownerUserId ?? 'admin',
-        ...(ownerUserId ? { ownerUserId } : {}),
+        kind: 'claude_login',
+        ownerUserId,
+        priority,
+        secret: `fake-access-${label}`,
+        oauth: {
+          accessToken: `fake-access-${label}`,
+          refreshToken: `fake-refresh-${label}`,
+          expiresAt: now.getTime() + 3_600_000,
+          scopes: [],
+        },
+        createdBy: ownerUserId,
       });
     const hooks = createClaudeCodeCredentials({ credentials: accounts, now: () => now });
     return { accounts, add, ...hooks };
   }
 
-  it('gives a run its owner’s subscription first and names the account', async () => {
+  it('gives a run its owner’s sign-in and names the account, never another person’s', async () => {
     const { add, credentials, accounts } = await pool();
-    await add('Team key', 'api_key', apiKey);
-    const alice = await add('Alice Max', 'subscription', aliceToken, 'alice');
+    const alice = await add('alice', 'alice');
 
     await expect(credentials({ orgId: 'org-1', userId: 'alice' }, { exclude: [] })).resolves.toEqual({
-      env: { CLAUDE_CODE_OAUTH_TOKEN: aliceToken },
+      env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-alice' },
       accountId: alice.id,
     });
     expect((await accounts.getAccount('org-1', alice.id))?.lastUsedAt).toEqual(now);
-    // Bob never gets Alice's subscription.
-    await expect(credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [] })).resolves.toMatchObject({
-      env: { ANTHROPIC_API_KEY: apiKey },
-    });
+    await expect(credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [] })).rejects.toBeInstanceOf(
+      ClaudeCodeCredentialMissingError,
+    );
+  });
+
+  it('gives a run the sign-in it asked for by id', async () => {
+    const { add, credentials } = await pool();
+    await add('first', 'alice');
+    const second = await add('second', 'alice', 5);
+    await expect(
+      credentials({ orgId: 'org-1', userId: 'alice' }, { exclude: [], preferredAccountId: second.id }),
+    ).resolves.toEqual({ env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-second' }, accountId: second.id });
   });
 
   it('sets an account aside until its reset and moves to the next', async () => {
     const { add, credentials, onCredentialFailure, accounts } = await pool();
-    const first = await add('First', 'api_key', apiKey);
-    const second = await add('Second', 'api_key', 'sk-ant-api03-cccccccccccccccccccc3333');
+    const first = await add('first', 'alice');
+    const second = await add('second', 'alice', 1);
     const resetsAt = new Date(now.getTime() + 2 * 3_600_000);
 
     await onCredentialFailure(
-      { orgId: 'org-1', userId: 'bob' },
+      { orgId: 'org-1', userId: 'alice' },
       { accountId: first.id, error: new ClaudeCodeError('rate_limit', 'limit', { resetsAt, now }) },
     );
     expect((await accounts.getAccount('org-1', first.id))?.limitedUntil).toEqual(resetsAt);
-    await expect(credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [first.id] })).resolves.toMatchObject({
+    await expect(credentials({ orgId: 'org-1', userId: 'alice' }, { exclude: [first.id] })).resolves.toMatchObject({
       accountId: second.id,
     });
     // A later turn of another session also skips it while it is limited.
-    await expect(credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [] })).resolves.toMatchObject({
+    await expect(credentials({ orgId: 'org-1', userId: 'alice' }, { exclude: [] })).resolves.toMatchObject({
       accountId: second.id,
     });
   });
 
   it('sits an account out for the default cooldown when no reset was given', async () => {
     const { add, onCredentialFailure, accounts } = await pool();
-    const first = await add('First', 'api_key', apiKey);
+    const first = await add('first', 'alice');
     await onCredentialFailure(
-      { orgId: 'org-1', userId: 'bob' },
+      { orgId: 'org-1', userId: 'alice' },
       { accountId: first.id, error: new ClaudeCodeError('rate_limit', 'limit') },
     );
     expect((await accounts.getAccount('org-1', first.id))?.limitedUntil).toEqual(
@@ -126,55 +157,50 @@ describe('Claude Code credential accounts', () => {
 
   it('turns off a refused account and ignores failures that are not the account’s', async () => {
     const { add, onCredentialFailure, accounts } = await pool();
-    const first = await add('First', 'api_key', apiKey);
+    const first = await add('first', 'alice');
     await onCredentialFailure(
-      { orgId: 'org-1', userId: 'bob' },
+      { orgId: 'org-1', userId: 'alice' },
       { accountId: first.id, error: new ClaudeCodeError('failed', 'boom') },
     );
     expect((await accounts.getAccount('org-1', first.id))?.disabled).toBe(false);
     await onCredentialFailure(
-      { orgId: 'org-1', userId: 'bob' },
-      { accountId: first.id, error: new ClaudeCodeError('auth', 'Invalid API key') },
+      { orgId: 'org-1', userId: 'alice' },
+      { accountId: first.id, error: new ClaudeCodeError('auth', 'Invalid token') },
     );
-    expect(await accounts.getAccount('org-1', first.id)).toMatchObject({ disabled: true, lastError: 'Invalid API key' });
+    expect(await accounts.getAccount('org-1', first.id)).toMatchObject({ disabled: true, lastError: 'Invalid token' });
   });
 
   it('fails with the earliest reset when every account is out of usage', async () => {
     const { add, credentials, onCredentialFailure } = await pool();
-    const first = await add('First', 'api_key', apiKey);
+    const first = await add('first', 'alice');
     const resetsAt = new Date(now.getTime() + 3_600_000);
     await onCredentialFailure(
-      { orgId: 'org-1', userId: 'bob' },
+      { orgId: 'org-1', userId: 'alice' },
       { accountId: first.id, error: new ClaudeCodeError('rate_limit', 'limit', { resetsAt, now }) },
     );
 
-    const error = await credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [first.id] }).catch(e => e);
+    const error = await credentials({ orgId: 'org-1', userId: 'alice' }, { exclude: [first.id] }).catch(e => e);
     expect(error).toBeInstanceOf(ClaudeCodeError);
     expect(error).toMatchObject({ kind: 'rate_limit', resetsAt });
   });
 
-  it('does not fall back to the single credential once an account failed this turn', async () => {
+  it('has nothing to fall back on once the only sign-in failed this turn', async () => {
     const { add, credentials, onCredentialFailure, accounts } = await pool();
     await accounts.setCredential({ orgId: 'org-1' }, 'anthropic', { type: 'api_key', key: 'sk-ant-api03-legacy' });
-    const first = await add('First', 'api_key', apiKey);
+    const first = await add('first', 'alice');
     await onCredentialFailure(
-      { orgId: 'org-1', userId: 'bob' },
-      { accountId: first.id, error: new ClaudeCodeError('auth', 'Invalid API key') },
+      { orgId: 'org-1', userId: 'alice' },
+      { accountId: first.id, error: new ClaudeCodeError('auth', 'Invalid token') },
     );
 
-    await expect(credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [first.id] })).rejects.toMatchObject({
+    await expect(credentials({ orgId: 'org-1', userId: 'alice' }, { exclude: [first.id] })).rejects.toMatchObject({
       kind: 'auth',
+      message: 'No other Claude account is available for this run.',
     });
-    // A new turn with nothing tried uses the organization's single credential again.
-    await expect(credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [] })).resolves.toEqual({
-      ANTHROPIC_API_KEY: 'sk-ant-api03-legacy',
-    });
-  });
-
-  it('asks for a sign-in rather than the person’s own login when no account fits them', async () => {
-    const { add, credentials } = await pool();
-    await add('Alice Max', 'subscription', aliceToken, 'alice');
-    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).rejects.toBeInstanceOf(ClaudeCodeCredentialMissingError);
+    // A new turn with nothing tried still never uses the organization's Anthropic key.
+    await expect(credentials({ orgId: 'org-1', userId: 'alice' }, { exclude: [] })).rejects.toBeInstanceOf(
+      ClaudeCodeCredentialMissingError,
+    );
   });
 });
 
@@ -280,18 +306,12 @@ describe('Claude sign-in accounts', () => {
     const endpoint = tokenEndpoint(() => Response.json({ error: 'invalid_grant' }, { status: 400 }));
     const { accounts, addSignIn, credentials } = await signInPool(endpoint.fetchImpl);
     const expired = await addSignIn(signIn({ expiresAt: now.getTime() - 1 }));
-    const key = await accounts.addAccount({
-      orgId: 'org-1',
-      provider: 'anthropic',
-      label: 'Team key',
-      kind: 'api_key',
-      secret: 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111',
-      createdBy: 'admin',
-    });
+    const next = await addSignIn(signIn({ accessToken: 'fake-access-next', refreshToken: 'fake-refresh-next', email: 'alice+2@example.com' }));
+    await accounts.updateAccount('org-1', next.id, { priority: 10 });
 
     await expect(credentials({ orgId: 'org-1', userId: 'alice' })).resolves.toEqual({
-      env: { ANTHROPIC_API_KEY: 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111' },
-      accountId: key.id,
+      env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-next' },
+      accountId: next.id,
     });
     expect(await accounts.getAccount('org-1', expired.id)).toMatchObject({
       disabled: true,
@@ -323,7 +343,6 @@ describe('Claude sign-in accounts', () => {
 
 describe('Claude Code credentials: edges', () => {
   const now = new Date('2026-10-28T12:00:00Z');
-  const apiKey = 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111';
 
   /** The storage with some methods replaced, the rest bound to it. */
   function overriding<T extends object>(target: T, overrides: Partial<Record<keyof T, unknown>>): T {
@@ -339,51 +358,42 @@ describe('Claude Code credentials: edges', () => {
   async function seeded() {
     const storage = await createFactoryStorageForTests();
     const accounts = storage.credentials;
-    const addKey = (label: string, secret = apiKey) =>
-      accounts.addAccount({ orgId: 'org-1', provider: 'anthropic', label, kind: 'api_key', secret, createdBy: 'admin' });
+    const addKey = (label: string, priority = 0) =>
+      accounts.addAccount({
+        orgId: 'org-1',
+        provider: 'anthropic',
+        label,
+        kind: 'claude_login',
+        ownerUserId: 'bob',
+        priority,
+        secret: `fake-access-${label}`,
+        oauth: { accessToken: `fake-access-${label}`, refreshToken: 'fake-refresh', expiresAt: now.getTime() + 3_600_000, scopes: [] },
+        createdBy: 'bob',
+      });
     return { accounts, addKey };
   }
 
-  it('gives a run the account it asked for by id', async () => {
+  it('goes on with the next sign-in when one vanished while it was being refreshed', async () => {
     const { accounts, addKey } = await seeded();
-    await addKey('First');
-    const second = await addKey('Second', 'sk-ant-api03-dddddddddddddddddddd4444');
-    const { credentials } = createClaudeCodeCredentials({ credentials: accounts, now: () => now });
-    await expect(
-      credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [], preferredAccountId: second.id }),
-    ).resolves.toEqual({ env: { ANTHROPIC_API_KEY: 'sk-ant-api03-dddddddddddddddddddd4444' }, accountId: second.id });
-  });
-
-  it('goes on with the next account when a sign-in vanished while it was being refreshed', async () => {
-    const { accounts, addKey } = await seeded();
-    await accounts.addAccount({
-      orgId: 'org-1',
-      provider: 'anthropic',
-      label: 'alice@example.com',
-      kind: 'claude_login',
-      ownerUserId: 'alice',
-      secret: 'fake-access-1',
-      oauth: { accessToken: 'fake-access-1', refreshToken: 'fake-refresh-1', expiresAt: now.getTime() + 3_600_000, scopes: [] },
-      createdBy: 'alice',
+    const first = await addKey('first');
+    const next = await addKey('next', 1);
+    const vanishing = overriding(accounts, {
+      refreshAccountOAuth: async (orgId: string, id: string, options: never) =>
+        id === first.id ? undefined : accounts.refreshAccountOAuth(orgId, id, options),
     });
-    const key = await addKey('Team key');
-    const vanishing = overriding(accounts, { refreshAccountOAuth: async () => undefined });
     const { credentials } = createClaudeCodeCredentials({ credentials: vanishing, now: () => now });
-    await expect(credentials({ orgId: 'org-1', userId: 'alice' })).resolves.toEqual({
-      env: { ANTHROPIC_API_KEY: apiKey },
-      accountId: key.id,
+    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).resolves.toEqual({
+      env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-next' },
+      accountId: next.id,
     });
   });
 
-  it('fails the turn when an account’s secret is gone between listing it and reading it', async () => {
+  it('still runs when recording the account’s use fails', async () => {
     const { accounts, addKey } = await seeded();
-    await addKey('Team key');
-    const gone = overriding(accounts, { getAccountSecret: async () => undefined });
-    const { credentials } = createClaudeCodeCredentials({ credentials: gone, now: () => now });
-    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).rejects.toMatchObject({
-      kind: 'auth',
-      message: 'Claude account Team key is no longer available.',
-    });
+    const first = await addKey('first');
+    const failing = overriding(accounts, { markAccountUsed: async () => Promise.reject(new Error('db down')) });
+    const { credentials } = createClaudeCodeCredentials({ credentials: failing, now: () => now });
+    await expect(credentials({ orgId: 'org-1', userId: 'bob' })).resolves.toMatchObject({ accountId: first.id });
   });
 
   it('fails without any storage, and a failure report then has nothing to update', async () => {

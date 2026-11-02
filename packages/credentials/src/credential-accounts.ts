@@ -15,15 +15,7 @@
  */
 
 import { isPersonalCredentialKind } from '@factory/store';
-import type { CredentialAccount, CredentialAccountKind } from '@factory/store';
-
-/** `claude setup-token` and subscription OAuth tokens start with this; API keys with `sk-ant-api`. */
-export const ANTHROPIC_SUBSCRIPTION_TOKEN_PREFIX = 'sk-ant-oat';
-
-/** What a pasted Anthropic secret is: a subscription token or an API key. */
-export function anthropicSecretKind(secret: string): CredentialAccountKind {
-  return secret.trim().startsWith(ANTHROPIC_SUBSCRIPTION_TOKEN_PREFIX) ? 'subscription' : 'api_key';
-}
+import type { CredentialAccount } from '@factory/store';
 
 export interface PickCredentialAccountInput {
   /** The person the run works for. */

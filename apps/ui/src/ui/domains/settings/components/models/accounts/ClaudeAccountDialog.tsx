@@ -4,7 +4,6 @@ import {
   DialogBody,
   DialogCancel,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -16,34 +15,22 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { CredentialAccountInfo } from '../../../../../../api/types';
-import { useAddCredentialAccount, useUpdateCredentialAccount } from '../../../../../../hooks/useCredentialAccounts';
+import { useUpdateCredentialAccount } from '../../../../../../hooks/useCredentialAccounts';
 import { accountErrorMessage, CLAUDE_ACCOUNTS_PROVIDER } from './accountErrors';
 
-export type ClaudeAccountDialogMode =
-  | { kind: 'add'; canAddOrgKeys: boolean }
-  | { kind: 'rename'; account: CredentialAccountInfo }
-  | { kind: 'replaceSecret'; account: CredentialAccountInfo };
-
-/** Add an account, rename one, or replace its secret. */
-export function ClaudeAccountDialog({ mode, onClose }: { mode: ClaudeAccountDialogMode; onClose: () => void }) {
+/** Rename a Claude Code account; accounts are added only by signing in to Claude. */
+export function ClaudeAccountDialog({ account, onClose }: { account: CredentialAccountInfo; onClose: () => void }) {
   const { t } = useTranslation('settings');
-  const addMutation = useAddCredentialAccount(CLAUDE_ACCOUNTS_PROVIDER);
-  const updateMutation = useUpdateCredentialAccount(CLAUDE_ACCOUNTS_PROVIDER);
-  const mutation = mode.kind === 'add' ? addMutation : updateMutation;
-  const [label, setLabel] = useState(mode.kind === 'rename' ? mode.account.label : '');
-  const [secret, setSecret] = useState('');
+  const mutation = useUpdateCredentialAccount(CLAUDE_ACCOUNTS_PROVIDER);
+  const [label, setLabel] = useState(account.label);
 
-  const askLabel = mode.kind !== 'replaceSecret';
-  const askSecret = mode.kind !== 'rename';
-  const ready = (!askLabel || label.trim() !== '') && (!askSecret || secret.trim() !== '');
+  const ready = label.trim() !== '';
   const error = mutation.error ? accountErrorMessage(mutation.error) : undefined;
 
   const save = async () => {
     if (!ready || mutation.isPending) return;
     try {
-      if (mode.kind === 'add') await addMutation.mutateAsync({ label: label.trim(), secret: secret.trim() });
-      else if (mode.kind === 'rename') await updateMutation.mutateAsync({ id: mode.account.id, label: label.trim() });
-      else await updateMutation.mutateAsync({ id: mode.account.id, secret: secret.trim() });
+      await mutation.mutateAsync({ id: account.id, label: label.trim() });
       onClose();
     } catch {}
   };
@@ -52,25 +39,11 @@ export function ClaudeAccountDialog({ mode, onClose }: { mode: ClaudeAccountDial
     if (!mutation.isPending) onClose();
   };
 
-  const title =
-    mode.kind === 'add'
-      ? t('claudeAccounts.dialog.addTitle')
-      : mode.kind === 'rename'
-        ? t('claudeAccounts.dialog.renameTitle', { label: mode.account.label })
-        : t('claudeAccounts.dialog.replaceTitle', { label: mode.account.label });
-
   return (
     <Dialog open onOpenChange={open => !open && close()} pending={mutation.isPending}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {askSecret && (
-            <DialogDescription>
-              {t('claudeAccounts.dialog.subscriptionHint')}{' '}
-              {mode.kind === 'add' &&
-                (mode.canAddOrgKeys ? t('claudeAccounts.dialog.orgKeyHint') : t('claudeAccounts.dialog.orgKeyAdminOnly'))}
-            </DialogDescription>
-          )}
+          <DialogTitle>{t('claudeAccounts.dialog.renameTitle', { label: account.label })}</DialogTitle>
         </DialogHeader>
         <DialogBody>
           <form
@@ -80,36 +53,19 @@ export function ClaudeAccountDialog({ mode, onClose }: { mode: ClaudeAccountDial
               void save();
             }}
           >
-            {askLabel && (
-              <Field className="gap-1">
-                <FieldLabel>{t('claudeAccounts.dialog.label')}</FieldLabel>
-                <Input
-                  autoFocus
-                  size="sm"
-                  maxLength={100}
-                  placeholder={t('claudeAccounts.dialog.labelPlaceholder')}
-                  value={label}
-                  disabled={mutation.isPending}
-                  onChange={event => setLabel(event.target.value)}
-                />
-              </Field>
-            )}
-            {askSecret && (
-              <Field className="gap-1">
-                <FieldLabel>{t('claudeAccounts.dialog.secret')}</FieldLabel>
-                <Input
-                  autoFocus={!askLabel}
-                  size="sm"
-                  type="password"
-                  autoComplete="off"
-                  placeholder={t('claudeAccounts.dialog.secretPlaceholder')}
-                  value={secret}
-                  disabled={mutation.isPending}
-                  onChange={event => setSecret(event.target.value)}
-                />
-              </Field>
-            )}
-            {/* Lets Enter submit from either field. */}
+            <Field className="gap-1">
+              <FieldLabel>{t('claudeAccounts.dialog.label')}</FieldLabel>
+              <Input
+                autoFocus
+                size="sm"
+                maxLength={100}
+                placeholder={t('claudeAccounts.dialog.labelPlaceholder')}
+                value={label}
+                disabled={mutation.isPending}
+                onChange={event => setLabel(event.target.value)}
+              />
+            </Field>
+            {/* Lets Enter submit. */}
             <button type="submit" hidden />
             {error && (
               <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">

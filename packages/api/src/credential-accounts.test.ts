@@ -42,45 +42,69 @@ async function setup(claudeSignIn?: ClaudeSignInFlows) {
   return { seed, send };
 }
 
+/** A person's Claude sign-in, filed the way the sign-in flow files it. */
+function addSignIn(seed: Awaited<ReturnType<typeof setup>>['seed'], ownerUserId: string, label = `${ownerUserId}@example.com`) {
+  return seed.credentials.addAccount({
+    orgId: 'org1',
+    provider: 'anthropic',
+    label,
+    kind: 'claude_login',
+    ownerUserId,
+    secret: 'fake-access',
+    oauth: { accessToken: 'fake-access', refreshToken: 'fake-refresh', expiresAt: 0, scopes: [] },
+    createdBy: ownerUserId,
+  });
+}
+
 describe('credential account routes', () => {
-  it('lets a member add their own subscription and never returns a secret', async () => {
-    const { send } = await setup();
-    const created = await send('alice', 'POST', BASE, { label: 'Alice Max', secret: aliceToken });
-    expect(created.status).toBe(201);
-    expect(created.body.account).toMatchObject({
-      label: 'Alice Max',
-      kind: 'subscription',
-      mine: true,
-      status: 'active',
-      hint: '2222',
-      canManage: true,
-      canReplaceSecret: true,
+  it('refuses a pasted setup token or API key from anyone: Claude Code accounts are added by signing in', async () => {
+    const { seed, send } = await setup();
+    for (const [user, secret] of [
+      ['alice', aliceToken],
+      ['admin', apiKey],
+    ] as const) {
+      const refused = await send(user, 'POST', BASE, { label: 'Pasted', secret });
+      expect(refused.status).toBe(410);
+      expect(refused.body).toMatchObject({ error: 'claude_sign_in_required' });
+    }
+    expect(await seed.credentials.listAccounts('org1', 'anthropic')).toEqual([]);
+    expect((await send('alice', 'POST', '/web/config/providers/openai/accounts', { label: 'x', secret: apiKey })).status).toBe(
+      400,
+    );
+  });
+
+  it('lists sign-ins without their tokens, and pasted ones left from before as legacy', async () => {
+    const { seed, send } = await setup();
+    await addSignIn(seed, 'alice');
+    await seed.credentials.addAccount({
+      orgId: 'org1',
+      provider: 'anthropic',
+      label: 'Old team key',
+      kind: 'api_key',
+      secret: apiKey,
+      createdBy: 'admin',
     });
 
     const listed = await send('bob', 'GET', BASE);
     expect(listed.status).toBe(200);
-    expect(listed.body.canAddOrgKeys).toBe(false);
-    expect(listed.body.accounts[0]).toMatchObject({ mine: false, canManage: false, canReplaceSecret: false });
-    expect(JSON.stringify(listed.body)).not.toContain(aliceToken);
+    expect(listed.body).not.toHaveProperty('canAddOrgKeys');
+    expect(listed.body.accounts).toEqual([
+      expect.objectContaining({ label: 'alice@example.com', kind: 'claude_login', mine: false, canManage: false, legacy: false }),
+      expect.objectContaining({ label: 'Old team key', kind: 'api_key', legacy: true }),
+    ]);
+    expect(listed.body.accounts[0]).not.toHaveProperty('canReplaceSecret');
+    expect(JSON.stringify(listed.body)).not.toContain('fake-');
+    expect(JSON.stringify(listed.body)).not.toContain(apiKey);
   });
 
-  it('keeps organization API keys to admins', async () => {
-    const { send } = await setup();
-    expect((await send('bob', 'POST', BASE, { label: 'Team', secret: apiKey })).status).toBe(403);
-    const created = await send('admin', 'POST', BASE, { label: 'Team', secret: apiKey, priority: 2 });
-    expect(created.status).toBe(201);
-    expect(created.body.account).toMatchObject({ kind: 'api_key', priority: 2, mine: false, canManage: true });
-  });
-
-  it('validates input', async () => {
-    const { send } = await setup();
-    expect((await send('alice', 'POST', BASE, { label: '', secret: aliceToken })).status).toBe(400);
-    expect((await send('alice', 'POST', BASE, { label: 'x', secret: 'short' })).status).toBe(400);
-    expect((await send('alice', 'POST', BASE, { label: 'x', secret: `${aliceToken} extra` })).status).toBe(400);
-    expect((await send('alice', 'POST', BASE, { label: 'x', secret: aliceToken, owner: 'bob' })).status).toBe(400);
-    expect((await send('alice', 'POST', '/web/config/providers/openai/accounts', { label: 'x', secret: apiKey })).status).toBe(
-      400,
-    );
+  it('validates a change and takes no secret', async () => {
+    const { seed, send } = await setup();
+    const account = await addSignIn(seed, 'alice');
+    const path = `${BASE}/${account.id}`;
+    expect((await send('alice', 'PATCH', path, { label: '' })).status).toBe(400);
+    expect((await send('alice', 'PATCH', path, { secret: aliceToken })).status).toBe(400);
+    expect((await send('alice', 'PATCH', path, { owner: 'bob' })).status).toBe(400);
+    expect((await send('alice', 'GET', BASE)).body.accounts[0]).toMatchObject({ label: 'alice@example.com', hint: '' });
   });
 
   it('needs a signed-in caller', async () => {
@@ -88,45 +112,55 @@ describe('credential account routes', () => {
     expect((await send(null, 'GET', BASE)).status).toBe(401);
   });
 
-  it('lets only the owner replace a subscription’s secret, and keeps its kind', async () => {
-    const { send } = await setup();
-    const { body } = await send('alice', 'POST', BASE, { label: 'Alice Max', secret: aliceToken });
-    const path = `${BASE}/${body.account.id}`;
+  it('lets the owner manage their sign-in, and an admin switch it off', async () => {
+    const { seed, send } = await setup();
+    const account = await addSignIn(seed, 'alice');
+    const path = `${BASE}/${account.id}`;
 
     expect((await send('bob', 'PATCH', path, { label: 'mine now' })).status).toBe(403);
-    expect((await send('admin', 'PATCH', path, { secret: 'sk-ant-oat01-cccccccccccccccccccc3333' })).status).toBe(403);
-    expect((await send('alice', 'PATCH', path, { secret: apiKey })).status).toBe(400);
-    const replaced = await send('alice', 'PATCH', path, { secret: 'sk-ant-oat01-cccccccccccccccccccc3333' });
-    expect(replaced.body.account).toMatchObject({ hint: '3333', status: 'active' });
-    // An admin may still switch it off.
+    expect((await send('alice', 'PATCH', path, { label: 'Work Max', priority: 3 })).body.account).toMatchObject({
+      label: 'Work Max',
+      priority: 3,
+      mine: true,
+    });
     expect((await send('admin', 'PATCH', path, { disabled: true })).body.account.status).toBe('disabled');
   });
 
   it('shows a limited account with its reset and clears it when switched back on', async () => {
     const { send, seed } = await setup();
-    const { body } = await send('admin', 'POST', BASE, { label: 'Team', secret: apiKey });
+    const account = await addSignIn(seed, 'alice');
     const until = new Date(now.getTime() + 3_600_000);
-    await seed.credentials.markAccountLimited('org1', body.account.id, { until, error: '5-hour limit reached' });
+    await seed.credentials.markAccountLimited('org1', account.id, { until, error: '5-hour limit reached' });
 
-    const listed = await send('admin', 'GET', BASE);
+    const listed = await send('alice', 'GET', BASE);
     expect(listed.body.accounts[0]).toMatchObject({
       status: 'limited',
       limitedUntil: until.toISOString(),
       lastError: '5-hour limit reached',
     });
-    const enabled = await send('admin', 'PATCH', `${BASE}/${body.account.id}`, { disabled: false });
+    const enabled = await send('alice', 'PATCH', `${BASE}/${account.id}`, { disabled: false });
     expect(enabled.body.account.status).toBe('active');
     expect(enabled.body.account.limitedUntil).toBeUndefined();
   });
 
-  it('removes an account for its owner or an admin, within the organization only', async () => {
-    const { send } = await setup();
-    const { body } = await send('alice', 'POST', BASE, { label: 'Alice Max', secret: aliceToken });
-    const path = `${BASE}/${body.account.id}`;
+  it('removes an account for its owner or an admin, within the organization only, legacy ones too', async () => {
+    const { seed, send } = await setup();
+    const account = await addSignIn(seed, 'alice');
+    const legacy = await seed.credentials.addAccount({
+      orgId: 'org1',
+      provider: 'anthropic',
+      label: 'Old Max',
+      kind: 'subscription',
+      ownerUserId: 'alice',
+      secret: aliceToken,
+      createdBy: 'alice',
+    });
+    const path = `${BASE}/${account.id}`;
 
     expect((await send('bob', 'DELETE', path)).status).toBe(403);
     expect((await send('alice', 'DELETE', `${BASE}/00000000-0000-4000-8000-000000000000`)).status).toBe(404);
     expect((await send('alice', 'DELETE', path)).status).toBe(200);
+    expect((await send('admin', 'DELETE', `${BASE}/${legacy.id}`)).status).toBe(200);
     expect((await send('alice', 'GET', BASE)).body.accounts).toEqual([]);
   });
 });
@@ -182,7 +216,7 @@ describe('Claude sign-in routes', () => {
     const done = await send('alice', 'GET', `${BASE}/sign-in/flow-1`);
     expect(done.body.signIn).toMatchObject({
       status: 'done',
-      account: { kind: 'claude_login', mine: true, canManage: true, canReplaceSecret: false, needsSignIn: false, hint: '' },
+      account: { kind: 'claude_login', mine: true, canManage: true, legacy: false, needsSignIn: false, hint: '' },
     });
     expect(JSON.stringify(done.body)).not.toContain('fake-');
 
@@ -228,7 +262,7 @@ describe('Claude sign-in routes', () => {
     await seed.credentials.markAccountFailed('org1', account.id, 'sign in to Claude again');
     const listed = await send('alice', 'GET', BASE);
     expect(listed.body.accounts[0]).toMatchObject({ status: 'disabled', needsSignIn: true, lastError: 'sign in to Claude again' });
-    // A sign-in has no secret to paste over.
-    expect((await send('alice', 'PATCH', `${BASE}/${account.id}`, { secret: 'sk-ant-oat01-cccccccccccccccccccc3333' })).status).toBe(403);
+    // A sign-in has no secret to paste over: it is renewed by signing in again.
+    expect((await send('alice', 'PATCH', `${BASE}/${account.id}`, { secret: 'sk-ant-oat01-cccccccccccccccccccc3333' })).status).toBe(400);
   });
 });

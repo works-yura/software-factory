@@ -1,4 +1,4 @@
-import { getTenantCredentialsStorage, pickCredentialAccount, TenantCredentialStore } from '@factory/credentials';
+import { getTenantCredentialsStorage, pickCredentialAccount } from '@factory/credentials';
 import { ClaudeCodeError } from '@factory/harness-claude-code';
 import type { ClaudeCredentialFailure, ClaudeCredentialRequest, ClaudeTurnCredentials } from '@factory/harness-claude-code';
 import type { CredentialAccount, ModelCredentialsStorage } from '@factory/store';
@@ -29,27 +29,13 @@ export const CLAUDE_CODE_ACCOUNT_PROVIDER = 'anthropic';
 /** How long an account sits out when the provider gave no reset time. */
 export const DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS = 60 * 60_000;
 
-/** `claude setup-token` and Claude subscription OAuth tokens; the CLI takes them as `CLAUDE_CODE_OAUTH_TOKEN`. */
-const OAUTH_TOKEN_PREFIX = 'sk-ant-oat';
-
 export class ClaudeCodeCredentialMissingError extends Error {
   constructor(orgId: string) {
     super(
-      `No Claude account is set for organization ${orgId}. Sign in to Claude, or add an Anthropic API key or a Claude setup token, under Settings → Models → Claude Code accounts to run Claude Code sessions.`,
+      `No Claude sign-in is set for organization ${orgId}. Sign in to Claude under Settings → Models → Claude Code accounts to run Claude Code sessions.`,
     );
     this.name = 'ClaudeCodeCredentialMissingError';
   }
-}
-
-/** The env for one Anthropic credential: an API key, or an OAuth/setup token. */
-export function claudeCodeCredentialEnv(credential: {
-  type: 'api_key' | 'oauth';
-  secret: string;
-}): Record<string, string> {
-  if (credential.type === 'oauth' || credential.secret.startsWith(OAUTH_TOKEN_PREFIX)) {
-    return { CLAUDE_CODE_OAUTH_TOKEN: credential.secret };
-  }
-  return { ANTHROPIC_API_KEY: credential.secret };
 }
 
 export interface ClaudeCodeCredentials {
@@ -60,21 +46,20 @@ export interface ClaudeCodeCredentials {
 /**
  * The credentials every Claude Code turn asks for, harness-agnostic on purpose.
  *
- * - The organization's Anthropic accounts (Settings → Models) come first: the
- *   turn gets one (see `pickCredentialAccount` for which), and an account that
- *   runs out of usage sits out until it resets while the turn goes on with the
- *   next. A subscription account serves only its owner's runs.
- * - A Claude sign-in (`claude_login`) is refreshed here first when its access
- *   token has less than `CLAUDE_OAUTH_REFRESH_MARGIN_MS` left, under the
- *   account row's lock; the turn gets the access token alone. A sign-in the
- *   token endpoint refuses is turned off with a message asking for a new
- *   sign-in, and the turn goes on with the next account.
- * - With no account this run may use, the organization's single Anthropic
- *   credential applies (an API key as `ANTHROPIC_API_KEY`, an OAuth or setup
- *   token as `CLAUDE_CODE_OAUTH_TOKEN`, refreshed first like a Mastra run's);
- *   with none, the turn fails asking for a sign-in. The person's own `claude`
- *   login (`~/.claude`, its Keychain item) is never used, locally either.
- * - When every account the run may use is out of usage, the turn fails with a
+ * - Only Claude sign-ins (`claude_login`, Settings → Models) run Claude Code:
+ *   the turn gets one of its owner's (see `pickCredentialAccount` for which),
+ *   and a sign-in that runs out of usage sits out until it resets while the
+ *   turn goes on with the next. Pasted setup tokens and API keys from before
+ *   are ignored, and so is the organization's Anthropic key for Mastra runs.
+ * - A sign-in is refreshed here first when its access token has less than
+ *   `CLAUDE_OAUTH_REFRESH_MARGIN_MS` left, under the account row's lock; the
+ *   turn gets the access token alone (`CLAUDE_CODE_OAUTH_TOKEN`). A sign-in
+ *   the token endpoint refuses is turned off with a message asking for a new
+ *   sign-in, and the turn goes on with the next one.
+ * - With no sign-in this run may use, the turn fails asking for one. The
+ *   person's own `claude` login (`~/.claude`, its Keychain item) is never
+ *   used, locally either.
+ * - When every sign-in the run may use is out of usage, the turn fails with a
  *   `rate_limit` error that says when the first one comes back.
  */
 export function createClaudeCodeCredentials({
@@ -87,15 +72,6 @@ export function createClaudeCodeCredentials({
   /** The OAuth refresh's transport; the global `fetch` by default. */
   fetch?: typeof fetch;
 }): ClaudeCodeCredentials {
-  const single = async ({ orgId, userId }: ClaudeCodeCredentialTenant): Promise<Record<string, string>> => {
-    const store = new TenantCredentialStore(orgId, userId, credentials, 'factory');
-    await store.ensureFresh();
-    const stored = store.get(CLAUDE_CODE_ACCOUNT_PROVIDER);
-    const secret = stored ? await store.getApiKey(CLAUDE_CODE_ACCOUNT_PROVIDER) : undefined;
-    if (!stored || !secret) throw new ClaudeCodeCredentialMissingError(orgId);
-    return claudeCodeCredentialEnv({ type: stored.type, secret });
-  };
-
   /** A sign-in's access token, refreshed first when it is about to run out; `undefined` when the sign-in was refused. */
   const signInToken = async (storage: ModelCredentialsStorage, orgId: string, account: CredentialAccount) => {
     try {
@@ -118,7 +94,9 @@ export function createClaudeCodeCredentials({
       // Sign-ins refused while picking: skipped like accounts the turn already tried, but not counted as tried.
       const refused: string[] = [];
       for (;;) {
-        const accounts = storage ? await storage.listAccounts(tenant.orgId, CLAUDE_CODE_ACCOUNT_PROVIDER) : [];
+        const listed = storage ? await storage.listAccounts(tenant.orgId, CLAUDE_CODE_ACCOUNT_PROVIDER) : [];
+        // Only sign-ins run Claude Code: a pasted setup token or API key from before is never used.
+        const accounts = listed.filter(account => account.kind === 'claude_login');
         const at = now();
         const picked = pickCredentialAccount(accounts, {
           userId: tenant.userId,
@@ -134,28 +112,20 @@ export function createClaudeCodeCredentials({
               { resetsAt: picked.resetsAt, now: at },
             );
           }
-          // An account already failed this turn and no other is left: the old credential is not a fallback for it.
           if (request.exclude.length > 0 || refused.length > 0) {
             throw new ClaudeCodeError('auth', 'No other Claude account is available for this run.');
           }
-          return single(tenant);
+          throw new ClaudeCodeCredentialMissingError(tenant.orgId);
         }
         const { account } = picked;
-        const secret =
-          account.kind === 'claude_login' && storage
-            ? await signInToken(storage, tenant.orgId, account)
-            : await storage?.getAccountSecret(tenant.orgId, account.id);
-        if (account.kind === 'claude_login' && storage && secret === undefined) {
+        // A sign-in was picked from the storage's own listing, so the storage is there.
+        const accessToken = await signInToken(storage!, tenant.orgId, account);
+        if (accessToken === undefined) {
           refused.push(account.id);
           continue;
         }
-        // Removed between the listing and now: the next turn lists again.
-        if (!storage || !secret) throw new ClaudeCodeError('auth', `Claude account ${account.label} is no longer available.`);
-        await storage.markAccountUsed(tenant.orgId, account.id, at).catch(() => {});
-        return {
-          env: claudeCodeCredentialEnv({ type: account.kind === 'api_key' ? 'api_key' : 'oauth', secret }),
-          accountId: account.id,
-        };
+        await storage!.markAccountUsed(tenant.orgId, account.id, at).catch(() => {});
+        return { env: { CLAUDE_CODE_OAUTH_TOKEN: accessToken }, accountId: account.id };
       }
     },
 
