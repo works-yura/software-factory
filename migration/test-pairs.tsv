@@ -11,7 +11,7 @@ boards/review.test.ts	pipelines/src/review/board.test.ts	+1	session-branch refre
 boards/work.test.ts	pipelines/src/work/board.test.ts	+1	work spanning several repositories: Done waits for every open change request
 boards/work-transition-policy.test.ts	pipelines/src/work/transition-policy.test.ts
 work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts	+2	Linear/Jira identifier branches dropped with the vocabulary (-1); per-item GitHub suffix cases ported from upstream c3a2784881 (+3)
-storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts
+storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts	+1	upstream #28889: the board poll reads the list cache without cloning (+1)
 storage/domains/work-items/attention-events.test.ts	store/src/work-items/attention-events.test.ts
 storage/domains/audit/base.test.ts	store/src/audit/base.test.ts	+3	forward paging (`after`) ported from upstream f3bc1caddb
 storage/domains/audit/actions.test.ts	store/src/audit/actions.test.ts
