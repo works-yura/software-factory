@@ -468,9 +468,9 @@ describe('bundled Factory skill assets', () => {
     const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
 
     expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
-    expect(phase1).toContain('gh issue edit "$ISSUE" --add-label "status: needs triage"');
+    expect(phase1).toContain('`source_control_update_issue` with `{ issue: <number>, addLabels: ["status: needs triage"] }`');
     expect(phase1).toContain('For GitLab issues, skip this GitHub-only label mutation.');
-    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
+    expect(triage).toContain('`removeLabels: ["status: needs triage"]`');
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
@@ -558,9 +558,9 @@ describe('bundled Factory skill assets', () => {
       'After a GitHub comment is posted or updated, reconcile the labels',
     );
     expect(labelReconciliationIndex).toBeGreaterThan(questionsIndex);
-    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: auto-triaged"');
-    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
-    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: needs approval"');
+    expect(triage).toContain('`addLabels: ["status: auto-triaged"]`');
+    expect(triage).toContain('`removeLabels: ["status: needs triage"]`');
+    expect(triage).toContain('`addLabels: ["status: needs approval"]`');
     for (const label of [
       'effort:low',
       'effort:medium',
@@ -578,18 +578,11 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain(
       'Add the selected `effort:<level>`, `impact:<level>`, and `severity:<level>` labels from the handoff.',
     );
-    expect(triage).toContain('gh label create "severity:<level>"');
+    expect(triage).toContain('`createLabels: [{ name: "severity:<level>", description: "Triage severity: <level>" }]`');
     expect(triage).toContain('Remove only conflicting alternatives from these explicit labels');
     expect(triage).toContain('On every initial run and refresh, keep exactly the selected effort label');
     expect(triage).toContain('exactly the selected severity label. Confidence is never a label.');
     expect(triage).toContain('Do not add, remove, or derive any `trio-*` labels');
-    expect(triage).toContain('gh label create "$LABEL" --repo mastra-ai/mastra');
-    expect(triage).toContain(
-      'gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'<comma-separated labels selected in Phase 4>\'',
-    );
-    expect(triage.indexOf('gh label create "$LABEL"')).toBeLessThan(
-      triage.indexOf('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label'),
-    );
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
       'For GitLab issues, use the same structured handoff without attempting GitHub publication or label mutations.',
@@ -603,9 +596,12 @@ describe('bundled Factory skill assets', () => {
     expect(review).toContain('Verdict: approve');
     expect(review).toContain('Verdict: request changes');
     // The verdict must be published on the PR itself, unprompted.
-    expect(review).toContain('gh pr review <number> --approve --body-file');
-    expect(review).toContain('gh pr review <number> --request-changes --body-file');
-    expect(review).toContain('gh pr comment <number> --body-file');
+    expect(review).toContain(
+      "`source_control_review_change_request` (`changeRequestId: <number>`, `body`: the file's contents, `commitId`: the reviewed head SHA)",
+    );
+    expect(review).toContain('approve → `event: "approve"`');
+    expect(review).toContain('request changes → `event: "request-changes"`');
+    expect(review).toContain("`source_control_comment_change_request` (`changeRequestId: <number>`, `body`: the file's contents)");
     // A push can land mid-review; publishing must re-check the head first.
     for (const skill of [review, await read('factory-rereview')]) {
       expect(skill).toContain('**The head must not have moved.**');
@@ -616,10 +612,10 @@ describe('bundled Factory skill assets', () => {
     // metadata, and top-level comments — and dispositioned, and a confirmed
     // major finding must block approval.
     expect(review).toContain('Existing Review Signal');
-    expect(review).toContain('--json reviews');
+    expect(review).toContain('`source_control_list_change_request_reviews` with `changeRequestId: <number>`');
     expect(review).toContain('reviewThreads');
     expect(review).toContain('isResolved isOutdated path line');
-    expect(review).toContain('--json comments');
+    expect(review).toContain('source_control_list_change_request_comments');
     expect(review).toContain('Existing review disposition');
     expect(review).toContain('confirmed major finding from an existing reviewer that remains unaddressed');
     expect(review).toContain('Approval is earned, not the default');
@@ -700,8 +696,8 @@ describe('bundled Factory skill assets', () => {
     // the final conversation message.
     inOrder(
       "Don't send either to the conversation yet",
-      'gh pr review <number> --approve --body-file',
-      'gh pr review <number> --request-changes --body-file',
+      'approve → `event: "approve"`',
+      'request changes → `event: "request-changes"`',
       'Then make your terminal `factory_record_review_verdict` call',
       'post the **session handoff**',
       'as your final conversation message',
@@ -811,7 +807,7 @@ describe('bundled Factory skill assets', () => {
     // be a restatement of the author's implementation.
     const phase1 = section('## Phase 1: PR Goal & Context', '## Phase 2');
     const designAt = phase1.indexOf('Write your own design before reading theirs');
-    const diffAt = phase1.indexOf('gh pr diff <number>');
+    const diffAt = phase1.indexOf('accept: "diff"');
     expect(designAt).toBeGreaterThan(-1);
     expect(diffAt).toBeGreaterThan(designAt);
     expect(phase1).toContain('Do not open the diff, commits, or changed-file list yet');
@@ -922,7 +918,7 @@ describe('bundled Factory skill assets', () => {
     const reviewPhase1 = review.slice(review.indexOf('## Phase 1: PR Goal & Context'), review.indexOf('## Phase 2'));
     const reviewDesignAt = reviewPhase1.indexOf('Write your own design before reading theirs');
     const reviewLoadAt = reviewPhase1.indexOf('Load the category guidance before opening the diff');
-    const reviewDiffAt = reviewPhase1.indexOf('gh pr diff <number>');
+    const reviewDiffAt = reviewPhase1.indexOf('accept: "diff"');
     expect(reviewDesignAt).toBeGreaterThan(-1);
     expect(reviewLoadAt).toBeGreaterThan(reviewDesignAt);
     expect(reviewDiffAt).toBeGreaterThan(reviewLoadAt);
@@ -936,7 +932,7 @@ describe('bundled Factory skill assets', () => {
     );
     const rereviewDesignAt = rereviewPhase1.indexOf('Recover or write your own design before reading theirs');
     const rereviewLoadAt = rereviewPhase1.indexOf('Load the category guidance before opening the cumulative diff');
-    const rereviewDiffAt = rereviewPhase1.indexOf('gh pr diff <number>');
+    const rereviewDiffAt = rereviewPhase1.indexOf('accept: "diff"');
     expect(rereviewDesignAt).toBeGreaterThan(-1);
     expect(rereviewLoadAt).toBeGreaterThan(rereviewDesignAt);
     expect(rereviewDiffAt).toBeGreaterThan(rereviewLoadAt);
@@ -1034,7 +1030,7 @@ describe('bundled Factory skill assets', () => {
     // design is recovered from the prior pass (or rewritten) before the
     // cumulative diff opens, and every carried-forward request is re-justified.
     const designAt = goalAndPriorPass.indexOf('Recover or write your own design before reading theirs');
-    const diffAt = goalAndPriorPass.indexOf('gh pr diff <number>');
+    const diffAt = goalAndPriorPass.indexOf('accept: "diff"');
     expect(designAt).toBeGreaterThan(-1);
     expect(diffAt).toBeGreaterThan(designAt);
     expect(goalAndPriorPass).toContain('Do not open the cumulative diff, commits, or changed-file list yet');

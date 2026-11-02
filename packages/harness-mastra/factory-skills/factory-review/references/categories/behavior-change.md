@@ -33,4 +33,4 @@ A default, an ordering, a threshold, a format, a timing — something existing u
 - Grep callers/consumers on the branch: `archaeology.md` → Callers.
 - `git blame -L` the changed lines on the base; open the originating PR.
 - `ls .changeset/` and read the level.
-- `gh pr list --search` for open PRs touching the same files.
+- Open PRs touching the same files: `archaeology.md` → Related PRs (`source_control_api_read` on `repos/<owner>/<repo>/pulls` and each one's `/files`).

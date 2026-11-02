@@ -8,7 +8,7 @@ describe.each(['factory-review', 'factory-rereview'])('%s publish fallback', ski
   const content = readFileSync(join(skillsDir, skill, 'SKILL.md'), 'utf8');
 
   it('publishes an author-identity verdict as a plain comment with a visible warning after the verdict line', () => {
-    expect(content).toContain('gh pr comment <number> --body-file <file>');
+    expect(content).toContain("`source_control_comment_change_request` (`changeRequestId: <number>`, `body`: the file's contents)");
     expect(content).toContain('**Factory misconfiguration:** the review token is the PR author');
     expect(content).toContain('Factory routing');
   });
@@ -16,10 +16,9 @@ describe.each(['factory-review', 'factory-rereview'])('%s publish fallback', ski
 
 describe.each(['factory-review', 'factory-rereview'])('%s author cross-check', skill => {
   const content = readFileSync(join(skillsDir, skill, 'SKILL.md'), 'utf8');
-  const restAuthorLookup = 'gh api repos/<owner>/<repo>/pulls/<number> --jq .user.login';
 
-  it('compares the intake author with the REST login of the exact PR, not the gh CLI author', () => {
-    expect(content).toContain(`Compare \`triggeredBy\` with the PR author from \`${restAuthorLookup}\``);
+  it('compares the intake author with the REST login of the exact PR, not another author form', () => {
+    expect(content).toContain('Compare `triggeredBy` with the PR author `user.login` from `source_control_api_read` path `repos/<owner>/<repo>/pulls/<number>`');
     expect(content).toContain('`app/<slug>`');
     expect(content).toContain('`<slug>[bot]`');
     expect(content).not.toContain('Compare `triggeredBy` with `.author.login`');
@@ -41,12 +40,12 @@ describe.each(['factory-review', 'factory-rereview'])('%s author cross-check', s
 describe('factory-rereview prior-pass lookup', () => {
   const content = readFileSync(join(skillsDir, 'factory-rereview', 'SKILL.md'), 'utf8');
 
-  it('finds its earlier review by REST login, not the gh CLI reviewer login', () => {
+  it('finds its earlier review by REST login, not another reviewer login form', () => {
     expect(content).toContain(
-      `gh api repos/<owner>/<repo>/pulls/<number>/reviews --paginate --jq '.[] | select(.user.login == "<factory-app>[bot]") | {state, submitted_at, body}'`,
+      '`repos/<owner>/<repo>/pulls/<number>/reviews` (every page) and keep the entries whose `user.login` is `<factory-app>[bot]`',
     );
     expect(content).toContain(
-      `gh api repos/<owner>/<repo>/issues/<number>/comments --paginate --jq '.[] | select(.user.login == "<factory-app>[bot]") | {created_at, body}'`,
+      '`repos/<owner>/<repo>/issues/<number>/comments`, every page, keeping `<factory-app>[bot]` entries',
     );
     expect(content).not.toContain('select(.author.login == "<factory-app[bot]>")');
   });

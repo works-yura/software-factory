@@ -42,12 +42,12 @@ Work and Review cards move independently. Never mirror their stages or mark Work
 
 ## Configure board transition policy
 
-Search the installed `defineBoard()` definition for `transitionPolicy`. Read `src/boards/transition-policy.ts` for the public contract and `src/boards/work-transition-policy.ts` for Work's automatic classification, approval, and acceptance policy. Review has no additional policy. Custom boards without a policy do not inherit Work's classification or acceptance behavior through phase or role names.
+Search the installed `defineBoard()` definition for `transitionPolicy`. Read `packages/core/src/boards/transition-policy.ts` for the public contract and `packages/pipelines/src/work/transition-policy.ts` for Work's automatic classification, approval, and acceptance policy. Review has no additional policy. Custom boards without a policy do not inherit Work's classification or acceptance behavior through phase or role names.
 
 Topology declares allowed moves; transition policy adds business restrictions; lifecycle handlers return effects. Add custom restrictions to the board definition, not the generic transition service or global rules:
 
 ```typescript
-import type { BoardTransitionPolicy } from '@mastra/factory/boards';
+import type { BoardTransitionPolicy } from '@factory/core';
 
 const transitionPolicy: BoardTransitionPolicy = context => {
   if (context.toStage === 'shipped' && !context.isHumanTransition) {
@@ -65,7 +65,7 @@ Policy allowance cannot bypass topology, board ownership, ingress authorization,
 
 ## Configure board phase semantics
 
-Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal'`; working phases also require `role`. Read `src/boards/define-board.ts` for validation and the derived helpers (`phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, `phaseForRole`) and `src/boards/semantics.ts` for how runtime resolves an item's board and phase. Work and Review declarations live in `src/boards/work.ts` and `src/boards/review.ts`.
+Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal'`; working phases also require `role`. Read `packages/core/src/boards/define-board.ts` for validation and the derived helpers (`phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, `phaseForRole`) and `packages/core/src/boards/semantics.ts` for how runtime resolves an item's board and phase. Work and Review declarations live in `packages/pipelines/src/work/board.ts` and `packages/pipelines/src/review/board.ts`.
 
 Runtime reads the installed board's declarations for consent arming, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, sweeps, and supervisor findings; nothing name-matches phases, and custom boards inherit nothing from Work. `initialPhase` must be resting. Unknown board or phase fails closed: consent is requested, nothing is cleaned up, no seat is started or revoked.
 
@@ -85,11 +85,11 @@ Keep the remaining limits explicit: `factory-ui` still uses built-in stages and 
 
 ## Change a built-in handler
 
-Integration overrides (`rules[event]` on the GitHub constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. There is no override mechanism for board-owned handlers, including Work's `submit_plan` tool-result rule: change the installed definition itself (`src/boards/work.ts`, handler in `src/boards/work-tool-rules.ts`) or install a custom board that declares its own `tools`.
+Integration overrides (`rules[event]` on the GitHub constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. There is no override mechanism for board-owned handlers, including Work's `submit_plan` tool-result rule: change the installed definition itself (`packages/pipelines/src/work/board.ts`, handler in `packages/pipelines/src/work/tool-rules.ts`) or install a custom board that declares its own `tools`.
 
 Before changing a built-in handler:
 
-1. Find and read it: GitHub handlers live in `src/integrations/github/default-rules.ts`, Work's tool-result handler in `src/boards/work-tool-rules.ts`, and Work and Review lifecycle/policy defaults in `src/boards/work.ts` and `src/boards/review.ts`. Custom handlers live in their installed definitions.
+1. Find and read it: GitHub handlers live in `packages/integration-github/src/default-rules.ts`, Work's tool-result handler in `packages/pipelines/src/work/tool-rules.ts`, and Work and Review lifecycle/policy defaults in `packages/pipelines/src/work/board.ts` and `packages/pipelines/src/review/board.ts`. Custom handlers live in their installed definitions.
 2. Decide whether the replacement must preserve part of that behavior explicitly.
 3. Use only fields exposed by the typed context. Do not reach into Factory storage or raw webhook payloads.
 4. Return `undefined` to allow the ingress with no decision, or return a typed rejection or bounded structured decision.

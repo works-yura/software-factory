@@ -21,7 +21,7 @@ Load `factory-review` with `skill_read` and apply these parts of it exactly as w
 - **Phase 4: History & Architecture**.
 - **Phase 5: Verdict** — the verdict test, self-scrutiny of your requests, the adversarial check before approve, and the approval gates except gate 3 (existing review signal) and gate 4 (pending bots), which do not apply before a PR exists.
 
-Skip everything tied to a PR or MR: no `gh pr`/`glab mr` commands, no waiting for review bots, no PR comments, no labels, no `source_control_*` review, comment, or check tools, and no follow-up PR. Never push, commit to the work branch, or open a change request.
+Skip everything tied to a PR or MR: no change-request reads, no waiting for review bots, no PR comments, no labels, no `source_control_*` review, comment, or check tools, and no follow-up PR. Never push, commit to the work branch, or open a change request.
 
 ## Checkout
 

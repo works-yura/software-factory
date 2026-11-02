@@ -26,6 +26,6 @@
 ## Verify
 
 - `git revert --no-commit <sha>` in a worktree at the base; `git diff` it against the PR branch. Delta into the notes.
-- `gh pr view <original>` — read what it fixed and why.
+- `source_control_get_change_request` with `changeRequestId: <original>` — read what it fixed and why.
 - `git log <original-sha>..<base> -- <files>` for anything that landed on top.
-- `gh pr checks` on the revert branch — the revert should make CI green if a red CI was the reason.
+- CI on the revert branch's head (`source_control_api_read` paths `repos/<owner>/<repo>/commits/<headSha>/check-runs` and `.../status`) — the revert should make CI green if a red CI was the reason.

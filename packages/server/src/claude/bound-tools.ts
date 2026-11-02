@@ -127,8 +127,8 @@ export function checkoutGit(cwd: string): SessionGit {
  * - the governed card move (`factory_transition_work_item`), review verdicts and
  *   reproduction-test recording, exactly the ones a bound Mastra run gets, for
  *   the card this session is bound to;
- * - `factory_bound_work_item`, which stands in for the `factory-phase` signal a
- *   Mastra run reads its stage and revision from.
+ * - `factory_bound_work_item`, the bound card's stage and revision as they are
+ *   now; the `factory-phase` signal only opens each turn.
  */
 export async function createClaudeBoundTools(
   scope: FactoryMcpToolScope,
@@ -163,7 +163,7 @@ export async function createClaudeBoundTools(
   tools.factory_bound_work_item = createTool({
     id: 'factory_bound_work_item',
     description:
-      'Read the Factory work item this session is bound to: its board, current stage, revision (pass it as `expectedRevision` to factory_transition_work_item), your role, title and source. Use it wherever instructions mention the factory-phase signal.',
+      'Read the Factory work item this session is bound to: its board, current stage, revision (pass it as `expectedRevision` to factory_transition_work_item), your role, title and source. The `factory-phase` signal at the start of the turn says the same; this reads it now, after a move.',
     inputSchema: z.object({}),
     execute: async () => {
       const binding = await deps.storage.findActiveRunBindingByThread({

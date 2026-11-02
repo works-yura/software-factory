@@ -29,8 +29,8 @@ Typo, formatting, lockfile, version bump, dependency bump, generated code, renam
 
 - Categorize every hunk by kind: `git diff <base>...HEAD --stat` then skim each file's diff for the odd hunk.
 - Generated code: run the generator on the branch; `git status` should be clean.
-- Dependency bump: `gh api repos/<dep-owner>/<dep-repo>/releases` or the package's CHANGELOG for the range; note anything behavioral.
+- Dependency bump: the package's CHANGELOG for the range (in the checkout or `node_modules`; the dependency's own repository is outside this session, so its releases cannot be read — if no changelog is available, say the release notes could not be checked); note anything behavioral.
 - Rename: grep the old name repo-wide on the branch, including docs, config, and string literals.
-- CI green: `gh pr checks`.
+- CI green: `source_control_api_read` paths `repos/<owner>/<repo>/commits/<headSha>/check-runs` and `.../status`.
 
 Most mechanical PRs produce a handoff of Triage + Verdict. That's correct, not lazy.

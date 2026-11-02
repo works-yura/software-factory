@@ -32,6 +32,6 @@ Build config, CI workflows, lint/format config, scripts, dev tooling, monorepo p
 ## Verify
 
 - **Fresh-clone install and build** in a temp worktree when install/build behavior is part of the claim: use the repository's documented command shape and record the decisive result.
-- If a workflow changed, find the run for this branch in `gh run list --branch <head>` and read it.
+- If a workflow changed, find the run for this branch with `source_control_api_read` path `repos/<owner>/<repo>/actions/runs` and `query: { branch: "<head>" }`, and read it.
 - If packaging changed: `pnpm pack` the affected package, install the tarball into a scratch project, import the public entry.
 - Run the script on macOS if the author is on Linux, or note that you couldn't.

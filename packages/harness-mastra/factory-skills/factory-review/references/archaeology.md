@@ -2,61 +2,66 @@
 
 Zero judgment in this file. These are known-working command shapes; adapt them to the repository and preserve only decisive evidence in the review record.
 
-**Shell notes.** `gh` output can carry ANSI codes that break `jq`; use `gh`'s built-in `--jq` or prefix with `NO_COLOR=1`. `timeout` is not a command on macOS. Quote paths with spaces.
+**Shell notes.** `timeout` is not a command on macOS. Quote paths with spaces.
+
+**Tool notes.** Provider reads are Factory tool calls, written below as `tool { input }`. `source_control_api_read` takes query parameters in `query`, never in `path`, and does not paginate: request `{ "per_page": "100", "page": "<n>" }` pages until one comes back short, and pick the fields you need from the JSON yourself. An answer marked `truncated: true` was cut; read a narrower path or page.
 
 ## Resolve the PR before prediction
 
-```bash
-# Accepts a number, URL, or branch. Keep the first query minimal.
-gh pr view <pr> --json number,title,body,author,baseRefName,url,closingIssuesReferences \
-  --jq '{number,title,author:.author.login,base:.baseRefName,url,issues:[.closingIssuesReferences[]?.number],body}'
+```text
+# Keep the first read minimal: number, title, body, author, base branch, url.
+source_control_get_change_request { changeRequestId: <pr> }
+
+# Linked issues (closingIssuesReferences) need GraphQL
+source_control_api_read { graphql: { query: 'query { repository(owner: "<owner>", name: "<repo>") { pullRequest(number: <pr>) { closingIssuesReferences(first: 20) { nodes { number } } } } }' } }
 ```
 
-`baseRefName` is the comparison branch; it may not be `main`. Extract the problem statement from `body` and ignore implementation/change-list sections until after the pre-diff model is written.
+The base branch is the comparison branch; it may not be `main`. Extract the problem statement from the body and ignore implementation/change-list sections until after the pre-diff model is written.
 
-Owner/repo for later calls:
+Owner/repo for later calls: the Target repository line in the system prompt, or
 
 ```bash
-gh repo view --json nameWithOwner --jq .nameWithOwner
+git remote get-url origin
 ```
 
 ## Open the PR after the pre-diff model
 
-```bash
-# Resolve the head now that isolation is over
-gh pr view <pr> --json headRefName,headRefOid --jq '{head:.headRefName,headSha:.headRefOid}'
+```text
+# Resolve the head now that isolation is over: head branch and head SHA
+source_control_get_change_request { changeRequestId: <pr> }
 
-# Changed files
-gh pr view <pr> --json files --jq '.files[] | "\(.path)\t+\(.additions) -\(.deletions)"'
+# Changed files (filename, additions, deletions, patch), every page
+source_control_api_read { path: "repos/<owner>/<repo>/pulls/<pr>/files", query: { per_page: "100", page: "<n>" } }
 
-# Commit list
-gh pr view <pr> --json commits --jq '.commits[] | "\(.oid[0:8])  \(.messageHeadline)"'
+# Commit list (sha, commit.message), every page
+source_control_api_read { path: "repos/<owner>/<repo>/pulls/<pr>/commits", query: { per_page: "100", page: "<n>" } }
 
 # Reviews and review-thread comments (with resolved state)
-gh api graphql -f query='
-  query($owner:String!,$repo:String!,$pr:Int!){
-    repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
+source_control_api_read { graphql: { query: '
+  query {
+    repository(owner: "<owner>", name: "<repo>") { pullRequest(number: <pr>) {
       reviews(first:50){ pageInfo{hasNextPage endCursor} nodes{ author{login} state submittedAt body } }
       reviewThreads(first:100){ pageInfo{hasNextPage endCursor} nodes{ isResolved isOutdated path line
         comments(first:20){ pageInfo{hasNextPage endCursor} nodes{ author{login} createdAt body } } } }
-    }}}' -F owner=<owner> -F repo=<repo> -F pr=<pr>
-# Follow pageInfo.hasNextPage/endCursor on reviews, reviewThreads, and comments until
-# exhausted — a truncated history reads as complete and re-raises omitted findings.
+    }}}' } }
+# Follow pageInfo.hasNextPage/endCursor (after: "<endCursor>") on reviews, reviewThreads, and comments
+# until exhausted — a truncated history reads as complete and re-raises omitted findings.
 
-# PR-level (issue) comments
-gh api repos/<owner>/<repo>/issues/<pr>/comments --paginate --jq '.[] | "\(.user.login) \(.created_at)\n\(.body)\n---"'
+# PR-level (issue) comments, every page
+source_control_list_change_request_comments { changeRequestId: <pr> }   # follow cursor
 
-# CI status
-gh pr checks <pr> 2>&1 || true
+# CI status on the head
+source_control_api_read { path: "repos/<owner>/<repo>/commits/<headSha>/check-runs" }
+source_control_api_read { path: "repos/<owner>/<repo>/commits/<headSha>/status" }
 ```
 
-If GraphQL is rate-limited, the REST equivalents (all with `--paginate`): `gh api repos/<owner>/<repo>/pulls/<pr>/files`, `.../pulls/<pr>/commits`, `.../pulls/<pr>/reviews`, `.../pulls/<pr>/comments` (review comments; no resolved state via REST — note that). Check quota with `gh api rate_limit --jq '.resources | {core:.core.remaining, graphql:.graphql.remaining}'`.
+If GraphQL is rate-limited, the REST equivalents (every page): `repos/<owner>/<repo>/pulls/<pr>/files`, `.../pulls/<pr>/commits`, `.../pulls/<pr>/reviews` (or `source_control_list_change_request_reviews`), `.../pulls/<pr>/comments` (review comments; no resolved state via REST — note that). Check quota with `source_control_api_read { path: "rate_limit" }` and read `resources.core.remaining` and `resources.graphql.remaining`.
 
 ## Linked issues (step 2)
 
-```bash
-gh issue view <n> --json number,title,body,author,state,labels,comments \
-  --jq '{number,title,author:.author.login,state,labels:[.labels[].name],body,comments:[.comments[] | {author:.author.login,body}]}'
+```text
+source_control_api_read { path: "repos/<owner>/<repo>/issues/<n>" }            # number, title, user.login, state, labels[].name, body
+source_control_api_read { path: "repos/<owner>/<repo>/issues/<n>/comments" }   # user.login, body; every page
 ```
 
 Also scan the PR body for `#NNN`, `fixes`, `closes`, `resolves` — `closingIssuesReferences` only catches the formally linked ones.
@@ -74,7 +79,7 @@ A clean existing base checkout is also fine. Do not open the PR head until the p
 
 ```bash
 # Fork heads are not on origin/<head>; fetch the PR ref and pin the worktree to the head SHA
-gh pr view <pr> --json headRefOid --jq .headRefOid   # <sha>
+# <sha>: the head SHA from source_control_get_change_request { changeRequestId: <pr> }
 git fetch origin refs/pull/<pr>/head
 git worktree add --detach /tmp/review-head-<pr> <sha>
 git -C /tmp/review-head-<pr> diff origin/<base>...HEAD --stat
@@ -89,11 +94,13 @@ git log --oneline -20 origin/<base> -- <file>
 
 # Who wrote the changed lines, in what commit (run on the base worktree against the pre-PR lines)
 git blame -L <start>,<end> origin/<base> -- <file>
+```
 
-# From a blame SHA to its PR
-gh pr list --search "<sha>" --state merged --json number,title,url --jq '.[]'
+```text
+# From a blame SHA to its PR (number, title, html_url)
+source_control_api_read { path: "repos/<owner>/<repo>/commits/<sha>/pulls" }
 # or
-gh api "repos/<owner>/<repo>/commits/<sha>/pulls" --jq '.[] | {number,title,html_url}'
+source_control_api_read { path: "search/issues", query: { q: "repo:<owner>/<repo> is:pr is:merged <sha>" } }
 ```
 
 Read the originating PR's description and review thread. That's where the reason lives.
@@ -106,26 +113,32 @@ git log -S "<exact string>" --oneline origin/<base> -- <path-or-dot>
 
 # Reverts touching the area
 git log --oneline origin/<base> --grep="^Revert" -- <path>
+```
 
-# The reverted attempt itself
-gh pr view <n> --json title,body,reviews,comments
+```text
+# The reverted attempt itself: title and body, reviews, comments
+source_control_get_change_request { changeRequestId: <n> }
+source_control_list_change_request_reviews { changeRequestId: <n> }
+source_control_list_change_request_comments { changeRequestId: <n> }
 
-# Closed-unmerged PRs with the same idea (strongest precedent signal)
-gh pr list --search "<feature terms> is:closed is:unmerged" --state closed --limit 20 --json number,title,closedAt,url --jq '.[]'
+# Closed-unmerged PRs with the same idea (strongest precedent signal); number, title, closed_at, html_url
+source_control_api_read { path: "search/issues", query: { q: "repo:<owner>/<repo> is:pr is:closed is:unmerged <feature terms>", per_page: "20" } }
 
 # Issues describing the same symptom under other words
-gh issue list --search "<symptom terms>" --state all --limit 20 --json number,title,state,url --jq '.[]'
+source_control_api_read { path: "search/issues", query: { q: "repo:<owner>/<repo> is:issue <symptom terms>", per_page: "20" } }
 ```
 
 ## Related PRs and issues (when overlap or precedent could matter)
 
-```bash
-# Open PRs touching the same files (merge-order risk)
-gh pr list --state open --limit 50 --json number,title,files --jq '.[] | select(.files[].path | test("<path-fragment>")) | {number,title}'
+```text
+# Open PRs touching the same files (merge-order risk): list the open PRs, then read each one's
+# files and keep those with a filename matching <path-fragment>
+source_control_api_read { path: "repos/<owner>/<repo>/pulls", query: { state: "open", per_page: "50" } }
+source_control_api_read { path: "repos/<owner>/<repo>/pulls/<n>/files", query: { per_page: "100" } }
 
 # By feature/function name, open and closed
-gh pr list --search "<term>" --state all --limit 20 --json number,title,state,url --jq '.[]'
-gh issue list --search "<term>" --state all --limit 20 --json number,title,state,url --jq '.[]'
+source_control_api_read { path: "search/issues", query: { q: "repo:<owner>/<repo> is:pr <term>", per_page: "20" } }
+source_control_api_read { path: "search/issues", query: { q: "repo:<owner>/<repo> is:issue <term>", per_page: "20" } }
 ```
 
 Search terms: the feature name, the file path, the function names touched, the error message from the issue.
@@ -151,7 +164,7 @@ Use this only when code reasoning cannot establish whether the regression eviden
 
 ```bash
 ROOT=$(git rev-parse --show-toplevel)
-HEAD=$(gh pr view <pr> --json headRefOid --jq .headRefOid)
+HEAD=<sha>   # the head SHA from source_control_get_change_request { changeRequestId: <pr> }
 git fetch origin refs/pull/<pr>/head   # fork heads are not on origin/<head>
 MB=$(git merge-base origin/<base> "$HEAD")
 WT="${TMPDIR:-/tmp}/review-tob-<pr>-$$"
@@ -211,8 +224,8 @@ Name a person under **Open questions**, not "someone."
 | Memory      | What the reviewer "just knows"                      | Recover from                                                                                                                                                                                                         |
 | ----------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Decisions   | "We chose X over Y because…"                        | Originating PRs (blame → PR), nearest AGENTS.md, design docs, `git grep -nE "because                                \| workaround \| don't  \| see #" -- <files>` near the changed lines                             |
-| Scars       | "Last time someone touched this it broke Z"         | `git log --grep="^Revert" -- <path>`; test names that encode bugs (`git grep -nE "should not                        \| regression \| double \| race" -- <test files>`); `gh issue list --search "<area> regression"` |
-| Users       | "Half the community calls this with a string"       | `git grep -n "<api>" -- examples/ docs/`; `gh issue list --search "<api>"`; call sites in the repo                                                                                                                   |
+| Scars       | "Last time someone touched this it broke Z"         | `git log --grep="^Revert" -- <path>`; test names that encode bugs (`git grep -nE "should not                        \| regression \| double \| race" -- <test files>`); `search/issues` with `q: "repo:<owner>/<repo> is:issue <area> regression"` |
+| Users       | "Half the community calls this with a string"       | `git grep -n "<api>" -- examples/ docs/`; `search/issues` with `q: "repo:<owner>/<repo> is:issue <api>"`; call sites in the repo                                                                                                                   |
 | Conventions | "We always go through the storage abstraction here" | The sibling feature; the three closest public neighbors; the package `CHANGELOG.md` for recent movement in the area                                                                                                  |
 
 ## Cleanup

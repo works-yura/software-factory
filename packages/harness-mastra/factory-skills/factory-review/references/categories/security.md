@@ -32,4 +32,4 @@
 - Caller enumeration: `archaeology.md` → Callers, for the vulnerable function and for every function that produces its input.
 - Grep for the same vulnerable pattern repo-wide (the API shape, not just the function name).
 - If safely reachable, reproduce the exploit on base in an isolated scratch project and confirm it fails on the branch. Record only a redacted result; never preserve dangerous exploit material in the review file.
-- `gh release list` / tags to identify affected versions for the backport question.
+- Releases (`source_control_api_read` path `repos/<owner>/<repo>/releases`) / `git tag` to identify affected versions for the backport question.

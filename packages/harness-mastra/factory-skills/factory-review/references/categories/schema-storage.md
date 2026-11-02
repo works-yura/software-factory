@@ -12,7 +12,7 @@ Anything that changes what's written to disk, a database, a cache, a message on 
 
 - **Walk the upgrade.** A user on the previous version with existing data updates. What happens on first read? First write? What if they downgrade after writing with the new version?
 - **Is it reversible?** Code reverts are free. Schema migrations, data transforms, and changed wire formats aren't. If this ships wrong, what's the rollback — and does rollback lose data? Irreversible changes get an order of magnitude more scrutiny and usually a flag.
-- **Asymmetric package versions.** Packages are upgraded independently by users. `@mastra/core` at N+1 next to `@mastra/memory` at N — which side writes the new shape, which reads it, and what does the un-upgraded side do with data it doesn't recognize? Is the contract guarded (version field, optional fields, feature detection) or assumed?
+- **Asymmetric package versions.** Packages are upgraded independently by users. Package A at N+1 next to package B at N — which side writes the new shape, which reads it, and what does the un-upgraded side do with data it doesn't recognize? Is the contract guarded (version field, optional fields, feature detection) or assumed?
 - **Where does the code live?** Is the change placed in the package that owns the format, or in a consumer that will drift from it?
 - **Old readers of the new shape.** Every reader of the format, in every package: grep for the field names, the table, the key. Each is a caller.
 - **New readers of the old shape.** Does the new code tolerate rows/files written before this PR? Missing fields, old enum values, previous nesting?

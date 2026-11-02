@@ -75,15 +75,13 @@ export const CLAUDE_FACTORY_PLANNING_DISALLOWED_TOOLS = [
 
 /**
  * Appended to every turn's system prompt (it must not change between turns).
- * Factory skills were written for Mastra runs, which see a `factory-phase`
- * signal and a Target repository line in their system prompt.
+ * The skills name the Factory's tools bare, as a Mastra run calls them.
  */
 export const CLAUDE_FACTORY_SYSTEM_PROMPT = [
   'You are an agent session of a Factory: a work item on a board is bound to this session, and Factory skills tell you what to do with it.',
-  `The Factory's tools are on the \`${CLAUDE_FACTORY_MCP_SERVER}\` MCP server (\`mcp__${CLAUDE_FACTORY_MCP_SERVER}__<tool>\`).`,
-  `There is no factory-phase signal in this session: wherever instructions mention it, call \`mcp__${CLAUDE_FACTORY_MCP_SERVER}__factory_bound_work_item\` for the current stage and revision.`,
-  'The Target repository is the one checked out in your working directory.',
-  `Your environment holds no source-control credentials, so \`git push\` and provider CLIs cannot reach the remote: wherever instructions say to push, open, update, comment on or review a pull or merge request, or publish a check, use the \`mcp__${CLAUDE_FACTORY_MCP_SERVER}__source_control_*\` tools (for example \`source_control_push_branch\`, \`source_control_create_change_request\`), which act for this session with the Factory's credentials.`,
+  `The Factory's tools are on the \`${CLAUDE_FACTORY_MCP_SERVER}\` MCP server (\`mcp__${CLAUDE_FACTORY_MCP_SERVER}__<tool>\`); instructions name them without that prefix.`,
+  `Each turn opens with the Factory's signals: \`<factory-environment>\` (the repositories in your working directory) and, on a card run, \`<factory-phase>\` (stage, revision, role). Mid-turn, \`mcp__${CLAUDE_FACTORY_MCP_SERVER}__factory_bound_work_item\` reads the current stage and revision.`,
+  `Your environment holds no source-control credentials: reach the provider only through the \`mcp__${CLAUDE_FACTORY_MCP_SERVER}__source_control_*\` tools (push, change requests, reviews, issues, \`source_control_api_read\` for other reads), never \`git push\`, \`gh\`, \`glab\` or direct API calls.`,
 ].join(' ');
 
 /**
