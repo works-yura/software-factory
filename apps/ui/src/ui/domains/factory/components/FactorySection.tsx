@@ -3,7 +3,7 @@ import { Brain, GitPullRequest, MessagesSquare, SquareKanban } from 'lucide-reac
 import type { ComponentType } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
-import { useServerFeatures } from '../../../../hooks/useServerFeatures';
+import { useKnowledgeAvailable } from '../../../../hooks/useKnowledgeAvailable';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { orderedBoards } from '../boardCatalog';
 import { supervisorChatEnabled } from '../../supervisor/services/supervisor';
@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
-  const features = useServerFeatures();
+  const knowledge = useKnowledgeAvailable(factoryId);
   const catalog = useBoardCatalog(factoryId);
   const { t } = useTranslation('nav');
 
@@ -48,7 +48,7 @@ export function FactorySection() {
           )}
         </Sidebar.NavList>
       </section>
-      {features.data?.knowledge ? (
+      {knowledge.available ? (
         <Sidebar.NavList>
           <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label={t('knowledge')} />
         </Sidebar.NavList>

@@ -111,6 +111,9 @@ function stubKnowledgeRoute(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
+      HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', harness: 'mastra' } }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-records`, () =>
       HttpResponse.json({ workRecords: [] }),
     ),
@@ -1538,5 +1541,43 @@ describe('KnowledgePage', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Back to the project view' }));
     expect(await screen.findByText('Payments Service', { selector: GRAPH_NODE_LABEL_SELECTOR })).toBeInTheDocument();
+  });
+});
+
+describe('Knowledge on a Claude Code Factory', () => {
+  let projectReads = 0;
+  function serveClaudeCodeFactory() {
+    projectReads = 0;
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () => {
+        projectReads += 1;
+        return HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', harness: 'claude-code' } });
+      }),
+    );
+  }
+
+  it('leaves Knowledge out of the sidebar', async () => {
+    stubKnowledgeRoute();
+    renderRoute(`/factories/${FACTORY_ID}`);
+    expect(await screen.findByRole('link', { name: 'Knowledge' })).toBeInTheDocument();
+  });
+
+  it('does not list Knowledge in the sidebar once the Factory is known to run on Claude Code', async () => {
+    serveClaudeCodeFactory();
+    renderRoute(`/factories/${FACTORY_ID}`);
+    expect(await screen.findByRole('navigation', { name: /Factory/ })).toBeInTheDocument();
+    await waitFor(() => expect(projectReads).toBeGreaterThan(0));
+    // Let the answer land and the sidebar re-render before asserting an absence.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+    expect(screen.queryByRole('link', { name: 'Knowledge' })).not.toBeInTheDocument();
+  });
+
+  it('sends a direct link to the factory home', async () => {
+    serveClaudeCodeFactory();
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}`));
   });
 });

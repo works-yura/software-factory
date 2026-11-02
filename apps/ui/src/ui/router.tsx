@@ -29,7 +29,7 @@ import { supervisorChatEnabled } from './domains/supervisor/services/supervisor'
 import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
-import { useServerFeatures } from '../hooks/useServerFeatures';
+import { useKnowledgeAvailable } from '../hooks/useKnowledgeAvailable';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
@@ -117,10 +117,10 @@ function ConnectionsRedirect() {
 
 function KnowledgeRoute() {
   const { factoryId } = useParams<{ factoryId: string }>();
-  const features = useServerFeatures();
+  const knowledge = useKnowledgeAvailable(factoryId);
 
-  if (features.isPending || !factoryId) return null;
-  if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}`} replace />;
+  if (knowledge.pending || !factoryId) return null;
+  if (!knowledge.available) return <Navigate to={`/factories/${factoryId}`} replace />;
   return <KnowledgePage />;
 }
 
