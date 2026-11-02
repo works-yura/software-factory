@@ -181,13 +181,30 @@ describe('Board card session liveness', () => {
     stubFactoryWithBoundSession();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
-        HttpResponse.json({ sessions: [{ ...boundSession, materializedAt: null }] }),
+        HttpResponse.json({
+          sessions: [{ ...boundSession, materializedAt: null, firstMessageAt: '2026-07-20T00:00:00.000Z' }],
+        }),
       ),
     );
     renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="initializing"]')).not.toBeNull());
+  });
+
+  it('keeps a bound session nobody wrote to idle, so it neither glows nor holds the card', async () => {
+    // A card's session opens before its checkout: nothing prepares until a message goes out.
+    stubFactoryWithBoundSession();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [{ ...boundSession, materializedAt: null, firstMessageAt: null }] }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    expect(card.querySelector('[data-live-session-indicator]')).toBeNull();
   });
 
   it('lights the working dot when any bound session runs, not just the newest ref', async () => {

@@ -16,7 +16,7 @@ import {
 import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
 import { sessionRowStatus } from './sessionStatus';
 import type { SessionRowStatus } from './sessionStatus';
-import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
+import { sessionCheckoutPending, SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 import { lazyLabels } from '../../../i18n/lazy';
 
@@ -175,7 +175,7 @@ export function buildFactorySessionRow({
     openPath: `${url}/threads/${session.sessionId}`,
     active: session.sessionId === routeSessionId,
     status: sessionActivityStatus({
-      initializing: !session.materializedAt,
+      initializing: sessionCheckoutPending(session),
       running,
       attention,
       settled: isSettled(item, boards, pullRequest),
@@ -227,7 +227,7 @@ export function buildUserSessionRow({
     openPath: url,
     active: pathname === url,
     status: sessionActivityStatus({
-      initializing: !session.materializedAt,
+      initializing: sessionCheckoutPending(session),
       running,
       attention: false,
       settled: false,

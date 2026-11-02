@@ -3,6 +3,7 @@ import { useParkedSessions } from '../../../../hooks/useWorkItems';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { sessionRowStatus } from '../../workspaces/services/sessionStatus';
+import { sessionCheckoutPending } from '../../workspaces/services/user-sessions';
 import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import type { WorkItem } from '../services/workItems';
 
@@ -29,7 +30,7 @@ export function useItemSessionStatuses({
   const workspaces = useWorkspacesQuery(factoryProjectId);
   const materializingSessionIds = new Set(
     allSessionRows(workspaces.data)
-      .filter(session => !session.materializedAt)
+      .filter(sessionCheckoutPending)
       .map(session => session.sessionId),
   );
 

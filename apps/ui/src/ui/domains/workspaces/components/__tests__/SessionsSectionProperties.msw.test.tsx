@@ -69,6 +69,7 @@ const sessions: FactoryUserSession[] = [
     sandboxId: null,
     sandboxWorkdir: null,
     materializedAt: null,
+    firstMessageAt: '2026-07-20T00:00:00.000Z',
     createdAt: '2026-09-04T09:30:00.000Z',
     updatedAt: '2026-09-04T10:00:00.000Z',
   },

@@ -106,7 +106,7 @@ describe('User sessions sidebar activity', () => {
   });
 
   it('shows the initializing belt for a session that has not materialized yet', async () => {
-    stubProjectAndSessions([makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null })]);
+    stubProjectAndSessions([makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null, firstMessageAt: '2026-07-20T00:00:00.000Z' })]);
     stubActiveSessions(new Set());
 
     const { client } = renderSection();
@@ -130,6 +130,7 @@ describe('User sessions sidebar activity', () => {
               sessionId: 'sess-4',
               branch: 'user/feature-d',
               materializedAt: settled ? '2026-07-20T00:00:00.000Z' : null,
+              firstMessageAt: '2026-07-20T00:00:00.000Z',
             }),
           ],
         }),

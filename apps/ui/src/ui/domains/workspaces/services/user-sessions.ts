@@ -38,6 +38,8 @@ export interface FactoryUserSession {
   sandboxId: string | null;
   sandboxWorkdir: string | null;
   materializedAt: string | null;
+  /** When the session's first conversational message went out; a session nobody wrote to has none. */
+  firstMessageAt?: string | null;
   createdAt: string;
   updatedAt: string;
   /** What the viewer may do with this session, computed by the server. */
@@ -47,6 +49,15 @@ export interface FactoryUserSession {
 }
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
+
+/**
+ * The session's checkout is being prepared: a message went out and the
+ * workspace is not there yet. A session nobody wrote to is idle, not preparing,
+ * even though it has no checkout.
+ */
+export function sessionCheckoutPending(session: Pick<FactoryUserSession, 'materializedAt' | 'firstMessageAt'>): boolean {
+  return !session.materializedAt && Boolean(session.firstMessageAt);
+}
 
 function normalizeUserSession({ title, ...session }: FactoryUserSessionPayload): FactoryUserSession {
   return { ...session, title: title ?? undefined };

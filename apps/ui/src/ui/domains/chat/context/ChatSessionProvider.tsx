@@ -37,11 +37,12 @@ function modelLockedReason(session: FactoryUserSession | undefined): string | un
 }
 
 /**
- * A personal chat runs on Claude Code when the server created its session
- * there; a draft does when its Factory's harness is `claude-code` (the server
- * creates it there). Either way its model is the Factory's Claude model.
+ * A session runs on Claude Code when the server says so (a personal chat or a
+ * card's session); a personal draft does when its Factory's harness is
+ * `claude-code` (the server creates it there). Either way its model is the
+ * Factory's Claude model.
  */
-function claudeCodeChat({
+export function claudeCodeChat({
   userScoped,
   isUserDraft,
   storedSession,
@@ -52,10 +53,9 @@ function claudeCodeChat({
   storedSession: FactoryUserSession | undefined;
   factory: FactoryProject | undefined;
 }): { model: ClaudeCodeModel | null } | undefined {
-  if (!userScoped) return undefined;
   const claude = storedSession
     ? storedSession.harness === 'claude-code'
-    : isUserDraft && factory?.harness === 'claude-code';
+    : userScoped && isUserDraft && factory?.harness === 'claude-code';
   return claude ? { model: factory?.claudeCodeModel ?? null } : undefined;
 }
 

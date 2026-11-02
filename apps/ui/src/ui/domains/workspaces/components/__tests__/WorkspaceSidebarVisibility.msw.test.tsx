@@ -67,7 +67,7 @@ describe('Workspace sidebar visibility', () => {
 
   it('keeps a session that has not materialized yet visible past the five-row cut', async () => {
     const sessions = [1, 2, 3, 4, 5].map(index => makeSession(index));
-    stubSessions([...sessions, makeSession(6, { materializedAt: null })]);
+    stubSessions([...sessions, makeSession(6, { materializedAt: null, firstMessageAt: '2026-07-20T00:00:00.000Z' })]);
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
@@ -77,7 +77,7 @@ describe('Workspace sidebar visibility', () => {
   });
 
   it('never drops a pinned session to make room for a busy one', async () => {
-    const busy = [1, 2, 3, 4, 6].map(index => makeSession(index, { materializedAt: null }));
+    const busy = [1, 2, 3, 4, 6].map(index => makeSession(index, { materializedAt: null, firstMessageAt: '2026-07-20T00:00:00.000Z' }));
     stubSessions([...busy, makeSession(5)]);
     localStorage.setItem('mastracode.pinnedSessions', JSON.stringify(['work-session-5']));
 

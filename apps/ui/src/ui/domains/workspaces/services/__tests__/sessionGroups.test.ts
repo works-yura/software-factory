@@ -133,7 +133,7 @@ describe('customGroupOrder', () => {
 describe('groupSessionRows by status', () => {
   it('orders groups Waiting, Working, Initializing, Idle, Done and leaves out empty ones', () => {
     const waitingRow = factoryRow(testSession('waiting-1'), { attention: true });
-    const initializingRow = factoryRow(testSession('init-1', { materializedAt: undefined }), { running: true });
+    const initializingRow = factoryRow(testSession('init-1', { materializedAt: null, firstMessageAt: '2026-09-04T09:00:00.000Z' }), { running: true });
     const idleRow = userRow('idle-1');
 
     const groups = groupRows([idleRow, initializingRow, waitingRow], 'status', builtinContext, []);

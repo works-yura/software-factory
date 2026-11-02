@@ -37,6 +37,21 @@ describe('sessionActivityStatus', () => {
   });
 });
 
+describe('a session without a checkout', () => {
+  const unmaterialized = { materializedAt: null } as const;
+
+  it('is initializing once a message went out, until its checkout is there', () => {
+    const preparing = testSession('s1', { ...unmaterialized, firstMessageAt: '2026-11-02T21:12:00.000Z' });
+    expect(factoryRow(preparing).status).toBe('initializing');
+    expect(userRow('s2', { ...unmaterialized, firstMessageAt: '2026-11-02T21:12:00.000Z' }).status).toBe('initializing');
+  });
+
+  it('is idle while nobody wrote to it: an empty session prepares nothing', () => {
+    expect(factoryRow(testSession('s1', { ...unmaterialized, firstMessageAt: null })).status).toBe('idle');
+    expect(userRow('s2', unmaterialized).status).toBe('idle');
+  });
+});
+
 describe('factory session status on a custom board', () => {
   it.each([
     ['shipped', 'done'],

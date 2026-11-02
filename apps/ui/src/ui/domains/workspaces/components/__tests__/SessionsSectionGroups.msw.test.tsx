@@ -40,6 +40,7 @@ function session(sessionId: string, title: string, branch: string, age: 'old' | 
     sandboxId: null,
     sandboxWorkdir: null,
     materializedAt: age === 'old' ? null : '2026-09-04T10:00:00.000Z',
+    firstMessageAt: '2026-07-20T00:00:00.000Z',
     createdAt,
     updatedAt: createdAt,
   };

@@ -1623,6 +1623,11 @@ export class MastraFactory {
             observeSessionRunReports(session as never, (outcome, since) =>
               reportSessionRunEnd({ sessionId: session.id, threadId: session.thread.getId() ?? null, outcome, since }),
             );
+            // Its first message dates the session (TTFI) and tells the board its checkout is under way.
+            observeSessionFirstMessage(
+              { identity: { getId: () => session.id }, subscribe: listener => channel.subscribe(listener) },
+              { sourceControl: { sessions: sourceControlSessions } },
+            );
             // A permission request reaches whoever follows the session, as a Mastra session's approval does.
             channel.subscribe(event => {
               if (event.type !== 'tool_approval_required') return;
