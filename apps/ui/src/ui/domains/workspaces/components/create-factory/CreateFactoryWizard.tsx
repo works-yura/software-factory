@@ -91,7 +91,7 @@ export function CreateFactoryWizard() {
   const createFactory = useCreateFactoryFromDraft({
     draft,
     onFactoryCreated: factory => flow.rememberFactory(factory),
-    onRepositoryLinked: linkedRepositoryId => flow.rememberLinkedRepository(linkedRepositoryId),
+    onRepositoryLinked: repository => flow.rememberLinkedRepository(repository),
     onCreated: async factory => {
       await flow.clear();
       void navigate(factoryHomePath(factory));
@@ -126,7 +126,7 @@ export function CreateFactoryWizard() {
           // a linked repository), stepping back would let the user pick a new
           // name or repository while the retry still resumes the prior IDs, so
           // the Back affordance is dropped until the wizard completes.
-          step === 'name' || committing || Boolean(draft.factoryId) || Boolean(draft.linkedRepositoryId)
+          step === 'name' || committing || Boolean(draft.factoryId) || draft.linkedRepositories.length > 0
             ? undefined
             : () => {
                 setTyped(undefined);
@@ -158,7 +158,9 @@ export function CreateFactoryWizard() {
               flow.persistBeforeRedirect(factoryId);
               manageGithubConnection(baseUrl);
             }}
-            onSelectRepository={repository => void flow.chooseRepository(repository)}
+            selected={draft.repositories}
+            onToggleRepository={repository => void flow.toggleRepository(repository)}
+            onContinue={() => void flow.confirmRepositories()}
           />
         )}
         {step === 'model-provider' && draft.harness === 'claude-code' && (

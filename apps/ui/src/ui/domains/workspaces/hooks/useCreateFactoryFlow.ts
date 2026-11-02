@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../api/keys';
-import { isFactoryHarness } from '../services/github';
+import { isFactoryHarness, isGitLabRepository } from '../services/github';
 import type { FactoryHarness, FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
 
 // Separate sessionStorage keys from onboarding so the two flows never collide.
@@ -10,7 +10,7 @@ const NAME_KEY = 'mastracode.factory-create.name';
 const HARNESS_KEY = 'mastracode.factory-create.harness';
 const REPO_KEY = 'mastracode.factory-create.repository';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
-const LINKED_KEY = 'mastracode.factory-create.linked-repository-id';
+const LINKED_KEY = 'mastracode.factory-create.linked-repositories';
 const HOST_KEY = 'mastracode.factory-create.host-factory-id';
 
 export const CREATE_FACTORY_STEPS = ['name', 'harness', 'vcs', 'model-provider'] as const;
@@ -36,7 +36,7 @@ function isKnownStep(value: string | null): value is CreateFactoryFlowStep {
 /** A stored step is only honoured while the picks it was reached through are still there. */
 function canResume(step: Exclude<CreateFactoryFlowStep, 'name'>, draft: Omit<CreateFactoryDraft, 'step'>): boolean {
   if (step === 'harness' || step === 'vcs') return Boolean(draft.name);
-  return Boolean(draft.name && draft.repository);
+  return Boolean(draft.name && draft.repositories.length > 0);
 }
 
 function isSourceControlRepository(value: unknown): value is SourceControlRepository {
@@ -54,9 +54,14 @@ function isSourceControlRepository(value: unknown): value is SourceControlReposi
   );
 }
 
-function readRepository(): SourceControlRepository | undefined {
+/** Identity of a repository across providers; a slug alone can exist on both GitHub and GitLab. */
+export function repositoryKey(repository: SourceControlRepository): string {
+  return `${isGitLabRepository(repository) ? 'gitlab' : 'github'}:${repository.fullName}`;
+}
+
+function readRepositories(): SourceControlRepository[] {
   const stored = sessionStorage.getItem(REPO_KEY);
-  if (!stored) return undefined;
+  if (!stored) return [];
 
   let parsed: unknown;
   try {
@@ -64,26 +69,43 @@ function readRepository(): SourceControlRepository | undefined {
   } catch {
     parsed = undefined;
   }
-  if (isSourceControlRepository(parsed)) return parsed;
+  // A draft written before the wizard took several repositories holds a single object.
+  const candidates = Array.isArray(parsed) ? parsed : [parsed];
+  if (candidates.length > 0 && candidates.every(isSourceControlRepository)) return candidates;
 
   sessionStorage.removeItem(REPO_KEY);
-  return undefined;
+  return [];
+}
+
+function readLinkedRepositories(): string[] {
+  const stored = sessionStorage.getItem(LINKED_KEY);
+  if (!stored) return [];
+  try {
+    const parsed: unknown = JSON.parse(stored);
+    if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) return parsed;
+  } catch {
+    // Fall through: an unreadable marker means nothing is known to be linked.
+  }
+  sessionStorage.removeItem(LINKED_KEY);
+  return [];
 }
 
 /**
  * The wizard's draft. Everything the user picked lives here until the last
  * step commits it, so quitting halfway leaves no half-built Factory behind.
- * `factoryId` and `linkedRepositoryId` only appear once that commit starts —
+ * `factoryId` and `linkedRepositories` only appear once that commit starts —
  * they let a failed attempt resume instead of creating a second Factory.
+ * `repositories` are in link order: the first is the Factory's primary repository.
  */
 export interface CreateFactoryDraft {
   step: CreateFactoryFlowStep;
   name?: string;
   /** The runtime picked on the harness step; unset means the server default (mastra). */
   harness?: FactoryHarness;
-  repository?: SourceControlRepository;
+  repositories: SourceControlRepository[];
   factoryId?: string;
-  linkedRepositoryId?: string;
+  /** Keys (see `repositoryKey`) of the repositories already linked to the Factory. */
+  linkedRepositories: string[];
   /** The Factory whose shell hosts the wizard, so an OAuth return comes back to it. */
   hostFactoryId?: string;
 }
@@ -97,9 +119,9 @@ function readDraft(): CreateFactoryDraft {
   const picks = {
     name: sessionStorage.getItem(NAME_KEY) ?? undefined,
     harness: readHarness(),
-    repository: readRepository(),
+    repositories: readRepositories(),
     factoryId: sessionStorage.getItem(FACTORY_KEY) ?? undefined,
-    linkedRepositoryId: sessionStorage.getItem(LINKED_KEY) ?? undefined,
+    linkedRepositories: readLinkedRepositories(),
     hostFactoryId: sessionStorage.getItem(HOST_KEY) ?? undefined,
   };
   const step = sessionStorage.getItem(STEP_KEY);
@@ -108,24 +130,31 @@ function readDraft(): CreateFactoryDraft {
   // when the stored value is unknown or its resume gate fails.
   if (isKnownStep(step) && (step === 'name' || (isResumableStep(step) && canResume(step, picks))))
     return { ...picks, step };
-  return { step: 'name', name: picks.name, harness: picks.harness, hostFactoryId: picks.hostFactoryId };
+  return {
+    step: 'name',
+    name: picks.name,
+    harness: picks.harness,
+    repositories: [],
+    linkedRepositories: [],
+    hostFactoryId: picks.hostFactoryId,
+  };
 }
 
 function writeDraft({
   step,
   name,
   harness,
-  repository,
+  repositories,
   factoryId,
-  linkedRepositoryId,
+  linkedRepositories,
   hostFactoryId,
 }: CreateFactoryDraft): void {
   sessionStorage.setItem(STEP_KEY, step);
   writeEntry(NAME_KEY, name);
   writeEntry(HARNESS_KEY, harness);
-  writeEntry(REPO_KEY, repository && JSON.stringify(repository));
+  writeEntry(REPO_KEY, repositories.length > 0 ? JSON.stringify(repositories) : undefined);
   writeEntry(FACTORY_KEY, factoryId);
-  writeEntry(LINKED_KEY, linkedRepositoryId);
+  writeEntry(LINKED_KEY, linkedRepositories.length > 0 ? JSON.stringify(linkedRepositories) : undefined);
   writeEntry(HOST_KEY, hostFactoryId);
 }
 
@@ -176,7 +205,7 @@ export function useCreateFactoryFlow() {
 
   const clear = useMutation({
     mutationFn: async () => clearDraft(),
-    onSuccess: () => queryClient.setQueryData(queryKeys.factoryCreateFlow(), { step: 'name' }),
+    onSuccess: () => queryClient.setQueryData(queryKeys.factoryCreateFlow(), { step: 'name', repositories: [], linkedRepositories: [] }),
   });
 
   const step = draftQuery.data?.step ?? 'name';
@@ -192,8 +221,21 @@ export function useCreateFactoryFlow() {
         harnessChoice ? { step: 'harness', name } : { step: 'vcs', name, harness: undefined },
       ),
     chooseHarness: (harness: FactoryHarness) => patchDraft.mutateAsync({ step: 'vcs', harness }),
-    chooseRepository: (repository: SourceControlRepository) =>
-      patchDraft.mutateAsync({ step: 'model-provider', repository }),
+    /** Add the repository to the pick, or drop it if it is already picked. Stays on the step. */
+    toggleRepository: (repository: SourceControlRepository) => {
+      const current = readDraft().repositories;
+      const key = repositoryKey(repository);
+      return patchDraft.mutateAsync({
+        repositories: current.some(item => repositoryKey(item) === key)
+          ? current.filter(item => repositoryKey(item) !== key)
+          : [...current, repository],
+      });
+    },
+    /** Commit the picked repositories and move on; needs at least one. */
+    confirmRepositories: () => {
+      if (readDraft().repositories.length === 0) return Promise.resolve(null);
+      return patchDraft.mutateAsync({ step: 'model-provider' });
+    },
     /** Step backwards to the previous wizard step, preserving already-collected picks. */
     back: ({ harnessChoice }: { harnessChoice: boolean }) => {
       const steps = createFactorySteps({ harnessChoice });
@@ -205,7 +247,8 @@ export function useCreateFactoryFlow() {
     /** Keep what the final commit already achieved, so a retry resumes instead of duplicating. */
     rememberFactory: (factory: FactoryProject | FactoryProjectPayload) =>
       patchDraft.mutateAsync({ factoryId: factory.id }),
-    rememberLinkedRepository: (linkedRepositoryId: string) => patchDraft.mutateAsync({ linkedRepositoryId }),
+    rememberLinkedRepository: (repository: SourceControlRepository) =>
+      patchDraft.mutateAsync({ linkedRepositories: [...readDraft().linkedRepositories, repositoryKey(repository)] }),
     /** Re-persist the current draft, with its host, right before a full-page OAuth redirect. */
     persistBeforeRedirect: (hostFactoryId: string | undefined) => writeDraft({ ...readDraft(), hostFactoryId }),
     clear: clear.mutateAsync,

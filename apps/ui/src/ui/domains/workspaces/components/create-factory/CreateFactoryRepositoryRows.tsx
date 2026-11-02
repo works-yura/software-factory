@@ -3,7 +3,7 @@ import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPale
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { Settings2 } from 'lucide-react';
+import { ArrowRight, Settings2 } from 'lucide-react';
 
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
@@ -15,6 +15,7 @@ import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { GitLabIcon } from '../../../../ui/icons';
 import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
+import { repositoryKey } from '../../hooks/useCreateFactoryFlow';
 import type { GithubRepo, GithubStatus, SourceControlRepository } from '../../services/github';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 import { translator } from '../../../../i18n/t';
@@ -26,7 +27,20 @@ export interface CreateFactoryRepositoryRowsProps {
   githubRedirecting: boolean;
   onConnect: () => void;
   onManageConnection: () => void;
-  onSelectRepository: (repository: SourceControlRepository) => void;
+  /** The repositories picked so far, in pick order; the first becomes the primary one. */
+  selected: readonly SourceControlRepository[];
+  /** Picks the repository, or drops it if already picked. */
+  onToggleRepository: (repository: SourceControlRepository) => void;
+  /** Go on to the next step with what is picked. */
+  onContinue: () => void;
+}
+
+type RepositoryPicker = Pick<CreateFactoryRepositoryRowsProps, 'selected' | 'onToggleRepository'>;
+
+function repositoryRowBadge(picker: RepositoryPicker, repository: SourceControlRepository): string | undefined {
+  const index = picker.selected.findIndex(item => repositoryKey(item) === repositoryKey(repository));
+  if (index < 0) return undefined;
+  return index === 0 ? tk('createFactory.repos.primary') : tk('createFactory.repos.selected');
 }
 
 function connectionMessage(status: GithubStatus | undefined): string {
@@ -47,8 +61,11 @@ export function CreateFactoryRepositoryRows({
   githubRedirecting,
   onConnect,
   onManageConnection,
-  onSelectRepository,
+  selected,
+  onToggleRepository,
+  onContinue,
 }: CreateFactoryRepositoryRowsProps) {
+  const picker = { selected, onToggleRepository };
   const githubStatus = useGithubStatusQuery();
   const connected = githubStatus.data?.connected === true;
   const gitlabStatus = useGitLabStatusQuery();
@@ -89,7 +106,7 @@ export function CreateFactoryRepositoryRows({
     })()
   ) : (
     <>
-      <GithubRepositoryResults query={query} onSelectRepository={onSelectRepository} />
+      <GithubRepositoryResults query={query} picker={picker} />
       <CommandGroup heading="GitHub">
         <CommandPaletteItem
           icon={<Settings2 />}
@@ -104,6 +121,17 @@ export function CreateFactoryRepositoryRows({
 
   return (
     <>
+      {selected.length > 0 && (
+        <CommandGroup>
+          <CommandPaletteItem
+            icon={<ArrowRight />}
+            title={tk('createFactory.repos.continue', { count: selected.length })}
+            subtitle={selected.map(repository => repository.fullName).join(', ')}
+            value="continue-with-repositories"
+            onSelect={onContinue}
+          />
+        </CommandGroup>
+      )}
       {githubRows}
       {gitlabConfigured ? (
         <GitLabRepositoryResults
@@ -114,7 +142,7 @@ export function CreateFactoryRepositoryRows({
           })}
           pending={gitlabProjects.isPending}
           error={gitlabProjects.error}
-          onSelectRepository={onSelectRepository}
+          picker={picker}
         />
       ) : (
         (() => {
@@ -157,8 +185,8 @@ export function CreateFactoryRepositoryRows({
 
 function GithubRepositoryResults({
   query,
-  onSelectRepository,
-}: Pick<CreateFactoryRepositoryRowsProps, 'query' | 'onSelectRepository'>) {
+  picker,
+}: Pick<CreateFactoryRepositoryRowsProps, 'query'> & { picker: RepositoryPicker }) {
   const debouncedQuery = useDebouncedValue(query, 750);
   const repos = useGithubReposQuery(debouncedQuery || undefined, true);
 
@@ -177,8 +205,9 @@ function GithubRepositoryResults({
           icon={<GithubIcon />}
           title={repo.fullName}
           subtitle={`${repo.private ? tk('vcs.private') : tk('createFactory.repos.public')} · ${repo.defaultBranch}`}
+          badge={repositoryRowBadge(picker, repo)}
           value={`repo-${repo.id}`}
-          onSelect={() => onSelectRepository(repo)}
+          onSelect={() => picker.onToggleRepository(repo)}
         />
       ))}
     </CommandGroup>
@@ -190,13 +219,13 @@ function GitLabRepositoryResults({
   projects,
   pending,
   error,
-  onSelectRepository,
+  picker,
 }: {
   query: string;
   projects: GitLabRepository[] | undefined;
   pending: boolean;
   error: Error | null;
-  onSelectRepository: (repository: SourceControlRepository) => void;
+  picker: RepositoryPicker;
 }) {
   const normalizedQuery = query.trim().toLowerCase();
   const matches = (projects ?? []).filter(project => project.fullName.toLowerCase().includes(normalizedQuery));
@@ -221,8 +250,9 @@ function GitLabRepositoryResults({
             icon={<GitLabIcon />}
             title={repo.fullName}
             subtitle={`GitLab · ${repo.defaultBranch}`}
+            badge={repositoryRowBadge(picker, repo)}
             value={`gitlab-repo-${repo.id}`}
-            onSelect={() => onSelectRepository(repo)}
+            onSelect={() => picker.onToggleRepository(repo)}
           />
         ))
       )}

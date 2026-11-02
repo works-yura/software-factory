@@ -101,6 +101,10 @@
       "gitlabSignIn": "Sign in to GitLab to grant access to your projects.",
       "connectingGitlab": "Connecting to GitLab",
       "repositories": "Repositories",
+      "primary": "Primary",
+      "selected": "Selected",
+      "continue_one": "Continue with {{count}} repository",
+      "continue_other": "Continue with {{count}} repositories",
       "gitlabRepositories": "GitLab repositories",
       "public": "Public"
     },

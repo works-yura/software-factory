@@ -26,7 +26,7 @@ const NAME_KEY = 'mastracode.factory-create.name';
 const HARNESS_KEY = 'mastracode.factory-create.harness';
 const REPO_KEY = 'mastracode.factory-create.repository';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
-const LINKED_KEY = 'mastracode.factory-create.linked-repository-id';
+const LINKED_KEY = 'mastracode.factory-create.linked-repositories';
 const WIZARD_PATH = '/factories/fp-host/new-factory';
 
 const connectedGithub: GithubStatus = {
@@ -210,12 +210,12 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    await user.click(await screen.findByRole('option', { name: /octo\/hello/ }));
+    await pickRepositories(user, /octo\/hello/);
 
     expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
     expect(calls).toEqual([]);
     expect(sessionStorage.getItem(STEP_KEY)).toBe('model-provider');
-    expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject({ fullName: 'octo/hello' });
+    expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject([{ fullName: 'octo/hello' }]);
   });
 
   it('creates the Factory, links the repository and saves the model on the last step', async () => {
@@ -424,15 +424,17 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    await user.click(await screen.findByRole('option', { name: /acme\/app/ }));
+    await pickRepositories(user, /acme\/app/);
 
     expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
-    expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject({
-      provider: 'gitlab',
-      id: 'gitlab-project:encoded',
-      externalId: '10',
-      fullName: 'acme/app',
-    });
+    expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject([
+      {
+        provider: 'gitlab',
+        id: 'gitlab-project:encoded',
+        externalId: '10',
+        fullName: 'acme/app',
+      },
+    ]);
   });
 
   it('restarts at the name step when the stored draft has no repository to commit', async () => {
@@ -628,7 +630,7 @@ describe('back navigation', () => {
 
   it('also drops the back button when only the repository link has been persisted', async () => {
     seedDraft('model-provider');
-    sessionStorage.setItem(LINKED_KEY, 'lnk-existing');
+    sessionStorage.setItem(LINKED_KEY, JSON.stringify(['github:octo/hello']));
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
       http.get(`${TEST_BASE_URL}/web/om`, () => HttpResponse.json({})),
@@ -713,6 +715,12 @@ function expectNoProviderRows() {
   expect(screen.queryByRole('option', { name: /anthropic\/claude-sonnet-4-5/ })).not.toBeInTheDocument();
 }
 
+/** Pick repositories on the codebase step, then go on with them. */
+async function pickRepositories(user: ReturnType<typeof userEvent.setup>, ...names: RegExp[]) {
+  for (const name of names) await user.click(await screen.findByRole('option', { name }));
+  await user.click(await screen.findByRole('option', { name: /^Continue with \d+ repositor/ }));
+}
+
 async function finishOnModelStep(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
   await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
@@ -746,7 +754,7 @@ describe('harness step', () => {
     expect(sessionStorage.getItem(HARNESS_KEY)).toBe('claude-code');
     expect(calls).toEqual([]);
 
-    await user.click(await screen.findByRole('option', { name: /octo\/hello/ }));
+    await pickRepositories(user, /octo\/hello/);
 
     // The last step is Claude Code's own: a Claude model, no Mastra provider to connect.
     expect(await screen.findByLabelText('Choose your Claude model')).toBeInTheDocument();
@@ -779,7 +787,7 @@ describe('harness step', () => {
     const { client } = renderFlow();
 
     await user.click(await screen.findByRole('option', { name: /Mastra.*Any model/ }));
-    await user.click(await screen.findByRole('option', { name: /octo\/hello/ }));
+    await pickRepositories(user, /octo\/hello/);
     await finishOnModelStep(user);
 
     await waitForMutationsIdle(client);
@@ -925,5 +933,115 @@ describe('harness step', () => {
     renderFlow();
 
     expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+  });
+});
+
+describe('several repositories', () => {
+  const second = {
+    ...repo,
+    id: 100,
+    fullName: 'octo/web',
+    name: 'web',
+    sandboxWorkdir: '/workspace/web',
+  };
+
+  function serveTwoRepositories() {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo, second] })),
+    );
+  }
+
+  it('keeps picking on the codebase step, marks the first pick primary and drops a repository picked again', async () => {
+    sessionStorage.setItem(STEP_KEY, 'vcs');
+    sessionStorage.setItem(NAME_KEY, 'Mastra');
+    serveTwoRepositories();
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /octo\/hello/ }));
+    await user.click(await screen.findByRole('option', { name: /octo\/web/ }));
+
+    expect(await screen.findByRole('option', { name: /^Continue with 2 repositories/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /octo\/hello.*Primary/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /octo\/web.*Selected/ })).toBeInTheDocument();
+    expect(screen.getByLabelText('Choose your codebase')).toBeInTheDocument();
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('vcs');
+
+    // The continue row lists the picks too, so match the repository row by its title.
+    await user.click(screen.getByRole('option', { name: /^octo\/hello/ }));
+
+    expect(await screen.findByRole('option', { name: /^Continue with 1 repository/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /octo\/web.*Primary/ })).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject([{ fullName: 'octo/web' }]);
+  });
+
+  it('offers no way on until a repository is picked', async () => {
+    sessionStorage.setItem(STEP_KEY, 'vcs');
+    sessionStorage.setItem(NAME_KEY, 'Mastra');
+    serveTwoRepositories();
+
+    renderFlow();
+
+    expect(await screen.findByRole('option', { name: /octo\/hello/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /^Continue with/ })).not.toBeInTheDocument();
+  });
+
+  it('links every picked repository in pick order when the last step commits', async () => {
+    const calls: string[] = [];
+    sessionStorage.setItem(STEP_KEY, 'model-provider');
+    sessionStorage.setItem(NAME_KEY, 'Mastra');
+    sessionStorage.setItem(REPO_KEY, JSON.stringify([second, repo]));
+    stubModelStepEndpoints(calls);
+    const linkedSlugs: string[] = [];
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
+        async ({ request }) => {
+          calls.push('link');
+          linkedSlugs.push(((await request.json()) as { repository: { slug: string } }).repository.slug);
+          return HttpResponse.json({ projectRepository: linkedRepository });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+    await finishOnModelStep(user);
+    await waitForMutationsIdle(client);
+
+    expect(linkedSlugs).toEqual(['octo/web', 'octo/hello']);
+    expect(calls.filter(call => call === 'create')).toHaveLength(1);
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
+  });
+
+  it('on retry only links the repositories that are not linked yet', async () => {
+    const calls: string[] = [];
+    sessionStorage.setItem(STEP_KEY, 'model-provider');
+    sessionStorage.setItem(NAME_KEY, 'Mastra');
+    sessionStorage.setItem(FACTORY_KEY, 'fp-1');
+    sessionStorage.setItem(REPO_KEY, JSON.stringify([repo, second]));
+    sessionStorage.setItem(LINKED_KEY, JSON.stringify(['github:octo/hello']));
+    stubModelStepEndpoints(calls);
+    const linkedSlugs: string[] = [];
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
+        async ({ request }) => {
+          linkedSlugs.push(((await request.json()) as { repository: { slug: string } }).repository.slug);
+          return HttpResponse.json({ projectRepository: linkedRepository });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+    await finishOnModelStep(user);
+    await waitForMutationsIdle(client);
+
+    expect(linkedSlugs).toEqual(['octo/web']);
+    expect(calls).not.toContain('create');
   });
 });

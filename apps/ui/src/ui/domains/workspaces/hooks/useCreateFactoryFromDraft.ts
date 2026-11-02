@@ -4,7 +4,8 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { updateFactoryDefaultModel, updateFactoryHarness } from '../services/github';
-import type { ClaudeCodeModel, FactoryProjectPayload } from '../services/github';
+import type { ClaudeCodeModel, FactoryProjectPayload, SourceControlRepository } from '../services/github';
+import { repositoryKey } from './useCreateFactoryFlow';
 import type { CreateFactoryDraft } from './useCreateFactoryFlow';
 import { translator } from '../../../i18n/t';
 
@@ -14,7 +15,7 @@ export interface CreateFactoryFromDraftOptions {
   draft?: CreateFactoryDraft;
   /** Persisted as each stage lands, so a failed attempt resumes instead of duplicating. */
   onFactoryCreated: (factory: FactoryProjectPayload) => Promise<unknown>;
-  onRepositoryLinked: (linkedRepositoryId: string) => Promise<unknown>;
+  onRepositoryLinked: (repository: SourceControlRepository) => Promise<unknown>;
   onCreated: (factory: FactoryProjectPayload) => Promise<unknown>;
 }
 
@@ -26,8 +27,8 @@ export interface CreateFactoryFromDraftOptions {
 export type CreateFactoryModelPick = { modelId: string } | { claudeCodeModel: ClaudeCodeModel | null };
 
 /**
- * The wizard's single write: create the Factory, link the repository (which
- * feeds its issue intake), and save the model its runs start on. Nothing
+ * The wizard's single write: create the Factory, link its repositories in pick order (the first is
+ * the primary one; each feeds its issue intake), and save the model its runs start on. Nothing
  * before this touches the server, so an abandoned wizard leaves nothing behind.
  */
 export function useCreateFactoryFromDraft({
@@ -43,7 +44,7 @@ export function useCreateFactoryFromDraft({
 
   return useMutation({
     mutationFn: async (pick: CreateFactoryModelPick) => {
-      if (!draft?.name || !draft.repository) throw new Error(tk('createFactory.startOver'));
+      if (!draft?.name || draft.repositories.length === 0) throw new Error(tk('createFactory.startOver'));
 
       const claude = 'claudeCodeModel' in pick;
       const factory = draft.factoryId
@@ -55,9 +56,12 @@ export function useCreateFactoryFromDraft({
           );
       if (!draft.factoryId) await onFactoryCreated(factory);
 
-      if (!draft.linkedRepositoryId) {
-        const linked = await linkRepository.mutateAsync({ factoryProjectId: factory.id, repo: draft.repository });
-        await onRepositoryLinked(linked.projectRepositoryId);
+      // One at a time, in pick order: link order is the environment's position order, and
+      // each link rewrites the shared intake config. A retry skips what already landed.
+      for (const repository of draft.repositories) {
+        if (draft.linkedRepositories.includes(repositoryKey(repository))) continue;
+        await linkRepository.mutateAsync({ factoryProjectId: factory.id, repo: repository });
+        await onRepositoryLinked(repository);
       }
 
       // A Claude Code Factory got its model on create; a retry after a failed link still sends it.

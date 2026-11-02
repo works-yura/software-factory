@@ -34,7 +34,9 @@ it('disables both connect actions when neither provider is configured', async ()
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
+        selected={[]}
+        onToggleRepository={vi.fn()}
+        onContinue={vi.fn()}
       />
     </Command>,
   );
@@ -72,7 +74,9 @@ it('calls onConnect for GitHub directly without any Platform redirect', async ()
         githubRedirecting={false}
         onConnect={onConnect}
         onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
+        selected={[]}
+        onToggleRepository={vi.fn()}
+        onContinue={vi.fn()}
       />
     </Command>,
   );
@@ -128,7 +132,9 @@ it('starts a Nango connect session when the user picks the GitLab row', async ()
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
+        selected={[]}
+        onToggleRepository={vi.fn()}
+        onContinue={vi.fn()}
       />
     </Command>,
   );
@@ -171,7 +177,9 @@ it('disables the GitLab row when the account is personal (organization_required)
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
-        onSelectRepository={vi.fn()}
+        selected={[]}
+        onToggleRepository={vi.fn()}
+        onContinue={vi.fn()}
       />
     </Command>,
   );
