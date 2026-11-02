@@ -16,7 +16,6 @@ export * from './projects.ts';
 export * from './skills.ts';
 export * from './source-control-sessions.ts';
 export * from './source-control-settings.ts';
-export * from './supervisor.ts';
 export * from './surface.ts';
 export * from './telemetry.ts';
 export * from './work-items.ts';

@@ -2,9 +2,9 @@
  * Supervisor routes: the per-factory supervisor session address and the
  * deterministic health check the supervisor page pins above its transcript.
  *
- * Mounted from {@link WorkItemRoutes} so they share its tenant + project
- * resolution: a caller can only address a supervisor for a project their org
- * owns.
+ * Mounted from `WorkItemRoutes` (@factory/api) so they share its tenant +
+ * project resolution: a caller can only address a supervisor for a project
+ * their org owns.
  */
 
 import type { ApiRoute } from '@mastra/core/server';
@@ -12,7 +12,7 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { BoardRegistry } from '@factory/core';
 import type { WorkItemsStorage } from '@factory/store';
-import { runFactoryHealthCheck } from '@factory/supervisor';
+import { runFactoryHealthCheck } from './health.ts';
 import { supervisorResourceId, supervisorThreadId } from '@factory/session';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 

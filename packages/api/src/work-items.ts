@@ -51,7 +51,7 @@ import { buildAttentionRoutes, factoryDecisionType } from './attention.ts';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
-import { buildSupervisorRoutes } from './supervisor.ts';
+import { buildSupervisorRoutes } from '@factory/supervisor';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;

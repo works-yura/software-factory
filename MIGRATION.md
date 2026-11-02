@@ -225,6 +225,7 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 - **Сховано:** пункт «Chat» у навігації Фабрики, «Ask in chat» у меню картки, на рядку уваги й на невдалому рішенні правила. Маршрут `/factories/:id/supervisor` веде на головну Фабрики.
 - **Лишилось:** бекенд, сесія й health-worker Supervisor; знахідки (`supervisor-finding`) і далі видно в Activity.
 - **Тести:** `SupervisorPage.msw.test.tsx` вмикає прапорець (+1 на редирект), `RulesPage.msw.test.tsx` +1, `AppLayout.msw.test.tsx` +1.
+- **Пакет:** сесія Supervisor (`resolveSupervisorScope`, `hydrateSupervisorSession`, тип `SupervisorScope`) перейшла з `session/src/supervisor-session.ts` у `supervisor/src/session.ts`, маршрути `/supervisor/session` і `/supervisor/health` — з `api/src/supervisor.ts` у `supervisor/src/routes.ts` (монтує їх і далі `WorkItemRoutes`). У `session` лишились тільки адресні функції (`supervisorResourceId`, `parseSupervisorResourceId`, `supervisorThreadId`, `supervisorProjectIdFromContext`): їх читають доступ до сесій, ключі й дозволи інструментів, а `supervisor` залежить від `session`. Claude Code-варіант (`server/src/claude/supervisor.ts`) лишився в `server`, щоб `supervisor` не тягнув `harness-claude-code`. Тест `supervisor-session.test.ts` переїхав як `supervisor/src/session.test.ts`.
 
 ## Далі
 

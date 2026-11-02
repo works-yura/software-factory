@@ -11,7 +11,7 @@ import { IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@factory/core';
 import type { AuditAction } from '@factory/store';
 import type { AuditRecorder } from '@factory/feed';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
-import type { SupervisorScope } from './read-tools.ts';
+import type { SupervisorScope } from './session.ts';
 import type { WorkerMessageResult } from './session-messaging.ts';
 
 interface SupervisorWriteDependencies {

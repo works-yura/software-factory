@@ -183,12 +183,8 @@ import { FactorySupervisorHealthWorker } from '@factory/supervisor';
 import { SUPERVISOR_INSTRUCTIONS } from '@factory/supervisor';
 import { createFactorySupervisorReadTools } from '@factory/supervisor';
 import { messageWorkerSession } from '@factory/supervisor';
-import {
-  hydrateSupervisorSession,
-  persistFactoryToolPermissions,
-  supervisorProjectIdFromContext,
-  resolveSupervisorScope,
-} from '@factory/session';
+import { persistFactoryToolPermissions, supervisorProjectIdFromContext } from '@factory/session';
+import { hydrateSupervisorSession, resolveSupervisorScope } from '@factory/supervisor';
 import { createFactorySupervisorWriteTools } from '@factory/supervisor';
 import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from '@factory/observability';
 import { deliverFactorySessionNotification } from '@factory/harness-mastra';

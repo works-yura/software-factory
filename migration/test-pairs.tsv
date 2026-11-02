@@ -163,7 +163,7 @@ storage/domains/work-items/metrics.test.ts	api/src/metrics.test.ts
 supervisor/health.test.ts	supervisor/src/health.test.ts
 supervisor/read-tools.test.ts	supervisor/src/read-tools.test.ts
 supervisor/session-messaging.test.ts	supervisor/src/session-messaging.test.ts
-supervisor/session.test.ts	session/src/supervisor-session.test.ts
+supervisor/session.test.ts	supervisor/src/session.test.ts
 supervisor/write-tools.test.ts	supervisor/src/write-tools.test.ts
 timing.test.ts	observability/src/timing.test.ts
 tools/approval-tools.test.ts	harness-mastra/src/tools/approval-tools.test.ts

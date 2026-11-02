@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Supervisor: health checks and worker, read and write tools, session messaging, instructions.",
+  "description": "Supervisor: session scope and hydration, routes, health checks and worker, read and write tools, session messaging, instructions.",
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts"
@@ -13,12 +13,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@factory/auth": "workspace:*",
+    "@factory/contracts": "workspace:*",
     "@factory/core": "workspace:*",
+    "@factory/credentials": "workspace:*",
     "@factory/feed": "workspace:*",
     "@factory/integrations": "workspace:*",
     "@factory/runtime": "workspace:*",
     "@factory/session": "workspace:*",
     "@factory/store": "workspace:*",
+    "@mastra/code-sdk": "1.15.0",
     "@mastra/core": "1.79.0",
     "zod": "catalog:"
   },

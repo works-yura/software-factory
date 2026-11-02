@@ -2,13 +2,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '@factory/testing';
-import {
-  hydrateSupervisorSession,
-  parseSupervisorResourceId,
-  resolveSupervisorScope,
-  supervisorResourceId,
-  supervisorThreadId,
-} from './supervisor-session.ts';
+import { parseSupervisorResourceId, supervisorResourceId, supervisorThreadId } from '@factory/session';
+import { hydrateSupervisorSession, resolveSupervisorScope } from './session.ts';
 
 function requestContext(overrides: Partial<{ orgId: string; resourceId: string }> = {}) {
   const context = new RequestContext();

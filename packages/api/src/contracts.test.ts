@@ -24,7 +24,7 @@ import {
   updateProjectBodySchema,
 } from '@factory/contracts';
 import { ProjectRoutes } from './projects.ts';
-import { buildSupervisorRoutes } from './supervisor.ts';
+import { buildSupervisorRoutes } from '@factory/supervisor';
 import { WorkItemRoutes } from './work-items.ts';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
