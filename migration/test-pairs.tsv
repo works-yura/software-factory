@@ -148,7 +148,7 @@ session/org-seed-fail-open.test.ts	server/src/session/org-seed-fail-open.test.ts
 session/reply-credential-processor.test.ts	session/src/reply-credential-processor.test.ts
 session/resource-migration.test.ts	session/src/resource-migration.test.ts
 session/session-threads.test.ts	session/src/session-threads.test.ts
-session/source-control-tools.test.ts	harness-mastra/src/tools/source-control-tools.test.ts	+2	work spanning several repositories: self-review gates every repository; no default repository
+session/source-control-tools.test.ts	harness-mastra/src/tools/source-control-tools.test.ts	+7	work spanning several repositories: self-review gates every repository; no default repository; provider API reads scoped to the session, issue edits, review body edits
 session/thinking-default.test.ts	session/src/thinking-default.test.ts
 session/thread-title-mirror.test.ts	session/src/thread-title-mirror.test.ts
 session/work-item-repository.test.ts	session/src/work-item-repository.test.ts	+1	work spanning several repositories: a card naming no repository resolves to the environment
@@ -261,7 +261,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/lib/date/formatDuration.test.ts	../apps/ui/src/lib/date/formatDuration.test.ts
 ../../../apps/ui/src/lib/date/__tests__/relativeTime.test.ts	../apps/ui/src/lib/date/__tests__/relativeTime.test.ts
 ../../../apps/ui/src/ui/__tests__/BoardAutomationSettings.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardAutomationSettings.msw.test.tsx
-../../../apps/ui/src/ui/__tests__/BoardCardSessionLiveness.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardCardSessionLiveness.msw.test.tsx
+../../../apps/ui/src/ui/__tests__/BoardCardSessionLiveness.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardCardSessionLiveness.msw.test.tsx	+1	an empty session neither glows nor holds its card
 ../../../apps/ui/src/ui/__tests__/BoardListRowActions.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardListRowActions.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/BoardPageCardClickStartsRun.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageCardClickStartsRun.msw.test.tsx	-3	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/__tests__/BoardPageCardTitleTooltip.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageCardTitleTooltip.msw.test.tsx
@@ -458,7 +458,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	-2	upstream 74761d4c2e (#28245): defaultSessionFilters removed
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionPresentation.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionPresentation.test.ts
-../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts
+../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	+2	a session without a checkout initializes only once a message went out
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionStatus.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionStatus.test.ts
 ../../../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	+3	upstream c583bc9549 (#28271): New session opens a fresh draft (+1); f39f5d64d2 (#28300): New session and + close the mobile drawer (+1); the supervisor Chat link only when enabled (+1)
