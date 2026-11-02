@@ -6,6 +6,7 @@ import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { orderedBoards } from '../boardCatalog';
+import { supervisorChatEnabled } from '../../supervisor/services/supervisor';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
 import { boardTitle } from '../../../i18n/boardLabels';
@@ -21,9 +22,11 @@ export function FactorySection() {
 
   return (
     <nav className="flex flex-col gap-2" aria-label={t('factory')}>
-      <Sidebar.NavList>
-        <FactoryLink to={`/factories/${factoryId}/supervisor`} icon={MessagesSquare} label={t('supervisor')} />
-      </Sidebar.NavList>
+      {supervisorChatEnabled() ? (
+        <Sidebar.NavList>
+          <FactoryLink to={`/factories/${factoryId}/supervisor`} icon={MessagesSquare} label={t('supervisor')} />
+        </Sidebar.NavList>
+      ) : null}
       <section className="flex flex-col gap-1" aria-label={t('boards')}>
         <Sidebar.NavHeader className="mt-0">{t('boards')}</Sidebar.NavHeader>
         <Sidebar.NavList>

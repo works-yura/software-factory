@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
@@ -76,13 +76,27 @@ function renderRulesPage(onDecisionRequest: (statuses: string | null) => void) {
 }
 
 describe('Rules page filters', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('opens the supervisor from a failed decision row', async () => {
+    vi.stubEnv('VITE_FACTORY_SUPERVISOR_CHAT', 'true');
     const user = userEvent.setup();
     const router = renderRulesPage(() => undefined);
 
     await user.click(await screen.findByRole('button', { name: 'Ask the chat about the failed sendMessage decision' }));
 
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/supervisor`);
+  });
+
+  it('offers no supervisor shortcut while the supervisor chat is hidden', async () => {
+    renderRulesPage(() => undefined);
+
+    expect(await screen.findByText('sendMessage')).toBeVisible();
+    expect(
+      screen.queryByRole('button', { name: 'Ask the chat about the failed sendMessage decision' }),
+    ).not.toBeInTheDocument();
   });
 
   it('filters rule decisions with the mobile select', async () => {

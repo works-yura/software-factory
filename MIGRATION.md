@@ -217,6 +217,15 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 - **Тести:** `core/src/change-requests.test.ts` (5), `reproduction-test.test.ts` +2, `checkout.test.ts` +1, `bound-tools.test.ts` +1, `harness.test.ts` (промпт картки), решта — у `test-pairs.tsv`.
 - **Не зроблено:** різні провайдери в одному середовищі (GitHub разом з GitLab): сесія бачить репо лише свого провайдера. `pullRequestHeadSha` і дзеркальний вердикт рев'ю на картці лишились одні на картку. Діалог вибору лишився для автоматики, якій нема середовища.
 
+### Чат Supervisor сховано (2026-11-02)
+
+Чат Supervisor — одна розмова на Фабрику, яку бачить і пише вся організація (`factory-supervisor:<projectId>`); приватного варіанту нема. Тому в UI його сховано, код лишився.
+
+- **Прапорець:** `supervisorChatEnabled()` (`apps/ui/.../supervisor/services/supervisor.ts`) читає `VITE_FACTORY_SUPERVISOR_CHAT === 'true'`; за замовчуванням вимкнено.
+- **Сховано:** пункт «Chat» у навігації Фабрики, «Ask in chat» у меню картки, на рядку уваги й на невдалому рішенні правила. Маршрут `/factories/:id/supervisor` веде на головну Фабрики.
+- **Лишилось:** бекенд, сесія й health-worker Supervisor; знахідки (`supervisor-finding`) і далі видно в Activity.
+- **Тести:** `SupervisorPage.msw.test.tsx` вмикає прапорець (+1 на редирект), `RulesPage.msw.test.tsx` +1, `AppLayout.msw.test.tsx` +1.
+
 ## Далі
 
 Порядок і обсяг — у `README.md`, розділ «Що далі».

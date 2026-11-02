@@ -8,7 +8,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
@@ -87,6 +87,26 @@ function renderSupervisor(search = '') {
 }
 
 describe('SupervisorPage', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_FACTORY_SUPERVISOR_CHAT', 'true');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('sends a bookmarked link to the factory home while the supervisor chat is hidden', async () => {
+    vi.stubEnv('VITE_FACTORY_SUPERVISOR_CHAT', '');
+    stubSupervisorRoute(report([]));
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/supervisor`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    await waitFor(() => expect(router.state.location.pathname).not.toBe(`/factories/${FACTORY_ID}/supervisor`));
+    expect(screen.queryByRole('region', { name: 'Chat composer' })).not.toBeInTheDocument();
+  });
+
   describe('when the factory has no health findings', () => {
     it('binds the chat to the deterministic supervisor session without a stored session row', async () => {
       const { sessionCreates } = stubSupervisorRoute(report([]));

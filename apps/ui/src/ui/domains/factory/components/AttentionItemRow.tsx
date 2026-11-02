@@ -23,7 +23,7 @@ import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
-import { attentionPrompt, supervisorAskPath } from '../../supervisor/services/supervisor';
+import { attentionPrompt, supervisorAskPath, supervisorChatEnabled } from '../../supervisor/services/supervisor';
 import { attentionAuthorName, factoryAttentionTargetPath, readableAttentionDetail } from '../services/attention';
 import type { FactoryAttentionItem } from '../services/attention';
 import { RAIL_ROW_BODY } from './Timeline';
@@ -165,15 +165,17 @@ export function AttentionItemRow({
           </Txt>
         </span>
         <span className={SHOWN_ON_REVEAL}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            tooltip={t('attention.askSupervisor')}
-            aria-label={t('attention.askSupervisorAbout', { title: item.title })}
-            onClick={() => void navigate(supervisorAskPath(factoryId, attentionPrompt(item)))}
-          >
-            <Brain aria-hidden />
-          </Button>
+          {supervisorChatEnabled() ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              tooltip={t('attention.askSupervisor')}
+              aria-label={t('attention.askSupervisorAbout', { title: item.title })}
+              onClick={() => void navigate(supervisorAskPath(factoryId, attentionPrompt(item)))}
+            >
+              <Brain aria-hidden />
+            </Button>
+          ) : null}
           {onChooseRepository ? (
             <RowAction
               tooltip={t('attention.chooseRepository')}

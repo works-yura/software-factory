@@ -27,6 +27,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
 import { SupervisorPage } from './pages/SupervisorPage';
+import { supervisorChatEnabled } from './domains/supervisor/services/supervisor';
 import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
@@ -65,6 +66,12 @@ function RootLanding() {
 function FactoryHomeRedirect() {
   const { factoryId } = useParams<{ factoryId: string }>();
   return <FactoryBoardLanding factoryId={factoryId} />;
+}
+
+/** A bookmarked supervisor link lands on the factory home while the chat is hidden. */
+function SupervisorRoute() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  return supervisorChatEnabled() ? <SupervisorPage /> : <Navigate to={`/factories/${factoryId}`} replace />;
 }
 
 function ActivityRedirect({ everyEvent = false }: { everyEvent?: boolean }) {
@@ -147,7 +154,7 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
                 { path: 'user/new/:draftSessionId', element: <NewPage /> },
                 { path: 'user/threads/:threadId', element: <ThreadPage /> },
-                { path: 'supervisor', element: <SupervisorPage /> },
+                { path: 'supervisor', element: <SupervisorRoute /> },
                 { path: 'new', element: <NewPage /> },
                 { path: 'new-factory', element: <CreateFactoryPage /> },
                 { path: 'work', element: <WorkBoardPage /> },

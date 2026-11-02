@@ -286,7 +286,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug and factory-test s
 ../../../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx	../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	+4	Factory-routed built-in model start ported from upstream a9f392e60e (+1); Claude Code Factory needs no Mastra model (+3)
-../../../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx
+../../../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	+1	no supervisor shortcut while the supervisor chat is hidden (+1)
 ../../../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx
@@ -461,7 +461,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug and factory-test s
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionStatus.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionStatus.test.ts
-../../../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	+2	upstream c583bc9549 (#28271): New session opens a fresh draft (+1); f39f5d64d2 (#28300): New session and + close the mobile drawer (+1)
+../../../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	+3	upstream c583bc9549 (#28271): New session opens a fresh draft (+1); f39f5d64d2 (#28300): New session and + close the mobile drawer (+1); the supervisor Chat link only when enabled (+1)
 ../../../apps/ui/src/ui/lib/readSSE.test.ts	../apps/ui/src/ui/lib/readSSE.test.ts
 ../../../apps/ui/src/ui/lib/overlays/__tests__/overlays.msw.test.tsx	../apps/ui/src/ui/lib/overlays/__tests__/overlays.msw.test.tsx
 ../../../apps/ui/src/ui/lib/pwa/PwaInstallBanner.msw.test.tsx	../apps/ui/src/ui/lib/pwa/PwaInstallBanner.msw.test.tsx
@@ -473,7 +473,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug and factory-test s
 ../../../apps/ui/src/ui/pages/__tests__/BoardPageFilters.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/BoardPageFilters.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/KnowledgePage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/KnowledgePage.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/PrivateSessionNotFound.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/PrivateSessionNotFound.msw.test.tsx
-../../../apps/ui/src/ui/pages/__tests__/SupervisorPage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/SupervisorPage.msw.test.tsx	+1	the Factory chat on a Claude Code Factory runs on Claude Code
+../../../apps/ui/src/ui/pages/__tests__/SupervisorPage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/SupervisorPage.msw.test.tsx	+2	the Factory chat on a Claude Code Factory runs on Claude Code (+1); a bookmarked link redirects while the chat is hidden (+1)
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageDocumentTitle.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageDocumentTitle.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageEagerRender.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageEagerRender.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageHeader.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageHeader.msw.test.tsx

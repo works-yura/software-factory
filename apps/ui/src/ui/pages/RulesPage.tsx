@@ -29,7 +29,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
-import { supervisorAskPath } from '../domains/supervisor/services/supervisor';
+import { supervisorAskPath, supervisorChatEnabled } from '../domains/supervisor/services/supervisor';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE, RAIL_ROW_BODY } from '../domains/factory/components/Timeline';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import { SkeletonRows } from '../ui/SkeletonRows';
@@ -261,7 +261,7 @@ function DecisionRow({
         </Txt>
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-        {decision.status === 'failed' ? (
+        {decision.status === 'failed' && supervisorChatEnabled() ? (
           <Button
             variant="ghost"
             size="icon-sm"

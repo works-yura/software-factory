@@ -33,6 +33,16 @@ export function getSupervisorHealth(baseUrl: string, factoryProjectId: string): 
   return requestJson(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/supervisor/health`);
 }
 
+/**
+ * The supervisor chat is one conversation per factory, shared by the whole
+ * organization, so it is hidden until it can be private: no nav link, no "ask"
+ * shortcuts, and its route falls back to the factory home. Set
+ * `VITE_FACTORY_SUPERVISOR_CHAT=true` to bring it back.
+ */
+export function supervisorChatEnabled(): boolean {
+  return import.meta.env.VITE_FACTORY_SUPERVISOR_CHAT === 'true';
+}
+
 export function supervisorAskPath(factoryProjectId: string, question: string): string {
   return `/factories/${factoryProjectId}/supervisor?${new URLSearchParams({ ask: question })}`;
 }

@@ -10,7 +10,7 @@ import { canMoveTo, canStartRun } from '../boardCardState';
 import type { BoardCardOwner } from '../boardCardState';
 import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
-import { workItemPrompt } from '../../supervisor/services/supervisor';
+import { supervisorChatEnabled, workItemPrompt } from '../../supervisor/services/supervisor';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
@@ -120,10 +120,12 @@ export function WorkItemMenuItems({
           <span>{externalLinkLabel(item.source)}</span>
         </DropdownMenu.Item>
       )}
-      <DropdownMenu.Item render={<Link to={askSupervisorPath(factoryId, item)} />}>
-        <MessagesSquare aria-hidden />
-        <span>{t('menu.askSupervisor')}</span>
-      </DropdownMenu.Item>
+      {supervisorChatEnabled() && (
+        <DropdownMenu.Item render={<Link to={askSupervisorPath(factoryId, item)} />}>
+          <MessagesSquare aria-hidden />
+          <span>{t('menu.askSupervisor')}</span>
+        </DropdownMenu.Item>
+      )}
       {stages
         .filter(stage => stage.id !== columnStage)
         .filter(stage => !awaitsTriage || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))

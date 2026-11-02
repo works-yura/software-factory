@@ -132,6 +132,7 @@ function renderApp(initialPath = `/factories/${FACTORY_ID}/a`) {
 describe('AppLayout', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it('renders the sidebar once and swaps only the outlet between routes', async () => {
@@ -159,14 +160,24 @@ describe('AppLayout', () => {
       `/factories/${FACTORY_ID}/activity`,
     );
     const nav = within(sidebar).getByRole('navigation', { name: 'Factory' });
-    // The supervisor (restored from @mastra/factory 0.23) is the Factory's Chat.
+    // The supervisor chat is shared by the whole organization, so it stays out of the nav.
+    expect(within(nav).queryByRole('link', { name: 'Chat' })).not.toBeInTheDocument();
+    for (const retired of ['Overview', 'Audit log']) {
+      expect(within(nav).queryByRole('link', { name: retired })).not.toBeInTheDocument();
+    }
+  });
+
+  it('links the supervisor as the Factory chat when it is enabled', async () => {
+    vi.stubEnv('VITE_FACTORY_SUPERVISOR_CHAT', 'true');
+    stubFactory();
+    renderApp();
+
+    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
+    const nav = within(sidebar).getByRole('navigation', { name: 'Factory' });
     expect(within(nav).getByRole('link', { name: 'Chat' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/supervisor`,
     );
-    for (const retired of ['Overview', 'Audit log']) {
-      expect(within(nav).queryByRole('link', { name: retired })).not.toBeInTheDocument();
-    }
   });
 
   it('shows one sidebar toggle: in the sidebar header while open, in the page header once collapsed', async () => {
