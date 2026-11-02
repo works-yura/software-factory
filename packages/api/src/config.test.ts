@@ -80,7 +80,34 @@ describe('GET /web/config/features', () => {
     const response = await app.request('/web/config/features');
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual(expected);
+    const body = (await response.json()) as Record<string, unknown> & { harnesses: Array<{ id: string }> };
+    const { harnesses, ...flags } = body;
+    expect(flags).toEqual(expected);
+    // Every server runs Mastra; Claude Code only where it is configured.
+    expect(harnesses.map(harness => harness.id)).toEqual(expected.claudeCode ? ['mastra', 'claude-code'] : ['mastra']);
+  });
+
+  it("describes what each harness can do, so the UI asks that instead of the harness's id", async () => {
+    const app = new Hono();
+    mountApiRoutes(
+      app as never,
+      new ConfigRoutes({
+        auth: fakeRouteAuth({ enabled: false }),
+        controller: makeAgentController([]),
+        features: { knowledge: true, claudeCode: true },
+      }).routes(),
+    );
+    const { harnesses } = (await (await app.request('/web/config/features')).json()) as {
+      harnesses: Array<{ id: string; modelScope: string; supports: Record<string, boolean> }>;
+    };
+    expect(harnesses).toEqual([
+      expect.objectContaining({ id: 'mastra', modelScope: 'session', supports: expect.objectContaining({ goal: true }) }),
+      expect.objectContaining({
+        id: 'claude-code',
+        modelScope: 'factory',
+        supports: expect.objectContaining({ goal: false, knowledge: false, imageAttachments: false }),
+      }),
+    ]);
   });
 });
 

@@ -34,6 +34,7 @@ import { useChatModels } from './useChatModels';
 import { useChatModelCatalog } from './useChatModelCatalog';
 import { useChatPermissions } from './useChatPermissions';
 import { useChatSessionContext } from './useChatSessionContext';
+import type { HarnessDescriptor } from '@factory/contracts';
 import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 
@@ -50,7 +51,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
-  const { sessionId, sessionEnabled, baseUrl, modelLockedReason } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, modelLockedReason, harness } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
@@ -112,7 +113,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     return result.data;
   };
 
-  const commandsWithoutHelp: SlashCommand[] = [
+  const everyCommand: SlashCommand[] = [
     {
       name: 'model',
       args: '<id>',
@@ -306,6 +307,10 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     },
   ];
 
+  // Commands for what this session's harness does not have stay out of the list and of /help.
+  const unsupported = unsupportedCommands(harness);
+  const commandsWithoutHelp = everyCommand.filter(command => !unsupported.has(command.name));
+
   const helpCommand: SlashCommand = {
     name: 'help',
     description: tk('commands.help'),
@@ -337,4 +342,16 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   };
 
   return { commands, runComposerCommand };
+}
+
+/** Slash commands the harness has no counterpart for; an unknown harness (still loading) keeps them all. */
+export function unsupportedCommands(harness: HarnessDescriptor | undefined): Set<string> {
+  if (!harness) return new Set();
+  const names: string[] = [];
+  if (harness.modelScope !== 'session') names.push('model');
+  if (!harness.supports.goal) names.push('goal', 'goal-clear', 'goal-pause', 'goal-resume');
+  if (!harness.supports.sessionPermissions) names.push('permissions', 'yolo');
+  if (!harness.supports.thinkingLevel) names.push(THINK_COMMAND_DESCRIPTOR.name);
+  if (!harness.supports.memory) names.push('om');
+  return new Set(names);
 }

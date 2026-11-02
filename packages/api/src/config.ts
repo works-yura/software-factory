@@ -29,6 +29,7 @@ import { Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
 import { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, buildProviderAccess, buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 import type { ModelCatalog } from '@factory/credentials';
+import { CLAUDE_CODE_HARNESS, HARNESSES } from '@factory/contracts';
 
 export { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, resolveDeploymentModelProviders, buildProviderAccess, buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 export type { ProviderCredentialSource, ProviderInfo, OMSession, ModelCatalog, ModelCredentialHolder, ModelCatalogEntry } from '@factory/credentials';
@@ -399,6 +400,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             mcp: options.features?.mcp ?? false,
             claudeCode: options.features?.claudeCode ?? false,
             claudeSignIn: (options.features?.claudeCode ?? false) && (options.features?.claudeSignIn ?? false),
+            // What each harness this server runs can do; the UI asks these instead of checking ids.
+            harnesses: HARNESSES.filter(harness => harness.id !== CLAUDE_CODE_HARNESS.id || options.features?.claudeCode === true),
           }),
       }),
 

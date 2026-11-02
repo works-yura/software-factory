@@ -549,8 +549,6 @@
       "title": "Харнес",
       "description": "На чому працюють агенти цієї Factory.",
       "label": "Агенти працюють на",
-      "mastra": "Mastra",
-      "claudeCode": "Claude Code",
       "changeNote": "Змінюється в розділі Моделі; зміна діє для нових сесій.",
       "openModels": "Змінити в Моделях"
     },

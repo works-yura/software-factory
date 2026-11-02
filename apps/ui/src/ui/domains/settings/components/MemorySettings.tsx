@@ -26,12 +26,12 @@ import { OMSection } from './OMSection';
 
 export function MemorySettings({ factoryId }: { factoryId: string }) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
-  const { harness } = useFactoryHarness(factoryId);
+  const { harness, descriptor } = useFactoryHarness(factoryId);
   const { t } = useTranslation('settings');
 
-  // Observational memory is Mastra's; Claude Code compacts its own context. The nav hides the
-  // section on such a Factory, so only a direct link lands here.
-  if (harness === 'claude-code') {
+  // A harness without observational memory (Claude Code compacts its own context) has nothing to set here.
+  // The nav hides the section on such a Factory, so only a direct link lands here.
+  if (harness !== undefined && !descriptor.supports.memory) {
     return (
       <EmptyState
         as="h2"

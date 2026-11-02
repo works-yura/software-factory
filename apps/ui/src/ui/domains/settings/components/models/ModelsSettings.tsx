@@ -14,11 +14,12 @@ import { ModelRoutingSection } from './routing/ModelRoutingSection';
  */
 export function ModelsSettings({ factoryId }: { factoryId: string }) {
   const { t } = useTranslation('settings');
-  const { harness } = useFactoryHarness(factoryId);
+  const { harness, descriptor } = useFactoryHarness(factoryId);
   return (
     <div className="flex flex-col gap-8">
       <HarnessSwitchSection factoryId={factoryId} />
-      {harness === 'mastra' && (
+      {/* Each harness's own model settings: Mastra's providers, or Claude's model and accounts. */}
+      {harness !== undefined && descriptor.setup.modelProvider && (
         <>
           <ModelRoutingSection factoryId={factoryId} />
           <SettingsSubsection scope="org" title={t('models.customProviders')}>
@@ -28,7 +29,7 @@ export function ModelsSettings({ factoryId }: { factoryId: string }) {
           </SettingsSubsection>
         </>
       )}
-      {harness === 'claude-code' && (
+      {harness !== undefined && descriptor.setup.claudeSignIn && (
         <>
           <ClaudeCodeModelSection factoryId={factoryId} />
           <ClaudeAccountsSection />

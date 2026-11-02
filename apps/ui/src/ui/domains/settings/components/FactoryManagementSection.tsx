@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
+import { useHarness } from '../../../../hooks/useHarness';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { settingsSectionPath } from '../settingsSections';
@@ -16,6 +17,7 @@ export function FactoryManagementSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const factory = factoryQuery.data;
+  const harness = useHarness(factory?.harness);
   const deleteMutation = useDeleteFactoryMutation();
   const { t } = useTranslation('settings');
 
@@ -35,7 +37,7 @@ export function FactoryManagementSection() {
           <SettingsRow label={t('factory.harness.label')} description={t('factory.harness.changeNote')}>
             <div className="flex items-center gap-3">
               <Txt as="span" variant="body" data-testid="factory-harness">
-                {factory.harness === 'claude-code' ? t('factory.harness.claudeCode') : t('factory.harness.mastra')}
+                {harness.label}
               </Txt>
               <Link
                 to={settingsSectionPath(factory.id, 'models')}

@@ -46,7 +46,7 @@ type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { t } = useTranslation('chat');
-  const { sessionId, sessionEnabled, baseUrl, factorySessionState, claudeCode } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, factorySessionState, claudeCode, harness } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
@@ -85,7 +85,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const draftModelFailed = onUserDraft && !claudeCode && modelError !== undefined;
   const [heldDraftText, setHeldDraftText] = useState<string>();
   const startingDraft = heldDraftText !== undefined;
-  const attachDisabled = blocked || chatPreparing || planFeedback.pending || startingDraft;
+  // A harness that takes no images (Claude Code here) refuses them on send, so the button is off from the start.
+  const attachDisabled =
+    blocked || chatPreparing || planFeedback.pending || startingDraft || harness?.supports.imageAttachments === false;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
     disabled: chatPreparing || planFeedback.pending || startingDraft,
   });

@@ -8,6 +8,7 @@ import { useLocation, useParams } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
+import { useHarness } from '../../../../hooks/useHarness';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { ClaudeCodeModel, FactoryProject, LinkedRepositoryPayload } from '../../workspaces/services/github';
@@ -89,6 +90,10 @@ export function ChatSessionConfigProvider({
   const sessionQuery = useUserSessionQuery(supervisor ? undefined : userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
+  // The stored session says which harness runs it; the Factory chat and a personal draft run on the Factory's.
+  const harness = useHarness(
+    supervisor ? factory?.harness : storedSession ? storedSession.harness : isUserDraft ? factory?.harness : undefined,
+  );
   const owner = useMemo(
     () =>
       storedSession && {
@@ -119,6 +124,7 @@ export function ChatSessionConfigProvider({
           factorySessionState: factory ? { factoryProjectId: factory.id } : undefined,
           baseUrl,
           kind: 'factory' as const,
+          harness,
           // A Claude Code Factory's chat runs on Claude Code too (the server creates it there), on its Claude model.
           claudeCode: factory?.harness === 'claude-code' ? { model: factory.claudeCodeModel ?? null } : undefined,
         }}
@@ -229,6 +235,7 @@ export function ChatSessionConfigProvider({
     owner,
     modelLockedReason: modelLockedReason(storedSession),
     claudeCode: claudeCodeChat({ userScoped, isUserDraft, storedSession, factory }),
+    harness,
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;

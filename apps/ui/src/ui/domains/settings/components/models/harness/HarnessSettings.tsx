@@ -12,6 +12,7 @@ import { translator } from '../../../../../i18n/t';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import { CLAUDE_CODE_MODELS, isClaudeCodeModel, isFactoryHarness } from '../../../../workspaces/services/github';
 import type { ClaudeCodeModel, FactoryHarness } from '../../../../workspaces/services/github';
+import { useHarness } from '../../../../../../hooks/useHarness';
 import { SettingsSubsection } from '../../SettingsSubsection';
 
 const tk = translator('settings');
@@ -40,7 +41,8 @@ export function useFactoryHarness(factoryId: string) {
   const claudeCodeModel: ClaudeCodeModel | null = isClaudeCodeModel(project?.claudeCodeModel)
     ? project.claudeCodeModel
     : null;
-  return { projectQuery, mutation, harness, claudeCodeModel };
+  const descriptor = useHarness(harness);
+  return { projectQuery, mutation, harness, descriptor, claudeCodeModel };
 }
 
 /**

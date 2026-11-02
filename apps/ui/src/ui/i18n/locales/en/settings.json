@@ -539,8 +539,6 @@
       "title": "Harness",
       "description": "The runtime this Factory’s agents run on.",
       "label": "Agents run on",
-      "mastra": "Mastra",
-      "claudeCode": "Claude Code",
       "changeNote": "Switch it in Models; the switch applies to new sessions.",
       "openModels": "Change in Models"
     },

@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
+import type { HarnessDescriptor } from '@factory/contracts';
+
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 
@@ -11,6 +13,8 @@ export interface ServerFeatures {
   claudeCode?: boolean;
   /** People can sign in to Claude from here; the sign-in page opens on the server's machine. Absent from older servers. */
   claudeSignIn?: boolean;
+  /** The harnesses this server runs and what each can do. Absent from older servers. */
+  harnesses?: HarnessDescriptor[];
 }
 
 export function useServerFeatures() {

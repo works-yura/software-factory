@@ -9,6 +9,7 @@ import { Link, useLocation, useParams } from 'react-router';
 import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
+import { useHarness } from '../../hooks/useHarness';
 import { useFallbackModelQuery } from '../../hooks/useAvailableModels';
 import { useProvidersQuery } from '../../hooks/use-providers';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
@@ -35,8 +36,8 @@ export function NewPage() {
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
   const providersQuery = useProvidersQuery();
   const defaultModelId = projectQuery.data?.defaultModelId ?? undefined;
-  // A Claude Code Factory's chats run on its Claude model, so no Mastra model or provider key is asked for.
-  const claudeCode = (projectQuery.data?.harness ?? activeFactory?.harness) === 'claude-code';
+  // A harness whose model is the Factory's (Claude Code) asks for no Mastra model or provider key here.
+  const claudeCode = useHarness(projectQuery.data?.harness ?? activeFactory?.harness).modelScope === 'factory';
   // No Factory default: chats start on the built-in model the organization's keys can run, as the server picks.
   const fallbackModelQuery = useFallbackModelQuery({
     factoryProjectId: activeFactory?.id,

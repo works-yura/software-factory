@@ -1,5 +1,6 @@
 import type { ClaudeCodeModel } from '../../workspaces/services/github';
 import { createContext } from 'react';
+import type { HarnessDescriptor } from '@factory/contracts';
 
 import type { ThreadOwner } from '../services/reply-credential';
 
@@ -80,6 +81,11 @@ export interface ChatSessionContextApi {
    * model is the Factory's Claude model (null = the CLI default), not a Mastra pick.
    */
   claudeCode?: { model: ClaudeCodeModel | null };
+  /**
+   * What the harness this chat runs on can do (commands, attachments, where its
+   * model is chosen). Absent while unknown; read it through `chatHarness`.
+   */
+  harness?: HarnessDescriptor;
 }
 
 export const ChatSessionContext = createContext<ChatSessionContextApi | null>(null);

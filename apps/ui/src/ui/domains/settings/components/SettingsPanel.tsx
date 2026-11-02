@@ -51,7 +51,9 @@ export function SettingsPanel() {
 
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
-  const { harness } = useFactoryHarness(factoryId ?? '');
+  const { harness, descriptor } = useFactoryHarness(factoryId ?? '');
+  // A harness with per-session permission categories keeps them in Behavior; otherwise the Factory's tool rules do.
+  const factoryToolRules = harness !== undefined && !descriptor.supports.sessionPermissions;
   const settings = settingsQuery.data ?? null;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
@@ -76,10 +78,10 @@ export function SettingsPanel() {
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} />}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
-      {section === 'behavior' && factoryId && harness === 'claude-code' && (
+      {section === 'behavior' && factoryId && factoryToolRules && (
         <ClaudeBehaviorSettings factoryId={factoryId} />
       )}
-      {section === 'behavior' && harness !== 'claude-code' && (
+      {section === 'behavior' && !factoryToolRules && (
         <BehaviorSettings
           settings={settings}
           onBehaviorChange={onBehaviorChange}
