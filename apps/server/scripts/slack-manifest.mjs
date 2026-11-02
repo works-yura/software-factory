@@ -7,8 +7,8 @@ const usage = `Usage:
   pnpm slack:manifest --url <public-url> --name <app-name> [--copy]
 
 Examples:
-  pnpm slack:manifest --url https://mc-web.example.com --name "Mastra Factory (dev)"
-  pnpm slack:manifest --url https://mc-web.example.com/ --name "Mastra Factory (dev)" --copy`;
+  pnpm slack:manifest --url https://mc-web.example.com --name "Factory (dev)"
+  pnpm slack:manifest --url https://mc-web.example.com/ --name "Factory (dev)" --copy`;
 
 const { values } = parseArgs({
   options: {

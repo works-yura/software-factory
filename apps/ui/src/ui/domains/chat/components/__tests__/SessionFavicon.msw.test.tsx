@@ -8,7 +8,7 @@ function faviconHref() {
 }
 
 beforeEach(() => {
-  document.head.innerHTML = '<link rel="icon" type="image/svg+xml" href="/mastra.svg">';
+  document.head.innerHTML = '<link rel="icon" type="image/svg+xml" href="/factory.svg">';
 });
 
 describe('SessionFavicon', () => {
@@ -48,7 +48,7 @@ describe('SessionFavicon', () => {
     it('keeps the normal Mastra favicon', () => {
       renderWithProviders(<SessionFavicon />);
 
-      expect(faviconHref()).toBe('/mastra.svg');
+      expect(faviconHref()).toBe('/factory.svg');
     });
   });
 
@@ -57,7 +57,7 @@ describe('SessionFavicon', () => {
       const { unmount } = renderWithProviders(<SessionFavicon state="working" />);
       unmount();
 
-      expect(faviconHref()).toBe('/mastra.svg');
+      expect(faviconHref()).toBe('/factory.svg');
     });
   });
 

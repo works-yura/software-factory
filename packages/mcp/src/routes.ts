@@ -64,7 +64,7 @@ const FACTORY_MCP_SERVER_VERSION = '1.0.0';
 
 /** What a connected client is told the server is for and where to start. */
 const FACTORY_MCP_INSTRUCTIONS = [
-  'A Mastra Factory tracks software work as work items on a board; agent sessions plan and build them.',
+  'A Factory tracks software work as work items on a board; agent sessions plan and build them.',
   'Start with `factory_list_attention` for what needs a person, or `search` and `fetch` to find a work item.',
   'Work item tools file, update, move and follow items; session tools start, message and follow the agent sessions working on them.',
   'Every call runs as the signed-in user. When the Factory has a repository, session tools act from a private connector session of theirs.',
@@ -367,9 +367,9 @@ async function serveTools(
 ): Promise<Response> {
   const server = new MCPServer({
     id: `factory-${options.factoryProjectId}`,
-    name: `${options.projectName ?? 'Mastra'} Factory`,
+    name: options.projectName ? `${options.projectName} Factory` : 'Factory',
     version: FACTORY_MCP_SERVER_VERSION,
-    description: 'Manage work items, sessions and decisions in a Mastra Factory.',
+    description: 'Manage work items, sessions and decisions in a Factory.',
     instructions: FACTORY_MCP_INSTRUCTIONS,
     // VS Code, Cursor and Claude Code still open with 2025-era `initialize`; serve them statelessly.
     legacy: 'stateless',
@@ -497,7 +497,7 @@ export function buildFactoryMcpRoutes(deps: FactoryMcpRoutesDeps): ApiRoute[] {
           resource: `${deps.publicOrigin}${mcpPath}`,
           authorization_servers: deps.authorizationServers,
           bearer_methods_supported: ['header'],
-          resource_name: 'Mastra Factory',
+          resource_name: 'Factory',
         });
       },
     }),

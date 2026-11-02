@@ -258,6 +258,16 @@ export function isClaudeCodeModel(value: unknown): value is ClaudeCodeModel {
 }
 
 /** A Factory project row from `/web/factory/projects`. */
+export type FactoryToolPolicy = 'allow' | 'ask' | 'deny';
+export type FactoryToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
+
+export interface FactoryToolPermissions {
+  /** A category left out asks. */
+  categories: Partial<Record<FactoryToolCategory, FactoryToolPolicy>>;
+  /** Auto-approve: every category is allowed. */
+  yolo: boolean;
+}
+
 export interface FactoryProjectPayload {
   id: string;
   name: string;
@@ -276,6 +286,8 @@ export interface FactoryProjectPayload {
   autoRunEnabled?: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
   autoApprovePlans?: boolean;
+  /** Settings → Behavior tool permissions of a Factory on Claude Code; null until set (every category asks). */
+  toolPermissions?: FactoryToolPermissions | null;
   /** Whether Review agents publish test results as a commit check. Defaults to off. */
   reviewTestChecksEnabled?: boolean;
   /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
@@ -446,6 +458,21 @@ export async function updateFactoryHarness(
     body: JSON.stringify(patch),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.updateHarness'));
+  return project;
+}
+
+export async function updateFactoryToolPermissions(
+  baseUrl: string,
+  factoryProjectId: string,
+  toolPermissions: FactoryToolPermissions,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ toolPermissions }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.updateToolPermissions'));
   return project;
 }
 

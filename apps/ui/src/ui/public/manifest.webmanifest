@@ -1,6 +1,6 @@
 {
   "id": "/",
-  "name": "Mastra Factory",
+  "name": "Factory",
   "short_name": "Factory",
   "description": "Build and manage software with MastraCode agents.",
   "start_url": "/",

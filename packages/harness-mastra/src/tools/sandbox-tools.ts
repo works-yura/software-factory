@@ -33,7 +33,7 @@ export function createFactorySandboxTools(
     execute: async ({ reason }) => {
       const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
       if (!sourceControl) throw new Error('This session has no sandbox to recreate.');
-      console.warn('[Mastra Factory] Session agent is recreating its sandbox', {
+      console.warn('[Factory] Session agent is recreating its sandbox', {
         orgId: scope.orgId,
         sessionId: scope.sessionId,
         reason,

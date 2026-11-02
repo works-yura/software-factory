@@ -1761,7 +1761,7 @@ describe('prs route', () => {
     );
     expect(res.status).toBe(200);
     expect(ingestFactoryEvent).toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith('[Mastra Factory] Failed to ingest polled GitHub events', expect.anything());
+    expect(warn).toHaveBeenCalledWith('[Factory] Failed to ingest polled GitHub events', expect.anything());
     warn.mockRestore();
   });
 });

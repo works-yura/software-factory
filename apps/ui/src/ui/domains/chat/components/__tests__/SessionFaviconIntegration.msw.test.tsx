@@ -41,7 +41,7 @@ function renderThread() {
 }
 
 beforeEach(() => {
-  document.head.innerHTML = '<link rel="icon" type="image/svg+xml" href="/mastra.svg">';
+  document.head.innerHTML = '<link rel="icon" type="image/svg+xml" href="/factory.svg">';
 });
 
 describe('Session favicon tracks the session lifecycle', () => {

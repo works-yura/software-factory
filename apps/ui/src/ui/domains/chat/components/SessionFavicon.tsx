@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 import type { ChatSessionPhase } from '../../workspaces/services/sessionStatus';
 
-const DEFAULT_FAVICON = '/mastra.svg';
+const DEFAULT_FAVICON = '/factory.svg';
 
 const FAVICONS: Record<ChatSessionPhase, string> = {
   initializing: '/favicon-session-initializing.svg',

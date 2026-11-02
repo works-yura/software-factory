@@ -39,7 +39,7 @@ export async function resolveEnvironmentRepositories(args: {
     const connection = connectionById.get(link.connectionId);
     const repository = connection ? await sourceControl.repositories.get({ orgId, id: link.repositoryId }) : null;
     if (!connection || !repository) {
-      console.warn('[Mastra Factory] Environment repository link cannot be resolved; skipping it', {
+      console.warn('[Factory] Environment repository link cannot be resolved; skipping it', {
         orgId,
         factoryProjectId,
         projectRepositoryId: link.id,

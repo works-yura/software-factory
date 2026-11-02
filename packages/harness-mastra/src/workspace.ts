@@ -603,7 +603,7 @@ export async function resolveProjectEnvironment(
   for (const link of links) {
     const repository = await storage.repositories.get({ orgId, id: link.repositoryId });
     if (!repository) {
-      console.warn('[Mastra Factory] Environment repository link has no repository row; skipping it', {
+      console.warn('[Factory] Environment repository link has no repository row; skipping it', {
         orgId,
         factoryProjectId: project.id,
         projectRepositoryId: link.id,
@@ -616,7 +616,7 @@ export async function resolveProjectEnvironment(
     const directory = repositoryDirectoryName(repository.slug);
     if (directories.has(directory)) {
       console.warn(
-        '[Mastra Factory] Environment repository shares its directory name with an earlier one; skipping it',
+        '[Factory] Environment repository shares its directory name with an earlier one; skipping it',
         {
           orgId,
           factoryProjectId: project.id,
@@ -1164,7 +1164,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
         if (!tokenScopeWarned) {
           tokenScopeWarned = true;
-          console.warn('[Mastra Factory] GH_TOKEN covers the session repository only', {
+          console.warn('[Factory] GH_TOKEN covers the session repository only', {
             sessionId: session.sessionId,
             repositories: environment?.repos.map(repo => repo.slug) ?? [repoFullName],
             reason,
@@ -1427,7 +1427,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // the problem. Clone and checkout above still ran, so the tree is
         // real; the agent (or an edited setup command) takes it from here.
         if (hasFailedSetupCommand(session.id, projectRepository.setupCommand)) {
-          console.warn('[Mastra Factory] Skipping setup command that already failed this session', {
+          console.warn('[Factory] Skipping setup command that already failed this session', {
             orgId: session.orgId,
             sessionId: session.sessionId,
             projectRepositoryId: session.projectRepositoryId,
@@ -1444,7 +1444,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                 timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
               });
             } catch (teardownError) {
-              console.warn('[Mastra Factory] Worktree teardown after setup failure failed', {
+              console.warn('[Factory] Worktree teardown after setup failure failed', {
                 orgId: session.orgId,
                 sessionId: session.sessionId,
                 projectRepositoryId: session.projectRepositoryId,
@@ -1566,7 +1566,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             );
             state.branch = synced.branch;
           } catch (error) {
-            console.warn('[Mastra Factory] Environment repository could not be synced; continuing the boot', {
+            console.warn('[Factory] Environment repository could not be synced; continuing the boot', {
               orgId: session.orgId,
               sessionId: session.sessionId,
               projectRepositoryId: repo.projectRepositoryId,
@@ -1593,7 +1593,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             recordFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`);
             state.setupStatus = 'failed';
             failures.set(repo.slug, error.message);
-            console.warn('[Mastra Factory] Environment repository setup command failed; continuing the boot', {
+            console.warn('[Factory] Environment repository setup command failed; continuing the boot', {
               orgId: session.orgId,
               sessionId: session.sessionId,
               projectRepositoryId: repo.projectRepositoryId,
@@ -1608,7 +1608,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // commands, a workspace command that keeps failing must not wedge
           // every start of the session.
           if (hasFailedSetupCommand(session.id, `workspace:${workspaceCommand}`)) {
-            console.warn('[Mastra Factory] Skipping workspace setup command that already failed this session', {
+            console.warn('[Factory] Skipping workspace setup command that already failed this session', {
               orgId: session.orgId,
               sessionId: session.sessionId,
             });
@@ -1664,7 +1664,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           });
         }
       } catch (error) {
-        console.warn('[Mastra Factory] Could not record environment setup results', {
+        console.warn('[Factory] Could not record environment setup results', {
           orgId: session.orgId,
           sessionId: session.sessionId,
           error: error instanceof Error ? error.message : String(error),

@@ -1,10 +1,10 @@
 /**
  * `document.title` follows the current thread so browser tabs read at a
  * glance. Two shapes:
- *   - PR-backed factory sessions → `#<number> | Mastra Factory`
- *   - User sessions (and any non-PR thread) → `<thread title> | Mastra Factory`
+ *   - PR-backed factory sessions → `#<number> | Factory`
+ *   - User sessions (and any non-PR thread) → `<thread title> | Factory`
  * Everything else — loading, no linked work item, no title yet — leaves the
- * default `Mastra Factory` in place.
+ * default `Factory` in place.
  */
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -108,7 +108,7 @@ async function renderRoute(path: string) {
 }
 
 afterEach(() => {
-  document.title = 'Mastra Factory';
+  document.title = 'Factory';
 });
 
 describe('ThreadPage document title', () => {
@@ -148,7 +148,7 @@ describe('ThreadPage document title', () => {
     });
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
-    await waitFor(() => expect(document.title).toBe('#1567 | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('#1567 | Factory'));
   });
 
   it('shows the thread title for user sessions', async () => {
@@ -158,7 +158,7 @@ describe('ThreadPage document title', () => {
     });
     await renderRoute(`/factories/${FACTORY_ID}/user/threads/${THREAD_ID}`);
 
-    await waitFor(() => expect(document.title).toBe('Investigate Pricing Bug | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('Investigate Pricing Bug | Factory'));
   });
 
   it('uses the thread title in the work-session sidebar while the document title shows the issue number', async () => {
@@ -197,7 +197,7 @@ describe('ThreadPage document title', () => {
     });
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
-    await waitFor(() => expect(document.title).toBe('#42 | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('#42 | Factory'));
     expect(await screen.findByRole('button', { name: 'Fix flaky login' })).toBeInTheDocument();
   });
 
@@ -211,7 +211,7 @@ describe('ThreadPage document title', () => {
     // Give the session boundary a chance to resolve so we know we've reached
     // the branch that mounts <PageTitle/>; without a title/PR number the hook
     // must leave the default in place and preserve the sidebar branch fallback.
-    await waitFor(() => expect(document.title).toBe('Mastra Factory'), { timeout: 2000 });
+    await waitFor(() => expect(document.title).toBe('Factory'), { timeout: 2000 });
     expect(await screen.findByRole('button', { name: 'factory/pr-1567' })).toBeInTheDocument();
   });
 });

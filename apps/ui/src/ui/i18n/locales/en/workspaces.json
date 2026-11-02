@@ -68,7 +68,7 @@
     "steps": {
       "name": {
         "title": "Name your new Factory",
-        "placeholder": "e.g. Mastra"
+        "placeholder": "e.g. Acme"
       },
       "harness": {
         "title": "Choose how your agents run",
@@ -356,7 +356,8 @@
     "unlinkRepository": "Failed to unlink repository ({{status}})",
     "deleteFactory": "Failed to delete Factory ({{status}})",
     "loadRepositorySettings": "Failed to load repository settings ({{status}})",
-    "updateHarness": "Failed to update the Factory harness"
+    "updateHarness": "Failed to update the Factory harness",
+    "updateToolPermissions": "Failed to update the Factory’s tool permissions"
   },
   "sessions": {
     "newSession": "New session",

@@ -570,7 +570,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
           // The thinking default sets the reasoning spend of every run that has not
           // picked its own, so it is admin-only.
-          const adminField = parsedBody.data.defaultThinkingLevel !== undefined ? 'thinking default' : undefined;
+          // Tool permissions are shared by everyone working in the Factory and YOLO lets
+          // every call through, so they are admin-only as well.
+          const adminField =
+            parsedBody.data.defaultThinkingLevel !== undefined
+              ? 'thinking default'
+              : parsedBody.data.toolPermissions !== undefined
+                ? 'tool permissions'
+                : undefined;
           if (
             adminField &&
             this.deps.auth.enabled() &&

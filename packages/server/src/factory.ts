@@ -1199,7 +1199,7 @@ export class MastraFactory {
                   versionControl: githubIntegration.versionControl,
                 }
               : undefined,
-            logger: { info: (msg, meta) => console.info(`[Mastra Factory] ${msg}`, meta ?? {}) },
+            logger: { info: (msg, meta) => console.info(`[Factory] ${msg}`, meta ?? {}) },
           },
           { getMastra: () => this.#prepared?.base.controller.getMastra() },
         )

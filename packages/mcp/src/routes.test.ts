@@ -333,7 +333,7 @@ describe('Factory MCP server', () => {
       resource: `${PUBLIC_ORIGIN}/web/factory/projects/${project.id}/mcp`,
       authorization_servers: ['https://auth.example.com'],
       bearer_methods_supported: ['header'],
-      resource_name: 'Mastra Factory',
+      resource_name: 'Factory',
     });
   });
 
@@ -365,7 +365,7 @@ describe('Factory MCP server', () => {
 
     const discover = await claudeRequest(url, 'server/discover', {}, 'token-alice');
     const instructions: string = discover.body?.result.instructions;
-    expect(instructions).toMatch(/Mastra Factory/);
+    expect(instructions).toMatch(/A Factory tracks/);
     expect(instructions).toMatch(/signed-in user/);
 
     // Every tool the instructions point Claude at must be one it can call.

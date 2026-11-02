@@ -68,7 +68,7 @@
     "steps": {
       "name": {
         "title": "Назвіть нову Factory",
-        "placeholder": "наприклад, Mastra"
+        "placeholder": "наприклад, Acme"
       },
       "harness": {
         "title": "Виберіть харнес: на чому працюватимуть агенти",
@@ -360,7 +360,8 @@
     "unlinkRepository": "Не вдалося відв'язати репозиторій ({{status}})",
     "deleteFactory": "Не вдалося видалити Factory ({{status}})",
     "loadRepositorySettings": "Не вдалося завантажити налаштування репозиторію ({{status}})",
-    "updateHarness": "Не вдалося змінити харнес Factory"
+    "updateHarness": "Не вдалося змінити харнес Factory",
+    "updateToolPermissions": "Не вдалося змінити дозволи інструментів Factory"
   },
   "sessions": {
     "newSession": "Нова сесія",

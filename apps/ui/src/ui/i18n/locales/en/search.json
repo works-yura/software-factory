@@ -3,7 +3,7 @@
   "dialog": {
     "title": "Global search",
     "description": "Search navigation, Factories, work sessions, review sessions, and user sessions.",
-    "commandLabel": "Search MastraCode"
+    "commandLabel": "Search Factory"
   },
   "input": {
     "placeholder": "Search sessions, reviews, #issues, pages, and Factories…"

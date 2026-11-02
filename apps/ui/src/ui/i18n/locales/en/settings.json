@@ -7,7 +7,7 @@
     "repositories": "Repositories",
     "environment": "Environment",
     "intake": "Work Intake",
-    "models": "Models",
+    "models": "Harness",
     "skills": "Skills",
     "behavior": "Behavior",
     "memory": "Memory"
@@ -431,7 +431,7 @@
     "notProvided": "Not provided",
     "profile": {
       "title": "Profile",
-      "description": "Your signed-in identity for this MastraCode deployment."
+      "description": "Your signed-in identity for this Factory deployment."
     },
     "accountId": {
       "label": "Account ID",
@@ -446,8 +446,8 @@
     "session": {
       "title": "Session",
       "logOut": "Log out",
-      "description": "End your MastraCode session on this device.",
-      "logOutLabel": "Log out of MastraCode"
+      "description": "End your Factory session on this device.",
+      "logOutLabel": "Log out of Factory"
     },
     "github": {
       "title": "GitHub account",
@@ -477,6 +477,11 @@
     "fanfare": "Fanfare"
   },
   "behavior": {
+    "claudeCode": {
+      "generalDescription": "Shared by everyone working in this Factory. Saved with the Factory and applied to every Claude Code turn. Smart editing and completion notifications belong to Mastra, so they are not shown here.",
+      "permissionsDescription": "“Allow” runs without asking, “Ask” asks you, “Deny” blocks. Auto-approve above allows every category. Saved with the Factory and applied to every Claude Code turn.",
+      "saveFailed": "Could not save the tool permissions"
+    },
     "general": {
       "title": "General",
       "description": "Shared by everyone working in this Factory. Auto-approve and smart editing reset when the server restarts."

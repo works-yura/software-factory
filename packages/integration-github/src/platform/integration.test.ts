@@ -1354,7 +1354,7 @@ describe('PlatformGithubIntegration', () => {
       userGithubUsername: 'ada',
     });
     const logged = warningLog.mock.calls.map(call => String(call[0])).join('\n');
-    expect(logged).toContain('[Mastra Factory] WARN Platform GitHub user connection verification failed');
+    expect(logged).toContain('[Factory] WARN Platform GitHub user connection verification failed');
     expect(logged).toContain('"userId":"user-1"');
     expect(logged).toContain('"reason":"missing-permissions"');
     warningLog.mockRestore();

@@ -378,7 +378,7 @@ async function ingestPolledEvents(
   const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
   // Best-effort: a rule-ingress failure must not fail the GitHub list response it piggybacks on.
   if (rejected) {
-    console.warn('[Mastra Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
+    console.warn('[Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
   }
 }
 
@@ -774,7 +774,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
               // keys). Skip it so the org's usable installations still list.
               if ((err as { status?: number }).status === 403) {
                 console.warn(
-                  `[Mastra Factory] skipping GitHub installation ${inst.externalId} (${inst.accountName}): ${(err as Error).message}`,
+                  `[Factory] skipping GitHub installation ${inst.externalId} (${inst.accountName}): ${(err as Error).message}`,
                 );
                 return { inst, list: [] };
               }
@@ -784,7 +784,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
               // reflects reality and the UI prompts a reconnect, then keep
               // listing the remaining installations.
               if ((err as { status?: number }).status !== 404) throw err;
-              console.error(`[Mastra Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
+              console.error(`[Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
               await github.sourceControlStorage.installations.delete({ orgId, id: inst.id });
               return { inst, list: [] };
             }

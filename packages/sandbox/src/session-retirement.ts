@@ -89,7 +89,7 @@ export class SessionRetirementCoordinator {
     this.#invalidateSession = options.invalidateSession ?? (() => {});
     this.#onSessionDeleted = options.onSessionDeleted;
     this.#sandbox = options.sandbox;
-    this.#warn = options.warn ?? ((message, details) => console.warn(`[Mastra Factory] ${message}`, details));
+    this.#warn = options.warn ?? ((message, details) => console.warn(`[Factory] ${message}`, details));
     this.#destroyTimeoutMs = options.destroyTimeoutMs ?? DEFAULT_DESTROY_TIMEOUT_MS;
   }
 

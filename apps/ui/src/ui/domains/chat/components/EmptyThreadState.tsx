@@ -1,6 +1,6 @@
+import { Factory } from 'lucide-react';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
-import { Logo } from '@mastra/playground-ui/components/Logo';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -38,7 +38,7 @@ export function EmptyThreadState() {
 
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
-      <Logo size="md" aria-label="Mastra Code" />
+      <Factory size={40} aria-label="Factory" />
       <Txt as="h1" variant="display" tone="ink" id="empty-thread-title" className="mt-7 text-balance">
         {t('emptyThread.title')}
       </Txt>

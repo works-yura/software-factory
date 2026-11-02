@@ -1978,7 +1978,7 @@ describe('GitHub session workspace preparation', () => {
         setupError,
       );
       expect(warn).toHaveBeenCalledWith(
-        '[Mastra Factory] Worktree teardown after setup failure failed',
+        '[Factory] Worktree teardown after setup failure failed',
         expect.objectContaining({ sessionId: 'session-a', error: 'secondary teardown failure' }),
       );
     } finally {
@@ -2011,7 +2011,7 @@ describe('GitHub session workspace preparation', () => {
         workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
       ).resolves.toBeDefined();
       expect(warn).toHaveBeenCalledWith(
-        '[Mastra Factory] Skipping setup command that already failed this session',
+        '[Factory] Skipping setup command that already failed this session',
         expect.objectContaining({ sessionId: 'session-a' }),
       );
     } finally {
@@ -4080,7 +4080,7 @@ describe('factory environment sandbox context', () => {
 
       expect(lastGhToken()).toBe('repo-token-repository-1');
       expect(warn).toHaveBeenCalledExactlyOnceWith(
-        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        '[Factory] GH_TOKEN covers the session repository only',
         expect.objectContaining({
           reason: 'provider failed to mint one token for this repository set (Error)',
         }),
@@ -4102,7 +4102,7 @@ describe('factory environment sandbox context', () => {
 
       expect(lastGhToken()).toBe('repo-token-repository-1');
       expect(warn).toHaveBeenCalledExactlyOnceWith(
-        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        '[Factory] GH_TOKEN covers the session repository only',
         expect.objectContaining({
           sessionId: 'session-a',
           repositories: ['octocat/hello', 'octocat/docs'],
@@ -4142,7 +4142,7 @@ describe('factory environment sandbox context', () => {
       await boot(resolver);
 
       expect(warn).toHaveBeenCalledWith(
-        '[Mastra Factory] Environment repository could not be synced; continuing the boot',
+        '[Factory] Environment repository could not be synced; continuing the boot',
         expect.objectContaining({ projectRepositoryId: 'link-2', error: 'fetch failed' }),
       );
       expect(mocks.runSetupCommand.mock.calls.map(call => call[2])).toEqual(['pnpm i', 'touch .workspace-ready']);
@@ -4177,7 +4177,7 @@ describe('factory environment sandbox context', () => {
       await expect(boot(resolver)).resolves.toBeDefined();
       expect(mocks.runSetupCommand.mock.calls.map(call => call[2])).not.toContain('touch .workspace-ready');
       expect(warn).toHaveBeenCalledWith(
-        '[Mastra Factory] Skipping workspace setup command that already failed this session',
+        '[Factory] Skipping workspace setup command that already failed this session',
         expect.objectContaining({ sessionId: 'session-a' }),
       );
       warn.mockRestore();
@@ -4198,7 +4198,7 @@ describe('factory environment sandbox context', () => {
       await boot(resolver);
 
       expect(warn).toHaveBeenCalledWith(
-        '[Mastra Factory] Environment repository shares its directory name with an earlier one; skipping it',
+        '[Factory] Environment repository shares its directory name with an earlier one; skipping it',
         expect.objectContaining({ projectRepositoryId: 'link-4', directory: 'docs' }),
       );
       const ctx = mocks.createSandbox.mock.calls[0]![0] as any;

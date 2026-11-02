@@ -84,6 +84,20 @@ export const createProjectBodySchema = z.object({
   claudeCodeModel: claudeCodeModelSchema.optional().default(null),
 });
 
+/** A Factory's tool permissions (Settings → Behavior); a category left out asks. */
+const toolPermissionsSchema = z.object({
+  categories: z
+    .object({
+      read: z.enum(['allow', 'ask', 'deny']).optional(),
+      edit: z.enum(['allow', 'ask', 'deny']).optional(),
+      execute: z.enum(['allow', 'ask', 'deny']).optional(),
+      mcp: z.enum(['allow', 'ask', 'deny']).optional(),
+      other: z.enum(['allow', 'ask', 'deny']).optional(),
+    })
+    .strict(),
+  yolo: z.boolean(),
+});
+
 export const updateProjectBodySchema = z
   .object({
     name: nonEmptyTrimmed(200).optional(),
@@ -92,6 +106,7 @@ export const updateProjectBodySchema = z
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     harness: z.enum(FACTORY_HARNESS_KINDS).optional(),
     claudeCodeModel: claudeCodeModelSchema.optional(),
+    toolPermissions: toolPermissionsSchema.nullable().optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),
     reviewTestChecksEnabled: z.boolean().optional(),

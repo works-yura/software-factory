@@ -420,7 +420,7 @@ describe('Global search', () => {
 
     await user.keyboard('{Control>}k{/Control}');
     await screen.findByRole('dialog', { name: 'Global search' });
-    expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
+    expect(screen.getByRole('combobox', { name: 'Search Factory' })).toHaveFocus();
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
@@ -436,7 +436,7 @@ describe('Global search', () => {
     const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
     await user.click(trigger);
     await screen.findByRole('dialog', { name: 'Global search' });
-    expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
+    expect(screen.getByRole('combobox', { name: 'Search Factory' })).toHaveFocus();
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
@@ -452,7 +452,7 @@ describe('Global search', () => {
     await user.keyboard('{Control>}k{/Control}');
 
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
+    expect(screen.getByRole('combobox', { name: 'Search Factory' })).toHaveFocus();
   });
 
   it.each(['activity', 'overview', 'attention', 'metrics', 'audit'])(
@@ -491,7 +491,7 @@ describe('Global search', () => {
       'Connections',
       'Repositories',
       'Work Intake',
-      'Models',
+      'Harness',
       'Memory',
       'Behavior',
     ]) {
@@ -533,7 +533,7 @@ describe('Global search', () => {
     await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
-    const input = screen.getByRole('combobox', { name: 'Search MastraCode' });
+    const input = screen.getByRole('combobox', { name: 'Search Factory' });
     const sessionRequestCount = Object.values(requests.sessionRequests).reduce((total, count) => total + count, 0);
     const workItemRequestCount = requests.workItemRequests;
 
@@ -731,7 +731,7 @@ describe('Global search', () => {
     const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), query);
+    await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), query);
 
     expect(await screen.findByText('Review command palette PR')).toBeInTheDocument();
     expect(within(dialog).getByText('#900')).toBeInTheDocument();
@@ -745,7 +745,7 @@ describe('Global search', () => {
     await openWithShortcut();
     await screen.findByText('factory/pr-900');
 
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#900');
+    await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), '#900');
 
     expect(await screen.findByText('factory/pr-900')).toBeInTheDocument();
     expect(screen.queryByText('feature/offline-index')).not.toBeInTheDocument();
@@ -761,7 +761,7 @@ describe('Global search', () => {
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
     expect(await within(rail).findByRole('button', { name: /^Work Items\s*4$/ })).toBeInTheDocument();
 
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+    await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), '#4242');
     const card = await screen.findByText('Bump the command palette dependencies');
     const results = within(dialog).getByRole('region', { name: 'Search results' });
     expect(within(results).getByText('Work Items')).toBeInTheDocument();
@@ -790,7 +790,7 @@ describe('Global search', () => {
     await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+    await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), '#4242');
     await user.click(await screen.findByText('Bump the command palette dependencies'));
 
     expect(await screen.findByText('Reviewing is paused for this repository.')).toBeInTheDocument();
@@ -832,7 +832,7 @@ describe('Global search', () => {
     await screen.findByText('Review command palette PR');
     await waitFor(() => expect(client.isFetching()).toBe(0));
 
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+    await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), '#4242');
     await user.click(await screen.findByText('Bump the command palette dependencies'));
 
     expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
@@ -877,7 +877,7 @@ describe('Global search', () => {
     const { client } = renderSearchRoute();
     const pickCard = async () => {
       await openWithShortcut();
-      await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+      await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), '#4242');
       await user.click(await screen.findByText('Bump the command palette dependencies'));
     };
 
@@ -948,7 +948,7 @@ describe('Global search', () => {
     const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#20454');
+    await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), '#20454');
     const candidate = await screen.findByText('Harden the review board drop target');
     expect(within(dialog).getByText(/Intake · not filed/)).toBeInTheDocument();
 
@@ -971,7 +971,7 @@ describe('Global search', () => {
     const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#900');
+    await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), '#900');
 
     const results = within(dialog).getByRole('region', { name: 'Search results' });
     await waitFor(() => expect(within(results).getAllByRole('option')).toHaveLength(1));
@@ -988,7 +988,7 @@ describe('Global search', () => {
     expect(await screen.findByText('Intake could not be loaded.')).toBeInTheDocument();
     expect(within(dialog).queryByText('Harden the review board drop target')).not.toBeInTheDocument();
 
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+    await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), '#4242');
     expect(await screen.findByText('Bump the command palette dependencies')).toBeInTheDocument();
   });
 
@@ -1029,7 +1029,7 @@ describe('Global search', () => {
     renderSearchRoute();
     const dialog = await openWithShortcut();
 
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'factory memory');
+    await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), 'factory memory');
 
     expect(await within(dialog).findByText('Memory')).toBeInTheDocument();
   });

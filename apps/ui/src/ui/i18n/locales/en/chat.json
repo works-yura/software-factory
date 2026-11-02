@@ -91,7 +91,7 @@
   "composer": {
     "planFeedbackPlaceholder": "Give feedback on this plan…",
     "steerPlaceholder": "Steer the agent…",
-    "placeholder": "Ask Mastra Code…",
+    "placeholder": "Ask Factory…",
     "initializingSession": "Initializing session…",
     "startingSession": "Starting session…",
     "initializingWorkSession": "Initializing work session",

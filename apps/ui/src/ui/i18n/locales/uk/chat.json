@@ -91,7 +91,7 @@
   "composer": {
     "planFeedbackPlaceholder": "Напишіть відгук щодо цього плану…",
     "steerPlaceholder": "Скеруйте агента…",
-    "placeholder": "Запитайте Mastra Code…",
+    "placeholder": "Запитайте Factory…",
     "initializingSession": "Ініціалізація сесії…",
     "startingSession": "Запуск сесії…",
     "initializingWorkSession": "Ініціалізація робочої сесії",

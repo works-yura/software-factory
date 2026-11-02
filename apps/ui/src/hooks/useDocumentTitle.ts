@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-const DEFAULT_TITLE = 'Mastra Factory';
+const DEFAULT_TITLE = 'Factory';
 
 /** Unmount restores the default, so leaving a session never strands its headline on the board. */
 export function useDocumentTitle(title: string | undefined): void {

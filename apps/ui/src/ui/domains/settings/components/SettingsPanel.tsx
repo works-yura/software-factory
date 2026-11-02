@@ -23,6 +23,8 @@ import { McpClientsSection } from './McpClientsSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
+import { ClaudeBehaviorSettings } from './ClaudeBehaviorSettings';
+import { useFactoryHarness } from './models/harness/HarnessSettings';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
 
@@ -49,6 +51,7 @@ export function SettingsPanel() {
 
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
+  const { harness } = useFactoryHarness(factoryId ?? '');
   const settings = settingsQuery.data ?? null;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
@@ -73,7 +76,10 @@ export function SettingsPanel() {
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} />}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
-      {section === 'behavior' && (
+      {section === 'behavior' && factoryId && harness === 'claude-code' && (
+        <ClaudeBehaviorSettings factoryId={factoryId} />
+      )}
+      {section === 'behavior' && harness !== 'claude-code' && (
         <BehaviorSettings
           settings={settings}
           onBehaviorChange={onBehaviorChange}

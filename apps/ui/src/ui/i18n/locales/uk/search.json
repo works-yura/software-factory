@@ -3,7 +3,7 @@
   "dialog": {
     "title": "Глобальний пошук",
     "description": "Пошук розділів, Factory, робочих сесій, сесій рев’ю та сесій користувача.",
-    "commandLabel": "Пошук у MastraCode"
+    "commandLabel": "Пошук у Factory"
   },
   "input": {
     "placeholder": "Шукайте сесії, рев’ю, #задачі, сторінки та Factory…"

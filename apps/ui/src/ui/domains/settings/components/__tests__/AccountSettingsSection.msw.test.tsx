@@ -44,7 +44,7 @@ describe('AccountSettingsSection', () => {
 
       renderWithProviders(<AccountSettingsSection />);
 
-      expect(await screen.findByRole('button', { name: 'Log out of MastraCode' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Log out of Factory' })).toBeInTheDocument();
     });
   });
 
@@ -57,7 +57,7 @@ describe('AccountSettingsSection', () => {
       renderWithProviders(<AccountSettingsSection />);
 
       expect(await screen.findByText('Authentication is not enabled for this deployment.')).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Log out of MastraCode' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Log out of Factory' })).not.toBeInTheDocument();
     });
   });
 });

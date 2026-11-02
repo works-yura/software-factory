@@ -48,6 +48,8 @@ export function GeneralSettings() {
 }
 
 interface BehaviorSettingsProps {
+  /** A Factory on Claude Code: Mastra's smart editing and completion notifications do not apply. */
+  claudeCode?: boolean;
   settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
   permissions: PermissionRules | null;
@@ -55,6 +57,7 @@ interface BehaviorSettingsProps {
 }
 
 export function BehaviorSettings({
+  claudeCode = false,
   settings,
   onBehaviorChange,
   permissions,
@@ -67,7 +70,7 @@ export function BehaviorSettings({
       <SettingsSubsection
         scope="factory"
         title={t('behavior.general.title')}
-        description={t('behavior.general.description')}
+        description={claudeCode ? t('behavior.claudeCode.generalDescription') : t('behavior.general.description')}
       >
         <SettingsContainer>
           <SettingsRow label={t('behavior.autoApprove.label')} description={t('behavior.autoApprove.description')}>
@@ -78,6 +81,7 @@ export function BehaviorSettings({
               onChange={v => onBehaviorChange({ yolo: v })}
             />
           </SettingsRow>
+          {!claudeCode && (
           <SettingsRow label={t('behavior.smartEditing.label')} description={t('behavior.smartEditing.description')}>
             <Toggle
               ariaLabel={t('behavior.smartEditing.label')}
@@ -86,6 +90,8 @@ export function BehaviorSettings({
               onChange={v => onBehaviorChange({ smartEditing: v })}
             />
           </SettingsRow>
+          )}
+          {!claudeCode && (
           <SettingsRow label={t('behavior.notifications.label')} description={t('behavior.notifications.description')}>
             <SegmentedControl
               aria-label={t('behavior.notifications.label')}
@@ -99,24 +105,33 @@ export function BehaviorSettings({
               <SegmentedControlItem value="both">{t('behavior.notifications.both')}</SegmentedControlItem>
             </SegmentedControl>
           </SettingsRow>
+          )}
         </SettingsContainer>
       </SettingsSubsection>
-      <PermissionsSection permissions={permissions} setPermissionForCategory={setPermissionForCategory} />
+      {/* Auto-approve allows every category, so the per-category choices have nothing to say until it is off. */}
+      {!settings?.yolo && (
+        <PermissionsSection
+          claudeCode={claudeCode}
+          permissions={permissions}
+          setPermissionForCategory={setPermissionForCategory}
+        />
+      )}
     </div>
   );
 }
 
 const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 function PermissionsSection({
+  claudeCode,
   permissions,
   setPermissionForCategory,
-}: Pick<BehaviorSettingsProps, 'permissions' | 'setPermissionForCategory'>) {
+}: Pick<BehaviorSettingsProps, 'claudeCode' | 'permissions' | 'setPermissionForCategory'>) {
   const { t } = useTranslation('settings');
   return (
     <SettingsSubsection
       scope="factory"
       title={t('behavior.permissions.title')}
-      description={t('behavior.permissions.description')}
+      description={claudeCode ? t('behavior.claudeCode.permissionsDescription') : t('behavior.permissions.description')}
     >
       <SettingsContainer>
         {TOOL_CATEGORIES.map(value => (

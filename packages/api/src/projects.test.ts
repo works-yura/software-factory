@@ -232,6 +232,54 @@ describe('ProjectRoutes', () => {
     expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('high');
   });
 
+  it('keeps a Factory’s tool permissions for an organization admin and rejects unknown categories and policies', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Shared', harness: 'claude-code' },
+    });
+    expect(project.toolPermissions).toBeNull();
+    const isOrganizationAdmin = vi.fn(async () => false);
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+    );
+    const patch = (body: Record<string, unknown>) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const permissions = { categories: { read: 'allow', execute: 'deny' }, yolo: false };
+
+    const denied = await patch({ toolPermissions: permissions });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      message: 'Organization administrator access is required to change the tool permissions.',
+    });
+    expect((await seed.projects.getById({ id: project.id }))?.toolPermissions).toBeNull();
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    expect((await patch({ toolPermissions: { categories: { sudo: 'allow' }, yolo: false } })).status).toBe(400);
+    expect((await patch({ toolPermissions: { categories: { read: 'maybe' }, yolo: false } })).status).toBe(400);
+    expect((await patch({ toolPermissions: { categories: {} } })).status).toBe(400);
+
+    const saved = await patch({ toolPermissions: permissions });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ project: { toolPermissions: permissions } });
+    expect((await seed.projects.getById({ id: project.id }))?.toolPermissions).toEqual(permissions);
+
+    const cleared = await patch({ toolPermissions: null });
+    expect(cleared.status).toBe(200);
+    expect((await seed.projects.getById({ id: project.id }))?.toolPermissions).toBeNull();
+  });
+
   it('creates a project without a model scope, ignoring one an old client sends', async () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
