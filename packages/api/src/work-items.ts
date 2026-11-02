@@ -338,6 +338,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                   ? {
                       role: phase.runner.context,
                       context: phase.runner.context,
+                      ...(phase.runner.skill ? { skill: phase.runner.skill } : {}),
                       autoStart: phase.autoStart === true,
                       ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
                       ...(phase.exitTool

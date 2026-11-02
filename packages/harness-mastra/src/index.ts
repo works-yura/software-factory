@@ -11,6 +11,7 @@ export * from './rules/reproduction-test.ts';
 export * from './rules/review-source-tool.ts';
 export * from './rules/start-coordinator.ts';
 export * from './rules/tools.ts';
+export * from './skills/app-skills.ts';
 export * from './skills/catalog.ts';
 export * from './tools/approval-tools.ts';
 export * from './tools/deliver.ts';

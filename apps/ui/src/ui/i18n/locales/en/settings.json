@@ -283,7 +283,7 @@
   },
   "skills": {
     "title": "Factory skills",
-    "description": "The built-in playbooks Factory agents follow when working your items, shipped with the server and read-only. Expand a skill to read the exact instructions the agent receives.",
+    "description": "The playbooks Factory agents follow when working your items: the built-in ones shipped with the server and your app's own skills, read-only here. Expand a skill to read the exact instructions the agent receives.",
     "loading": "Loading skills…",
     "loadFailed": "Failed to load skills",
     "boardsLoadFailed": "Installed boards could not be loaded; showing built-in skills ungrouped.",
@@ -293,7 +293,11 @@
     "failedBadge": "Failed to load",
     "cannotLoad": "Agents cannot load this skill: {{error}}",
     "noRoles": "This board declares no working roles.",
-    "kickoffNote": "Kickoff instructions for this board are defined in code by its board definition; there is no skill to show here.",
+    "kickoffNote": "Phases in these roles run no skill; their kickoff instructions are defined in code by the board definition.",
+    "overriddenBadge": "Overridden by app",
+    "notFoundBadge": "Not found",
+    "notFoundNote": "This phase runs a skill the server does not have, so cards entering it fail to start. Add it with MastraFactory({ skills }) or a factory-skills/{{name}}/SKILL.md file.",
+    "appSkills": "App skills",
     "boardAria": "{{title}} board",
     "names": {
       "triage": "Triage",

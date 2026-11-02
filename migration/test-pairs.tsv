@@ -43,7 +43,7 @@ environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule
 environment/build.test.ts	harness-mastra/src/environment/build.test.ts
 environment/heads.test.ts	harness-mastra/src/environment/heads.test.ts
 factory-disable-builtin-tools.test.ts	server/src/factory-disable-builtin-tools.test.ts
-factory.test.ts	server/src/factory.test.ts	-1	Platform Jira registration cases dropped with the vocabulary (-3); upstream a95f079204 (browser) and 7e428dc80e (recreate sandbox), after 4c22623ea3 (+2)
+factory.test.ts	server/src/factory.test.ts	+1	Platform Jira registration cases dropped with the vocabulary (-3); upstream a95f079204 (browser) and 7e428dc80e (recreate sandbox), after 4c22623ea3 (+2); upstream #28823: app skills are checked at construction (+2)
 index.test.ts	server/src/index.test.ts
 integrations/github/acceptance-labels.test.ts	integration-github/src/acceptance-labels.test.ts
 integrations/github/app-identity.test.ts	integration-github/src/app-identity.test.ts
@@ -106,14 +106,14 @@ routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts
 routes/projects.test.ts	api/src/projects.test.ts	+1	harness and Claude Code model on create and update
 routes/session-access.test.ts	session/src/session-access.test.ts	+2	model-switch guard and multipart body cases ported from upstream 8fb8a82428
 routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts	-1	user and hybrid scope catalogs removed; one Factory-catalog case remains
-routes/skills.test.ts	api/src/skills.test.ts
+routes/skills.test.ts	api/src/skills.test.ts	+2	upstream #28823: skills catalog origin (+2)
 routes/source-control-sessions.test.ts	api/src/source-control-sessions.test.ts	+4	personal chats of a Claude Code Factory create Claude Code sessions
 routes/source-control-settings.test.ts	api/src/source-control-settings.test.ts
 routes/supervisor.test.ts	api/src/supervisor.test.ts
 routes/surface.test.ts	api/src/surface.test.ts	+1	work spanning several repositories: a card naming no repository dispatches across the environment; ambiguity only without one
 routes/telemetry.test.ts	api/src/telemetry.test.ts
 routes/tenant-credentials.test.ts	credentials/src/tenant-credentials.test.ts
-routes/work-items.test.ts	api/src/work-items.test.ts	+1	upstream #28604: the board catalog sends autoStart/exitTool conditions
+routes/work-items.test.ts	api/src/work-items.test.ts	+2	upstream #28604: the board catalog sends autoStart/exitTool conditions; upstream #28823: phase skill in the board catalog (+1)
 rules/automation-stamping.test.ts	runtime/src/automation-stamping.test.ts
 rules/binding-context.test.ts	session/src/binding-context.test.ts
 rules/bindings.test.ts	runtime/src/bindings.test.ts
@@ -396,7 +396,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+1	Bug and factory-test s
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/CustomProvidersSection.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentBuilds.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/EnvironmentSection.msw.test.tsx
-../../../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx
+../../../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/FactorySkillsSection.msw.test.tsx	+2	upstream #28823: phase skills, missing skills and app skills (+2)
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/GithubLabelRouting.msw.test.tsx
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/IntakeSection.msw.test.tsx	-22	Linear/Jira/incident.io UI cases dropped with the vocabulary (-28); ClickUp intake cases (+5); ClickUp status rules (+1)
 ../../../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	../apps/ui/src/ui/domains/settings/components/__tests__/LinearRouting.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary

@@ -34,6 +34,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
+import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Tool } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
@@ -200,7 +201,7 @@ import {
 import type { FactoryReporting } from '@factory/harness-mastra';
 import { observeSessionRunReports } from '@factory/harness-mastra';
 import { FactorySessionsStateProcessor } from '@factory/harness-mastra';
-import { createWorkspaceFactory, FactoryWorkspaceRegistry } from '@factory/harness-mastra';
+import { assertFactorySkills, createWorkspaceFactory, FactoryWorkspaceRegistry, findBoardSkillProblems } from '@factory/harness-mastra';
 import type { FactorySandboxStart } from '@factory/harness-mastra';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
@@ -346,6 +347,13 @@ export interface MastraFactoryConfig {
   configVersion?: string;
   /** Board definitions installed for this Factory instance. */
   boards?: readonly InstalledBoard[];
+  /**
+   * App skills written in code with `createSkill()` from `@mastra/core/skills`.
+   * Every Factory session can load them, and a board phase runs one through
+   * `runner.skill`. A skill here wins over a `factory-skills/` folder skill or
+   * a bundled skill of the same name. Names must be unique.
+   */
+  skills?: readonly InlineSkill[];
   /** Whether the built-in Work and Review boards are installed. Default: true. */
   includeDefaultBoards?: boolean;
 
@@ -539,6 +547,7 @@ export class MastraFactory {
   #sandbox: FactorySandbox | undefined;
   #sandboxDescription: FactorySandboxDescription | undefined;
   readonly #boards: BoardRegistry;
+  readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
@@ -569,6 +578,10 @@ export class MastraFactory {
         "MastraFactory: 'rules' was removed. Set 'configVersion' for the audit label and declare tool-result " +
           'rules on the owning board via defineBoard({ tools }).',
       );
+    }
+    this.#skills = assertFactorySkills(config.skills);
+    for (const problem of findBoardSkillProblems(this.#boards, this.#skills)) {
+      console.warn(`[factory] ${problem}`);
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
     this.#config = config;
@@ -1321,6 +1334,7 @@ export class MastraFactory {
     // A session's workspace — its checkout, the environment's other repositories, setup commands — for both
     // harnesses: a Mastra session's tools work in it, a Claude Code session's CLI runs in it.
     const sessionWorkspaces = createWorkspaceFactory({
+      skills: this.#skills,
       ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
       ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
       sourceControls: integrations.flatMap(integration =>
@@ -2064,6 +2078,7 @@ export class MastraFactory {
               claudeCode !== undefined && !claudeCodeConfig?.credentials && claudeCodeConfig?.localDevelopment === true,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
+            skills: this.#skills,
             configVersion,
             boardRegistry: this.#boards,
             factoryTransitionService: transitionService,
