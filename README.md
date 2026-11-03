@@ -5,8 +5,8 @@
 | Пакет | Тека | Що це |
 | --- | --- | --- |
 | **Рушій** | | |
-| `@factory/core` | `packages/core` | Factory engine: define a pipeline, move a card, resolve the decision. Work, Review, Acceptance, and Bug live in @factory/pipelines. |
-| `@factory/pipelines` | `packages/pipelines` | Work, Review, and Acceptance pipelines for the conveyor; Work runs bugs and features test-first. |
+| `@factory/core` | `packages/core` | Factory engine: define a pipeline, move a card, resolve the decision. Work and Review live in @factory/pipelines. |
+| `@factory/pipelines` | `packages/pipelines` | Work and Review pipelines for the conveyor; Work runs bugs and features test-first. |
 | **Сховище і рантайм** | | |
 | `@factory/store` | `packages/store` | Card, decision, and run-binding storage on Mastra storage domains (libsql, pg). |
 | `@factory/runtime` | `packages/runtime` | Moves cards: transition service, decision dispatcher, run audit, terminal cleanup. |
@@ -62,7 +62,7 @@ const boards = createPipelines();
 shared/work-item-branch.ts   назви гілок і номери PR/MR для Work і Review
 ```
 
-Нова дошка — нова тека й один рядок у `createPipelines` (вбудовані) або в `boards: [...]` хоста (`apps/server/src/mastra/index.ts`: `[acceptanceBoard]`).
+Нова дошка — нова тека й один рядок у `createPipelines` (вбудовані) або в `boards: [...]` хоста (`boards` у `apps/server/src/mastra/index.ts`).
 
 ### Work: тест перед кодом
 

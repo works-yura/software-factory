@@ -1,11 +1,9 @@
 import { createBoardRegistry } from '@factory/core';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 
-import { acceptanceBoard } from './acceptance/board.ts';
 import { isReviewBoardPhase, reviewBoard } from './review/board.ts';
 import { isWorkBoardPhase, workBoard } from './work/board.ts';
 
-export { acceptanceBoard } from './acceptance/board.ts';
 export { createDefaultBoardRegistry, defaultBoards } from './defaults.ts';
 export { isReviewBoardPhase, reviewBoard } from './review/board.ts';
 export { hasRecordedVerdict } from './review/phase-rules.ts';
@@ -25,9 +23,9 @@ export { workLaneForRole, workStageCarries } from './work/legacy-plan-role.ts';
 export { isTestFirst, SELF_REVIEW_ROUND_LIMIT } from './work/phase-rules.ts';
 export { openApprovedChangeRequest } from './work/tool-rules.ts';
 
-/** A registry with Work, Review, and Acceptance installed, plus any boards the host adds. */
+/** A registry with Work and Review installed, plus any boards the host adds. */
 export function createPipelines(boards: readonly InstalledBoard[] = []): BoardRegistry {
-  return createBoardRegistry({ boards: [workBoard, reviewBoard, acceptanceBoard, ...boards] });
+  return createBoardRegistry({ boards: [workBoard, reviewBoard, ...boards] });
 }
 
 export function allowsBuiltInBoardTransition(board: 'work' | 'review', from: string, to: string): boolean {

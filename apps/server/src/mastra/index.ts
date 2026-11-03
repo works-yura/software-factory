@@ -33,7 +33,6 @@ import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } fro
 import { GithubIntegration, GithubTokenIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
 import { ClickUpIntegration } from '@factory/integration-clickup';
 import { GitLabIntegration } from '@factory/integration-gitlab';
-import { acceptanceBoard } from '@factory/pipelines';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 // Local development: loopback sign-in, credential key, and vector store.
 import { createLocalDevAuth, createLocalVector, localDevAuthEnabled, localDevCredentialKey } from './local';
@@ -365,8 +364,6 @@ export const factory = new MastraFactory({
   secretEncryption,
   integrations,
   configVersion: factoryConfigVersion,
-  // Manual Acceptance board next to built-in Work and Review.
-  boards: [acceptanceBoard],
   // Providers every signed-in account may run on this server's own credentials,
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),

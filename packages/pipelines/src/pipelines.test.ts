@@ -12,9 +12,7 @@ import {
   rulePhaseContext,
   workItemPhaseSemantics,
 } from '@factory/core';
-import type { BoardTransitionPolicyContext } from '@factory/core';
 
-import { acceptanceBoard } from './acceptance/board.ts';
 import { allowsBuiltInBoardTransition, createPipelines } from './index.ts';
 import { reviewBoard } from './review/board.ts';
 import { workBoard } from './work/board.ts';
@@ -22,8 +20,8 @@ import { workBoard } from './work/board.ts';
 describe('factory pipelines', () => {
   const installed = createPipelines();
 
-  it('installs Work, Review, and Acceptance', () => {
-    expect([...installed.keys()]).toEqual(['work', 'review', 'acceptance']);
+  it('installs Work and Review', () => {
+    expect([...installed.keys()]).toEqual(['work', 'review']);
   });
 
   it('rejects a second pipeline with a reserved id', () => {
@@ -136,38 +134,5 @@ describe('factory pipelines', () => {
     expect(
       rulePhaseContext(installed, { board: null, externalSource: null, stages: ['execute'] }),
     ).toMatchObject({ kind: 'working', role: 'work' });
-  });
-
-  it('defines Acceptance and lets only a person accept', () => {
-    expect(acceptanceBoard.initialPhase).toBe('queued');
-    expect(acceptanceBoard.phaseKind('verifying')).toBe('working');
-    expect(acceptanceBoard.roleForPhase('verifying')).toBe('validator');
-    expect(acceptanceBoard.isTerminal('accepted')).toBe(true);
-    expect(acceptanceBoard.allowsTransition('decision', 'accepted')).toBe(true);
-
-    const decision = acceptanceBoard.rules.verifying?.manual?.onEnter?.({
-      ingress: { id: 'ingress-1' },
-    } as never);
-    expect(decision).toMatchObject({
-      type: 'invokeSkill',
-      role: 'validator',
-      idempotencyKey: 'ingress-1:acceptance-verification',
-    });
-
-    const blocked = acceptanceBoard.transitionPolicy?.({
-      toStage: 'accepted',
-      isHumanTransition: false,
-    } as BoardTransitionPolicyContext);
-    expect(blocked).toEqual({
-      type: 'reject',
-      code: 'approval_required',
-      reason: 'A person must accept the product result after reviewing evidence.',
-    });
-    expect(
-      acceptanceBoard.transitionPolicy?.({
-        toStage: 'accepted',
-        isHumanTransition: true,
-      } as BoardTransitionPolicyContext),
-    ).toBeUndefined();
   });
 });

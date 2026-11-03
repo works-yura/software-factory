@@ -99,8 +99,8 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(factoryConfigVersion).toBe('mastracode-web-v1');
     expect(factoryConfigs[0]?.configVersion).toBe(factoryConfigVersion);
     expect(factoryConfigs[0]).not.toHaveProperty('rules');
-    // The Acceptance and Bug boards sit next to the built-in Work and Review boards.
-    expect(factoryConfigs[0]?.boards?.map(board => board.id)).toEqual(['acceptance']);
+    // Only the built-in Work and Review boards are installed.
+    expect(factoryConfigs[0]?.boards).toBeUndefined();
     expect(factoryConfigs[0]?.includeDefaultBoards).toBeUndefined();
   });
 

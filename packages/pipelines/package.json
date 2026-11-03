@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Work, Review, Acceptance, and Bug pipelines for the conveyor.",
+  "description": "Work and Review pipelines for the conveyor.",
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing.ts",

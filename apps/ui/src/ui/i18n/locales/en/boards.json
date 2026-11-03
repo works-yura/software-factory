@@ -19,14 +19,5 @@
       "done": "Done",
       "canceled": "Canceled"
     }
-  },
-  "acceptance": {
-    "title": "Acceptance",
-    "phases": {
-      "queued": "Awaiting evidence",
-      "verifying": "Verifying criteria",
-      "decision": "Product decision",
-      "accepted": "Accepted"
-    }
   }
 }

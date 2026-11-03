@@ -92,8 +92,8 @@ function policy(
 }
 
 describe('work board: test-first definition', () => {
-  it('installs Work, Review, and Acceptance only', () => {
-    expect([...createPipelines().keys()]).toEqual(['work', 'review', 'acceptance']);
+  it('installs Work and Review only', () => {
+    expect([...createPipelines().keys()]).toEqual(['work', 'review']);
   });
 
   it('puts the tests phase between Planning and Building in its own tester seat', () => {
