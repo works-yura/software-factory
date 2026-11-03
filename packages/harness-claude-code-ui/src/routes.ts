@@ -1,14 +1,20 @@
-import { randomUUID } from 'node:crypto';
-
 import { defaultDisplayState } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
+import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
 import type { StorageListMessagesInput } from '@mastra/core/storage';
 import type { Context, MiddlewareHandler } from 'hono';
 
 import type { PlanDecision } from '@factory/harness';
-import { ASK_USER_QUESTION_TOOL, ClaudeCodeRunContext, type ClaudeCodeSession } from '@factory/harness-claude-code';
+import {
+  ASK_USER_QUESTION_TOOL,
+  ClaudeCodeRunContext,
+  MESSAGE_AUTHOR_KEY,
+  type ClaudeChatDelivery,
+  type ClaudeCodeSession,
+} from '@factory/harness-claude-code';
 
 import { ClaudeSessionUiChannel, type ClaudeUiStorage } from './channel.ts';
+import { runErrorIdentity } from './projector.ts';
 
 /** How often an idle stream sends a comment so proxies and the client's idle timer keep it open. */
 const HEARTBEAT_MS = 25_000;
@@ -74,9 +80,30 @@ export function toWireEvent(event: AgentControllerEvent | { type: 'display_state
     return { ...event, displayState: state };
   }
   if ('error' in event && event.error instanceof Error) {
-    return { ...event, error: { name: event.error.name, message: event.error.message } };
+    // What the chat's error card reads: a Claude failure's kind, status and reset time travel with it.
+    return { ...event, error: runErrorIdentity(event.error) };
   }
   return event;
+}
+
+/** The chat route a message came in on, and how the session takes it. */
+const CHAT_DELIVERY: Record<string, ClaudeChatDelivery> = {
+  'POST /messages': 'message',
+  'POST /follow-up': 'follow-up',
+  'POST /steer': 'steer',
+};
+
+/**
+ * The context a person's message runs with: their identity as the host's
+ * auth stamped it on the request (Mastra's message author), so the message
+ * is stored as theirs.
+ */
+function personContext(c: Context): ClaudeCodeRunContext {
+  const context = new ClaudeCodeRunContext();
+  const request = c.get('requestContext' as never) as { get?: (key: string) => unknown } | undefined;
+  const author = typeof request?.get === 'function' ? request.get(MASTRA_MESSAGE_AUTHOR_KEY) : undefined;
+  if (author) context.set(MESSAGE_AUTHOR_KEY, author);
+  return context;
 }
 
 /** An `ask_user` answer, as the chat sends it: the text, or the chosen options. */
@@ -239,9 +266,10 @@ export class ClaudeSessionUi {
         return this.#state(c, channel);
       case 'GET /stream':
         return this.#stream(c, channel);
+      // As Mastra's routes: a message joins the run in flight, a follow-up waits for it to end,
+      // a steer stops it and starts over with the message.
       case 'POST /messages':
       case 'POST /follow-up':
-      // Claude cannot be interrupted mid-turn: steering joins the run as its next turn.
       case 'POST /steer': {
         const body = await jsonBody(c);
         if (typeof body.message !== 'string' || !body.message.trim()) {
@@ -251,11 +279,11 @@ export class ClaudeSessionUi {
           return c.json({ error: 'Claude Code sessions do not take attachments yet.' }, 400);
         }
         await this.#onPersonInput?.(c, session);
-        const { accepted } = session.sendSignal(
-          { id: randomUUID(), type: 'user', tagName: 'user', contents: body.message },
-          { requestContext: new ClaudeCodeRunContext() },
-        );
-        await accepted;
+        await session.sendChatMessage({
+          content: body.message,
+          requestContext: personContext(c),
+          delivery: CHAT_DELIVERY[route]!,
+        });
         return c.json({ ok: true });
       }
       case 'POST /abort':

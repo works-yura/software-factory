@@ -75,6 +75,39 @@ describe('TurnTranslator', () => {
     ]);
   });
 
+  it('takes usage as the turn streams: a message once a later one follows, the rest at the end, growth as the difference', () => {
+    const translator = new TurnTranslator();
+    const assistant = (id: string, usage: Record<string, unknown>) =>
+      line({ type: 'assistant', message: { id, content: [{ type: 'text', text: id }], usage } });
+    translator.push(assistant('msg_a', { input_tokens: 10, output_tokens: 1, cache_creation: { ephemeral_5m_input_tokens: 4 } }));
+    // The latest message may still grow.
+    expect(translator.takeUsage()).toEqual([]);
+    translator.push(assistant('msg_b', { input_tokens: 20, output_tokens: 2 }));
+    expect(translator.takeUsage()).toEqual([
+      { promptTokens: 10, completionTokens: 1, totalTokens: 11, cacheCreationInputTokens5m: 4 },
+    ]);
+    // A later copy of msg_a makes it the latest again; msg_b, followed now, counts.
+    translator.push(assistant('msg_a', { input_tokens: 10, output_tokens: 5, cache_creation: { ephemeral_5m_input_tokens: 6 } }));
+    expect(translator.takeUsage()).toEqual([{ promptTokens: 20, completionTokens: 2, totalTokens: 22 }]);
+    // msg_a grew after it was counted: at the end only the difference counts.
+    expect(translator.takeUsage(true)).toEqual([
+      { promptTokens: 0, completionTokens: 4, totalTokens: 4, cacheCreationInputTokens5m: 2 },
+    ]);
+    // An unchanged copy adds nothing.
+    translator.push(assistant('msg_a', { input_tokens: 10, output_tokens: 5, cache_creation: { ephemeral_5m_input_tokens: 6 } }));
+    expect(translator.takeUsage(true)).toEqual([]);
+  });
+
+  it('takes the result’s total at the end when no message carried usage, once', () => {
+    const translator = new TurnTranslator();
+    translator.push(parseStreamLine(fixture('turn-complete.jsonl')[5]!)!);
+    expect(translator.takeUsage()).toEqual([]);
+    expect(translator.takeUsage(true)).toEqual([
+      toTokenUsage({ input_tokens: 10, cache_creation_input_tokens: 2431, cache_read_input_tokens: 29315, output_tokens: 118 }),
+    ]);
+    expect(translator.takeUsage(true)).toEqual([]);
+  });
+
   it('falls back to the result usage when no message carried any', () => {
     const translator = new TurnTranslator();
     translator.push(parseStreamLine(fixture('turn-complete.jsonl')[5]!)!);

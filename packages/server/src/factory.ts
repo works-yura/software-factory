@@ -1622,7 +1622,9 @@ export class MastraFactory {
             const channel = this.#claudeSessionUi.attach(session);
             // The same run bookkeeping a Mastra session gets when it is created.
             observeSessionRunEnd(session, { audit: auditDomain });
-            observeSessionRunReports(session as never, (outcome, since) =>
+            // Through the chat channel: its events name parked tools as a Mastra session does (`ask_user`,
+            // `submit_plan`) and mark a permission request as an approval, which the report tells apart.
+            observeSessionRunReports(channel, (outcome, since) =>
               reportSessionRunEnd({ sessionId: session.id, threadId: session.thread.getId() ?? null, outcome, since }),
             );
             // Its first message dates the session (TTFI) and tells the board its checkout is under way.

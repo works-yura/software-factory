@@ -62,6 +62,36 @@ export function askUserPrompt(input: unknown): AskUserPrompt {
   };
 }
 
+/** A message's author, as Mastra stamps one on a person's message (`providerOptions.mastra.author`). */
+export interface ClaudeMessageAuthor {
+  id: string;
+  name?: string;
+  avatarUrl?: string;
+}
+
+/**
+ * A notification as the session keeps it, with the fields a Mastra
+ * notification record carries into its signal (`createNotificationSignal`):
+ * the chat's notification card reads its source, kind and metadata.
+ */
+export interface ClaudeNotificationRecord {
+  id: string;
+  source: string;
+  kind: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  summary: string;
+  payload?: unknown;
+  sourceId?: string;
+  dedupeKey?: string;
+  coalesceKey?: string;
+  /** How many notifications were merged into this one (same source, kind and coalesce key). */
+  coalescedCount?: number;
+  attributes?: Record<string, string | number | boolean | null | undefined>;
+  metadata?: Record<string, unknown>;
+  /** ISO time it was first received. */
+  createdAt: string;
+}
+
 /** Tool calls that mean "the plan is ready for review". */
 export const PLAN_GATE_TOOL_IDS: readonly string[] = [SUBMIT_PLAN_TOOL_ID, EXIT_PLAN_MODE_TOOL];
 /** The contract's name for a plan gate, so the dispatcher's plan handling applies unchanged. */
@@ -73,12 +103,26 @@ export const PLAN_GATE_TOOL = 'submit_plan';
  */
 export type ClaudeTranscriptEntry =
   /**
-   * What the turn was given, one entry per input, before the CLI starts: a
-   * person's or the dispatcher's message (`signal`, with its signal id when it
-   * had one) or a notification. The planning preamble and the prompt that
-   * carries a plan decision are not inputs; see `plan_decision`.
+   * What the session was given, one entry per input: a person's or the
+   * dispatcher's message (`signal`, with its signal id when it had one) or a
+   * notification. Recorded once, when the session takes it: before the turn
+   * that carries it starts, or right away for input that joins a run in
+   * flight (`delivery: 'while-active'`, as a Mastra interjection is marked).
+   * The planning preamble and the prompt that carries a plan decision are not
+   * inputs; see `plan_decision`.
    */
-  | { kind: 'input'; source: 'signal' | 'notification'; text: string; id?: string }
+  | {
+      kind: 'input';
+      source: 'signal' | 'notification';
+      text: string;
+      id?: string;
+      /** Who wrote it, when a person did (the request's message author). */
+      author?: ClaudeMessageAuthor;
+      /** Set when the input joined a run in flight. */
+      delivery?: 'while-active';
+      /** The notification as the Factory sent it, for a `notification` input. */
+      notification?: ClaudeNotificationRecord;
+    }
   /** A person answered the plan the thread was parked on; the next turn carries the answer. */
   | { kind: 'plan_decision'; toolCallId: string; decision: PlanDecision }
   | { kind: 'init'; sessionId: string; model?: string; permissionMode?: string }
@@ -136,6 +180,32 @@ export type TurnOutcome =
   | { kind: 'permission'; request: PermissionRequest }
   | { kind: 'error'; error: ClaudeCodeError };
 
+const USAGE_COUNTS = ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'] as const;
+const CACHE_CREATION_COUNTS = ['ephemeral_5m_input_tokens', 'ephemeral_1h_input_tokens'] as const;
+
+/** What `current` adds to `reported` (a later copy of the same message), or `undefined` when nothing grew. */
+function usageDifference(current: ClaudeUsage, reported: ClaudeUsage): ClaudeUsage | undefined {
+  const step: ClaudeUsage = {};
+  let grew = false;
+  for (const key of USAGE_COUNTS) {
+    if (current[key] === undefined) continue;
+    const value = Math.max(0, current[key] - (reported[key] ?? 0));
+    step[key] = value;
+    if (value > 0) grew = true;
+  }
+  if (current.cache_creation) {
+    step.cache_creation = {};
+    for (const key of CACHE_CREATION_COUNTS) {
+      const now = current.cache_creation[key];
+      if (now === undefined) continue;
+      const value = Math.max(0, now - (reported.cache_creation?.[key] ?? 0));
+      step.cache_creation[key] = value;
+      if (value > 0) grew = true;
+    }
+  }
+  return grew ? step : undefined;
+}
+
 /** Anthropic usage as the contract counts it: prompt tokens include cache reads and writes. */
 export function toTokenUsage(usage: ClaudeUsage): AgentTokenUsage {
   const input = usage.input_tokens ?? 0;
@@ -174,6 +244,12 @@ export class TurnTranslator {
   sessionId: string | undefined;
   #usageByMessage = new Map<string, ClaudeUsage>();
   #anonymousUsage: ClaudeUsage[] = [];
+  /** What {@link takeUsage} already reported, per message id. */
+  #reportedUsage = new Map<string, ClaudeUsage>();
+  #reportedAnonymous = 0;
+  #reportedResult = false;
+  /** The message the latest usage came with; it may still grow, so it is reported once another follows. */
+  #latestUsageMessage: string | undefined;
   #result: Extract<ClaudeStreamMessage, { type: 'result' }> | undefined;
   #gate: PlanGate | undefined;
   #permission: PermissionRequest | undefined;
@@ -270,8 +346,10 @@ export class TurnTranslator {
 
   #assistant(message: Extract<ClaudeStreamMessage, { type: 'assistant' }>): ClaudeTranscriptEntry[] {
     if (message.usage) {
-      if (message.messageId) this.#usageByMessage.set(message.messageId, message.usage);
-      else this.#anonymousUsage.push(message.usage);
+      if (message.messageId) {
+        this.#usageByMessage.set(message.messageId, message.usage);
+        this.#latestUsageMessage = message.messageId;
+      } else this.#anonymousUsage.push(message.usage);
     }
     const entries: ClaudeTranscriptEntry[] = [];
     const parent = message.parentToolUseId;
@@ -370,6 +448,34 @@ export class TurnTranslator {
     const perMessage = [...this.#usageByMessage.values(), ...this.#anonymousUsage];
     if (perMessage.length > 0) return perMessage.map(toTokenUsage);
     return this.#result?.usage ? [toTokenUsage(this.#result.usage)] : [];
+  }
+
+  /**
+   * Usage not reported yet, one step per model message, as the turn streams:
+   * a message counts once a later one follows it (the CLI repeats a message
+   * per content block), and `final` (the turn ended or was stopped) takes the
+   * rest. A message that grew after it was reported adds only the difference.
+   * With no message usage at all, `final` falls back to the result's total.
+   */
+  takeUsage(final = false): AgentTokenUsage[] {
+    const steps: AgentTokenUsage[] = [];
+    for (const [id, usage] of this.#usageByMessage) {
+      if (!final && id === this.#latestUsageMessage) continue;
+      const reported = this.#reportedUsage.get(id);
+      const step = reported ? usageDifference(usage, reported) : usage;
+      if (!step) continue;
+      this.#reportedUsage.set(id, usage);
+      steps.push(toTokenUsage(step));
+    }
+    for (; this.#reportedAnonymous < this.#anonymousUsage.length; this.#reportedAnonymous += 1) {
+      steps.push(toTokenUsage(this.#anonymousUsage[this.#reportedAnonymous]!));
+    }
+    const sawMessageUsage = this.#usageByMessage.size > 0 || this.#anonymousUsage.length > 0;
+    if (final && !sawMessageUsage && this.#result?.usage && !this.#reportedResult) {
+      this.#reportedResult = true;
+      steps.push(toTokenUsage(this.#result.usage));
+    }
+    return steps;
   }
 
   /** How the turn went once the process exited. Aborts are the session's call, not the stream's. */

@@ -11,11 +11,11 @@ import type { AgentEvent, AgentRunEndReason } from '@factory/harness';
 import { deferred, fakeClaude, fixture, type FakeTurn } from './__fixtures__/fake-claude.ts';
 import type { ClaudeSpawn } from './cli.ts';
 import { ClaudeCodeError } from './errors.ts';
-import { createClaudeCodeHarness, type ClaudeCodeHarnessConfig } from './harness.ts';
+import { ClaudeCodeRunContext, createClaudeCodeHarness, type ClaudeCodeHarnessConfig } from './harness.ts';
 import type { ClaudeTranscriptEntry } from './events.ts';
 import { GATE_SYSTEM_PROMPT, PLANNING_PROMPT } from './gate.ts';
 import { GATE_SERVER_SOURCE } from './gate-server.ts';
-import { ACCOUNT_SWITCH_PROMPT, MAX_ACCOUNT_SWITCHES, writeMcpConfigFile } from './session.ts';
+import { ACCOUNT_SWITCH_PROMPT, MAX_ACCOUNT_SWITCHES, MESSAGE_AUTHOR_KEY, writeMcpConfigFile } from './session.ts';
 import type { ClaudeCodeSession, ClaudeCredentialFailure, ClaudeCredentialRequest } from './session.ts';
 import { createInMemorySessionStore, emptyThreadState, type ClaudeSessionStore, type ClaudeThreadState } from './store.ts';
 
@@ -172,22 +172,25 @@ describe('ClaudeCodeSession', () => {
 
   it('queues a signal sent mid-turn and runs it as the next turn of the same run', async () => {
     const hold = deferred();
-    const { fake, session, events, signal } = await setup([
+    const { fake, session, events, signal, transcript } = await setup([
       { lines: fixture('turn-complete.jsonl'), holdAt: 5, hold: hold.promise },
       { lines: fixture('turn-complete.jsonl') },
     ]);
     const end = nextEnd(session);
     const first = await signal('one', 'first');
 
+    await vi.waitFor(async () => expect(await session.thread.listActiveMessages()).toEqual([{ id: 'one' }]));
     const second = await signal('two', 'and also this');
     expect(second).toMatchObject({ action: 'deliver', runId: first.runId });
-    // The dispatcher's replay guard sees the queued signal as landed right away, and the first once the CLI took it.
-    await vi.waitFor(async () =>
-      expect(await session.thread.listActiveMessages()).toEqual(expect.arrayContaining([{ id: 'one' }, { id: 'two' }])),
-    );
+    // Recorded as soon as it joins, as a Mastra interjection is; the replay guard sees it land only with its turn.
+    expect(transcript.at(-1)).toEqual({ kind: 'input', source: 'signal', text: 'and also this', id: 'two', delivery: 'while-active' });
+    expect(await session.thread.listActiveMessages()).toEqual([{ id: 'one' }]);
 
     hold.resolve();
     expect(await end).toBe('complete');
+    expect(await session.thread.listActiveMessages()).toEqual([{ id: 'one' }, { id: 'two' }]);
+    // Recorded once: its turn does not record it again.
+    expect(transcript.filter(entry => entry.kind === 'input')).toHaveLength(2);
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[1]!.stdin).toBe('and also this');
     expect(flagValue(fake.calls[1]!.args, '--resume')).toBe(CLAUDE_SESSION);
@@ -387,7 +390,7 @@ describe('ClaudeCodeSession', () => {
       expect(await end).toBe('suspended');
       await vi.waitFor(async () =>
         expect((await store.get('card-1'))!.threads['thread-1']!.pendingInputs).toEqual([
-          { kind: 'signal', id: 'two', text: 'Also create y.txt.' },
+          { kind: 'signal', id: 'two', text: 'Also create y.txt.', echoed: true },
         ]),
       );
     });
@@ -645,7 +648,7 @@ describe('ClaudeCodeSession', () => {
       expect(await end).toBe('suspended');
       await vi.waitFor(async () =>
         expect((await store.get('card-1'))!.threads['thread-1']!.pendingInputs).toEqual([
-          { kind: 'signal', id: 'two', text: 'Mind the CHANGELOG.' },
+          { kind: 'signal', id: 'two', text: 'Mind the CHANGELOG.', echoed: true },
         ]),
       );
     });
@@ -1121,7 +1124,7 @@ describe('ClaudeCodeSession', () => {
       const end = nextEnd(session);
       await signal('one', 'first');
       const result = await session.sendNotificationSignal(
-        { source: 'factory', kind: 'rule-message', summary: 'Reviewer left comments.' },
+        { source: 'factory', kind: 'rule-message', summary: 'Reviewer left comments.', priority: 'urgent' },
         { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
       );
       expect((await result.accepted)?.action).toBe('deliver');
@@ -1453,7 +1456,7 @@ describe('ClaudeCodeSession messages and signals', () => {
     const { fake, session, transcript } = await setup([COMPLETE]);
     expect(await session.sendMessage({ content: 'Hello.' })).toEqual({ reason: 'complete' });
     expect(fake.calls[0]!.stdin).toBe('Hello.');
-    expect(transcript[0]).toEqual({ kind: 'input', source: 'signal', text: 'Hello.', id: expect.any(String) });
+    expect(transcript[0]).toEqual({ kind: 'input', source: 'signal', text: 'Hello.' });
   });
 
   it('rejects a message whose run never started, and resolves one that joined it with the run’s end', async () => {
@@ -1574,22 +1577,22 @@ describe('ClaudeCodeSession notifications', () => {
     ]);
     let end = nextEnd(session);
     await signal('one', 'first');
-    const delivered = await session.sendNotificationSignal({ source: 'factory', kind: 'note', summary: 'Delivered.' });
+    const delivered = await session.sendNotificationSignal({ source: 'factory', kind: 'note', summary: 'Delivered.', priority: 'urgent' });
     const held = await session.sendNotificationSignal(
-      { source: 'factory', kind: 'note', summary: 'Held.' },
+      { source: 'factory', kind: 'note', summary: 'Held.', priority: 'urgent' },
       { ifActive: { behavior: 'persist' } },
     );
     expect((await delivered.accepted)?.action).toBe('deliver');
     expect(held.accepted).toBeUndefined();
     hold.resolve();
     await end;
-    expect(fake.calls[1]!.stdin).toBe('<system-notification source="factory" kind="note">\nDelivered.\n</system-notification>');
+    expect(fake.calls[1]!.stdin).toBe('<system-notification source="factory" kind="note" priority="urgent">\nDelivered.\n</system-notification>');
     expect(await session.thread.listActiveMessages()).toEqual([{ id: 'one' }]);
 
     end = nextEnd(session);
     await signal('two', 'second');
     await end;
-    expect(fake.calls[2]!.stdin).toBe('<system-notification source="factory" kind="note">\nHeld.\n</system-notification>\n\nsecond');
+    expect(fake.calls[2]!.stdin).toBe('<system-notification source="factory" kind="note" priority="urgent">\nHeld.\n</system-notification>\n\nsecond');
   });
 
   it('does not replay a woken notification after a turn that completed', async () => {
@@ -1928,7 +1931,8 @@ describe('ClaudeCodeSession abort', () => {
     expect(await end).toBe('aborted');
     await vi.waitFor(() => expect(claude.fake.calls[0]!.killed).toEqual(['SIGTERM']));
     await new Promise(resolve => setTimeout(resolve, 10));
-    expect(events).toEqual([{ type: 'agent_end', reason: 'aborted' }]);
+    expect(events.filter(event => event.type !== 'usage_update')).toEqual([{ type: 'agent_end', reason: 'aborted' }]);
+    expect(events.at(-1)).toEqual({ type: 'agent_end', reason: 'aborted' });
   });
 });
 
@@ -2108,5 +2112,250 @@ describe('writeMcpConfigFile', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('ClaudeCodeSession parity with a Mastra session', () => {
+  const AUTHOR = { id: 'user-ada', name: 'Ada', avatarUrl: 'https://example.test/ada.png' };
+  const asPerson = () => new ClaudeCodeRunContext().set(MESSAGE_AUTHOR_KEY, { ...AUTHOR, extra: 'ignored' });
+  const held = (hold: Promise<void>): FakeTurn => ({ lines: fixture('turn-complete.jsonl'), holdAt: 5, hold });
+
+  it('keeps a person’s message that joined a run which was then stopped, for the next run (A1)', async () => {
+    const hold = deferred();
+    const { fake, session, signal, transcript } = await setup([held(hold.promise), COMPLETE]);
+    await signal('one', 'long task');
+    await vi.waitFor(async () => expect(await session.thread.listActiveMessages()).toEqual([{ id: 'one' }]));
+    expect(await session.sendChatMessage({ content: 'also do this' })).toEqual({ action: 'deliver' });
+    session.abort();
+    hold.resolve();
+
+    const end = nextEnd(session);
+    await signal('two', 'next');
+    await end;
+    expect(fake.calls[1]!.stdin).toBe('also do this\n\nnext');
+    // Shown once, when it joined; its later turn does not show it again.
+    expect(transcript.filter(entry => entry.kind === 'input').map(entry => (entry as { text: string }).text)).toEqual([
+      'long task',
+      'also do this',
+      'next',
+    ]);
+  });
+
+  it('stores input queued for the run in flight, so a restart does not lose it (A1)', async () => {
+    const hold = deferred();
+    const { session, signal, store } = await setup([held(hold.promise), COMPLETE]);
+    const end = nextEnd(session);
+    await signal('one', 'long task');
+    await vi.waitFor(async () => expect(await session.thread.listActiveMessages()).toEqual([{ id: 'one' }]));
+    await session.sendChatMessage({ content: 'and this' });
+    await vi.waitFor(async () =>
+      expect((await store.get('card-1'))!.threads['thread-1']!.pendingInputs).toEqual([
+        { kind: 'signal', text: 'and this', echoed: true },
+      ]),
+    );
+    hold.resolve();
+    await end;
+    await vi.waitFor(async () => expect((await store.get('card-1'))!.threads['thread-1']!.pendingInputs).toEqual([]));
+  });
+
+  it('takes a kickoff its sender retries while it is still queued only once (A1)', async () => {
+    const hold = deferred();
+    const { fake, session, signal } = await setup([held(hold.promise), COMPLETE]);
+    const end = nextEnd(session);
+    await signal('one', 'first');
+    await signal('kickoff-2', 'the next stage');
+    await signal('kickoff-2', 'the next stage');
+    hold.resolve();
+    await end;
+    expect(fake.calls[1]!.stdin).toBe('the next stage');
+  });
+
+  it('keeps a person’s message when the turn fails before Claude starts, and shows it once (A2)', async () => {
+    let failures = 1;
+    const { fake, session, transcript } = await setup([COMPLETE], {
+      credentials: async () => {
+        if (failures-- > 0) throw new ClaudeCodeError('rate_limit', 'Every account is at its usage limit.');
+        return { ANTHROPIC_API_KEY: 'sk' };
+      },
+    });
+    let end = nextEnd(session);
+    await session.sendChatMessage({ content: 'please fix the build' });
+    expect(await end).toBe('error');
+
+    end = nextEnd(session);
+    await session.sendChatMessage({ content: 'any news?' });
+    expect(await end).toBe('complete');
+    expect(fake.calls[0]!.stdin).toBe('please fix the build\n\nany news?');
+    expect(transcript.filter(entry => entry.kind === 'input').map(entry => (entry as { text: string }).text)).toEqual([
+      'please fix the build',
+      'any news?',
+    ]);
+  });
+
+  it('stamps the person who wrote on the message, from the request context (A7)', async () => {
+    const { session, transcript } = await setup([COMPLETE]);
+    const end = nextEnd(session);
+    await session.sendChatMessage({ content: 'Hi.', requestContext: asPerson() });
+    await end;
+    expect(transcript[0]).toEqual({ kind: 'input', source: 'signal', text: 'Hi.', author: AUTHOR });
+  });
+
+  it('keeps the notification’s record (id, source, kind, priority, metadata) for the chat’s notification card (A4)', async () => {
+    const { session, transcript } = await setup([COMPLETE]);
+    const end = nextEnd(session);
+    await session.sendNotificationSignal(
+      {
+        id: 'note-1',
+        source: 'github',
+        kind: 'pull-request-review',
+        summary: 'Review requested on #12.',
+        priority: 'high',
+        metadata: { repository: 'acme/app', pullRequestNumber: 12, targetUrl: 'https://github.com/acme/app/pull/12' },
+      },
+      { ifIdle: { behavior: 'wake' } },
+    );
+    await end;
+    expect(transcript[0]).toMatchObject({
+      kind: 'input',
+      source: 'notification',
+      notification: {
+        id: 'note-1',
+        source: 'github',
+        kind: 'pull-request-review',
+        priority: 'high',
+        summary: 'Review requested on #12.',
+        coalescedCount: 1,
+        metadata: { repository: 'acme/app', pullRequestNumber: 12, targetUrl: 'https://github.com/acme/app/pull/12' },
+      },
+    });
+  });
+
+  describe('notification priority (A5, Mastra’s default delivery policy)', () => {
+    it('holds a medium notice that comes mid-run for the next run instead of interrupting', async () => {
+      const hold = deferred();
+      const { fake, session, signal } = await setup([held(hold.promise), COMPLETE]);
+      let end = nextEnd(session);
+      await signal('one', 'first');
+      const result = await session.sendNotificationSignal(
+        { source: 'factory', kind: 'stage-transition', summary: 'The card moved to Review.', priority: 'medium' },
+        { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'persist' } },
+      );
+      expect(result.accepted).toBeUndefined();
+      hold.resolve();
+      await end;
+      expect(fake.calls).toHaveLength(1);
+
+      end = nextEnd(session);
+      await signal('two', 'next');
+      await end;
+      expect(fake.calls[1]!.stdin).toContain('The card moved to Review.');
+    });
+
+    it('delivers a high notice that comes mid-run in a run of its own once the run ends', async () => {
+      const hold = deferred();
+      const { fake, session, signal, events } = await setup([held(hold.promise), COMPLETE]);
+      await signal('one', 'first');
+      await session.sendNotificationSignal(
+        { source: 'github', kind: 'pr-comment', summary: 'New review comment.', priority: 'high' },
+        { ifIdle: { behavior: 'wake' } },
+      );
+      hold.resolve();
+      await vi.waitFor(() => expect(events.filter(event => event.type === 'agent_end')).toHaveLength(2));
+      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls[1]!.stdin).toContain('New review comment.');
+    });
+
+    it('never wakes an idle session for a low notice', async () => {
+      const { fake, session } = await setup([COMPLETE]);
+      const result = await session.sendNotificationSignal(
+        { source: 'factory', kind: 'progress', summary: 'Still going.', priority: 'low' },
+        { ifIdle: { behavior: 'wake' } },
+      );
+      await result.persisted;
+      expect(result.accepted).toBeUndefined();
+      expect(session.run.isRunning()).toBe(false);
+      expect(fake.calls).toHaveLength(0);
+    });
+
+    it('merges a waiting notice with a newer one under the same coalesce key', async () => {
+      const { fake, session, signal } = await setup([COMPLETE]);
+      const note = (summary: string) =>
+        session.sendNotificationSignal({ source: 'factory', kind: 'progress', summary, priority: 'low', coalesceKey: 'card-1' });
+      await (await note('1 of 3 done.')).persisted;
+      await (await note('2 of 3 done.')).persisted;
+      const end = nextEnd(session);
+      await signal('one', 'go on');
+      await end;
+      expect(fake.calls[0]!.stdin).not.toContain('1 of 3 done.');
+      expect(fake.calls[0]!.stdin).toContain('2 of 3 done.');
+    });
+  });
+
+  describe('follow-up and steer (A9)', () => {
+    it('queues a follow-up until the run ends, says how many wait, then runs it on its own', async () => {
+      const hold = deferred();
+      const { fake, session, signal, events, transcript } = await setup([held(hold.promise), COMPLETE]);
+      await signal('one', 'first');
+      expect(await session.sendChatMessage({ content: 'then this', delivery: 'follow-up' })).toEqual({ action: 'queued' });
+      expect(session.queuedFollowUps).toBe(1);
+      expect(events.at(-1)).toEqual({ type: 'follow_up_queued', count: 1 });
+      // Not shown until its run takes it.
+      expect(transcript.some(entry => entry.kind === 'input' && entry.text === 'then this')).toBe(false);
+
+      hold.resolve();
+      await vi.waitFor(() => expect(events.filter(event => event.type === 'agent_end')).toHaveLength(2));
+      expect(fake.calls[1]!.stdin).toBe('then this');
+      expect(session.queuedFollowUps).toBe(0);
+      expect(events.filter(event => (event.type as string) === 'follow_up_queued')).toEqual([
+        { type: 'follow_up_queued', count: 1 },
+        { type: 'follow_up_queued', count: 0 },
+      ]);
+    });
+
+    it('sends a follow-up to an idle session at once', async () => {
+      const { fake, session } = await setup([COMPLETE]);
+      const end = nextEnd(session);
+      expect(await session.sendChatMessage({ content: 'hello', delivery: 'follow-up' })).toEqual({ action: 'wake' });
+      await end;
+      expect(fake.calls[0]!.stdin).toBe('hello');
+    });
+
+    it('steers: stops the run in flight and starts a new one with the message', async () => {
+      const { fake, session, signal, events } = await setup([{ lines: [], hang: true }, COMPLETE]);
+      await signal('one', 'the wrong thing');
+      expect(await session.sendChatMessage({ content: 'do the right thing', delivery: 'steer' })).toEqual({ action: 'wake' });
+      await vi.waitFor(() => expect(events.filter(event => event.type === 'agent_end')).toHaveLength(2));
+      expect(events.filter(event => event.type === 'agent_end')).toEqual([
+        { type: 'agent_end', reason: 'aborted' },
+        { type: 'agent_end', reason: 'complete' },
+      ]);
+      expect(fake.calls.map(call => call.stdin)).toEqual(['the wrong thing', 'do the right thing']);
+    });
+  });
+
+  describe('usage (A10)', () => {
+    it('reports a model message’s usage while the turn still runs', async () => {
+      const hold = deferred();
+      const { session, signal, events } = await setup([held(hold.promise)]);
+      const end = nextEnd(session);
+      await signal('one', 'go');
+      // msg_01A is whole once msg_01B starts; the turn is still held before its result.
+      await vi.waitFor(() => expect(events.filter(event => event.type === 'usage_update')).toHaveLength(1));
+      hold.resolve();
+      await end;
+      expect(events.map(event => event.type)).toEqual(['usage_update', 'usage_update', 'agent_end']);
+    });
+
+    it('counts the usage a stopped turn already reported', async () => {
+      const hold = deferred();
+      const { session, signal, events } = await setup([held(hold.promise)]);
+      const end = nextEnd(session);
+      await signal('one', 'go');
+      await vi.waitFor(() => expect(events.filter(event => event.type === 'usage_update')).toHaveLength(1));
+      session.abort();
+      expect(await end).toBe('aborted');
+      expect(events.map(event => event.type)).toEqual(['usage_update', 'usage_update', 'agent_end']);
+      hold.resolve();
+    });
   });
 });

@@ -33,6 +33,8 @@ import {
   ASK_USER_QUESTION_TOOL,
   askUserPrompt,
   TurnTranslator,
+  type ClaudeMessageAuthor,
+  type ClaudeNotificationRecord,
   type ClaudeTranscriptEntry,
   type PermissionRequest,
   type PlanGate,
@@ -51,12 +53,52 @@ import {
   type GateServerCommand,
 } from './gate.ts';
 import { writeGateServerScript } from './gate-server.ts';
+import { claudeNotificationDecision } from './notifications.ts';
 import { claudePermissionRules, type ClaudeToolPermissions } from './permissions.ts';
 import { emptyThreadState, type ClaudePendingInput, type ClaudeSessionRecord, type ClaudeSessionStore, type ClaudeThreadState } from './store.ts';
 import { parseStreamLine } from './stream.ts';
 
 /** How many delivered signal ids and dedupe keys a thread remembers. */
 const RECENT_LIMIT = 200;
+
+/**
+ * The request-context key a person's identity travels under when they write
+ * (Mastra's `MASTRA_MESSAGE_AUTHOR_KEY`); their message is stamped with it.
+ */
+export const MESSAGE_AUTHOR_KEY = 'mastra__messageAuthor';
+
+/** The author a request context carries, in the shape Mastra stamps on a message. */
+export function messageAuthor(requestContext: AgentRunContext | undefined): ClaudeMessageAuthor | undefined {
+  const value = requestContext?.get(MESSAGE_AUTHOR_KEY);
+  if (!value || typeof value !== 'object') return undefined;
+  const { id, name, avatarUrl } = value as Record<string, unknown>;
+  if (typeof id !== 'string' || !id) return undefined;
+  return {
+    id,
+    ...(typeof name === 'string' ? { name } : {}),
+    ...(typeof avatarUrl === 'string' ? { avatarUrl } : {}),
+  };
+}
+
+/**
+ * A notification as Factory callers send it: the contract's fields plus the
+ * ones a Mastra notification record also keeps (`SendNotificationSignalInput`).
+ */
+export type ClaudeNotificationInput = AgentNotificationInput & {
+  id?: string;
+  coalesceKey?: string;
+  attributes?: Record<string, string | number | boolean | null | undefined>;
+  metadata?: Record<string, unknown>;
+};
+
+/** How a person's chat message joins the session (the chat's message, follow-up and steer routes). */
+export type ClaudeChatDelivery = 'message' | 'follow-up' | 'steer';
+
+/** Emitted (besides the contract's events) whenever the number of queued follow-ups changes, as Mastra does. */
+export interface FollowUpQueuedEvent {
+  type: 'follow_up_queued';
+  count: number;
+}
 
 /** Settings sources a turn reads by default: the repo's, never the person's own `~/.claude/settings.json`. */
 export const DEFAULT_SETTING_SOURCES: ClaudeSettingSource[] = ['project', 'local'];
@@ -263,6 +305,10 @@ interface ActiveRun {
   /** The current turn's input until the CLI took it (its `init`); given back if the turn never started. */
   unsent?: ClaudePendingInput[];
   process?: ClaudeRun;
+  /** The current attempt's stream, so a stop still counts the usage it saw. */
+  translator?: TurnTranslator;
+  /** The run's first turn recorded its input; input that joins later is recorded as it comes. */
+  begun?: boolean;
   abortRequested: boolean;
   settled: boolean;
   /** Tools the current turn asks about on every call (see `ClaudeToolPermissions.askEachTime`). */
@@ -284,7 +330,9 @@ const escapeAttribute = (value: string) =>
 const escapeNotificationBody = (value: string) =>
   value.replace(/<(\/?)system-notification/gi, (_match, slash: string) => `&lt;${slash}system-notification`);
 
-function formatNotification(input: AgentNotificationInput): string {
+function formatNotification(
+  input: Pick<ClaudeNotificationRecord, 'source' | 'kind' | 'payload' | 'summary'> & { priority?: string },
+): string {
   const attrs = [`source="${escapeAttribute(input.source)}"`, `kind="${escapeAttribute(input.kind)}"`];
   if (input.priority) attrs.push(`priority="${escapeAttribute(input.priority)}"`);
   const payload = input.payload as { message?: unknown; body?: unknown } | undefined;
@@ -410,6 +458,11 @@ export class ClaudeCodeSession implements AgentSession {
     return this.#run?.runId;
   }
 
+  /** A person's follow-ups waiting for the run in flight to end (Mastra's `queuedFollowUps`). */
+  get queuedFollowUps(): number {
+    return (this.#threadState().followUps ?? []).filter(input => input.kind === 'signal').length;
+  }
+
   readonly thread = {
     getId: (): string | undefined => this.#record.threadId,
     requireId: (): string => this.#record.threadId,
@@ -453,21 +506,63 @@ export class ClaudeCodeSession implements AgentSession {
     return () => this.#transcriptListeners.delete(listener);
   }
 
-  /** Stops the run now: `agent_end: aborted` is emitted before this returns; the process is stopped behind it. */
+  /**
+   * Stops the run now: `agent_end: aborted` is emitted before this returns; the
+   * process is stopped behind it. The usage the turn reported so far is
+   * counted first. Queued follow-ups then start their own run, as Mastra's
+   * queue drains once the thread is idle.
+   */
   abort(): void {
+    this.#abort(true);
+  }
+
+  #abort(drainFollowUps: boolean): void {
     const run = this.#run;
     if (!run || run.settled) return;
     run.abortRequested = true;
     run.process?.terminate();
-    this.#settle(run, 'aborted');
+    this.#reportUsage(run, true);
+    this.#settle(run, 'aborted', { drainFollowUps });
   }
 
   /** Resolves when the run the message started or joined ends. */
   async sendMessage(input: { content: string; requestContext?: AgentRunContext }): Promise<unknown> {
-    const accepted = this.#accept([{ kind: 'signal', id: randomUUID(), text: input.content }], true);
+    const author = messageAuthor(input.requestContext);
+    const accepted = this.#accept([{ kind: 'signal', text: input.content, ...(author ? { author } : {}) }], true);
     if (accepted.action === 'persist') return undefined;
     if (accepted.action === 'wake') await accepted.run.started;
     return { reason: await accepted.run.ended };
+  }
+
+  /**
+   * A person's chat message, as Mastra's session routes take one: `message`
+   * starts a run or joins the one in flight (an interjection); `follow-up`
+   * waits for the run in flight to end and then starts its own
+   * (`follow_up_queued` tells the chat how many wait); `steer` stops the run
+   * in flight and starts a new one with the message, keeping queued
+   * follow-ups. The message carries its author from the request context.
+   * Resolves once the message is taken; a run that then fails says so as an
+   * `error` event.
+   */
+  async sendChatMessage(input: {
+    content: string;
+    requestContext?: AgentRunContext;
+    delivery?: ClaudeChatDelivery;
+  }): Promise<{ action: 'wake' | 'deliver' | 'queued' }> {
+    const author = messageAuthor(input.requestContext);
+    const message: ClaudePendingInput = { kind: 'signal', text: input.content, ...(author ? { author } : {}) };
+    const delivery = input.delivery ?? 'message';
+    if (delivery === 'follow-up' && this.run.isRunning()) {
+      const thread = this.#threadState();
+      thread.followUps = [...(thread.followUps ?? []), message];
+      await this.#save();
+      this.#emitFollowUpCount();
+      return { action: 'queued' };
+    }
+    if (delivery === 'steer') this.#abort(false);
+    const accepted = this.#accept([message], true);
+    if (accepted.action === 'persist') throw new Error('unreachable: chat messages always wake');
+    return { action: accepted.action };
   }
 
   sendSignal(
@@ -475,8 +570,9 @@ export class ClaudeCodeSession implements AgentSession {
     options: { requestContext: AgentRunContext; requireDelivery?: boolean },
   ): AgentSignalResult {
     let accepted: Accepted;
+    const author = messageAuthor(options.requestContext);
     try {
-      accepted = this.#accept([{ kind: 'signal', id: input.id, text: signalText(input) }], true);
+      accepted = this.#accept([{ kind: 'signal', id: input.id, text: signalText(input), ...(author ? { author } : {}) }], true);
     } catch (error) {
       return { accepted: Promise.reject(error) };
     }
@@ -488,8 +584,20 @@ export class ClaudeCodeSession implements AgentSession {
     return { accepted: Promise.resolve(result) };
   }
 
+  /**
+   * Gives the agent a notification as a Mastra session's delivery policy
+   * would (see {@link claudeNotificationDecision}): urgent ones, and high and
+   * medium ones on an idle thread, are delivered (`ifActive`/`ifIdle` decide
+   * whether that joins the run in flight or wakes an idle session); a high one
+   * that comes mid-run is delivered in a run of its own once the run in
+   * flight ends; medium ones mid-run and low ones are held for the next run
+   * instead of interrupting or waking (Mastra summarizes them into its
+   * notification inbox; Claude has no inbox to read them from, so the full
+   * notice goes with the next run). A notice still waiting merges a newer one with the same
+   * source, kind and coalesce key, as Mastra's notification store does.
+   */
   async sendNotificationSignal(
-    input: AgentNotificationInput,
+    input: ClaudeNotificationInput,
     options: AgentNotificationOptions = {},
   ): Promise<AgentNotificationResult> {
     const thread = this.#threadState();
@@ -498,12 +606,21 @@ export class ClaudeCodeSession implements AgentSession {
       return { persisted: Promise.resolve(), accepted: Promise.resolve({ action: 'deliver' }) };
     }
     if (input.dedupeKey) thread.dedupeKeys = remember(thread.dedupeKeys, input.dedupeKey);
-    const pending: ClaudePendingInput = { kind: 'notification', text: formatNotification(input) };
+    const record = this.#notificationRecord(thread, input);
+    // The text Claude reads names a priority only when the sender gave one.
+    const text = formatNotification({ ...record, priority: input.priority });
+    const pending: ClaudePendingInput = { kind: 'notification', text, notification: record };
     const active = this.run.isRunning();
-    const wake = active
+    const allowed = active
       ? (options.ifActive?.behavior ?? 'deliver') === 'deliver'
       : (options.ifIdle?.behavior ?? 'persist') === 'wake';
-    if (!wake) {
+    const decision = claudeNotificationDecision({ record, threadState: active ? 'active' : 'idle', now: new Date() });
+    if (allowed && decision.action === 'summarize' && decision.deliverAt) {
+      // Mastra delivers the full notice once the run in flight is over.
+      thread.followUps = [...(thread.followUps ?? []), pending];
+      return { persisted: this.#save() };
+    }
+    if (!allowed || decision.action === 'summarize') {
       thread.pendingInputs.push(pending);
       return { persisted: this.#save() };
     }
@@ -630,6 +747,93 @@ export class ClaudeCodeSession implements AgentSession {
 
   // -- internals ------------------------------------------------------------
 
+  /**
+   * The record a notification is kept as. One still waiting (not given to the
+   * agent yet) with the same source, kind and coalesce key is taken out and
+   * merged into it, as Mastra's store coalesces a pending record.
+   */
+  #notificationRecord(thread: ClaudeThreadState, input: ClaudeNotificationInput): ClaudeNotificationRecord {
+    const fresh: ClaudeNotificationRecord = {
+      id: input.id ?? randomUUID(),
+      source: input.source,
+      kind: input.kind,
+      priority: input.priority ?? 'medium',
+      summary: input.summary,
+      ...(input.payload !== undefined ? { payload: input.payload } : {}),
+      ...(input.sourceId ? { sourceId: input.sourceId } : {}),
+      ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}),
+      ...(input.coalesceKey ? { coalesceKey: input.coalesceKey } : {}),
+      coalescedCount: 1,
+      ...(input.attributes ? { attributes: structuredClone(input.attributes) } : {}),
+      ...(input.metadata ? { metadata: structuredClone(input.metadata) } : {}),
+      createdAt: new Date().toISOString(),
+    };
+    if (!input.coalesceKey) return fresh;
+    const matches = ({ notification }: ClaudePendingInput) =>
+      notification !== undefined &&
+      notification.coalesceKey === input.coalesceKey &&
+      notification.source === input.source &&
+      notification.kind === input.kind;
+    for (const list of [thread.pendingInputs, thread.followUps ?? []]) {
+      const index = list.findIndex(matches);
+      if (index === -1) continue;
+      const existing = list.splice(index, 1)[0]!.notification!;
+      return {
+        ...existing,
+        summary: input.summary,
+        priority: input.priority ?? existing.priority,
+        ...(input.payload !== undefined || existing.payload !== undefined ? { payload: input.payload ?? existing.payload } : {}),
+        coalescedCount: (existing.coalescedCount ?? 1) + 1,
+        ...(input.attributes || existing.attributes ? { attributes: { ...existing.attributes, ...input.attributes } } : {}),
+        ...(input.metadata || existing.metadata ? { metadata: { ...existing.metadata, ...input.metadata } } : {}),
+      };
+    }
+    return fresh;
+  }
+
+  #emitFollowUpCount() {
+    const event: FollowUpQueuedEvent = { type: 'follow_up_queued', count: this.queuedFollowUps };
+    this.#emit(event as unknown as AgentEvent);
+  }
+
+  /** Reports the usage the run's current attempt saw and has not reported yet; `final` takes the rest. */
+  #reportUsage(run: ActiveRun, final: boolean) {
+    // Usage after the run already ended would be billed to the next run.
+    if (run.settled || !run.translator) return;
+    for (const usage of run.translator.takeUsage(final)) this.#emit({ type: 'usage_update', usage });
+  }
+
+  /** Records input as the session takes it, once; `whileActive` marks input that joins a run in flight. */
+  #echo(inputs: ClaudePendingInput[], run: ActiveRun, whileActive = false) {
+    for (const input of inputs) {
+      if (input.echoed) continue;
+      // A plan answer queued for this turn shows as the decision it is, not as typed input.
+      if (input.planDecision) {
+        this.#emitTranscript({ kind: 'plan_decision', ...input.planDecision }, run);
+      } else if (!input.gate) {
+        this.#emitTranscript(
+          {
+            kind: 'input',
+            source: input.kind,
+            text: input.text,
+            ...(input.id ? { id: input.id } : {}),
+            ...(input.author ? { author: input.author } : {}),
+            ...(input.notification ? { notification: input.notification } : {}),
+            ...(whileActive && input.kind === 'signal' ? { delivery: 'while-active' as const } : {}),
+          },
+          run,
+        );
+      }
+      input.echoed = true;
+    }
+  }
+
+  /** Input not already waiting under the same signal id (a sender's retry of what is still queued). */
+  #fresh(inputs: ClaudePendingInput[], ...waiting: ClaudePendingInput[][]): ClaudePendingInput[] {
+    const ids = new Set(waiting.flat().flatMap(input => (input.id ? [input.id] : [])));
+    return inputs.filter(input => !input.id || !ids.has(input.id));
+  }
+
   #threadState(threadId = this.#record.threadId): ClaudeThreadState {
     return (this.#record.threads[threadId] ??= emptyThreadState());
   }
@@ -656,7 +860,13 @@ export class ClaudeCodeSession implements AgentSession {
 
   #save(): Promise<void> {
     this.#record.updatedAt = new Date().toISOString();
-    const write = this.#saving.then(() => this.#config.store.put(structuredClone(this.#record)));
+    const record = structuredClone(this.#record);
+    // Input queued for the run in flight survives a restart: it waits for the next turn there.
+    const run = this.#run;
+    if (run && !run.settled && run.queue.length) {
+      record.threads[run.threadId]?.pendingInputs.push(...structuredClone(run.queue));
+    }
+    const write = this.#saving.then(() => this.#config.store.put(record));
     // A failed write fails its caller but must not wedge every later write.
     this.#saving = write.catch(error => console.warn('[claude-code harness] Unable to persist session.', error));
     return write;
@@ -671,9 +881,11 @@ export class ClaudeCodeSession implements AgentSession {
   #accept(inputs: ClaudePendingInput[], wake: boolean, { keepGate = false } = {}): Accepted {
     const run = this.#run;
     if (run && !run.settled) {
-      run.queue.push(...inputs);
-      // It will run within this run, so it has landed as far as the dispatcher's replay guard is concerned.
-      this.#markDelivered(inputs);
+      const fresh = this.#fresh(inputs, run.queue, this.#threadState(run.threadId).pendingInputs);
+      run.queue.push(...fresh);
+      // It joins the run now, as a Mastra interjection does: the chat shows it at once. It counts as
+      // delivered (the dispatcher's replay guard) only once the turn that carries it starts.
+      if (run.begun) this.#echo(fresh, run, true);
       void this.#save().catch(() => {});
       return { action: 'deliver', run };
     }
@@ -721,7 +933,7 @@ export class ClaudeCodeSession implements AgentSession {
     };
     this.#run = run;
     const thread = this.#threadState();
-    const first = [...thread.pendingInputs, ...inputs];
+    const first = [...thread.pendingInputs, ...this.#fresh(inputs, thread.pendingInputs)];
     thread.pendingInputs = [];
     const previous = this.#barrier;
     run.loopDone = this.#loop(run, first, previous);
@@ -780,28 +992,40 @@ export class ClaudeCodeSession implements AgentSession {
     this.#settle(run, reason);
   }
 
-  #settle(run: ActiveRun, reason: AgentRunEndReason) {
+  #settle(run: ActiveRun, reason: AgentRunEndReason, { drainFollowUps = true } = {}) {
     if (run.settled) return;
     run.settled = true;
     if (this.#run === run) this.#run = undefined;
     if (reason === 'aborted' || reason === 'error') {
       const thread = this.#threadState(run.threadId);
-      // The turn never reached Claude: its notifications wait for the next turn, and its
-      // signals stay undelivered, so the dispatcher's replay guard sends them again.
+      // Input that never reached Claude waits for the next turn: notifications, gate answers and
+      // a person's messages. A signal with an id stays undelivered instead, so its sender (the
+      // dispatcher's replay guard) sends it again.
+      const kept = (input: ClaudePendingInput) => input.kind === 'notification' || input.gate || !input.id;
       if (run.unsent) {
-        thread.pendingInputs.unshift(...run.unsent.filter(input => input.kind === 'notification' || input.gate));
+        thread.pendingInputs.unshift(...run.unsent.filter(kept));
         run.unsent = undefined;
       }
-      // A queued signal never reached Claude: forget it so the dispatcher's replay guard sends it again.
-      const dropped = new Set(run.queue.flatMap(input => (input.kind === 'signal' && input.id ? [input.id] : [])));
-      thread.deliveredIds = thread.deliveredIds.filter(id => !dropped.has(id));
-      thread.pendingInputs.push(...run.queue.filter(input => input.kind === 'notification'));
+      thread.pendingInputs.push(...run.queue.filter(kept));
       run.queue = [];
     }
     run.markStarted();
     void this.#save().catch(() => {});
     run.resolveEnded(reason);
     this.#emit({ type: 'agent_end', reason });
+    if (drainFollowUps && reason !== 'suspended') this.#drainFollowUps(run.threadId);
+  }
+
+  /** Starts a run with what waited for the last one to end (follow-ups, a high notice that came mid-run). */
+  #drainFollowUps(threadId: string) {
+    if (this.#run || threadId !== this.#record.threadId) return;
+    const thread = this.#threadState(threadId);
+    const waiting = thread.followUps ?? [];
+    if (waiting.length === 0) return;
+    const hadFollowUps = waiting.some(input => input.kind === 'signal');
+    thread.followUps = [];
+    this.#accept(waiting, true);
+    if (hadFollowUps) this.#emitFollowUpCount();
   }
 
   async #cwd(): Promise<string> {
@@ -873,17 +1097,8 @@ export class ClaudeCodeSession implements AgentSession {
     const planning = (thread.mode ?? this.#config.mode) === 'planning';
     const lead = planning ? [this.#config.planningPrompt ?? PLANNING_PROMPT] : [];
     const prompt = [...lead, ...inputs.map(input => input.text)].join('\n\n');
-    if (!run.settled) {
-      for (const input of inputs) {
-        // A plan answer queued for this turn shows as the decision it is, not as typed input.
-        if (input.planDecision) {
-          this.#emitTranscript({ kind: 'plan_decision', ...input.planDecision }, run);
-          continue;
-        }
-        if (input.gate) continue;
-        this.#emitTranscript({ kind: 'input', source: input.kind, text: input.text, ...(input.id ? { id: input.id } : {}) }, run);
-      }
-    }
+    if (!run.settled) this.#echo(inputs, run);
+    run.begun = true;
     run.unsent = inputs;
     const tried: string[] = [];
     const credentials = turnCredentials(
@@ -993,6 +1208,7 @@ export class ClaudeCodeSession implements AgentSession {
         this.#argsInput(thread, planning, mcpConfigPaths, model, rules ? { rules } : {}, systemPrompt, settingSources),
       );
       const translator = new TurnTranslator();
+      run.translator = translator;
       let processRef: ClaudeRun | undefined;
       let stopForGate = false;
       let stopForAccount = false;
@@ -1012,6 +1228,8 @@ export class ClaudeCodeSession implements AgentSession {
         }
         // Once the plan is in, the rest is the process being stopped (e.g. the gate call failing with "Connection closed").
         if (!run.settled && !stopForGate) for (const entry of entries) this.#emitTranscript(entry, run);
+        // A model message's usage counts as soon as the stream has it whole, so a run's cost shows as it goes.
+        this.#reportUsage(run, false);
         if ((translator.gate || translator.permission) && !stopForGate) {
           // The plan, or a call waiting for a person, is the turn's last word: stop before Claude goes on without the answer.
           stopForGate = true;
@@ -1045,8 +1263,7 @@ export class ClaudeCodeSession implements AgentSession {
 
       const exit = await proc.exited;
       run.process = undefined;
-      // Usage after the run already ended would be billed to the next run.
-      if (!run.settled) for (const usage of translator.usageSteps()) this.#emit({ type: 'usage_update', usage });
+      this.#reportUsage(run, true);
       if (run.abortRequested) return { kind: 'aborted' };
       if (exit.spawnError) {
         return { kind: 'error', error: new ClaudeCodeError('process', `Unable to start Claude Code: ${exit.spawnError.message}`) };

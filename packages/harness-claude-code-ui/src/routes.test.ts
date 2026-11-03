@@ -1,5 +1,5 @@
 import { InMemoryStore } from '@mastra/core/storage';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,7 +33,10 @@ afterEach(() => {
   for (const close of open.splice(0)) close();
 });
 
-async function setup(turns: FakeTurn[], options: { user?: TestAuthUser; mode?: 'planning'; visibility?: 'private' | 'org' } = {}): Promise<Setup> {
+async function setup(
+  turns: FakeTurn[],
+  options: { user?: TestAuthUser; mode?: 'planning'; visibility?: 'private' | 'org'; author?: { id: string; name?: string } } = {},
+): Promise<Setup> {
   const fake = fakeClaude(turns);
   const storage = new InMemoryStore();
   const ui = createClaudeSessionUi({ controllerId: 'code', storage, heartbeatMs: 60_000 });
@@ -54,7 +57,10 @@ async function setup(turns: FakeTurn[], options: { user?: TestAuthUser; mode?: '
   const user = options.user ?? OWNER;
   app.use('*', async (c, next) => {
     c.set('factoryAuthUser' as never, user as never);
-    c.set('requestContext' as never, new RequestContext() as never);
+    const requestContext = new RequestContext();
+    // What the host's auth stamps for a signed-in person (Mastra's message author).
+    if (options.author) requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, options.author);
+    c.set('requestContext' as never, requestContext as never);
     await next();
   });
   app.use(
@@ -239,8 +245,9 @@ describe('Claude Code session routes', () => {
 
     await post(app, `${BASE}/card-1/messages`, { message: 'Update the README.' });
     await stream.until(event => event.type === 'agent_end');
-    const types = stream.events.map(event => event.type);
-    expect(types[1]).toBe('agent_start');
+    // Each event is followed by the state it leaves (`display_state_changed`), as a Mastra session streams.
+    const types = stream.events.map(event => event.type).filter(type => type !== 'display_state_changed');
+    expect(types[0]).toBe('agent_start');
     expect(types).toEqual(expect.arrayContaining(['message_start', 'message_update', 'tool_start', 'tool_end', 'message_end']));
     expect(types.at(-1)).toBe('agent_end');
     const userEcho = stream.events.find(event => event.type === 'message_start') as { message: Record<string, any> };
@@ -535,5 +542,115 @@ describe('Claude Code session routes', () => {
     expect(await switched.json()).toEqual({ error: 'Claude Code sessions do not support POST /model.' });
     const withFiles = await post(app, `${BASE}/card-1/messages`, { message: 'look', files: [{ data: 'x', mediaType: 'image/png' }] });
     expect(withFiles.status).toBe(400);
+  });
+});
+
+describe('Claude Code session routes: Mastra parity', () => {
+  const AUTHOR = { id: 'user-ada', name: 'Ada' };
+
+  it('stamps the person who wrote on the stored message, from the request’s message author (A7)', async () => {
+    const { app, session } = await setup([{ lines: fixture('turn-complete.jsonl') }], { author: AUTHOR });
+    const end = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'Hello from Ada.' });
+    await end;
+    const { messages } = (await (await app.request(`${BASE}/card-1/threads/card-1/messages?limit=10`)).json()) as {
+      messages: Array<Record<string, any>>;
+    };
+    expect(messages[0]!.content.metadata.signal.author).toEqual(AUTHOR);
+    expect(messages[0]!.content.providerMetadata).toEqual({ mastra: { author: AUTHOR } });
+  });
+
+  it('stores a failed run’s error on the thread and streams it with its kind, status and reset time (A3)', async () => {
+    const { app, session } = await setup([{ lines: fixture('turn-rate-limit.jsonl'), exitCode: 1 }]);
+    const stream = await openStream(app);
+    const end = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'go' });
+    expect(await end).toBe('error');
+    const error = (await stream.until(event => event.type === 'error')) as { error: Record<string, unknown> };
+    expect(error.error).toMatchObject({ name: 'ClaudeCodeError', kind: 'rate_limit', resetsAt: '2026-10-27T16:00:00.000Z' });
+
+    const { messages } = (await (await app.request(`${BASE}/card-1/threads/card-1/messages?limit=10`)).json()) as {
+      messages: Array<{ role: string; content: { parts: Array<Record<string, any>> } }>;
+    };
+    const parts = messages.filter(message => message.role === 'assistant').flatMap(message => message.content.parts);
+    expect(parts.filter(part => part.type === 'error')).toEqual([{ type: 'error', error: { ...error.error, modelId: 'claude-sonnet-4-6' } }]);
+  });
+
+  it('follows every event with the state it leaves, so the chat’s usage and run state keep up (A8)', async () => {
+    const { app, session } = await setup([{ lines: fixture('turn-complete.jsonl') }]);
+    const stream = await openStream(app);
+    const end = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'go' });
+    await end;
+    const last = (await stream.until(
+      event => event.type === 'display_state_changed' && stream.events[stream.events.indexOf(event) - 1]?.type === 'agent_end',
+    )) as { displayState: { isRunning: boolean; tokenUsage: unknown } };
+    const usageAt = stream.events.findIndex(event => event.type === 'usage_update');
+    const after = stream.events[usageAt + 1] as { type: string; displayState: { tokenUsage: Record<string, number> } };
+    expect(after.type).toBe('display_state_changed');
+    expect(after.displayState.tokenUsage.totalTokens).toBeGreaterThan(0);
+    expect(last.displayState.isRunning).toBe(false);
+    const state = (await (await app.request(`${BASE}/card-1`)).json()) as { tokenUsage: unknown };
+    expect(last.displayState.tokenUsage).toEqual(state.tokenUsage);
+  });
+
+  it('queues a follow-up sent mid-run and says how many wait; steer stops the run and starts over (A9)', async () => {
+    const { app, session, fake } = await setup([
+      { lines: fixture('turn-complete.jsonl').slice(0, 2), hang: true },
+      { lines: fixture('turn-complete.jsonl') },
+      { lines: fixture('turn-complete.jsonl') },
+    ]);
+    const stream = await openStream(app);
+    await post(app, `${BASE}/card-1/messages`, { message: 'Take your time.' });
+    await vi.waitFor(() => expect(fake.calls).toHaveLength(1));
+
+    expect(await (await post(app, `${BASE}/card-1/follow-up`, { message: 'Then the docs.' })).json()).toEqual({ ok: true });
+    expect(await stream.until(event => event.type === 'follow_up_queued')).toEqual({ type: 'follow_up_queued', count: 1 });
+    const state = (await stream.until(
+      event => event.type === 'display_state_changed' && (event.displayState as { queuedFollowUps: number }).queuedFollowUps === 1,
+    )) as { displayState: { queuedFollowUps: number } };
+    expect(state.displayState.queuedFollowUps).toBe(1);
+
+    await post(app, `${BASE}/card-1/steer`, { message: 'Actually, the tests first.' });
+    await vi.waitFor(() => expect(fake.calls).toHaveLength(3));
+    await stream.until(() => stream.events.filter(event => event.type === 'agent_end').length === 3);
+    expect(stream.events.filter(event => event.type === 'agent_end')).toEqual([
+      { type: 'agent_end', reason: 'aborted' },
+      { type: 'agent_end', reason: 'complete' },
+      { type: 'agent_end', reason: 'complete' },
+    ]);
+    expect(fake.calls.map(call => call.stdin)).toEqual(['Take your time.', 'Actually, the tests first.', 'Then the docs.']);
+    expect(fake.calls[0]!.killed).toEqual(['SIGTERM']);
+  });
+
+  it('names the model the last turn ran on in the session state, also after a restart (A6)', async () => {
+    const { app, session, storage } = await setup([{ lines: fixture('turn-complete.jsonl') }]);
+    const end = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'go' });
+    await end;
+    expect(((await (await app.request(`${BASE}/card-1`)).json()) as { modelId: string }).modelId).toBe('claude-sonnet-4-6');
+    const { messages } = (await (await app.request(`${BASE}/card-1/threads/card-1/messages?limit=10`)).json()) as {
+      messages: Array<{ role: string; content: { metadata?: Record<string, unknown> } }>;
+    };
+    expect(messages.find(message => message.role === 'assistant')!.content.metadata).toMatchObject({
+      modelId: 'claude-sonnet-4-6',
+      provider: 'anthropic',
+    });
+
+    const restarted = createClaudeSessionUi({ controllerId: 'code', storage, heartbeatMs: 60_000 }).attach(session);
+    await restarted.ready;
+    expect(restarted.modelId).toBe('claude-sonnet-4-6');
+  });
+
+  it('streams a parked permission as tool_approval_required and a question as ask_user, as run reports read them (A11)', async () => {
+    const { app, session, ui } = await setup([{ lines: fixture('turn-question.jsonl') }]);
+    const seen: Array<Record<string, unknown>> = [];
+    ui.channel('card-1')!.subscribe(event => seen.push(event as unknown as Record<string, unknown>));
+    const end = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'Ask me.' });
+    expect(await end).toBe('suspended');
+    const parked = seen.filter(event => event.type === 'tool_suspended' || event.type === 'tool_approval_required');
+    expect(parked).toEqual([expect.objectContaining({ type: 'tool_suspended', toolName: 'ask_user' })]);
+    expect(seen.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'suspended' }]);
   });
 });
