@@ -1,4 +1,3 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Circle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -16,24 +15,8 @@ export function ConnectionActivity() {
   const { phase } = useChatTranscript();
   const preparingThreadId = usePreparingThreadId();
 
-  // A dropped stream makes every other status stale, the composer's working ring included.
-  if (status === 'reconnecting')
-    return (
-      <span className={statusItem} role="status" aria-live="polite">
-        <Circle size={10} /> {t('status.reconnecting')}
-      </span>
-    );
-  if (status === 'error')
-    return (
-      <span
-        className={cn(statusItem, 'text-destructive-foreground [&_svg]:text-destructive-foreground')}
-        role="status"
-        aria-live="polite"
-        title={t('status.reconnectHint')}
-      >
-        <Circle size={10} /> {t('status.disconnected')}
-      </span>
-    );
+  // The notice above the composer owns connection failures; other activity is stale until recovery.
+  if (status === 'reconnecting' || status === 'error') return null;
   // preparing message sets busy; preparation status takes precedence
   if (preparingThreadId)
     return (

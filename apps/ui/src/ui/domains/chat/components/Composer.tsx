@@ -5,6 +5,7 @@ import {
   Composer as ComposerRoot,
   ComposerActions,
   ComposerBox,
+  ComposerHeader,
   ComposerInput,
   ComposerRing,
   ComposerSuggestions,
@@ -13,7 +14,7 @@ import {
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, ImagePlus, Square } from 'lucide-react';
+import { ImagePlus } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -32,13 +33,16 @@ import {
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
+import { useComposerConnectionNotice } from '../hooks/useComposerConnectionNotice';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { StatusLine } from './StatusLine';
+import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
+import { ComposerPrimaryAction } from './ComposerPrimaryAction';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 
@@ -53,6 +57,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
+  const connectionNotice = useComposerConnectionNotice(status);
+  const connectionLost = connectionNotice.open && connectionNotice.notice !== 'reconnected';
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
@@ -93,6 +99,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const composerDisabled = startingDraft || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading;
+  const hasSubmittableDraft = (draft.trim().length > 0 || images.length > 0) && !(planFeedback.pending && !draft.trim());
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -267,7 +274,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerRing busy={busy || chatPreparing || startingDraft}>
+      <ComposerHeader open={connectionNotice.open}>
+        <ComposerConnectionNotice notice={connectionNotice.notice} />
+      </ComposerHeader>
+      <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
@@ -303,27 +313,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
-              {liveRun && (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  onClick={() => void abortMutation.mutateAsync()}
-                  aria-label={t('composer.abort')}
-                >
-                  <Square size={14} />
-                </Button>
-              )}
-              <Button
-                type="submit"
-                size="icon-sm"
-                disabled={
-                  sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
-                }
-                aria-label={t('composer.send')}
-                title={sendTitle}
-              >
-                <ArrowUp size={16} />
-              </Button>
+              <ComposerPrimaryAction
+                showAbort={liveRun && !hasSubmittableDraft}
+                sendDisabled={sendDisabled || !hasSubmittableDraft}
+                sendTitle={sendTitle}
+                onAbort={() => void abortMutation.mutateAsync()}
+              />
             </ButtonsGroup>
           </ComposerActions>
         </ComposerBox>

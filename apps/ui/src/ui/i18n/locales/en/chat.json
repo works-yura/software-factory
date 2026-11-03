@@ -169,9 +169,6 @@
   },
   "status": {
     "line": "Session status line",
-    "reconnecting": "Reconnecting…",
-    "reconnectHint": "Check the server and reload to reconnect",
-    "disconnected": "Disconnected",
     "preparingWorkspace": "Preparing workspace…",
     "connecting": "Connecting…",
     "working": "Working…",
@@ -369,5 +366,10 @@
     "placeholder": "Ask Claude Code…",
     "model": "Claude Code · {{model}}",
     "modelHint": "This chat runs on Claude Code with the Factory’s Claude model. Change it in Settings → Models."
+  },
+  "connectionNotice": {
+    "reconnecting": "Reconnecting…",
+    "error": "Connection lost. Check the server and reload to reconnect.",
+    "reconnected": "Reconnected"
   }
 }
