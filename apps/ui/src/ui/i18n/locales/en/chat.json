@@ -372,7 +372,7 @@
   },
   "connectionNotice": {
     "reconnecting": "Reconnecting…",
-    "error": "Connection lost. Check the server and reload to reconnect.",
+    "error": "Connection lost. It reconnects once the server answers.",
     "reconnected": "Reconnected"
   }
 }

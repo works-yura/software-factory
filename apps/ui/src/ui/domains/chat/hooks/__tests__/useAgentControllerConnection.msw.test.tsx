@@ -398,7 +398,7 @@ describe('useAgentControllerConnection', () => {
     expect(result.current.state?.running).toBe(false);
   });
 
-  it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {
+  it('given reconnect polling is disconnected, then it backs off and keeps polling slowly past the retry cap', () => {
     expect(reconnectRefetchInterval(true, 0)).toBe(false);
     expect(reconnectRefetchInterval(true, 0, true)).toBe(15_000);
     expect(reconnectRefetchInterval(true, 0, false)).toBe(false);
@@ -406,7 +406,8 @@ describe('useAgentControllerConnection', () => {
     expect(reconnectRefetchInterval(false, 1)).toBe(2000);
     expect(reconnectRefetchInterval(false, 5)).toBe(30_000);
     expect(reconnectRefetchInterval(false, 9)).toBe(30_000);
-    expect(reconnectRefetchInterval(false, 10)).toBe(false);
+    expect(reconnectRefetchInterval(false, 10)).toBe(60_000);
+    expect(reconnectRefetchInterval(false, 50)).toBe(60_000);
   });
 
   it('given synced state exists before the stream connects, then status remains connecting', () => {

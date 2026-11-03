@@ -73,7 +73,7 @@ describe('ConnectionActivity', () => {
 
   it.each([
     ['reconnecting', 'Reconnecting…'],
-    ['error', 'Connection lost. Check the server and reload to reconnect.'],
+    ['error', 'Connection lost. It reconnects once the server answers.'],
   ] as const)('given the %s stream while the agent runs, then it outranks the working state', (status, label) => {
     const view = renderWithProviders(<ActivityFixture status={status} busy />);
     advance(300);

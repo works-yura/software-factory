@@ -31,7 +31,10 @@ export function reconnectRefetchInterval(
   // The stream is best-effort and does not replay events. A missed final
   // message/end event must not leave an apparently active run stale forever.
   if (sseConnected) return running ? 15_000 : false;
-  if (fetchFailureCount >= 10) return false;
+  // Past the cap the notice says the connection is lost, but polling goes on
+  // slowly: a server that comes back (a dev restart takes minutes) reconnects
+  // the page without a reload.
+  if (fetchFailureCount >= 10) return 60_000;
   return Math.min(1000 * 2 ** fetchFailureCount, 30_000);
 }
 
