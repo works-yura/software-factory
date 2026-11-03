@@ -89,8 +89,8 @@ integrations/platform/github/integration.test.ts	integration-github/src/platform
 integrations/platform/gitlab/event-worker.test.ts	integration-gitlab/src/platform/event-worker.test.ts
 integrations/pull-request-head.test.ts	integrations/src/pull-request-head.test.ts	+1	work spanning several repositories: same number in two repositories
 integrations/reconciliation-config.test.ts	integrations/src/reconciliation-config.test.ts
-integrations/subscription-session.test.ts	integrations/src/subscription-session.test.ts	+2	provider events reach a session another harness runs
-mcp/routes.test.ts	mcp/src/routes.test.ts	+25	connector support and factory.activity events ported from upstream f3bc1caddb; plus 7 cases for the session-scoped tokens Claude Code sessions use; plus 2 for unbound user-scope and Factory chat (supervisor) tokens; plus 3 for the session tools a Claude Code session gets over MCP
+integrations/subscription-session.test.ts	integrations/src/subscription-session.test.ts	+4	provider events reach a session another harness runs; harness routing: abort and running state through the owning harness
+mcp/routes.test.ts	mcp/src/routes.test.ts	+26	connector support and factory.activity events ported from upstream f3bc1caddb; plus 7 cases for the session-scoped tokens Claude Code sessions use; plus 2 for unbound user-scope and Factory chat (supervisor) tokens; plus 3 for the session tools a Claude Code session gets over MCP; interactive claim for a person-started Claude turn
 platform-auth-host.test.ts	auth/src/platform-auth-host.test.ts
 routes/apply-default-model.scenario.test.ts	api/src/apply-default-model.scenario.test.ts
 routes/attention.test.ts	api/src/attention.test.ts
@@ -107,7 +107,7 @@ routes/projects.test.ts	api/src/projects.test.ts	+1	harness and Claude Code mode
 routes/session-access.test.ts	session/src/session-access.test.ts	+2	model-switch guard and multipart body cases ported from upstream 8fb8a82428
 routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts	-1	user and hybrid scope catalogs removed; one Factory-catalog case remains
 routes/skills.test.ts	api/src/skills.test.ts	+12	upstream #28823: skills catalog origin (+2); upstream #29042: frontmatter in the catalog, project skill edit routes (+10)
-routes/source-control-sessions.test.ts	api/src/source-control-sessions.test.ts	+5	personal chats of a Claude Code Factory create Claude Code sessions; a delete without a retirement coordinator tells the host (+1)
+routes/source-control-sessions.test.ts	api/src/source-control-sessions.test.ts	+6	personal chats of a Claude Code Factory create Claude Code sessions; a delete without a retirement coordinator tells the host (+1); deleting a session another harness runs
 routes/source-control-settings.test.ts	api/src/source-control-settings.test.ts
 routes/supervisor.test.ts	api/src/supervisor.test.ts
 routes/surface.test.ts	api/src/surface.test.ts	+2	work spanning several repositories: a card naming no repository dispatches across the environment; ambiguity only without one; upstream #28721: a replacement work board has only its own lanes (+1)
@@ -166,15 +166,15 @@ supervisor/session-messaging.test.ts	supervisor/src/session-messaging.test.ts
 supervisor/session.test.ts	supervisor/src/session.test.ts
 supervisor/write-tools.test.ts	supervisor/src/write-tools.test.ts
 timing.test.ts	observability/src/timing.test.ts
-tools/approval-tools.test.ts	harness-mastra/src/tools/approval-tools.test.ts
-tools/deliver.test.ts	harness-mastra/src/tools/deliver.test.ts	+1	notices reach a session another harness runs
+tools/approval-tools.test.ts	harness-mastra/src/tools/approval-tools.test.ts	+2	answering a Claude Code permission
+tools/deliver.test.ts	harness-mastra/src/tools/deliver.test.ts	+3	notices reach a session another harness runs; notification record and running state for another harness
 tools/messaging-tools.test.ts	harness-mastra/src/tools/messaging-tools.test.ts
 tools/permissions.test.ts	harness-mastra/src/tools/permissions.test.ts
 tools/read-tools.test.ts	harness-mastra/src/tools/read-tools.test.ts
 tools/reports.test.ts	harness-mastra/src/tools/reports.test.ts
 tools/run-watch.test.ts	harness-mastra/src/tools/run-watch.test.ts
 tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
-tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	-1	hybrid scope cases removed with the personal model scope; upstream #28721: the old plan role still starts (+1)
+tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	+2	hybrid scope cases removed with the personal model scope; upstream #28721: the old plan role still starts (+1); side and role sessions on Claude Code
 tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts
 tools/work-item-tools.test.ts	harness-mastra/src/tools/work-item-tools.test.ts
 workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test skills stay generic and defer the stack to the target repository (+1); upstream #28838: src/mastra/factory-skills (+1); upstream #29042: project skill edits in session workspaces (+6)
@@ -285,7 +285,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/__tests__/ConnectionsRedirect.msw.test.tsx	../apps/ui/src/ui/__tests__/ConnectionsRedirect.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx	../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
-../../../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	+4	Factory-routed built-in model start ported from upstream a9f392e60e (+1); Claude Code Factory needs no Mastra model (+3)
+../../../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	+6	Factory-routed built-in model start ported from upstream a9f392e60e (+1); Claude Code Factory needs no Mastra model (+3); a Factory without sessionless chat opens a personal draft
 ../../../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	+1	no supervisor shortcut while the supervisor chat is hidden (+1)
 ../../../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
@@ -338,9 +338,9 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test s
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/transcript-notifications.test.ts	../apps/ui/src/ui/domains/chat/components/__tests__/transcript-notifications.test.ts
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ConnectionActivity.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ConnectionActivity.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelCredential.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelCredential.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	-6	personal model scope removed (Your models, scope choice, personal keys) (-7); error-card model switch case ported from upstream 38ff787998 (+1)
+../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPicker.msw.test.tsx	-5	personal model scope removed (Your models, scope choice, personal keys) (-7); error-card model switch case ported from upstream 38ff787998 (+1); the Factory model label for a factory-scoped harness
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPickerRoutedThread.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ModelPickerRoutedThread.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/OperationalMemoryStatus.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/OperationalMemoryStatus.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/OperationalMemoryStatus.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/OperationalMemoryStatus.msw.test.tsx	+2	no memory budgets for a harness without memory
 ../../../apps/ui/src/ui/domains/chat/context/__tests__/ChatModelsProvider.msw.test.tsx	../apps/ui/src/ui/domains/chat/context/__tests__/ChatModelsProvider.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/context/__tests__/ChatRuntime.msw.test.tsx	../apps/ui/src/ui/domains/chat/context/__tests__/ChatRuntime.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/context/__tests__/ChatSessionAddressing.msw.test.tsx	../apps/ui/src/ui/domains/chat/context/__tests__/ChatSessionAddressing.msw.test.tsx
