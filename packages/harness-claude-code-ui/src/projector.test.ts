@@ -569,6 +569,23 @@ describe('ClaudeTranscriptProjector', () => {
       expect(assistant!.content.metadata).toEqual({ modelId: 'claude-opus-4-5', provider: 'anthropic' });
     });
 
+    it("names the account a reply ran on, as a Mastra reply names its credential", () => {
+      const p = projector();
+      const out = play(p, [
+        { kind: 'input', source: 'signal', text: 'Go', id: 'sig-1' },
+        { kind: 'credential', label: 'alice@example.com', ownerId: 'alice' },
+        { kind: 'init', sessionId: 'claude-1', model: 'claude-opus-4-5' },
+        { kind: 'text', text: 'Done.', messageId: 'msg_1' },
+      ]);
+      const [, assistant] = stored(out.writes);
+      expect(assistant!.content.metadata).toEqual({
+        modelId: 'claude-opus-4-5',
+        provider: 'anthropic',
+        credentialLabel: 'alice@example.com',
+        credentialOwnerId: 'alice',
+      });
+    });
+
     it('stores a person’s message with its author and an interjection with while-active delivery, as Mastra’s session does (A1, A7)', () => {
       const author = { id: 'user-ada', name: 'Ada' };
       const p = projector();

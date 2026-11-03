@@ -1188,7 +1188,7 @@ describe('ClaudeCodeSession account rotation', () => {
             ? request.preferredAccountId
             : undefined) ?? ids.find(candidate => !request.exclude.includes(candidate));
         if (!id) throw new ClaudeCodeError('rate_limit', 'Every account is out of usage.');
-        return { env: { CLAUDE_CODE_OAUTH_TOKEN: `token-${id}` }, accountId: id };
+        return { env: { CLAUDE_CODE_OAUTH_TOKEN: `token-${id}` }, accountId: id, credential: { label: `Account ${id}` } };
       },
       onCredentialFailure: async (_session: ClaudeCodeSession, failure: ClaudeCredentialFailure) => {
         failures.push(failure);
@@ -1220,6 +1220,11 @@ describe('ClaudeCodeSession account rotation', () => {
     expect((await store.get('card-1'))?.accountId).toBe('b');
     // The person's input shows once, not once per account.
     expect(transcript.filter(entry => entry.kind === 'input')).toHaveLength(1);
+    // Each account the turn ran on is named, so the replies after it carry the account that wrote them.
+    expect(transcript.filter(entry => entry.kind === 'credential')).toEqual([
+      { kind: 'credential', label: 'Account a' },
+      { kind: 'credential', label: 'Account b' },
+    ]);
   });
 
   it('prefers the account the session ran on last', async () => {

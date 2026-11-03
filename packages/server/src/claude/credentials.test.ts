@@ -69,6 +69,7 @@ describe('Claude Code credentials hook', () => {
     await expect(credentials({ orgId: 'org-1', userId: 'alice' })).resolves.toEqual({
       env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-1' },
       accountId: signIn.id,
+      credential: { label: 'alice@example.com', ownerId: 'alice' },
     });
   });
 });
@@ -107,6 +108,7 @@ describe('Claude Code credential accounts', () => {
     await expect(credentials({ orgId: 'org-1', userId: 'alice' }, { exclude: [] })).resolves.toEqual({
       env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-alice' },
       accountId: alice.id,
+      credential: { label: 'alice', ownerId: 'alice' },
     });
     expect((await accounts.getAccount('org-1', alice.id))?.lastUsedAt).toEqual(now);
     await expect(credentials({ orgId: 'org-1', userId: 'bob' }, { exclude: [] })).rejects.toBeInstanceOf(
@@ -120,7 +122,7 @@ describe('Claude Code credential accounts', () => {
     const second = await add('second', 'alice', 5);
     await expect(
       credentials({ orgId: 'org-1', userId: 'alice' }, { exclude: [], preferredAccountId: second.id }),
-    ).resolves.toEqual({ env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-second' }, accountId: second.id });
+    ).resolves.toEqual({ env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-second' }, accountId: second.id, credential: { label: 'second', ownerId: 'alice' } });
   });
 
   it('sets an account aside until its reset and moves to the next', async () => {
@@ -251,6 +253,7 @@ describe('Claude sign-in accounts', () => {
     await expect(credentials({ orgId: 'org-1', userId: 'alice' })).resolves.toEqual({
       env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-1' },
       accountId: account.id,
+      credential: expect.any(Object),
     });
     expect(endpoint.calls).toHaveLength(0);
   });
@@ -263,7 +266,7 @@ describe('Claude sign-in accounts', () => {
     const account = await addSignIn(signIn({ expiresAt: now.getTime() + CLAUDE_OAUTH_REFRESH_MARGIN_MS - 1 }));
 
     const turn = await credentials({ orgId: 'org-1', userId: 'alice' });
-    expect(turn).toEqual({ env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-2' }, accountId: account.id });
+    expect(turn).toEqual({ env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-2' }, accountId: account.id, credential: expect.any(Object) });
     expect(JSON.stringify(turn)).not.toContain('fake-refresh');
     expect(endpoint.calls).toHaveLength(1);
     expect(Object.fromEntries(endpoint.calls[0]!)).toEqual({
@@ -312,6 +315,7 @@ describe('Claude sign-in accounts', () => {
     await expect(credentials({ orgId: 'org-1', userId: 'alice' })).resolves.toEqual({
       env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-next' },
       accountId: next.id,
+      credential: expect.any(Object),
     });
     expect(await accounts.getAccount('org-1', expired.id)).toMatchObject({
       disabled: true,
@@ -385,6 +389,7 @@ describe('Claude Code credentials: edges', () => {
     await expect(credentials({ orgId: 'org-1', userId: 'bob' })).resolves.toEqual({
       env: { CLAUDE_CODE_OAUTH_TOKEN: 'fake-access-next' },
       accountId: next.id,
+      credential: expect.any(Object),
     });
   });
 

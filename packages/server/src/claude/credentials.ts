@@ -125,7 +125,11 @@ export function createClaudeCodeCredentials({
           continue;
         }
         await storage!.markAccountUsed(tenant.orgId, account.id, at).catch(() => {});
-        return { env: { CLAUDE_CODE_OAUTH_TOKEN: accessToken }, accountId: account.id };
+        return {
+          env: { CLAUDE_CODE_OAUTH_TOKEN: accessToken },
+          accountId: account.id,
+          credential: { label: account.label, ...(account.ownerUserId ? { ownerId: account.ownerUserId } : {}) },
+        };
       }
     },
 

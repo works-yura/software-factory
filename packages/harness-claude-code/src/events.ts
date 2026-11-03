@@ -126,6 +126,8 @@ export type ClaudeTranscriptEntry =
   /** A person answered the plan the thread was parked on; the next turn carries the answer. */
   | { kind: 'plan_decision'; toolCallId: string; decision: PlanDecision }
   | { kind: 'init'; sessionId: string; model?: string; permissionMode?: string }
+  /** The account the turn runs on, as a person reads it; `ownerId` when it is someone's own sign-in. */
+  | { kind: 'credential'; label: string; ownerId?: string }
   | { kind: 'user'; text: string; parentToolCallId?: string }
   | { kind: 'text'; text: string; messageId?: string; parentToolCallId?: string }
   | { kind: 'thinking'; text: string; messageId?: string; parentToolCallId?: string }

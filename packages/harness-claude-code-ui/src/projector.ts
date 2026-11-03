@@ -267,6 +267,8 @@ export class ClaudeTranscriptProjector {
   #pendingApproval: PendingApproval | undefined;
   #pendingQuestion: PendingQuestion | undefined;
   #modelId: string | undefined;
+  /** The account the run's replies ran on, as Mastra stamps a reply's credential. */
+  #credential: { label: string; ownerId?: string } | undefined;
   #tasks: UiTask[] = [];
   /** Running subagents, by their `Task`/`Agent` call id. */
   #subagents = new Map<string, ActiveSubagent>();
@@ -403,6 +405,9 @@ export class ClaudeTranscriptProjector {
         break;
       case 'init':
         if (entry.model) this.#modelId = entry.model;
+        break;
+      case 'credential':
+        this.#credential = { label: entry.label, ...(entry.ownerId ? { ownerId: entry.ownerId } : {}) };
         break;
       case 'text':
       case 'thinking':
@@ -589,12 +594,19 @@ export class ClaudeTranscriptProjector {
       content: {
         format: 2,
         parts: [],
-        ...(this.#modelId ? { metadata: { modelId: this.#modelId, provider: CLAUDE_MODEL_PROVIDER } } : {}),
+        ...(this.#modelId ? { metadata: { modelId: this.#modelId, provider: CLAUDE_MODEL_PROVIDER, ...this.#credentialStamp() } } : {}),
       },
     };
     this.#current = message;
     out.events.push({ type: 'message_start', message: clone(message) });
     return message;
+  }
+
+  /** `credentialLabel`, and `credentialOwnerId` for someone's own sign-in, as the chat reads a reply's credential. */
+  #credentialStamp(): { credentialLabel?: string; credentialOwnerId?: string } {
+    const credential = this.#credential;
+    if (!credential) return {};
+    return { credentialLabel: credential.label, ...(credential.ownerId ? { credentialOwnerId: credential.ownerId } : {}) };
   }
 
   #setPart(message: MastraDBMessage, index: number, part: MastraMessagePart, out: Projection) {

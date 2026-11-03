@@ -266,6 +266,8 @@ export interface ClaudeTurnCredentials {
   env: Record<string, string>;
   /** Names the account, so the turn can move off it when it runs out. */
   accountId?: string;
+  /** How the chat names the account the turn runs on (a reply's credential), and whose sign-in it is. */
+  credential?: { label: string; ownerId?: string };
 }
 
 export interface ClaudeCredentialFailure {
@@ -1204,6 +1206,8 @@ export class ClaudeCodeSession implements AgentSession {
         this.#record.accountId = credentials.accountId;
         void this.#save().catch(() => {});
       }
+      // The replies that follow ran on this account, as a Mastra reply names its credential.
+      if (credentials.credential) this.#emitTranscript({ kind: 'credential', ...credentials.credential }, run);
       const args = buildClaudeArgs(
         this.#argsInput(thread, planning, mcpConfigPaths, model, rules ? { rules } : {}, systemPrompt, settingSources),
       );
