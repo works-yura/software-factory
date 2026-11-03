@@ -52,11 +52,21 @@ const SERVER_PREFIXES = ['/api', '/web', '/auth', '/connect'];
  *   4. Source-layout fallbacks under `MASTRA_PROJECT_ROOT` or cwd.
  * Returns `undefined` when no build is found (e.g. plain `mastra dev` without
  * a prior vite build), in which case the middleware is simply not mounted.
+ *
+ * The override is taken as given, even without an `index.html` yet: a server
+ * that starts while vite rebuilds it would otherwise serve whatever stale
+ * build lies in a fallback directory, and keep serving it until restarted.
  */
 export function resolveUiDistDir(): string | undefined {
+  const override = process.env.MASTRACODE_UI_DIST?.trim();
+  if (override) {
+    if (!existsSync(join(override, 'index.html'))) {
+      console.warn(`[factory] MASTRACODE_UI_DIST has no index.html yet (${override}); serving it once it is built`);
+    }
+    return resolve(override);
+  }
   const projectRoot = process.env.MASTRA_PROJECT_ROOT?.trim();
   const candidates = [
-    process.env.MASTRACODE_UI_DIST,
     resolve(process.cwd(), 'factory'),
     join(dirname(fileURLToPath(import.meta.url)), 'factory'),
     projectRoot && resolve(projectRoot, 'src/mastra/public/factory'),

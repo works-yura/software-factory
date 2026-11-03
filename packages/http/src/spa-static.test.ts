@@ -48,6 +48,16 @@ describe('resolveUiDistDir', () => {
     expect(resolveUiDistDir()).toBe('/custom/factory-ui');
   });
 
+  it('keeps the explicit override while it is being rebuilt, instead of a stale fallback build', () => {
+    process.env.MASTRACODE_UI_DIST = '/custom/factory-ui';
+    vi.spyOn(process, 'cwd').mockReturnValue('/project/src/mastra/public');
+    vi.mocked(existsSync).mockImplementation(path => path === '/project/src/mastra/public/factory/index.html');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(resolveUiDistDir()).toBe('/custom/factory-ui');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('MASTRACODE_UI_DIST has no index.html'));
+  });
+
   it('falls back to the source layout under MASTRA_PROJECT_ROOT', () => {
     process.env.MASTRA_PROJECT_ROOT = '/project';
     vi.spyOn(process, 'cwd').mockReturnValue('/runtime');
