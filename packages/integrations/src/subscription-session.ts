@@ -42,6 +42,8 @@ export interface ExternalNotificationSession {
    * session's `respondToToolApproval`; `false` when nothing waits on `toolCallId`.
    */
   answerToolApproval?(input: { toolCallId: string; approved: boolean }): Promise<boolean>;
+  /** Tears the session down when its row is deleted, as the controller's `deleteSession` does a Mastra one. */
+  deleteSession?(): Promise<void>;
   /** The session itself, as the harness contract's `AgentSession` (`@factory/harness`), for code that kicks off its runs. */
   agentSession?: object;
 }

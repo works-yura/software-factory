@@ -6,6 +6,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
 
+import { externalSessionFor } from '@factory/integrations';
 import { reclaimDeletedSessionSandbox } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
 import type { SessionRetirementCoordinator } from '@factory/sandbox';
@@ -726,7 +727,12 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
               error,
             });
           });
-          await options.controller?.deleteSession({ sessionId: session.sessionId });
+          // The harness that runs it tears it down: a Claude Code session is not the controller's.
+          const external = options.controller
+            ? await externalSessionFor(options.controller, session.sessionId)
+            : undefined;
+          if (external?.deleteSession) await external.deleteSession();
+          else await options.controller?.deleteSession({ sessionId: session.sessionId });
         } catch (error) {
           console.error('[Factory Sessions] Failed to tear down live controller session', {
             sessionId: session.sessionId,

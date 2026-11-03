@@ -2477,6 +2477,10 @@ export class MastraFactory {
           isRunning: () => session.run.isRunning(),
           abort: () => session.abort(),
           agentSession: session,
+          deleteSession: async () => {
+            await claudeHarness.deleteSession(sessionId);
+            this.#claudeSessionUi.channel(sessionId)?.detach();
+          },
           answerToolApproval: async ({ toolCallId, approved }) => {
             if (session.pendingPermission?.toolCallId !== toolCallId) return false;
             await session.respondToToolApproval({ toolCallId, approved });

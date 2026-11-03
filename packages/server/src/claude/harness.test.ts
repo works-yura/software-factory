@@ -134,6 +134,17 @@ describe('createClaudeFactoryHarness', () => {
     expect(await config.turnContextFor!(quiet)).toBe('<factory-phase>\nFactory work phase: Build (build)\n</factory-phase>');
   });
 
+  it('tears a deleted session down in this process, as the controller does a Mastra one', async () => {
+    const { factory } = setup();
+    const session = await factory.harness.createSession({ sessionId: 'session-a', threadId: 'thread-a' });
+    const abort = vi.spyOn(session, 'abort');
+    await factory.harness.deleteSession('session-a');
+    expect(abort).toHaveBeenCalledTimes(1);
+    // Forgotten here: a later lookup is a fresh object, never the torn-down one.
+    expect(await factory.harness.getSession('session-a')).not.toBe(session);
+    await expect(factory.harness.deleteSession('no-such-session')).resolves.toBeUndefined();
+  });
+
   it('needs a session store or a store directory', () => {
     expect(() =>
       createClaudeFactoryHarness({

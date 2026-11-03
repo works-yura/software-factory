@@ -20,6 +20,7 @@ import {
 } from '@factory/runtime';
 import type { SourceControlStorageHandle } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
+import { routeExternalSessions } from '@factory/integrations';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
@@ -1568,5 +1569,43 @@ describe('deleting a session without a retirement coordinator', () => {
       warn.mockRestore();
     }
     expect(deleted).toEqual(['session-gone', 'session-cleanup-fails']);
+  });
+
+  it('tears down a session another harness runs through that harness, not the controller', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    await sourceControl.sessions.create({
+      sessionId: 'session-claude',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-claude',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+    const controller = { deleteSession: vi.fn(async () => true) };
+    const deleteSession = vi.fn(async () => {});
+    routeExternalSessions(controller, async sessionId =>
+      sessionId === 'session-claude' ? { sendNotificationSignal: vi.fn(), deleteSession } : undefined,
+    );
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, user as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      buildSourceControlSessionRoutes({
+        auth: fakeRouteAuth(),
+        controller: controller as never,
+        sourceControls: [sourceControl],
+        projects: seed.projects,
+        memorySettings: seed.memorySettings,
+      }),
+    );
+    const removed = await app.request('/web/user-sessions/session-claude', { method: 'DELETE' });
+    expect(removed.status).toBe(200);
+    expect(deleteSession).toHaveBeenCalledTimes(1);
+    expect(controller.deleteSession).not.toHaveBeenCalled();
+    await expect(sourceControl.sessions.getBySessionId('session-claude')).resolves.toBeNull();
   });
 });
