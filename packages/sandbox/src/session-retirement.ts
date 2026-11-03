@@ -9,6 +9,7 @@ import type {
   SourceControlStorageHandle,
 } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
+import { LocalFactorySandbox } from './local-factory-sandbox.ts';
 import { requireExec } from './materialization.ts';
 import { clearFailedSetupCommands, evictSessionSandbox, peekSessionSandbox } from './session-sandbox.ts';
 
@@ -273,7 +274,10 @@ export class SessionRetirementCoordinator {
    * started, no teardown command runs — the provider kills by identity.
    */
   async #destroyDetachedSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
-    if (!input.deleteSession || !session.sandboxId || !this.#sandbox) return;
+    if (!this.#sandbox) return;
+    // A local sandbox has no VM to pause: it is the checkout on disk, so a finished session frees it too.
+    const local = this.#sandbox instanceof LocalFactorySandbox;
+    if (!local && (!input.deleteSession || !session.sandboxId)) return;
     try {
       await destroyDetachedSessionSandbox({ sandbox: this.#sandbox, session });
     } catch (error) {
@@ -443,7 +447,10 @@ export class SessionRetirementCoordinator {
 
   async #releaseSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
     try {
-      await releaseSessionSandbox({ sessionId: session.id, destroy: input.deleteSession });
+      await releaseSessionSandbox({
+        sessionId: session.id,
+        destroy: input.deleteSession || this.#sandbox instanceof LocalFactorySandbox,
+      });
     } catch (error) {
       this.#warn('Factory session sandbox release failed', {
         orgId: session.orgId,
