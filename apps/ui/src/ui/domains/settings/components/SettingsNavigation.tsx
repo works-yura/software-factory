@@ -87,7 +87,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: Bot,
         searchText:
-          'models default model factory models routing factory defaults thinking level api keys providers credentials sign in oauth custom endpoints',
+          'models harness runtime claude code default model factory models routing factory defaults thinking level api keys providers credentials sign in oauth custom endpoints',
       },
       {
         id: 'memory',

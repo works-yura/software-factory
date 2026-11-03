@@ -122,7 +122,7 @@ describe('Settings ownership', () => {
       search: '?from=chat',
       state: { settingsReturnTo: '/factories/fp-1/work' },
     });
-    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Harness' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('sends retired Factory memory links to Memory', async () => {

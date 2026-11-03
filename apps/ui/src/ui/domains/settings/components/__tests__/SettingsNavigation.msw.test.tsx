@@ -43,9 +43,9 @@ describe('SettingsNavigation', () => {
         .getAllByRole('link')
         .map(link => link.textContent);
     expect(linksIn('Account')).toEqual(['My account', 'Preferences', 'Connections']);
-    expect(linksIn('Agent')).toEqual(['Models', 'Memory', 'Skills', 'Behavior']);
+    expect(linksIn('Agent')).toEqual(['Harness', 'Memory', 'Skills', 'Behavior']);
     expect(linksIn('Factory')).toEqual(['Repositories', 'Environment', 'Work Intake', 'Manage Factory']);
-    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
+    expect(screen.getByRole('link', { name: 'Harness' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');
   });
 
@@ -59,7 +59,7 @@ describe('SettingsNavigation', () => {
 
     const agent = screen.getByRole('region', { name: 'Agent' });
     await waitFor(() => expect(within(agent).queryByRole('link', { name: 'Memory' })).not.toBeInTheDocument());
-    expect(within(agent).getAllByRole('link').map(link => link.textContent)).toEqual(['Models', 'Skills', 'Behavior']);
+    expect(within(agent).getAllByRole('link').map(link => link.textContent)).toEqual(['Harness', 'Skills', 'Behavior']);
   });
 
   it('keeps legacy terms searchable while showing the clearer destination label', async () => {
@@ -74,8 +74,8 @@ describe('SettingsNavigation', () => {
   });
 
   it.each([
-    { query: 'default model', destination: 'Models' },
-    { query: 'factory models', destination: 'Models' },
+    { query: 'default model', destination: 'Harness' },
+    { query: 'factory models', destination: 'Harness' },
     { query: 'factory memory', destination: 'Memory' },
     { query: 'shared memory', destination: 'Memory' },
   ])('finds $destination by the former page name "$query"', async ({ query, destination }) => {
