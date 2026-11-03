@@ -25,6 +25,8 @@ export const CLAUDE_THREAD_SETTINGS = {
   actorUserId: 'factoryActorUserId',
   /** The checkout is a pull or merge request someone outside wrote: its turns read no settings file from it. */
   untrustedCheckout: 'factoryUntrustedCheckout',
+  /** A signed-in person's message or answer waits for the next turn, which is then theirs (interactive). */
+  personTurn: 'factoryPersonTurn',
 } as const;
 
 export interface ClaudeStartCoordinatorOptions {

@@ -11,6 +11,10 @@ import type { FactorySessionTokenClaims } from '@factory/mcp';
 
 import { CLAUDE_FACTORY_MCP_SERVER, createClaudeFactoryHarness, DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS } from './harness.ts';
 import type { ClaudeFactoryHarnessOptions } from './harness.ts';
+import { RequestContext } from '@mastra/core/request-context';
+import { FACTORY_INTERACTIVE_KEY } from '@factory/harness-mastra';
+
+import { markClaudePersonTurn } from './person-turn.ts';
 import { createFactoryToolPermissions } from './permissions.ts';
 import { CLAUDE_THREAD_SETTINGS } from './start-coordinator.ts';
 
@@ -218,6 +222,19 @@ describe('createClaudeFactoryHarness', () => {
       expect(first.mcpServers.factory.headers[FACTORY_SESSION_TOKEN_HEADER]).not.toBe(
         second.mcpServers.factory.headers[FACTORY_SESSION_TOKEN_HEADER],
       );
+    });
+
+    it("marks the turn a signed-in person's message started as interactive, and only that turn", async () => {
+      const { factory, config, signed } = setup();
+      const session = await factory.harness.createSession({ sessionId: 'session-a', threadId: 'thread-a' });
+      // A wake, webhook or dispatcher turn: nobody signed in.
+      await markClaudePersonTurn({ get: () => new RequestContext() }, session);
+      await (config.mcpConfig as McpHook)(session);
+      // A person's message over HTTP, as the auth gate marks it.
+      await markClaudePersonTurn({ get: () => new RequestContext([[FACTORY_INTERACTIVE_KEY, true]]) }, session);
+      await (config.mcpConfig as McpHook)(session);
+      await (config.mcpConfig as McpHook)(session);
+      expect(signed.map(claims => claims.interactive === true)).toEqual([false, true, false]);
     });
 
     it('defaults the resource to the factory when the session has none', async () => {

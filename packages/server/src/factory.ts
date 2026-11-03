@@ -74,6 +74,7 @@ import {
   boundRunRequestContext,
   claudeFactoryToolName,
   claudeWorkerSession,
+  markClaudePersonTurn,
   observeClaudeToolResults,
   CLAUDE_THREAD_SETTINGS,
   createFactoryToolPermissions,
@@ -1798,6 +1799,8 @@ export class MastraFactory {
       };
       // The Factory chat is shared by the Factory's organization: its next turn runs as whoever wrote or answered.
       this.#claudeSessionUi.setPersonInputHook(async (c, session) => {
+        // A signed-in person's message or answer makes the turn that carries it theirs (interactive).
+        await markClaudePersonTurn(c as never, session);
         if (!claudeSupervisorProjectId(session.id)) return;
         const userId = routeAuth.tenant(c)?.userId;
         if (userId) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.actorUserId, value: userId });

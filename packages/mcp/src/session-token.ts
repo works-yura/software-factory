@@ -32,6 +32,11 @@ export interface FactorySessionTokenClaims {
   scope?: 'supervisor';
   /** Who a `supervisor` token acts as: the person whose message or answer started the turn. */
   userId?: string;
+  /**
+   * A signed-in person's message or answer started the turn, as `FACTORY_INTERACTIVE_KEY` marks a
+   * Mastra turn started over HTTP: the person's own actions (approvals, proposals, role starts) are open to it.
+   */
+  interactive?: boolean;
 }
 
 export interface FactorySessionTokenSigner {
@@ -91,6 +96,7 @@ export function createFactorySessionTokenSigner(
       }
       if (payload.scope !== undefined && payload.scope !== 'supervisor') return null;
       if (payload.scope === 'supervisor' && (typeof payload.userId !== 'string' || payload.userId.length === 0)) return null;
+      if (payload.interactive !== undefined && typeof payload.interactive !== 'boolean') return null;
       return pickClaims(payload as FactorySessionTokenClaims);
     },
   };
@@ -105,5 +111,6 @@ function pickClaims(claims: FactorySessionTokenClaims): FactorySessionTokenClaim
     resourceId: claims.resourceId,
     ...(claims.scope ? { scope: claims.scope } : {}),
     ...(typeof claims.userId === 'string' ? { userId: claims.userId } : {}),
+    ...(claims.interactive === true ? { interactive: true } : {}),
   };
 }

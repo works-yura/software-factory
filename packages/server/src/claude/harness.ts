@@ -279,6 +279,10 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
             const tenant = await tenantOf(session);
             const mcp = options.mcp!;
             // Minted per turn and only for this session's own coordinates; it expires on its own.
+            // A turn a signed-in person started (their message or answer) is interactive, as a Mastra turn over HTTP;
+            // the mark is taken by the turn that carries it.
+            const interactive = (await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.personTurn })) === true;
+            if (interactive) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.personTurn, value: false });
             // The Factory chat's token is a supervisor token: its tools, acting as the person behind the turn.
             const token = mcp.tokens.sign({
               orgId: tenant.orgId,
@@ -287,6 +291,7 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
               threadId: session.thread.requireId(),
               resourceId: session.resourceId ?? (tenant.supervisor ? session.id : tenant.factoryProjectId),
               ...(tenant.supervisor ? { scope: 'supervisor' as const, userId: tenant.userId } : {}),
+              ...(interactive ? { interactive: true } : {}),
             });
             return {
               mcpServers: {

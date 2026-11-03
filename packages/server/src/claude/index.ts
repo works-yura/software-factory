@@ -14,3 +14,4 @@ export * from './live-session.ts';
 export * from './thread-title.ts';
 export * from './tool-results.ts';
 export * from './worker-messaging.ts';
+export * from './person-turn.ts';
