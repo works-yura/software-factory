@@ -74,6 +74,7 @@ import {
   boundRunRequestContext,
   claudeFactoryToolName,
   claudeWorkerSession,
+  createClaudeFactoryChatGuard,
   markClaudePersonTurn,
   observeClaudeToolResults,
   CLAUDE_THREAD_SETTINGS,
@@ -2401,6 +2402,19 @@ export class MastraFactory {
           const uiDist = resolveUiDistDir();
           const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
           const timing = factoryTimingEnabled ? [createRequestTimingMiddleware()] : [];
+          // A Claude Code Factory's own id never becomes a Mastra chat (see `createClaudeFactoryChatGuard`).
+          const claudeFactoryChat = claudeCode
+            ? [
+                createClaudeFactoryChatGuard({
+                  controllerId: CONTROLLER_ID,
+                  factoryHarness: async id => {
+                    if (!storage.isDomainReady('projects')) return undefined;
+                    await factoryProjectsStorage.ensureReady();
+                    return (await factoryProjectsStorage.getById({ id }))?.harness ?? undefined;
+                  },
+                }),
+              ]
+            : [];
           if (!auth) {
             // Auth disabled: no gate. Still prime the sentinel-local custom
             // provider snapshot so model calls see DB rows, then SPA + CORS.
@@ -2409,6 +2423,7 @@ export class MastraFactory {
                 ...timing,
                 createFactoryInteractiveMarker(),
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
+                ...claudeFactoryChat,
                 this.#claudeSessionUi.middleware(),
                 ...spa,
               ],
@@ -2453,6 +2468,7 @@ export class MastraFactory {
                 storage: customProvidersStorage,
                 authEnabled: Boolean(auth),
               }),
+              ...claudeFactoryChat,
               // After the access guard: a Claude Code session's routes get the same checks as any session's.
               this.#claudeSessionUi.middleware(),
               ...spa,
