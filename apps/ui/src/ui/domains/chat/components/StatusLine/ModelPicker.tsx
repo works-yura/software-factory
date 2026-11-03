@@ -47,8 +47,11 @@ function canSwitchModel({
   draftSessionId,
   sessionEnabled,
   modelLockedReason,
-}: Pick<ChatSessionContextApi, 'kind' | 'draftSessionId' | 'sessionEnabled' | 'modelLockedReason'>): boolean {
+  harness,
+}: Pick<ChatSessionContextApi, 'kind' | 'draftSessionId' | 'sessionEnabled' | 'modelLockedReason' | 'harness'>): boolean {
   if (modelLockedReason) return false;
+  // The Factory picks this harness's model (Settings → Models); a session has nothing to switch.
+  if (harness?.modelScope === 'factory') return false;
   if (kind === 'user' && draftSessionId) return true;
   return sessionEnabled;
 }
@@ -156,14 +159,16 @@ export function ModelPicker() {
   const { t } = useTranslation('chat');
   const modelSwitch = useModelSwitch();
   const { modelsQuery, activeModelId, selectedModelId, catalogLoading, switchable, busy } = modelSwitch;
-  const { modelLockedReason, claudeCode } = useChatSessionContext();
+  const { modelLockedReason, claudeCode, harness } = useChatSessionContext();
   const { status } = useChatConnection();
   const { isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
   const organizationScoped = useFactoryAuth().data?.authEnabled === true;
 
-  // Claude Code runs on the Factory's Claude model: nothing to pick per session.
-  if (claudeCode) return <ClaudeCodeModelLabel model={claudeCode.model} factoryId={factoryId} />;
+  // A harness whose model is the Factory's (Claude Code) shows it; nothing to pick per session.
+  if (claudeCode || harness?.modelScope === 'factory') {
+    return <ClaudeCodeModelLabel model={claudeCode?.model ?? null} factoryId={factoryId} />;
+  }
 
   if (!selectedModelId && (isLoading || status === 'connecting')) {
     return <Skeleton aria-label={t('modelPicker.loading')} className="h-3.5 w-24" />;

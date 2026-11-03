@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -227,6 +227,25 @@ describe('NewPage in a Claude Code Factory', () => {
     expect(await screen.findByText(/Runs on Claude Code in a checkout of the Factory’s repository/)).toBeInTheDocument();
     expect(await screen.findByRole('link', { name: /Claude Code · Sonnet/ })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'No model available' })).not.toBeInTheDocument();
+  });
+
+  it("starts a personal draft from /new instead of a chat on the Factory's own resource, which Claude Code can't run", async () => {
+    stubClaudeFactory({ repositories: true });
+
+    const router = renderNewPage('/factories/fp-1/new');
+
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/factories\/fp-1\/user\/new\/[^/]+$/));
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /Claude Code · Sonnet/ })).toBeInTheDocument();
+  });
+
+  it('keeps /new on a Mastra Factory', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+
+    const router = renderNewPage('/factories/fp-1/new');
+
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/fp-1/new');
   });
 
   it('says a repository is needed when the Factory has none to check out', async () => {

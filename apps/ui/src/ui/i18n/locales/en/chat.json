@@ -363,7 +363,10 @@
       "unavailable": "The provider could not complete the request. Send a message to continue the run.",
       "noReason": "The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.",
       "unexpected": "An unexpected error stopped the run. Copy the error details to investigate."
-    }
+    },
+    "reviewClaudeAccounts": "Review Claude accounts",
+    "openModelSettings": "Open model settings",
+    "resetsAt": "The limit resets {{time}}."
   },
   "claudeCode": {
     "placeholder": "Ask Claude Code…",

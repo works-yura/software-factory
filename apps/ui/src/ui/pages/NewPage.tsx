@@ -4,7 +4,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Bot, GitBranch } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, Navigate, useLocation, useMatch, useParams } from 'react-router';
 
 import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
@@ -17,6 +17,7 @@ import { useServerFeatures } from '../../hooks/useServerFeatures';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '@factory/credentials/provider-display-name';
 import { MODEL_DEFAULTS_ANCHORS, settingsSectionPath } from '../domains/settings/settingsSections';
+import { newUserSessionPath } from '../domains/workspaces/services/factoryPaths';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
@@ -36,8 +37,11 @@ export function NewPage() {
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
   const providersQuery = useProvidersQuery();
   const defaultModelId = projectQuery.data?.defaultModelId ?? undefined;
+  const harness = useHarness(projectQuery.data?.harness ?? activeFactory?.harness);
   // A harness whose model is the Factory's (Claude Code) asks for no Mastra model or provider key here.
-  const claudeCode = useHarness(projectQuery.data?.harness ?? activeFactory?.harness).modelScope === 'factory';
+  const claudeCode = harness.modelScope === 'factory';
+  const location = useLocation();
+  const onFactoryDraft = useMatch('/factories/:factoryId/new') !== null;
   // No Factory default: chats start on the built-in model the organization's keys can run, as the server picks.
   const fallbackModelQuery = useFallbackModelQuery({
     factoryProjectId: activeFactory?.id,
@@ -60,6 +64,12 @@ export function NewPage() {
   const configurationError = claudeCode
     ? (projectQuery.error ?? undefined)
     : (projectQuery.error ?? (defaultModelId ? null : fallbackModelQuery.error) ?? providersQuery.error ?? undefined);
+
+  // `/new` composes on the Factory's own resource, which only a harness with sessionless chats runs;
+  // on any other (Claude Code) a new chat is a personal session, so start one of those instead.
+  if (onFactoryDraft && activeFactory && harness.supports.sessionlessChat === false) {
+    return <Navigate to={newUserSessionPath(activeFactory.id)} replace state={location.state} />;
+  }
 
   return (
     <ChatPageLayout

@@ -5,6 +5,8 @@ import { useContext, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useParams } from 'react-router';
 
+import type { HarnessDescriptor } from '@factory/contracts/harnesses';
+
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
@@ -38,26 +40,36 @@ function modelLockedReason(session: FactoryUserSession | undefined): string | un
 }
 
 /**
- * A session runs on Claude Code when the server says so (a personal chat or a
- * card's session); a personal draft does when its Factory's harness is
- * `claude-code` (the server creates it there). Either way its model is the
- * Factory's Claude model.
+ * The harness a chat runs on: the stored session's (a personal chat or a
+ * card's session, as the server says), or the Factory's for the Factory chat
+ * and a personal draft (the server creates both there). Unknown — and so
+ * Mastra — while the session or Factory is still loading.
  */
-export function claudeCodeChat({
-  userScoped,
+export function chatHarnessId({
+  supervisor,
   isUserDraft,
   storedSession,
   factory,
 }: {
-  userScoped: boolean;
+  supervisor: boolean;
   isUserDraft: boolean;
   storedSession: FactoryUserSession | undefined;
   factory: FactoryProject | undefined;
-}): { model: ClaudeCodeModel | null } | undefined {
-  const claude = storedSession
-    ? storedSession.harness === 'claude-code'
-    : userScoped && isUserDraft && factory?.harness === 'claude-code';
-  return claude ? { model: factory?.claudeCodeModel ?? null } : undefined;
+}): string | undefined {
+  if (supervisor) return factory?.harness;
+  if (storedSession) return storedSession.harness;
+  return isUserDraft ? factory?.harness : undefined;
+}
+
+/**
+ * A chat whose harness takes its model from the Factory (Claude Code) runs on
+ * the Factory's Claude model, not on a Mastra pick.
+ */
+export function claudeCodeChat(
+  harness: HarnessDescriptor,
+  factory: FactoryProject | undefined,
+): { model: ClaudeCodeModel | null } | undefined {
+  return harness.modelScope === 'factory' ? { model: factory?.claudeCodeModel ?? null } : undefined;
 }
 
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */
@@ -92,7 +104,7 @@ export function ChatSessionConfigProvider({
   const storedSession = sessionQuery.data;
   // The stored session says which harness runs it; the Factory chat and a personal draft run on the Factory's.
   const harness = useHarness(
-    supervisor ? factory?.harness : storedSession ? storedSession.harness : isUserDraft ? factory?.harness : undefined,
+    chatHarnessId({ supervisor: Boolean(supervisor), isUserDraft, storedSession, factory }),
   );
   const owner = useMemo(
     () =>
@@ -126,7 +138,7 @@ export function ChatSessionConfigProvider({
           kind: 'factory' as const,
           harness,
           // A Claude Code Factory's chat runs on Claude Code too (the server creates it there), on its Claude model.
-          claudeCode: factory?.harness === 'claude-code' ? { model: factory.claudeCodeModel ?? null } : undefined,
+          claudeCode: claudeCodeChat(harness, factory),
         }}
       >
         {children}
@@ -234,7 +246,7 @@ export function ChatSessionConfigProvider({
     kind: userScoped ? ('user' as const) : ('factory' as const),
     owner,
     modelLockedReason: modelLockedReason(storedSession),
-    claudeCode: claudeCodeChat({ userScoped, isUserDraft, storedSession, factory }),
+    claudeCode: claudeCodeChat(harness, factory),
     harness,
   };
 

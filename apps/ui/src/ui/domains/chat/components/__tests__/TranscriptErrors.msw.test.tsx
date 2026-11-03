@@ -1,3 +1,5 @@
+import { CLAUDE_CODE_HARNESS } from '@factory/contracts/harnesses';
+import type { HarnessDescriptor } from '@factory/contracts/harnesses';
 import type { MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -35,7 +37,15 @@ function failedReply(
   };
 }
 
-function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; liveEvent?: LiveEvent }) {
+function ErrorSession({
+  messages,
+  liveEvent,
+  harness,
+}: {
+  messages: MastraDBMessage[];
+  liveEvent?: LiveEvent;
+  harness?: HarnessDescriptor;
+}) {
   const entries = liveEvent
     ? transcriptReducer(initialTranscript, { type: 'event', event: liveEvent }).entries
     : createInitialTranscript({ messages, threadId: 'thread-1' }).entries;
@@ -54,6 +64,7 @@ function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; li
           baseUrl: TEST_BASE_URL,
           kind: 'user',
           factorySessionState: { factoryProjectId: 'factory-1' },
+          harness,
         }}
       >
         <ChatConnectionContext.Provider
@@ -221,5 +232,64 @@ describe('chat run errors', () => {
     );
 
     expect(screen.getByText('Provider access failed')).toBeVisible();
+  });
+
+  describe('on a harness whose model and credentials are the Factory\'s (Claude Code)', () => {
+    const usageLimit = {
+      type: 'error',
+      error: {
+        name: 'ClaudeCodeError',
+        message: 'Claude AI usage limit reached',
+        kind: 'rate_limit',
+        resetsAt: '2026-11-04T15:00:00.000Z',
+      },
+    } as unknown as LiveEvent;
+
+    it('points a rejected sign-in at the Claude accounts instead of the session model picker', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: [{ id: 'openai/gpt-5.5', provider: 'openai', modelName: 'gpt-5.5', hasApiKey: true }],
+          }),
+        ),
+      );
+      renderWithProviders(
+        <ErrorSession
+          messages={[failedReply('Incorrect API key provided.', 'AI_APICallError', { statusCode: 401 })]}
+          harness={CLAUDE_CODE_HARNESS}
+        />,
+      );
+
+      expect(screen.getByText('Provider access failed')).toBeVisible();
+      expect(await screen.findByRole('link', { name: 'Review Claude accounts' })).toHaveAttribute(
+        'href',
+        '/factories/factory-1/settings/models',
+      );
+      expect(screen.queryByRole('link', { name: 'Review credentials' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Change model' })).not.toBeInTheDocument();
+    });
+
+    it('reads the kind and reset time a Claude error carries', async () => {
+      renderWithProviders(<ErrorSession messages={[]} liveEvent={usageLimit} harness={CLAUDE_CODE_HARNESS} />);
+
+      expect(screen.getByText('Provider rate limit reached')).toBeVisible();
+      expect(screen.getByText('Claude AI usage limit reached')).toBeVisible();
+      expect(screen.getByText(/^The limit resets /)).toBeVisible();
+      expect(await screen.findByRole('link', { name: 'Review Claude accounts' })).toBeVisible();
+    });
+
+    it('reads an error without the Claude fields as before', () => {
+      renderWithProviders(
+        <ErrorSession
+          messages={[]}
+          liveEvent={{ type: 'error', error: { name: 'ClaudeCodeError', message: 'The CLI exited' } }}
+          harness={CLAUDE_CODE_HARNESS}
+        />,
+      );
+
+      expect(screen.getByText('Run stopped')).toBeVisible();
+      expect(screen.queryByText(/^The limit resets /)).toBeNull();
+      expect(screen.queryByRole('link')).toBeNull();
+    });
   });
 });

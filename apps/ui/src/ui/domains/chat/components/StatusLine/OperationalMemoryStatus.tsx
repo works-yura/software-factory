@@ -1,11 +1,13 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { formatCompactTokens, TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
 import { Brain, MessageSquare } from 'lucide-react';
+import { useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { lazyLabels } from '../../../../i18n/lazy';
 import { translator } from '../../../../i18n/t';
 
+import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { useChatRuntime } from '../../context/useChatRuntime';
 import type { OMWork } from '../../services/om';
 import { omWork } from '../../services/om';
@@ -23,7 +25,9 @@ function reading(tokens: number, threshold: number) {
 export function OperationalMemoryStatus() {
   const { t } = useTranslation('chat');
   const runtime = useChatRuntime();
-  const om = runtime.omProgress;
+  // A harness without observational memory (Claude Code) has no budgets to show, whatever the runtime reports.
+  const memorySupported = useContext(ChatSessionContext)?.harness?.supports.memory !== false;
+  const om = memorySupported ? runtime.omProgress : undefined;
   const work = omWork(runtime);
   const showMsg = om && om.threshold > 0;
   const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;
