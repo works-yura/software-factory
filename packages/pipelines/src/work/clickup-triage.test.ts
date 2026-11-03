@@ -22,7 +22,7 @@ function entering(source: string): FactoryStageRuleContext {
   } as unknown as FactoryStageRuleContext;
 }
 
-describe('Work triage entry for imported tasks', () => {
+describe('Work triage entry for cards without a provider issue', () => {
   const handler = workBoard.phases.triage.onEnter?.manual;
 
   it('starts the triage skill for a ClickUp card, with the task text as untrusted data', async () => {
@@ -31,7 +31,8 @@ describe('Work triage entry for imported tasks', () => {
     expect((decision as { arguments: string }).arguments).toContain('Steps: open the app');
   });
 
-  it('leaves a card a person made by hand alone', async () => {
-    expect(await handler?.(entering('manual'))).toBeUndefined();
+  it('starts the triage skill for a card a person made by hand', async () => {
+    const decision = await handler?.(entering('manual'));
+    expect(decision).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
   });
 });
