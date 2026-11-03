@@ -14,7 +14,7 @@ import type {
   ClaudeToolPermissions,
 } from '@factory/harness-claude-code';
 import type { HarnessRoute } from '@factory/harness';
-import { BUNDLED_FACTORY_SKILLS_PATH } from '@factory/harness-mastra';
+import { BUNDLED_FACTORY_SKILLS_PATH, resolveLocalFactorySkillsPath } from '@factory/harness-mastra';
 import { FACTORY_SESSION_TOKEN_HEADER, FACTORY_TOOL_ANNOTATIONS } from '@factory/mcp';
 import { peekSessionEnvironment, renderSessionEnvironment } from '@factory/sandbox';
 import type { FactorySessionTokenSigner } from '@factory/mcp';
@@ -166,8 +166,8 @@ export interface ClaudeFactoryHarnessOptions {
   allowedTools?: string[];
   approvedPermissionMode?: ClaudePermissionMode;
   turnTimeoutMs?: number;
-  /** Factory skills; the bundled ones by default. */
-  skillsDir?: string;
+  /** Factory skills; the bundled ones plus the project's local `factory-skills` by default. */
+  skillsDir?: string | string[];
   command?: string;
   spawn?: ClaudeSpawn;
   env?: Record<string, string | undefined>;
@@ -374,7 +374,11 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     planningPrompt: CLAUDE_FACTORY_PLANNING_PROMPT,
     planningDisallowedTools: CLAUDE_FACTORY_PLANNING_DISALLOWED_TOOLS,
     approvedPermissionMode: options.approvedPermissionMode ?? 'acceptEdits',
-    skillsDir: options.skillsDir ?? BUNDLED_FACTORY_SKILLS_PATH,
+    skillsDir: options.skillsDir ?? [
+      // Local first so a project can override a bundled skill; the dev server bundle ships no copy of its own.
+      ...[resolveLocalFactorySkillsPath()].filter((dir): dir is string => Boolean(dir)),
+      BUNDLED_FACTORY_SKILLS_PATH,
+    ],
     ...(options.turnTimeoutMs ? { turnTimeoutMs: options.turnTimeoutMs } : {}),
     ...(options.command ? { command: options.command } : {}),
     ...(options.spawn ? { spawn: options.spawn } : {}),

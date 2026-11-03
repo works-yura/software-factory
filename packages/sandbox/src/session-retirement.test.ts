@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -1145,12 +1145,10 @@ describe('SessionRetirementCoordinator.resetSessionSandbox', () => {
   });
 });
 
-// v4: Factory offers `factory_recreate_sandbox` only where a reset gives the
-// next command a fresh sandbox. LocalSandbox's destroy kills processes but
-// keeps the working directory, so the checkout, uncommitted files and the
-// setup marker survive a reset on a local sandbox.
+// A local sandbox's destroy takes its working directory with it, like any
+// other provider's destroy takes the VM disk: a reset gives a fresh sandbox.
 describe('SessionRetirementCoordinator.resetSessionSandbox on a LocalFactorySandbox', () => {
-  it('keeps the working directory, so a reset is not a fresh sandbox there', async () => {
+  it('drops the working directory, so a reset is a fresh sandbox there', async () => {
     const root = await mkdtemp(join(tmpdir(), 'factory-reset-'));
     try {
       const storage = new SourceControlStorageInMemory();
@@ -1172,7 +1170,41 @@ describe('SessionRetirementCoordinator.resetSessionSandbox on a LocalFactorySand
       await sandbox.start();
 
       expect(sandbox.status).toBe('running');
-      await expect(readFile(marker, 'utf8')).resolves.toBe('done');
+      await expect(readFile(marker, 'utf8')).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('SessionRetirementCoordinator.retireSession on a LocalFactorySandbox', () => {
+  it('removes the working directory on done and on delete, and leaves other sessions alone', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'factory-retire-'));
+    try {
+      const storage = new SourceControlStorageInMemory();
+      seedRepositoryLink(storage);
+      const make = (branch: string) =>
+        storage.sessions.create({
+          sessionId: randomUUID(),
+          projectRepositoryId: 'repo-link-1',
+          orgId: 'org-1',
+          userId: 'user-1',
+          branch,
+          baseBranch: 'main',
+        } as CreateSourceControlSessionInput);
+      const [done, deleted, other] = await Promise.all([make('b/1'), make('b/2'), make('b/3')]);
+      for (const session of [done, deleted, other]) {
+        await mkdir(join(root, session.id, 'repo'), { recursive: true });
+        await writeFile(join(root, session.id, 'repo', 'a.txt'), 'x');
+      }
+      const coordinator = new SessionRetirementCoordinator({ sandbox: new LocalFactorySandbox({ root }) });
+
+      await coordinator.retireSession({ sourceControl: storage, orgId: 'org-1', sessionId: done.sessionId, deleteSession: false });
+      await coordinator.retireSession({ sourceControl: storage, orgId: 'org-1', sessionId: deleted.sessionId, deleteSession: true });
+
+      await expect(readFile(join(root, done.id, 'repo', 'a.txt'), 'utf8')).rejects.toThrow();
+      await expect(readFile(join(root, deleted.id, 'repo', 'a.txt'), 'utf8')).rejects.toThrow();
+      await expect(readFile(join(root, other.id, 'repo', 'a.txt'), 'utf8')).resolves.toBe('x');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

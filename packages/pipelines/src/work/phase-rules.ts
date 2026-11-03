@@ -51,13 +51,12 @@ function investigateTriagedSource(provider: string, fetchHint: string) {
 }
 
 /**
- * Triage for a card imported from a task tracker that has no rule source of its own (today ClickUp).
- * Such a card carries the task text in its metadata, so the agent needs no provider tool: the
- * reference alone is enough. These cards ride the `manual` rule source, so a card a person made by
- * hand (item source `manual`) stays as it was and nothing starts for it.
+ * Triage for a card with no provider issue behind it: one imported from a task tracker that has no
+ * rule source of its own (today ClickUp), or one a person made by hand. Both carry the task text
+ * in the card itself, so the agent needs no provider tool: the reference alone is enough. They ride
+ * the `manual` rule source and are triaged alike; a hand-made card is not left as a plain chat.
  */
 export function investigateTriagedImportedTask(context: FactoryStageRuleContext) {
-  if (context.item.source === 'manual') return undefined;
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:factory-triage-task`,
