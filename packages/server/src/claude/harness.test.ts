@@ -107,6 +107,29 @@ describe('createClaudeFactoryHarness', () => {
     expect(await config.turnContextFor!(unbound)).toBeUndefined();
   });
 
+  it("opens a turn with the factory-sessions signal a Mastra run gets, before its phase", async () => {
+    const sessionsFor = vi.fn(async ({ sessionId }: { sessionId: string }) =>
+      sessionId === 'session-a' ? 'Side sessions you started:\n- "Flaky test" (session s-1): running' : undefined,
+    );
+    const { factory, config } = setup({ sessionsFor, phaseFor: async () => 'Factory work phase: Build (build)' });
+    const following = await factory.harness.createSession({ sessionId: 'session-a', threadId: 'thread-a' });
+    const quiet = await factory.harness.createSession({ sessionId: 'session-b', threadId: 'thread-b' });
+
+    expect(await config.turnContextFor!(following)).toBe(
+      '<factory-sessions>\nSide sessions you started:\n- "Flaky test" (session s-1): running\n</factory-sessions>\n' +
+        '<factory-phase>\nFactory work phase: Build (build)\n</factory-phase>',
+    );
+    expect(sessionsFor).toHaveBeenCalledWith({
+      orgId: 'org-a',
+      factoryProjectId: 'factory-a',
+      userId: 'user-a',
+      sessionId: 'session-a',
+      threadId: 'thread-a',
+      resourceId: 'factory-a',
+    });
+    expect(await config.turnContextFor!(quiet)).toBe('<factory-phase>\nFactory work phase: Build (build)\n</factory-phase>');
+  });
+
   it('needs a session store or a store directory', () => {
     expect(() =>
       createClaudeFactoryHarness({

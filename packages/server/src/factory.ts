@@ -71,6 +71,7 @@ import {
   createClaudeSupervisorSessions,
   claudeLiveSession,
   claudeSupervisorProjectId,
+  boundRunRequestContext,
   claudeFactoryToolName,
   claudeWorkerSession,
   observeClaudeToolResults,
@@ -1551,6 +1552,28 @@ export class MastraFactory {
         messageSession,
       });
 
+    // The `factory-sessions` signal: a Mastra run's input processor, a Claude Code turn's opening context.
+    const factorySessionsProcessor = () =>
+      workItemsStorage && storage.isDomainReady('source-control')
+        ? new FactorySessionsStateProcessor({
+            authEnabled: routeAuth.enabled(),
+            sessions: sourceControlSessions,
+            projects: factoryProjectsStorage,
+            workItems: workItemsStorage,
+            boards,
+            // Whichever harness runs the session: a Claude Code worker is not the controller's.
+            isRunning: async sessionId => {
+              const controller = this.#prepared?.base.controller;
+              return controller ? isSessionRunning(controller, sessionId) : false;
+            },
+            lastActivity: async threadId => {
+              const thread = await this.#prepared?.base.controller.queryThreadById({ threadId });
+              return thread?.updatedAt ? new Date(thread.updatedAt) : null;
+            },
+            notifications: async () => (await factoryMessaging())?.notifications ?? null,
+          })
+        : undefined;
+
     // After each tool call of either harness: a Mastra session's through the controller, a Claude Code
     // session's after its MCP call (agent action audit, PR auto-subscription).
     const postToolObserver = async (toolContext: IntegrationPostToolContext) => {
@@ -1656,6 +1679,17 @@ export class MastraFactory {
                 },
               }
             : {}),
+          // The factory-sessions signal a Mastra run gets, read as the session's own tools see it.
+          sessionsFor: async coordinates => {
+            const processor = factorySessionsProcessor();
+            if (!processor) return undefined;
+            const signal = await processor.computeStateSignal({
+              requestContext: boundRunRequestContext({ ...coordinates, kind: 'user', interactive: false }),
+              contextWindow: { hasSnapshot: false },
+              activeStateSignals: [],
+            } as never);
+            return typeof signal?.contents === 'string' ? signal.contents : undefined;
+          },
           ...claudeCodeCredentials,
           cwdFor: claudeCheckout!,
           mcp: {
@@ -2090,28 +2124,8 @@ export class MastraFactory {
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
           const channelReplyProcessor = new FactoryChannelReplyProcessor();
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
-          const sessionsProcessor =
-            workItemsStorage && storage.isDomainReady('source-control')
-              ? [
-                  new FactorySessionsStateProcessor({
-                    authEnabled: routeAuth.enabled(),
-                    sessions: sourceControlSessions,
-                    projects: factoryProjectsStorage,
-                    workItems: workItemsStorage,
-                    boards,
-                    // Whichever harness runs the session: a Claude Code worker is not the controller's.
-                    isRunning: async sessionId => {
-                      const controller = this.#prepared?.base.controller;
-                      return controller ? isSessionRunning(controller, sessionId) : false;
-                    },
-                    lastActivity: async threadId => {
-                      const thread = await this.#prepared?.base.controller.queryThreadById({ threadId });
-                      return thread?.updatedAt ? new Date(thread.updatedAt) : null;
-                    },
-                    notifications: async () => (await factoryMessaging())?.notifications ?? null,
-                  }),
-                ]
-              : [];
+          const sessionsState = factorySessionsProcessor();
+          const sessionsProcessor = sessionsState ? [sessionsState] : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
             return [channelReplyProcessor, environmentProcessor, ...sessionsProcessor, factoryProcessor];
