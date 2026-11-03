@@ -17,7 +17,8 @@ function app() {
     }),
   );
   hono.all('*', async c => {
-    const body = c.req.method === 'POST' ? await c.req.json().catch(() => null) : null;
+    // The raw request, as the Mastra routes behind the guard read it.
+    const body = c.req.method === 'POST' ? await c.req.raw.json().catch(() => null) : null;
     reached.push(`${c.req.method} ${c.req.path}${body ? ` ${JSON.stringify(body)}` : ''}`);
     return c.json({ ok: true });
   });

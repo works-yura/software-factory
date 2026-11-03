@@ -31,8 +31,11 @@ export function createClaudeFactoryChatGuard(options: {
     if (!match || decode(match[1]!) !== options.controllerId) return next();
     let sessionId = match[2] ? decode(match[2]) : undefined;
     if (!sessionId && c.req.method === 'POST') {
-      // Hono keeps the parsed body, so the route behind still reads it.
-      const body = (await c.req.json().catch(() => ({}))) as { sessionId?: unknown };
+      // Read a clone: the route behind reads the raw request, whose body can be read only once.
+      const body = (await c.req.raw
+        .clone()
+        .json()
+        .catch(() => ({}))) as { sessionId?: unknown };
       sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined;
     }
     if (!sessionId || (await options.factoryHarness(sessionId)) !== 'claude-code') return next();
