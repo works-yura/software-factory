@@ -405,22 +405,15 @@
     "regenerateFailed": "Не вдалося згенерувати назву"
   },
   "preview": {
-    "label": "Подробиці сесії {{name}}",
-    "owner": "Власник",
-    "pullRequest": "Пул-реквест",
-    "workItem": "Картка",
-    "branch": "Гілка",
-    "baseBranch": "Базова гілка",
-    "kinds": {
-      "work": "Робоча сесія",
-      "review": "Сесія рев'ю",
-      "user": "Сесія користувача"
-    },
+    "label": "Деталі сесії {{name}}",
     "statuses": {
-      "initializing": "Запуск",
+      "initializing": "Ініціалізація",
       "working": "Агент працює",
       "ready": "Чекає на вас"
-    }
+    },
+    "merged": "Змерджено",
+    "takenOverFrom": "Перейшла від {{name}}",
+    "previously": "Раніше {{name}}"
   },
   "sharing": {
     "private": "Приватна",
@@ -544,5 +537,16 @@
     },
     "jumpToFile": "Перейти до файлу",
     "jumpToFileCount": "Перейти до файлу, {{files}}"
+  },
+  "track": {
+    "tookOver": "{{name}} перейняв сесію",
+    "movedTo": "{{name}} переніс картку в «{{stage}}»",
+    "agentRun": "Запуск агента",
+    "agentRuns_one": "{{count}} запуск агента",
+    "agentRuns_few": "{{count}} запуски агента",
+    "agentRuns_many": "{{count}} запусків агента",
+    "agentRuns_other": "{{count}} запусків агента",
+    "now": "зараз",
+    "timeline": "Хронологія сесії"
   }
 }
