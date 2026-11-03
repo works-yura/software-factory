@@ -402,21 +402,14 @@
   },
   "preview": {
     "label": "{{name}} session details",
-    "owner": "Owner",
-    "pullRequest": "Pull request",
-    "workItem": "Work item",
-    "branch": "Branch",
-    "baseBranch": "Base branch",
-    "kinds": {
-      "work": "Work session",
-      "review": "Review session",
-      "user": "User session"
-    },
     "statuses": {
       "initializing": "Initializing",
       "working": "Agent working",
       "ready": "Waiting on you"
-    }
+    },
+    "merged": "Merged",
+    "takenOverFrom": "Taken over from {{name}}",
+    "previously": "Previously {{name}}"
   },
   "sharing": {
     "private": "Private",
@@ -530,5 +523,14 @@
     },
     "jumpToFile": "Jump to file",
     "jumpToFileCount": "Jump to file, {{files}}"
+  },
+  "track": {
+    "tookOver": "{{name}} took over",
+    "movedTo": "{{name}} moved it to {{stage}}",
+    "agentRun": "Agent run",
+    "agentRuns_one": "{{count}} agent run",
+    "agentRuns_other": "{{count}} agent runs",
+    "now": "now",
+    "timeline": "Session timeline"
   }
 }
