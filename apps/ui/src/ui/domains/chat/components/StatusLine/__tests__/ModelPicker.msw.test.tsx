@@ -1,3 +1,5 @@
+import { CLAUDE_CODE_HARNESS } from '@factory/contracts/harnesses';
+import type { HarnessDescriptor } from '@factory/contracts/harnesses';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -69,6 +71,7 @@ function renderPicker({
   catalogFails = false,
   sessionPolicy,
   withChangeModelAction = false,
+  harness,
 }: {
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
@@ -89,6 +92,8 @@ function renderPicker({
   /** The session catalog request fails. */
   catalogFails?: boolean;
   withChangeModelAction?: boolean;
+  /** The harness the chat context reports; absent leaves it unknown, as older contexts do. */
+  harness?: HarnessDescriptor;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
@@ -168,7 +173,7 @@ function renderPicker({
   }
 
   const picker = (
-    <ChatSessionContext.Provider value={{ ...baseSession, kind }}>
+    <ChatSessionContext.Provider value={{ ...baseSession, kind, harness }}>
       <ChatConnectionContext.Provider
         value={{
           status: 'ready',
@@ -211,6 +216,23 @@ afterEach(() => {
 });
 
 describe('ModelPicker', () => {
+  it("follows a harness whose model is the Factory's: the Factory chat shows it and offers no switch", async () => {
+    const { modelSwitches } = renderPicker({
+      kind: 'factory',
+      inFactory: true,
+      harness: CLAUDE_CODE_HARNESS,
+      withChangeModelAction: true,
+    });
+
+    expect(await screen.findByRole('link', { name: /^Claude Code · / })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/models',
+    );
+    expect(screen.queryByLabelText('Session model')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Change model' })).not.toBeInTheDocument();
+    expect(modelSwitches).toEqual([]);
+  });
+
   it('keeps a personal-route session on the server-resolved Factory catalog and default', async () => {
     const user = userEvent.setup();
     renderPicker({

@@ -27,6 +27,12 @@ export interface HarnessDescriptor {
     knowledge: boolean;
     /** The session's sandbox can be recreated from the chat. */
     sandboxRecreate: boolean;
+    /**
+     * A chat on the Factory's own resource with no stored session behind it
+     * (`/factories/:id/new`). Without it a new chat starts as a personal
+     * session, which this harness runs.
+     */
+    sessionlessChat: boolean;
   };
   /** What creating a Factory on this harness asks for. */
   setup: {
@@ -49,6 +55,7 @@ export const MASTRA_HARNESS: HarnessDescriptor = {
     memory: true,
     knowledge: true,
     sandboxRecreate: true,
+    sessionlessChat: true,
   },
   setup: { modelProvider: true, claudeSignIn: false },
 };
@@ -65,6 +72,7 @@ export const CLAUDE_CODE_HARNESS: HarnessDescriptor = {
     memory: false,
     knowledge: false,
     sandboxRecreate: false,
+    sessionlessChat: false,
   },
   setup: { modelProvider: false, claudeSignIn: true },
 };

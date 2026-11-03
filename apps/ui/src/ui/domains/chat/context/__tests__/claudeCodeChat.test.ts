@@ -1,35 +1,47 @@
+import { CLAUDE_CODE_HARNESS, MASTRA_HARNESS } from '@factory/contracts/harnesses';
 import { describe, expect, it } from 'vitest';
 
 import type { FactoryProject } from '../../../workspaces/services/github';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
-import { claudeCodeChat } from '../ChatSessionProvider';
+import { chatHarnessId, claudeCodeChat } from '../ChatSessionProvider';
 
 const claudeFactory = { harness: 'claude-code', claudeCodeModel: 'sonnet' } as FactoryProject;
 const claudeSession = { harness: 'claude-code' } as FactoryUserSession;
 const mastraSession = {} as FactoryUserSession;
 
+describe('chatHarnessId', () => {
+  it("reads a card's or personal session's harness from the stored session", () => {
+    expect(
+      chatHarnessId({ supervisor: false, isUserDraft: false, storedSession: claudeSession, factory: claudeFactory }),
+    ).toBe('claude-code');
+    expect(
+      chatHarnessId({ supervisor: false, isUserDraft: false, storedSession: mastraSession, factory: claudeFactory }),
+    ).toBeUndefined();
+  });
+
+  it("runs the Factory chat and a personal draft on the Factory's harness", () => {
+    expect(chatHarnessId({ supervisor: true, isUserDraft: false, storedSession: undefined, factory: claudeFactory })).toBe(
+      'claude-code',
+    );
+    expect(chatHarnessId({ supervisor: false, isUserDraft: true, storedSession: undefined, factory: claudeFactory })).toBe(
+      'claude-code',
+    );
+  });
+
+  it('leaves a card session not loaded yet unknown', () => {
+    expect(
+      chatHarnessId({ supervisor: false, isUserDraft: false, storedSession: undefined, factory: claudeFactory }),
+    ).toBeUndefined();
+  });
+});
+
 describe('claudeCodeChat', () => {
-  it("shows the Factory's Claude model on a card's Claude Code session, not only on personal chats", () => {
-    expect(
-      claudeCodeChat({ userScoped: false, isUserDraft: false, storedSession: claudeSession, factory: claudeFactory }),
-    ).toEqual({ model: 'sonnet' });
-    expect(
-      claudeCodeChat({ userScoped: true, isUserDraft: false, storedSession: claudeSession, factory: claudeFactory }),
-    ).toEqual({ model: 'sonnet' });
+  it("shows the Factory's Claude model where the harness takes its model from the Factory", () => {
+    expect(claudeCodeChat(CLAUDE_CODE_HARNESS, claudeFactory)).toEqual({ model: 'sonnet' });
+    expect(claudeCodeChat(CLAUDE_CODE_HARNESS, undefined)).toEqual({ model: null });
   });
 
-  it('leaves a Mastra session, and a card session not loaded yet, on the Mastra model picker', () => {
-    expect(
-      claudeCodeChat({ userScoped: false, isUserDraft: false, storedSession: mastraSession, factory: claudeFactory }),
-    ).toBeUndefined();
-    expect(
-      claudeCodeChat({ userScoped: false, isUserDraft: false, storedSession: undefined, factory: claudeFactory }),
-    ).toBeUndefined();
-  });
-
-  it("runs a personal draft on its Factory's harness", () => {
-    expect(
-      claudeCodeChat({ userScoped: true, isUserDraft: true, storedSession: undefined, factory: claudeFactory }),
-    ).toEqual({ model: 'sonnet' });
+  it('leaves a per-session model harness on the Mastra model picker', () => {
+    expect(claudeCodeChat(MASTRA_HARNESS, claudeFactory)).toBeUndefined();
   });
 });
