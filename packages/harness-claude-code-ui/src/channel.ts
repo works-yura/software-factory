@@ -74,6 +74,14 @@ export interface AttachClaudeSessionDeps {
 /** How many of the newest stored messages are searched for a plan parked, or the task list kept, before a restart. */
 const ADOPT_WINDOW = 50;
 
+/** Events that come in bursts (streamed text); their state snapshots are coalesced, as Mastra's session bus does. */
+const COALESCIBLE_DISPLAY_STATE_EVENTS = new Set(['message_update', 'tool_input_delta']);
+/** At most one coalesced snapshot per this many ms, plus a leading one (Mastra's `DISPLAY_STATE_COALESCE_MS`). */
+const DISPLAY_STATE_COALESCE_MS = 16;
+
+/** Where a session thread keeps the model its last turn ran on, as a Mastra thread keeps its own. */
+export const THREAD_MODEL_KEY = 'currentModelId';
+
 /**
  * One Claude Code session as the chat UI sees it: its transcript recorded into
  * the session's memory thread (resource = the session's resourceId, thread =
@@ -92,6 +100,10 @@ export class ClaudeSessionUiChannel {
   #threadWrites: Promise<void> = Promise.resolve();
   /** The thread's token usage so far, as a Mastra session's tally (kept on the thread's metadata). */
   #tokenUsage: TokenUsage = emptyTokenUsage();
+  /** The model stored on the thread (its last turn's), until this process sees a turn. */
+  #storedModelId: string | undefined;
+  #displayStateTimer: ReturnType<typeof setTimeout> | undefined;
+  #displayStatePending = false;
   readonly #detach: Array<() => void>;
   /** Session state the UI merges in (`PUT /state`); kept so it reads back, never given to Claude. */
   readonly state: Record<string, unknown> = {};
@@ -129,8 +141,9 @@ export class ClaudeSessionUiChannel {
     return this.session.run.isRunning();
   }
 
+  /** The model Claude reported on the latest turn, stored on the thread so it reads back after a restart. */
   get modelId(): string | undefined {
-    return this.#projector.modelId;
+    return this.#projector.modelId ?? this.#storedModelId;
   }
 
   /** The thread's token usage so far, for the session state and `/cost`. */
@@ -190,6 +203,7 @@ export class ClaudeSessionUiChannel {
     if (approval) state.pendingApprovals.set(approval.toolCallId, { ...approval, threadId: this.threadId });
     state.tokenUsage = this.tokenUsage;
     state.tasks = this.tasks;
+    state.queuedFollowUps = this.session.queuedFollowUps;
     return state;
   }
 
@@ -215,6 +229,9 @@ export class ClaudeSessionUiChannel {
   detach(): void {
     for (const off of this.#detach.splice(0)) off();
     this.#listeners.clear();
+    clearTimeout(this.#displayStateTimer);
+    this.#displayStateTimer = undefined;
+    this.#displayStatePending = false;
   }
 
   // -- internals ------------------------------------------------------------
@@ -246,6 +263,8 @@ export class ClaudeSessionUiChannel {
     // The total kept before a restart, plus anything this process counted while it was read.
     const saved = thread?.metadata?.tokenUsage;
     if (saved && typeof saved === 'object') this.#tokenUsage = addTokenUsage(this.#tokenUsage, saved as Partial<TokenUsage>);
+    const model = thread?.metadata?.[THREAD_MODEL_KEY];
+    if (typeof model === 'string' && model) this.#storedModelId = model;
     const gate = this.session.pendingPlan;
     const permission = this.session.pendingPermission;
     const { messages } = await memory.listMessages({
@@ -323,8 +342,21 @@ export class ClaudeSessionUiChannel {
     });
   }
 
+  /** Stores the model a new turn reported on the thread, so `GET /` still names it after a restart. */
+  #recordModel() {
+    const model = this.#projector.modelId;
+    if (!model || model === this.#storedModelId) return;
+    this.#storedModelId = model;
+    this.#writeThread(thread =>
+      thread.metadata?.[THREAD_MODEL_KEY] === model
+        ? undefined
+        : { ...thread, metadata: { ...thread.metadata, [THREAD_MODEL_KEY]: model } },
+    ).catch(error => console.warn('[claude-code ui] Unable to record the model.', error));
+  }
+
   #apply(projection: Projection) {
     for (const event of projection.events) if (event.type === 'usage_update') this.#countUsage(event.usage);
+    this.#recordModel();
     for (const message of projection.writes) {
       // Re-inserting keeps the order messages first changed in, which is creation order for new ones.
       this.#pending.delete(message.id);
@@ -332,14 +364,54 @@ export class ClaudeSessionUiChannel {
     }
     if (projection.writes.length) this.#scheduleFlush();
     for (const event of projection.events) {
-      for (const listener of [...this.#listeners]) {
-        try {
-          listener(event);
-        } catch (error) {
-          console.warn('[claude-code ui] Stream listener failed.', error);
-        }
+      // As a Mastra session's bus: every event is followed by the state it leaves, so the chat's
+      // run state, usage (`/cost`) and queued follow-ups follow along; bursts share snapshots.
+      const coalesced = COALESCIBLE_DISPLAY_STATE_EVENTS.has(event.type);
+      if (!coalesced) this.#flushDisplayState();
+      this.#dispatch(event);
+      if (event.type === 'display_state_changed' || this.#listeners.size === 0) continue;
+      if (coalesced) this.#scheduleDisplayState();
+      else this.#dispatchDisplayState();
+    }
+  }
+
+  #dispatch(event: AgentControllerEvent) {
+    for (const listener of [...this.#listeners]) {
+      try {
+        listener(event);
+      } catch (error) {
+        console.warn('[claude-code ui] Stream listener failed.', error);
       }
     }
+  }
+
+  #dispatchDisplayState() {
+    this.#dispatch({ type: 'display_state_changed', displayState: this.displayState() } as AgentControllerEvent);
+  }
+
+  /** A leading snapshot now, then at most one trailing one per window. */
+  #scheduleDisplayState() {
+    if (this.#displayStateTimer) {
+      this.#displayStatePending = true;
+      return;
+    }
+    this.#dispatchDisplayState();
+    this.#displayStateTimer = setTimeout(() => {
+      this.#displayStateTimer = undefined;
+      this.#flushDisplayState();
+    }, DISPLAY_STATE_COALESCE_MS);
+    this.#displayStateTimer.unref?.();
+  }
+
+  /** Sends the snapshot a coalescing window withheld, if any. */
+  #flushDisplayState() {
+    if (this.#displayStateTimer) {
+      clearTimeout(this.#displayStateTimer);
+      this.#displayStateTimer = undefined;
+    }
+    if (!this.#displayStatePending) return;
+    this.#displayStatePending = false;
+    this.#dispatchDisplayState();
   }
 
   #scheduleFlush() {

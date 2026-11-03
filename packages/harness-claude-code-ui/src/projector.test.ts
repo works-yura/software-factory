@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 
-import { SUBMIT_PLAN_TOOL_ID, type ClaudeTranscriptEntry } from '@factory/harness-claude-code';
+import { createNotificationSignal, defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
+import { createSignal } from '@mastra/core/signals';
+
+import {
+  ClaudeCodeError,
+  claudeNotificationDecision,
+  SUBMIT_PLAN_TOOL_ID,
+  type ClaudeTranscriptEntry,
+} from '@factory/harness-claude-code';
 
 import {
   ClaudeTranscriptProjector,
@@ -500,7 +508,147 @@ describe('ClaudeTranscriptProjector', () => {
   it('reports a failed run as an error event', () => {
     const p = projector();
     const out = p.event({ type: 'error', error: new Error('rate limited') });
-    expect(out.events).toEqual([{ type: 'error', error: new Error('rate limited') }]);
+    expect(out.events[0]).toEqual({ type: 'error', error: new Error('rate limited') });
+  });
+
+  describe('Mastra parity', () => {
+    it('stores a run’s failure as an error part on its last assistant message, as recordTerminalErrorMessage does (A3)', () => {
+      const p = projector();
+      const out = play(p, [
+        { kind: 'input', source: 'signal', text: 'Go', id: 'sig-1' },
+        { kind: 'init', sessionId: 'claude-1', model: 'claude-sonnet-4-6' },
+        { kind: 'text', text: 'Working on it.', messageId: 'msg_1' },
+        { kind: 'result', subtype: 'error_during_execution', isError: true },
+      ]);
+      const failure = new ClaudeCodeError('rate_limit', 'Claude AI usage limit reached.', {
+        status: 429,
+        resetsAt: new Date('2026-10-28T15:00:00Z'),
+      });
+      const failed = p.event({ type: 'error', error: failure });
+      const again = p.event({ type: 'error', error: failure });
+
+      const [, assistant] = stored([...out.writes, ...failed.writes, ...again.writes]);
+      expect(assistant!.content.parts).toEqual([
+        { type: 'text', text: 'Working on it.' },
+        {
+          type: 'error',
+          error: {
+            name: 'ClaudeCodeError',
+            message: 'Claude AI usage limit reached.',
+            statusCode: 429,
+            status: 429,
+            kind: 'rate_limit',
+            resetsAt: '2026-10-28T15:00:00.000Z',
+            modelId: 'claude-sonnet-4-6',
+          },
+        },
+      ]);
+    });
+
+    it('stores a failure before Claude said anything on an assistant message of its own (A3)', () => {
+      const p = projector();
+      const out = play(p, [{ kind: 'input', source: 'signal', text: 'Go', id: 'sig-1' }]);
+      const failed = p.event({ type: 'error', error: new Error('No Claude account is connected.') });
+      const [, assistant] = stored([...out.writes, ...failed.writes]);
+      expect(assistant).toMatchObject({
+        role: 'assistant',
+        threadId: 'thread-1',
+        content: { parts: [{ type: 'error', error: { name: 'Error', message: 'No Claude account is connected.' } }] },
+      });
+      expect(failed.events.map(event => event.type)).toEqual(['error', 'message_start', 'message_update', 'message_end']);
+    });
+
+    it('stamps the model that answered on the reply, as stampResponseModel does (A6)', () => {
+      const p = projector();
+      const out = play(p, [
+        { kind: 'input', source: 'signal', text: 'Go', id: 'sig-1' },
+        { kind: 'init', sessionId: 'claude-1', model: 'claude-opus-4-5' },
+        { kind: 'text', text: 'Done.', messageId: 'msg_1' },
+      ]);
+      const [, assistant] = stored(out.writes);
+      expect(assistant!.content.metadata).toEqual({ modelId: 'claude-opus-4-5', provider: 'anthropic' });
+    });
+
+    it('stores a person’s message with its author and an interjection with while-active delivery, as Mastra’s session does (A1, A7)', () => {
+      const author = { id: 'user-ada', name: 'Ada' };
+      const p = projector();
+      const out = play(p, [
+        { kind: 'input', source: 'signal', text: 'Also this.', author, delivery: 'while-active' },
+      ]);
+      const [message] = stored(out.writes);
+      const mastra = createSignal({
+        id: 'id-1',
+        type: 'user',
+        tagName: 'user',
+        contents: 'Also this.',
+        createdAt: message!.createdAt,
+        author,
+        providerOptions: { mastra: { author: { ...author } } },
+        attributes: { delivery: 'while-active' },
+      }).toDBMessage({ threadId: 'thread-1', resourceId: 'factory-1' });
+      expect(message).toEqual(mastra);
+      expect(message!.content.metadata?.signal).toMatchObject({ author, attributes: { delivery: 'while-active' } });
+      expect(message!.content.providerMetadata).toEqual({ mastra: { author } });
+    });
+
+    it('stores a notification as the signal Mastra creates for a delivered notification record (A4)', () => {
+      const p = projector();
+      const record = {
+        id: 'note-1',
+        source: 'github',
+        kind: 'pull-request-review',
+        priority: 'high' as const,
+        summary: 'Review requested on #12.',
+        coalescedCount: 1,
+        metadata: { repository: 'acme/app', pullRequestNumber: 12, targetUrl: 'https://github.com/acme/app/pull/12' },
+        createdAt: '2026-10-28T09:59:00.000Z',
+      };
+      const out = play(p, [
+        { kind: 'input', source: 'notification', text: '<system-notification>…</system-notification>', notification: record },
+      ]);
+      const [message] = stored(out.writes);
+      const received = new Date(record.createdAt);
+      const mastra = createNotificationSignal({
+        ...record,
+        threadId: 'thread-1',
+        status: 'delivered',
+        createdAt: received,
+        updatedAt: received,
+      }).toDBMessage({ threadId: 'thread-1', resourceId: 'factory-1' });
+      // Same shape as Mastra's, but for the ids and times each one makes up.
+      const { id: _id, createdAt: _at, ...expected } = mastra;
+      const { signal: mastraSignal } = mastra.content.metadata as { signal: Record<string, unknown> };
+      expect(message).toMatchObject({
+        ...expected,
+        content: {
+          ...expected.content,
+          metadata: { signal: { ...mastraSignal, id: message!.id, createdAt: (message!.createdAt as Date).toISOString() } },
+        },
+      });
+      expect(message!.content.metadata?.signal).toMatchObject({
+        type: 'notification',
+        tagName: 'notification',
+        attributes: { id: 'note-1', source: 'github', kind: 'pull-request-review', priority: 'high', status: 'delivered' },
+        metadata: { repository: 'acme/app', pullRequestNumber: 12, notification: { recordId: 'note-1', signal: 'notification' } },
+      });
+    });
+
+    it('forwards the follow-up count (A9)', () => {
+      const event = { type: 'follow_up_queued', count: 2 };
+      expect(projector().event(event).events).toEqual([{ type: 'follow_up_queued', count: 2 }]);
+    });
+  });
+
+  it('decides notification delivery exactly as Mastra’s default policy does (A5)', () => {
+    const now = new Date('2026-10-28T10:00:00Z');
+    for (const priority of ['low', 'medium', 'high', 'urgent'] as const) {
+      for (const threadState of ['active', 'idle'] as const) {
+        const record = { priority } as Parameters<typeof defaultNotificationDeliveryDecision>[0]['record'];
+        expect(claudeNotificationDecision({ record: { priority }, threadState, now })).toEqual(
+          defaultNotificationDeliveryDecision({ record, threadState, now }),
+        );
+      }
+    }
   });
 
   it('announces a new run once, however many turns it takes', () => {

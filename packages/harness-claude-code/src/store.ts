@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import type { PlanDecision } from '@factory/harness';
 
-import type { PermissionRequest, PlanGate } from './events.ts';
+import type { ClaudeMessageAuthor, ClaudeNotificationRecord, PermissionRequest, PlanGate } from './events.ts';
 import type { ClaudeSessionMode } from './cli.ts';
 
 /** Input that waits for the next turn: a persisted notification, or signals queued when a gate parked the run. */
@@ -15,6 +15,12 @@ export interface ClaudePendingInput {
   gate?: true;
   /** A plan answer queued for the next turn (`queuePlanAnswer`); recorded when that turn starts. */
   planDecision?: { toolCallId: string; decision: PlanDecision };
+  /** Who wrote a signal, when a person did. */
+  author?: ClaudeMessageAuthor;
+  /** The notification a `notification` input carries; absent in records written before notifications kept it. */
+  notification?: ClaudeNotificationRecord;
+  /** Already recorded in the transcript (it joined a run in flight, or its turn started and failed). */
+  echoed?: true;
 }
 
 export interface ClaudeThreadState {
@@ -32,6 +38,12 @@ export interface ClaudeThreadState {
   /** Tools a person allowed for one call (`askEachTime` tools): the next turn's, then they ask again. */
   grantedOnce?: string[];
   pendingInputs: ClaudePendingInput[];
+  /**
+   * Input that starts a run of its own once the current run ends: a person's
+   * follow-up (Mastra's follow-up queue) or a high-priority notification that
+   * came mid-run. Absent in records written before follow-ups.
+   */
+  followUps?: ClaudePendingInput[];
   /** Recent signal ids Claude received, newest last; the dispatcher's replay guard reads them. */
   deliveredIds: string[];
   /** Recent notification dedupe keys, newest last. */

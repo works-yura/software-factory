@@ -7,6 +7,8 @@ import type {
   MastraMessagePart,
   TokenUsage,
 } from '@mastra/core/agent-controller';
+import type { NotificationRecord } from '@mastra/core/notifications';
+import { notificationSignalAttributes, notificationSignalMetadata } from '@mastra/core/notifications';
 import { createSignal } from '@mastra/core/signals';
 
 import type { AgentEvent, AgentTokenUsage, PlanDecision } from '@factory/harness';
@@ -15,6 +17,7 @@ import {
   askUserPrompt,
   PLAN_GATE_TOOL_IDS,
   type AskUserPrompt,
+  type ClaudeNotificationRecord,
   type ClaudeTranscriptEntry,
   type PermissionRequest,
   type PlanGate,
@@ -172,6 +175,53 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
+/** Claude's models are Anthropic's; stamped beside the model id as Mastra stamps a reply's provider. */
+export const CLAUDE_MODEL_PROVIDER = 'anthropic';
+
+/**
+ * A run's failure as Mastra stores it on the assistant message (an `error`
+ * part, `toPersistedErrorIdentity`): name and message, the HTTP status as
+ * `statusCode`, plus what a Claude Code failure knows on top (`kind`, the
+ * CLI's `status`, when a limit `resetsAt`). Also the shape a stream's `error`
+ * event carries.
+ */
+export function runErrorIdentity(error: unknown, modelId?: string) {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  const details = failure as Error & { kind?: unknown; status?: unknown; resetsAt?: unknown };
+  const status = typeof details.status === 'number' && Number.isInteger(details.status) ? details.status : undefined;
+  return {
+    name: failure.name || 'Error',
+    message: failure.message || 'Unknown error',
+    ...(status !== undefined ? { statusCode: status, status } : {}),
+    ...(typeof details.kind === 'string' ? { kind: details.kind } : {}),
+    ...(details.resetsAt instanceof Date && !Number.isNaN(details.resetsAt.getTime())
+      ? { resetsAt: details.resetsAt.toISOString() }
+      : {}),
+    ...(modelId ? { modelId } : {}),
+  };
+}
+
+/** The notification signal Mastra stores for a delivered notification record (`createNotificationSignal`). */
+function notificationSignal(record: ClaudeNotificationRecord, id: string, createdAt: Date) {
+  const received = new Date(record.createdAt);
+  const delivered = {
+    ...record,
+    threadId: '',
+    status: 'delivered',
+    createdAt: received,
+    updatedAt: received,
+  } as unknown as NotificationRecord;
+  return createSignal({
+    id,
+    type: 'notification',
+    tagName: 'notification',
+    contents: record.summary,
+    createdAt,
+    attributes: notificationSignalAttributes(delivered),
+    metadata: { ...record.metadata, notification: notificationSignalMetadata(delivered) },
+  });
+}
+
 /**
  * Turns a Claude Code session's transcript and events into what the chat UI
  * reads for a Mastra session: `MastraDBMessage`s for the thread history and
@@ -202,6 +252,10 @@ export class ClaudeTranscriptProjector {
   #running = false;
   /** The assistant message being written, until the next input or the end of the run. */
   #current: MastraDBMessage | undefined;
+  /** The latest assistant message since the last input, kept after it closed: a run's failure is recorded on it. */
+  #lastAssistant: MastraDBMessage | undefined;
+  /** The thread the latest entry was for, for a failure recorded before anything else was. */
+  #lastThreadId: string | undefined;
   /** The part deltas are growing now. */
   #active: StreamedPart | undefined;
   /** Streamed parts of {@link #current} whose full block is still to come, oldest first. */
@@ -306,9 +360,11 @@ export class ClaudeTranscriptProjector {
 
   entry(entry: ClaudeTranscriptEntry, meta: { runId: string; threadId: string }): Projection {
     const out: Projection = { events: [], writes: [] };
+    this.#lastThreadId = meta.threadId;
     if (meta.runId !== this.#runId) {
       this.#runId = meta.runId;
       this.#segment = 0;
+      this.#lastAssistant = undefined;
       if (!this.#running) {
         this.#running = true;
         out.events.push({ type: 'agent_start' });
@@ -423,6 +479,12 @@ export class ClaudeTranscriptProjector {
         const { error } = event as Extract<AgentEvent, { type: 'error' }>;
         const failure = error instanceof Error ? error : new Error(String(error));
         out.events.push({ type: 'error', error: failure });
+        this.#recordError(failure, out);
+        break;
+      }
+      case 'follow_up_queued': {
+        const { count } = event as { type: 'follow_up_queued'; count: number };
+        out.events.push({ type: 'follow_up_queued', count });
         break;
       }
       case 'agent_end': {
@@ -452,13 +514,53 @@ export class ClaudeTranscriptProjector {
     return new Date(time);
   }
 
+  /**
+   * Stores a run's failure as Mastra's `recordTerminalErrorMessage` does: an
+   * `error` part on the run's latest assistant message (once), or on a new
+   * assistant message when the run said nothing yet.
+   */
+  #recordError(error: Error, out: Projection) {
+    const part = { type: 'error' as const, error: runErrorIdentity(error, this.#modelId) };
+    const open = this.#current;
+    const target = open ?? this.#lastAssistant;
+    if (target?.content.parts.some(existing => existing.type === 'error')) return;
+    if (open) {
+      this.#setPart(open, open.content.parts.length, part, out);
+      out.writes.push(clone(open));
+      return;
+    }
+    if (target) {
+      target.content.parts.push(part);
+      out.writes.push(clone(target));
+      return;
+    }
+    // Nothing said yet: a message of its own, as Mastra creates one for a failed attempt with no output.
+    const message = this.#ensureCurrent(this.#lastThreadId ?? '', out);
+    this.#setPart(message, 0, part, out);
+    this.#closeCurrent(out);
+  }
+
   #input(entry: Extract<ClaudeTranscriptEntry, { kind: 'input' }>, threadId: string, out: Projection) {
+    this.#lastAssistant = undefined;
     const createdAt = this.#createdAt();
     const id = entry.id ?? this.#newId();
+    // A person's message carries its author, and one that joined a run in flight is marked an
+    // interjection, as Mastra's session stamps them (`withMessageAuthor`, `asInterjection`).
+    const author = entry.author;
     const signal =
       entry.source === 'signal'
-        ? createSignal({ id, type: 'user', tagName: 'user', contents: entry.text, createdAt })
-        : (() => {
+        ? createSignal({
+            id,
+            type: 'user',
+            tagName: 'user',
+            contents: entry.text,
+            createdAt,
+            ...(author ? { author, providerOptions: { mastra: { author: { ...author } } } } : {}),
+            ...(entry.delivery ? { attributes: { delivery: entry.delivery } } : {}),
+          })
+        : entry.notification
+          ? notificationSignal(entry.notification, id, createdAt)
+          : (() => {
             const { body, attributes } = parseNotification(entry.text);
             return createSignal({
               id,
@@ -483,7 +585,12 @@ export class ClaudeTranscriptProjector {
       createdAt: this.#createdAt(),
       threadId,
       resourceId: this.#resourceId,
-      content: { format: 2, parts: [] },
+      // The model that answered, as Mastra stamps a reply (`stampResponseModel`).
+      content: {
+        format: 2,
+        parts: [],
+        ...(this.#modelId ? { metadata: { modelId: this.#modelId, provider: CLAUDE_MODEL_PROVIDER } } : {}),
+      },
     };
     this.#current = message;
     out.events.push({ type: 'message_start', message: clone(message) });
@@ -800,6 +907,7 @@ export class ClaudeTranscriptProjector {
     const message = this.#current;
     if (!message) return;
     this.#current = undefined;
+    this.#lastAssistant = message;
     this.#active = undefined;
     this.#unconfirmed = [];
     // A part that only ever streamed (its full block never came, e.g. on abort) is kept as streamed.

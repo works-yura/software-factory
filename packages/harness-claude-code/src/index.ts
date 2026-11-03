@@ -9,3 +9,4 @@ export * from './store.ts';
 export * from './stream.ts';
 export * from './permissions.ts';
 export * from './gate-server.ts';
+export * from './notifications.ts';
