@@ -2275,6 +2275,7 @@ export class MastraFactory {
                         transitionService,
                         sourceControl: request =>
                           sourceControlSessions.getSourceControlBySessionId(request.sessionId).then(handle => handle ?? undefined),
+                        boards,
                         projects: factoryProjectsStorage,
                         ...(claudeCodeConfig?.approvedPermissionMode
                           ? { approvedPermissionMode: claudeCodeConfig.approvedPermissionMode }
