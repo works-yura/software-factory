@@ -5,7 +5,9 @@ import { z } from 'zod';
 import { boardForWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import { workLaneForRole } from '@factory/pipelines';
+import { externalSessionFor } from '@factory/integrations';
 import type { IntegrationTools } from '@factory/integrations';
+import type { AgentSession } from '@factory/harness';
 import { buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 import { USER_SESSION_BRANCH_PREFIX } from '@factory/session';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
@@ -75,6 +77,17 @@ export interface FactorySessionToolDependencies {
   auditRecorder: AuditRecorder;
   /** The browser Start's coordinator; absent until the Factory runtime is ready. */
   startCoordinator: () => Pick<FactoryStartCoordinator, 'prepare'> | undefined;
+  /**
+   * Creates a session on a Factory harness other than Mastra (`claude-code`),
+   * for a side session of a Factory that runs on it; `undefined` when this
+   * server has no such harness.
+   */
+  createHarnessSession?: (input: {
+    harness: string;
+    sessionId: string;
+    resourceId: string;
+    title: string;
+  }) => Promise<AgentSession | undefined>;
 }
 
 const LISTED_MODELS = 8;
@@ -94,6 +107,13 @@ function startErrorMessage(error: unknown): string | null {
 function workItemLabel(item: WorkItemRow): string {
   const number = workItemNumber(item);
   return number === null ? `"${item.title}"` : `#${number}`;
+}
+
+/** A Claude Code session runs on its Factory's Claude Code model; there is no per-session model to pick. */
+function claudeModelError(): Error {
+  return new Error(
+    "That session runs on Claude Code: it uses the Factory's Claude Code model (Settings → Models) and its model can't be switched per session.",
+  );
 }
 
 function titleFrom(prompt: string): string {
@@ -194,6 +214,7 @@ export function createFactorySessionTools(
       }
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Session model switching is not available on this server.');
+      if (await externalSessionFor(messaging.controller, sessionId)) throw claudeModelError();
       const threadId = await resolveSessionThread({
         controller: messaging.controller,
         sessions: deps.sessions,
@@ -256,6 +277,14 @@ export function createFactorySessionTools(
       if (!parent || !sourceControl) throw new Error('This session has no Factory session row to start from.');
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Starting sessions is not available on this server.');
+
+      // A Factory on another harness starts its side sessions there: a Mastra session would be the wrong agent.
+      const project = await deps.sessionModel.projects.get({ orgId: scope.orgId, id: scope.factoryProjectId });
+      const harness = project?.harness ?? 'mastra';
+      if (harness !== 'mastra') {
+        if (model) throw claudeModelError();
+        return startHarnessSideSession({ harness, prompt, title, parent, sourceControl });
+      }
 
       // The child runs with the same credentials as this session, so validate against those.
       const parentThreadId = await resolveSessionThread({
@@ -346,6 +375,58 @@ export function createFactorySessionTools(
       return { mode: 'side' as const, sessionId: ensured.sessionId, threadId, title: threadTitle };
     },
   });
+
+  /** A side session on the Factory's own harness: the same row and kickoff as a Mastra one, in that harness's session. */
+  async function startHarnessSideSession({
+    harness,
+    prompt,
+    title,
+    parent,
+    sourceControl,
+  }: {
+    harness: string;
+    prompt: string;
+    title?: string;
+    parent: NonNullable<Awaited<ReturnType<FactorySessionToolDependencies['sessions']['getBySessionId']>>>;
+    sourceControl: NonNullable<
+      Awaited<ReturnType<FactorySessionToolDependencies['sessions']['getSourceControlBySessionId']>>
+    >;
+  }) {
+    if (!deps.createHarnessSession) throw new Error(`This server can't start ${harness} sessions.`);
+    const sessionId = globalThis.crypto.randomUUID();
+    const ensured = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: scope.orgId,
+      factoryProjectId: scope.factoryProjectId,
+      sessionId,
+      branch: `${USER_SESSION_BRANCH_PREFIX}${sessionId}`,
+      attributeToUserId: scope.userId,
+      ...(parent.projectRepositoryId ? { projectRepositoryId: parent.projectRepositoryId } : {}),
+      visibility: parent.visibility,
+      origin: { sessionId: scope.sessionId, threadId: scope.threadId },
+    });
+    const threadTitle = title ?? titleFrom(prompt);
+    const session = await deps.createHarnessSession({
+      harness,
+      sessionId: ensured.sessionId,
+      resourceId: parent.visibility === 'private' ? scope.userId : scope.factoryProjectId,
+      title: threadTitle,
+    });
+    if (!session) throw new Error(`This server can't start ${harness} sessions.`);
+    await sourceControl.sessions.rename({ sessionId: ensured.sessionId, title: threadTitle });
+    const kickoffContext = new RequestContext();
+    kickoffContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
+    await session.sendSignal(
+      { id: globalThis.crypto.randomUUID(), type: 'user', tagName: 'user', contents: prompt },
+      { requestContext: kickoffContext, requireDelivery: true },
+    ).accepted;
+    return {
+      mode: 'side' as const,
+      sessionId: ensured.sessionId,
+      threadId: session.thread.requireId(),
+      title: threadTitle,
+    };
+  }
 
   async function startWorkItemRole({
     prompt,
@@ -460,13 +541,16 @@ export function createFactorySessionTools(
         binding.revokedAt >= startedAt,
     );
 
-    const session = await messaging.controller.getSession(prepared.sessionId);
+    // The harness that owns the prepared session kicks it off: a Claude Code one is not the controller's.
+    const external = await externalSessionFor(messaging.controller, prepared.sessionId);
+    const mastra = external ? undefined : await messaging.controller.getSession(prepared.sessionId);
+    const session = (external?.agentSession as AgentSession | undefined) ?? (mastra ? asAgentSession(mastra) : undefined);
     if (!session) throw new Error(`The ${role} session was bound but is not running; open it from the board.`);
     const kickoffId = globalThis.crypto.randomUUID();
     // Heartbeat from before the kickoff so a fast run's end is seen; the open-run
     // entry and audit follow the accepted kickoff, as the dispatcher records them.
     // The run's end reaches this item's followers through the session's listener.
-    const heartbeat = heartbeatOpenRunUntilEnd(asAgentSession(session), kickoffId);
+    const heartbeat = heartbeatOpenRunUntilEnd(session, kickoffId);
     const kickoffContext = new RequestContext();
     kickoffContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
     try {
@@ -479,7 +563,7 @@ export function createFactorySessionTools(
       throw error;
     }
 
-    await recordSessionRunStart(asAgentSession(session), {
+    await recordSessionRunStart(session, {
       audit: deps.auditRecorder,
       actorType: 'human',
       observedEnd: heartbeat.endReason,

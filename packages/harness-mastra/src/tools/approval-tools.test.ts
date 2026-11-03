@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { routeExternalSessions } from '@factory/integrations';
+
 import { createFactoryApprovalTools } from './approval-tools.ts';
 import type { FactoryToolScope } from './scope.ts';
 
@@ -133,6 +135,50 @@ describe('factory_answer_approval', () => {
     const { answer, respondToToolApproval, record } = setup();
     respondToToolApproval.mockReturnValueOnce({ accepted: false, reason: 'aborting' } as never);
     await expect(answer({ decision: 'approve' })).rejects.toThrow('not accepted (aborting)');
+    expect(record).not.toHaveBeenCalled();
+  });
+});
+
+describe('factory_answer_approval on a session another harness runs', () => {
+  function external(waiting: string | undefined) {
+    const respondToToolApproval = vi.fn(
+      async ({ toolCallId }: { toolCallId: string; approved: boolean }) => toolCallId === waiting,
+    );
+    const controller = { getSession: vi.fn(async () => null) };
+    routeExternalSessions(controller, async sessionId =>
+      sessionId === WORKER ? { sendNotificationSignal: vi.fn(), answerToolApproval: respondToToolApproval } : undefined,
+    );
+    const record = vi.fn();
+    const tools = createFactoryApprovalTools(scope, {
+      sessions: {
+        getBySessionId: async () =>
+          ({ sessionId: WORKER, orgId: 'org-1', factoryProjectId: 'project-1', userId: 'x', visibility: 'org' }) as never,
+      },
+      workItems: {
+        findActiveRunBindingForSession: async () => ({ workItemId: ITEM }) as never,
+        listSessionSubscriptions: async () => [{ workItemId: ITEM }] as never,
+      },
+      auditRecorder: { record } as never,
+      messaging: async () => ({ controller }) as never,
+    });
+    const answer = (input: Record<string, unknown>) =>
+      (
+        tools.factory_answer_approval as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }
+      ).execute({ sessionId: WORKER, toolCallId: 'call-1', ...input }, {});
+    return { answer, respondToToolApproval, controller, record };
+  }
+
+  it('answers the permission a Claude Code session holds, instead of saying nothing is waiting', async () => {
+    const { answer, respondToToolApproval, controller, record } = external('call-1');
+    await expect(answer({ decision: 'decline', reason: 'No.' })).resolves.toMatchObject({ answered: 'decline' });
+    expect(respondToToolApproval).toHaveBeenCalledWith({ toolCallId: 'call-1', approved: false });
+    expect(controller.getSession).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: 'factory.run.dismissed' }));
+  });
+
+  it('says nothing is waiting when that session holds no such call', async () => {
+    const { answer, record } = external(undefined);
+    await expect(answer({ decision: 'approve' })).rejects.toThrow('Nothing is waiting');
     expect(record).not.toHaveBeenCalled();
   });
 });

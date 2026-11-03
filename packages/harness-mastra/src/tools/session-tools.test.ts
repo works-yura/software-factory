@@ -5,6 +5,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '@factory/testing';
+import { routeExternalSessions } from '@factory/integrations';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { fakeRouteAuth } from '@factory/http/testing';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
@@ -1348,5 +1349,91 @@ describe('session tools on a turn nobody signed in started', () => {
     await expect(answer(env.scope)).rejects.toThrow('Only a person can answer an approval');
     // A person's turn gets past the gate and fails on the lookup instead.
     await expect(answer({ ...env.scope, interactive: true })).rejects.toThrow('was not found in this Factory');
+  });
+});
+
+describe('factory session tools on a Factory whose sessions another harness runs', () => {
+  /** A session another harness (Claude Code) runs, as the harness contract drives it. */
+  function harnessSession(sessionId: string) {
+    return {
+      thread: { getId: () => sessionId, requireId: () => sessionId },
+      stream: { isActive: () => true },
+      run: { isRunning: () => true },
+      subscribe: vi.fn(() => () => {}),
+      sendSignal: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1', action: 'wake' }) })),
+    };
+  }
+
+  it("refuses to switch a Claude Code session's model instead of reporting a switch that does nothing", async () => {
+    const env = await setup();
+    const { controller } = (await env.deps.messaging()) as { controller: object };
+    routeExternalSessions(controller, async sessionId =>
+      sessionId === env.scope.sessionId ? { sendNotificationSignal: vi.fn() } : undefined,
+    );
+    await expect(env.switchModel({ sessionId: env.scope.sessionId, modelId: 'openai/gpt-5' })).rejects.toThrow(
+      'runs on Claude Code',
+    );
+  });
+
+  it('kicks off a role through the harness that owns the prepared session, not the controller', async () => {
+    const env = await setup();
+    const { item } = await env.seed.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'someone-else',
+      factoryProjectId: env.scope.factoryProjectId,
+      input: { title: 'Speed up the nightly build', stages: ['intake'], metadata: {} },
+    });
+    const sessions = new Map<string, ReturnType<typeof harnessSession>>();
+    const { controller } = (await env.deps.messaging()) as { controller: object };
+    routeExternalSessions(controller, async sessionId => {
+      if (sessionId === env.scope.sessionId) return undefined;
+      const session = sessions.get(sessionId) ?? harnessSession(sessionId);
+      sessions.set(sessionId, session);
+      return { sendNotificationSignal: vi.fn(), agentSession: session };
+    });
+
+    const result = (await env.start({ prompt: 'Profile the build.', workItem: item.id, role: 'work' })) as {
+      sessionId: string;
+    };
+    const kicked = sessions.get(result.sessionId)!;
+    expect(kicked.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'user', contents: 'Profile the build.' }),
+      expect.objectContaining({ requireDelivery: true }),
+    );
+    // No Mastra session took the kickoff.
+    for (const { session } of env.created) expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("starts a side session of a Claude Code Factory on Claude Code, with the origin and the caller's prompt", async () => {
+    const env = await setup();
+    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { harness: 'claude-code' } });
+    const session = harnessSession('side');
+    const createHarnessSession = vi.fn(async () => session as never);
+    const tools = createFactorySessionTools(env.scope, { ...env.deps, createHarnessSession });
+    const start = (input: Record<string, unknown>) =>
+      (tools.factory_start_session as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }).execute(
+        input,
+        {},
+      );
+
+    await expect(start({ prompt: 'Find the flaky test.', model: 'openai/gpt-5' })).rejects.toThrow('runs on Claude Code');
+    const result = (await start({ prompt: 'Find the flaky test.' })) as { mode: string; sessionId: string; title: string };
+
+    expect(result).toMatchObject({ mode: 'side', title: 'Find the flaky test.' });
+    expect(createHarnessSession).toHaveBeenCalledWith({
+      harness: 'claude-code',
+      sessionId: result.sessionId,
+      resourceId: env.scope.factoryProjectId,
+      title: 'Find the flaky test.',
+    });
+    await expect(env.sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({
+      originSessionId: env.scope.sessionId,
+      userId: 'user-1',
+    });
+    expect(session.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'Find the flaky test.' }),
+      expect.objectContaining({ requireDelivery: true }),
+    );
+    expect(env.created).toEqual([]);
   });
 });

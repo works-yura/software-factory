@@ -17,6 +17,8 @@ vi.mock('@factory/credentials', async importOriginal => ({
 }));
 
 import {
+  abortSessionRun,
+  isSessionRunning,
   prepareSessionRunContext,
   resolveSubscriptionNotificationTarget,
   resolveSubscriptionSession,
@@ -124,6 +126,39 @@ describe('resolveSubscriptionNotificationTarget', () => {
     await expect(resolveSubscriptionNotificationTarget(controller as never, row(), { label: 'GitHub' })).resolves.toBeUndefined();
     expect(controller.queryThreadById).toHaveBeenCalledWith({ threadId: 'thread-1' });
     expect(controller.getSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('run state on whichever harness runs the session', () => {
+  it('reads and stops a run the other harness holds, without asking the controller', async () => {
+    let running = true;
+    const external = {
+      sendNotificationSignal: vi.fn(),
+      isRunning: () => running,
+      abort: vi.fn(() => {
+        running = false;
+      }),
+    };
+    const controller = { getSession: vi.fn() };
+    routeExternalSessions(controller, async sessionId => (sessionId === 'claude-1' ? external : undefined));
+
+    await expect(isSessionRunning(controller, 'claude-1')).resolves.toBe(true);
+    await expect(abortSessionRun(controller, 'claude-1')).resolves.toBe(true);
+    expect(external.abort).toHaveBeenCalledTimes(1);
+    await expect(isSessionRunning(controller, 'claude-1')).resolves.toBe(false);
+    await expect(abortSessionRun(controller, 'claude-1')).resolves.toBe(false);
+    expect(controller.getSession).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the controller's live session", async () => {
+    const live = { stream: { isActive: () => true }, abort: vi.fn() };
+    const controller = { getSession: vi.fn(async (id: string) => (id === 'mastra-1' ? live : undefined)) };
+    routeExternalSessions(controller, async () => undefined);
+
+    await expect(isSessionRunning(controller, 'mastra-1')).resolves.toBe(true);
+    await expect(isSessionRunning(controller, 'gone')).resolves.toBe(false);
+    await expect(abortSessionRun(controller, 'mastra-1')).resolves.toBe(true);
+    expect(live.abort).toHaveBeenCalledTimes(1);
   });
 });
 

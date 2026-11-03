@@ -18,7 +18,6 @@
  * and the storage domains those capabilities require.
  */
 
-import { randomUUID } from 'node:crypto';
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
@@ -57,7 +56,6 @@ import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { boardForWorkItem, namesRepository, openChangeRequests } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
-import { ClaudeCodeRunContext } from '@factory/harness-claude-code';
 import { createRoutingHarness } from '@factory/harness';
 import { createFactorySessionTokenSigner } from '@factory/mcp';
 import {
@@ -74,6 +72,7 @@ import {
   claudeLiveSession,
   claudeSupervisorProjectId,
   claudeFactoryToolName,
+  claudeWorkerSession,
   observeClaudeToolResults,
   CLAUDE_THREAD_SETTINGS,
   createFactoryToolPermissions,
@@ -104,7 +103,13 @@ import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/inte
 import { buildPlatformConnectRoutes } from '@factory/integrations';
 import { PlatformGithubIntegration } from '@factory/integration-github';
 import { PlatformGitLabIntegration } from '@factory/integration-gitlab';
-import { createSessionAsRowOwner, prepareSessionRunContext, routeExternalSessions } from '@factory/integrations';
+import {
+  abortSessionRun,
+  createSessionAsRowOwner,
+  isSessionRunning,
+  prepareSessionRunContext,
+  routeExternalSessions,
+} from '@factory/integrations';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from '@factory/mcp';
 import type { FactoryMcpConfig } from '@factory/mcp';
 import { resolveDeploymentModelProviders } from '@factory/api';
@@ -979,6 +984,8 @@ export class MastraFactory {
     const workItemsReady = storage.isDomainReady('work-items');
     // Set once the Claude Code harness exists (below): a deleted session's CLI config dir goes with it.
     let removeClaudeSessionConfig: ((sessionId: string) => Promise<void>) | undefined;
+    // Set with it too: a side session of a Claude Code Factory is a Claude Code session.
+    let createClaudeSideSession: FactoryToolDependencies['createHarnessSession'];
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
@@ -1026,8 +1033,8 @@ export class MastraFactory {
           abortSession: async (binding): Promise<void> => {
             const controller = this.#prepared?.base.controller;
             if (!controller) return;
-            const session = await controller.getSession(binding.sessionId);
-            if (session?.stream.isActive()) session.abort();
+            // Whichever harness runs the seat: a Claude Code session stops its CLI run.
+            await abortSessionRun(controller, binding.sessionId);
           },
           // Session retirement supersedes the older direct sandbox release: it
           // invalidates the session and stops/destroys its sandbox.
@@ -1187,6 +1194,7 @@ export class MastraFactory {
           : {}),
       },
       startCoordinator: () => this.#startCoordinator,
+      createHarnessSession: async input => createClaudeSideSession?.(input),
       messaging: factoryMessaging,
     };
     // Proactive environment builds exist only when the sandbox can build
@@ -1744,6 +1752,16 @@ export class MastraFactory {
       });
       this.#claudeSessionUi.setSessionResolver(sessionId => supervisorSessions.resolve(sessionId));
       removeClaudeSessionConfig = sessionId => claudeCode.removeSessionConfig(sessionId);
+      createClaudeSideSession = async ({ harness, sessionId, resourceId, title }) => {
+        if (harness !== 'claude-code') return undefined;
+        // The Factory's thread convention, as a card's or a chat's Claude Code session: the thread is the session id.
+        const session =
+          (await claudeCode.harness.getSession(sessionId)) ??
+          (await claudeCode.harness.createSession({ sessionId, threadId: sessionId, resourceId }));
+        await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.sessionId, value: sessionId });
+        await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.title, value: title });
+        return session;
+      };
       // The Factory chat is shared by the Factory's organization: its next turn runs as whoever wrote or answered.
       this.#claudeSessionUi.setPersonInputHook(async (c, session) => {
         if (!claudeSupervisorProjectId(session.id)) return;
@@ -1888,9 +1906,7 @@ export class MastraFactory {
                       const mastra = await prepared.base.controller.getSession(id, context);
                       if (mastra) return mastra;
                       const claude = await claudeCode?.harness.getSession(id);
-                      if (!claude) return undefined;
-                      const send = (input: { content: string }) => claude.sendMessage({ content: input.content });
-                      return { sendMessage: send, queueMessage: send };
+                      return claude ? claudeWorkerSession(claude) : undefined;
                     },
                   },
                   sessionId,
@@ -2083,9 +2099,10 @@ export class MastraFactory {
                     projects: factoryProjectsStorage,
                     workItems: workItemsStorage,
                     boards,
+                    // Whichever harness runs the session: a Claude Code worker is not the controller's.
                     isRunning: async sessionId => {
-                      const session = await this.#prepared?.base.controller.getSession(sessionId);
-                      return session?.stream.isActive() ?? false;
+                      const controller = this.#prepared?.base.controller;
+                      return controller ? isSessionRunning(controller, sessionId) : false;
                     },
                     lastActivity: async threadId => {
                       const thread = await this.#prepared?.base.controller.queryThreadById({ threadId });
@@ -2168,10 +2185,8 @@ export class MastraFactory {
                               // A worker on Claude Code takes the message as a person's input; a Mastra one through its controller.
                               const claudeSession = await claudeCode?.harness.getSession(sessionId);
                               if (claudeSession) {
-                                await claudeSession.sendSignal(
-                                  { id: randomUUID(), type: 'user', tagName: 'user', contents: message },
-                                  { requestContext: new ClaudeCodeRunContext() },
-                                ).accepted;
+                                const worker = claudeWorkerSession(claudeSession);
+                                await (delivery === 'queue' ? worker.queueMessage : worker.sendMessage)({ content: message });
                                 return;
                               }
                               const controller = this.#prepared?.base.controller;
@@ -2441,6 +2456,14 @@ export class MastraFactory {
         return {
           sendNotificationSignal: (input, options) =>
             session.sendNotificationSignal(input, { ifIdle: { behavior: options?.ifIdle?.behavior ?? 'wake' } }),
+          isRunning: () => session.run.isRunning(),
+          abort: () => session.abort(),
+          agentSession: session,
+          answerToolApproval: async ({ toolCallId, approved }) => {
+            if (session.pendingPermission?.toolCallId !== toolCallId) return false;
+            await session.respondToToolApproval({ toolCallId, approved });
+            return true;
+          },
         };
       });
     }
