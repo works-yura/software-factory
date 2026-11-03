@@ -73,6 +73,8 @@ import {
   createClaudeSupervisorSessions,
   claudeLiveSession,
   claudeSupervisorProjectId,
+  claudeFactoryToolName,
+  observeClaudeToolResults,
   CLAUDE_THREAD_SETTINGS,
   createFactoryToolPermissions,
   observeClaudeThreadTitle,
@@ -1329,6 +1331,8 @@ export class MastraFactory {
           boards,
           loadMemorySettings,
           factoryThinkingLevel: factoryProjectId => readFactoryThinkingLevel(factoryProjectsStorage, factoryProjectId),
+          // A Claude Code session's transcript names the Factory's tools as its MCP client does.
+          bareToolName: claudeFactoryToolName,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -1539,6 +1543,39 @@ export class MastraFactory {
         messageSession,
       });
 
+    // After each tool call of either harness: a Mastra session's through the controller, a Claude Code
+    // session's after its MCP call (agent action audit, PR auto-subscription).
+    const postToolObserver = async (toolContext: IntegrationPostToolContext) => {
+      const requestContext = (toolContext.context as { requestContext?: RequestContext } | undefined)
+        ?.requestContext;
+      if (requestContext) {
+        await observeAgentGitAction({
+          audit: auditDomain,
+          toolContext: { ...toolContext, context: requestContext },
+          resolveRepositorySlugs: async sessionId => {
+            for (const provider of sourceControlToolProviders) {
+              const session = await provider.storage.sessions.getBySessionId(sessionId);
+              if (!session) continue;
+              return environmentSlugs(
+                await resolveSessionRepositories({ sourceControl: provider.storage, session }),
+              );
+            }
+            return [];
+          },
+        });
+      }
+      await Promise.all(
+        integrations.map(async integration => {
+          if (!integration.postToolObserver) return;
+          try {
+            await integration.postToolObserver({ toolContext, requestContext });
+          } catch (error) {
+            console.warn(`[factory] Integration '${integration.id}' post-tool observer failed:`, error);
+          }
+        }),
+      );
+    };
+
     // Claude Code factories: their sessions live in the Claude harness, reach the
     // Factory's tools over MCP with per-turn session tokens, and show in the chat
     // through `claudeSessionUi`. Everything else stays on Mastra.
@@ -1659,6 +1696,19 @@ export class MastraFactory {
                 });
               },
             });
+            // The board's tool-result rules run on its completed Factory tool calls, as on a Mastra run's.
+            if (factoryProcessor) {
+              observeClaudeToolResults(channel, async () => {
+                const row = await sourceControlSessions.getBySessionId(session.id);
+                if (!row?.factoryProjectId) return;
+                const binding = await workItemsStorage.findActiveRunBindingForSession({
+                  orgId: row.orgId,
+                  factoryProjectId: row.factoryProjectId,
+                  sessionId: session.id,
+                });
+                if (binding) await factoryProcessor.reconcileBinding(binding);
+              });
+            }
             // A permission request reaches whoever follows the session, as a Mastra session's approval does.
             channel.subscribe(event => {
               if (event.type !== 'tool_approval_required') return;
@@ -2066,36 +2116,7 @@ export class MastraFactory {
               extraTools: ({ requestContext }: { requestContext: RequestContext }) => sessionExtraTools(requestContext),
             }
           : {}),
-        postToolObserver: async (toolContext: IntegrationPostToolContext) => {
-          const requestContext = (toolContext.context as { requestContext?: RequestContext } | undefined)
-            ?.requestContext;
-          if (requestContext) {
-            await observeAgentGitAction({
-              audit: auditDomain,
-              toolContext: { ...toolContext, context: requestContext },
-              resolveRepositorySlugs: async sessionId => {
-                for (const provider of sourceControlToolProviders) {
-                  const session = await provider.storage.sessions.getBySessionId(sessionId);
-                  if (!session) continue;
-                  return environmentSlugs(
-                    await resolveSessionRepositories({ sourceControl: provider.storage, session }),
-                  );
-                }
-                return [];
-              },
-            });
-          }
-          await Promise.all(
-            integrations.map(async integration => {
-              if (!integration.postToolObserver) return;
-              try {
-                await integration.postToolObserver({ toolContext, requestContext });
-              } catch (error) {
-                console.warn(`[factory] Integration '${integration.id}' post-tool observer failed:`, error);
-              }
-            }),
-          );
-        },
+        postToolObserver,
         ...(pubsub ? { pubsub, crossProcessPubSub: true } : {}),
         buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
           // Public `/auth/*` routes (login/callback/logout/me). Folded in as
@@ -2121,6 +2142,7 @@ export class MastraFactory {
                           createClaudeSessionTools(scope, {
                             sessionTools: requestContext => sessionExtraTools(requestContext),
                             sandboxFor: claudeSessionSandbox,
+                            observe: postToolObserver,
                           }) as Promise<Record<string, Tool<any, any, any, any>>>,
                       }
                     : {}),
@@ -2135,6 +2157,7 @@ export class MastraFactory {
                             // The CLI runs in the session's checkout on this host; git for the test recorder runs there too.
                             checkoutFor: async sessionId =>
                               ((await claudeCode?.harness.getSession(sessionId)) as { cwd?: string } | undefined)?.cwd,
+                            observe: postToolObserver,
                           }),
                         // The Factory chat on Claude Code: the supervisor's tools, acting as the person behind the turn.
                         createSupervisor: scope => {

@@ -169,14 +169,16 @@ function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
     const toolCallId = invocation.toolCallId;
     const toolName = invocation.toolName ?? invocation.name;
     if (typeof toolCallId !== 'string' || typeof toolName !== 'string') continue;
+    // A Claude Code transcript settles a failed call as a `result` marked `isError`.
+    const failed = state === 'error' || invocation.isError === true;
     completed.push({
       assistantMessageId: message.id,
       messageCreatedAt: createdAt,
       toolCallId,
       toolName: toolName.slice(0, 256),
       input: boundedResult(invocation.args ?? {}),
-      status: state === 'error' ? 'error' : 'success',
-      value: state === 'error' ? boundedError(invocation.result ?? invocation.error) : boundedResult(invocation.result),
+      status: failed ? 'error' : 'success',
+      value: failed ? boundedError(invocation.result ?? invocation.error) : boundedResult(invocation.result),
     });
   }
   return completed;
@@ -358,6 +360,11 @@ export interface FactoryPhaseStateProcessorOptions {
     toolResult: FactoryRuleJsonValue;
     status: 'success' | 'error';
   }) => Promise<void>;
+  /**
+   * The tool name a board rule knows, for a call stored under another name: a Claude Code
+   * session's transcript names the Factory's tools as its MCP client does (`mcp__factory__<tool>`).
+   */
+  bareToolName?: (toolName: string) => string;
 }
 
 export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
@@ -568,7 +575,10 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const item = preloadedItem ?? (await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId }));
     if (!itemInRuleStage(await this.boards.load(binding), item)) return;
     for (const message of messages) {
-      for (const toolResult of completedToolResults(message)) {
+      for (const stored of completedToolResults(message)) {
+        const toolResult = this.options.bareToolName
+          ? { ...stored, toolName: this.options.bareToolName(stored.toolName) }
+          : stored;
         if (toolCallIds && !toolCallIds.has(toolResult.toolCallId)) continue;
         try {
           await this.options.recordPullRequestProvenance?.({

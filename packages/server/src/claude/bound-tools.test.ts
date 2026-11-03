@@ -8,7 +8,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkItemsStorage } from '@factory/store';
 import { createBoardRegistry, createFactoryStorageForTests } from '@factory/testing';
 
-import { createClaudeBoundTools, createClaudeSessionTools, repositoryCheckout } from './bound-tools.ts';
+import {
+  boundRunRequestContext,
+  createClaudeBoundTools,
+  createClaudeSessionTools,
+  repositoryCheckout,
+} from './bound-tools.ts';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 const TEST_PATH = 'test/profile_test.js';
@@ -190,6 +195,49 @@ describe('Claude Code session tools', () => {
     });
     // A fresh call id each time: the inner tools key idempotency on it.
     expect((seen[1] as { toolCallId: string }).toolCallId).not.toBe((seen[0] as { toolCallId: string }).toolCallId);
+  });
+
+  it('names the session in the controller entry, as the subscription tools read it from a Mastra run', () => {
+    const controller = boundRunRequestContext(scope as never).get('controller') as {
+      session?: { id: string; ownerId: string };
+    };
+    expect(controller.session).toEqual({ id: scope.sessionId, ownerId: scope.userId });
+  });
+
+  it("runs the post-tool observers after each call, as a Mastra session's controller does", async () => {
+    const observed: Array<Record<string, unknown>> = [];
+    const tools = await createClaudeSessionTools(scope as never, {
+      sessionTools: async () => ({
+        source_control_create_change_request: {
+          id: 'source_control_create_change_request',
+          description: 'Open a PR.',
+          execute: async (input: { fail?: boolean }) => {
+            if (input.fail) throw new Error('refused');
+            return { url: 'https://github.com/acme/repo/pull/7' };
+          },
+        },
+      }),
+      sandboxFor: async () => undefined,
+      observe: async toolContext => {
+        observed.push(toolContext as never);
+        // An observer failing never fails the call.
+        throw new Error('observer down');
+      },
+    });
+    const tool = tools.source_control_create_change_request!;
+    await expect(tool.execute!({ title: 'Fix' } as never, {} as never)).resolves.toEqual({
+      url: 'https://github.com/acme/repo/pull/7',
+    });
+    await expect(tool.execute!({ fail: true } as never, {} as never)).rejects.toThrow('refused');
+    expect(observed).toHaveLength(2);
+    expect(observed[0]).toMatchObject({
+      toolName: 'source_control_create_change_request',
+      input: { title: 'Fix' },
+      output: { url: 'https://github.com/acme/repo/pull/7' },
+    });
+    const requestContext = (observed[0]!.context as { requestContext: { get(key: string): unknown } }).requestContext;
+    expect((requestContext.get('controller') as { sessionId: string }).sessionId).toBe(scope.sessionId);
+    expect(observed[1]).toMatchObject({ toolName: 'source_control_create_change_request', error: expect.any(Error) });
   });
 
   it('passes no workspace when the session has no sandbox, so the tool says so', async () => {
