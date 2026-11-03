@@ -829,7 +829,7 @@ describe('Factory MCP for a bound agent session (session tokens)', () => {
   const signer = createFactorySessionTokenSigner('test-secret');
 
   /** A card run bound to `session-claude`, the way the start path binds one. */
-  async function boundSession(seed: Awaited<ReturnType<typeof setup>>) {
+  async function boundSession(seed: Awaited<ReturnType<typeof setup>>, { interactive = false } = {}) {
     await seed.createSessions([{ sessionId: 'session-claude', userId: 'alice', visibility: 'org' }]);
     await seed.workItems.prepareRunStart({
       orgId: 'org-1',
@@ -855,6 +855,7 @@ describe('Factory MCP for a bound agent session (session tokens)', () => {
       sessionId: 'session-claude',
       threadId: 'session-claude',
       resourceId: seed.project.id,
+      ...(interactive ? { interactive: true } : {}),
     });
   }
 
@@ -914,6 +915,15 @@ describe('Factory MCP for a bound agent session (session tokens)', () => {
 
     now = 1_500;
     expect(clocked.verify(token)).toBeNull();
+  });
+
+  it("gives the turn a signed-in person started what only a person may do, as an HTTP turn of a Mastra session", async () => {
+    const createBound = vi.fn(() => ({}));
+    const seed = await setup({ sessionTokens: signer, createBound });
+    const token = await boundSession(seed, { interactive: true });
+    expect((await sessionRequest(seed.url, 'tools/list', {}, token)).status).toBe(200);
+    expect(createBound).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-claude', interactive: true }));
+    expect(signer.verify(token)).toMatchObject({ interactive: true });
   });
 
   it('serves a bound session its worker-scoped tools, plus the bound-only ones', async () => {

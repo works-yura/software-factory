@@ -127,6 +127,18 @@ export interface ClaudeFactoryHarnessOptions {
     resourceId: string;
   }) => Promise<string | undefined>;
   /**
+   * The `factory-sessions` signal a Mastra run sees (`FactorySessionsStateProcessor`): the side sessions
+   * it started and the work items it follows, or who it reports to; `undefined` when there is nothing to show.
+   */
+  sessionsFor?: (session: {
+    orgId: string;
+    factoryProjectId: string;
+    userId: string;
+    sessionId: string;
+    threadId: string;
+    resourceId: string;
+  }) => Promise<string | undefined>;
+  /**
    * Where the Factory chats (supervisor sessions) on Claude Code get their
    * private empty working folders; `<storeDir>-supervisor`, or one under the
    * OS temp dir, by default.
@@ -267,6 +279,10 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
             const tenant = await tenantOf(session);
             const mcp = options.mcp!;
             // Minted per turn and only for this session's own coordinates; it expires on its own.
+            // A turn a signed-in person started (their message or answer) is interactive, as a Mastra turn over HTTP;
+            // the mark is taken by the turn that carries it.
+            const interactive = (await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.personTurn })) === true;
+            if (interactive) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.personTurn, value: false });
             // The Factory chat's token is a supervisor token: its tools, acting as the person behind the turn.
             const token = mcp.tokens.sign({
               orgId: tenant.orgId,
@@ -275,6 +291,7 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
               threadId: session.thread.requireId(),
               resourceId: session.resourceId ?? (tenant.supervisor ? session.id : tenant.factoryProjectId),
               ...(tenant.supervisor ? { scope: 'supervisor' as const, userId: tenant.userId } : {}),
+              ...(interactive ? { interactive: true } : {}),
             });
             return {
               mcpServers: {
@@ -319,6 +336,18 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       const signals = environment
         ? [`<factory-environment>\n${renderSessionEnvironment(environment)}\n</factory-environment>`]
         : [];
+      if (options.sessionsFor && !claudeSupervisorProjectId(session.id) && session.thread.getId()) {
+        const tenant = await tenantOf(session);
+        const sessions = await options.sessionsFor({
+          orgId: tenant.orgId,
+          factoryProjectId: tenant.factoryProjectId,
+          userId: tenant.userId,
+          sessionId: session.id,
+          threadId: session.thread.requireId(),
+          resourceId: session.resourceId ?? tenant.factoryProjectId,
+        });
+        if (sessions) signals.push(`<factory-sessions>\n${sessions}\n</factory-sessions>`);
+      }
       if (options.phaseFor && !claudeSupervisorProjectId(session.id) && session.thread.getId()) {
         const tenant = await tenantOf(session);
         const phase = await options.phaseFor({

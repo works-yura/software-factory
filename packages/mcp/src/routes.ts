@@ -321,7 +321,7 @@ export async function resolveSessionTokenScope(
         resourceId: claims.resourceId,
         threadId: claims.threadId,
         kind: 'supervisor',
-        interactive: false,
+        interactive: claims.interactive === true,
       },
     };
   }
@@ -349,8 +349,8 @@ export async function resolveSessionTokenScope(
       resourceId: claims.resourceId,
       threadId: claims.threadId,
       kind: worker ? 'worker' : 'user',
-      // The token cannot tell who started the turn, so nothing only a person may do.
-      interactive: false,
+      // Only a turn a signed-in person started may do what only a person may do; the token says which.
+      interactive: claims.interactive === true,
     },
   };
 }

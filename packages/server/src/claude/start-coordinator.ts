@@ -1,4 +1,5 @@
-import { externallyAuthoredWorkItem } from '@factory/core';
+import { autoApprovedExitTool, externallyAuthoredWorkItem } from '@factory/core';
+import type { BoardRegistry } from '@factory/core';
 import type { ClaudeCodeHarness, ClaudeCodeSession, ClaudePermissionMode } from '@factory/harness-claude-code';
 import {
   commitRunStart,
@@ -8,8 +9,9 @@ import {
   UntrustedSharedSessionError,
 } from '@factory/harness-mastra';
 import type { FactoryStartPreparedResult, FactoryStartRequest } from '@factory/harness-mastra';
-import type { FactoryTransitionService } from '@factory/runtime';
-import type { FactoryProjectsStorage, SourceControlStorageHandle, WorkItemsStorage } from '@factory/store';
+import { toBoardSource } from '@factory/runtime';
+import type { FactoryTransitionService, ProjectBoardSource } from '@factory/runtime';
+import type { FactoryProjectsStorage, SourceControlStorageHandle, WorkItemRow, WorkItemsStorage } from '@factory/store';
 
 /** Thread settings a Claude Code session carries, read by the chat and by later starts. */
 export const CLAUDE_THREAD_SETTINGS = {
@@ -23,6 +25,8 @@ export const CLAUDE_THREAD_SETTINGS = {
   actorUserId: 'factoryActorUserId',
   /** The checkout is a pull or merge request someone outside wrote: its turns read no settings file from it. */
   untrustedCheckout: 'factoryUntrustedCheckout',
+  /** A signed-in person's message or answer waits for the next turn, which is then theirs (interactive). */
+  personTurn: 'factoryPersonTurn',
 } as const;
 
 export interface ClaudeStartCoordinatorOptions {
@@ -37,6 +41,11 @@ export interface ClaudeStartCoordinatorOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   /** The mode a session leaves planning in once its plan is approved; `acceptEdits` by default. */
   approvedPermissionMode?: ClaudePermissionMode;
+  /**
+   * The boards, for the card phase's own plan auto-approval (`autoApprovedExitTool`), as the dispatcher
+   * decides it for a Mastra run. Without them only the project's `autoApprovePlans` counts.
+   */
+  boards?: BoardRegistry | ProjectBoardSource;
 }
 
 /**
@@ -112,7 +121,7 @@ export class ClaudeStartCoordinator {
     if (untrustedCheckout) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout, value: true });
 
     const project = await projects.get({ orgId: request.orgId, id: request.factoryProjectId });
-    await this.#applyRoleMode(session, request, project?.autoApprovePlans === true);
+    await this.#applyRoleMode(session, request, await this.#plansAreAutoApproved(request, storedItem, project));
 
     return commitRunStart({
       storage,
@@ -123,6 +132,24 @@ export class ClaudeStartCoordinator {
       resourceId,
       onPrepared: item => session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.workItemId, value: item.id }),
     });
+  }
+
+  /**
+   * The dispatcher's `#plansAreAutoApproved`: the card's phase ends with an auto-approved `submit_plan`,
+   * or the project approves plans itself. The phase is the one the start moves the card into.
+   */
+  async #plansAreAutoApproved(
+    request: FactoryStartRequest,
+    storedItem: WorkItemRow | null,
+    project: { autoApprovePlans?: boolean | null } | null,
+  ): Promise<boolean> {
+    const boards = this.#options.boards;
+    if (storedItem && boards) {
+      const item = request.destinationStage ? { ...storedItem, stages: [request.destinationStage] } : storedItem;
+      const registry = await toBoardSource(boards).load({ orgId: request.orgId, factoryProjectId: request.factoryProjectId });
+      if (autoApprovedExitTool(registry, item) === 'submit_plan') return true;
+    }
+    return project?.autoApprovePlans === true;
   }
 
   async #applyRoleMode(

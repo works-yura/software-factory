@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
-import type { SendNotificationSignalInput } from '@mastra/core/notifications';
+import type { NotificationsStorage, SendNotificationSignalInput } from '@mastra/core/notifications';
 
-import { createSessionAsRowOwner, externalSessionFor } from '@factory/integrations';
+import { createSessionAsRowOwner, externalSessionFor, isSessionRunning } from '@factory/integrations';
 import type { SourceControlSessionLookup } from '@factory/session';
 import { listFactorySessionThreads, sessionMemoryResourceId, sessionStampCounts } from '@factory/session';
 import type { FactorySessionOwnership, SessionRunBindings } from '@factory/session';
@@ -89,13 +89,27 @@ export async function deliverFactorySessionNotification({
   // start a second agent there. A stage notice keeps it asleep, as `onlyIfLive` keeps an offline Mastra one.
   const external = await externalSessionFor(controller, target.sessionId);
   if (external) {
-    const result = await external.sendNotificationSignal(
-      { ...notification, source: FACTORY_SESSION_NOTIFICATION_SOURCE },
-      onlyIfLive ? { ifIdle: { behavior: 'persist' } } : {},
-    );
+    const input = { ...notification, source: FACTORY_SESSION_NOTIFICATION_SOURCE };
+    // That harness keeps no notification record, so the record a Mastra delivery writes is written here: the
+    // reports, the message rate limit and the side-session listing read the thread's notifications from it.
+    const notifications = await notificationStore(controller);
+    const record = await notifications?.createNotification({
+      ...input,
+      threadId: target.threadId,
+      resourceId: ownerResourceId,
+    });
+    const result = await external.sendNotificationSignal(input, onlyIfLive ? { ifIdle: { behavior: 'persist' } } : {});
     await Promise.all([result.persisted, result.accepted].filter(Boolean));
-    // That harness keeps no notification record; the delivery is named for this call.
-    return { delivered: onlyIfLive ? 'persisted' : 'woken', notificationId: randomUUID() };
+    // The session holds it now, read on its next turn if not this one: nothing may deliver it again.
+    if (record) {
+      await notifications!.updateNotification({
+        id: record.id,
+        threadId: target.threadId,
+        status: 'delivered',
+        deliveryReason: 'external-session',
+      });
+    }
+    return { delivered: onlyIfLive ? 'persisted' : 'woken', notificationId: record?.id ?? randomUUID() };
   }
 
   // No request context: without a user the controller's access check is a no-op,
@@ -142,6 +156,17 @@ export async function deliverFactorySessionNotification({
   }
 }
 
+/** The notifications store of the controller's Mastra, where a Mastra delivery records its notices. */
+async function notificationStore(
+  controller: object,
+): Promise<Pick<NotificationsStorage, 'createNotification' | 'updateNotification'> | undefined> {
+  const mastra = (controller as { getMastra?: () => { getStorage?: () => unknown } | undefined }).getMastra?.();
+  const storage = mastra?.getStorage?.() as
+    | { getStore(name: 'notifications'): Promise<NotificationsStorage | undefined> }
+    | undefined;
+  return (await storage?.getStore('notifications')) ?? undefined;
+}
+
 export interface FactorySessionActivity {
   /** Whether the session's agent is mid-run in this process. */
   running: boolean;
@@ -155,13 +180,14 @@ export async function sessionActivity(
   sessionId: string,
   threadId: string,
 ): Promise<FactorySessionActivity> {
-  const [live, thread] = await Promise.all([
-    controller.getSession(sessionId),
+  // Whichever harness runs it: a Claude Code worker is not the controller's.
+  const [running, thread] = await Promise.all([
+    isSessionRunning(controller, sessionId),
     controller.queryThreadById({ threadId }),
   ]);
   const updatedAt = thread?.updatedAt ? new Date(thread.updatedAt) : null;
   return {
-    running: live?.stream.isActive() ?? false,
+    running,
     lastActivityAt: updatedAt && Number.isFinite(updatedAt.getTime()) ? updatedAt.toISOString() : null,
   };
 }

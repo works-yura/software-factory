@@ -5,8 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { routeExternalSessions } from '@factory/integrations';
 import type { SourceControlSession } from '@factory/store';
-import { deliverFactorySessionNotification, resolveSessionThread } from './deliver.ts';
+import { deliverFactorySessionNotification, resolveSessionThread, sessionActivity } from './deliver.ts';
 import type { FactoryDeliveryController } from './deliver.ts';
+import { hasFinalReport } from './reports.ts';
 
 const ROW = {
   sessionId: 'session-b',
@@ -166,6 +167,54 @@ describe('deliverFactorySessionNotification', () => {
     // A stage notice leaves it asleep, as it skips an offline Mastra session.
     await expect(deliver({ onlyIfLive: true })).resolves.toMatchObject({ delivered: 'persisted' });
     expect(external.sendNotificationSignal).toHaveBeenLastCalledWith(expect.anything(), { ifIdle: { behavior: 'persist' } });
+  });
+
+  it("records the notice another harness took in the thread's notifications, as a Mastra delivery does", async () => {
+    const { controller, deliver } = setup({ offline: true });
+    const store = new InMemoryStore();
+    const notifications = (await store.getStore('notifications'))!;
+    Object.assign(controller, { getMastra: () => ({ getStorage: () => store }) });
+    const external = { sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve() })) };
+    routeExternalSessions(controller, async () => external);
+    const since = new Date(Date.now() - 1000);
+
+    const report = { kind: 'done', summary: 'Finished.', priority: 'high' as const, attributes: { 'from-session': 'session-a' } };
+    const result = await deliverFactorySessionNotification({
+      controller: controller as unknown as FactoryDeliveryController,
+      sessions: { getBySessionId: vi.fn(async () => ROW) },
+      runs: RUNS,
+      target: { sessionId: 'session-b', threadId: 'thread-stored' },
+      notification: report,
+    });
+
+    const [record] = await notifications.listNotifications({ threadId: 'thread-stored' });
+    expect(result).toEqual({ delivered: 'woken', notificationId: record!.id });
+    expect(record).toMatchObject({
+      source: 'factory-session',
+      kind: 'done',
+      summary: 'Finished.',
+      resourceId: 'project-1',
+      status: 'delivered',
+      attributes: { 'from-session': 'session-a' },
+    });
+    // The run-end backstop now sees the final report and sends no second one.
+    await expect(
+      hasFinalReport(notifications, {
+        senderSessionId: 'session-a',
+        recipientThreadId: 'thread-stored',
+        since,
+        kinds: ['done'],
+      }),
+    ).resolves.toBe(true);
+    await expect(deliver()).resolves.toMatchObject({ delivered: 'woken' });
+  });
+
+  it('reads a worker another harness runs as running, though the controller holds no session for it', async () => {
+    const { controller } = setup({ offline: true });
+    routeExternalSessions(controller, async () => ({ sendNotificationSignal: vi.fn(), isRunning: () => true }));
+    await expect(sessionActivity(controller as never, 'session-b', 'thread-stored')).resolves.toMatchObject({
+      running: true,
+    });
   });
 
   it('skips a missing thread without creating or sending', async () => {

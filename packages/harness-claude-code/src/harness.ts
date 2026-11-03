@@ -37,6 +37,12 @@ export interface ClaudeCodeHarness extends AgentHarness {
   getSession(sessionId: string): Promise<ClaudeCodeSession | undefined>;
   /** Creates the session, or returns the one already stored under this id. */
   createSession(input: { sessionId: string; threadId: string; resourceId?: string }): Promise<ClaudeCodeSession>;
+  /**
+   * Tears a session down, as the controller's `deleteSession` does a Mastra
+   * one: stops its run and forgets it in this process; what it persisted stays.
+   * A no-op for a session it does not hold.
+   */
+  deleteSession(sessionId: string): Promise<void>;
 }
 
 function claudeSession(session: AgentSession): ClaudeCodeSession {
@@ -94,6 +100,13 @@ export function createClaudeCodeHarness(config: ClaudeCodeHarnessConfig): Claude
       };
       await config.store.put(record);
       return (await load(sessionId))!;
+    },
+
+    async deleteSession(sessionId) {
+      const session = await load(sessionId);
+      if (!session) return;
+      session.abort();
+      sessions.delete(sessionId);
     },
 
     listActiveThreadRuns() {

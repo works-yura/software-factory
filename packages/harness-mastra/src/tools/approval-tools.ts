@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { externalSessionFor } from '@factory/integrations';
 import type { IntegrationTools } from '@factory/integrations';
 import type { SourceControlSessionLookup } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
@@ -80,21 +81,28 @@ export function createFactoryApprovalTools(
 
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Answering approvals is not available on this server.');
-      const live = (await messaging.controller.getSession(sessionId)) as ApprovalGateSession | null;
-      if (!live?.approval.isArmed({ toolCallId })) {
-        throw new Error(
+      const notWaiting = () =>
+        new Error(
           'Nothing is waiting on that tool call any more: the run that asked has ended or it was already answered. ' +
             'Message the session with factory_signal_session if it should try again.',
         );
+      // A session another harness runs (Claude Code) holds its own approval gate.
+      const external = await externalSessionFor(messaging.controller, sessionId);
+      if (external) {
+        const answered = await external.answerToolApproval?.({ toolCallId, approved: decision === 'approve' });
+        if (!answered) throw notWaiting();
+      } else {
+        const live = (await messaging.controller.getSession(sessionId)) as ApprovalGateSession | null;
+        if (!live?.approval.isArmed({ toolCallId })) throw notWaiting();
+        const result = live.respondToToolApproval({
+          decision,
+          toolCallId,
+          ...(decision === 'decline'
+            ? { declineContext: { reason: reason ?? 'Declined by a session following it.' } }
+            : {}),
+        });
+        if (!result.accepted) throw new Error(`The answer was not accepted (${result.reason}).`);
       }
-      const result = live.respondToToolApproval({
-        decision,
-        toolCallId,
-        ...(decision === 'decline'
-          ? { declineContext: { reason: reason ?? 'Declined by a session following it.' } }
-          : {}),
-      });
-      if (!result.accepted) throw new Error(`The answer was not accepted (${result.reason}).`);
 
       deps.auditRecorder.record({
         orgId: scope.orgId,

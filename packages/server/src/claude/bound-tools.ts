@@ -9,6 +9,7 @@ import type { Tool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { BoardRegistry } from '@factory/core';
+import type { IntegrationPostToolContext } from '@factory/integrations';
 import { createFactoryTransitionTools } from '@factory/harness-mastra';
 import type { SessionGit } from '@factory/harness-mastra';
 import type { FactoryMcpToolScope } from '@factory/mcp';
@@ -19,6 +20,14 @@ import type { WorkItemsStorage } from '@factory/store';
 
 type AnyTool = Tool<any, any, any, any>;
 
+/**
+ * What runs after each of a session's tool calls, as the Mastra controller's
+ * `postToolObserver` runs after a Mastra session's (PR auto-subscription,
+ * agent action audit). `context` carries `{ requestContext }`, as a Mastra
+ * tool call's does.
+ */
+export type ClaudeToolObserver = (toolContext: IntegrationPostToolContext) => Promise<void>;
+
 /** The request context a bound Mastra run's tools read, rebuilt from a verified worker scope. */
 export function boundRunRequestContext(scope: FactoryMcpToolScope): RequestContext {
   const requestContext = new RequestContext();
@@ -28,6 +37,9 @@ export function boundRunRequestContext(scope: FactoryMcpToolScope): RequestConte
     sessionId: scope.sessionId,
     threadId: scope.threadId,
     resourceId: scope.resourceId,
+    // A Mastra run's controller entry names its session; the subscription tools file under it.
+    // The session runs as its row's owner, as a session recreated for delivery does.
+    session: { id: scope.sessionId, ownerId: scope.userId },
     state,
     getState: () => state,
   });
@@ -44,18 +56,36 @@ function asMcpTool(
   tool: AnyTool,
   requestContext: RequestContext,
   workspace?: () => Promise<{ sandbox: unknown } | undefined>,
+  observe?: ClaudeToolObserver,
 ): AnyTool {
+  const observed = async (toolContext: Pick<IntegrationPostToolContext, 'input' | 'output' | 'error'>) => {
+    if (!observe) return;
+    try {
+      await observe({ toolName: tool.id, ...toolContext, context: { requestContext } });
+    } catch (error) {
+      // Bookkeeping: a failed observer never fails the call the agent made.
+      console.warn(`[factory] Post-tool observer failed for ${tool.id}:`, error);
+    }
+  };
   return createTool({
     id: tool.id,
     description: tool.description,
     ...(tool.inputSchema ? { inputSchema: tool.inputSchema } : {}),
     execute: async (input: unknown) => {
       if (!tool.execute) throw new Error(`Tool ${tool.id} cannot be executed.`);
-      return tool.execute(input, {
-        requestContext,
-        ...(workspace ? { workspace: await workspace() } : {}),
-        agent: { agentId: 'claude-code', toolCallId: randomUUID(), messages: [], suspend: async () => {} },
-      } as never);
+      let output: unknown;
+      try {
+        output = await tool.execute(input, {
+          requestContext,
+          ...(workspace ? { workspace: await workspace() } : {}),
+          agent: { agentId: 'claude-code', toolCallId: randomUUID(), messages: [], suspend: async () => {} },
+        } as never);
+      } catch (error) {
+        await observed({ input, error });
+        throw error;
+      }
+      await observed({ input, output });
+      return output;
     },
   }) as AnyTool;
 }
@@ -73,6 +103,8 @@ export async function createClaudeSessionTools(
     sessionTools: (requestContext: RequestContext) => Promise<Record<string, unknown>>;
     /** The sandbox the session's checkout lives in. */
     sandboxFor: (sessionId: string) => Promise<unknown>;
+    /** Runs after each call, as the Mastra controller's `postToolObserver`. */
+    observe?: ClaudeToolObserver;
   },
 ): Promise<Record<string, AnyTool>> {
   const requestContext = boundRunRequestContext(scope);
@@ -82,7 +114,7 @@ export async function createClaudeSessionTools(
   };
   const tools: Record<string, AnyTool> = {};
   for (const [name, tool] of Object.entries(await deps.sessionTools(requestContext))) {
-    tools[name] = asMcpTool(tool as AnyTool, requestContext, workspace);
+    tools[name] = asMcpTool(tool as AnyTool, requestContext, workspace, deps.observe);
   }
   return tools;
 }
@@ -139,6 +171,8 @@ export async function createClaudeBoundTools(
     sessions?: FactorySessionSourceLookup;
     /** The session's checkout on this host, where the CLI runs; without it the tester cannot record its failing test. */
     checkoutFor?: (sessionId: string) => Promise<string | undefined>;
+    /** Runs after each call, as the Mastra controller's `postToolObserver`. */
+    observe?: ClaudeToolObserver;
   },
 ): Promise<Record<string, AnyTool>> {
   const requestContext = boundRunRequestContext(scope);
@@ -159,7 +193,9 @@ export async function createClaudeBoundTools(
       : {}),
   })) as Record<string, AnyTool>;
   const tools: Record<string, AnyTool> = {};
-  for (const [name, tool] of Object.entries(transitionTools)) tools[name] = asMcpTool(tool, requestContext);
+  for (const [name, tool] of Object.entries(transitionTools)) {
+    tools[name] = asMcpTool(tool, requestContext, undefined, deps.observe);
+  }
   tools.factory_bound_work_item = createTool({
     id: 'factory_bound_work_item',
     description:

@@ -33,6 +33,19 @@ export interface ExternalNotificationSession {
     /** `ifIdle: persist` keeps an idle session asleep: the notice waits for its next turn. Otherwise it wakes. */
     options?: { requestContext?: RequestContext; ifIdle?: { behavior?: 'persist' | 'wake' } },
   ): Promise<{ persisted?: Promise<unknown>; accepted?: Promise<unknown> }>;
+  /** Whether its agent is mid-run in this process, as a Mastra session's `stream.isActive()`. */
+  isRunning?(): boolean;
+  /** Stops the run in flight, as a Mastra session's `abort()`. */
+  abort?(): void;
+  /**
+   * Answers the tool call it holds for a person's approval, as a Mastra
+   * session's `respondToToolApproval`; `false` when nothing waits on `toolCallId`.
+   */
+  answerToolApproval?(input: { toolCallId: string; approved: boolean }): Promise<boolean>;
+  /** Tears the session down when its row is deleted, as the controller's `deleteSession` does a Mastra one. */
+  deleteSession?(): Promise<void>;
+  /** The session itself, as the harness contract's `AgentSession` (`@factory/harness`), for code that kicks off its runs. */
+  agentSession?: object;
 }
 
 export type ExternalSessionLookup = (sessionId: string) => Promise<ExternalNotificationSession | undefined>;
@@ -55,6 +68,36 @@ export async function externalSessionFor(
   sessionId: string,
 ): Promise<ExternalNotificationSession | undefined> {
   return externalSessions.get(controller)?.(sessionId);
+}
+
+/** A controller that can say whether it holds a session live. */
+type LiveSessionController = {
+  getSession(sessionId: string): Promise<{ stream: { isActive(): boolean }; abort(): void } | undefined | null>;
+};
+
+/**
+ * Whether the session's agent is mid-run in this process, on whichever harness
+ * runs it: the session another harness holds under this id, else the
+ * controller's live session.
+ */
+export async function isSessionRunning(controller: LiveSessionController, sessionId: string): Promise<boolean> {
+  const external = await externalSessionFor(controller, sessionId);
+  if (external) return external.isRunning?.() ?? false;
+  return (await controller.getSession(sessionId))?.stream.isActive() ?? false;
+}
+
+/** Stops the session's run in flight, on whichever harness runs it; `false` when nothing was running. */
+export async function abortSessionRun(controller: LiveSessionController, sessionId: string): Promise<boolean> {
+  const external = await externalSessionFor(controller, sessionId);
+  if (external) {
+    if (!external.isRunning?.() || !external.abort) return false;
+    external.abort();
+    return true;
+  }
+  const session = await controller.getSession(sessionId);
+  if (!session?.stream.isActive()) return false;
+  session.abort();
+  return true;
 }
 
 /**
