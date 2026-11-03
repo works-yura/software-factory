@@ -8,9 +8,9 @@ import { readSkill } from './skills.ts';
 export interface ClaudeCodeHarnessConfig extends ClaudeCodeSessionConfig {
   /**
    * Extra skills directory, searched before the session's `<cwd>/.claude/skills`.
-   * A relative path resolves against the session's cwd.
+   * A relative path resolves against the session's cwd. A list is searched in order.
    */
-  skillsDir?: string;
+  skillsDir?: string | string[];
   /**
    * Called once for every session object the harness builds, whether created
    * or rehydrated from the store, before anyone can drive it: the place to
@@ -126,7 +126,8 @@ export function createClaudeCodeHarness(config: ClaudeCodeHarnessConfig): Claude
       const session = claudeSession(agentSession);
       const cwd = session.cwd ?? (await config.cwdFor(session.id));
       const directories = [join(cwd, '.claude', 'skills')];
-      if (config.skillsDir) directories.unshift(isAbsolute(config.skillsDir) ? config.skillsDir : join(cwd, config.skillsDir));
+      const extra = [config.skillsDir ?? []].flat().map(dir => (isAbsolute(dir) ? dir : join(cwd, dir)));
+      directories.unshift(...extra);
       return readSkill(directories, name);
     },
   };
