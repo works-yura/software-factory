@@ -9,7 +9,6 @@ import {
   planWorkItem,
   selfReviewWorkItem,
   triageIssueEntry,
-  writeTests,
 } from './phase-rules.ts';
 import { advanceApprovedPlan, openApprovedChangeRequest } from './tool-rules.ts';
 import { workTransitionPolicy } from './transition-policy.ts';
@@ -23,14 +22,13 @@ function onEveryWorkSource(
   return Object.fromEntries(WORK_RULE_SOURCES.map(source => [source, handler]));
 }
 
-export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'tests' | 'execute' | 'review' | 'done' | 'canceled';
+export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled';
 
 /** Every Work phase: a card may move from any phase to any other; the transition policy guards the moves. */
 const ALL_PHASES: readonly WorkBoardPhase[] = [
   'intake',
   'triage',
   'planning',
-  'tests',
   'execute',
   'review',
   'done',
@@ -45,8 +43,6 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
   sourceClosed: { completed: 'done', canceled: 'canceled' },
   changeRequests: { build: 'execute', review: 'review', merged: 'done' },
   triageClassification: true,
-  // Bugs and feature requests: the tester commits the failing test, the builder may not touch it.
-  reproductionTest: { record: 'tests', protect: 'execute' },
   tools: {
     submit_plan: { onResult: advanceApprovedPlan },
     factory_record_review_verdict: { onResult: openApprovedChangeRequest },
@@ -75,14 +71,6 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       runner: { context: 'work' },
       nextPhases: ALL_PHASES,
       onEnter: onEveryWorkSource(planWorkItem),
-    },
-    tests: {
-      name: 'Tests',
-      // Its own seat: the tester writes and commits the failing tests, never the code that passes them.
-      kind: 'working',
-      runner: { context: 'tester' },
-      nextPhases: ALL_PHASES,
-      onEnter: onEveryWorkSource(writeTests),
     },
     execute: {
       name: 'Building',

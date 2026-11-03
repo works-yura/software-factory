@@ -195,8 +195,6 @@ export interface FactoryRuleItemContext {
   url: string | null;
   stages: readonly string[];
   acceptedAt: Date | null;
-  /** Triage classification, once recorded; a move out of Triage carries the one it reports. Unset where the host does not supply it. */
-  triageType?: FactoryTriageType | null;
   /** Intake-stamped facts about the source — repository id, reporter login, labels. */
   metadata: Record<string, unknown> | null;
 }
@@ -252,7 +250,7 @@ export interface FactoryStageRuleContext extends FactoryBoundRuleContext {
   stage: FactoryRuleStage;
   fromStage: FactoryRuleStage;
   toStage: FactoryRuleStage;
-  /** Project switch: cards on boards that declare `changeRequests` (Work, Bug) get an independent self-review before the change request opens. Unset means off. */
+  /** Project switch: cards on boards that declare `changeRequests` (Work) get an independent self-review before the change request opens. Unset means off. */
   selfReviewEnabled?: boolean;
 }
 
@@ -402,18 +400,6 @@ export const WORK_CHANGE_REQUESTS: FactoryRuleChangeRequests = Object.freeze({
   merged: Object.freeze({ phase: 'done', title: 'Done' }),
   builderRole: 'work',
 });
-
-/**
- * Card metadata a board's `reproductionTest` seat records: the commit that added the failing
- * test and the test files it wrote. Written only by `factory_record_reproduction_test`.
- */
-export const REPRODUCTION_TEST_SHA_KEY = 'bugReproTestSha';
-export const REPRODUCTION_TEST_PATHS_KEY = 'bugReproTestPaths';
-/**
- * Every recorded reproduction test as `{ repository, sha, paths }`, one per repository the tests
- * went into; the two keys above mirror the first record.
- */
-export const REPRODUCTION_TESTS_KEY = 'reproductionTests';
 
 /** The change-request flow a rule context's card follows: its board's declaration, else Work's for a Work card. */
 export function changeRequestFlow(context: {

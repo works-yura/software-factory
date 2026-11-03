@@ -9,8 +9,8 @@ import { workBoard } from './board.ts';
  * other board.
  */
 
-/** Skills Planning runs: `factory-plan`, and `bug-plan` for a bug. */
-const PLANNING_SKILLS: ReadonlySet<string> = new Set(['factory-plan', 'bug-plan']);
+/** Skills Planning runs. */
+const PLANNING_SKILLS: ReadonlySet<string> = new Set(['factory-plan']);
 
 /** The built-in Work lane a role's run belongs to: `plan` plans, `work` builds. Undefined on other boards. */
 export function workLaneForRole(board: unknown, role: string): string | undefined {
@@ -21,8 +21,7 @@ export function workLaneForRole(board: unknown, role: string): string | undefine
  * Whether a built-in Work stage carries a run decided for `role`. Planning,
  * Building and Review share the `work` context, so the skill tells them apart:
  * Planning carries the plan skills' runs (and runs for the old `plan` role),
- * Building and Review the other `work` runs. The `tests` stage keeps its own
- * `tester` context. Undefined on other boards.
+ * Building and Review the other `work` runs. Undefined on other boards.
  */
 export function workStageCarries(board: unknown, stage: string, role: string, skillName: unknown): boolean | undefined {
   if (board !== workBoard) return undefined;

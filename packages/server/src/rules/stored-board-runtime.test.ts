@@ -212,7 +212,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         'intake:Intake',
         'triage:Triage',
         'planning:Planning',
-        'tests:Tests',
         'execute:Building',
         'review:Review',
         'done:Done',

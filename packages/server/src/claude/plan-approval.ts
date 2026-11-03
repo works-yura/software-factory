@@ -1,7 +1,6 @@
 import type { PlanDecision } from '@factory/harness';
 import type { ClaudeCodeSession } from '@factory/harness-claude-code';
 import { boardForWorkItem } from '@factory/core';
-import { isTestFirst } from '@factory/pipelines';
 import type { FactoryTransitionService } from '@factory/runtime';
 import type { SourceControlSessionLookup } from '@factory/session';
 import type { WorkItemsStorage } from '@factory/store';
@@ -10,9 +9,8 @@ import { CLAUDE_THREAD_SETTINGS } from './start-coordinator.ts';
 
 /**
  * A person approving a card's plan in a Claude Code chat: the card moves on, as
- * an approved plan of a Mastra session does (`advanceApprovedPlan`): to the
- * failing test for test-first types, to Building for the rest. The session
- * does not resume on its own; it holds the answer, and the next stage's start
+ * an approved plan of a Mastra session does (`advanceApprovedPlan`): to
+ * Building. The session does not resume on its own; it holds the answer, and the next stage's start
  * runs it with the answer first. Anything else (a rejection, a session bound to
  * no card in Planning) is left to the session.
  *
@@ -42,7 +40,7 @@ export function createClaudePlanApproval(deps: {
       factoryProjectId: row.factoryProjectId,
       workItemId,
       board: 'work',
-      stage: isTestFirst(item) ? 'tests' : 'execute',
+      stage: 'execute',
       expectedRevision: item.revision,
       actor: { type: 'human', id: userId },
       ingress: { type: 'human', identity: `human:${userId}:plan-approval:${answer.toolCallId}` },

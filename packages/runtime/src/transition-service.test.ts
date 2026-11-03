@@ -1213,7 +1213,7 @@ describe('FactoryTransitionService', () => {
     expect(result.status).toBe('accepted');
     const [plan] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(plan).toMatchObject({
-      decision: { type: 'invokeSkill', role: 'work', skillName: 'bug-plan' },
+      decision: { type: 'invokeSkill', role: 'work', skillName: 'factory-plan' },
       approvedBy: 'agent:binding-1',
     });
     expect(plan?.approvedAt).not.toBeNull();

@@ -15,9 +15,6 @@ import type { FactoryTransitionService, ProjectBoardSource } from '@factory/runt
 import { FACTORY_TRIAGE_TYPES, hasOpenChangeRequest } from '@factory/core';
 import { IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@factory/core';
 
-import { createReproductionTestTool, recordsReproductionTest, reproductionTestGuard } from './reproduction-test.ts';
-import type { SessionGitResolver } from './reproduction-test.ts';
-
 const MAX_RATIONALE_LENGTH = 1_000;
 
 const transitionInputSchema = z
@@ -77,8 +74,6 @@ export async function createFactoryTransitionTools(options: {
   sessions?: FactorySessionSourceLookup;
   /** A fixed registry, or the per-project boards. */
   boards?: BoardRegistry | ProjectBoardSource;
-  /** Git in the session checkout, for boards that declare a reproduction test. */
-  sessionGit?: SessionGitResolver;
 }): Promise<IntegrationTools> {
   const boardSource = options.boards ? toBoardSource(options.boards) : undefined;
   const resolution = await resolveFactorySessionAddress({
@@ -109,19 +104,14 @@ export async function createFactoryTransitionTools(options: {
   const boards = boardSource ? await boardSource.load(availableBinding) : undefined;
   const bound = { ...options, boards };
   let isTriage = false;
-  let recordsTest = false;
-  if (availableBinding.role === 'triage' || boards) {
+  if (availableBinding.role === 'triage') {
     const item = await options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
-    if (!item && availableBinding.role === 'triage') return {};
-    if (item) {
-      isTriage = availableBinding.role === 'triage' && classifiesTriage(boards, item);
-      recordsTest = recordsReproductionTest(boards, item, availableBinding.role);
-    }
+    if (!item) return {};
+    isTriage = classifiesTriage(boards, item);
   }
 
   return {
     ...(availableBinding.role === 'review' ? createReviewVerdictTool(bound, availableBinding.workItemId) : {}),
-    ...(recordsTest ? createReproductionTestTool(bound, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: isTriage
@@ -154,23 +144,7 @@ export async function createFactoryTransitionTools(options: {
         if (!item) throw new Error('Bound Factory work item not found.');
         const currentBoards = boardSource ? await boardSource.load(binding) : undefined;
         const board = boardForWorkItem(item);
-        // A board with a reproduction test keeps its fix seat from moving on while the checkout
-        // changes the recorded test files. Checked here because it needs the session's sandbox;
-        // board policies are pure.
-        const guarded = await reproductionTestGuard({
-          boards: currentBoards,
-          item,
-          role: binding.role,
-          stage,
-          git: async repository =>
-            options.sessionGit?.({
-              requestContext: execution.requestContext,
-              workspace: (execution as { workspace?: unknown }).workspace,
-              ...(repository ? { repository } : {}),
-            }),
-        });
-        if (guarded) return guarded;
-        // Only a triage binding on a classifying board (Work, Bug) may classify; other roles can
+        // Only a triage binding on a classifying board (Work) may classify; other roles can
         // echo the key from history.
         const triageType =
           binding.role === 'triage' && classifiesTriage(currentBoards, item) ? requestedTriageType : undefined;
@@ -264,7 +238,7 @@ function createReviewVerdictTool(
     factory_record_review_verdict: createTool({
       id: 'factory_record_review_verdict',
       description:
-        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On a Review card it records the published PR verdict and the card stays in Reviewing. On a Work or Bug card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
+        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On a Review card it records the published PR verdict and the card stays in Reviewing. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
       inputSchema: reviewVerdictInputSchema,
       requireApproval: false,
       execute: async ({ verdict, reviewedHeadSha, reviewedHeads, findings }, execution) => {

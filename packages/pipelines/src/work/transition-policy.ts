@@ -1,46 +1,7 @@
-import { describeChangeRequests, openChangeRequests, REPRODUCTION_TEST_SHA_KEY } from '@factory/core';
-import type { BoardTransitionPolicy, BoardTransitionPolicyContext, BoardTransitionPolicyResult } from '@factory/core';
+import { describeChangeRequests, openChangeRequests } from '@factory/core';
+import type { BoardTransitionPolicy } from '@factory/core';
 
-import { TEST_FIRST_TRIAGE_TYPES } from './phase-rules.ts';
-
-/**
- * Work's policy. Entering the failing test (`tests`) is where the Building gates apply: plan
- * approval, and a person for non-bug work. For test-first types an agent reaches Building only from
- * a recorded test, or back from Review.
- */
 export const workTransitionPolicy: BoardTransitionPolicy = context => {
-  if (context.toStage === 'tests') return basePolicy({ ...context, toStage: 'execute' });
-  const base = basePolicy(context);
-  if (base?.type === 'reject') return base;
-  const { actor, item, fromStage, toStage } = context;
-  if (
-    actor.type !== 'human' &&
-    toStage === 'execute' &&
-    fromStage !== 'review' &&
-    item.triageType != null &&
-    TEST_FIRST_TRIAGE_TYPES.has(item.triageType)
-  ) {
-    if (fromStage !== 'tests') {
-      return {
-        type: 'reject',
-        code: 'invalid_transition',
-        reason: `A ${item.triageType} reaches Building through its failing test: move the card to \`tests\` first.`,
-      };
-    }
-    if (typeof item.metadata?.[REPRODUCTION_TEST_SHA_KEY] !== 'string') {
-      return {
-        type: 'reject',
-        code: 'invalid_transition',
-        reason:
-          'No failing test is recorded. Commit the test and record it with factory_record_reproduction_test, ' +
-          'or move the card to `intake` when it cannot be written.',
-      };
-    }
-  }
-  return base;
-};
-
-function basePolicy(context: BoardTransitionPolicyContext): BoardTransitionPolicyResult {
   const { item, requestedTriageType, actor, fromStage, toStage, isHumanTransition, plansAutoApproved, planApproved } =
     context;
   const triageAgent = actor.type === 'agent' && actor.role === 'triage';
@@ -140,4 +101,4 @@ function basePolicy(context: BoardTransitionPolicyContext): BoardTransitionPolic
     ...(triageAgent && requestedTriageType ? { triageType: requestedTriageType } : {}),
     ...(isHumanTransition && entersWork && !item.acceptedAt ? { accept: true as const } : {}),
   };
-}
+};

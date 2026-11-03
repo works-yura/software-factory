@@ -1,7 +1,4 @@
-import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import path from 'node:path';
 
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
@@ -11,9 +8,7 @@ import { z } from 'zod';
 import type { BoardRegistry } from '@factory/core';
 import type { IntegrationPostToolContext } from '@factory/integrations';
 import { createFactoryTransitionTools } from '@factory/harness-mastra';
-import type { SessionGit } from '@factory/harness-mastra';
 import type { FactoryMcpToolScope } from '@factory/mcp';
-import { repoDirUnder } from '@factory/sandbox';
 import type { FactoryTransitionService } from '@factory/runtime';
 import type { FactorySessionSourceLookup } from '@factory/session';
 import type { WorkItemsStorage } from '@factory/store';
@@ -119,46 +114,12 @@ export async function createClaudeSessionTools(
   return tools;
 }
 
-/** Git in a local checkout, for the reproduction-test recorder and guard; a failed command answers with its exit code. */
-/**
- * The checkout of `repository` under a session's working directory. A session
- * spanning several repositories runs in the directory holding them, one
- * checkout per repository; a single-repository session runs in its checkout.
- */
-export function repositoryCheckout(
-  cwd: string,
-  repository: string | undefined,
-  requireRepository = false,
-): string | undefined {
-  const spansSeveral = !existsSync(path.join(cwd, '.git'));
-  if (!repository) {
-    if (spansSeveral && requireRepository) {
-      throw new Error('This session spans several repositories; pass `repository` to name the one the test went into.');
-    }
-    return spansSeveral ? undefined : cwd;
-  }
-  if (!spansSeveral) return cwd;
-  const dir = repoDirUnder(cwd, repository);
-  return existsSync(dir) ? dir : undefined;
-}
-
-export function checkoutGit(cwd: string): SessionGit {
-  return args =>
-    new Promise(resolve => {
-      execFile('git', ['-C', cwd, ...args], { timeout: 30_000 }, (error, stdout, stderr) => {
-        const code = (error as { code?: unknown } | null)?.code;
-        resolve({ exitCode: error ? (typeof code === 'number' ? code : 1) : 0, stdout: String(stdout), stderr: String(stderr) });
-      });
-    });
-}
-
 /**
  * The tools only a bound run has, for a Claude Code session reaching the
  * Factory MCP endpoint with its session token:
  *
- * - the governed card move (`factory_transition_work_item`), review verdicts and
- *   reproduction-test recording, exactly the ones a bound Mastra run gets, for
- *   the card this session is bound to;
+ * - the governed card move (`factory_transition_work_item`) and review verdicts,
+ *   exactly the ones a bound Mastra run gets, for the card this session is bound to;
  * - `factory_bound_work_item`, the bound card's stage and revision as they are
  *   now; the `factory-phase` signal only opens each turn.
  */
@@ -169,8 +130,6 @@ export async function createClaudeBoundTools(
     transitionService: Pick<FactoryTransitionService, 'transition'>;
     boards: BoardRegistry;
     sessions?: FactorySessionSourceLookup;
-    /** The session's checkout on this host, where the CLI runs; without it the tester cannot record its failing test. */
-    checkoutFor?: (sessionId: string) => Promise<string | undefined>;
     /** Runs after each call, as the Mastra controller's `postToolObserver`. */
     observe?: ClaudeToolObserver;
   },
@@ -182,15 +141,6 @@ export async function createClaudeBoundTools(
     transitionService: deps.transitionService,
     boards: deps.boards,
     ...(deps.sessions ? { sessions: deps.sessions } : {}),
-    ...(deps.checkoutFor
-      ? {
-          sessionGit: async ({ repository, requireRepository }) => {
-            const cwd = await deps.checkoutFor!(scope.sessionId);
-            const checkout = cwd ? repositoryCheckout(cwd, repository, requireRepository) : undefined;
-            return checkout ? checkoutGit(checkout) : undefined;
-          },
-        }
-      : {}),
   })) as Record<string, AnyTool>;
   const tools: Record<string, AnyTool> = {};
   for (const [name, tool] of Object.entries(transitionTools)) {

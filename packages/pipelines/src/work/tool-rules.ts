@@ -1,7 +1,6 @@
 import { hasOpenChangeRequest } from '@factory/core';
 import type { FactoryToolResultRuleContext } from '@factory/core';
 
-import { isTestFirst } from './phase-rules.ts';
 import { changeRequestNoun, metadataString, untrustedSourceReference } from './references.ts';
 
 function resultContent(value: unknown): string | undefined {
@@ -11,36 +10,26 @@ function resultContent(value: unknown): string | undefined {
   return typeof content === 'string' ? content : undefined;
 }
 
-/**
- * A `submit_plan` rule that moves an approved Planning card to `stage` on the card's own board.
- * Interactive-session path only: the plan skills never call submit_plan — they request the move
- * with factory_transition_work_item directly.
- */
-export function advanceApprovedPlanTo(stage: string) {
-  return (context: FactoryToolResultRuleContext) => {
-    if (
-      context.result.status !== 'success' ||
-      context.item.stages.length !== 1 ||
-      context.item.stages[0] !== 'planning' ||
-      context.actor.type !== 'agent' ||
-      // Planning runs in the `work` session; `plan` is the role of cards planned before that.
-      (context.actor.role !== 'work' && context.actor.role !== 'plan') ||
-      !resultContent(context.result.value)?.startsWith('Plan approved.')
-    ) {
-      return;
-    }
-    return {
-      type: 'transition',
-      idempotencyKey: `${context.ingress.id}:approved-plan`,
-      board: context.board,
-      stage,
-    } as const;
-  };
-}
-
-/** An approved plan goes to the failing test for test-first types, straight to Building for the rest. */
+// Interactive-session path only: factory-plan never calls submit_plan — it
+// advances planning → execute via factory_transition_work_item directly.
 export function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
-  return advanceApprovedPlanTo(isTestFirst(context.item) ? 'tests' : 'execute')(context);
+  if (
+    context.result.status !== 'success' ||
+    context.item.stages.length !== 1 ||
+    context.item.stages[0] !== 'planning' ||
+    context.actor.type !== 'agent' ||
+    // Planning runs in the `work` session; `plan` is the role of cards planned before that.
+    (context.actor.role !== 'work' && context.actor.role !== 'plan') ||
+    !resultContent(context.result.value)?.startsWith('Plan approved.')
+  ) {
+    return;
+  }
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:approved-plan`,
+    board: context.board,
+    stage: 'execute',
+  } as const;
 }
 
 /**

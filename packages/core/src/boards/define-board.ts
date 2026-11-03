@@ -217,14 +217,6 @@ export type BoardSourceClosed<PhaseId extends string> = Readonly<{ completed: Ph
  */
 export type BoardChangeRequests<PhaseId extends string> = Readonly<{ build: PhaseId; review: PhaseId; merged: PhaseId }>;
 
-/**
- * A reproduction test written in its own phase and protected in a later one. The seat in `record`
- * commits a failing test and records the commit and test paths on the card
- * (`factory_record_reproduction_test`); the seat in `protect` fixes the code and cannot move the
- * card on to a working phase while its checkout changes those paths since the recorded commit.
- */
-export type BoardReproductionTest<PhaseId extends string> = Readonly<{ record: PhaseId; protect: PhaseId }>;
-
 export interface BoardDefinition<BoardId extends string, PhaseId extends string> {
   readonly id: BoardId;
   readonly name: string;
@@ -244,8 +236,6 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly sourceClosed?: BoardSourceClosed<PhaseId>;
   /** How the board's cards ship code; absent when they never open change requests. */
   readonly changeRequests?: BoardChangeRequests<PhaseId>;
-  /** Where a reproduction test is recorded and where it is protected; absent when the board has none. */
-  readonly reproductionTest?: BoardReproductionTest<PhaseId>;
   /**
    * Whether the board's `triage` seat reports a structured classification with every transition
    * it requests. The board's transition policy decides what each classification may do.
@@ -281,7 +271,6 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   sourceClosed?: { completed: keyof Phases & string; canceled: keyof Phases & string };
   changeRequests?: { build: keyof Phases & string; review: keyof Phases & string; merged: keyof Phases & string };
   triageClassification?: boolean;
-  reproductionTest?: { record: keyof Phases & string; protect: keyof Phases & string };
 };
 
 export class BoardDefinitionError extends Error {
@@ -476,28 +465,6 @@ function validateChangeRequests(
   });
 }
 
-function validateReproductionTest(
-  reproductionTest: unknown,
-  phases: Readonly<Record<string, BoardPhaseDefinition<string>>>,
-): BoardReproductionTest<string> | undefined {
-  if (reproductionTest === undefined) return undefined;
-  if (!isPlainObject(reproductionTest)) throw new BoardDefinitionError('Board reproductionTest must be a plain object.');
-  const keys = Object.keys(reproductionTest);
-  if (keys.length !== 2 || !keys.includes('record') || !keys.includes('protect')) {
-    throw new BoardDefinitionError('Board reproductionTest must declare exactly record and protect.');
-  }
-  for (const key of ['record', 'protect'] as const) {
-    const phase = reproductionTest[key];
-    if (typeof phase !== 'string' || !Object.hasOwn(phases, phase) || phases[phase]!.kind !== 'working') {
-      throw new BoardDefinitionError(`Board reproductionTest.${key} "${String(phase)}" must name a working phase.`);
-    }
-  }
-  if (reproductionTest.record === reproductionTest.protect) {
-    throw new BoardDefinitionError('Board reproductionTest must record and protect in different phases.');
-  }
-  return Object.freeze({ record: reproductionTest.record as string, protect: reproductionTest.protect as string });
-}
-
 function validateEventRules(events: unknown): BoardEventRules {
   if (events === undefined) return Object.freeze({});
   if (!isPlainObject(events)) throw new BoardDefinitionError('Board events must be a plain object.');
@@ -645,9 +612,6 @@ function buildBoard<
   const changeRequests = validateChangeRequests(config.changeRequests, config.phases) as
     | BoardChangeRequests<PhaseId>
     | undefined;
-  const reproductionTest = validateReproductionTest(config.reproductionTest, config.phases) as
-    | BoardReproductionTest<PhaseId>
-    | undefined;
   if (config.triageClassification !== undefined && typeof config.triageClassification !== 'boolean') {
     throw new BoardDefinitionError('Board triageClassification must be a boolean.');
   }
@@ -773,7 +737,6 @@ function buildBoard<
     ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
     ...(sourceClosed ? { sourceClosed } : {}),
     ...(changeRequests ? { changeRequests } : {}),
-    ...(reproductionTest ? { reproductionTest } : {}),
     ...(config.triageClassification === true ? { triageClassification: true as const } : {}),
     allowsTransition(from: PhaseId, to: PhaseId) {
       return from === to || transitions[from]?.some(transition => transition.to === to) === true;

@@ -139,7 +139,7 @@ import { asAgentSession, createMastraHarness } from '@factory/harness-mastra';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from '@factory/harness-mastra';
 import type { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { createTerminalStageCleanup } from '@factory/runtime';
-import { createFactoryTransitionTools, resolveSessionGit } from '@factory/harness-mastra';
+import { createFactoryTransitionTools } from '@factory/harness-mastra';
 import { FactoryTransitionService, ProjectBoardCache, toBoardSource } from '@factory/runtime';
 import type { ProjectBoardSource } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
@@ -1457,7 +1457,7 @@ export class MastraFactory {
                   resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
                 if (!binding) return undefined;
                 const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                // Self-review gates the change request on boards that ship them (Work, Bug).
+                // Self-review gates the change request on boards that ship them (Work).
                 if (!item || !(await toBoardSource(boards).load(binding)).get(boardForWorkItem(item))?.changeRequests) {
                   return undefined;
                 }
@@ -1854,9 +1854,6 @@ export class MastraFactory {
             storage: workItemsStorage,
             transitionService,
             boards,
-            // The reproduction-test guard and recorder run git in the session checkout.
-            sessionGit: execution =>
-              resolveSessionGit({ ...execution, providers: sourceControlToolProviders }),
             // Heals crash-resumed sessions: recovered addresses re-seed
             // projectRepositoryId/baseRef from the source session record.
             // Only offered while the source-control domain is ready — a
@@ -2191,9 +2188,6 @@ export class MastraFactory {
                             transitionService,
                             boards: this.#boards,
                             sessions: sourceControlSessions,
-                            // The CLI runs in the session's checkout on this host; git for the test recorder runs there too.
-                            checkoutFor: async sessionId =>
-                              ((await claudeCode?.harness.getSession(sessionId)) as { cwd?: string } | undefined)?.cwd,
                             observe: postToolObserver,
                           }),
                         // The Factory chat on Claude Code: the supervisor's tools, acting as the person behind the turn.

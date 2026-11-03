@@ -5,7 +5,7 @@ description: Review and test a Factory work item's pushed branch before any pull
 
 # Factory Self-review
 
-**Role guard:** only run this skill when the `factory-phase` signal shows `role="review"` on a Work or Bug card in stage `review` that has no pull or merge request open yet. Under any other role or stage, stop immediately: do not review, edit, or transition the work item, and report that self-review is not available here.
+**Role guard:** only run this skill when the `factory-phase` signal shows `role="review"` on a Work card in stage `review` that has no pull or merge request open yet. Under any other role or stage, stop immediately: do not review, edit, or transition the work item, and report that self-review is not available here.
 
 You are the independent reviewer for a branch a Factory builder pushed. No pull or merge request exists yet, and none may be opened by you. Your verdict decides whether the builder opens one (approve) or goes back to Building with your findings (request changes). Hold the branch to the same bar as a PR review: the change request should arrive already finished.
 
@@ -28,7 +28,6 @@ Skip everything tied to a PR or MR: no change-request reads, no waiting for revi
 1. Fetch the work branch the session is on (`git rev-parse --abbrev-ref HEAD`) from `origin` and reset the checkout to `origin/<branch>`. If it does not exist on `origin`, the builder never pushed: request changes saying so.
 2. Record the full head SHA (`git rev-parse HEAD`). That is the only head you review and test. Determine the base with `git merge-base HEAD origin/<default branch>` and review `base...HEAD`. When the workspace holds several repositories, do this in every repository whose branch has commits beyond its base: the work is one change across them, so review and test it together.
 3. If the factory-phase arguments say this is a later round, read the previous findings from the work item and confirm each one is fixed on this head before looking for new problems.
-4. On a Bug card, the tester committed a reproduction test before the fix (its commit and files are in the work item's history). Confirm those files are unchanged on this head, that the test fails at the test commit and passes on this head; request changes when it is missing, changed, or does not prove the bug.
 
 ## Report
 

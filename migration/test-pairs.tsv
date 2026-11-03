@@ -1,5 +1,5 @@
 # v3 test (from v3/packages/factory/src)	v4 test (from v4/packages)	expected delta	why the counts differ
-boards/define-board.test.ts	core/src/boards/define-board.test.ts	-3	Work/Review lifecycle cases moved to pipelines/src/pipelines.test.ts (-6); changeRequests, triageClassification, and reproductionTest declarations (+3; first used by the Bug board, now by Work)
+boards/define-board.test.ts	core/src/boards/define-board.test.ts	-4	Work/Review lifecycle cases moved to pipelines/src/pipelines.test.ts (-6); changeRequests and triageClassification declarations (+2)
 boards/events.test.ts	core/src/boards/events.test.ts
 boards/registry.test.ts	core/src/boards/registry.test.ts	-3	rewritten: v4 registry has no built-in boards (4 cases replace 7)
 boards/relocate.test.ts	core/src/boards/relocate.test.ts
@@ -177,7 +177,7 @@ tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
 tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	+2	hybrid scope cases removed with the personal model scope; upstream #28721: the old plan role still starts (+1); side and role sessions on Claude Code
 tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts
 tools/work-item-tools.test.ts	harness-mastra/src/tools/work-item-tools.test.ts
-workspace.test.ts	harness-mastra/src/workspace.test.ts	+8	Bug and factory-test skills stay generic and defer the stack to the target repository (+1); upstream #28838: src/mastra/factory-skills (+1); upstream #29042: project skill edits in session workspaces (+6)
+workspace.test.ts	harness-mastra/src/workspace.test.ts	+7	upstream #28838: src/mastra/factory-skills (+1); upstream #29042: project skill edits in session workspaces (+6)
 ../../internal-workspace/src/file-commands.test.ts	internal-workspace/src/file-commands.test.ts
 ../../internal-workspace/src/repo-clone.test.ts	internal-workspace/src/repo-clone.test.ts
 ../../internal-workspace/src/setup-marker.test.ts	internal-workspace/src/setup-marker.test.ts

@@ -470,8 +470,6 @@ export class FactoryTransitionService {
         url: item.externalSource?.url ?? null,
         stages: [...item.stages],
         acceptedAt: item.acceptedAt,
-        // The move out of Triage persists the classification it reports, after this snapshot.
-        triageType: item.triageType ?? request.triageType ?? null,
         metadata: item.metadata,
       },
       board: request.board,
@@ -538,7 +536,7 @@ export class FactoryTransitionService {
             };
           }
           // Self-review sits between a board's build and its change request, so only boards that
-          // ship change requests (Work, Bug) read the project switch.
+          // ship change requests (Work) read the project switch.
           const selfReviewEnabled =
             board.changeRequests !== undefined && this.#selfReviewEnabled
               ? await this.#selfReviewEnabled({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })

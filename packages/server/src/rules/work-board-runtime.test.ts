@@ -7,9 +7,8 @@ import { createBoardRegistry, createFactoryStorageForTests, FactoryDecisionDispa
 
 /**
  * A bug on the Work board end to end through the runtime: an issue lands in Intake, a person
- * starts triage, the agents classify and plan, the plan gate holds the failing test for a person,
- * the tester's recorded test opens the fix, and the stock GitHub rules carry the card through its
- * pull request to Done.
+ * starts triage, the agents classify and plan, the plan gate holds Building for a person, and the
+ * stock GitHub rules carry the card through its pull request to Done.
  */
 async function setup() {
   const seeded = await createFactoryStorageForTests();
@@ -109,7 +108,7 @@ function pullRequest(action: 'opened' | 'closed', deliveryId: string, merged = f
 }
 
 describe('Work board runtime: a bug', () => {
-  it('carries a bug issue through triage, the plan gate, the failing test, the fix, its pull request, and the merge', async () => {
+  it('carries a bug issue through triage, the plan gate, the fix, its pull request, and the merge', async () => {
     const { workItems, sourceControl, integrationStorage, project, projectRepository, boards, transitionService, rules } =
       await setup();
     const delivered: string[] = [];
@@ -260,52 +259,20 @@ describe('Work board runtime: a bug', () => {
     await expect(move('planning', triage, { triageType: 'bug' })).resolves.toMatchObject({ status: 'accepted' });
     await drain();
     expect(await card()).toMatchObject({ stages: ['planning'], triageType: 'bug' });
-    expect(skills.at(-1)).toBe('bug-plan');
-    expect(delivered.at(-1)).toContain('Run bug-plan.');
+    expect(skills.at(-1)).toBe('factory-plan');
+    expect(delivered.at(-1)).toContain('Run factory-plan.');
 
-    // The plan gate: without auto-approved plans the planner cannot start the failing test
-    // itself, nor skip it straight to the fix.
+    // The plan gate: without auto-approved plans the planner cannot start Building itself.
     const plan = { type: 'agent' as const, bindingId: 'binding-plan', role: 'plan' };
-    await expect(move('tests', plan)).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
     await expect(move('execute', plan)).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
     expect(await card()).toMatchObject({ stages: ['planning'] });
-    await expect(move('tests', { type: 'human', id: 'user-1' })).resolves.toMatchObject({ status: 'accepted' });
-    await drain();
-    expect(await card()).toMatchObject({ stages: ['tests'] });
-    expect(skills.at(-1)).toBe('bug-test');
-    expect(delivered.at(-1)).toContain('Run bug-test.');
-
-    // The tester's seat cannot hand over to the fix until the failing test is recorded on the card
-    // (factory_record_reproduction_test writes these keys after checking the commit in the checkout).
-    const tester = { type: 'agent' as const, bindingId: 'binding-tester', role: 'tester' };
-    await expect(move('execute', tester)).resolves.toMatchObject({
-      status: 'rejected',
-      reason: expect.stringContaining('No failing test is recorded'),
-    });
-    const testing = await card();
-    await workItems.update({
-      orgId: 'org-1',
-      id: testing.id,
-      userId: 'agent:binding-tester',
-      expectedRevision: testing.revision,
-      patch: {
-        metadata: {
-          ...(testing.metadata ?? {}),
-          bugReproTestSha: 'c'.repeat(40),
-          bugReproTestPaths: ['apps/mobile/test/profile_save_test.dart'],
-        },
-      },
-    });
-    await expect(move('execute', tester)).resolves.toMatchObject({ status: 'accepted' });
+    await expect(move('execute', { type: 'human', id: 'user-1' })).resolves.toMatchObject({ status: 'accepted' });
     await drain();
     const building = await card();
     expect(building).toMatchObject({ stages: ['execute'] });
-    expect(skills.at(-1)).toBe('bug-build');
-    expect(delivered.at(-1)).toContain('Run bug-build.');
-    expect(delivered.at(-1)).toContain('"apps/mobile/test/profile_save_test.dart"');
 
-    // The fix seat leaves through Review (where its tool checks the test files), then opens the
-    // pull request. Provenance binds it to the Work card, and it gets its own Review card.
+    // The fix seat moves to Review, then opens the pull request. Provenance binds it to the Work
+    // card, and it gets its own Review card.
     const work = { type: 'agent' as const, bindingId: 'binding-work', role: 'work' };
     await expect(move('review', work)).resolves.toMatchObject({ status: 'accepted' });
     await drain();

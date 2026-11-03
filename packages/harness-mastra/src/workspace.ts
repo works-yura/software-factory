@@ -99,9 +99,6 @@ export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): stri
 }
 export const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
-  'bug-build',
-  'bug-plan',
-  'bug-test',
   'configure-factory-rules',
   'factory-complete-issue',
   'factory-gitlab-rereview',
@@ -110,7 +107,6 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-rereview',
   'factory-review',
   'factory-self-review',
-  'factory-test',
   'factory-triage',
 ]);
 

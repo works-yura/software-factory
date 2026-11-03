@@ -312,8 +312,7 @@ async function runToPlanGate(nextTurnText: string) {
     expect(plan.args[plan.args.indexOf('--disallowedTools') + 1]).toContain('Write');
     expect(plan.stdin).toMatch(/^<factory-mode name="planning">/);
     expect(plan.stdin).toContain('do not call factory_transition_work_item');
-    // A bug plans with bug-plan.
-    expect(plan.stdin).toContain('Bug Plan');
+    expect(plan.stdin).toContain('Factory Plan');
     const session = await claude.harness.getSession(sessionId);
     expect(session?.pendingPlan).toMatchObject({ toolCallId: 'toolu-plan' });
     // The card waits for a person: no agent can carry it on, and nothing else ran.
@@ -374,7 +373,7 @@ describe('Work board on the Claude Code harness', () => {
 
   it('moves the card on when a person approves the plan in the chat, and the next stage takes the answer first', async () => {
     const { workItems, transitionService, fake, sessionId, session, card, drain, sessions } = await runToPlanGate(
-      'Tests: the failing test for the dropped phone number is committed.',
+      'Built: the phone number is saved, with a test.',
     );
     const approvePlan = createClaudePlanApproval({ sessions, workItems, transitionService });
 
@@ -391,16 +390,16 @@ describe('Work board on the Claude Code harness', () => {
         userId: 'user-1',
       }),
     ).resolves.toBe(true);
-    // A bug is test-first: the approved plan goes to the failing test, as a Mastra plan does.
-    expect(await card()).toMatchObject({ stages: ['tests'] });
+    // The approved plan goes to Building, as a Mastra plan does.
+    expect(await card()).toMatchObject({ stages: ['execute'] });
     await drain();
     expect(fake.calls).toHaveLength(3);
-    const tester = fake.calls[2]!;
-    expect(tester.args).toEqual(expect.arrayContaining(['--resume', CLAUDE_SESSION, '--permission-mode', 'acceptEdits']));
-    expect(tester.stdin).toMatch(/^The plan was approved\. Implement it\./);
-    expect(tester.stdin).toContain('Keep the migration small.');
+    const build = fake.calls[2]!;
+    expect(build.args).toEqual(expect.arrayContaining(['--resume', CLAUDE_SESSION, '--permission-mode', 'acceptEdits']));
+    expect(build.stdin).toMatch(/^The plan was approved\. Implement it\./);
+    expect(build.stdin).toContain('Keep the migration small.');
     expect(session?.pendingPlan).toBeUndefined();
-    expect(await card()).toMatchObject({ stages: ['tests'], sessions: { tester: { sessionId } } });
+    expect(await card()).toMatchObject({ stages: ['execute'], sessions: { work: { sessionId } } });
 
     // Approving again (a stale card) changes nothing.
     await expect(
@@ -410,7 +409,7 @@ describe('Work board on the Claude Code harness', () => {
 
   it('shows the card waiting on its plan, on the board and in the inbox, until a person answers', async () => {
     const { workItems, transitionService, project, sessionId, session, card, drain, liveSessions, sessions } = await runToPlanGate(
-      'Tests: committed.',
+      'Built.',
     );
     const scope = { orgId: 'org-1', factoryProjectId: project.id, userId: 'user-1' };
     const inbox = new ParkedRunAttentionProvider({ workItems, liveSessions });

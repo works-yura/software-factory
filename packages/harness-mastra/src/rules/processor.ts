@@ -329,7 +329,7 @@ export async function describeFactoryPhase(input: {
     (runtime
       ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
       : '') +
-    // Review and every board that ships change requests (Work, Bug) park cards in Intake.
+    // Review and every board that ships change requests (Work) park cards in Intake.
     ((board === 'review' || boards.get(board)?.changeRequests !== undefined) && stage === 'intake'
       ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
       : '') +
@@ -636,7 +636,6 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         url: item.externalSource?.url ?? null,
         stages: item.stages,
         acceptedAt: item.acceptedAt,
-        triageType: item.triageType,
         metadata: item.metadata,
       },
       board,

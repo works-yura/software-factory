@@ -146,7 +146,7 @@ function mergeRequestUpdated(context: FactoryGitLabRuleContext) {
 }
 
 function mergeRequestCommented(context: FactoryGitLabRuleContext) {
-  // The authoring card answers comments; it sits on a board that ships change requests (Work, Bug).
+  // The authoring card answers comments; it sits on a board that ships change requests (Work).
   const flow = changeRequestFlow(context);
   if (!context.item || !context.mergeRequest || !context.note || !flow) return;
   if (context.mergeRequest.state !== 'open' || context.mergeRequest.merged) return;

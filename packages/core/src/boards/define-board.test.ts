@@ -339,25 +339,3 @@ describe('defineBoard changeRequests and triageClassification', () => {
     expect(() => define({ triageClassification: 'yes' })).toThrow(/triageClassification must be a boolean/);
   });
 });
-
-describe('defineBoard reproductionTest', () => {
-  const phases = {
-    queued: { title: 'Queued', kind: 'resting', next: 'testing' },
-    testing: { title: 'Testing', kind: 'working', role: 'tester', next: 'fixing' },
-    fixing: { title: 'Fixing', kind: 'working', role: 'work', next: 'shipped' },
-    shipped: { title: 'Shipped', kind: 'terminal' },
-  } as const;
-  const define = (reproductionTest: unknown) =>
-    defineBoard({ id: 'bugfix', title: 'Bugfix', initialPhase: 'queued', phases, reproductionTest } as never);
-
-  it('exposes a frozen record/protect pair and rejects phases that are not working or are the same', () => {
-    const board = define({ record: 'testing', protect: 'fixing' });
-    expect(board.reproductionTest).toEqual({ record: 'testing', protect: 'fixing' });
-    expect(Object.isFrozen(board.reproductionTest)).toBe(true);
-    expect('reproductionTest' in define(undefined)).toBe(false);
-    expect(() => define({ record: 'queued', protect: 'fixing' })).toThrow(/reproductionTest.record "queued"/);
-    expect(() => define({ record: 'testing', protect: 'shipped' })).toThrow(/reproductionTest.protect "shipped"/);
-    expect(() => define({ record: 'testing', protect: 'testing' })).toThrow(/different phases/);
-    expect(() => define({ record: 'testing' })).toThrow(/exactly record and protect/);
-  });
-});

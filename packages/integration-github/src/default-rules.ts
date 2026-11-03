@@ -175,7 +175,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // yet", Review means one is open. The card rests there through every round of
   // feedback — the builder is woken in place — until the merge closes it.
   if (context.item && context.pullRequestIntake !== true) {
-    // Boards that ship change requests (Work, Bug) declare where the card waits while one is out.
+    // Boards that ship change requests (Work) declare where the card waits while one is out.
     const flow = changeRequestFlow(context);
     if (!flow || !context.board || context.pullRequest.state !== 'open') return;
     if (!context.item.stages.includes(flow.build.phase)) return;
@@ -219,7 +219,7 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
       },
     } as const;
   }
-  // Only boards that declare a change-request flow (Work, Bug) close on merge;
+  // Only boards that declare a change-request flow (Work) close on merge;
   // other custom boards handle the merge with their own rules.
   const flow = changeRequestFlow(context);
   if (!flow || !context.board) return;
@@ -264,7 +264,7 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   // Only the Work item that authored the PR can act on the feedback. Provenance
   // binds the event there; a Review card seeing its own posted review must not
   // react to it (that would loop the reviewer against itself). Authoring cards sit
-  // on boards that ship change requests (Work, Bug).
+  // on boards that ship change requests (Work).
   const flow = changeRequestFlow(context);
   if (!flow) return;
   // A closed or merged pull request has no branch left to push fixes to.

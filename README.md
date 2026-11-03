@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | **Рушій** | | |
 | `@factory/core` | `packages/core` | Factory engine: define a pipeline, move a card, resolve the decision. Work and Review live in @factory/pipelines. |
-| `@factory/pipelines` | `packages/pipelines` | Work and Review pipelines for the conveyor; Work runs bugs and features test-first. |
+| `@factory/pipelines` | `packages/pipelines` | Work and Review pipelines for the conveyor. |
 | **Сховище і рантайм** | | |
 | `@factory/store` | `packages/store` | Card, decision, and run-binding storage on Mastra storage domains (libsql, pg). |
 | `@factory/runtime` | `packages/runtime` | Moves cards: transition service, decision dispatcher, run audit, terminal cleanup. |
@@ -64,27 +64,20 @@ shared/work-item-branch.ts   назви гілок і номери PR/MR для 
 
 Нова дошка — нова тека й один рядок у `createPipelines` (вбудовані) або в `boards: [...]` хоста (`boards` у `apps/server/src/mastra/index.ts`).
 
-### Work: тест перед кодом
+### Work
 
-Баги й фічі йдуть однією дошкою Work. Тип задачі задає тріаж (`triageType`), а не окрема дошка: окрема дошка потрібна лише для іншого процесу (інший результат, тригер чи ворота), див. `MIGRATION.md`, «Bug злито у Work».
+Баги й фічі йдуть однією дошкою Work, як в оригіналі Mastra Factory. Тип задачі задає тріаж (`triageType`), а не окрема дошка.
 
 | Фаза | Вид, роль | Що робить |
 | --- | --- | --- |
 | `intake` | resting | сюди потрапляє картка; нічого не запускає |
 | `triage` | working, `triage` | скіл `factory-triage`: класифікація. Баг іде в Planning сам, решта чекає людину |
-| `planning` | working, `plan` | баг — скіл `bug-plan` (як відтворити тестом і як виправити); решта — `factory-plan` (з розділом Test plan). Баг і фіча далі йдуть у `tests`, решта — у `execute`. Без затвердженого плану агент не пройде, якщо не ввімкнено `autoApprovePlans` |
-| `tests` (Tests) | working, `tester` | окреме місце: лише падаючі тести, окремий коміт. Баг — скіл `bug-test` (відтворення), фіча — `factory-test` (тести з Test plan). `factory_record_reproduction_test` записує в картку `bugReproTestSha` і `bugReproTestPaths`. Не вийшло — звіт і `intake` |
-| `execute` (Building) | working, `work` | баг — скіл `bug-build`, решта — промпт. Із записаними тестами: до зелених тестів і перевірок з `AGENTS.md`, тестові файли не чіпати, вихід лише через `review` |
+| `planning` | working, `work` | скіл `factory-plan`. Без затвердженого плану агент не перейде в `execute`, якщо не ввімкнено `autoApprovePlans` |
+| `execute` (Building) | working, `work` | промпт білдера: реалізувати план, далі PR або self-review |
 | `review` | working, `work` | self-review (`factory-self-review`), якщо ввімкнено; далі PR |
 | `done` / `canceled` | terminal | `done` — після merge PR або закриття issue |
 
-Test-first типи — `bug` і `feature request` (`TEST_FIRST_TRIAGE_TYPES`, `pipelines/src/work/phase-rules.ts`). Для них агент потрапляє в `execute` лише з `tests` із записаним тестом або назад з `review`; людина може перенести картку куди завгодно. Решта типів (docs, maintenance…) іде з `planning` одразу в `execute`, як раніше.
-
-Перевірка тесту детермінована: `factory_transition_work_item` (`harness-mastra/src/rules/reproduction-test.ts`) відхиляє перехід місця `work` з `execute` у робочу фазу, якщо `git diff --name-only --no-renames <bugReproTestSha>` у чекауті сесії зачіпає записані шляхи (зокрема незакомічені зміни); якщо чекаут не прочитати — теж відмова. У Mastra git іде в пісочницю сесії, у Claude Code — у теку сесії на хості (`server/src/claude/bound-tools.ts`). Політика дошки тут не підходить: вона чиста, без пісочниці й з таймаутом 5 с. Перехід у `intake` (віддати людині) не перевіряється.
-
-Скіли не знають стека: як збирати, запускати, тестувати й відтворювати на конкретній платформі (admin, mobile Flutter, server), вони читають з `AGENTS.md` і скілів репозиторію (`.agents/skills`, `.claude/skills`).
-
-Поведінка, що раніше трималася на id `work`, винесена в оголошення дошки: `changeRequests: { build, review, merged }`, `triageClassification: true` і `reproductionTest: { record, protect }`. Захист тесту не покриває пуші після переходу в `review` (відповіді на фідбек PR): там тест перевіряє self-review і рев'ю PR.
+Поведінка, що раніше трималася на id `work`, винесена в оголошення дошки: `changeRequests: { build, review, merged }` і `triageClassification: true`.
 
 ### Кілька репозиторіїв: одна робоча тека
 
@@ -92,7 +85,7 @@ Factory може мати кілька репозиторіїв (наприкл�
 
 - **Картка без репозиторію** (ручна, з ClickUp) працює в усьому середовищі: ніхто не вибирає репо ні при старті, ні при переносі. Рядок сесії записано під першим репо середовища, але це лише облік. Агент отримує список `Workspace repositories` і змінює ті репо, яких стосується задача.
 - **Картка з репозиторієм** (issue або PR з GitHub/GitLab) працює як раніше: `Target repository` — репо, звідки вона прийшла, решта середовища поруч.
-- **Інструменти:** для картки на все середовище `source_control_*` не мають репо за замовчуванням, тож `repository` обов'язковий. `factory_record_reproduction_test` записує тест окремо для кожного репо. Self-review передає `reviewedHeads` (head кожного репо), і кожен PR/MR відкривається лише з затвердженого head свого репо.
+- **Інструменти:** для картки на все середовище `source_control_*` не мають репо за замовчуванням, тож `repository` обов'язковий. Self-review передає `reviewedHeads` (head кожного репо), і кожен PR/MR відкривається лише з затвердженого head свого репо.
 - **Злиття:** картка тримає список відкритих PR/MR (`openChangeRequests`, по одному на репо) і переходить у Done, коли змерджено всі. Номер `!5` в одному проєкті й `!5` в іншому — різні записи. MR із проєкту, що не є джерелом intake, теж відстежується для картки.
 - **Claude Code** клонує всі репо середовища так само (`server/src/claude/checkout.ts`).
 - Діалог вибору репо лишився тільки в «Потребує вас», для автоматики, якій нема на чому працювати: кілька репо підключено, але жоден не увімкнено в середовищі.

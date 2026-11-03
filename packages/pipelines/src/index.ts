@@ -20,7 +20,7 @@ export type { WorkItemBranchInput, WorkItemBranchSource } from './shared/work-it
 export { isWorkBoardPhase, workBoard } from './work/board.ts';
 export type { WorkBoardPhase } from './work/board.ts';
 export { workLaneForRole, workStageCarries } from './work/legacy-plan-role.ts';
-export { isTestFirst, SELF_REVIEW_ROUND_LIMIT } from './work/phase-rules.ts';
+export { SELF_REVIEW_ROUND_LIMIT } from './work/phase-rules.ts';
 export { openApprovedChangeRequest } from './work/tool-rules.ts';
 
 /** A registry with Work and Review installed, plus any boards the host adds. */
