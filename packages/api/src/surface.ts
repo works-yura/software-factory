@@ -8,7 +8,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import { boardForWorkItem, legacyPlanRoleFor } from '@factory/core';
-import type { BoardRegistry } from '@factory/core';
+import type { BoardRegistry, IntakeRoutesReader } from '@factory/core';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '@factory/integrations';
 import { getGithubFeatureDiagnostics } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
@@ -481,6 +481,9 @@ export function buildIntegrationContext(
     onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
     configVersion: string;
     boardRegistry: BoardRegistry;
+    /** The project's intake routes and boards, so integrations filing cards themselves apply the routes. */
+    intakeRoutes?: IntakeRoutesReader;
+    projectBoards?: { load(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> };
     factoryReady: boolean;
     /** Work-item feed service, so a channel integration can ingest platform messages. */
     feed: CommentsDomain;
@@ -522,7 +525,13 @@ export function buildIntegrationContext(
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady
       ? {
-          runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
+          runtime: {
+            configVersion: deps.configVersion,
+            workItems: deps.domains.workItems,
+            boards: deps.boardRegistry,
+            ...(deps.intakeRoutes ? { intakeRoutes: deps.intakeRoutes } : {}),
+            ...(deps.projectBoards ? { projectBoards: deps.projectBoards } : {}),
+          },
         }
       : {}),
     ...(deps.emitAudit || deps.onRepositoryPush

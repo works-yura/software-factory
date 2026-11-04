@@ -62,6 +62,8 @@ export class ClickUpIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       workItems: ctx.runtime.workItems,
       boards: ctx.runtime.boards,
+      ...(ctx.runtime.intakeRoutes ? { intakeRoutes: ctx.runtime.intakeRoutes } : {}),
+      ...(ctx.runtime.projectBoards ? { projectBoards: ctx.runtime.projectBoards } : {}),
       configVersion: ctx.runtime.configVersion,
     });
     return [new IssueReconcileWorker({ integrationId: this.id, reconcile, intervalMs: this.#intervalSeconds * 1000 })];

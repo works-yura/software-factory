@@ -302,6 +302,23 @@ describe('intake routes placing linked cards', () => {
     });
   });
 
+  it('keeps the placement of a decision whose integration already applied the routes and names the route', async () => {
+    const { boards, scope, route, deliver } = await setup();
+    await boards.create(scope, docsBoard, 'admin');
+    const docs = await route({ name: 'Everything to Docs', target: { boardKey: 'docs', phaseKey: 'writing' } });
+
+    // ClickUp's poller holds a task that predates the server at the route board's first phase.
+    const held = await deliver({
+      sourceKey: 'clickup-task:86c9',
+      source: 'clickup-task',
+      board: 'docs',
+      stage: 'inbox',
+      metadata: { intakeRouteId: docs.id },
+    });
+    expect(placed(held)).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(held?.metadata).toMatchObject({ intakeRouteId: docs.id });
+  });
+
   it("does not re-route a decision that names a later phase, such as a maintainer's review request", async () => {
     const { boards, scope, route, deliver } = await setup();
     await boards.create(scope, docsBoard, 'admin');

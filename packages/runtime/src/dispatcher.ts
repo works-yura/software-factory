@@ -1458,6 +1458,9 @@ export class FactoryDecisionDispatcher {
     boards: BoardRegistry,
   ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
     if (!this.#intakeRoutes || decision.skipRules === true) return decision;
+    // An integration that applied the routes itself (ClickUp's poller) names the route it took;
+    // its placement, such as a pre-existing task held at the board's first phase, stands.
+    if (typeof decision.metadata?.[INTAKE_ROUTE_METADATA_KEY] === 'string') return decision;
     if (decision.stage !== boards.get(decision.board)?.initialPhase) return decision;
     // A card another card's rule files (a board's child card) goes where that
     // board put it; routes place only what arrives from outside.

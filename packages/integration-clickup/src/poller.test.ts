@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry, defineBoard } from '@factory/core';
+import type { IntakeRoute, RuleGroup } from '@factory/core';
+
 import type { ClickUpTask } from './api.ts';
 import { createClickUpPoller } from './poller.ts';
 
@@ -31,7 +34,37 @@ interface SetupOptions {
   binding?: { board: string | null } | null;
   routes?: Array<{ label: string; board: string }>;
   closure?: boolean;
+  /** Intake routes of the project; set, the poller applies them ahead of tag routes and the List's board. */
+  intakeRoutes?: IntakeRoute[];
 }
+
+/** The project's boards an intake route can name: Work and a stored Docs board. */
+const projectRegistry = createBoardRegistry({
+  boards: [
+    defineBoard({
+      id: 'work',
+      title: 'Work',
+      initialPhase: 'intake',
+      phases: {
+        intake: { title: 'Intake', kind: 'resting', outcomes: { triage: 'triage' } },
+        triage: { title: 'Triage', kind: 'working', role: 'triage' },
+      },
+    }),
+    defineBoard({
+      id: 'docs',
+      title: 'Docs',
+      initialPhase: 'inbox',
+      phases: {
+        inbox: { title: 'Inbox', kind: 'resting', outcomes: { drafting: 'drafting' } },
+        drafting: { title: 'Drafting', kind: 'working', role: 'writer' },
+      },
+    }),
+  ],
+});
+const tagged = (tag: string): RuleGroup => ({
+  operator: 'AND',
+  conditions: [{ field: 'item.labels', operator: 'contains', value: tag }],
+});
 
 function setup(options: SetupOptions) {
   const listTasks = vi.fn(async (_input: unknown) => options.tasks);
@@ -58,6 +91,12 @@ function setup(options: SetupOptions) {
     projects: { listAll: async () => [{ id: 'proj', orgId: 'org' }] as never },
     workItems: { getByProjectSource, commitRuleEvaluation, update } as never,
     boards: { get: () => board } as never,
+    ...(options.intakeRoutes
+      ? {
+          intakeRoutes: { listIntakeRoutes: async () => options.intakeRoutes! },
+          projectBoards: { load: async () => projectRegistry },
+        }
+      : {}),
     configVersion: 'v',
     now: () => START,
   });
@@ -202,5 +241,94 @@ describe('createClickUpPoller', () => {
     const calls = listTasks.mock.calls as unknown as Array<[{ updatedAfter: Date }]>;
     expect(calls[0]![0].updatedAfter.toISOString()).toBe('2026-10-21T10:00:00.000Z');
     expect(calls[1]![0].updatedAfter.toISOString()).toBe('2026-10-28T11:00:00.000Z');
+  });
+
+  describe('intake routes', () => {
+    const docsRoute: IntakeRoute = {
+      id: 'route-docs',
+      enabled: true,
+      when: tagged('docs'),
+      target: { boardKey: 'docs', phaseKey: 'drafting' },
+    };
+
+    it('files a new task where the first matching route says, ahead of its tag route, and names the route', async () => {
+      const { poll, commitRuleEvaluation } = setup({
+        tasks: [task({ tags: ['docs', 'bug'] })],
+        routes: [{ label: 'Bug', board: 'bug' }],
+        intakeRoutes: [docsRoute],
+      });
+      expect(await poll()).toMatchObject({ checked: 1, updated: 1, failed: 0 });
+      expect(decisionOf(commitRuleEvaluation)).toMatchObject({
+        board: 'docs',
+        stage: 'drafting',
+        metadata: { intakeRouteId: 'route-docs', labels: ['docs', 'bug'] },
+      });
+    });
+
+    it("holds a task that existed before start at the route board's first phase", async () => {
+      const { poll, commitRuleEvaluation } = setup({
+        tasks: [task({ tags: ['docs'], createdAt: '2026-10-27T09:00:00.000Z' })],
+        intakeRoutes: [docsRoute],
+      });
+      await poll();
+      expect(decisionOf(commitRuleEvaluation)).toMatchObject({ board: 'docs', stage: 'inbox' });
+    });
+
+    it('files a task from a List without a board when a route takes it, and skips it when none does', async () => {
+      const routed = setup({ tasks: [task({ tags: ['docs'] })], binding: { board: null }, intakeRoutes: [docsRoute] });
+      await routed.poll();
+      expect(decisionOf(routed.commitRuleEvaluation)).toMatchObject({ board: 'docs', stage: 'drafting' });
+
+      const unrouted = setup({ tasks: [task({ tags: ['bug'] })], binding: { board: null }, intakeRoutes: [docsRoute] });
+      await unrouted.poll();
+      expect(unrouted.commitRuleEvaluation).not.toHaveBeenCalled();
+    });
+
+    it('places a task no route matches by its tag route as before, without naming a route', async () => {
+      const { poll, commitRuleEvaluation } = setup({
+        tasks: [task({ tags: ['bug'] })],
+        routes: [{ label: 'Bug', board: 'bug' }],
+        intakeRoutes: [docsRoute, { ...docsRoute, id: 'route-off', enabled: false, when: null }],
+      });
+      await poll();
+      const decision = decisionOf(commitRuleEvaluation);
+      expect(decision).toMatchObject({ board: 'bug', stage: 'intake' });
+      expect(decision.metadata).not.toHaveProperty('intakeRouteId');
+    });
+
+    it("leaves a task out when its List's status rules do not import it, whatever the routes say", async () => {
+      const { poll, commitRuleEvaluation } = setup({
+        tasks: [task({ tags: ['docs'], status: { name: 'backlog', type: 'open' } })],
+        intakeRoutes: [docsRoute],
+      });
+      await poll();
+      expect(commitRuleEvaluation).not.toHaveBeenCalled();
+    });
+
+    it('routes on ClickUp facts: the integration and the untrusted author', async () => {
+      const { poll, commitRuleEvaluation } = setup({
+        tasks: [task({ tags: [] })],
+        intakeRoutes: [
+          {
+            id: 'route-clickup',
+            enabled: true,
+            when: {
+              operator: 'AND',
+              conditions: [
+                { field: 'source.integration', operator: 'equals', value: 'clickup' },
+                { field: 'author.trusted', operator: 'equals', value: false },
+              ],
+            },
+            target: { boardKey: 'work', phaseKey: 'triage' },
+          },
+        ],
+      });
+      await poll();
+      expect(decisionOf(commitRuleEvaluation)).toMatchObject({
+        board: 'work',
+        stage: 'triage',
+        metadata: { intakeRouteId: 'route-clickup' },
+      });
+    });
   });
 });

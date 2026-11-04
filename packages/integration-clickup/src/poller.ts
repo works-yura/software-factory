@@ -1,5 +1,5 @@
-import { resolveBoardClosure } from '@factory/core';
-import type { BoardRegistry } from '@factory/core';
+import { cardRuleFacts, INTAKE_ROUTE_METADATA_KEY, resolveBoardClosure, resolveIntakePlacement } from '@factory/core';
+import type { BoardRegistry, ExternalWorkItemSource, IntakeRoutesReader } from '@factory/core';
 import type { IssueReconcileSummary } from '@factory/integrations';
 import type { FactoryProject, FactoryProjectsStorage, IntakeStorage, WorkItemRow, WorkItemsStorage } from '@factory/store';
 
@@ -24,6 +24,13 @@ export interface ClickUpPollerOptions {
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
   workItems: Pick<WorkItemsStorage, 'getByProjectSource' | 'commitRuleEvaluation' | 'update'>;
   boards: Pick<BoardRegistry, 'get'>;
+  /**
+   * The project's intake routes. A new task goes where the first matching route says, ahead
+   * of its tag route and its List's board; without a match those place it as before.
+   */
+  intakeRoutes?: IntakeRoutesReader;
+  /** A project's boards, stored ones included, which an intake route may name. Defaults to `boards`. */
+  projectBoards?: { load(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> };
   configVersion: string;
   /** How far back the first sweep looks for tasks. */
   lookbackDays?: number;
@@ -137,9 +144,26 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
     return true;
   };
 
+  /** Where an intake route sends a new task, if one matches; the route wins over tag routes and the List's board. */
+  const routePlacement = async (project: FactoryProject, task: ClickUpTask, source: ExternalWorkItemSource) => {
+    if (!options.intakeRoutes) return undefined;
+    const scope = { orgId: project.orgId, factoryProjectId: project.id };
+    const routes = await options.intakeRoutes.listIntakeRoutes(scope);
+    if (routes.length === 0) return undefined;
+    const registry = options.projectBoards ? await options.projectBoards.load(scope) : (options.boards as BoardRegistry);
+    const facts = cardRuleFacts({
+      title: task.name || `ClickUp task ${task.id}`,
+      metadata: taskMetadata(task),
+      externalSource: source,
+    });
+    const placement = resolveIntakePlacement(routes, facts, registry);
+    return placement && { ...placement, initialPhase: registry.get(placement.board)!.initialPhase };
+  };
+
   const fileTask = async (
     project: FactoryProject,
-    board: string,
+    /** The tag route's or the List's board; null when neither names one. */
+    fallbackBoard: string | null,
     rules: ListRules | undefined,
     task: ClickUpTask,
   ): Promise<Outcome> => {
@@ -164,17 +188,28 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
       });
       return moved ? 'moved' : 'refreshed';
     }
+    // The List's status rules decide which tasks are imported at all; a route only decides where.
     if (closing || rule.action !== 'phase') return 'unchanged';
 
-    const installed = options.boards.get(board);
-    if (!installed) throw new Error(`Board "${board}" is not installed.`);
-    if (!(rule.phase in installed.phases)) {
-      throw new Error(`Board "${board}" has no phase "${rule.phase}" for status "${task.status.name}".`);
-    }
     // Tasks that already existed when the server started never start work on their own: the first
     // sweep would otherwise launch an agent for every open task in the List.
     const fresh = Date.parse(task.createdAt) > startedAt.getTime();
-    const stage = fresh ? rule.phase : installed.initialPhase;
+    const routed = await routePlacement(project, task, source);
+    let board: string;
+    let stage: string;
+    if (routed) {
+      board = routed.board;
+      stage = fresh ? routed.phase : routed.initialPhase;
+    } else {
+      if (!fallbackBoard) return 'unchanged';
+      board = fallbackBoard;
+      const installed = options.boards.get(board);
+      if (!installed) throw new Error(`Board "${board}" is not installed.`);
+      if (!(rule.phase in installed.phases)) {
+        throw new Error(`Board "${board}" has no phase "${rule.phase}" for status "${task.status.name}".`);
+      }
+      stage = fresh ? rule.phase : installed.initialPhase;
+    }
     const identity = `clickup:task:${task.id}:created`;
     await options.workItems.commitRuleEvaluation({
       orgId: project.orgId,
@@ -195,7 +230,8 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
           title: task.name || `ClickUp task ${task.id}`,
           url: task.url || null,
           stage,
-          metadata: taskMetadata(task),
+          // Naming the route tells the dispatcher the routes were applied: it keeps this placement.
+          metadata: routed ? { ...taskMetadata(task), [INTAKE_ROUTE_METADATA_KEY]: routed.routeId } : taskMetadata(task),
         },
       ],
       causalChain: [],
@@ -246,8 +282,9 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
           const tasks = await options.client.listTasks({ listId, updatedAfter: since, includeClosed: true });
           for (const task of tasks) {
             const tags = new Set(task.tags.map(tag => tag.toLowerCase()));
-            const board = routes.find(route => tags.has(route.label.toLowerCase()))?.board ?? binding.board;
-            if (!board) continue;
+            const board = routes.find(route => tags.has(route.label.toLowerCase()))?.board ?? binding.board ?? null;
+            // Without a board of its own a task can still be placed by an intake route.
+            if (!board && !options.intakeRoutes) continue;
             summary.checked += 1;
             try {
               const outcome = await fileTask(project, board, rules[listId], task);

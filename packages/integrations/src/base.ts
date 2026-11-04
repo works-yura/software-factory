@@ -25,7 +25,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import type { BoardRegistry } from '@factory/core';
+import type { BoardRegistry, IntakeRoutesReader } from '@factory/core';
 import type { Intake } from '@factory/capabilities';
 import type { VersionControl } from '@factory/capabilities';
 import type { RouteAuth } from '@factory/http';
@@ -152,6 +152,10 @@ export interface IntegrationContext {
     workItems: WorkItemsStorage;
     /** Installed boards, so integrations read phase semantics instead of matching names. */
     boards: BoardRegistry;
+    /** The project's intake routes, for integrations that place new cards themselves. */
+    intakeRoutes?: IntakeRoutesReader;
+    /** A project's boards, stored ones included, which an intake route may name. */
+    projectBoards?: { load(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> };
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
