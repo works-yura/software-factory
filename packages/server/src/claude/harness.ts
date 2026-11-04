@@ -256,6 +256,8 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
 
   const harness = createClaudeCodeHarness({
     store,
+    // Stream text and thinking as they are written (`text_delta`/`thinking_delta`), not one block at the end.
+    includePartialMessages: true,
     // The Factory chat has no repository: a private empty folder instead of a checkout.
     cwdFor: async sessionId => {
       const supervisorProjectId = claudeSupervisorProjectId(sessionId);

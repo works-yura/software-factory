@@ -6,7 +6,7 @@ import { fakeClaude } from './__fixtures__/fake-claude.ts';
 import { buildClaudeArgs, buildClaudeEnv, runClaude } from './cli.ts';
 import type { ClaudeChildProcess, ClaudeSpawn } from './cli.ts';
 
-const BASE_ARGS = ['-p', '-', '--output-format', 'stream-json', '--verbose'];
+const BASE_ARGS = ['-p', '-', '--output-format', 'stream-json', '--verbose', '--thinking-display', 'summarized'];
 
 /** A hand-driven child process: the test decides when it prints, fails and exits. */
 function scriptedChild(options: { exitOn?: NodeJS.Signals[]; pipes?: boolean } = {}) {
@@ -61,6 +61,8 @@ describe('buildClaudeArgs', () => {
       '--output-format',
       'stream-json',
       '--verbose',
+      '--thinking-display',
+      'summarized',
       '--include-partial-messages',
       '--resume',
       'abc',

@@ -55,7 +55,9 @@ export interface ClaudeArgsInput {
 
 /** Arguments for one non-interactive turn; the prompt goes on stdin (`-p -`). */
 export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
-  const args = ['-p', '-', '--output-format', 'stream-json', '--verbose'];
+  // `-p` defaults thinking to `display: "omitted"`: blocks arrive with empty text
+  // (signature only). Ask for summaries so the UI can show the reasoning.
+  const args = ['-p', '-', '--output-format', 'stream-json', '--verbose', '--thinking-display', 'summarized'];
   if (input.includePartialMessages) args.push('--include-partial-messages');
   if (input.resumeSessionId) args.push('--resume', input.resumeSessionId);
   if (input.model) args.push('--model', input.model);

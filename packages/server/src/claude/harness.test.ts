@@ -145,6 +145,11 @@ describe('createClaudeFactoryHarness', () => {
     await expect(factory.harness.deleteSession('no-such-session')).resolves.toBeUndefined();
   });
 
+  it('streams partial messages, so text and thinking reach the UI as they are written', () => {
+    const { config } = setup();
+    expect(config.includePartialMessages).toBe(true);
+  });
+
   it('needs a session store or a store directory', () => {
     expect(() =>
       createClaudeFactoryHarness({
