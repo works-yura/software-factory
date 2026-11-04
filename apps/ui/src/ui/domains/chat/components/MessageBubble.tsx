@@ -186,7 +186,7 @@ export function MessageBubble({
     Reasoning: (part: ReasoningPart) => (
       <ReasoningPartRenderer
         part={{ ...part, state: part.state ?? (entry.streaming ? 'streaming' : 'done') }}
-        defaultOpen={false}
+        defaultOpen
       />
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
