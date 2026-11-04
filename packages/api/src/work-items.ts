@@ -24,7 +24,7 @@ import type {
 } from '@factory/harness-mastra';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '@factory/harness-mastra';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '@factory/runtime';
-import type { WorkItemSource } from '@factory/core';
+import type { IntakeRoutesReader, WorkItemSource } from '@factory/core';
 import type { LiveSessions } from '@factory/session';
 import { auditRequestOrigin } from '@factory/feed';
 import type { AuditEmitter } from '@factory/feed';
@@ -63,6 +63,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Boards installed for this Factory instance. */
   /** A fixed registry, or the per-project boards. Defaults to the built-in boards. */
   boardRegistry?: BoardRegistry | ProjectBoardSource;
+  /** The project's intake routes, which place a card filed without a board. */
+  intakeRoutes?: IntakeRoutesReader;
   /** Comments domain — backs the mention attention provider. */
   comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
@@ -540,6 +542,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               workItems,
               boards: await this.#boards.load(resolved),
               transitionService,
+              intakeRoutes: this.deps.intakeRoutes,
               audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
               orgId: resolved.orgId,
               userId: resolved.userId,

@@ -9,6 +9,14 @@ import {
 } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import { moveCardToBoard } from '@factory/core';
+import {
+  cardRuleFacts,
+  INTAKE_ROUTE_METADATA_KEY,
+  landingPhase,
+  placedByIntakeRoute,
+  resolveIntakePlacement,
+} from '@factory/core';
+import type { IntakeRoutesReader } from '@factory/core';
 import { toBoardSource } from './project-boards.ts';
 import type { ProjectBoardSource } from './project-boards.ts';
 import {
@@ -39,7 +47,7 @@ import { decisionOvertaken } from './decision-applicability.ts';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from '@factory/store';
 import type { FactoryTransitionService } from './transition-service.ts';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from '@factory/core';
-import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from '@factory/core';
+import { externalSourceForWorkItem, FACTORY_RULE_STAGES } from '@factory/core';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -342,6 +350,8 @@ export interface FactoryDecisionDispatcherOptions {
     factoryProjectId: string;
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
   }) => Promise<string | null>;
+  /** The project's intake routes, which place newly filed linked cards. Without it, decisions place cards as they say. */
+  intakeRoutes?: IntakeRoutesReader;
   /** `false` spends a linked-card decision unfiled: its Factory project was deleted after the decision committed. */
   factoryProjectExists?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   maxInFlight?: number;
@@ -532,6 +542,7 @@ export class FactoryDecisionDispatcher {
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #factoryProjectExists?: FactoryDecisionDispatcherOptions['factoryProjectExists'];
+  readonly #intakeRoutes?: IntakeRoutesReader;
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
   readonly #staleBindingTtlMs: number;
@@ -567,6 +578,7 @@ export class FactoryDecisionDispatcher {
     this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
     this.#factoryProjectExists = options.factoryProjectExists;
+    this.#intakeRoutes = options.intakeRoutes;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
     this.#staleBindingSweepIntervalMs = positiveMs(
@@ -835,9 +847,6 @@ export class FactoryDecisionDispatcher {
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    // Neither arming nor auto-run is standing consent for code from outside the write-access
-    // circle: only a run pre-approved by a person's gesture or its own agent's governed move passes.
-    if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
     if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
     if (item && startsInAutoPhase(boards, item, decision)) return false;
@@ -1236,7 +1245,7 @@ export class FactoryDecisionDispatcher {
 
   async #upsertLinkedItem(
     record: FactoryDeferredDecisionRecord,
-    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    requested: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
     if (
@@ -1250,13 +1259,22 @@ export class FactoryDecisionDispatcher {
     const existing = await this.#storage.getByProjectSource({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
-      source: externalSourceForDecision(decision),
+      source: externalSourceForDecision(requested),
     });
-    if (existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey) {
-      // Filing the card *was* the placement, so a retry of the same decision has
-      // nothing left to apply — and must not drag a card that has since moved
-      // back down to the stage this decision filed it at.
-      if (decision.skipRules === true) return;
+    const materializedHere = existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
+    // Filing the card *was* the placement, so a retry of the same decision has
+    // nothing left to apply — and must not drag a card that has since moved
+    // back down to the stage this decision filed it at.
+    if (materializedHere && requested.skipRules === true) return;
+    const boards = await this.#boards.load(record);
+    // Intake routes place only a card this decision files (or is still filing,
+    // on a retry); a card already on the board stays where it is.
+    const decision = !existing
+      ? await this.#routeArrival(record, requested, boards)
+      : materializedHere
+        ? await this.#resumeRoutedCard(record, existing, requested, boards)
+        : this.#keepRoutedCard(existing, requested, boards);
+    if (materializedHere && existing) {
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
           record.orgId,
@@ -1266,7 +1284,6 @@ export class FactoryDecisionDispatcher {
         if (replay?.status === 'accepted' && replay.stage === decision.stage) return;
       }
     }
-    const boards = await this.#boards.load(record);
     assertFactoryDecisionTarget(decision, boards);
     const definition = boards.get(decision.board);
     if (!definition) throw new Error('Factory decision target board is not installed.');
@@ -1428,6 +1445,86 @@ export class FactoryDecisionDispatcher {
       causalChain,
     });
     if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
+  }
+
+  /**
+   * Applies the project's intake routes to an arrival: a decision filing the card at its
+   * board's initial phase. A decision naming a later phase (a maintainer's review request)
+   * or placing the card outright (`skipRules`) already chose where the card goes.
+   */
+  async #routeArrival(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    boards: BoardRegistry,
+  ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
+    if (!this.#intakeRoutes || decision.skipRules === true) return decision;
+    if (decision.stage !== boards.get(decision.board)?.initialPhase) return decision;
+    // A card another card's rule files (a board's child card) goes where that
+    // board put it; routes place only what arrives from outside.
+    if (record.workItemId !== null) return decision;
+    const routes = await this.#intakeRoutes.listIntakeRoutes({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+    });
+    if (routes.length === 0) return decision;
+    const facts = cardRuleFacts({
+      title: decision.title,
+      metadata: decision.metadata ?? {},
+      externalSource: externalSourceForDecision(decision),
+    });
+    const placement = resolveIntakePlacement(routes, facts, boards);
+    if (!placement) return decision;
+    return {
+      ...decision,
+      board: placement.board,
+      stage: placement.phase,
+      metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: placement.routeId },
+    };
+  }
+
+  /**
+   * A retry of the decision that filed `existing` finishes the filing where it started: on the
+   * card's board, at the phase its route names now, or the board's first phase when the route was
+   * deleted, disabled or re-pointed since. Routes are not re-run, so an edit cannot send the card
+   * to a board it isn't on.
+   */
+  async #resumeRoutedCard(
+    record: FactoryDeferredDecisionRecord,
+    existing: WorkItemRow,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    boards: BoardRegistry,
+  ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
+    const routeId = existing.metadata?.[INTAKE_ROUTE_METADATA_KEY];
+    if (typeof routeId !== 'string') return decision;
+    const board = boards.get(boardForWorkItem(existing));
+    if (!board) return decision;
+    const routes = this.#intakeRoutes
+      ? await this.#intakeRoutes.listIntakeRoutes({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
+      : [];
+    const route = routes.find(entry => entry.id === routeId && entry.enabled && entry.target.boardKey === board.id);
+    return {
+      ...decision,
+      board: board.id,
+      stage: landingPhase(board, route?.target.phaseKey),
+      metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: routeId },
+    };
+  }
+
+  /**
+   * A card an intake route placed stays on the route's board when its source is filed again
+   * (a reconcile replaying "opened" with today's label route or binding): the decision lands
+   * on the card's board at its first phase, so it only backfills facts and moves nothing.
+   * An explicit placement (`skipRules`) still wins.
+   */
+  #keepRoutedCard(
+    existing: WorkItemRow,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    boards: BoardRegistry,
+  ): Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }> {
+    if (decision.skipRules === true || !placedByIntakeRoute(existing)) return decision;
+    const board = boards.get(boardForWorkItem(existing));
+    if (!board || board.id === decision.board) return decision;
+    return { ...decision, board: board.id, stage: board.initialPhase };
   }
 
   /** Drops `claimKey` when the card holding it belongs to a deleted Factory project; true when it is free again. */

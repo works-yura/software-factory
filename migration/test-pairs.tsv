@@ -22,7 +22,7 @@ storage/domains/comments/feed-context.test.ts	store/src/comments/feed-context.te
 rules/transition-service.test.ts	runtime/src/transition-service.test.ts	+1	upstream #28604: a phase that auto-approves submit_plan lets the planner move on
 rules/terminal-cleanup.test.ts	runtime/src/terminal-cleanup.test.ts
 rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts	+3	upstream #28721: decisions held for Work's shared context (+3)
-rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+6	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3); upstream #28971: a deleted project files no linked card and frees the claims its cards hold (+2)
+rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+7	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3); upstream #28971: a deleted project files no linked card and frees the claims its cards hold (+2); upstream #29109: outside authors' cards follow the person's gesture and phase conditions instead of a hard-coded refusal (3 rewritten, +1 split)
 session/run-audit.test.ts	runtime/src/run-audit.test.ts
 skills/service.test.ts	runtime/src/skills/service.test.ts	-1	the two skill-cache rescan cases moved to harness-mastra/src/harness.test.ts with the Mastra harness adapter (-2); formatSkillMessage case ported from upstream a5a9179daa (+1)
 storage/domains/channel-identity/base.test.ts	store/src/channel-identity/base.test.ts
@@ -49,14 +49,14 @@ integrations/github/acceptance-labels.test.ts	integration-github/src/acceptance-
 integrations/github/app-identity.test.ts	integration-github/src/app-identity.test.ts
 integrations/github/commits.test.ts	integration-github/src/commits.test.ts
 integrations/github/config.test.ts	integration-github/src/config.test.ts
-integrations/github/default-rules.test.ts	integration-github/src/default-rules.test.ts	+3	work spanning several repositories: a merge closes the card only with the last pull request out
+integrations/github/default-rules.test.ts	integration-github/src/default-rules.test.ts	+4	work spanning several repositories: a merge closes the card only with the last pull request out; upstream #29109: a card resting in Intake is not re-triaged (+1)
 integrations/github/integration.test.ts	integration-github/src/integration.test.ts	+2	agent reads of the API and issue edits
 integrations/github/org-isolation-scenario.test.ts	integration-github/src/org-isolation-scenario.test.ts
 integrations/github/provenance.test.ts	integration-github/src/provenance.test.ts
 integrations/github/reconcile-worker.test.ts	integration-github/src/reconcile-worker.test.ts
 integrations/github/routes-scenario.test.ts	integration-github/src/routes-scenario.test.ts
 integrations/github/routes.test.ts	integration-github/src/routes.test.ts	+4	connect registers the access-token account without a GitHub App, and reports an unreadable token (+2); status connects an access token by itself (+2)
-integrations/github/rules.test.ts	server/src/integrations/github/rules.test.ts	+3	edited Factory verdict cases ported from upstream f7d8e6bb96
+integrations/github/rules.test.ts	server/src/integrations/github/rules.test.ts	+15	edited Factory verdict cases ported from upstream f7d8e6bb96; upstream #29109: GithubRules with intake routes (+12)
 integrations/github/sandbox-release.test.ts	sandbox/src/github/sandbox-release.test.ts
 integrations/github/sandbox-scenario.test.ts	sandbox/src/github/sandbox-scenario.test.ts
 integrations/github/sandbox.git.test.ts	sandbox/src/github/sandbox.git.test.ts	+1	git identity matrix ported from upstream ca08ed414a; its provider block lives in integration-github/src/git-identity.git.test.ts
@@ -99,7 +99,7 @@ routes/config.test.ts	api/src/config.test.ts	0	personal default-model routes rem
 routes/contracts.test.ts	api/src/contracts.test.ts
 routes/custom-provider-source.test.ts	api/src/custom-provider-source.test.ts
 routes/fs.test.ts	api/src/fs.test.ts	-2	upstream 7573972d0c (#28274): /changes/diff and its truncation cases replaced by /changes/patches cases; upstream #28829: the host filesystem routes need a signed-in user (+3)
-routes/intake.test.ts	api/src/intake.test.ts	+4	upstream #28877: an unreadable project board source saves no binding or route (+2); upstream #28971: a binding refused while its project is deleted, a deleted project releases its sources (+2)
+routes/intake.test.ts	api/src/intake.test.ts	+7	upstream #28877: an unreadable project board source saves no binding or route (+2); upstream #28971: a binding refused while its project is deleted, a deleted project releases its sources (+2); upstream #29109: a rebind or label-route change leaves a routed card where its route put it (+3)
 routes/knowledge.test.ts	api/src/knowledge.test.ts
 routes/oauth.test.ts	api/src/oauth.test.ts
 routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts

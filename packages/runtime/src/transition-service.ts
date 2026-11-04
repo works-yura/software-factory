@@ -22,12 +22,7 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from '@factory/core';
-import {
-  externallyAuthoredWorkItem,
-  factoryRuleSourceForWorkItem,
-  isFactoryRuleStage,
-  workItemSource,
-} from '@factory/core';
+import { factoryRuleSourceForWorkItem, isFactoryRuleStage, workItemSource } from '@factory/core';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   assertFactoryDecisionTarget,
@@ -520,20 +515,6 @@ export class FactoryTransitionService {
           }
           if (policy?.accept && !isHumanTransition(request)) {
             throw new Error('Board policy requested unauthorized acceptance.');
-          }
-          // External content can steer a bound agent; board allowance cannot bypass this guard.
-          if (
-            request.actor.type === 'agent' &&
-            !board.isWorking(fromStage) &&
-            entersWorking &&
-            externallyAuthoredWorkItem(item)
-          ) {
-            return {
-              outcome: 'rejected' as const,
-              code: 'approval_required',
-              reason:
-                'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
-            };
           }
           // Self-review sits between a board's build and its change request, so only boards that
           // ship change requests (Work) read the project switch.

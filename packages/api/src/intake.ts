@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { BoardRegistry } from '@factory/core';
 import { toBoardSource } from '@factory/runtime';
 import type { ProjectBoardSource } from '@factory/runtime';
-import { cardLabels, moveCardToBoard } from '@factory/core';
+import { cardLabels, moveCardToBoard, placedByIntakeRoute } from '@factory/core';
 import type { Intake, IntakeItem } from '@factory/capabilities';
 import type { AuditEmitter } from '@factory/feed';
 import { FactoryProjectNotFoundError, normalizeIntakeLabel, resolveIntakeLabelRoute } from '@factory/store';
@@ -129,6 +129,11 @@ async function relocateSourceCards({
   for (const item of items) {
     const source = item.externalSource;
     if (!source || source.integrationId !== integration.id || !sourceKeys.has(source.externalId)) continue;
+    // An intake route chose this card's board; a rebind doesn't override it.
+    if (placedByIntakeRoute(item)) {
+      skipped += 1;
+      continue;
+    }
     const outcome = await moveCardToBoard({ workItems, boardRegistry, userId, item, targetBoard });
     if (outcome === 'moved') moved += 1;
     else if (outcome === 'skipped') skipped += 1;
@@ -176,6 +181,11 @@ async function relocateLabeledCards({
     if (!source || source.integrationId !== integrationId || source.type !== 'issue') continue;
     const labels = cardLabels(item);
     if (!labels.some(candidate => normalizeIntakeLabel(candidate) === changed)) continue;
+    // An intake route chose this card's board; a label route change doesn't override it.
+    if (placedByIntakeRoute(item)) {
+      skipped += 1;
+      continue;
+    }
     const targetBoard =
       resolveIntakeLabelRoute(routes, labels)?.board ??
       repositoryBoards.find(candidate => cardInRepository(item, candidate))?.board ??

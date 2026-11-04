@@ -24,6 +24,7 @@ import {
   transitionBodySchema,
   updateProjectBodySchema,
 } from '@factory/contracts';
+import { IntakeRouteRoutes } from './intake-routes.ts';
 import { ProjectRoutes } from './projects.ts';
 import { SkillRoutes } from './skills.ts';
 import { buildSupervisorRoutes } from '@factory/supervisor';
@@ -77,7 +78,14 @@ function registeredFactoryRoutes() {
     boards: {},
   } as never).routes();
   const skills = new SkillRoutes({ auth: {}, controllerId: 'code', harness: {}, overrides: {} } as never).routes();
-  return [...projects, ...work, ...attention, ...supervisor, ...automationRuns, ...boards, ...skills];
+  const intakeRoutes = new IntakeRouteRoutes({
+    auth: {},
+    audit: {},
+    projects: {},
+    storage: {},
+    boards: {},
+  } as never).routes();
+  return [...projects, ...work, ...attention, ...supervisor, ...automationRuns, ...boards, ...skills, ...intakeRoutes];
 }
 
 describe('Factory route contracts', () => {

@@ -1181,6 +1181,7 @@ export class MastraFactory {
       feed: commentsDomain,
       audit: auditStorage,
       boards,
+      ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
       transitionService,
       auditRecorder: auditDomain,
       sessions: sourceControlSessions,
@@ -2312,6 +2313,7 @@ export class MastraFactory {
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
                 boards,
+                ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();

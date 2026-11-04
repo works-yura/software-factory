@@ -63,6 +63,7 @@ import { CredentialAccountRoutes } from './credential-accounts.ts';
 import type { ClaudeSignInFlows } from './credential-accounts.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
 import { buildFsRoutes } from './fs.ts';
+import { IntakeRouteRoutes } from './intake-routes.ts';
 import { IntakeRoutes } from './intake.ts';
 import { KnowledgeRoutes } from './knowledge.ts';
 import { OAuthRoutes } from './oauth.ts';
@@ -825,11 +826,21 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
+          intakeRoutes: deps.storedBoards?.storage,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.storedBoards
+      ? new IntakeRouteRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
+          storage: deps.storedBoards.storage,
+          boards: deps.storedBoards.cache,
         }).routes()
       : []),
     ...(deps.factoryReady

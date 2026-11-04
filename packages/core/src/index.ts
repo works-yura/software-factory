@@ -7,6 +7,14 @@ export {
   isDefinedBoard,
 } from './boards/define-board.ts';
 export { cardRuleFacts } from './boards/card-facts.ts';
+export {
+  INTAKE_ROUTE_METADATA_KEY,
+  intakeTargetProblem,
+  landingPhase,
+  placedByIntakeRoute,
+  resolveIntakePlacement,
+} from './boards/intake-routing.ts';
+export type { IntakeRoute, IntakeRoutesReader, IntakeTargetProblem } from './boards/intake-routing.ts';
 export { holdsLegacyPlanner, LEGACY_PLAN_ROLE, legacyPlanRoleFor } from './boards/legacy-plan-role.ts';
 export { autoApprovedExitTool, startsInAutoPhase } from './boards/phase-automation.ts';
 export type {
@@ -65,6 +73,7 @@ export { resolveFactoryStageRules } from './rules/resolve.ts';
 export type { ResolvedFactoryStageRule } from './rules/resolve.ts';
 export {
   AUTO_TRIAGED_LABEL,
+  authorTrusted,
   externallyAuthored,
   externallyAuthoredWorkItem,
   changeRequestFlow,

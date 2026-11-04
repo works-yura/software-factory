@@ -20,6 +20,7 @@ import {
 } from '@factory/core';
 import { requestsChangesVerdict } from '@factory/session';
 import { selectEventRule } from '@factory/core';
+import { placedByIntakeRoute } from '@factory/core';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -452,6 +453,8 @@ export class GithubRules {
       item = updated.item;
       changed = true;
     }
+    // An intake route chose this card's board when it arrived; its labels no longer move it.
+    if (placedByIntakeRoute(item)) return { status: changed ? 'committed' : 'ignored' };
     const target = await this.#intakeTarget(project, repositoryName, labels);
     const outcome = await moveCardToBoard({
       workItems: this.options.storage,

@@ -21,6 +21,7 @@ export const AUDIT_ACTIONS = {
   intake: ['config_updated', 'binding_updated', 'label_route_updated'],
   board: ['created', 'updated', 'deleted'],
   skill: ['updated', 'reverted'],
+  intake_route: ['created', 'updated', 'deleted', 'reordered'],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;
