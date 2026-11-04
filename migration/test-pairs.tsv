@@ -22,14 +22,14 @@ storage/domains/comments/feed-context.test.ts	store/src/comments/feed-context.te
 rules/transition-service.test.ts	runtime/src/transition-service.test.ts	+1	upstream #28604: a phase that auto-approves submit_plan lets the planner move on
 rules/terminal-cleanup.test.ts	runtime/src/terminal-cleanup.test.ts
 rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts	+3	upstream #28721: decisions held for Work's shared context (+3)
-rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+4	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3)
+rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+6	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3); upstream #28971: a deleted project files no linked card and frees the claims its cards hold (+2)
 session/run-audit.test.ts	runtime/src/run-audit.test.ts
 skills/service.test.ts	runtime/src/skills/service.test.ts	-1	the two skill-cache rescan cases moved to harness-mastra/src/harness.test.ts with the Mastra harness adapter (-2); formatSkillMessage case ported from upstream a5a9179daa (+1)
 storage/domains/channel-identity/base.test.ts	store/src/channel-identity/base.test.ts
 storage/domains/credentials/base.test.ts	store/src/credentials/base.test.ts
 storage/domains/custom-providers/base.test.ts	store/src/custom-providers/base.test.ts
 storage/domains/filesystem/base.test.ts	store/src/filesystem/base.test.ts
-storage/domains/intake/base.test.ts	store/src/intake/base.test.ts
+storage/domains/intake/base.test.ts	store/src/intake/base.test.ts	+2	upstream #28971: a binding needs a live project, a deleted project releases its sources (+2)
 storage/domains/integrations/base.test.ts	store/src/integrations/base.test.ts
 storage/domains/memory-settings/base.test.ts	store/src/memory-settings/base.test.ts
 storage/domains/model-defaults/base.test.ts	store/src/model-defaults/base.test.ts
@@ -99,7 +99,7 @@ routes/config.test.ts	api/src/config.test.ts	0	personal default-model routes rem
 routes/contracts.test.ts	api/src/contracts.test.ts
 routes/custom-provider-source.test.ts	api/src/custom-provider-source.test.ts
 routes/fs.test.ts	api/src/fs.test.ts	-2	upstream 7573972d0c (#28274): /changes/diff and its truncation cases replaced by /changes/patches cases; upstream #28829: the host filesystem routes need a signed-in user (+3)
-routes/intake.test.ts	api/src/intake.test.ts	+2	upstream #28877: an unreadable project board source saves no binding or route (+2)
+routes/intake.test.ts	api/src/intake.test.ts	+4	upstream #28877: an unreadable project board source saves no binding or route (+2); upstream #28971: a binding refused while its project is deleted, a deleted project releases its sources (+2)
 routes/knowledge.test.ts	api/src/knowledge.test.ts
 routes/oauth.test.ts	api/src/oauth.test.ts
 routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts

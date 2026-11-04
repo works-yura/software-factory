@@ -2,6 +2,7 @@ import { MastraError } from '@mastra/core/error';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { FactoryStorageOps } from '@mastra/core/storage';
 import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
@@ -24,6 +25,7 @@ import type {
 } from '@factory/store';
 import { ACTIVE_RUN_BINDING_STAGES } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
+import type { IntakeStorage } from '@factory/store';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
@@ -171,6 +173,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   /** Source-control domain the connection/repository routes fan out over. */
   sourceControl: SourceControlStorage;
+  /** Intake routing to release with a deleted Factory project, in the same transaction. */
+  intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
   /** Integration ids allowed as source-control connection targets. */
   versionControlIntegrationIds?: string[];
   /** Validate and persist a repository selected from a provider-backed listing. */
@@ -281,6 +285,16 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   async #sourceControl(): Promise<SourceControlStorage> {
     await this.deps.sourceControl.ensureReady();
     return this.deps.sourceControl;
+  }
+
+  async #intakeRelease(
+    orgId: string,
+    factoryProjectId: string,
+  ): Promise<((ops: FactoryStorageOps) => Promise<void>) | undefined> {
+    const { intake } = this.deps;
+    if (!intake) return undefined;
+    await intake.ensureReady();
+    return ops => intake.clearProjectBindings({ orgId, factoryProjectId }, ops);
   }
 
   async #handles(): Promise<SourceControlStorageHandle[]> {
@@ -712,7 +726,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               await handle.connections.delete({ orgId: tenant.orgId, id: connection.id });
             }
           }
-          await (await this.#projects()).delete({ orgId: tenant.orgId, id });
+          await (
+            await this.#projects()
+          ).delete({ orgId: tenant.orgId, id }, await this.#intakeRelease(tenant.orgId, id));
           await this.#dropSchedule(id);
           return context.body(null, 204);
         },

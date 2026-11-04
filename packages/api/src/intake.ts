@@ -9,7 +9,7 @@ import type { ProjectBoardSource } from '@factory/runtime';
 import { cardLabels, moveCardToBoard } from '@factory/core';
 import type { Intake, IntakeItem } from '@factory/capabilities';
 import type { AuditEmitter } from '@factory/feed';
-import { normalizeIntakeLabel, resolveIntakeLabelRoute } from '@factory/store';
+import { FactoryProjectNotFoundError, normalizeIntakeLabel, resolveIntakeLabelRoute } from '@factory/store';
 import type { IntakeConfig, IntakeLabelRoute, IntakeStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
@@ -535,14 +535,22 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
               integrationId: binding.integrationId,
               sourceId: binding.sourceId,
             });
-            await intake.setBinding({
-              orgId: tenant.orgId,
-              userId: tenant.userId,
-              integrationId: binding.integrationId,
-              sourceId: binding.sourceId,
-              factoryProjectId: binding.factoryProjectId,
-              board: binding.board,
-            });
+            try {
+              await intake.setBinding({
+                orgId: tenant.orgId,
+                userId: tenant.userId,
+                integrationId: binding.integrationId,
+                sourceId: binding.sourceId,
+                factoryProjectId: binding.factoryProjectId,
+                board: binding.board,
+              });
+            } catch (error) {
+              // The project was deleted after the check above; the binding transaction refused it.
+              if (error instanceof FactoryProjectNotFoundError) {
+                return c.json({ error: 'factory_project_not_found' }, 404);
+              }
+              throw error;
+            }
             // A source that stays in the same project but is pointed at a different board
             // takes its resting cards along. Bindings that predate persisted boards have a
             // null board yet still fed Work/Review, so relocation compares each card's

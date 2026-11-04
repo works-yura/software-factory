@@ -1226,6 +1226,7 @@ export class MastraFactory {
       ...(environmentBuilds ? { environmentBuilds } : {}),
       projects: factoryProjectsStorage,
       sourceControl: sourceControlStorage,
+      intake: intakeStorage,
       versionControlIntegrationIds: integrations
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
@@ -2321,6 +2322,10 @@ export class MastraFactory {
                   await factoryProjectsStorage.ensureReady();
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                   return project?.autoApprovePlans ?? false;
+                },
+                factoryProjectExists: async ({ orgId, factoryProjectId }) => {
+                  await factoryProjectsStorage.ensureReady();
+                  return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,

@@ -5,13 +5,37 @@ import { join } from 'node:path';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
-import { DEFAULT_INTAKE_CONFIG, IntakeStorage, resolveIntakeLabelRoute } from './base.ts';
+import { FactoryProjectsStorage } from '../projects/base.ts';
+import {
+  DEFAULT_INTAKE_CONFIG,
+  FactoryProjectNotFoundError,
+  IntakeStorage,
+  resolveIntakeLabelRoute,
+} from './base.ts';
 
-async function makeStorage(url: string = ':memory:'): Promise<IntakeStorage> {
+/** `projectIdsByOrg`: Factory projects to create, since a binding needs its project to exist. */
+async function makeStorage(
+  url: string = ':memory:',
+  projectIdsByOrg: Record<string, string[]> = {},
+): Promise<IntakeStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'intake-test', url });
+  backend.registerDomain(new FactoryProjectsStorage());
   const domain = backend.registerDomain(new IntakeStorage());
   await backend.init();
   onTestFinished(() => backend.close());
+  const now = new Date();
+  for (const [orgId, ids] of Object.entries(projectIdsByOrg)) {
+    for (const id of ids) {
+      await backend.ops.insertOne('factory_projects', {
+        id,
+        org_id: orgId,
+        created_by: 'user1',
+        name: id,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+  }
   return domain;
 }
 
@@ -124,7 +148,7 @@ describe('IntakeStorage', () => {
 
   describe('source bindings', () => {
     it('scopes bound source ids to one org and Factory project', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'], org2: ['proj-9'] });
       await storage.setBinding({
         orgId: 'org1',
         integrationId: 'gitlab',
@@ -142,7 +166,7 @@ describe('IntakeStorage', () => {
         orgId: 'org2',
         integrationId: 'gitlab',
         sourceId: 'src-c',
-        factoryProjectId: 'proj-1',
+        factoryProjectId: 'proj-9',
       });
 
       const scope = { orgId: 'org1', integrationId: 'gitlab' };
@@ -154,7 +178,7 @@ describe('IntakeStorage', () => {
     });
 
     it('moves a source to another project instead of binding it twice', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'] });
       const binding = { orgId: 'org1', integrationId: 'gitlab', sourceId: 'src-a' };
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1' });
@@ -167,7 +191,7 @@ describe('IntakeStorage', () => {
     });
 
     it('persists the bound board and resets it when rebound without one', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'] });
       const binding = { orgId: 'org1', integrationId: 'gitlab', sourceId: 'src-a' };
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1', board: 'release' });
@@ -184,7 +208,7 @@ describe('IntakeStorage', () => {
     });
 
     it('clears a binding and returns its project', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'] });
       const binding = { orgId: 'org1', integrationId: 'gitlab', sourceId: 'src-a' };
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1' });
@@ -199,8 +223,35 @@ describe('IntakeStorage', () => {
       expect(await storage.listBindings({ orgId: 'org1' })).toEqual([]);
     });
 
+    it('refuses a binding to a Factory project that does not exist', async () => {
+      const storage = await makeStorage(undefined, { org1: ['proj-1'] });
+      const binding = { orgId: 'org1', integrationId: 'gitlab', sourceId: 'src-a' };
+
+      await expect(storage.setBinding({ ...binding, factoryProjectId: 'gone' })).rejects.toBeInstanceOf(
+        FactoryProjectNotFoundError,
+      );
+      // A project of another org does not count either.
+      await expect(
+        storage.setBinding({ ...binding, orgId: 'org2', factoryProjectId: 'proj-1' }),
+      ).rejects.toBeInstanceOf(FactoryProjectNotFoundError);
+      expect(await storage.listBindings({ orgId: 'org1', integrationId: 'gitlab' })).toEqual([]);
+    });
+
+    it("releases every source of one Factory project and leaves the others' bindings", async () => {
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'] });
+      const scope = { orgId: 'org1', integrationId: 'gitlab' };
+      await storage.setBinding({ ...scope, sourceId: 'src-a', factoryProjectId: 'proj-1' });
+      await storage.setBinding({ ...scope, sourceId: 'src-b', factoryProjectId: 'proj-1' });
+      await storage.setBinding({ ...scope, sourceId: 'src-c', factoryProjectId: 'proj-2' });
+
+      await storage.clearProjectBindings({ orgId: 'org1', factoryProjectId: 'proj-1' });
+
+      expect(await storage.listBoundSourceIds({ ...scope, factoryProjectId: 'proj-1' })).toEqual([]);
+      expect(await storage.listBoundSourceIds({ ...scope, factoryProjectId: 'proj-2' })).toEqual(['src-c']);
+    });
+
     it('converges concurrent first bindings onto one row', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'] });
       const binding = { orgId: 'org1', integrationId: 'gitlab', sourceId: 'src-a' };
 
       await Promise.all([
@@ -214,7 +265,7 @@ describe('IntakeStorage', () => {
     });
 
     it('atomically migrates and deduplicates equivalent source selections and bindings', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'] });
       await storage.saveConfig({
         orgId: 'org1',
         config: { gitlab: { enabled: true, sourceIds: ['legacy-a', 'legacy-b', 'canonical'] } },
@@ -248,7 +299,7 @@ describe('IntakeStorage', () => {
     });
 
     it('rejects conflicting canonical routes without changing selection or bindings', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'] });
       const config = { gitlab: { enabled: true, sourceIds: ['legacy', 'canonical'] } };
       await storage.saveConfig({ orgId: 'org1', config });
       await storage.setBinding({

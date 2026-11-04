@@ -10,6 +10,19 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+export class FactoryProjectNotFoundError extends Error {
+  constructor() {
+    super('Factory project not found for this organization.');
+    this.name = 'FactoryProjectNotFoundError';
+  }
+}
+
+async function assertFactoryProject(ops: FactoryStorageOps, orgId: string, factoryProjectId: string): Promise<void> {
+  if (!(await ops.findOne('factory_projects', { org_id: orgId, id: factoryProjectId }))) {
+    throw new FactoryProjectNotFoundError();
+  }
+}
+
 export interface IntakeSelection {
   enabled: boolean;
   /** Provider-owned source ids; `null` means nothing is selected. */
@@ -355,23 +368,37 @@ export class IntakeStorage extends FactoryStorageDomain {
     userId?: string;
   }): Promise<void> {
     const where = { org_id: orgId, integration_id: integrationId, source_id: sourceId };
-    const now = new Date();
-    const patch = { factory_project_id: factoryProjectId, board, updated_at: now };
-    const updated = await this.#db.updateMany('intake_source_bindings', where, patch);
-    if (updated > 0) return;
-    try {
-      await this.#db.insertOne('intake_source_bindings', {
-        ...where,
-        factory_project_id: factoryProjectId,
-        board,
-        created_by_user_id: userId ?? null,
-        created_at: now,
-        updated_at: now,
-      });
-    } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-      await this.#db.updateMany('intake_source_bindings', where, patch);
-    }
+    // The project check and the write commit together: a binding saved while the
+    // project is being deleted is refused instead of outliving it.
+    await this.storage.withTransaction(
+      async ops => {
+        await assertFactoryProject(ops, orgId, factoryProjectId);
+        const now = new Date();
+        const patch = { factory_project_id: factoryProjectId, board, updated_at: now };
+        const updated = await ops.updateMany('intake_source_bindings', where, patch);
+        if (updated > 0) return;
+        await ops.insertOne('intake_source_bindings', {
+          ...where,
+          factory_project_id: factoryProjectId,
+          board,
+          created_by_user_id: userId ?? null,
+          created_at: now,
+          updated_at: now,
+        });
+      },
+      { isolationLevel: 'serializable' },
+    );
+  }
+
+  /**
+   * Release every source a Factory project was bound to, so the others can take
+   * them. Pass the transaction deleting the project, so no binding lands in between.
+   */
+  async clearProjectBindings(
+    { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string },
+    ops: FactoryStorageOps = this.#db,
+  ): Promise<void> {
+    await ops.deleteMany('intake_source_bindings', { org_id: orgId, factory_project_id: factoryProjectId });
   }
   /** Atomically replace legacy provider source ids in both selection and routing state. */
   async migrateSourceIds({

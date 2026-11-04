@@ -11,6 +11,7 @@ import type { AuditEmitter } from '@factory/feed';
 import { createFactoryStorageForTests } from '@factory/testing';
 import type { FactoryStorageTestSeed } from '@factory/testing';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.ts';
+import { ProjectRoutes } from './projects.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 const auditEvents: Array<Record<string, unknown>> = [];
@@ -514,6 +515,71 @@ describe('intake configuration', () => {
       const response = await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: foreign.id });
 
       expect(response.status).toBe(404);
+      expect(await seed.intake.listBindings({ orgId: 'org1' })).toEqual([]);
+    });
+
+    it('refuses a binding whose factory is deleted while the request is in flight, so its successor can bind', async () => {
+      const deleted = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'deleted' } });
+      const successor = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'successor' } });
+      const projectsApp = new Hono();
+      projectsApp.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, orgUser as never);
+        await next();
+      });
+      mountApiRoutes(
+        projectsApp as any,
+        new ProjectRoutes({
+          auth: fakeRouteAuth(),
+          projects: seed.projects,
+          sourceControl: seed.sourceControl,
+          intake: seed.intake,
+        }).routes(),
+      );
+      const write = seed.intake.setBinding.bind(seed.intake);
+      const { promise: writing, resolve: startWriting } = Promise.withResolvers<void>();
+      const { promise: deletedNow, resolve: finishDelete } = Promise.withResolvers<void>();
+      vi.spyOn(seed.intake, 'setBinding').mockImplementationOnce(async input => {
+        startWriting();
+        await deletedNow;
+        return write(input);
+      });
+      const source = { integrationId: 'gitlab', sourceId: 'team-1' };
+
+      const inFlight = put({ ...source, factoryProjectId: deleted.id });
+      await writing;
+      expect((await projectsApp.request(`/web/factory/projects/${deleted.id}`, { method: 'DELETE' })).status).toBe(
+        204,
+      );
+      finishDelete();
+
+      expect((await inFlight).status).toBe(404);
+      expect((await put({ ...source, factoryProjectId: successor.id })).status).toBe(200);
+      expect(await seed.intake.listBindings({ orgId: 'org1' })).toEqual([
+        { ...source, factoryProjectId: successor.id, board: null },
+      ]);
+    });
+
+    it('releases a deleted factory\'s sources with the project', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      expect((await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id })).status).toBe(
+        200,
+      );
+      const projectsApp = new Hono();
+      projectsApp.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, orgUser as never);
+        await next();
+      });
+      mountApiRoutes(
+        projectsApp as any,
+        new ProjectRoutes({
+          auth: fakeRouteAuth(),
+          projects: seed.projects,
+          sourceControl: seed.sourceControl,
+          intake: seed.intake,
+        }).routes(),
+      );
+
+      expect((await projectsApp.request(`/web/factory/projects/${project.id}`, { method: 'DELETE' })).status).toBe(204);
       expect(await seed.intake.listBindings({ orgId: 'org1' })).toEqual([]);
     });
   });
