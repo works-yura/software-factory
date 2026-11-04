@@ -56,7 +56,7 @@ export function createMastraHarness(controller: MastraFactoryController): AgentH
     runContext(agentSession: AgentSession, input: AgentRunContextInput) {
       const session = mastraSession(agentSession);
       const requestContext = new RequestContext();
-      requestContext.set('user', { workosId: input.userId, organizationId: input.orgId });
+      requestContext.set('user', { id: input.userId, organizationId: input.orgId });
       requestContext.set('controller', {
         state: session.state.get(),
         getState: () => session.state.get(),

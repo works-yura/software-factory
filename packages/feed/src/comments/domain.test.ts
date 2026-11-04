@@ -54,8 +54,8 @@ async function seedWorkItem(seed: Seed, { orgId = ORG, factoryProjectId = 'proje
   return item;
 }
 
-const asAlice = { workosId: 'user-alice', organizationId: ORG, name: 'Alice' };
-const asBob = { workosId: 'user-bob', organizationId: ORG, name: 'Bob' };
+const asAlice = { id: 'user-alice', organizationId: ORG, name: 'Alice' };
+const asBob = { id: 'user-bob', organizationId: ORG, name: 'Bob' };
 
 async function postComment(
   app: Hono,
@@ -86,7 +86,7 @@ describe('CommentsDomain routes', () => {
     const path = `/web/factory/work-items/${item.id}/comments`;
 
     expect((await buildApp(domain).request(path)).status).toBe(401);
-    expect((await buildApp(domain, { workosId: 'user-alice' }).request(path)).status).toBe(403);
+    expect((await buildApp(domain, { id: 'user-alice' }).request(path)).status).toBe(403);
     expect((await buildApp(domain, asAlice).request('/web/factory/work-items/not-a-uuid/comments')).status).toBe(404);
     expect((await buildApp(domain, asAlice).request(path)).status).toBe(404);
   });
@@ -228,14 +228,14 @@ describe('CommentsDomain routes', () => {
     expect((await patch(buildApp(memberDomain, asBob), 'hijacked')).status).toBe(403);
     expect((await patch(buildApp(memberDomain, asAlice), 'still mine')).status).toBe(200);
     const adminEdit = await patch(
-      buildApp(memberDomain, { workosId: 'user-admin', organizationId: ORG, name: 'Admin' }),
+      buildApp(memberDomain, { id: 'user-admin', organizationId: ORG, name: 'Admin' }),
       'moderated',
     );
     expect(adminEdit.status).toBe(200);
 
     expect((await buildApp(memberDomain, asBob).request(path, { method: 'DELETE' })).status).toBe(403);
     const adminDelete = await buildApp(memberDomain, {
-      workosId: 'user-admin',
+      id: 'user-admin',
       organizationId: ORG,
     }).request(path, { method: 'DELETE' });
     expect(adminDelete.status).toBe(200);

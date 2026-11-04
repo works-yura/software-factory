@@ -39,7 +39,7 @@ async function seedProject(defaultModelId: string) {
 function mount(deps: ConstructorParameters<typeof ProjectRoutes>[0]) {
   const app = new Hono();
   app.use('*', async (context, next) => {
-    context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+    context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
     await next();
   });
   mountApiRoutes(app as never, new ProjectRoutes(deps).routes());

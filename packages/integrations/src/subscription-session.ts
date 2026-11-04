@@ -132,7 +132,7 @@ export async function subscriptionRunContext(
   }
   if (!userId || !hasResolvedOrg(orgId)) return undefined;
   const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: userId, organizationId: orgId });
+  requestContext.set('user', { id: userId, organizationId: orgId });
   // The web auth middleware primes credential snapshots per request; a
   // webhook-triggered run has no request, so prime here or the model resolves
   // against an empty snapshot and the run fails closed before persisting. A
@@ -170,7 +170,7 @@ export async function prepareSessionRunContext(
   if (options?.expectedOrgId !== undefined && sessionRow.orgId !== options.expectedOrgId) {
     return 'organization-mismatch';
   }
-  requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
+  requestContext.set('user', { id: sessionRow.userId, organizationId: sessionRow.orgId });
   await primeTenantCredentialsForRequestContext(requestContext);
   return 'prepared';
 }
@@ -193,7 +193,7 @@ export async function createSessionAsRowOwner(
   },
 ) {
   const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: args.row.userId, organizationId: args.row.orgId });
+  requestContext.set('user', { id: args.row.userId, organizationId: args.row.orgId });
   const session = await controller.createSession({
     id: args.sessionId,
     ownerId: args.row.userId,

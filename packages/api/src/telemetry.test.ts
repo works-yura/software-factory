@@ -16,7 +16,7 @@ vi.mock('posthog-node', () => ({
   },
 }));
 
-const user = { workosId: 'user_123', organizationId: 'org_123' };
+const user = { id: 'user_123', organizationId: 'org_123' };
 const body = { activity: 'page_view', page: 'work' };
 
 function buildApp(options: { user?: TestAuthUser; enabled?: boolean; providerName?: string } = {}) {
@@ -101,7 +101,7 @@ describe('Factory web activity', () => {
     vi.stubEnv('MASTRA_PROJECT_ID', 'other-project');
     vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'other-deployment');
     await buildApp({ user: { ...user, organizationId: 'other-org' } }).request('/web/telemetry/activity', request());
-    await buildApp({ user: { ...user, workosId: 'other-user' } }).request('/web/telemetry/activity', request());
+    await buildApp({ user: { ...user, id: 'other-user' } }).request('/web/telemetry/activity', request());
     expect(capture.mock.calls.map(([event]) => event.distinctId)).toEqual([
       'factory:platform:user_123',
       'factory:platform:user_123',
@@ -121,7 +121,7 @@ describe('Factory web activity', () => {
   });
 
   it('does not merge custom-provider accounts with platform accounts', async () => {
-    await buildApp({ user, providerName: 'workos' }).request('/web/telemetry/activity', request());
+    await buildApp({ user, providerName: 'better-auth' }).request('/web/telemetry/activity', request());
     expect(capture).not.toHaveBeenCalled();
   });
 
@@ -198,7 +198,7 @@ describe('authenticated telemetry capability', () => {
   });
 
   it('does not enable capture for custom providers or signed-out visitors', async () => {
-    expect(await (await authApp('workos').request('/auth/me')).json()).toMatchObject({ telemetryEnabled: false });
+    expect(await (await authApp('better-auth').request('/auth/me')).json()).toMatchObject({ telemetryEnabled: false });
     expect(await (await authApp('mastra-studio', false).request('/auth/me')).json()).toEqual({
       authenticated: false,
       user: null,

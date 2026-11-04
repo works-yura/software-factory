@@ -254,7 +254,7 @@ function createSession(
         input: { userId: string; orgId: string; threadId: string; resourceId: string },
       ): { get(key: string): unknown } => {
         const values = new Map<string, unknown>([
-          ['user', { workosId: input.userId, organizationId: input.orgId }],
+          ['user', { id: input.userId, organizationId: input.orgId }],
           [
             'controller',
             {
@@ -1076,7 +1076,7 @@ describe('FactoryDecisionDispatcher', () => {
       },
     );
     const requestContext = sendNotificationSignal.mock.calls[0]?.[1]?.requestContext;
-    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext?.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
     expect(consumeStream).toHaveBeenCalledOnce();
   });
 
@@ -1381,7 +1381,7 @@ describe('FactoryDecisionDispatcher', () => {
       { requestContext: expect.anything(), requireDelivery: true },
     );
     const requestContext = session.sendSignal.mock.calls[0]?.[1]?.requestContext;
-    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext?.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
     expect(requestContext?.get('controller')).toMatchObject({
       resourceId: PROJECT_ID,
       threadId: 'thread-1',
@@ -4573,7 +4573,7 @@ describe('FactoryDecisionDispatcher', () => {
       }),
     );
     const requestContext = sendNotificationSignal.mock.calls[0]?.[1]?.requestContext;
-    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext?.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
   });
 
   it('queues the transition message exactly once when the card changes before it commits', async () => {
@@ -5864,7 +5864,7 @@ describe('FactoryDecisionDispatcher', () => {
     // authenticated session owner on the request context.
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     const kickoffOptions = sendNotificationSignal.mock.calls[0]![1];
-    expect(kickoffOptions?.requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(kickoffOptions?.requestContext?.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
     expect(kickoffOptions?.requestContext?.get('controller')).toMatchObject({
       threadId: 'thread-1',
       resourceId: 'session-1',

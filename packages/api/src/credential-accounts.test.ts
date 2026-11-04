@@ -18,7 +18,7 @@ async function setup(claudeSignIn?: ClaudeSignInFlows) {
   const app = (userId: string | null, orgId = 'org1') => {
     const hono = new Hono();
     hono.use('*', async (c, next) => {
-      if (userId) c.set('factoryAuthUser' as never, { workosId: userId, organizationId: orgId } as never);
+      if (userId) c.set('factoryAuthUser' as never, { id: userId, organizationId: orgId } as never);
       await next();
     });
     mountApiRoutes(

@@ -205,9 +205,9 @@ async function startFactory(board: ReturnType<typeof defineBoard>, skills?: Inli
     vi.unstubAllEnvs();
   };
   await factory.finalize();
-  const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
+  const app = new Hono<{ Variables: { factoryAuthUser: { id: string; organizationId: string } } }>();
   app.use('*', async (c, next) => {
-    c.set('factoryAuthUser', { workosId: 'phase-user', organizationId: ORG });
+    c.set('factoryAuthUser', { id: 'phase-user', organizationId: ORG });
     await next();
   });
   mountApiRoutes(app, args.server?.apiRoutes ?? []);

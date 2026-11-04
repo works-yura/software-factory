@@ -830,8 +830,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
-    // (`ensureRunning()` on first command) and dead-VM self-healing (E2B
-    // `retryOnDead`, Platform status reset on destroy), so a replacement VM
+    // (`ensureRunning()` on first command) and, for remote providers, dead-VM
+    // self-healing, so a replacement VM
     // re-enters this hook and heals itself with credentials at least as
     // fresh as the start that installed them.
     const setupHook: SandboxStartHook = async args => {

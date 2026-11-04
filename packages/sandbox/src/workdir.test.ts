@@ -9,8 +9,8 @@ import {
 } from './workdir.ts';
 
 describe('repositoryDirectoryName', () => {
-  // The same fixtures the platform template's private `repoDirName` is
-  // tested with (`workspaces/platform-workspace/src/repo-template.ts`):
+  // The same fixtures Mastra's repo templates' private `repoDirName` is
+  // tested with (upstream Mastra workspace providers):
   // the boot hook's per-repo marker path must land on the directory the
   // template cloned into, so the two rules have to agree for every slug.
   it('derives the directory the repo templates clone into', () => {

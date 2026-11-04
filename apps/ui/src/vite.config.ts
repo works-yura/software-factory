@@ -302,7 +302,7 @@ export default defineConfig(({ mode }) => {
         // package instead of pnpm's entire global store.
         allow: fsAllow,
       },
-      // OAuth callback URLs (WorkOS/GitHub) are registered against the
+      // OAuth callback URLs (auth/GitHub) are registered against the
       // configured UI origin ahead of time. Silently hopping to a free port
       // would keep the UI working while every OAuth redirect breaks — fail
       // instead so the port stays consistent with MASTRACODE_PUBLIC_URL.
@@ -337,7 +337,7 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
         },
-        // Optional WorkOS auth routes live on the API server too; proxy them so
+        // Optional auth routes live on the API server too; proxy them so
         // the configured dev UI server can reach login/callback/logout/me on the
         // configured API server.
         //

@@ -55,7 +55,6 @@ export const CLAUDE_FACTORY_MUTATING_TOOLS = [
     ...Object.entries(FACTORY_TOOL_ANNOTATIONS).flatMap(([id, annotations]) => (annotations.readOnlyHint ? [] : [id])),
     'factory_transition_work_item',
     'factory_record_review_verdict',
-    'factory_recreate_sandbox',
     'factory_switch_session_model',
     'factory_subscribe_session',
     'factory_unsubscribe_session',

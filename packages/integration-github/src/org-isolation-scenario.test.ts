@@ -27,7 +27,7 @@ vi.mock('drizzle-orm', () => ({
 // personal-org bootstrap. A no-org cookie user comes back with an
 // `organizationId` populated (mirroring the provider's `ensureOrganization`),
 // so `tenant()` yields a real tenant instead of an org gate 403.
-let cookieUser: { workosId: string; organizationId?: string } | null = null;
+let cookieUser: { id: string; organizationId?: string } | null = null;
 // Bootstrap is always attempted for no-org users, but the WorkOS create can
 // fail (e.g. missing API permissions); toggle to exercise that failure path.
 let bootstrapSucceeds = true;
@@ -40,14 +40,14 @@ const testAuth: RouteAuth = {
     const u = cookieUser;
     // Bootstrap: a personal (no-org) user gets a personal org. When the WorkOS
     // create fails, the user stays no-org and the org gate still fires.
-    const organizationId = u.organizationId ?? (bootstrapSucceeds ? `org-personal-${u.workosId}` : undefined);
-    const resolved: { workosId: string; organizationId?: string } = { workosId: u.workosId, organizationId };
+    const organizationId = u.organizationId ?? (bootstrapSucceeds ? `org-personal-${u.id}` : undefined);
+    const resolved: { id: string; organizationId?: string } = { id: u.id, organizationId };
     c.set('factoryAuthUser', resolved);
     return resolved;
   },
   tenant: (c: any) => {
-    const u = c.get('factoryAuthUser') as { workosId: string; organizationId?: string } | undefined;
-    return u ? { orgId: u.organizationId, userId: u.workosId } : undefined;
+    const u = c.get('factoryAuthUser') as { id: string; organizationId?: string } | undefined;
+    return u ? { orgId: u.organizationId, userId: u.id } : undefined;
   },
   isOrganizationAdmin: async () => true,
 };
@@ -335,7 +335,7 @@ _projectRepositoriesRef = githubProjectRepositories;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
 
-function buildApp(user: { workosId: string; organizationId?: string } | null) {
+function buildApp(user: { id: string; organizationId?: string } | null) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -409,7 +409,7 @@ describe('same repo connected by two orgs stays isolated', () => {
     });
     tables.projectRepositories.push(projectRepositoryA, projectRepositoryB);
 
-    const appA = buildApp({ workosId: 'a1', organizationId: 'orgA' });
+    const appA = buildApp({ id: 'a1', organizationId: 'orgA' });
 
     expect(projectRepositoryA.id).not.toBe(projectRepositoryB.id);
     expect(tables.projectRepositories).toHaveLength(2);
@@ -432,8 +432,8 @@ describe('two users in one org each get their own sandbox + session workspace', 
 
   it('hides sessions across users while sharing the org-owned project', async () => {
     seedOrgProject();
-    const user1 = buildApp({ workosId: 'a1', organizationId: 'orgA' });
-    const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
+    const user1 = buildApp({ id: 'a1', organizationId: 'orgA' });
+    const user2 = buildApp({ id: 'a2', organizationId: 'orgA' });
 
     // Both users share the same org-owned project. No sandbox state exists
     // before a session is created — sessions are the only sandbox-bearing unit.
@@ -515,7 +515,7 @@ describe('cross-user session workspaces are rejected', () => {
       sessions.set(userId, session);
     }
 
-    const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
+    const user2 = buildApp({ id: 'a2', organizationId: 'orgA' });
 
     // User 2 supplies user 1's session id → rejected (session not owned).
     const res = await postJson(user2, '/web/github/projects/p1/push', {
@@ -544,12 +544,12 @@ describe('cross-user session workspaces are rejected', () => {
 describe('install flow binds the installation to the org', () => {
   it('persists an org-owned installation, then a second org user can use it', async () => {
     // User 1 connects: state must encode their (org, user).
-    const connect = await buildApp({ workosId: 'a1', organizationId: 'orgA' }).request('/auth/github/connect');
+    const connect = await buildApp({ id: 'a1', organizationId: 'orgA' }).request('/auth/github/connect');
     expect(connect.status).toBe(302);
     expect(connect.headers.get('location')).toContain('state=state.orgA.a1');
 
     // Callback with a matching state persists the installation against orgA.
-    const cb = await buildApp({ workosId: 'a1', organizationId: 'orgA' }).request(
+    const cb = await buildApp({ id: 'a1', organizationId: 'orgA' }).request(
       '/auth/github/callback?state=state.orgA.a1&code=abc',
     );
     expect(cb.headers.get('location')).toBe('/?github=connected');
@@ -569,7 +569,7 @@ describe('install flow binds the installation to the org', () => {
         installationId: 7,
       },
     ]);
-    const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
+    const user2 = buildApp({ id: 'a2', organizationId: 'orgA' });
     const status = await user2.request('/web/github/status');
     expect((await status.json()).connected).toBe(true);
 
@@ -593,7 +593,7 @@ describe('install flow binds the installation to the org', () => {
 
   it('rejects a callback whose session org differs from the signed state org', async () => {
     // State was signed for orgA but the callback session is in orgB.
-    const res = await buildApp({ workosId: 'a1', organizationId: 'orgB' }).request(
+    const res = await buildApp({ id: 'a1', organizationId: 'orgB' }).request(
       '/auth/github/callback?state=state.orgA.a1&code=abc',
     );
     expect(res.headers.get('location')).toBe('/?github=error');
@@ -602,7 +602,7 @@ describe('install flow binds the installation to the org', () => {
 });
 
 // ── Personal-org bootstrap: no-org cookie connect reaches install ─────────
-// A user who signs in with no WorkOS organization used to dead-end at the org
+// A user who signs in with no organization used to dead-end at the org
 // gate (`organization_required`). With bootstrap, `ensureFactoryAuthUser` gives the
 // personal account an org on first authenticated use, so a cookie-only
 // navigation to `/auth/github/connect` redirects to the GitHub App install with
@@ -611,7 +611,7 @@ describe('personal-org bootstrap on the cookie connect flow', () => {
   it('redirects a no-org cookie user to install with the bootstrapped org', async () => {
     // The gate skips `/auth/*`, so no user is stashed up front; the cookie user
     // has no organization yet.
-    cookieUser = { workosId: 'solo1' };
+    cookieUser = { id: 'solo1' };
 
     const res = await buildApp(null).request('/auth/github/connect');
 
@@ -625,7 +625,7 @@ describe('personal-org bootstrap on the cookie connect flow', () => {
     // When the WorkOS org create fails (e.g. missing API permissions), the
     // personal account stays no-org, so the org gate fires as before.
     bootstrapSucceeds = false;
-    cookieUser = { workosId: 'solo1' };
+    cookieUser = { id: 'solo1' };
 
     const res = await buildApp(null).request('/auth/github/connect');
 

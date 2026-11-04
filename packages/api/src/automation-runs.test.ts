@@ -11,10 +11,10 @@ let seed: FactoryStorageTestSeed;
 let PROJECT_ID = '';
 let WORK_ITEM_ID = '';
 
-const orgUser = { workosId: 'u1', organizationId: 'org1' };
+const orgUser = { id: 'u1', organizationId: 'org1' };
 
 function buildApp(
-  user: { workosId: string; organizationId?: string } | null,
+  user: { id: string; organizationId?: string } | null,
   options: { enabled?: boolean; isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean> } = {},
 ) {
   const app = new Hono();

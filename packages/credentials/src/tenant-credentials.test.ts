@@ -175,7 +175,7 @@ describe('registerTenantCredentialResolver', () => {
     registerTenantCredentialResolver(seed.credentials);
 
     const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: USER, organizationId: ORG });
+    requestContext.set('user', { id: USER, organizationId: ORG });
 
     const store = resolveCredentialStore(requestContext);
     expect(store).toBeDefined();
@@ -198,7 +198,7 @@ describe('registerTenantCredentialResolver', () => {
     }));
 
     const ctx = new RequestContext();
-    ctx.set('user', { workosId: 'sender', organizationId: ORG });
+    ctx.set('user', { id: 'sender', organizationId: ORG });
     ctx.set('controller', {
       state: { factoryModelScope: 'user', factoryOwnerUserId: 'owner', factoryOrgId: ORG },
     });
@@ -227,7 +227,7 @@ describe('registerTenantCredentialResolver', () => {
   it('returns the same store instance per tenant (snapshot reuse)', () => {
     registerTenantCredentialResolver(seed.credentials);
     const ctx = new RequestContext();
-    ctx.set('user', { workosId: USER, organizationId: ORG });
+    ctx.set('user', { id: USER, organizationId: ORG });
     expect(resolveCredentialStore(ctx)).toBe(resolveCredentialStore(ctx));
   });
 
@@ -240,9 +240,9 @@ describe('registerTenantCredentialResolver', () => {
     }));
 
     const userContext = new RequestContext();
-    userContext.set('user', { workosId: USER, organizationId: ORG });
+    userContext.set('user', { id: USER, organizationId: ORG });
     const factoryContext = new RequestContext();
-    factoryContext.set('user', { workosId: USER, organizationId: ORG });
+    factoryContext.set('user', { id: USER, organizationId: ORG });
     factoryContext.set('controller', { resourceId: 'factory-session' });
     await primeTenantCredentialsForRequestContext(userContext);
     await primeTenantCredentialsForRequestContext(factoryContext);
@@ -257,7 +257,7 @@ describe('registerTenantCredentialResolver', () => {
 
   it('allows deployment credentials only for providers the operator opted in', () => {
     const ctx = new RequestContext();
-    ctx.set('user', { workosId: USER, organizationId: ORG });
+    ctx.set('user', { id: USER, organizationId: ORG });
 
     registerTenantCredentialResolver(seed.credentials);
     expect(resolveCredentialStore(ctx)?.allowsDeploymentCredentials?.('amazon-bedrock')).toBe(false);
@@ -271,7 +271,7 @@ describe('registerTenantCredentialResolver', () => {
   it('scopes personal accounts (no org) under a synthetic per-user org', async () => {
     registerTenantCredentialResolver(seed.credentials);
     const ctx = new RequestContext();
-    ctx.set('user', { workosId: USER });
+    ctx.set('user', { id: USER });
 
     await seed.credentials.setCredential({ orgId: `user:${USER}`, userId: USER }, 'openai', {
       type: 'api_key',
@@ -295,7 +295,7 @@ describe('registerTenantCredentialResolver', () => {
     resetTenantCredentialResolverForTests();
     setCredentialStoreProvider(undefined);
     const ctx = new RequestContext();
-    ctx.set('user', { workosId: USER, organizationId: ORG });
+    ctx.set('user', { id: USER, organizationId: ORG });
     expect(resolveCredentialStore(ctx)).toBeUndefined();
   });
 });
@@ -349,7 +349,7 @@ describe('resolveTenantProviderDefaultModel', () => {
 });
 
 describe('createTenantCredentialPrimer', () => {
-  function buildApp(user: { workosId: string; organizationId?: string } | null) {
+  function buildApp(user: { id: string; organizationId?: string } | null) {
     const app = new Hono();
     app.use('*', async (c, next) => {
       if (user) c.set('factoryAuthUser' as never, user as never);
@@ -368,12 +368,12 @@ describe('createTenantCredentialPrimer', () => {
       credentialScope: 'factory',
     }));
 
-    const res = await buildApp({ workosId: USER, organizationId: ORG }).request('/ok');
+    const res = await buildApp({ id: USER, organizationId: ORG }).request('/ok');
     expect(res.status).toBe(200);
 
     for (const controller of [undefined, { resourceId: 'factory-session' }]) {
       const context = new RequestContext();
-      context.set('user', { workosId: USER, organizationId: ORG });
+      context.set('user', { id: USER, organizationId: ORG });
       if (controller) context.set('controller', controller);
       await prepareCredentialTenant(context);
       expect(resolveCredentialStore(context)!.getStoredApiKey('openai')).toBe('org-key');

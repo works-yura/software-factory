@@ -1067,7 +1067,7 @@ describe('GithubRules', () => {
         type: 'reactive',
         tagName: 'skill',
         attributes: { name: 'factory-triage' },
-        user: { workosId: 'user-1', organizationId: 'org-1' },
+        user: { id: 'user-1', organizationId: 'org-1' },
       }),
     ]);
     const deferredDecisions = await workItems.listDeferredDecisions('org-1', project.id);

@@ -17,7 +17,7 @@ import { createSessionAccessGuard } from '@factory/session';
 import { createClaudeSessionUi, type ClaudeSessionUi } from './routes.ts';
 
 const BASE = '/api/agent-controller/code/sessions';
-const OWNER: TestAuthUser = { workosId: 'owner', organizationId: 'org-1' };
+const OWNER: TestAuthUser = { id: 'owner', organizationId: 'org-1' };
 
 interface Setup {
   app: Hono;
@@ -432,7 +432,7 @@ describe('Claude Code session routes', () => {
   });
 
   it('keeps another person’s private session out of reach', async () => {
-    const { app } = await setup([], { user: { workosId: 'someone-else', organizationId: 'org-1' }, visibility: 'private' });
+    const { app } = await setup([], { user: { id: 'someone-else', organizationId: 'org-1' }, visibility: 'private' });
     expect((await app.request(`${BASE}/card-1/threads/card-1/messages?limit=10`)).status).toBe(404);
     expect((await post(app, `${BASE}/card-1/messages`, { message: 'hi' })).status).toBe(404);
   });

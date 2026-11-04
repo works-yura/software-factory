@@ -286,7 +286,7 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
     );
   }
 
-  // Organization required: signed in but no WorkOS org.
+  // Organization required: signed in but no org.
   if (status.organizationRequired || status.reason === 'organization_required') {
     return (
       <Txt as="p" variant="caption" tone="muted" className={calloutClass}>

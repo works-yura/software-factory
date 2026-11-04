@@ -20,7 +20,7 @@ import { CommentsDomain } from './domain.ts';
 type Seed = Awaited<ReturnType<typeof createFactoryStorageForTests>>;
 
 const ORG = 'org-1';
-const asAlice = { workosId: 'user-alice', organizationId: ORG, name: 'Alice' };
+const asAlice = { id: 'user-alice', organizationId: ORG, name: 'Alice' };
 
 function buildApp(seed: Seed, pubsub: EventEmitterPubSub, user?: TestAuthUser) {
   const domain = new CommentsDomain({

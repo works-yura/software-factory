@@ -26,7 +26,7 @@ export type ClaudeToolObserver = (toolContext: IntegrationPostToolContext) => Pr
 /** The request context a bound Mastra run's tools read, rebuilt from a verified worker scope. */
 export function boundRunRequestContext(scope: FactoryMcpToolScope): RequestContext {
   const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
+  requestContext.set('user', { id: scope.userId, organizationId: scope.orgId });
   const state = { factoryProjectId: scope.factoryProjectId, factoryOrgId: scope.orgId };
   requestContext.set('controller', {
     sessionId: scope.sessionId,

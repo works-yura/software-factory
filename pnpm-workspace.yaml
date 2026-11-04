@@ -235,7 +235,6 @@ overrides:
   'copy-anything': 4.0.5
   'data-urls': 7.0.0
   'deepmerge-ts': 8.0.0
-  'e2b': 2.38.0
   'edgedriver': 6.3.0
   'electron-to-chromium': 1.5.430
   'empathic': 2.0.1

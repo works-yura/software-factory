@@ -45,7 +45,7 @@ function instanceOver(store: KnowledgeStorage): Knowledge {
 async function createHarness(
   options: {
     limits?: Partial<KnowledgeRouteLimits>;
-    user?: { workosId: string; organizationId?: string };
+    user?: { id: string; organizationId?: string };
     orgId?: string;
     knowledge?: KnowledgeStorage;
     knowledgeResolver?: (key: string) => Promise<Knowledge | undefined>;
@@ -68,7 +68,7 @@ async function createHarness(
     ...(options.threadTitle ? { threadTitle: options.threadTitle } : {}),
   }).routes();
   const app = new Hono();
-  const user = options.user ?? { workosId: 'user-1', organizationId: orgId };
+  const user = options.user ?? { id: 'user-1', organizationId: orgId };
   app.use('*', async (context, next) => {
     context.set('factoryAuthUser' as never, user as never);
     await next();
@@ -1051,7 +1051,7 @@ describe('KnowledgeRoutes', () => {
     await node(h.knowledge, 'Secret Entity', h.projectScope);
     const outsider = new Hono();
     outsider.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'intruder', organizationId: OTHER_ORG } as never);
+      context.set('factoryAuthUser' as never, { id: 'intruder', organizationId: OTHER_ORG } as never);
       await next();
     });
     // Same route module + storage, different caller org: the project lookup 404s.
@@ -1075,7 +1075,7 @@ describe('KnowledgeRoutes', () => {
     // Attacker has their own valid project in another org but shares the store.
     const attacker = await createHarness({
       orgId: OTHER_ORG,
-      user: { workosId: 'intruder', organizationId: OTHER_ORG },
+      user: { id: 'intruder', organizationId: OTHER_ORG },
       knowledge: victim.knowledge,
     });
     const { status } = await nodeDetail(attacker, secret.id);
@@ -1209,7 +1209,7 @@ describe('KnowledgeRoutes', () => {
     // under the OTHER org — proving the scope guard, not an empty-fixture accident.
     const foreign = await createHarness({
       orgId: OTHER_ORG,
-      user: { workosId: 'other', organizationId: OTHER_ORG },
+      user: { id: 'other', organizationId: OTHER_ORG },
       knowledge: h.knowledge,
     });
     const foreignEntity = await node(h.knowledge, 'Foreign Entity', foreign.projectScope);
@@ -1252,7 +1252,7 @@ describe('KnowledgeRoutes', () => {
     // Cross-org thread: seeded under the other org, requested from ours.
     const foreign = await createHarness({
       orgId: OTHER_ORG,
-      user: { workosId: 'other', organizationId: OTHER_ORG },
+      user: { id: 'other', organizationId: OTHER_ORG },
       knowledge: h.knowledge,
     });
     const foreignEntity = await node(h.knowledge, 'Foreign Holder', foreign.projectScope);

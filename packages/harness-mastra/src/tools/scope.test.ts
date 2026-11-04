@@ -67,7 +67,7 @@ function context({
   interactive = true,
   tag,
 }: {
-  user?: { workosId: string; organizationId?: string; name?: string; avatarUrl?: string };
+  user?: { id: string; organizationId?: string; name?: string; avatarUrl?: string };
   resourceId?: string;
   threadId?: string;
   interactive?: boolean;
@@ -90,7 +90,7 @@ describe('resolveFactoryToolScope', () => {
     const { seed, project, createSession, sessions, workItems } = await seedFactory();
     await createSession('session-1', 'user-1', 'private');
     const scope = await resolveFactoryToolScope({
-      requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' } }),
+      requestContext: context({ user: { id: 'user-1', organizationId: 'org-1' } }),
       authEnabled: true,
       sessions,
       projects: seed.projects,
@@ -113,7 +113,7 @@ describe('resolveFactoryToolScope', () => {
     await createSession('session-1', 'user-1');
     const scope = await resolveFactoryToolScope({
       requestContext: context({
-        user: { workosId: 'user-1', organizationId: 'org-1', name: 'Caleb', avatarUrl: 'https://example.com/c.png' },
+        user: { id: 'user-1', organizationId: 'org-1', name: 'Caleb', avatarUrl: 'https://example.com/c.png' },
       }),
       authEnabled: true,
       sessions,
@@ -126,7 +126,7 @@ describe('resolveFactoryToolScope', () => {
   it('authorizes Slack management as the linked sender while the model uses the session owner', async () => {
     const { seed, createSession, sessions, workItems } = await seedFactory();
     await createSession('session-1', 'owner-1', 'org');
-    const requestContext = context({ user: { workosId: 'owner-1', organizationId: 'org-1' } });
+    const requestContext = context({ user: { id: 'owner-1', organizationId: 'org-1' } });
     requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: 'responder-1', orgId: 'org-1' });
     const scope = await resolveFactoryToolScope({
       requestContext,
@@ -136,13 +136,13 @@ describe('resolveFactoryToolScope', () => {
       workItems,
     });
     expect(scope).toMatchObject({ userId: 'responder-1', kind: 'user', interactive: true });
-    expect(requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+    expect(requestContext.get('user')).toEqual({ id: 'owner-1', organizationId: 'org-1' });
   });
 
   it('does not let a linked Slack responder manage someone else’s private session', async () => {
     const { seed, createSession, sessions, workItems } = await seedFactory();
     await createSession('session-1', 'owner-1', 'private');
-    const requestContext = context({ user: { workosId: 'owner-1', organizationId: 'org-1' } });
+    const requestContext = context({ user: { id: 'owner-1', organizationId: 'org-1' } });
     requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: 'responder-1', orgId: 'org-1' });
     await expect(
       resolveFactoryToolScope({ requestContext, authEnabled: true, sessions, projects: seed.projects, workItems }),
@@ -152,7 +152,7 @@ describe('resolveFactoryToolScope', () => {
   it('rejects a Slack sender from another organization even when the model runs as the owner', async () => {
     const { seed, createSession, sessions, workItems } = await seedFactory();
     await createSession('session-1', 'owner-1', 'org');
-    const requestContext = context({ user: { workosId: 'owner-1', organizationId: 'org-1' } });
+    const requestContext = context({ user: { id: 'owner-1', organizationId: 'org-1' } });
     requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: 'responder-1', orgId: 'org-2' });
     await expect(
       resolveFactoryToolScope({ requestContext, authEnabled: true, sessions, projects: seed.projects, workItems }),
@@ -163,7 +163,7 @@ describe('resolveFactoryToolScope', () => {
     const { seed, createSession, sessions, workItems } = await seedFactory();
     await createSession('session-1', 'user-1', 'org');
     const scope = await resolveFactoryToolScope({
-      requestContext: context({ user: { workosId: 'user-2', organizationId: 'org-1' } }),
+      requestContext: context({ user: { id: 'user-2', organizationId: 'org-1' } }),
       authEnabled: true,
       sessions,
       projects: seed.projects,
@@ -177,7 +177,7 @@ describe('resolveFactoryToolScope', () => {
     await createSession('session-1', 'user-1', 'private');
     await expect(
       resolveFactoryToolScope({
-        requestContext: context({ user: { workosId: 'user-2', organizationId: 'org-1' } }),
+        requestContext: context({ user: { id: 'user-2', organizationId: 'org-1' } }),
         authEnabled: true,
         sessions,
         projects: seed.projects,
@@ -191,7 +191,7 @@ describe('resolveFactoryToolScope', () => {
     await createSession('session-1', 'user-1');
     await expect(
       resolveFactoryToolScope({
-        requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-2' } }),
+        requestContext: context({ user: { id: 'user-1', organizationId: 'org-2' } }),
         authEnabled: true,
         sessions,
         projects: seed.projects,
@@ -220,7 +220,7 @@ describe('resolveFactoryToolScope', () => {
     await seed.projects.delete({ orgId: 'org-1', id: project.id });
     await expect(
       resolveFactoryToolScope({
-        requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' } }),
+        requestContext: context({ user: { id: 'user-1', organizationId: 'org-1' } }),
         authEnabled: true,
         sessions,
         projects: seed.projects,
@@ -233,7 +233,7 @@ describe('resolveFactoryToolScope', () => {
     const { seed, project, sessions, workItems } = await seedFactory();
     await expect(
       resolveFactoryToolScope({
-        requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' }, tag: project.id }),
+        requestContext: context({ user: { id: 'user-1', organizationId: 'org-1' }, tag: project.id }),
         authEnabled: true,
         sessions,
         projects: seed.projects,
@@ -255,7 +255,7 @@ describe('resolveFactoryToolScope', () => {
       }),
     ).resolves.toMatchObject({ status: 'revoked' });
     const scope = await resolveFactoryToolScope({
-      requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' }, threadId: 'thread-b' }),
+      requestContext: context({ user: { id: 'user-1', organizationId: 'org-1' }, threadId: 'thread-b' }),
       authEnabled: true,
       sessions,
       projects: seed.projects,
@@ -270,7 +270,7 @@ describe('resolveFactoryToolScope', () => {
     await createSession('session-1', 'user-1');
     await bindRun('session-1', 'thread-a');
     const scope = await resolveFactoryToolScope({
-      requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' }, threadId: 'thread-b' }),
+      requestContext: context({ user: { id: 'user-1', organizationId: 'org-1' }, threadId: 'thread-b' }),
       authEnabled: true,
       sessions,
       projects: seed.projects,
@@ -308,7 +308,7 @@ describe('resolveFactoryToolScope', () => {
     await bindRun('session-1', 'thread-1');
     await expect(
       resolveFactoryToolScope({
-        requestContext: context({ user: { workosId: 'user-9', organizationId: 'org-9' } }),
+        requestContext: context({ user: { id: 'user-9', organizationId: 'org-9' } }),
         authEnabled: true,
         sessions,
         projects: seed.projects,
@@ -322,7 +322,7 @@ describe('resolveFactoryToolScope', () => {
     await createSession('session-1', 'user-1', 'private');
     // A wake's context carries the target row's owner (prepareSessionRunContext) and no interactive marker.
     const scope = await resolveFactoryToolScope({
-      requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' }, interactive: false }),
+      requestContext: context({ user: { id: 'user-1', organizationId: 'org-1' }, interactive: false }),
       authEnabled: true,
       sessions,
       projects: seed.projects,
@@ -362,7 +362,7 @@ describe('resolveFactoryToolScope', () => {
     await createSession('session-1', 'user-1');
     const resolve = (interactive: boolean) =>
       resolveFactoryToolScope({
-        requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' }, interactive }),
+        requestContext: context({ user: { id: 'user-1', organizationId: 'org-1' }, interactive }),
         authEnabled: true,
         sessions,
         projects: seed.projects,

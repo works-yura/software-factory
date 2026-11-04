@@ -279,8 +279,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
 
     // Prefer the profile stamped into event metadata at record time: it works
     // regardless of the auth provider's ability to resolve a user by id
-    // (MastraAuthStudio's getUser() always returns null, WorkOS looks up by
-    // id but every provider stamps here uniformly).
+    // (not every provider can, but every provider stamps here uniformly).
     const profiles: Record<string, WireAuditActor> = {};
     for (const event of events) {
       if (event.actorType !== 'human') continue;

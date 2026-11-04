@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Factory auth: WorkOS/Studio providers, platform auth host, signed OAuth state.",
+  "description": "Factory auth: provider-neutral auth gate and routes, signed OAuth state.",
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts"
@@ -16,7 +16,6 @@
     "@factory/http": "workspace:*",
     "@factory/observability": "workspace:*",
     "@factory/store": "workspace:*",
-    "@mastra/auth-workos": "1.6.7",
     "@mastra/core": "1.79.0",
     "hono": "4.13.13"
   },

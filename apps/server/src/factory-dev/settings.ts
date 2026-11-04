@@ -16,9 +16,7 @@ export interface FactoryDevSettings {
   };
   organization: { id: string; name: string };
   project: { id: string; name: string };
-  environment: { id: string; name: string };
   database: DatabaseSettings;
-  sandbox: { provider: 'local' | 'platform' };
 }
 
 export const settingsPath = (root: string) => path.join(root, '.factory', 'settings.json');

@@ -117,7 +117,7 @@ function authenticatedRequestContext(
   sessionId = 'session-1',
 ) {
   const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+  requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
   // The session runs under its Factory resource; only its session id names it.
   requestContext.set('controller', {
     sessionId,
@@ -218,7 +218,7 @@ describe('parseCreatedPullRequest', () => {
 describe('GitHub subscription entry points', () => {
   it.each([
     { user: undefined, resourceId: 'resource-1' },
-    { user: { workosId: 'user-1' }, resourceId: 'resource-1' },
+    { user: { id: 'user-1' }, resourceId: 'resource-1' },
     { user: { organizationId: 'org-1' }, resourceId: 'resource-1' },
   ])('does not expose tools without authenticated identity: %o', ({ user, resourceId }) => {
     const requestContext = new RequestContext();

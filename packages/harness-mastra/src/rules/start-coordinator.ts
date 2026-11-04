@@ -352,7 +352,7 @@ export class FactoryStartCoordinator {
     const existingUser = requestContext.get('user');
     if (!existingUser || typeof existingUser !== 'object') {
       requestContext.set('user', {
-        workosId: request.userId,
+        id: request.userId,
         organizationId: request.orgId,
       });
     }

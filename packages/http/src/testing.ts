@@ -25,7 +25,7 @@ export function mountApiRoutes(app: Hono<any>, routes: ApiRoute[]): void {
 
 /** The user shape tests stash on the request context, mirroring the web host. */
 export interface TestAuthUser {
-  workosId: string;
+  id: string;
   organizationId?: string;
 }
 
@@ -50,13 +50,13 @@ export function fakeRouteAuth(
     ensureUser: async c => user(c),
     tenant: c => {
       const u = user(c);
-      return u ? { orgId: u.organizationId, userId: u.workosId } : undefined;
+      return u ? { orgId: u.organizationId, userId: u.id } : undefined;
     },
     isOrganizationAdmin: async (c, organizationId) => {
       const u = user(c);
       if (!u) return false;
       try {
-        return await isAdmin(organizationId, u.workosId);
+        return await isAdmin(organizationId, u.id);
       } catch {
         return false;
       }

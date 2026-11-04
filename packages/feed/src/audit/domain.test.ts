@@ -114,7 +114,7 @@ describe('AuditDomain', () => {
     const domain = auditDomain(seed);
     const app = new Hono();
     app.post('/emit', async c => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await domain.emit({
         context: c,
         input: {
@@ -185,7 +185,7 @@ describe('AuditDomain', () => {
       userId: 'user-1',
       input: { name: 'Other project' },
     });
-    const buildApp = (domain: AuditDomain, user?: { workosId: string; organizationId?: string }) => {
+    const buildApp = (domain: AuditDomain, user?: { id: string; organizationId?: string }) => {
       const app = new Hono();
       app.use('*', async (c, next) => {
         if (user) c.set('factoryAuthUser' as never, user as never);
@@ -198,18 +198,18 @@ describe('AuditDomain', () => {
 
     expect((await buildApp(domain).request(`/web/factory/projects/${project.id}/audit`)).status).toBe(401);
     expect(
-      (await buildApp(domain, { workosId: 'user-1' }).request(`/web/factory/projects/${project.id}/audit`)).status,
+      (await buildApp(domain, { id: 'user-1' }).request(`/web/factory/projects/${project.id}/audit`)).status,
     ).toBe(403);
     expect(
       (
-        await buildApp(domain, { workosId: 'user-1', organizationId: 'org-1' }).request(
+        await buildApp(domain, { id: 'user-1', organizationId: 'org-1' }).request(
           '/web/factory/projects/not-a-uuid/audit',
         )
       ).status,
     ).toBe(404);
     expect(
       (
-        await buildApp(domain, { workosId: 'user-1', organizationId: 'org-1' }).request(
+        await buildApp(domain, { id: 'user-1', organizationId: 'org-1' }).request(
           `/web/factory/projects/${project.id}/audit`,
         )
       ).status,
@@ -240,7 +240,7 @@ describe('AuditDomain', () => {
     });
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, domain.routes());
@@ -276,7 +276,7 @@ describe('AuditDomain', () => {
       c.set(
         'factoryAuthUser' as never,
         {
-          workosId: 'user-1',
+          id: 'user-1',
           organizationId: 'org-1',
           name: 'Ada Lovelace',
           avatarUrl: 'https://avatars.example/ada.png',
@@ -318,7 +318,7 @@ describe('AuditDomain', () => {
     });
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, domain.routes());
@@ -349,7 +349,7 @@ describe('AuditDomain', () => {
     const list = vi.spyOn(domain, 'list').mockResolvedValue({ events: [], nextCursor: undefined });
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, domain.routes());

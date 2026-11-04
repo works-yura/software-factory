@@ -125,9 +125,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await mastra.stopWorkers();
         await storage.close();
       });
-      const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
+      const app = new Hono<{ Variables: { factoryAuthUser: { id: string; organizationId: string } } }>();
       app.use('*', async (c, next) => {
-        c.set('factoryAuthUser', { workosId: 'admin-user', organizationId: orgId });
+        c.set('factoryAuthUser', { id: 'admin-user', organizationId: orgId });
         await next();
       });
       mountApiRoutes(app, args.server?.apiRoutes ?? []);

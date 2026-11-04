@@ -46,7 +46,7 @@ describe('Claude Code session tools', () => {
     expect(seen[0]).toEqual({
       input: { repository: 'a/b' },
       sessionId: scope.sessionId,
-      user: { workosId: scope.userId, organizationId: scope.orgId },
+      user: { id: scope.userId, organizationId: scope.orgId },
       workspace: { sandbox },
       toolCallId: expect.any(String),
     });

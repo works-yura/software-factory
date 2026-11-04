@@ -19,7 +19,6 @@
  */
 
 
-import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
@@ -204,7 +203,6 @@ import { createFactorySupervisorWriteTools } from '@factory/supervisor';
 import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from '@factory/observability';
 import { deliverFactorySessionNotification } from '@factory/harness-mastra';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from '@factory/harness-mastra';
-import { createFactorySandboxTools } from '@factory/harness-mastra';
 import type { FactoryToolDependencies } from '@factory/harness-mastra';
 import {
   createSessionApprovalNotifier,
@@ -225,19 +223,14 @@ export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
 export interface MastraFactoryConfig {
   /**
-   * Auth provider instance — `MastraAuthStudio` (`@mastra/auth-studio`),
-   * `MastraAuthWorkos` (`@mastra/auth-workos`), `MastraAuthBetterAuth`
-   * (`@mastra/auth-better-auth`), or any custom `MastraAuthProvider`. Whatever
-   * instance is passed is the active provider; a passed instance is always
-   * honored as-is.
+   * Auth provider instance — `MastraAuthBetterAuth`
+   * (`@mastra/auth-better-auth`), the local dev provider, or any custom
+   * `MastraAuthProvider`. Whatever instance is passed is the active provider;
+   * a passed instance is always honored as-is.
    *
-   * Omitted → the factory defaults to `MastraAuthStudio`, proxying auth
-   * through the shared Mastra platform API. `MastraAuthStudio` resolves its
-   * own env (`MASTRA_SHARED_API_URL`, `MASTRA_ORGANIZATION_ID`,
-   * `MASTRA_COOKIE_DOMAIN`).
-   *
-   * Pass `null` to disable auth entirely (open server, local-dev behavior)
-   * without falling back to the default.
+   * There is no default provider: omitting this slot makes `prepare()` throw,
+   * so a deployment never boots without auth by accident. Pass `null` to
+   * disable auth entirely (open server, local-dev behavior).
    */
   auth?: IMastraAuthProvider | null;
   /**
@@ -289,7 +282,7 @@ export interface MastraFactoryConfig {
   allowedOrigins?: string[];
   /**
    * The host's sandbox: a FactorySandbox instance such as
-   * `new PlatformFactorySandbox({ ... })`, which owns the session sandbox
+   * `new LocalFactorySandbox({ ... })`, which owns the session sandbox
    * constructor, the repo template and the schema of environment settings.
    * A bare callback is also accepted and wrapped as a `provider: 'custom'`
    * sandbox with no settings. Omitted → repository sandboxes are
@@ -447,12 +440,11 @@ export interface MastraFactoryDispatcherConfig {
 
 const CONTROLLER_ID = 'code';
 
-/**
- * Providers whose sandbox a session's agent may recreate itself. Each needs
- * its `destroy()` to leave the instance able to start a fresh VM, proven
- * against the real provider.
- */
-const SELF_RECREATE_SANDBOX_PROVIDERS: ReadonlySet<string> = new Set(['platform']);
+/** Thrown by `prepare()` when no `auth` slot was configured. */
+const MISSING_AUTH_ERROR =
+  'MastraFactory: no auth provider configured. Set FACTORY_LOCAL_DEV_AUTH=1 for local single-user ' +
+  'development, MASTRACODE_AUTH_DISABLED=1 to run without authentication, or pass an auth provider ' +
+  "(MastraFactory's `auth` option; `null` disables auth).";
 
 /** Why a wake couldn't be run as its Factory session's owner. */
 const WAKE_OWNER_UNRESOLVED = {
@@ -466,68 +458,6 @@ function hasPlatformCredentials(): boolean {
   // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
   // written by project scaffolding. Either enables the platform integrations.
   return Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
-}
-
-/**
- * Default auth provider — `MastraAuthStudio`, which proxies identity to the
- * shared Mastra platform API. `MastraAuthStudio` resolves `MASTRA_SHARED_API_URL`,
- * `MASTRA_ORGANIZATION_ID`, and `MASTRA_COOKIE_DOMAIN` from env on its own —
- * this helper only derives a cookie-domain fallback from the factory's
- * `publicUrl`.
- *
- * Cookie-domain resolution (Studio picks the first that wins):
- *   1. explicit `MASTRA_COOKIE_DOMAIN` env, if set;
- *   2. `.mastra.ai` when `sharedApiUrl` is on `.mastra.ai`;
- *   3. this parent-domain fallback derived from `publicUrl` — so a deploy on
- *      `https://foo.mastra.cloud` mints cookies with `Domain=.mastra.cloud`
- *      without the caller wiring the env var by hand.
- *   4. otherwise host-only (no `Domain=`), which is correct for `localhost`.
- */
-function buildDefaultStudioAuth(publicUrl: string): IMastraAuthProvider {
-  return new MastraAuthStudio({
-    cookieDomain: parentDomainFromPublicUrl(publicUrl),
-  });
-}
-
-/**
- * Derive a parent cookie domain from `publicUrl` by stripping the leftmost
- * label — the same shape platform-API's env injection uses (see
- * `platform/servers/api/src/lib/studio-env-vars.ts`: `.${routingDomain.replace(/^[^.]+\./, '')}`).
- *
- * Rather than a generic `strip-left-label` heuristic — which either emits
- * cookies scoped to a public suffix (`sub.example.co.uk` → `.example.co.uk`
- * requires PSL data to be safe) or misclassifies numeric hostnames like
- * `3scale.example.com` as IPv4 — we only derive a parent domain when the
- * host sits under one of the platform's known registrable domains. Anything
- * else (custom domains, arbitrary tenant hostnames, IPs, `localhost`)
- * falls through to host-only cookies. Callers that need a different scope
- * pass `MASTRA_COOKIE_DOMAIN` explicitly (Studio honors that first).
- */
-const KNOWN_PLATFORM_COOKIE_PARENTS = ['mastra.cloud', 'mastra.ai'] as const;
-
-function isIpLiteral(hostname: string): boolean {
-  // IPv6 addresses in URLs are bracketed; `URL.hostname` strips the brackets
-  // but the address itself still contains `:`. IPv4 is four dot-separated
-  // numeric octets — trust the parser to have already validated shape.
-  if (hostname.includes(':')) return true;
-  return /^\d+(?:\.\d+){3}$/.test(hostname);
-}
-
-function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
-  let hostname: string;
-  try {
-    hostname = new URL(publicUrl).hostname.toLowerCase();
-  } catch {
-    return undefined;
-  }
-  if (hostname === 'localhost' || isIpLiteral(hostname)) return undefined;
-  for (const parent of KNOWN_PLATFORM_COOKIE_PARENTS) {
-    // Exact match → we're already on the parent, host-only is correct.
-    // Subdomain match → mint the parent-scoped cookie.
-    if (hostname === parent) return undefined;
-    if (hostname.endsWith(`.${parent}`)) return `.${parent}`;
-  }
-  return undefined;
 }
 
 /** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
@@ -567,8 +497,8 @@ const RETIRED_SANDBOX_OPTIONS: Record<string, string> = {
 function invalidSandboxOptionMessage(option: unknown): string {
   const lines = [
     `MastraFactory: 'sandbox' must be a FactorySandbox instance or a callback constructing a MastraSandbox from a FactorySandboxContext:`,
-    `  sandbox: new PlatformFactorySandbox()`,
-    `  sandbox: ctx => new PlatformSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })`,
+    `  sandbox: new LocalFactorySandbox({ root })`,
+    `  sandbox: ctx => new LocalSandbox({ id: ctx.sessionId })`,
   ];
   if (typeof option === 'object' && option !== null) {
     const retired = Object.keys(RETIRED_SANDBOX_OPTIONS).filter(key => key in option);
@@ -676,14 +606,13 @@ export class MastraFactory {
     // One bus for feed/attention events: a second fallback instance would leave
     // SSE subscribers and producers on different emitters in single-process runs.
     const eventBus = pubsub ?? new EventEmitterPubSub();
-    // Default auth: honor an explicitly-passed provider (including `null` to
-    // disable auth) as-is; otherwise fall back to `MastraAuthStudio`
-    // (platform-proxied identity). The default derives its cookie domain
-    // from `publicUrl` — deploys on `<sub>.mastra.cloud` mint parent-domain
-    // cookies without the caller wiring `MASTRA_COOKIE_DOMAIN` explicitly.
+    // Auth: honor an explicitly-passed provider (including `null` to disable
+    // auth) as-is. There is no default provider — an unset slot is a
+    // configuration mistake, and silently booting an open server is worse
+    // than refusing to boot.
     const configuredAuth = this.#config.auth;
-    const auth: IMastraAuthProvider | undefined =
-      configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth(publicOrigin));
+    if (configuredAuth === undefined) throw new Error(MISSING_AUTH_ERROR);
+    const auth: IMastraAuthProvider | undefined = configuredAuth ?? undefined;
     if (auth && !this.#config.secretEncryption) {
       console.warn(
         "[factory] auth is enabled but 'secretEncryption' is not configured. Persisted model credentials, " +
@@ -698,7 +627,7 @@ export class MastraFactory {
     const routeAuth = createFactoryRouteAuth(auth);
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
-      mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
+      mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(mcpConfig);
     // The MCP endpoint authenticates callers itself, so it needs an auth
     // provider and somewhere for clients to get tokens, unless the provider
     // needs no token (loopback dev auth).
@@ -840,7 +769,7 @@ export class MastraFactory {
 
     // One-time provider initialization with factory-level context (e.g.
     // better-auth builds its default instance on the backend's auth
-    // database, WorkOS derives its redirect URI from the public URL).
+    // database, SSO providers derive their redirect URI from the public URL).
     // Failures surface here, at prepare() — a misconfigured provider must
     // not boot.
     if (auth && hasAuthInit(auth)) {
@@ -1730,7 +1659,7 @@ export class MastraFactory {
                     })
                   : null;
                 const requestContext = new RequestContext();
-                requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+                requestContext.set('user', { id: row.userId, organizationId: row.orgId });
                 const observerModelId = stored?.observerModelId;
                 return controller.generateThreadTitle({
                   threadId,
@@ -1909,19 +1838,6 @@ export class MastraFactory {
                 deps: factoryToolDeps,
               }),
             );
-            if (
-              sessionRetirement &&
-              sandboxConfig &&
-              SELF_RECREATE_SANDBOX_PROVIDERS.has(sandboxConfig.provider)
-            ) {
-              mergeTools(
-                'factory-sandbox-tools',
-                createFactorySandboxTools(scope, {
-                  sessions: sourceControlSessions,
-                  resetSandbox: input => sessionRetirement.resetSessionSandbox(input),
-                }),
-              );
-            }
           }
         }
         // The supervisor session has no seat, so it never gets the

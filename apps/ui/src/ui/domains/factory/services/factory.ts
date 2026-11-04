@@ -7,7 +7,7 @@ const tk = translator('board');
  *
  * Reads a linked repository's open issues and open (non-draft) pull requests
  * through the server's `/web/github/projects/:projectRepositoryId/*` routes, which are behind
- * the WorkOS auth gate and scoped to the caller's organization. Tokens never
+ * the auth gate and scoped to the caller's organization. Tokens never
  * reach the browser — the server talks to GitHub with its installation token.
  */
 

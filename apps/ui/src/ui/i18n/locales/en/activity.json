@@ -292,7 +292,7 @@
     "properties": "Timeline properties",
     "group": "Group",
     "compact": "Compact view",
-    "auditPortal": "Open audit log in WorkOS",
+    "auditPortal": "Open audit log portal",
     "categories": {
       "work_item": "Work items",
       "run": "Runs",

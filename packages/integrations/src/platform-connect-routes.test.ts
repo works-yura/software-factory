@@ -42,7 +42,7 @@ function buildApp(user: TestAuthUser | null, fetchImpl: typeof fetch, options: {
   return app;
 }
 
-const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
+const org1 = (): TestAuthUser => ({ id: 'u1', organizationId: 'org1' });
 
 describe('platform connect routes', () => {
   it('lists GitLab connections and hides other providers', async () => {
@@ -117,7 +117,7 @@ describe('platform connect routes', () => {
       (await signedOut.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' })).status,
     ).toBe(401);
 
-    const personal = buildApp({ workosId: 'u1' }, fetchImpl);
+    const personal = buildApp({ id: 'u1' }, fetchImpl);
     expect((await personal.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' })).status).toBe(
       403,
     );

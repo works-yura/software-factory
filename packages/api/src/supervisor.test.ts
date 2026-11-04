@@ -13,7 +13,7 @@ import type { FactoryStorageTestSeed } from '@factory/testing';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { WorkItemRoutes } from './work-items.ts';
 
-const orgUser = { workosId: 'u1', organizationId: 'org1' };
+const orgUser = { id: 'u1', organizationId: 'org1' };
 
 let seed: FactoryStorageTestSeed;
 let PROJECT_ID = '';
@@ -110,7 +110,7 @@ describe('POST /supervisor/session', () => {
   });
 
   it('refuses a project the caller org does not own', async () => {
-    const other = { workosId: 'u2', organizationId: 'org2' };
+    const other = { id: 'u2', organizationId: 'org2' };
     const res = await request('POST', `/web/factory/projects/${PROJECT_ID}/supervisor/session`, other);
     expect(res.status).toBe(404);
   });
@@ -141,7 +141,7 @@ describe('GET /supervisor/health', () => {
     expect(body.counts).not.toHaveProperty('decision-failed');
   });
   it('is scoped to the caller org', async () => {
-    const other = { workosId: 'u2', organizationId: 'org2' };
+    const other = { id: 'u2', organizationId: 'org2' };
     const res = await request('GET', `/web/factory/projects/${PROJECT_ID}/supervisor/health`, other);
     expect(res.status).toBe(404);
   });

@@ -22,12 +22,9 @@ import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { PlatformFactorySandbox } from '@mastra/platform-workspace';
-import { E2BFactorySandbox } from '@mastra/e2b';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { AgentBrowser } from '@mastra/agent-browser';
 import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } from '@factory/server';
 import { GithubIntegration, GithubTokenIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
@@ -129,42 +126,22 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-// Auth selection, ordered by how explicit the operator's intent is:
-//   1. MASTRACODE_AUTH_DISABLED=1 — explicit opt-out, auth off entirely.
-//   2. MASTRA_SHARED_API_URL — explicit platform deferral; identity rides the
-//      shared platform API (`.env.schema` names this the highest-precedence
-//      auth config), so it wins even over a configured WORKOS_* pair — but
-//      loudly, because silently ignoring sign-in config is how self-hosted
-//      logins end up 302-ing somewhere that rejects their redirect_uri.
-//   3. WORKOS_API_KEY + WORKOS_CLIENT_ID — self-managed WorkOS sign-in. The
-//      constructor reads the rest of the WORKOS_* group from env, and
-//      `init()` derives the /auth/callback redirect from the deployment's
-//      publicUrl when WORKOS_REDIRECT_URI is unset. `fetchMemberships` lets
-//      token auth resolve the user's organization so the bootstrapped
-//      personal org works without re-auth. Note MASTRA_PLATFORM_ACCESS_TOKEN /
-//      MASTRA_PLATFORM_SECRET_KEY do NOT defer to the platform here: they are
-//      compute/integration credentials (sandboxes, GitHub/GitLab slots), not
-//      identity signals — platform compute plus self-managed sign-in is a
-//      supported combination.
-//   4. Nothing configured — leave undefined and MastraFactory installs its
-//      platform-backed default provider.
+// Auth selection. There is no implicit default: with none of these set,
+// `factory.prepare()` refuses to boot and names the options.
+//   1. FACTORY_LOCAL_DEV_AUTH=1 — loopback-only single-user identity, checked
+//      before every other option.
+//   2. MASTRACODE_AUTH_DISABLED=1 — explicit opt-out, auth off entirely.
+// A deployment with its own identity provider passes it to MastraFactory's
+// `auth` slot instead. Note MASTRA_PLATFORM_ACCESS_TOKEN /
+// MASTRA_PLATFORM_SECRET_KEY are integration credentials (GitHub/GitLab
+// slots), not identity signals.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
-const workosConfigured = Boolean(process.env.WORKOS_API_KEY?.trim() && process.env.WORKOS_CLIENT_ID?.trim());
 let auth: IMastraAuthProvider | null | undefined;
 
 if (localDevAuthEnabled) {
-  // Loopback-only single-user identity, checked before every other option.
   auth = createLocalDevAuth();
 } else if (authDisabled) {
   auth = null;
-} else if (process.env.MASTRA_SHARED_API_URL?.trim()) {
-  if (workosConfigured) {
-    console.warn(
-      '[Auth] WORKOS_API_KEY/WORKOS_CLIENT_ID are set but ignored: MASTRA_SHARED_API_URL takes precedence, so sign-in defers to the platform. Unset MASTRA_SHARED_API_URL to use self-managed WorkOS auth.',
-    );
-  }
-} else if (workosConfigured) {
-  auth = new MastraAuthWorkos({ fetchMemberships: true });
 }
 const secretEncryption = auth === null ? undefined : credentialEncryption();
 
@@ -240,7 +217,7 @@ const clickup = clickupApiToken
   : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
-// (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
+// (GITHUB_APP_PRIVATE_KEY, FACTORY_CREDENTIAL_ENCRYPTION_KEY, DATABASE_URL, …) never leak into
 // commands run against untrusted repo checkouts. PATH is always added by the
 // core LocalSandbox itself; the rest keeps git and TLS working normally.
 const LOCAL_SANDBOX_ENV_KEYS = [
@@ -306,10 +283,9 @@ const vector = databaseUrl
   ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl })
   : createLocalVector();
 
-// Deployment-stable secret for OAuth `state` signing: the GitHub webhook secret,
-// then the WorkOS cookie password. Unset → per-process random secret
-// (single-process local dev only).
-const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined;
+// Deployment-stable secret for OAuth `state` signing: the GitHub webhook secret.
+// Unset → per-process random secret (single-process local dev only).
+const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || undefined;
 
 const integrations = [
   ...(github ? [github] : []),
@@ -319,34 +295,27 @@ const integrations = [
 
 export const factoryConfigVersion = 'mastracode-web-v1';
 
-const hasPlatformSandboxEnv =
-  ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'].some(key => Boolean(process.env[key]?.trim())) &&
-  ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
-const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
-const e2bApiKey = process.env.E2B_API_KEY?.trim();
-if (!useLocalSandbox && !hasPlatformSandboxEnv && !e2bApiKey && !localDevelopmentMode) {
+// The only sandbox runs agent commands directly on this host as the server's
+// OS user, without isolation. Outside development and tests that must be an
+// explicit choice: FACTORY_SANDBOX_PROVIDER=local.
+const sandboxProvider = process.env.FACTORY_SANDBOX_PROVIDER?.trim() || undefined;
+if (sandboxProvider !== undefined && sandboxProvider !== 'local') {
   throw new Error(
-    'A sandbox provider is required outside local development and tests. Set MASTRA_PLATFORM_ACCESS_TOKEN or ' +
-      'MASTRA_PLATFORM_SECRET_KEY with MASTRA_PROJECT_ID and MASTRA_ENVIRONMENT_ID for Mastra platform sandboxes, ' +
-      'or E2B_API_KEY for E2B. To run agent commands directly on this machine as the server user, set ' +
-      'FACTORY_SANDBOX_PROVIDER=local.',
+    `FACTORY_SANDBOX_PROVIDER must be unset or local, got ${JSON.stringify(sandboxProvider)}. ` +
+      'Cloud sandbox providers (Mastra platform, E2B) are no longer supported.',
+  );
+}
+if (sandboxProvider !== 'local' && !localDevelopmentMode) {
+  throw new Error(
+    'Agent commands run directly on this machine as the server user. Outside local development and tests, ' +
+      'confirm that by setting FACTORY_SANDBOX_PROVIDER=local.',
   );
 }
 
-/**
- * The host sandbox, chosen once at boot: local when forced, else the platform
- * (its client reads the MASTRA_PLATFORM_* env itself), else E2B, else local
- * (development and tests only; see the guard above).
- */
-const sandbox =
-  !useLocalSandbox && hasPlatformSandboxEnv
-    ? new PlatformFactorySandbox()
-    : !useLocalSandbox && e2bApiKey
-      ? new E2BFactorySandbox({ apiKey: e2bApiKey })
-      : new LocalFactorySandbox({
-          root: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-          env: localSandboxEnv(),
-        });
+const sandbox = new LocalFactorySandbox({
+  root: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+  env: localSandboxEnv(),
+});
 
 /**
  * Browser automation for agent sessions, off unless FACTORY_BROWSER names a

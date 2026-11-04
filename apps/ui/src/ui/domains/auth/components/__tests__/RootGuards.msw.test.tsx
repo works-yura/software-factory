@@ -48,7 +48,7 @@ afterEach(() => vi.useRealTimers());
 
 describe('Factory session expiry', () => {
   it.each([
-    { provider: 'workos', signInAction: 'Continue with GitHub' },
+    { provider: 'factory-local-dev', signInAction: 'Continue to sign in' },
     { provider: 'better-auth', signInAction: 'Sign in' },
   ])(
     'keeps the draft and return URL when $provider expires while away from the tab',
@@ -124,7 +124,7 @@ describe('Factory session expiry', () => {
     server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedOut)));
     const { router } = renderApp();
 
-    await screen.findByRole('button', { name: 'Continue with GitHub' });
+    await screen.findByRole('button', { name: 'Continue to sign in' });
     expect(router.state.location.pathname).toBe('/signin');
     expect(new URLSearchParams(router.state.location.search).get('returnTo')).toBe(CURRENT_PATH);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();

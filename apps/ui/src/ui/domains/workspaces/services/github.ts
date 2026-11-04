@@ -4,7 +4,7 @@
  * repositories, and per-repository sandbox/git operations.
  *
  * All requests go to the server's `/web/github/*` and `/auth/github/*`
- * routes, which are behind the WorkOS auth gate and scoped to the logged-in
+ * routes, which are behind the auth gate and scoped to the logged-in
  * user. The browser never sees installation tokens — those live only inside the
  * server and the cloud sandbox.
  *
@@ -70,7 +70,7 @@ export interface GithubStatus {
    * prompt re-login instead of silently hiding GitHub.
    */
   authRequired?: boolean;
-  /** True when the user is signed in but has no WorkOS org (personal account). */
+  /** True when the user is signed in but has no org (personal account). */
   organizationRequired?: boolean;
   /** Machine-readable reason for the current state; see {@link GithubStatusReason}. */
   reason?: GithubStatusReason;

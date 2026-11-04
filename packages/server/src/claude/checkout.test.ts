@@ -56,7 +56,7 @@ describe('createClaudeCheckoutResolver', () => {
     // The setup runs on start; the root is only known once a file operation resolved it.
     expect(fake.calls).toEqual(['start', 'exists /']);
     const context = contexts[0]!;
-    expect(context.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(context.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
     const controller = context.get('controller') as { sessionId: string; getState: () => unknown };
     expect(controller.sessionId).toBe('session-1');
     expect(controller.getState()).toEqual({ factoryProjectId: 'factory-1', factoryOrgId: 'org-1' });

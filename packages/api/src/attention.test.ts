@@ -16,7 +16,7 @@ import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { WorkItemRoutes } from './work-items.ts';
 
-const orgUser = { workosId: 'u1', organizationId: 'org1' };
+const orgUser = { id: 'u1', organizationId: 'org1' };
 
 let seed: FactoryStorageTestSeed;
 let PROJECT_ID = '';

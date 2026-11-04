@@ -33,7 +33,7 @@ vi.mock('@factory/session', async importOriginal => ({
 })(importOriginal)),
 }));
 
-const user = { workosId: 'user-1', organizationId: 'org-1' };
+const user = { id: 'user-1', organizationId: 'org-1' };
 
 type RouteOptions = Parameters<typeof buildSourceControlSessionRoutes>[0];
 
@@ -42,7 +42,7 @@ function buildApp(
   { memorySettings, projects, users }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users'>,
   controller?: RouteOptions['controller'],
   workItems?: RouteOptions['workItems'],
-  viewer: { workosId: string; organizationId: string } = user,
+  viewer: { id: string; organizationId: string } = user,
   moveThread?: RouteOptions['moveThread'],
 ) {
   const app = new Hono();
@@ -378,7 +378,7 @@ describe('source-control session routes', () => {
     const noRuns = { clearSessionReferences: async () => 0, hasRunBindingForSession: async () => false };
     const owner = buildApp([sourceControl], seed, controller, noRuns);
     const teammate = buildApp([sourceControl], seed, controller, noRuns, {
-      workosId: 'user-2',
+      id: 'user-2',
       organizationId: 'org-1',
     });
 
@@ -688,7 +688,7 @@ describe('source-control session routes', () => {
   });
 
   describe('PUT /web/user-sessions/:sessionId/visibility', () => {
-    const teammate = { workosId: 'user-2', organizationId: 'org-1' };
+    const teammate = { id: 'user-2', organizationId: 'org-1' };
     const noRuns: RouteOptions['workItems'] = {
       clearSessionReferences: async () => 0,
       hasRunBindingForSession: async () => false,
@@ -961,7 +961,7 @@ describe('session sandbox recreate', () => {
       isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean>;
       controller?: RouteOptions['controller'];
       abortSettleTimeoutMs?: number;
-      caller?: { workosId: string; organizationId: string };
+      caller?: { id: string; organizationId: string };
       filesystem?: RouteOptions['filesystem'];
     } = {},
   ) {
@@ -1044,7 +1044,7 @@ describe('session sandbox recreate', () => {
       expect(response.status).toBe(200);
       const created = controller.createSession.mock.calls[0]![0];
       expect(created).toMatchObject({ id: session.sessionId, threadId: session.sessionId, ownerId: 'user-1' });
-      expect(created.requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(created.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
       // The session's Factory address is seeded, same as when the page starts the conversation.
       expect(controller.setState).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1233,7 +1233,7 @@ describe('session sandbox recreate', () => {
     const app = buildRecreateApp(seed, sourceControl, {
       sessionRetirement,
       isOrganizationAdmin: async () => true,
-      caller: { workosId: 'user-1', organizationId: 'org-2' },
+      caller: { id: 'user-1', organizationId: 'org-2' },
     });
 
     const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });

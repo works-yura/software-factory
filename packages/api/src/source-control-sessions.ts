@@ -257,7 +257,7 @@ async function startUserSessionConversation(
 ) {
   if (!controller) return undefined;
   const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
+  requestContext.set('user', { id: session.userId, organizationId: session.orgId });
   const live = await controller.createSession({
     id: session.sessionId,
     resourceId,
@@ -874,7 +874,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             })
           : null;
         const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+        requestContext.set('user', { id: row.userId, organizationId: row.orgId });
         try {
           const title = await nameSession(sessionId, async () => {
             const generated = await options.controller!.generateThreadTitle({

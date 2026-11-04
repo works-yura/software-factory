@@ -233,7 +233,7 @@ function createRequestContext(projectPath: string) {
 function createGithubRequestContext(
   projectId: string,
   sessionId: string,
-  user: Record<string, unknown> = { organizationId: 'org-1', workosId: 'user-1' },
+  user: Record<string, unknown> = { organizationId: 'org-1', id: 'user-1' },
 ) {
   const requestContext = createRequestContext('/unused');
   const state: Record<string, unknown> = { factoryProjectId: projectId };
@@ -267,7 +267,7 @@ function createUnscopedGithubRequestContext(projectId: string, projectPath: stri
     getState,
     session: { id: projectId, state: { get: getState } },
   });
-  requestContext.set('user', { organizationId: 'org-1', workosId: 'user-1' });
+  requestContext.set('user', { organizationId: 'org-1', id: 'user-1' });
   return requestContext;
 }
 
@@ -1839,7 +1839,7 @@ describe('GitHub session workspace preparation', () => {
     const resolver = createWorkspaceFactory({ projects: projects as any });
     const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1', {
       organizationId: 'org-2',
-      workosId: 'user-1',
+      id: 'user-1',
     });
 
     await expect(resolver({ requestContext } as any)).rejects.toThrow(
@@ -3017,7 +3017,7 @@ describe('GitHub session workspace preparation', () => {
       workspace({
         requestContext: createGithubRequestContext('project-1', 'session-a', {
           organizationId: 'org-2',
-          workosId: 'user-2',
+          id: 'user-2',
         }),
       }),
     ).rejects.toThrow(/Factory session session-a is not available/);
@@ -3031,23 +3031,6 @@ describe('GitHub session workspace preparation', () => {
     await expect(
       workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
     ).resolves.toBeDefined();
-  });
-
-  it('accepts session owners identified by provider-neutral id instead of workosId', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-    const existing = { id: 'existing', setToolsConfig: vi.fn() };
-
-    const result = await workspace({
-      requestContext: createGithubRequestContext('project-1', 'session-a', {
-        organizationId: 'org-1',
-        id: 'user-1',
-      }),
-      mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
-    });
-
-    expect(result).toBe(existing);
   });
 
   // Amendment 7 (user-directed): workspaces come ONLY from the sandbox

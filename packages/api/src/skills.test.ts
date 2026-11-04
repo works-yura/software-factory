@@ -75,7 +75,7 @@ function createHarness(
       : { allowed: true as const },
   );
   const requestContext = new RequestContext();
-  requestContext.set('user', options.user ?? { workosId: 'user-1', organizationId: 'org-1' });
+  requestContext.set('user', options.user ?? { id: 'user-1', organizationId: 'org-1' });
   const app = new Hono();
   app.use('*', async (context, next) => {
     context.set('requestContext' as never, requestContext);
@@ -318,7 +318,7 @@ describe('workspace skill invocation route', () => {
       }),
       sendMessage,
     }));
-    let viewer: TestAuthUser = { workosId: 'user-1', organizationId: 'org-1' };
+    let viewer: TestAuthUser = { id: 'user-1', organizationId: 'org-1' };
     const app = new Hono();
     app.use('*', async (c, next) => {
       c.set('factoryAuthUser' as never, viewer as never);
@@ -390,14 +390,14 @@ describe('workspace skill invocation route', () => {
     });
 
     // Another org never reaches the session, even with the right id.
-    viewer = { workosId: 'user-1', organizationId: 'org-2' };
+    viewer = { id: 'user-1', organizationId: 'org-2' };
     expect((await invoke(app, { sessionId, name: 'understand-pr' })).status).toBe(403);
     // A teammate cannot reach someone else's private session.
-    viewer = { workosId: 'user-2', organizationId: 'org-1' };
+    viewer = { id: 'user-2', organizationId: 'org-1' };
     expect((await invoke(app, { sessionId, name: 'understand-pr' })).status).toBe(403);
     expect(getSession).not.toHaveBeenCalled();
 
-    viewer = { workosId: 'user-1', organizationId: 'org-1' };
+    viewer = { id: 'user-1', organizationId: 'org-1' };
     const allowed = await invoke(app, { sessionId, name: 'understand-pr' });
     expect(allowed.status).toBe(200);
     expect(getSession).toHaveBeenCalledWith(sessionId);
@@ -489,7 +489,7 @@ describe('factory skills catalog route', () => {
   });
 
   it('serves the catalog to signed-in tenants', async () => {
-    const app = createCatalogApp({ user: { workosId: 'user-1', organizationId: 'org-1' } });
+    const app = createCatalogApp({ user: { id: 'user-1', organizationId: 'org-1' } });
     const response = await app.request('/web/factory/skills');
     expect(response.status).toBe(200);
   });
@@ -611,8 +611,8 @@ describe('factory skills catalog route', () => {
 });
 
 describe('project skill edit routes', () => {
-  const ADMIN = { workosId: 'admin-1', organizationId: 'org-1' };
-  const MEMBER = { workosId: 'member-1', organizationId: 'org-1' };
+  const ADMIN = { id: 'admin-1', organizationId: 'org-1' };
+  const MEMBER = { id: 'member-1', organizationId: 'org-1' };
   let projectDir: string;
 
   beforeEach(() => {
@@ -632,7 +632,7 @@ describe('project skill edit routes', () => {
 
   async function setup() {
     const seed = await createFactoryStorageForTests();
-    const admins = new Set([ADMIN.workosId]);
+    const admins = new Set([ADMIN.id]);
     const auth = fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => admins.has(userId) });
     const routes = new SkillRoutes({
       auth,
@@ -644,8 +644,8 @@ describe('project skill edit routes', () => {
         audit: new AuditDomain({ auth, audit: seed.audit, projects: seed.projects }),
       },
     }).routes();
-    const projectA = await seed.projects.create({ orgId: 'org-1', userId: ADMIN.workosId, input: { name: 'A' } });
-    const projectB = await seed.projects.create({ orgId: 'org-1', userId: ADMIN.workosId, input: { name: 'B' } });
+    const projectA = await seed.projects.create({ orgId: 'org-1', userId: ADMIN.id, input: { name: 'A' } });
+    const projectB = await seed.projects.create({ orgId: 'org-1', userId: ADMIN.id, input: { name: 'B' } });
     const elsewhere = await seed.projects.create({ orgId: 'org-2', userId: 'other', input: { name: 'C' } });
 
     const request = (user: TestAuthUser, path: string, init?: RequestInit) => {
@@ -700,7 +700,7 @@ describe('project skill edit routes', () => {
     expect(((await response.json()) as { skill: unknown }).skill).toMatchObject({
       name: 'factory-plan',
       content: '# Our Plan',
-      edited: { updatedBy: ADMIN.workosId },
+      edited: { updatedBy: ADMIN.id },
       originalChanged: false,
     });
 
@@ -710,7 +710,7 @@ describe('project skill edit routes', () => {
       description: 'Our planning rules',
       content: '# Our Plan',
       origin: 'bundled',
-      edited: { updatedBy: ADMIN.workosId },
+      edited: { updatedBy: ADMIN.id },
       originalChanged: false,
     });
     const b = await skill(ADMIN, projectB.id, 'factory-plan');

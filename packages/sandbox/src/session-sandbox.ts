@@ -48,10 +48,10 @@ export type FactorySandboxContext = CoreFactorySandboxContext;
  *
  * @example
  * ```typescript
- * sandbox: ({ sessionId, sandboxId }) => new E2BSandbox({ id: sessionId, sandboxId })
+ * sandbox: ({ sessionId }) => new LocalSandbox({ id: sessionId })
  * ```
  *
- * A FactorySandbox instance (for example `new E2BFactorySandbox({ apiKey })`)
+ * A FactorySandbox instance (for example `new LocalFactorySandbox({ root })`)
  * additionally exposes settings and template builds to the environment.
  */
 export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => MastraSandbox;

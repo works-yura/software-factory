@@ -24,7 +24,7 @@ function buildApp(
   return app;
 }
 
-const orgUser = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
+const orgUser = (): TestAuthUser => ({ id: 'u1', organizationId: 'org1' });
 
 describe('GitLab webhook auth boundary', () => {
   it('passes an unauthenticated delivery through the auth gate to GitLab token verification', async () => {
@@ -424,7 +424,7 @@ describe('GitLab UI routes', () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
 
     expect((await buildApp(gitlab, null).request('/web/gitlab/projects')).status).toBe(401);
-    expect((await buildApp(gitlab, { workosId: 'u1' }).request('/web/gitlab/projects')).status).toBe(403);
+    expect((await buildApp(gitlab, { id: 'u1' }).request('/web/gitlab/projects')).status).toBe(403);
   });
 });
 
@@ -472,7 +472,7 @@ describe('GitLab subscriptions route', () => {
     ).toBe(401);
     expect(
       (
-        await buildApp(gitlab, { workosId: 'u1' }).request(
+        await buildApp(gitlab, { id: 'u1' }).request(
           '/web/gitlab/subscriptions?resourceId=resource-1&threadId=thread-1',
         )
       ).status,

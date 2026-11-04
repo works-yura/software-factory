@@ -8,7 +8,6 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PLATFORM_AUTH_PROVIDER } from '@factory/auth';
 import { AuditDomain, CommentsDomain } from '@factory/feed';
 import { createFactoryTools } from '@factory/harness-mastra';
 import type { FactoryToolDependencies } from '@factory/harness-mastra';
@@ -27,38 +26,23 @@ import type { FactoryMcpRoutesDeps } from './routes.ts';
 import {
   buildFactoryMcpRoutes,
   connectorSessionId,
-  PLATFORM_MCP_AUTHORIZATION_SERVER,
   resolveMcpAuthorizationServers,
 } from './routes.ts';
 
 describe('resolveMcpAuthorizationServers', () => {
-  it('prefers config, then env, then Platform AuthKit', () => {
-    expect(resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, { authorizationServers: ['https://a'] }, {})).toEqual(
-      ['https://a'],
-    );
-    expect(
-      resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, {
-        MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: 'https://e',
-      }),
-    ).toEqual(['https://e']);
-    expect(resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, {})).toEqual([
-      PLATFORM_MCP_AUTHORIZATION_SERVER,
+  it('prefers config, then env', () => {
+    expect(resolveMcpAuthorizationServers({ authorizationServers: ['https://a'] }, {})).toEqual(['https://a']);
+    expect(resolveMcpAuthorizationServers(undefined, { MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: 'https://e' })).toEqual([
+      'https://e',
     ]);
   });
 
   it('treats a blank env var as unset', () => {
-    expect(
-      resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, {
-        MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: '  ',
-      }),
-    ).toEqual([PLATFORM_MCP_AUTHORIZATION_SERVER]);
-    expect(
-      resolveMcpAuthorizationServers('workos', undefined, { MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: '' }),
-    ).toEqual([]);
+    expect(resolveMcpAuthorizationServers(undefined, { MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: '  ' })).toEqual([]);
   });
 
-  it('returns nothing for other providers without config', () => {
-    expect(resolveMcpAuthorizationServers('workos', undefined, {})).toEqual([]);
+  it('returns nothing without config', () => {
+    expect(resolveMcpAuthorizationServers(undefined, {})).toEqual([]);
   });
 });
 

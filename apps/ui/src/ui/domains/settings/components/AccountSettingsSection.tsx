@@ -18,9 +18,7 @@ const tk = translator('settings');
 
 // Product names stay as they are; only descriptive labels are translated, at call time.
 const AUTH_PROVIDER_LABELS: Record<string, () => string> = {
-  workos: () => 'WorkOS',
   'better-auth': () => tk('account.authProviders.betterAuth'),
-  'mastra-studio': () => 'Mastra Studio',
 };
 
 function authProviderLabel(provider: string | undefined): string {

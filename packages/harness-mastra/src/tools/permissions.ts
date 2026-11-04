@@ -27,7 +27,6 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_start_session',
   'factory_answer_approval',
   'factory_switch_session_model',
-  'factory_recreate_sandbox',
 ];
 
 export interface FactoryToolPermissionsSession {

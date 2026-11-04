@@ -165,7 +165,7 @@ describe('run state on whichever harness runs the session', () => {
 describe('subscriptionRunContext', () => {
   it('runs as the subscribing user in the subscription organization and primes credentials', async () => {
     const context = await subscriptionRunContext(row(), undefined);
-    expect(context?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(context?.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
     expect(prime).toHaveBeenCalledTimes(1);
     expect(prime.mock.calls[0]?.[0]).toBe(context);
   });
@@ -174,7 +174,7 @@ describe('subscriptionRunContext', () => {
     const getBySessionId = vi.fn(async () => ({ userId: 'owner-2', orgId: 'org-2' }));
     const context = await subscriptionRunContext(row({ subscribedByUserId: null }), { sessions: { getBySessionId } });
     expect(getBySessionId).toHaveBeenCalledWith('session-1');
-    expect(context?.get('user')).toEqual({ workosId: 'owner-2', organizationId: 'org-2' });
+    expect(context?.get('user')).toEqual({ id: 'owner-2', organizationId: 'org-2' });
   });
 
   it('returns no context, and does not prime, when no identity can be resolved', async () => {
@@ -202,7 +202,7 @@ describe('prepareSessionRunContext', () => {
       'prepared',
     );
     expect(getBySessionId).toHaveBeenCalledWith('session-9');
-    expect(requestContext.get('user')).toEqual({ workosId: 'user-9', organizationId: 'org-9' });
+    expect(requestContext.get('user')).toEqual({ id: 'user-9', organizationId: 'org-9' });
     expect(prime).toHaveBeenCalledTimes(1);
     expect(prime.mock.calls[0]?.[0]).toBe(requestContext);
   });

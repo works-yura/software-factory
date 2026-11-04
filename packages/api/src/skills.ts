@@ -105,7 +105,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
     }
 
     // Personal sessions created without a session id are addressed by the
-    // authenticated WorkOS user id and need no app DB.
+    // authenticated user id and need no app DB.
     if (address.sessionId === tenant.userId) return { allowed: true };
 
     // Factory sessions are addressed by their source-control session id.

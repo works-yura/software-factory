@@ -45,7 +45,7 @@ Below it, the **Timeline** tells what moved, who moved it, and flags cards that 
 - **Group**: **Similar** folds one hand's run of the same deed into one sentence; **None** lists every audit event on its own line, with a details toggle for its recorded metadata.
 - **Filter**: limits the stream to work items, runs, git, agent, or intake events.
 - **Compact view**: tighter rows without avatars; grouped cards fold behind their count.
-- **Open audit log in WorkOS**, when the deployment has an audit portal.
+- **Open audit log portal**, when the deployment has an audit portal.
 
 The **Codebase** view lists the linked repository's recent commits by day. The old Overview, Attention, and Metrics URLs redirect to Activity; the old Audit URL opens it ungrouped (`?events=all`).
 

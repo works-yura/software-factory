@@ -22,22 +22,15 @@ vi.mock('@factory/server', async importOriginal => {
  * — the entry must stay a single self-contained file. These tests boot the
  * real entry and create session sandboxes from that host object directly.
  *
- * Provider precedence: Platform > E2B > Local. Template *definitions* are
- * covered by `@mastra/platform-workspace` repo-template tests; here we pin
- * which provider is selected and what session context is forwarded.
+ * The only provider is the local one; platform credentials are integration
+ * credentials and never select a sandbox.
  */
 describe('entry host sandbox (src/mastra/index.ts)', () => {
   beforeEach(() => {
     for (const name of [
-      'MASTRACODE_AUTH_DISABLED',
-      'WORKOS_API_KEY',
-      'WORKOS_CLIENT_ID',
-      'WORKOS_COOKIE_PASSWORD',
-      'MASTRA_SHARED_API_URL',
       'MASTRA_PLATFORM_SECRET_KEY',
       'MASTRA_PLATFORM_ACCESS_TOKEN',
       'MASTRA_CLOUD_ACCESS_TOKEN',
-      'MASTRA_ENVIRONMENT_ID',
       'DATABASE_URL',
       'APP_DATABASE_URL',
       'REDIS_URL',
@@ -49,12 +42,12 @@ describe('entry host sandbox (src/mastra/index.ts)', () => {
       'GITHUB_APP_WEBHOOK_SECRET',
       'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
-      'E2B_API_KEY',
-      'SANDBOX_PROVIDER',
       'FACTORY_SANDBOX_PROVIDER',
+      'FACTORY_LOCAL_DEV_AUTH',
     ]) {
       vi.stubEnv(name, '');
     }
+    vi.stubEnv('MASTRACODE_AUTH_DISABLED', '1');
     vi.stubEnv('MASTRA_PROJECT_ID', 'test-project');
     factoryConfigs.length = 0;
     vi.resetModules();
@@ -79,114 +72,28 @@ describe('entry host sandbox (src/mastra/index.ts)', () => {
       host.create({ getRepositoryAccess: undefined, ...ctx }, {});
   }
 
-  it('prefers PlatformSandbox over direct E2B and forwards session context', { timeout: 60_000 }, async () => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_platform');
-    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
-    vi.stubEnv('E2B_API_KEY', 'direct-e2b-must-not-win');
+  it('creates a per-session LocalSandbox', { timeout: 60_000 }, async () => {
     const callback = await importSandboxCallback();
 
-    const sandbox = callback({
-      sessionId: 'session-1',
-      repoFullName: 'acme/widgets',
-      setupCommand: 'pnpm install',
-      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/widgets.git' }),
-    });
+    const sandbox = callback({ sessionId: 'session-3' });
 
     // `vi.resetModules()` reloads the entry's module graph, so provider classes
     // have a fresh identity — assert on the stable `provider` discriminator.
-    expect(sandbox).toMatchObject({ provider: 'platform' });
-    expect(sandbox).toMatchObject({ id: 'session-1' });
-    // Session setup is not the callback's job: factory attaches it to the
-    // returned sandbox with setOnStart, so no onStart forwarding happens here.
-    expect((sandbox as unknown as { _onStart?: unknown })._onStart).toBeUndefined();
-    // A repo-backed session carries a lazy template resolver; no work happens
-    // until start().
-    expect((sandbox as unknown as { _template?: unknown })._template).toBeDefined();
+    expect(sandbox).toMatchObject({ provider: 'local' });
   });
 
-  it.each([
-    ['', 'sk_secret', 'sk_secret'],
-    ['jwt_platform', 'sk_secret', 'jwt_platform'],
-    ['  ', ' sk_secret ', 'sk_secret'],
-  ])(
-    'selects PlatformSandbox with access token %j and secret key %j',
-    { timeout: 60_000 },
-    async (token, key, expected) => {
-      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', token);
-      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', key);
-      vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
-      vi.stubEnv('E2B_API_KEY', 'direct-e2b');
-      const callback = await importSandboxCallback();
-
-      const sandbox = callback({ sessionId: 'session-sk', repoFullName: 'acme/widgets' });
-
-      expect(sandbox).toMatchObject({ provider: 'platform', _client: { accessToken: expected } });
-    },
-  );
-
-  it('requires an environment ID even with a secret key', { timeout: 60_000 }, async () => {
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
-    const callback = await importSandboxCallback();
-
-    expect(callback({ sessionId: 'session-no-env' })).toMatchObject({ provider: 'local' });
-  });
-
-  it.each(['e2b', 'railway'])(
-    'preserves the PlatformSandbox %s backend selection',
-    { timeout: 60_000 },
-    async provider => {
-      vi.stubEnv('SANDBOX_PROVIDER', provider);
-      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
-      vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
-      const callback = await importSandboxCallback();
-
-      expect(callback({ sessionId: 'session-platform-backend' })).toMatchObject({
-        provider: 'platform',
-        _client: { sandboxProvider: provider },
-      });
-    },
-  );
-
-  it('honors the local override even with all cloud credentials configured', { timeout: 60_000 }, async () => {
-    vi.stubEnv('FACTORY_SANDBOX_PROVIDER', 'local');
-    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+  it('stays local when platform credentials are configured', { timeout: 60_000 }, async () => {
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'jwt_platform');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
-    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
-    vi.stubEnv('E2B_API_KEY', 'direct-e2b');
     const callback = await importSandboxCallback();
 
     expect(callback({ sessionId: 'session-local' })).toMatchObject({ provider: 'local' });
   });
 
-  it('honors the local override when only direct E2B is configured', { timeout: 60_000 }, async () => {
-    vi.stubEnv('FACTORY_SANDBOX_PROVIDER', 'local');
-    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
-    vi.stubEnv('E2B_API_KEY', 'direct-e2b');
-    const callback = await importSandboxCallback();
+  it('rejects any FACTORY_SANDBOX_PROVIDER other than local', { timeout: 60_000 }, async () => {
+    vi.stubEnv('FACTORY_SANDBOX_PROVIDER', 'e2b');
 
-    expect(callback({ sessionId: 'session-local-e2b' })).toMatchObject({ provider: 'local' });
+    await expect(import('./index.js')).rejects.toThrow(/FACTORY_SANDBOX_PROVIDER must be unset or local/);
+    expect(factoryConfigs).toHaveLength(0);
   });
-
-  it('selects direct E2BSandbox when only E2B_API_KEY is configured', { timeout: 60_000 }, async () => {
-    vi.stubEnv('E2B_API_KEY', 'direct-e2b');
-    const callback = await importSandboxCallback();
-
-    const sandbox = callback({ sessionId: 'session-2', repoFullName: 'acme/widgets' });
-
-    expect(sandbox).toMatchObject({ provider: 'e2b' });
-    expect(sandbox).toMatchObject({ id: 'session-2' });
-  });
-
-  it(
-    'falls back to a per-session LocalSandbox when no remote provider is configured',
-    { timeout: 60_000 },
-    async () => {
-      const callback = await importSandboxCallback();
-
-      const sandbox = callback({ sessionId: 'session-3' });
-
-      expect(sandbox).toMatchObject({ provider: 'local' });
-    },
-  );
 });

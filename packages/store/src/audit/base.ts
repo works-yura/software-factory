@@ -3,7 +3,7 @@
  * behind the software factory.
  *
  * Rows are append-only: there is no update/delete API, and the table is the
- * local source of truth even when the WorkOS Audit Logs mirror is unavailable.
+ * local source of truth even when an external audit mirror is unavailable.
  * Tenancy is org-first, like `work_items`: `actor_id` records who acted but
  * never scopes reads.
  *
@@ -31,7 +31,7 @@ export interface AuditTarget {
 
 export type { AuditActorType } from './actors.ts';
 
-/** Display name and avatar of a human actor, stamped at record time because MastraAuthStudio cannot resolve users by id. */
+/** Display name and avatar of a human actor, stamped at record time because not every auth provider can resolve users by id. */
 export interface AuditActorProfileInput {
   name?: string;
   avatarUrl?: string;
@@ -59,9 +59,9 @@ export interface AuditContext {
 /** One persisted audit event. */
 export interface AuditEventRow {
   id: string;
-  /** Owning WorkOS organization id — the trail is org-wide. */
+  /** Owning organization id — the trail is org-wide. */
   orgId: string;
-  /** WorkOS user id of whoever performed the action, or `agent:<threadId>`. */
+  /** User id of whoever performed the action, or `agent:<threadId>`. */
   actorId: string;
   /** Whether a human or an agent (inside a run) performed the action. */
   actorType: AuditActorType;

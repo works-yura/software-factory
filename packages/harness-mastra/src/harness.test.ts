@@ -77,7 +77,7 @@ describe('createMastraHarness', () => {
         resourceId: 'fp-1',
       });
 
-      expect(context.get('user')).toEqual({ workosId: 'user-2', organizationId: 'org-1' });
+      expect(context.get('user')).toEqual({ id: 'user-2', organizationId: 'org-1' });
       expect(context.get('controller')).toMatchObject({
         state: { factoryProjectId: 'fp-1' },
         threadId: 'thread-1',

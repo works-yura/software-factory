@@ -8,7 +8,7 @@ const tk = translator('auth');
  * - `fetchAuthState()` reads `/auth/me` to decide whether to show the splash
  *   (unauthenticated) or the app, and to render identity / sign-out. Degrades
  *   gracefully to "auth disabled" when the route is absent.
- * - `loginUrl()` / `redirectToLogin()` build/navigate to the hosted WorkOS
+ * - `loginUrl()` / `redirectToLogin()` build/navigate to the provider's hosted
  *   login URL (used by the /signin page).
  * - `redirectToLogout()` / `logoutUrl()` send the user through the server logout route.
  *
@@ -25,12 +25,10 @@ export interface FactoryAuthState {
   /** Explicit server capability; absent on older servers. */
   telemetryEnabled?: boolean;
   user?: { userId?: string; email?: string; name?: string; avatarUrl?: string; organizationId?: string };
-  /** Active identity provider: 'workos' | 'better-auth' | custom adapter kind. */
+  /** Active identity provider: 'better-auth' | 'factory-local-dev' | custom adapter kind. */
   provider?: string;
   /** True when the provider hosts credential forms and sign-up is disabled. */
   signUpDisabled?: boolean;
-  /** True when Mastra Platform auth cannot redirect back to this deployment's domain. */
-  customDomainUnsupported?: boolean;
 }
 
 /** The resourceId under which a user's personal (non-factory) sessions live. */
@@ -139,7 +137,6 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
     user?: FactoryAuthState['user'] | null;
     provider?: string;
     signUpDisabled?: boolean;
-    customDomainUnsupported?: boolean;
   };
   return {
     authEnabled: true,
@@ -148,6 +145,5 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
     user: data.user ?? undefined,
     provider: data.provider,
     signUpDisabled: data.signUpDisabled,
-    customDomainUnsupported: data.customDomainUnsupported,
   };
 }

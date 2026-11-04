@@ -145,7 +145,7 @@ describe('deliverFactorySessionNotification', () => {
       }),
     );
     const { requestContext } = (controller.createSession.mock.calls[0] as unknown as [{ requestContext: any }])[0];
-    expect(requestContext.get('user')).toEqual({ workosId: 'user-b', organizationId: 'org-1' });
+    expect(requestContext.get('user')).toEqual({ id: 'user-b', organizationId: 'org-1' });
     expect(created.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: 'org-1' }));
     expect(controller.getCurrentAgent).toHaveBeenCalledWith(created);
     expect(agent.sendNotificationSignal).toHaveBeenCalledWith(expect.anything(), {

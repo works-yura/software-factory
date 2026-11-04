@@ -407,7 +407,7 @@ describe('provider key routes with a tenant', () => {
     { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
   ]);
 
-  function buildApp(user: { workosId: string; organizationId?: string } | null, authStorage?: AuthStorage) {
+  function buildApp(user: { id: string; organizationId?: string } | null, authStorage?: AuthStorage) {
     const app = new Hono();
     app.use('*', async (c, next) => {
       if (user) c.set('factoryAuthUser' as never, user as never);
@@ -426,8 +426,8 @@ describe('provider key routes with a tenant', () => {
     return app;
   }
 
-  const userA = { workosId: 'user-a', organizationId: 'org1' };
-  const userB = { workosId: 'user-b', organizationId: 'org1' };
+  const userA = { id: 'user-a', organizationId: 'org1' };
+  const userB = { id: 'user-b', organizationId: 'org1' };
 
   beforeEach(async () => {
     seed = await createFactoryStorageForTests();
@@ -644,7 +644,7 @@ describe('GET /web/config/models', () => {
     };
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      c.set('factoryAuthUser' as never, { id: 'user-a', organizationId: 'org1' } as never);
       await next();
     });
     mountApiRoutes(
@@ -686,7 +686,7 @@ describe('GET /web/config/models', () => {
     };
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      c.set('factoryAuthUser' as never, { id: 'user-a', organizationId: 'org1' } as never);
       await next();
     });
     mountApiRoutes(
@@ -725,9 +725,9 @@ describe('GET /web/config/models', () => {
         { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
       ],
     };
-    const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
+    const app = new Hono<{ Variables: { factoryAuthUser: { id: string; organizationId: string } } }>();
     app.use('*', async (c, next) => {
-      c.set('factoryAuthUser', { workosId: 'user-a', organizationId: 'org1' });
+      c.set('factoryAuthUser', { id: 'user-a', organizationId: 'org1' });
       await next();
     });
     mountApiRoutes(
@@ -772,7 +772,7 @@ describe('GET /web/config/models', () => {
     const request = async (deploymentProviders?: ReadonlySet<string>) => {
       const app = new Hono();
       app.use('*', async (c, next) => {
-        c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+        c.set('factoryAuthUser' as never, { id: 'user-a', organizationId: 'org1' } as never);
         await next();
       });
       mountApiRoutes(
@@ -816,7 +816,7 @@ describe('GET /web/config/models', () => {
     const controller = { listAvailableModels: async () => [] };
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      c.set('factoryAuthUser' as never, { id: 'user-a', organizationId: 'org1' } as never);
       await next();
     });
     mountApiRoutes(
@@ -854,7 +854,7 @@ describe('GET /web/config/models', () => {
     };
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      c.set('factoryAuthUser' as never, { id: 'user-a', organizationId: 'org1' } as never);
       await next();
     });
     mountApiRoutes(
@@ -882,8 +882,8 @@ describe('GET /web/config/models', () => {
     const openaiDefault = PROVIDER_DEFAULT_MODELS['openai-codex'];
     let seed: FactoryStorageTestSeed;
 
-    const mount = (user: { workosId: string; organizationId: string }) => {
-      const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
+    const mount = (user: { id: string; organizationId: string }) => {
+      const app = new Hono<{ Variables: { factoryAuthUser: { id: string; organizationId: string } } }>();
       app.use('*', async (c, next) => {
         c.set('factoryAuthUser', user);
         await next();
@@ -923,13 +923,13 @@ describe('GET /web/config/models', () => {
 
     it("starts a chat on the default mode's model when the org credentials can run it", async () => {
       await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', { type: 'api_key', key: 'sk-org' });
-      const fallback = mount({ workosId: 'user-a', organizationId: 'org1' });
+      const fallback = mount({ id: 'user-a', organizationId: 'org1' });
       expect(await fallback(factoryQuery)).toBe(modeDefault);
     });
 
     it("starts a chat on a connected provider's default when the org credentials cannot run the mode's model", async () => {
       await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
-      const fallback = mount({ workosId: 'user-a', organizationId: 'org1' });
+      const fallback = mount({ id: 'user-a', organizationId: 'org1' });
       expect(await fallback(factoryQuery)).toBe(openaiDefault);
     });
 
@@ -939,14 +939,14 @@ describe('GET /web/config/models', () => {
         key: 'sk-personal',
       });
       await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
-      const fallback = mount({ workosId: 'user-a', organizationId: 'org1' });
+      const fallback = mount({ id: 'user-a', organizationId: 'org1' });
 
       expect(await fallback(factoryQuery)).toBe(openaiDefault);
     });
 
     it('offers no fallback when no organization credential can run any model', async () => {
       const factory = await seed.projects.create({ orgId: 'org2', userId: 'user-b', input: { name: 'Empty' } });
-      const fallback = mount({ workosId: 'user-b', organizationId: 'org2' });
+      const fallback = mount({ id: 'user-b', organizationId: 'org2' });
       expect(await fallback(`?factoryId=${factory.id}`)).toBeNull();
     });
 
@@ -969,7 +969,7 @@ describe('personal default model routes', () => {
   it('are gone: the Factory default model is the only default', async () => {
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      c.set('factoryAuthUser' as never, { id: 'user-a', organizationId: 'org1' } as never);
       await next();
     });
     mountApiRoutes(app as any, new ConfigRoutes({ auth: fakeRouteAuth(), controller: makeAgentController([]) }).routes());
@@ -1059,7 +1059,7 @@ describe('OM routes with a tenant', () => {
     const app = new Hono();
     if (opts.authEnabled !== false) {
       app.use('*', async (c, next) => {
-        c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+        c.set('factoryAuthUser' as never, { id: 'user-a', organizationId: 'org1' } as never);
         await next();
       });
     }
@@ -1461,7 +1461,7 @@ describe('custom provider routes', () => {
   const onCustomProvidersChanged = vi.fn();
 
   function buildApp(
-    user: { workosId: string; organizationId?: string } | null,
+    user: { id: string; organizationId?: string } | null,
     opts: { withStorage?: boolean; authEnabled?: boolean } = {},
   ) {
     const app = new Hono();
@@ -1481,8 +1481,8 @@ describe('custom provider routes', () => {
     return app;
   }
 
-  const userA = { workosId: 'user-a', organizationId: 'org1' };
-  const userOtherOrg = { workosId: 'user-c', organizationId: 'org2' };
+  const userA = { id: 'user-a', organizationId: 'org1' };
+  const userOtherOrg = { id: 'user-c', organizationId: 'org2' };
   const providerBody = { name: 'My LLM', url: 'https://llm.example.com/v1', apiKey: 'sk-x', models: ['m1', 'm2'] };
 
   const postProvider = (app: Hono, body: unknown) =>

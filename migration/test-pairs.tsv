@@ -37,13 +37,13 @@ storage/domains/projects/base.test.ts	store/src/projects/base.test.ts	+2	one mod
 storage/domains/queue-health/base.test.ts	store/src/queue-health/base.test.ts
 secret-encryption.test.ts	store/src/secret-encryption.test.ts
 storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts
-auth-seam.test.ts	server/src/auth-seam.test.ts
-auth.test.ts	auth/src/auth.test.ts
+auth-seam.test.ts	server/src/auth-seam.test.ts	-7	WorkOS env fallback, isWorkOSAuth/getWorkOSProvider and Studio custom-domain cases dropped with @mastra/auth-workos and @mastra/auth-studio (-8); /auth/me provider report (+1)
+auth.test.ts	auth/src/auth.test.ts	-1	WorkOS env fallback cases replaced by explicit-provider selection (3 cases → 2)
 environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule.test.ts
 environment/build.test.ts	harness-mastra/src/environment/build.test.ts
 environment/heads.test.ts	harness-mastra/src/environment/heads.test.ts
 factory-disable-builtin-tools.test.ts	server/src/factory-disable-builtin-tools.test.ts
-factory.test.ts	server/src/factory.test.ts	+1	Platform Jira registration cases dropped with the vocabulary (-3); upstream a95f079204 (browser) and 7e428dc80e (recreate sandbox), after 4c22623ea3 (+2); upstream #28823: app skills are checked at construction (+2)
+factory.test.ts	server/src/factory.test.ts	-5	Platform Jira registration cases dropped with the vocabulary (-3); upstream a95f079204 (browser) and 7e428dc80e (recreate sandbox), after 4c22623ea3 (+2); upstream #28823: app skills are checked at construction (+2); Studio default auth and cookie-domain cases and the Platform-only recreate-sandbox case dropped with @mastra/auth-studio and @mastra/platform-workspace (-7); missing-auth refusal (+1)
 index.test.ts	server/src/index.test.ts
 integrations/github/acceptance-labels.test.ts	integration-github/src/acceptance-labels.test.ts
 integrations/github/app-identity.test.ts	integration-github/src/app-identity.test.ts
@@ -91,7 +91,6 @@ integrations/pull-request-head.test.ts	integrations/src/pull-request-head.test.t
 integrations/reconciliation-config.test.ts	integrations/src/reconciliation-config.test.ts
 integrations/subscription-session.test.ts	integrations/src/subscription-session.test.ts	+4	provider events reach a session another harness runs; harness routing: abort and running state through the owning harness
 mcp/routes.test.ts	mcp/src/routes.test.ts	+26	connector support and factory.activity events ported from upstream f3bc1caddb; plus 7 cases for the session-scoped tokens Claude Code sessions use; plus 2 for unbound user-scope and Factory chat (supervisor) tokens; plus 3 for the session tools a Claude Code session gets over MCP; interactive claim for a person-started Claude turn
-platform-auth-host.test.ts	auth/src/platform-auth-host.test.ts
 routes/apply-default-model.scenario.test.ts	api/src/apply-default-model.scenario.test.ts
 routes/attention.test.ts	api/src/attention.test.ts
 routes/automation-runs.test.ts	api/src/automation-runs.test.ts
@@ -177,7 +176,7 @@ tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
 tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	+2	hybrid scope cases removed with the personal model scope; upstream #28721: the old plan role still starts (+1); side and role sessions on Claude Code
 tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts
 tools/work-item-tools.test.ts	harness-mastra/src/tools/work-item-tools.test.ts
-workspace.test.ts	harness-mastra/src/workspace.test.ts	+7	upstream #28838: src/mastra/factory-skills (+1); upstream #29042: project skill edits in session workspaces (+6)
+workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/mastra/factory-skills (+1); upstream #29042: project skill edits in session workspaces (+6); workosId owner case dropped with the workosId field (-1)
 ../../internal-workspace/src/file-commands.test.ts	internal-workspace/src/file-commands.test.ts
 ../../internal-workspace/src/repo-clone.test.ts	internal-workspace/src/repo-clone.test.ts
 ../../internal-workspace/src/setup-marker.test.ts	internal-workspace/src/setup-marker.test.ts
@@ -185,9 +184,9 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+7	upstream #28838: src/m
 ../../../apps/server/src/factory-dev/settings.test.ts	../apps/server/src/factory-dev/settings.test.ts
 ../../../apps/server/src/factory-dev/token-lifecycle.test.ts	../apps/server/src/factory-dev/token-lifecycle.test.ts
 ../../../apps/server/src/mastra/env-schema.test.ts	../apps/server/src/mastra/env-schema.test.ts
-../../../apps/server/src/mastra/index.test.ts	../apps/server/src/mastra/index.test.ts	-11	Linear, Jira, incident.io, and Slack host wiring cases dropped with the integrations (-14); FACTORY_BROWSER wiring (+1); GitHub access-token wiring and App precedence (+2)
-../../../apps/server/src/mastra/production-boot-guards.test.ts	../apps/server/src/mastra/production-boot-guards.test.ts
-../../../apps/server/src/mastra/sandbox-provider.test.ts	../apps/server/src/mastra/sandbox-provider.test.ts
+../../../apps/server/src/mastra/index.test.ts	../apps/server/src/mastra/index.test.ts	-12	Linear, Jira, incident.io, and Slack host wiring cases dropped with the integrations (-14); FACTORY_BROWSER wiring (+1); GitHub access-token wiring and App precedence (+2); WorkOS and MASTRA_SHARED_API_URL auth cases dropped (-4); auth selection: missing auth, MASTRACODE_AUTH_DISABLED, FACTORY_LOCAL_DEV_AUTH (+3)
+../../../apps/server/src/mastra/production-boot-guards.test.ts	../apps/server/src/mastra/production-boot-guards.test.ts	+1	E2B provider replaced by FACTORY_SANDBOX_PROVIDER=local; a cloud provider value is refused (+1)
+../../../apps/server/src/mastra/sandbox-provider.test.ts	../apps/server/src/mastra/sandbox-provider.test.ts	-5	Platform and E2B sandbox selection cases dropped with @mastra/platform-workspace and @mastra/e2b (8 cases → local-only 3)
 ../../../apps/server/e2e/web/ask-user.scenario.test.ts	../apps/server/e2e/web/ask-user.scenario.test.ts
 ../../../apps/server/e2e/web/automated-chat.scenario.test.ts	../apps/server/e2e/web/automated-chat.scenario.test.ts
 ../../../apps/server/e2e/web/browser-tool-unavailable.scenario.test.ts	../apps/server/e2e/web/browser-tool-unavailable.scenario.test.ts
@@ -291,7 +290,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+7	upstream #28838: src/m
 ../../../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/SidebarUserMenu.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/SidebarUserMenu.msw.test.tsx
-../../../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx
+../../../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	-3	Mastra Platform sign-in and custom-domain cases dropped with @mastra/auth-studio
 ../../../apps/ui/src/ui/domains/auth/services/__tests__/auth-storage.msw.test.tsx	../apps/ui/src/ui/domains/auth/services/__tests__/auth-storage.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/transcript-parts.test.ts	../apps/ui/src/ui/domains/chat/components/transcript-parts.test.ts
 ../../../apps/ui/src/ui/domains/chat/components/useInitializingPlaceholder.test.ts	../apps/ui/src/ui/domains/chat/components/useInitializingPlaceholder.test.ts

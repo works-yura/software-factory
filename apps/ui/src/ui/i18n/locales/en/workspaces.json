@@ -201,7 +201,7 @@
       "disabled": "GitHub is disabled on the server.",
       "missingEnv": "Missing env vars: <code>{{vars}}</code>",
       "configure": "Set them in <code>mastracode/web/.env</code>, register <code>http://localhost:5173/auth/github/callback</code> as the GitHub App callback URL, then restart <code>pnpm web:dev</code> from <code>mastracode/web</code>.",
-      "organizationRequired": "Your account has no WorkOS organization. Connecting repositories requires an org. Sign out and back in to auto-create one, or ask your admin to add you to an org.",
+      "organizationRequired": "Your account has no organization. Connecting repositories requires an org. Sign out and back in to auto-create one, or ask your admin to add you to an org.",
       "tokenNotConnected": "GitHub could not connect with the deployment's <code>GITHUB_ACCESS_TOKEN</code>: the token is invalid or expired, or another organization already connected it. The server log names the reason.",
       "tokenNoAccess": "No repositories found. The access token lists only repositories its account can push to. A fine-grained token reaches only its resource owner's repositories: create it with the organization as the resource owner, or use a classic token with the <code>repo</code> scope.",
       "notConnected": "The GitHub App isn't connected yet. Click <strong>Connect GitHub</strong> to install it. After install, GitHub redirects to <code>/auth/github/callback</code> — make sure that URL is registered in your GitHub App settings (Callback URL).",

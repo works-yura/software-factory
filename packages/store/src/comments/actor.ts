@@ -7,7 +7,7 @@
  * - Agent actor ids are `agent:<bindingId>` (the transition-service convention):
  *   a binding id routes back to the live session via run bindings. Audit's
  *   `agent:<threadId>` form diverges; both satisfy `isAgentActor`.
- * - `id` is a namespaced string: only bare WorkOS ids (no `:`) are resolvable
+ * - `id` is a namespaced string: only bare provider user ids (no `:`) are resolvable
  *   or mentionable. External senders get `<platform>:<externalUserId>` plus a
  *   display snapshot captured at write time.
  */

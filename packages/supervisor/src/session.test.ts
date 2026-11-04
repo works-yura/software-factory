@@ -7,7 +7,7 @@ import { hydrateSupervisorSession, resolveSupervisorScope } from './session.ts';
 
 function requestContext(overrides: Partial<{ orgId: string; resourceId: string }> = {}) {
   const context = new RequestContext();
-  context.set('user', { workosId: 'user-1', organizationId: overrides.orgId ?? 'org-1' });
+  context.set('user', { id: 'user-1', organizationId: overrides.orgId ?? 'org-1' });
   context.set('controller', {
     resourceId: overrides.resourceId ?? 'resource-1',
     threadId: 'thread-1',

@@ -16,7 +16,7 @@ const ACTOR_GLYPHS: Array<[string, ComponentType<SVGProps<SVGSVGElement>>]> = [
   ['factory-', Zap],
 ];
 
-/** Only `github:` carries a name; an agent id is a uuid and a WorkOS id off the roster is worse than no name, so both read as a word. */
+/** Only `github:` carries a name; an agent id is a uuid and a user id off the roster is worse than no name, so both read as a word. */
 function actorName(by: string | undefined, roster: Map<string, FactoryMentionMember>): string {
   if (by === undefined) return ta('actor.someone');
   if (by.startsWith('agent:')) return ta('actor.agent');

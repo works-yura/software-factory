@@ -52,7 +52,7 @@ describe('org-classification fail-open (projectless factory session, rejecting o
   it('refuses curation and never classifies as local when the org seed write rejects', async () => {
     // 1. The controller's REAL initialState, captured off the factory mount.
     const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'org-seed-fail-open-test' });
-    const factory = new MastraFactory({ storage });
+    const factory = new MastraFactory({ storage, auth: null });
     await factory.prepare();
     expect(prepareMock).toHaveBeenCalledOnce();
     const capturedInitialState = (prepareMock.mock.calls[0]![0] as { initialState: Record<string, unknown> })

@@ -9,9 +9,7 @@ function createSettings(): FactoryDevSettings {
     auth: { source: 'mastra-cli-session', tokenId: 'token-current', tokenOrganizationId: 'org-1' },
     organization: { id: 'org-1', name: 'Mastra' },
     project: { id: 'project-1', name: 'Factory' },
-    environment: { id: 'env-1', name: 'Production' },
     database: { provider: 'libsql' },
-    sandbox: { provider: 'local' },
   };
 }
 

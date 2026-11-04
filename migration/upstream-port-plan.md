@@ -12,6 +12,7 @@ Upstream на 2026-11-04: `a403c993a0`. Від бази 177 комітів по 
 
 Не підтримуємо, тож з будь-якого коміту ці частини не беремо:
 - Linear, Jira, incident.io, Slack, WorkOS;
+- автентифікація Mastra Studio, пісочниці Platform (platform workspace) і E2B;
 - browser tools, Knowledge, CLI (`packages/cli`), шаблони `create-factory`;
 - особисті моделі та пам'ять;
 - зміни в `mastracode/sdk`: це наш `@mastra/code-sdk`, він оновлюється версією пакета, а не переносом.

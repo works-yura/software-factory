@@ -2,7 +2,6 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type * as authStudioModule from '@mastra/auth-studio';
 import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
 import { Agent } from '@mastra/core/agent';
@@ -29,7 +28,7 @@ import { PgVector } from '@mastra/pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestBoard } from '@factory/pipelines/testing';
 import type { VersionControl } from '@factory/capabilities';
-import { MastraFactory } from './factory.ts';
+import { MastraFactory as RealMastraFactory } from './factory.ts';
 import type { FactoryIntegration, IntegrationContext } from '@factory/integrations';
 import type * as platformGithubModule from '@factory/integration-github';
 import { invalidateCustomProvidersSnapshots } from '@factory/api';
@@ -183,21 +182,6 @@ vi.mock('@factory/runtime', async importOriginal => {
   };
 });
 
-// The default-auth path constructs `MastraAuthStudio` internally (no service
-// locator to peek at), so capture every instance the factory creates and let
-// tests observe the resolved default provider directly.
-const studioInstances = vi.hoisted(() => [] as unknown[]);
-vi.mock('@mastra/auth-studio', async importOriginal => {
-  const mod = (await importOriginal()) as typeof authStudioModule;
-  class TrackedMastraAuthStudio extends mod.MastraAuthStudio {
-    constructor(...args: ConstructorParameters<typeof mod.MastraAuthStudio>) {
-      super(...args);
-      studioInstances.push(this);
-    }
-  }
-  return { ...mod, MastraAuthStudio: TrackedMastraAuthStudio };
-});
-
 // `MastraFactory.prepare()` constructs `PlatformGithubIntegration` itself when
 // Platform credentials are present, so capture every instance's constructor
 // options to assert the `github` config key is forwarded to it.
@@ -218,15 +202,6 @@ vi.mock('@factory/integration-github', async importOriginal => ({
   return { ...actual, PlatformGithubIntegration: TrackedPlatformGithubIntegration };
 })(importOriginal)),
 }));
-
-/** The default `MastraAuthStudio` provider minted by the last `prepare()`. */
-function lastStudioProvider():
-  | (IMastraAuthProvider & {
-      getSessionHeaders?: (s: { id: string; userId: string }) => Record<string, string>;
-    })
-  | undefined {
-  return studioInstances.at(-1) as ReturnType<typeof lastStudioProvider>;
-}
 
 // Keep the real tenant-credentials module but spy on the registration so tests
 // can assert whether the factory registers the per-tenant resolver. Registering
@@ -269,6 +244,17 @@ vi.mock('@factory/session', async importOriginal => ({
   };
 })(importOriginal)),
 }));
+
+/**
+ * The factory has no default auth provider and refuses to prepare without
+ * one, so tests that don't state `auth` get an SSO-shaped fake. Tests of the
+ * missing-auth guard use {@link RealMastraFactory} directly.
+ */
+class MastraFactory extends RealMastraFactory {
+  constructor(config: ConstructorParameters<typeof RealMastraFactory>[0]) {
+    super('auth' in config ? config : { ...config, auth: fakeProvider() });
+  }
+}
 
 /** An SSO-shaped fake provider: gets the hosted-login `/auth/*` routes. */
 function fakeProvider(
@@ -327,7 +313,6 @@ async function prepareIntegrationContext(config: ConstructorParameters<typeof Ma
 beforeEach(() => {
   vi.clearAllMocks();
   controllerMock.queryThreadById.mockReset();
-  studioInstances.length = 0;
   dispatcherOptions.length = 0;
   terminalCleanups.length = 0;
   transitionServiceOptions.length = 0;
@@ -883,10 +868,8 @@ describe('MastraFactory.prepare', () => {
     // Names both accepted shapes, instance first, so an existing host can fix
     // its config from the message alone.
     expect(error.message).toMatch(/'sandbox' must be a FactorySandbox instance or a callback/);
-    expect(error.message).toMatch(/sandbox: new PlatformFactorySandbox\(\)/);
-    expect(error.message).toMatch(
-      /sandbox: ctx => new PlatformSandbox\(\{ id: ctx\.sessionId, sandboxId: ctx\.sandboxId \}\)/,
-    );
+    expect(error.message).toMatch(/sandbox: new LocalFactorySandbox\(\{ root \}\)/);
+    expect(error.message).toMatch(/sandbox: ctx => new LocalSandbox\(\{ id: ctx\.sessionId \}\)/);
     // Every retired option the host passed gets its own line.
     expect(error.message).toMatch(/'machine' becomes the provider instance/);
     expect(error.message).toMatch(/'workdir' becomes the workingDirectory/);
@@ -982,7 +965,7 @@ describe('MastraFactory.prepare', () => {
     const state: Record<string, unknown> = {};
     let persistState = true;
     const context = new RequestContext();
-    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('user', { id: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
       resourceId: '11111111-2222-4333-8444-555555555555',
       sessionId: 'session-1',
@@ -1046,7 +1029,7 @@ describe('MastraFactory.prepare', () => {
     };
     let persistState = true;
     const context = new RequestContext();
-    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('user', { id: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
       resourceId: '11111111-2222-4333-8444-555555555555',
       sessionId: 'session-1',
@@ -1116,7 +1099,7 @@ describe('MastraFactory.prepare', () => {
       });
       const state: Record<string, unknown> = { projectPath: repo, skipGlobalInstructions: true };
       const context = new RequestContext();
-      context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      context.set('user', { id: 'user-1', organizationId: 'org-1' });
       context.set('controller', {
         resourceId: '11111111-2222-4333-8444-555555555555',
         sessionId: 'session-1',
@@ -1223,7 +1206,7 @@ describe('MastraFactory.prepare', () => {
       requestContext: RequestContext;
     }) => Promise<Record<string, unknown>>;
     const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
     requestContext.set('controller', {
       resourceId: 'resource-1',
       sessionId: 'session-1',
@@ -1284,7 +1267,7 @@ describe('MastraFactory.prepare', () => {
 
     function sessionContext(interactive: boolean) {
       const requestContext = new RequestContext();
-      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
       if (interactive) requestContext.set('factoryInteractive', true);
       requestContext.set('controller', {
         sessionId: 'session-1',
@@ -1329,7 +1312,6 @@ describe('MastraFactory.prepare', () => {
       'factory_list_side_sessions',
       'factory_subscribe_session',
       'factory_unsubscribe_session',
-      'factory_recreate_sandbox',
     ];
 
     it('gives a user session every tool on every turn, and other sessions none', async () => {
@@ -1349,39 +1331,10 @@ describe('MastraFactory.prepare', () => {
       expect(Object.keys(woken).sort()).toEqual(Object.keys(interactive).sort());
 
       const stranger = new RequestContext();
-      stranger.set('user', { workosId: 'user-2', organizationId: 'org-2' });
+      stranger.set('user', { id: 'user-2', organizationId: 'org-2' });
       stranger.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
       const none = await extraTools({ requestContext: stranger });
       for (const name of [...READ_TOOLS, ...MANAGEMENT_TOOLS]) expect(none).not.toHaveProperty(name);
-    });
-
-    it('offers a session its own sandbox recreate only on Platform sandboxes', async () => {
-      class Sandbox extends FactorySandbox {
-        readonly provider: string;
-        constructor(provider: string) {
-          super();
-          this.provider = provider;
-        }
-        create = vi.fn(() => ({ id: 'sb' }) as never);
-      }
-      const toolsWith = async (provider: string | undefined) => {
-        prepareMock.mockClear();
-        const storage = fakeStorage();
-        const config = await prepareFactory({
-          storage,
-          ...(provider ? { sandbox: new Sandbox(provider) } : {}),
-        });
-        await seedUserSession(storage);
-        const extraTools = config.extraTools as (args: {
-          requestContext: RequestContext;
-        }) => Promise<Record<string, unknown>>;
-        return extraTools({ requestContext: sessionContext(false) });
-      };
-
-      expect(await toolsWith('platform')).toHaveProperty('factory_recreate_sandbox');
-      expect(await toolsWith('e2b')).not.toHaveProperty('factory_recreate_sandbox');
-      expect(await toolsWith('local')).not.toHaveProperty('factory_recreate_sandbox');
-      expect(await toolsWith(undefined)).not.toHaveProperty('factory_recreate_sandbox');
     });
 
     it('refuses an approval answer on a woken turn, which a person in the same session could give', async () => {
@@ -1428,10 +1381,10 @@ describe('MastraFactory.prepare', () => {
       // session-1 belongs to user-1; user-2's tool call sent the message. Even if
       // the sender's identity were on the context, the wake runs as the owner.
       const wake = new RequestContext();
-      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      wake.set('user', { id: 'user-2', organizationId: 'org-1' });
       await prepareWake({ requestContext: wake, resourceId: 'session-1' });
 
-      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(wake.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
     });
 
     it('wakes a user session under its owner resource through its own thread', async () => {
@@ -1447,10 +1400,10 @@ describe('MastraFactory.prepare', () => {
       controllerMock.queryThreadById.mockResolvedValue({ id: 'session-1', resourceId: 'user-1', metadata: {} });
 
       const wake = new RequestContext();
-      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      wake.set('user', { id: 'user-2', organizationId: 'org-1' });
       await prepareWake({ requestContext: wake, resourceId: 'user-1', threadId: 'session-1' });
 
-      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(wake.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
       expect(runEndReports).toEqual([]);
     });
 
@@ -1471,10 +1424,10 @@ describe('MastraFactory.prepare', () => {
       });
 
       const wake = new RequestContext();
-      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      wake.set('user', { id: 'user-2', organizationId: 'org-1' });
       await prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-7' });
 
-      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(wake.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
       expect(runEndReports).toEqual([]);
     });
 
@@ -1495,11 +1448,11 @@ describe('MastraFactory.prepare', () => {
       });
 
       const wake = new RequestContext();
-      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      wake.set('user', { id: 'user-atk', organizationId: 'org-1' });
       await expect(
         prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
       ).rejects.toThrow("can't be woken as its owner");
-      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+      expect(wake.get('user')).toEqual({ id: 'user-atk', organizationId: 'org-1' });
     });
 
     it('wakes a private run on its own thread under the Factory as its owner', async () => {
@@ -1515,10 +1468,10 @@ describe('MastraFactory.prepare', () => {
       threadsById({ 'session-1': { id: 'session-1', resourceId: project.id, metadata: {} } });
 
       const wake = new RequestContext();
-      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      wake.set('user', { id: 'user-2', organizationId: 'org-1' });
       await prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'session-1' });
 
-      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(wake.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
     });
 
     it("refuses a wake on a thread under the Factory stamped with a user session's id", async () => {
@@ -1537,11 +1490,11 @@ describe('MastraFactory.prepare', () => {
       });
 
       const wake = new RequestContext();
-      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      wake.set('user', { id: 'user-atk', organizationId: 'org-1' });
       await expect(
         prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
       ).rejects.toThrow("can't be woken as its owner");
-      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+      expect(wake.get('user')).toEqual({ id: 'user-atk', organizationId: 'org-1' });
     });
 
     it("refuses a wake on a thread under the Factory stamped with a private side session's id", async () => {
@@ -1563,11 +1516,11 @@ describe('MastraFactory.prepare', () => {
       });
 
       const wake = new RequestContext();
-      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      wake.set('user', { id: 'user-atk', organizationId: 'org-1' });
       await expect(
         prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
       ).rejects.toThrow("can't be woken as its owner");
-      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+      expect(wake.get('user')).toEqual({ id: 'user-atk', organizationId: 'org-1' });
     });
 
     it("refuses a wake on a thread created with a session's id under someone else's resource", async () => {
@@ -1582,11 +1535,11 @@ describe('MastraFactory.prepare', () => {
       threadsById({ 'session-1': { id: 'session-1', resourceId: 'user-atk', metadata: {} } });
 
       const wake = new RequestContext();
-      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      wake.set('user', { id: 'user-atk', organizationId: 'org-1' });
       await expect(
         prepareWake({ requestContext: wake, resourceId: 'user-atk', threadId: 'session-1' }),
       ).rejects.toThrow("can't be woken as its owner");
-      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+      expect(wake.get('user')).toEqual({ id: 'user-atk', organizationId: 'org-1' });
     });
 
     it("refuses a wake on a thread another resource stamped with someone else's session", async () => {
@@ -1606,12 +1559,12 @@ describe('MastraFactory.prepare', () => {
       });
 
       const wake = new RequestContext();
-      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      wake.set('user', { id: 'user-atk', organizationId: 'org-1' });
       await expect(
         prepareWake({ requestContext: wake, resourceId: 'user-atk', threadId: 'thread-atk' }),
       ).rejects.toThrow("can't be woken as its owner");
 
-      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+      expect(wake.get('user')).toEqual({ id: 'user-atk', organizationId: 'org-1' });
       expect(runEndReports).toEqual([
         expect.objectContaining({
           sessionId: 'thread-atk',
@@ -1633,7 +1586,7 @@ describe('MastraFactory.prepare', () => {
 
       // No Factory session row names session-2's owner; the sender is on the context.
       const wake = new RequestContext();
-      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      wake.set('user', { id: 'user-2', organizationId: 'org-1' });
       const message = "Factory session session-2 can't be woken as its owner: no Factory session row names its owner.";
       // session-2's own thread, under its owner's resource.
       await expect(prepareWake({ requestContext: wake, resourceId: 'user-2', threadId: 'session-2' })).rejects.toThrow(
@@ -1685,7 +1638,7 @@ describe('MastraFactory.prepare', () => {
         threadId: 'thread-1',
         tags: expect.objectContaining({ factoryProjectId: project.id }),
       });
-      expect(created.requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(created.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
       expect(runEndReports).toEqual([]);
     });
 
@@ -1970,107 +1923,23 @@ describe('MastraFactory.prepare', () => {
     expect(registerTenantCredentialResolverMock).not.toHaveBeenCalled();
   });
 
-  it('defaults to MastraAuthStudio when no auth is configured', async () => {
-    // No `auth` slot in config → factory falls back to `MastraAuthStudio` and
-    // the public `/auth/*` routes are folded into the API surface.
-    const config = await prepareFactory({ storage: fakeStorage() });
-    const provider = lastStudioProvider();
-    expect(provider).toBeDefined();
-    expect(provider?.name).toBe('mastra-studio');
-    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
-    expect(paths).toContain('/auth/login');
-    expect(paths).toContain('/auth/callback');
-    expect(paths).toContain('/auth/logout');
-    expect(paths).toContain('/auth/me');
-  });
-
-  // Both `MASTRA_COOKIE_DOMAIN` and `MASTRA_SHARED_API_URL` feed Studio's
-  // cookie-domain precedence (explicit > shared-API hostname > publicUrl
-  // fallback), so a runner with either set would silently flip the derived
-  // domain. Clear both around each derivation test and restore after.
-  async function withCleanCookieEnv<T>(fn: () => Promise<T>): Promise<T> {
-    const prevCookie = process.env.MASTRA_COOKIE_DOMAIN;
-    const prevShared = process.env.MASTRA_SHARED_API_URL;
-    delete process.env.MASTRA_COOKIE_DOMAIN;
-    delete process.env.MASTRA_SHARED_API_URL;
-    try {
-      return await fn();
-    } finally {
-      if (prevCookie === undefined) delete process.env.MASTRA_COOKIE_DOMAIN;
-      else process.env.MASTRA_COOKIE_DOMAIN = prevCookie;
-      if (prevShared === undefined) delete process.env.MASTRA_SHARED_API_URL;
-      else process.env.MASTRA_SHARED_API_URL = prevShared;
-    }
-  }
-
-  function seededSetCookie(): string | undefined {
-    return lastStudioProvider()?.getSessionHeaders?.({ id: 'test-token', userId: 'u_1' })?.['Set-Cookie'];
-  }
-
-  it('derives the default Studio cookie domain from publicUrl for subdomain deploys', async () => {
-    // A `<sub>.mastra.cloud` deploy should mint cookies with
-    // `Domain=.mastra.cloud` so the browser sends them back to sibling
-    // subdomains — no `MASTRA_COOKIE_DOMAIN` env wiring required.
-    await withCleanCookieEnv(async () => {
-      await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://studio-abc.mastra.cloud' });
-      const setCookie = seededSetCookie();
-      expect(setCookie).toBeDefined();
-      expect(setCookie).toContain('Domain=.mastra.cloud');
-    });
-  });
-
-  it('leaves the default Studio cookie host-only on localhost', async () => {
-    // `publicUrl` on localhost has no parent to peel — the cookie must stay
-    // host-only or the browser will silently reject it.
-    await withCleanCookieEnv(async () => {
-      await prepareFactory({ storage: fakeStorage(), publicUrl: 'http://localhost:4111' });
-      const setCookie = seededSetCookie();
-      expect(setCookie).toBeDefined();
-      expect(setCookie).not.toContain('Domain=');
-    });
-  });
-
-  it('leaves the default Studio cookie host-only for hosts outside the platform allowlist', async () => {
-    // Public-suffix trap: a naive last-two-labels heuristic would emit
-    // `Domain=.co.uk` for `foo.example.co.uk`, which every major browser
-    // rejects. Custom-domain deploys must fall through to host-only cookies.
-    await withCleanCookieEnv(async () => {
-      await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://studio.example.co.uk' });
-      const setCookie = seededSetCookie();
-      expect(setCookie).toBeDefined();
-      expect(setCookie).not.toContain('Domain=');
-    });
-  });
-
-  it('leaves the default Studio cookie host-only for numeric-labelled hostnames', async () => {
-    // A leading-digit label (e.g. `3scale.example.com`) is still a valid DNS
-    // host, not an IP. The derivation must not misclassify it as IPv4.
-    await withCleanCookieEnv(async () => {
-      await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://3scale.example.com' });
-      const setCookie = seededSetCookie();
-      expect(setCookie).toBeDefined();
-      // Not on the platform allowlist → host-only.
-      expect(setCookie).not.toContain('Domain=');
-    });
-  });
-
-  it('leaves the default Studio cookie host-only for literal IPv4 hosts', async () => {
-    // IP-literal deploys can't share cookies across an arbitrary parent, and
-    // browsers reject Domain= attributes on IP hosts entirely.
-    await withCleanCookieEnv(async () => {
-      await prepareFactory({ storage: fakeStorage(), publicUrl: 'http://10.0.0.1:4111' });
-      const setCookie = seededSetCookie();
-      expect(setCookie).toBeDefined();
-      expect(setCookie).not.toContain('Domain=');
-    });
+  it('refuses to prepare when no auth is configured', async () => {
+    // No default provider: an unset `auth` slot is a configuration mistake,
+    // and the error names every way to fix it.
+    const factory = new RealMastraFactory({ secretEncryption, storage: fakeStorage() });
+    await expect(factory.prepare()).rejects.toThrow(
+      /no auth provider configured.*FACTORY_LOCAL_DEV_AUTH=1.*MASTRACODE_AUTH_DISABLED=1.*pass an auth provider/,
+    );
+    expect(prepareMock).not.toHaveBeenCalled();
   });
 
   it('boots with auth off when auth is explicitly disabled (auth: null)', async () => {
-    // `auth: null` opts out of the default entirely — no default Studio
-    // provider constructed, no `/auth/*` routes, no gate middleware.
-    await prepareFactory({ storage: fakeStorage(), auth: null });
-    expect(lastStudioProvider()).toBeUndefined();
+    // `auth: null` is the explicit opt-out: no `/auth/*` routes besides the
+    // 404 `/auth/me`, no gate middleware.
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+    expect(paths).not.toContain('/auth/login');
   });
 });
 

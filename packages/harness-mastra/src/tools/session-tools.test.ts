@@ -536,7 +536,7 @@ describe('factory_start_session in side mode', () => {
     await start({ prompt: 'Go.' });
 
     const kickoff = created[0]!.session.sendSignal.mock.calls[0]![1].requestContext;
-    expect(kickoff.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(kickoff.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
     expect(kickoff.get(FACTORY_INTERACTIVE_KEY)).toBeUndefined();
     expect(kickoff.get('controller')).toBeUndefined();
     expect([...kickoff.keys()]).toEqual(['user']);
@@ -556,7 +556,7 @@ describe('factory_start_session in side mode', () => {
 
     const tenantFor = (resourceId: string, threadId: string) => {
       const requestContext = new RequestContext();
-      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
       requestContext.set('controller', { sessionId: resourceId, resourceId, threadId });
       return resolveFactoryCredentialTenant(requestContext, {
         projects: seed.projects,
@@ -814,7 +814,7 @@ describe('the side session it starts', () => {
   it('resolves as a worker with its origin, acting as the caller, and gets only the reply tool', async () => {
     const { childId, sessions, seed, scope } = await started();
     const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
     requestContext.set('controller', { sessionId: childId, resourceId: childId, threadId: childId });
 
     const childScope = await resolveFactoryToolScope({
@@ -916,7 +916,7 @@ describe('factory_start_session in work-item mode', () => {
     expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ type: 'user', contents: 'Profile the build.' });
     const kickoff = session.sendSignal.mock.calls[0]![1].requestContext;
     expect([...kickoff.keys()]).toEqual(['user']);
-    expect(kickoff.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(kickoff.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
 
     expect(await bindings()).toEqual([
       expect.objectContaining({ id: result.bindingId, role: 'work', sessionId: result.sessionId, status: 'active' }),
@@ -990,7 +990,7 @@ describe('factory_start_session in work-item mode', () => {
 
     const tenantFor = (resourceId: string, threadId: string) => {
       const requestContext = new RequestContext();
-      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
       requestContext.set('controller', { sessionId: resourceId, resourceId, threadId });
       return resolveFactoryCredentialTenant(requestContext, {
         projects: seed.projects,

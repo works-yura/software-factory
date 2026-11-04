@@ -191,7 +191,7 @@ describe('dispatchGitLabWebhook', () => {
       unknown,
       { requestContext?: { get: (key: string) => unknown } },
     ];
-    expect(options?.requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(options?.requestContext?.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
   });
 
   it('falls back to the Factory session owner for a row that names no subscribing user', async () => {
@@ -209,7 +209,7 @@ describe('dispatchGitLabWebhook', () => {
       unknown,
       { requestContext?: { get: (key: string) => unknown } },
     ];
-    expect(options?.requestContext?.get('user')).toEqual({ workosId: 'owner-9', organizationId: 'org-9' });
+    expect(options?.requestContext?.get('user')).toEqual({ id: 'owner-9', organizationId: 'org-9' });
   });
 
   it('fails the delivery, without retiring, when neither the row nor the session names a user', async () => {

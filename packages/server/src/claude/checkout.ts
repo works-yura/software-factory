@@ -37,7 +37,7 @@ export function createClaudeCheckoutResolver({
     if (!row) throw new Error(`Factory session ${sessionId} has no source-control session to check out.`);
     // The workspace resolves as the session's owner, the way their own Mastra turn would.
     const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+    requestContext.set('user', { id: row.userId, organizationId: row.orgId });
     // The workspace pins its checkout in the controller state (`projectPath`); here that state lives for this call.
     const state: Record<string, unknown> = { factoryProjectId: row.factoryProjectId ?? undefined, factoryOrgId: row.orgId };
     requestContext.set('controller', {

@@ -572,23 +572,23 @@ vi.mock('./config', () => ({
 // `factoryAuthUser` on the context, and `ensureUser` additionally simulates
 // cookie-based session resolution (`cookieUser`) the same way production
 // resolves a session cookie before scoping the tenant.
-let cookieUser: { workosId: string; organizationId?: string } | null = null;
+let cookieUser: { id: string; organizationId?: string } | null = null;
 const testAuth: RouteAuth = {
   enabled: () => true,
   ensureUser: async (c: any) => {
     const existing = c.get('factoryAuthUser');
     if (existing) return existing;
     if (!cookieUser) return undefined;
-    const withOrg: { workosId: string; organizationId?: string } = {
-      workosId: cookieUser.workosId,
+    const withOrg: { id: string; organizationId?: string } = {
+      id: cookieUser.id,
       organizationId: cookieUser.organizationId ?? 'org1',
     };
     c.set('factoryAuthUser', withOrg);
     return withOrg;
   },
   tenant: (c: any) => {
-    const u = c.get('factoryAuthUser') as { workosId: string; organizationId?: string } | undefined;
-    return u ? { orgId: u.organizationId, userId: u.workosId } : undefined;
+    const u = c.get('factoryAuthUser') as { id: string; organizationId?: string } | undefined;
+    return u ? { orgId: u.organizationId, userId: u.id } : undefined;
   },
   isOrganizationAdmin: async () => true,
 };
@@ -685,7 +685,7 @@ subscriptionsRef = githubSignalSubscriptions;
 
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
-  user: { workosId: string; organizationId?: string } | null,
+  user: { id: string; organizationId?: string } | null,
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     memorySettings?: Parameters<typeof buildGithubRoutes>[0]['memorySettings'];
@@ -722,7 +722,7 @@ function buildApp(
           if (!tenant?.organizationId) return;
           auditRecorded.push({
             orgId: tenant.organizationId,
-            actorId: tenant.workosId,
+            actorId: tenant.id,
             action: input.action,
             factoryProjectId: input.factoryProjectId,
             projectRepositoryId: input.projectRepositoryId,
@@ -925,7 +925,7 @@ describe('webhook route', () => {
       expect.objectContaining({ requestContext: expect.anything() }),
     );
     const runContext = sendNotificationSignal.mock.calls[0]![1].requestContext;
-    expect(runContext.get('user')).toEqual({ workosId: 'u1', organizationId: 'org1' });
+    expect(runContext.get('user')).toEqual({ id: 'u1', organizationId: 'org1' });
   });
 
   it('rejects invalid signatures without logging', async () => {
@@ -992,12 +992,12 @@ describe('webhook route', () => {
 describe('status route', () => {
   it('reports disabled without the feature', async () => {
     featureEnabled = false;
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/status');
     expect(await res.json()).toMatchObject({ enabled: false, connected: false });
   });
 
   it('reports disabled without a state signer', async () => {
-    const res = await buildApp({ workosId: 'u1' }, { stateSigner: null }).request('/web/github/status');
+    const res = await buildApp({ id: 'u1' }, { stateSigner: null }).request('/web/github/status');
     expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
   });
 
@@ -1011,7 +1011,7 @@ describe('status route', () => {
         accountType: 'User',
       }),
     );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/status');
     const json = await res.json();
     expect(json.enabled).toBe(true);
     expect(json.connected).toBe(true);
@@ -1024,7 +1024,7 @@ describe('status route', () => {
       { installationId: 4242, accountLogin: 'yura', accountType: 'User' },
     ]);
     try {
-      const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
+      const res = await buildApp({ id: 'u1' }).request('/web/github/status');
       expect(await res.json()).toMatchObject({
         mode: 'token',
         connected: true,
@@ -1037,7 +1037,7 @@ describe('status route', () => {
       // A token another org already claimed stays unconnected here.
       tables.installations.length = 0;
       githubStub.directInstallations.mockRejectedValueOnce(new Error('already connected by another org'));
-      const refused = await buildApp({ workosId: 'u1' }).request('/web/github/status');
+      const refused = await buildApp({ id: 'u1' }).request('/web/github/status');
       expect(await refused.json()).toMatchObject({ mode: 'token', connected: false, reason: 'not_connected' });
     } finally {
       githubStub.authMode = 'app';
@@ -1046,7 +1046,7 @@ describe('status route', () => {
   });
 
   it('leaves an App integration to its Connect flow', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/status');
     expect(await res.json()).toMatchObject({ mode: 'app', connected: false });
     expect(githubStub.directInstallations).not.toHaveBeenCalled();
   });
@@ -1068,13 +1068,13 @@ describe('pat route', () => {
   });
 
   it('reports not configured by default', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/pat');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/pat');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ configured: false, reviewerConfigured: false });
   });
 
   it('saves a pasted worker token and reports configured without ever returning it', async () => {
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     const saved = await app.request(jsonPost('ghp_secret123'));
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({ configured: true, reviewerConfigured: false });
@@ -1086,7 +1086,7 @@ describe('pat route', () => {
   });
 
   it('saves and removes a reviewer token independently of the worker token', async () => {
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     await app.request(jsonPost('ghp_worker', 'default'));
     const saved = await app.request(jsonPost('ghp_reviewer', 'reviewer'));
     expect(await saved.json()).toEqual({ configured: true, reviewerConfigured: true });
@@ -1096,13 +1096,13 @@ describe('pat route', () => {
   });
 
   it('rejects an unknown token kind', async () => {
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     expect((await app.request(jsonPost('ghp_x', 'author'))).status).toBe(400);
     expect((await app.request(del('author'))).status).toBe(400);
   });
 
   it('rejects an empty or whitespace token', async () => {
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     expect((await app.request(jsonPost('   '))).status).toBe(400);
     expect((await app.request(jsonPost('bad token'))).status).toBe(400);
     expect((await app.request(jsonPost(42))).status).toBe(400);
@@ -1111,7 +1111,7 @@ describe('pat route', () => {
   });
 
   it('removes the configured worker token', async () => {
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     await app.request(jsonPost('ghp_secret123'));
     const removed = await app.request(del());
     expect(removed.status).toBe(200);
@@ -1121,8 +1121,8 @@ describe('pat route', () => {
   });
 
   it('scopes the tokens per org', async () => {
-    await buildApp({ workosId: 'u1' }).request(jsonPost('ghp_org1'));
-    const other = await buildApp({ workosId: 'u2', organizationId: 'org2' }).request('/web/github/pat');
+    await buildApp({ id: 'u1' }).request(jsonPost('ghp_org1'));
+    const other = await buildApp({ id: 'u2', organizationId: 'org2' }).request('/web/github/pat');
     expect(await other.json()).toEqual({ configured: false, reviewerConfigured: false });
   });
 });
@@ -1152,7 +1152,7 @@ describe('subscriptions route', () => {
       },
     );
 
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/subscriptions?sessionId=run-a&threadId=run-a');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/subscriptions?sessionId=run-a&threadId=run-a');
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -1169,7 +1169,7 @@ describe('subscriptions route', () => {
   });
 
   it('requires a thread and a session to read subscriptions', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/subscriptions?threadId=run-a');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/subscriptions?threadId=run-a');
     expect(res.status).toBe(400);
   });
 
@@ -1184,7 +1184,7 @@ describe('subscriptions route', () => {
       status: 'open',
     });
 
-    const res = await buildApp({ workosId: 'u1' }).request(
+    const res = await buildApp({ id: 'u1' }).request(
       '/web/github/subscriptions?resourceId=resource-1&threadId=thread-1',
     );
 
@@ -1231,7 +1231,7 @@ describe('repos route', () => {
     install(7, 'octo');
     install(8, 'octo-duplicate');
 
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/repos');
 
     expect(res.status).toBe(200);
     const json = await res.json();
@@ -1256,7 +1256,7 @@ describe('repos route', () => {
     });
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/repos');
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.repos).toHaveLength(1);
@@ -1272,7 +1272,7 @@ describe('repos route', () => {
     vi.mocked(listInstallationRepos).mockRejectedValue(Object.assign(new Error('boom'), { status: 500 }));
 
     // Hono's default onError turns the rethrown error into a 500.
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/repos');
     expect(res.status).toBe(500);
     expect(tables.installations).toHaveLength(1);
   });
@@ -1290,7 +1290,7 @@ describe('repos route', () => {
       return defaultImpl(installationId);
     });
 
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/repos');
 
     expect(res.status).toBe(200);
     // Serial listing would never overlap; the route must fan out.
@@ -1310,7 +1310,7 @@ describe('auth scoping', () => {
   // gate's c.set(...).
   describe('without the gate (isolated custom-route context)', () => {
     it('status resolves the session from the cookie', async () => {
-      cookieUser = { workosId: 'u1' };
+      cookieUser = { id: 'u1' };
       tables.installations.push(
         installationRow({
           orgId: 'org1',
@@ -1328,7 +1328,7 @@ describe('auth scoping', () => {
     });
 
     it('org-tenant routes resolve the session from the cookie', async () => {
-      cookieUser = { workosId: 'u1' };
+      cookieUser = { id: 'u1' };
       const res = await buildApp(null).request('/web/github/repos');
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ repos: [] });
@@ -1348,7 +1348,7 @@ describe('connect + callback', () => {
     // Identify-first: the install page dead-ends for already-installed apps,
     // so connect verifies the user via OAuth and lets the callback decide
     // whether an install is actually needed.
-    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
+    const res = await buildApp({ id: 'u1' }).request('/auth/github/connect');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('/login/oauth/authorize');
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
@@ -1357,7 +1357,7 @@ describe('connect + callback', () => {
   it('redirects connect?manage=1 straight to the install URL', async () => {
     // "Manage GitHub connection" must land on GitHub's installation page —
     // the identify bounce completes invisibly for already-authorized users.
-    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect?manage=1');
+    const res = await buildApp({ id: 'u1' }).request('/auth/github/connect?manage=1');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('/installations/new');
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
@@ -1368,7 +1368,7 @@ describe('connect + callback', () => {
     // session cookie — no Authorization header — and the auth gate skips
     // `/auth/*`, so no user is stashed up front. The route must still resolve
     // the session (via ensureFactoryAuthUser) and redirect to install, not 401.
-    cookieUser = { workosId: 'u1' };
+    cookieUser = { id: 'u1' };
     const res = await buildApp(null).request('/auth/github/connect');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
@@ -1380,7 +1380,7 @@ describe('connect + callback', () => {
     ]);
     try {
       for (const path of ['/auth/github/connect', '/auth/github/connect?manage=1']) {
-        const res = await buildApp({ workosId: 'u1' }).request(path);
+        const res = await buildApp({ id: 'u1' }).request(path);
         expect(res.status).toBe(302);
         expect(res.headers.get('location')).toBe('/?github=connected');
       }
@@ -1395,7 +1395,7 @@ describe('connect + callback', () => {
 
   it('reports an error when the token account cannot be read', async () => {
     githubStub.directInstallations.mockRejectedValueOnce(new Error('Bad credentials'));
-    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
+    const res = await buildApp({ id: 'u1' }).request('/auth/github/connect');
     expect(res.headers.get('location')).toBe('/?github=error');
     expect(tables.installations).toHaveLength(0);
   });
@@ -1407,14 +1407,14 @@ describe('connect + callback', () => {
   });
 
   it('persists installations on a cookie-only callback navigation', async () => {
-    cookieUser = { workosId: 'u1' };
+    cookieUser = { id: 'u1' };
     const res = await buildApp(null).request('/auth/github/callback?state=state.org1.u1&code=abc');
     expect(res.headers.get('location')).toBe('/?github=connected');
     expect(tables.installations).toHaveLength(1);
   });
 
   it('rejects a callback whose state belongs to another user', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request(
+    const res = await buildApp({ id: 'u1' }).request(
       '/auth/github/callback?state=state.org1.someone-else&code=x',
     );
     expect(res.headers.get('location')).toBe('/?github=error');
@@ -1422,19 +1422,19 @@ describe('connect + callback', () => {
   });
 
   it('rejects a callback whose state belongs to another org', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?state=state.org2.u1&code=x');
+    const res = await buildApp({ id: 'u1' }).request('/auth/github/callback?state=state.org2.u1&code=x');
     expect(res.headers.get('location')).toBe('/?github=error');
     expect(tables.installations).toHaveLength(0);
   });
 
   it('persists installations on a valid callback', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?state=state.org1.u1&code=abc');
+    const res = await buildApp({ id: 'u1' }).request('/auth/github/callback?state=state.org1.u1&code=abc');
     expect(res.headers.get('location')).toBe('/?github=connected');
     expect(tables.installations).toHaveLength(1);
   });
 
   it('does not trust an unverified installation_id without a code', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request(
+    const res = await buildApp({ id: 'u1' }).request(
       '/auth/github/callback?state=state.org1.u1&installation_id=999',
     );
     // No code → bounce through OAuth identify, persist nothing.
@@ -1447,7 +1447,7 @@ describe('connect + callback', () => {
     // Updating an existing installation redirects here with installation_id +
     // setup_action but no signed state. Re-sync via a fresh identify bounce
     // instead of erroring out.
-    const res = await buildApp({ workosId: 'u1' }).request(
+    const res = await buildApp({ id: 'u1' }).request(
       '/auth/github/callback?installation_id=7&setup_action=update',
     );
     expect(res.status).toBe(302);
@@ -1458,7 +1458,7 @@ describe('connect + callback', () => {
 
   it('redirects a verified user with no installations to the install URL', async () => {
     vi.mocked(listUserInstallations).mockResolvedValueOnce([]);
-    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?state=state.org1.u1&code=abc');
+    const res = await buildApp({ id: 'u1' }).request('/auth/github/callback?state=state.org1.u1&code=abc');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('/installations/new');
     expect(tables.installations).toHaveLength(0);
@@ -1466,7 +1466,7 @@ describe('connect + callback', () => {
 });
 
 it('does not expose the removed GitHub project-creation route', async () => {
-  const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
+  const res = await buildApp({ id: 'u1' }).request('/web/github/projects', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ repoFullName: 'octo/hello', repoId: 99, installationId: 7 }),
@@ -1562,21 +1562,21 @@ describe('issues route', () => {
 
   it('403s for a personal (no-org) account', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1', organizationId: undefined }).request('/web/github/projects/p1/issues');
+    const res = await buildApp({ id: 'u1', organizationId: undefined }).request('/web/github/projects/p1/issues');
     expect(res.status).toBe(403);
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 
   it('404s for a project owned by another org', async () => {
     seedMaterializedProject({ orgId: 'other-org' });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues');
     expect(res.status).toBe(404);
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 
   it('lists open issues for the project repo', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues');
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.issues).toHaveLength(1);
@@ -1593,7 +1593,7 @@ describe('issues route', () => {
   it('forwards the requested page and echoes the next page', async () => {
     seedMaterializedProject();
     listRepoOpenIssues.mockResolvedValueOnce({ issues: [], nextPage: 3 });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=2');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues?page=2');
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ issues: [], nextPage: 3 });
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 2, { label: undefined });
@@ -1601,7 +1601,7 @@ describe('issues route', () => {
 
   it('forwards the status: auto-triaged label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request(
+    const res = await buildApp({ id: 'u1' }).request(
       '/web/github/projects/p1/issues?label=status%3A%20auto-triaged',
     );
     expect(res.status).toBe(200);
@@ -1610,7 +1610,7 @@ describe('issues route', () => {
 
   it('forwards the status: needs approval label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request(
+    const res = await buildApp({ id: 'u1' }).request(
       '/web/github/projects/p1/issues?label=status%3A%20needs%20approval',
     );
     expect(res.status).toBe(200);
@@ -1619,7 +1619,7 @@ describe('issues route', () => {
 
   it('400s on an unsupported label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=status%3Ablocked');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues?label=status%3Ablocked');
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'invalid_label' });
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
@@ -1627,7 +1627,7 @@ describe('issues route', () => {
 
   it('400s on a malformed page param', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=zero');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues?page=zero');
     expect(res.status).toBe(400);
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
@@ -1635,7 +1635,7 @@ describe('issues route', () => {
   it('502s when GitHub is unavailable', async () => {
     seedMaterializedProject();
     listRepoOpenIssues.mockRejectedValueOnce(new Error('GitHub unavailable'));
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
   });
@@ -1644,7 +1644,7 @@ describe('issues route', () => {
 describe('issue detail route', () => {
   it("returns one issue's description for the project repo", async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues/12');
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       number: 12,
@@ -1656,14 +1656,14 @@ describe('issue detail route', () => {
 
   it('404s when the issue does not exist', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/99');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues/99');
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: 'issue_not_found' });
   });
 
   it('400s on a malformed issue number', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/abc');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues/abc');
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'invalid_number' });
     expect(getIssueDetail).not.toHaveBeenCalled();
@@ -1671,7 +1671,7 @@ describe('issue detail route', () => {
 
   it('404s for a project owned by another org', async () => {
     seedMaterializedProject({ orgId: 'other-org' });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues/12');
     expect(res.status).toBe(404);
     expect(getIssueDetail).not.toHaveBeenCalled();
   });
@@ -1679,7 +1679,7 @@ describe('issue detail route', () => {
   it('502s when GitHub is unavailable', async () => {
     seedMaterializedProject();
     getIssueDetail.mockRejectedValueOnce(new Error('GitHub unavailable'));
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/issues/12');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
   });
@@ -1695,14 +1695,14 @@ describe('prs route', () => {
 
   it('404s for a project owned by another org', async () => {
     seedMaterializedProject({ orgId: 'other-org' });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/prs');
     expect(res.status).toBe(404);
     expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
   });
 
   it('lists open pull requests for the project repo', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/prs');
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.pullRequests).toHaveLength(1);
@@ -1720,7 +1720,7 @@ describe('prs route', () => {
   it('forwards the requested page and echoes the next page', async () => {
     seedMaterializedProject();
     listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [], nextPage: 4 });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs?page=3');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/prs?page=3');
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ pullRequests: [], nextPage: 4 });
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 3);
@@ -1729,7 +1729,7 @@ describe('prs route', () => {
   it('502s when GitHub is unavailable', async () => {
     seedMaterializedProject();
     listRepoOpenPullRequests.mockRejectedValueOnce(new Error('GitHub unavailable'));
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/prs');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
   });
@@ -1741,7 +1741,7 @@ describe('prs route', () => {
       nextPage: null,
     });
     const ingestFactoryEvent = vi.fn(async () => undefined);
-    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
+    const res = await buildApp({ id: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
     expect(res.status).toBe(200);
     const listedPullRequestPayload = expect.objectContaining({
       user: { login: 'grace' },
@@ -1756,7 +1756,7 @@ describe('prs route', () => {
     seedMaterializedProject();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const ingestFactoryEvent = vi.fn().mockRejectedValue(new Error('rules db unavailable'));
-    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
+    const res = await buildApp({ id: 'u1' }, { ingestFactoryEvent }).request(
       `/web/github/projects/p1/${resource}`,
     );
     expect(res.status).toBe(200);
@@ -1862,7 +1862,7 @@ describe('linked repository backlog import', () => {
 describe('pr detail route', () => {
   it("returns one pull request's description for the project repo", async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs/34');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/prs/34');
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       number: 34,
@@ -1874,14 +1874,14 @@ describe('pr detail route', () => {
 
   it('404s when the pull request does not exist', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs/99');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/prs/99');
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: 'pull_request_not_found' });
   });
 
   it('400s on a malformed pull request number', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs/abc');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/prs/abc');
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'invalid_number' });
     expect(getPullRequestDetail).not.toHaveBeenCalled();
@@ -1902,7 +1902,7 @@ describe('commits route', () => {
     sandboxEnabled = false;
     const fetchMock = stubCommitFetch();
 
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/commits');
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ commits: [], branch: 'main' });
@@ -1913,7 +1913,7 @@ describe('commits route', () => {
     seedMaterializedProject();
     const fetchMock = stubCommitFetch();
 
-    await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits?limit=1.5');
+    await buildApp({ id: 'u1' }).request('/web/github/projects/p1/commits?limit=1.5');
 
     const asked = new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams;
 
@@ -1925,7 +1925,7 @@ describe('commits route', () => {
     tables.projectRepositories[0].branch = 'release/v2';
     const fetchMock = stubCommitFetch();
 
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/commits');
 
     expect(await res.json()).toMatchObject({ branch: 'release/v2' });
     expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.get('sha')).toBe('release/v2');
@@ -1941,7 +1941,7 @@ describe('project settings routes', () => {
 
   it('404s for a project owned by another org', async () => {
     seedMaterializedProject({ orgId: 'other-org' });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/settings');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/settings');
     expect(res.status).toBe(404);
   });
 
@@ -1950,7 +1950,7 @@ describe('project settings routes', () => {
       setupCommand: 'pnpm i && pnpm build',
       teardownCommand: 'docker compose down --remove-orphans',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/settings');
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/settings');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       setupCommand: 'pnpm i && pnpm build',
@@ -1960,7 +1960,7 @@ describe('project settings routes', () => {
 
   it('persists trimmed lifecycle commands', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/settings', {
       setupCommand: '  pnpm i && pnpm build  ',
       teardownCommand: '  docker compose down --remove-orphans  ',
     });
@@ -1975,7 +1975,7 @@ describe('project settings routes', () => {
 
   it('clears lifecycle commands with an empty string or null', async () => {
     seedMaterializedProject({ setupCommand: 'pnpm i', teardownCommand: 'pnpm teardown' });
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     const res = await postJson(app, '/web/github/projects/p1/settings', {
       setupCommand: '   ',
       teardownCommand: '   ',
@@ -1997,7 +1997,7 @@ describe('project settings routes', () => {
 
   it('400s on a non-string setup command', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/settings', {
       setupCommand: 42,
     });
     expect(res.status).toBe(400);
@@ -2005,7 +2005,7 @@ describe('project settings routes', () => {
 
   it('400s on an oversized setup command', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/settings', {
       setupCommand: 'x'.repeat(2001),
     });
     expect(res.status).toBe(400);
@@ -2013,7 +2013,7 @@ describe('project settings routes', () => {
 
   it('400s on a setup command containing control characters', async () => {
     seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     const res = await postJson(app, '/web/github/projects/p1/settings', {
       setupCommand: 'pnpm i \x1b[31m&& rm -rf /',
     });
@@ -2031,7 +2031,7 @@ describe('project settings routes', () => {
 describe('Factory session routes', () => {
   it('creates metadata without provisioning a sandbox or worktree', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/sessions', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(200);
@@ -2066,14 +2066,14 @@ describe('Factory session routes', () => {
       getUser: vi.fn(async (id: string) => profiles[id as keyof typeof profiles] ?? null),
       getUsers: vi.fn(async (ids: string[]) => ids.map(id => profiles[id as keyof typeof profiles]).filter(Boolean)),
     };
-    await postJson(buildApp({ workosId: 'u1' }, { users }), '/web/github/projects/p1/sessions', {
+    await postJson(buildApp({ id: 'u1' }, { users }), '/web/github/projects/p1/sessions', {
       branch: 'feat/mine',
     });
-    await postJson(buildApp({ workosId: 'u2' }, { users }), '/web/github/projects/p1/sessions', {
+    await postJson(buildApp({ id: 'u2' }, { users }), '/web/github/projects/p1/sessions', {
       branch: 'feat/theirs',
     });
 
-    const response = await buildApp({ workosId: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
+    const response = await buildApp({ id: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
 
     expect(response.status).toBe(200);
     expect(users.getUsers).toHaveBeenCalledWith(expect.arrayContaining(['u1', 'u2']));
@@ -2093,8 +2093,8 @@ describe('Factory session routes', () => {
 
   it('falls back to individual profile lookups without dropping successful owners', async () => {
     seedMaterializedProject();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
-    await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { branch: 'feat/theirs' });
+    await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
+    await postJson(buildApp({ id: 'u2' }), '/web/github/projects/p1/sessions', { branch: 'feat/theirs' });
     const users = {
       getUser: vi.fn(async (id: string) => {
         if (id === 'u1') return { id, email: 'ada@example.com' };
@@ -2102,7 +2102,7 @@ describe('Factory session routes', () => {
       }),
     };
 
-    const response = await buildApp({ workosId: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
+    const response = await buildApp({ id: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
 
     expect(response.status).toBe(200);
     expect(users.getUser).toHaveBeenCalledTimes(2);
@@ -2115,8 +2115,8 @@ describe('Factory session routes', () => {
 
   it('falls back to individual lookups when the bulk owner lookup fails', async () => {
     seedMaterializedProject();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
-    await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { branch: 'feat/theirs' });
+    await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
+    await postJson(buildApp({ id: 'u2' }), '/web/github/projects/p1/sessions', { branch: 'feat/theirs' });
     const users = {
       getUsers: vi.fn(async () => {
         throw new Error('Directory unavailable');
@@ -2124,7 +2124,7 @@ describe('Factory session routes', () => {
       getUser: vi.fn(async (id: string) => (id === 'u1' ? { id, name: 'Ada Lovelace' } : { id, name: '', email: '' })),
     };
 
-    const response = await buildApp({ workosId: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
+    const response = await buildApp({ id: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
 
     expect(response.status).toBe(200);
     expect(users.getUsers).toHaveBeenCalledOnce();
@@ -2142,7 +2142,7 @@ describe('Factory session routes', () => {
       getUser: vi.fn(async (id: string) => ({ id, name: 'Ada Lovelace' })),
       getUsers: vi.fn(async (ids: string[]) => ids.map(id => ({ id, name: 'Ada Lovelace' }))),
     };
-    const app = buildApp({ workosId: 'u1' }, { users });
+    const app = buildApp({ id: 'u1' }, { users });
     await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
 
     const first = await app.request('/web/github/projects/p1/sessions');
@@ -2158,7 +2158,7 @@ describe('Factory session routes', () => {
 
   it('uses a supplied UUID for branch identity and persists a normalized title', async () => {
     seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     const sessionId = '00000000-0000-4000-8000-000000000001';
     const first = await postJson(app, '/web/github/projects/p1/sessions', {
       sessionId,
@@ -2183,7 +2183,7 @@ describe('Factory session routes', () => {
 
   it('returns the same session when a supplied UUID is retried', async () => {
     seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     const request = {
       sessionId: '00000000-0000-4000-8000-000000000001',
       title: 'Fix login flow',
@@ -2198,13 +2198,13 @@ describe('Factory session routes', () => {
 
   it('returns an org-visible session to a same-org non-owner', async () => {
     seedMaterializedProject();
-    const owner = buildApp({ workosId: 'u1' });
+    const owner = buildApp({ id: 'u1' });
     const created = await postJson(owner, '/web/github/projects/p1/sessions', {
       sessionId: '00000000-0000-4000-8000-000000000010',
     });
     expect(created.status).toBe(200);
 
-    const viewer = buildApp({ workosId: 'u2' });
+    const viewer = buildApp({ id: 'u2' });
     const res = await viewer.request('/web/user-sessions/00000000-0000-4000-8000-000000000010');
     expect(res.status).toBe(200);
     expect((await res.json()).session).toMatchObject({ userId: 'u1', visibility: 'org' });
@@ -2230,7 +2230,7 @@ describe('Factory session routes', () => {
       updatedAt: now,
     });
 
-    const viewer = buildApp({ workosId: 'u2' });
+    const viewer = buildApp({ id: 'u2' });
     const denied = await viewer.request('/web/user-sessions/00000000-0000-4000-8000-000000000011');
     const missing = await viewer.request('/web/user-sessions/00000000-0000-4000-8000-00000000dead');
     expect(denied.status).toBe(404);
@@ -2238,7 +2238,7 @@ describe('Factory session routes', () => {
     // Byte-identical bodies so private session IDs never leak existence.
     expect(await denied.text()).toBe(await missing.text());
 
-    const owner = buildApp({ workosId: 'u1' });
+    const owner = buildApp({ id: 'u1' });
     const allowed = await owner.request('/web/user-sessions/00000000-0000-4000-8000-000000000011');
     expect(allowed.status).toBe(200);
   });
@@ -2266,7 +2266,7 @@ describe('Factory session routes', () => {
       row({ id: 'r4', sessionId: 's-legacy-null', userId: 'u1', visibility: null }),
     );
 
-    const res = await buildApp({ workosId: 'u2' }).request('/web/github/projects/p1/sessions');
+    const res = await buildApp({ id: 'u2' }).request('/web/github/projects/p1/sessions');
     expect(res.status).toBe(200);
     const listed = (await res.json()).sessions.map((s: { sessionId: string }) => s.sessionId).sort();
     expect(listed).toEqual(['s-legacy-null', 's-org-other', 's-private-mine']);
@@ -2274,7 +2274,7 @@ describe('Factory session routes', () => {
 
   it('derives a branch from a server-generated UUID when no session ID is supplied', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {});
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/sessions', {});
     const session = (await res.json()).session;
 
     expect(session.branch).toBe(`user/session-${session.sessionId}`);
@@ -2283,7 +2283,7 @@ describe('Factory session routes', () => {
 
   it('truncates titles to 80 code points and stores blank titles as null', async () => {
     seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     const long = await postJson(app, '/web/github/projects/p1/sessions', {
       sessionId: '00000000-0000-4000-8000-000000000001',
       title: `${'x'.repeat(79)} word`,
@@ -2315,7 +2315,7 @@ describe('Factory session routes', () => {
     [{ baseBranch: 42 }, 'Invalid baseBranch'],
   ])('rejects invalid optional session fields', async (body, error) => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', body);
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/sessions', body);
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error });
@@ -2324,7 +2324,7 @@ describe('Factory session routes', () => {
 
   it('rejects a supplied UUID already bound to another session identity', async () => {
     seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     const sessionId = '00000000-0000-4000-8000-000000000001';
     await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x', sessionId });
 
@@ -2340,8 +2340,8 @@ describe('Factory session routes', () => {
     const sessionId = '00000000-0000-4000-8000-000000000001';
 
     const responses = await Promise.all([
-      postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { sessionId }),
-      postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { sessionId }),
+      postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/sessions', { sessionId }),
+      postJson(buildApp({ id: 'u2' }), '/web/github/projects/p1/sessions', { sessionId }),
     ]);
 
     expect(responses.map(response => response.status).sort()).toEqual([200, 409]);
@@ -2350,14 +2350,14 @@ describe('Factory session routes', () => {
 
   it('rejects a non-object body instead of treating it as an unnamed session', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', 42);
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/sessions', 42);
     expect(res.status).toBe(400);
     expect(tables.sessions).toHaveLength(0);
   });
 
   it('reuses the session for the same repository, user, and branch', async () => {
     seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     const first = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const second = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     expect((await second.json()).session.sessionId).toBe((await first.json()).session.sessionId);
@@ -2366,7 +2366,7 @@ describe('Factory session routes', () => {
 
   it('loads and deletes a session by its public session id', async () => {
     seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
 
@@ -2392,7 +2392,7 @@ describe('Factory session routes', () => {
       order.push('invalidate');
     });
     const sessionRetirement = new SessionRetirementCoordinator({ invalidateSession });
-    const app = buildApp({ workosId: 'u1' }, { controller, sessionRetirement });
+    const app = buildApp({ id: 'u1' }, { controller, sessionRetirement });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
     const row = tables.sessions.find(r => r.sessionId === sessionId)!;
@@ -2423,11 +2423,11 @@ describe('Factory session routes', () => {
   it('does not tear down a controller session for an unauthorized deletion', async () => {
     seedMaterializedProject();
     const controller = { deleteSession: vi.fn() } as any;
-    const ownerApp = buildApp({ workosId: 'u1' }, { controller });
+    const ownerApp = buildApp({ id: 'u1' }, { controller });
     const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
 
-    const response = await buildApp({ workosId: 'u2' }, { controller }).request(`/web/user-sessions/${sessionId}`, {
+    const response = await buildApp({ id: 'u2' }, { controller }).request(`/web/user-sessions/${sessionId}`, {
       method: 'DELETE',
     });
 
@@ -2443,7 +2443,7 @@ describe('Factory session routes', () => {
       generateThreadTitle: vi.fn(async () => 'Log parser rewrite'),
     } as any;
     const memorySettings = { get: vi.fn(async () => ({ observerModelId: 'anthropic/claude-haiku-4-5' })) } as any;
-    const app = buildApp({ workosId: 'u1' }, { controller, memorySettings });
+    const app = buildApp({ id: 'u1' }, { controller, memorySettings });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
     const sessionId = (await created.json()).session.sessionId;
 
@@ -2455,7 +2455,7 @@ describe('Factory session routes', () => {
     expect(named.threadId).toBe('thread-1');
     expect(named.sessionId).toBe(sessionId);
     // Naming runs as the session's owner, so it bills their model credentials.
-    expect(named.requestContext.get('user')).toEqual({ workosId: 'u1', organizationId: 'org1' });
+    expect(named.requestContext.get('user')).toEqual({ id: 'u1', organizationId: 'org1' });
     expect(named.requestContext.get('mastra__factoryMemorySettings')).toEqual({
       observerModelId: 'anthropic/claude-haiku-4-5',
     });
@@ -2472,7 +2472,7 @@ describe('Factory session routes', () => {
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => 'Log parser rewrite'),
     } as any;
-    const app = buildApp({ workosId: 'u1' }, { controller });
+    const app = buildApp({ id: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
     const sessionId = (await created.json()).session.sessionId;
 
@@ -2500,7 +2500,7 @@ describe('Factory session routes', () => {
         return 'Log parser rewrite';
       }),
     } as any;
-    const app = buildApp({ workosId: 'u1' }, { controller });
+    const app = buildApp({ id: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
     const sessionId = (await created.json()).session.sessionId;
 
@@ -2525,7 +2525,7 @@ describe('Factory session routes', () => {
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => `  Rewrite   the log parser ${'and more '.repeat(20)}`),
     } as any;
-    const app = buildApp({ workosId: 'u1' }, { controller });
+    const app = buildApp({ id: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
     const sessionId = (await created.json()).session.sessionId;
 
@@ -2544,7 +2544,7 @@ describe('Factory session routes', () => {
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => '   '),
     } as any;
-    const app = buildApp({ workosId: 'u1' }, { controller });
+    const app = buildApp({ id: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
     const sessionId = (await created.json()).session.sessionId;
 
@@ -2558,7 +2558,7 @@ describe('Factory session routes', () => {
     seedMaterializedProject();
     const controller = { queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
-    const app = buildApp({ workosId: 'u1' }, { controller });
+    const app = buildApp({ id: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
 
@@ -2573,11 +2573,11 @@ describe('Factory session routes', () => {
     seedMaterializedProject();
     const controller = { queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
-    const ownerApp = buildApp({ workosId: 'u1' }, { controller });
+    const ownerApp = buildApp({ id: 'u1' }, { controller });
     const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
 
-    const response = await buildApp({ workosId: 'u2' }, { controller }).request(
+    const response = await buildApp({ id: 'u2' }, { controller }).request(
       `/web/user-sessions/${sessionId}/title`,
       { method: 'POST' },
     );
@@ -2590,7 +2590,7 @@ describe('Factory session routes', () => {
     seedMaterializedProject();
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const controller = { deleteSession: vi.fn(async () => Promise.reject(new Error('teardown failed'))) } as any;
-    const app = buildApp({ workosId: 'u1' }, { controller });
+    const app = buildApp({ id: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
     const row = tables.sessions.find(r => r.sessionId === sessionId)!;
@@ -2615,7 +2615,7 @@ describe('Factory session routes', () => {
     filesystemCaptureMock.waitError = new Error('drain failed');
     try {
       const controller = { deleteSession: vi.fn(async () => {}) } as any;
-      const app = buildApp({ workosId: 'u1' }, { controller });
+      const app = buildApp({ id: 'u1' }, { controller });
       const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
       const sessionId = (await created.json()).session.sessionId;
 
@@ -2638,7 +2638,7 @@ describe('Factory session routes', () => {
     // The cross-session reuse pool died with the fleet: sandbox identity is
     // the session id, so a deleted session's VM is destroyed, not shelved.
     seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
     const row = tables.sessions.find(r => r.sessionId === sessionId)!;
@@ -2659,17 +2659,17 @@ describe('Factory session routes', () => {
 
   it("does not expose another organization's session regardless of visibility", async () => {
     seedMaterializedProject();
-    const created = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
+    const created = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/sessions', {
       branch: 'feat/x',
     });
     const sessionId = (await created.json()).session.sessionId;
-    const crossOrg = buildApp({ workosId: 'u2', organizationId: 'org2' });
+    const crossOrg = buildApp({ id: 'u2', organizationId: 'org2' });
     expect((await crossOrg.request(`/web/user-sessions/${sessionId}`)).status).toBe(404);
   });
 
   it('rejects invalid branch names', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/sessions', {
       branch: 'bad branch!',
     });
     expect(res.status).toBe(400);
@@ -2680,7 +2680,7 @@ describe('Factory session routes', () => {
 describe('commit route', () => {
   it('400s on an empty message', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/commit', {
       message: '   ',
     });
     expect(res.status).toBe(400);
@@ -2689,7 +2689,7 @@ describe('commit route', () => {
 
   it('400s on an unknown sessionId', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/commit', {
       message: 'wip',
       sessionId: 'missing-session',
     });
@@ -2699,7 +2699,7 @@ describe('commit route', () => {
 
   it('commits in a materialized session workspace', async () => {
     seedMaterializedSession();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/commit', {
       message: 'wip',
       sessionId: 'session-1',
     });
@@ -2712,7 +2712,7 @@ describe('commit route', () => {
 describe('sandbox teardown route', () => {
   it('is gone: the project-level sandbox concept no longer exists', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
+    const res = await buildApp({ id: 'u1' }).request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
     expect(res.status).toBe(404);
   });
 });
@@ -2720,7 +2720,7 @@ describe('sandbox teardown route', () => {
 describe('push route', () => {
   it('400s on an invalid branch', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/push', {
       branch: 'bad branch',
     });
     expect(res.status).toBe(400);
@@ -2729,7 +2729,7 @@ describe('push route', () => {
 
   it('uses repository-scoped access to push the branch', async () => {
     seedMaterializedSession();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/push', {
       branch: 'feat/x',
       sessionId: 'session-1',
     });
@@ -2752,7 +2752,7 @@ describe('push route', () => {
 describe('pr route', () => {
   it('400s on a missing title', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(400);
@@ -2761,7 +2761,7 @@ describe('pr route', () => {
 
   it('400s on an invalid base branch', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
       base: 'bad base',
       title: 'My PR',
@@ -2772,7 +2772,7 @@ describe('pr route', () => {
 
   it('opens a PR and returns its URL', async () => {
     seedMaterializedSession();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
@@ -2795,7 +2795,7 @@ describe('pr route', () => {
   it('returns 502 when the version-control provider rejects PR creation', async () => {
     seedMaterializedSession();
     createPullRequest.mockRejectedValueOnce(new Error('GitHub unavailable'));
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
       title: 'My PR',
       sessionId: 'session-1',
@@ -2809,7 +2809,7 @@ describe('pr route', () => {
 describe('audit events', () => {
   it('records git.commit only when a commit was actually created', async () => {
     seedMaterializedSession();
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ id: 'u1' });
     await postJson(app, '/web/github/projects/p1/commit', { message: 'wip', sessionId: 'session-1' });
     expect(auditRecorded.map(e => e.action)).toEqual(['factory.git.commit']);
 
@@ -2821,7 +2821,7 @@ describe('audit events', () => {
 
   it('records git.push with the branch target', async () => {
     seedMaterializedSession();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
+    await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/push', {
       branch: 'feat/x',
       sessionId: 'session-1',
     });
@@ -2836,7 +2836,7 @@ describe('audit events', () => {
 
   it('records git.pr_opened with the PR url and title', async () => {
     seedMaterializedSession();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+    await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
       title: 'My PR',
       sessionId: 'session-1',
@@ -2852,7 +2852,7 @@ describe('audit events', () => {
 
   it('does not record audit events for rejected mutations', async () => {
     seedMaterializedProject();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', { branch: 'bad branch' });
+    await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/push', { branch: 'bad branch' });
     expect(auditRecorded).toHaveLength(0);
   });
 
@@ -2860,7 +2860,7 @@ describe('audit events', () => {
     seedMaterializedSession();
     auditFailure = new Error('audit db down');
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
+    const res = await postJson(buildApp({ id: 'u1' }), '/web/github/projects/p1/push', {
       branch: 'feat/x',
       sessionId: 'session-1',
     });

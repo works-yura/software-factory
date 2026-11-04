@@ -51,7 +51,7 @@ const projects = new Map([
   [OTHER_FACTORY_ID, 'org-2'],
 ]);
 
-function buildApp(user?: { workosId: string; organizationId: string }, options: { authEnabled?: boolean } = {}) {
+function buildApp(user?: { id: string; organizationId: string }, options: { authEnabled?: boolean } = {}) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -104,9 +104,9 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
   return app;
 }
 
-const owner = buildApp({ workosId: 'owner', organizationId: 'org-1' });
-const teammate = buildApp({ workosId: 'teammate', organizationId: 'org-1' });
-const outsider = buildApp({ workosId: 'outsider', organizationId: 'org-2' });
+const owner = buildApp({ id: 'owner', organizationId: 'org-1' });
+const teammate = buildApp({ id: 'teammate', organizationId: 'org-1' });
+const outsider = buildApp({ id: 'outsider', organizationId: 'org-2' });
 
 const post = (app: Hono, path: string, body: unknown) =>
   app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });

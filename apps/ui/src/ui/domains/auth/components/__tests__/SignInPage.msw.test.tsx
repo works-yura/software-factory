@@ -3,7 +3,7 @@
  *
  * Drives the real route table (SignInGate → SignInPage) through a memory
  * router with MSW stubbing `/auth/me` and the better-auth credential
- * endpoints. WorkOS deploys keep the hosted-login redirect button; better-auth
+ * endpoints. Hosted-login (SSO) deploys keep the redirect button; better-auth
  * deploys get the email/password form posting to `/auth/api/*`.
  */
 import { screen, waitFor } from '@testing-library/react';
@@ -83,7 +83,7 @@ describe('SignInPage', () => {
       expect(screen.queryByRole('heading', { name: 'Work board' })).not.toBeInTheDocument();
 
       finishCheck();
-      expect(await screen.findByRole('button', { name: 'Continue with GitHub' })).toBeEnabled();
+      expect(await screen.findByRole('button', { name: 'Continue to sign in' })).toBeEnabled();
       expect(router.state.location.pathname).toBe('/signin');
     });
 
@@ -108,14 +108,14 @@ describe('SignInPage', () => {
 
         server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedOut)));
         await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        expect(await screen.findByRole('button', { name: 'Continue with GitHub' })).toBeEnabled();
+        expect(await screen.findByRole('button', { name: 'Continue to sign in' })).toBeEnabled();
         expect(router.state.location.pathname).toBe('/signin');
       },
     );
   });
 
   it('renders the agent factory welcome message without a separate page header', async () => {
-    stubAuthMe({ provider: 'workos' });
+    stubAuthMe({ provider: 'sso-fake' });
     renderSignIn();
 
     expect(await screen.findByRole('heading', { name: 'Build with an agent factory' })).toBeInTheDocument();
@@ -123,55 +123,17 @@ describe('SignInPage', () => {
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 
-  describe('given Studio auth', () => {
-    it('renders the Mastra Platform sign-in action on a supported host', async () => {
-      stubAuthMe({ provider: 'mastra-studio' });
+  describe('given a hosted-login (SSO) deploy', () => {
+    it('renders the hosted sign-in action and redirects to the login route', async () => {
+      stubAuthMe({ provider: 'sso-fake' });
       renderSignIn('/signin?returnTo=%2Ffactory%2Fboard');
 
-      const button = await screen.findByRole('button', { name: 'Sign in with Mastra Platform' });
-      expect(screen.queryByRole('button', { name: 'Continue with GitHub' })).not.toBeInTheDocument();
-
-      await userEvent.click(button);
-      expect(button).toBeDisabled();
-      expect(button).toHaveTextContent('Opening Mastra Platform…');
-      expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/factory/board');
-    });
-
-    it('shows custom-domain guidance when the server reports platform auth is unsupported', async () => {
-      stubAuthMe({ provider: 'mastra-studio', customDomainUnsupported: true });
-      renderSignIn();
-
-      const alert = await screen.findByRole('alert');
-      expect(alert).toHaveTextContent("Mastra Platform sign-in isn't available on custom domains");
-      expect(alert).toHaveTextContent('WORKOS_API_KEY + WORKOS_CLIENT_ID');
-      expect(screen.getByRole('link', { name: 'Auth overview' })).toHaveAttribute(
-        'href',
-        'https://mastra.ai/docs/auth/overview',
-      );
-      expect(screen.queryByRole('button', { name: 'Sign in with Mastra Platform' })).not.toBeInTheDocument();
-    });
-
-    it('shows custom-domain guidance after the blocked login redirect', async () => {
-      stubAuthMe({ provider: 'mastra-studio' });
-      renderSignIn('/signin?error=custom_domain_unsupported');
-
-      await screen.findByRole('heading', { name: "Mastra Platform sign-in isn't available on custom domains" });
-      expect(screen.getByRole('alert')).toHaveTextContent("Mastra Platform sign-in isn't available on custom domains");
-      expect(screen.queryByRole('button', { name: 'Sign in with Mastra Platform' })).not.toBeInTheDocument();
-    });
-  });
-
-  describe('given a WorkOS (hosted-login) deploy', () => {
-    it('renders the GitHub sign-in action and redirects to the login route', async () => {
-      stubAuthMe({ provider: 'workos' });
-      renderSignIn('/signin?returnTo=%2Ffactory%2Fboard');
-
-      const button = await screen.findByRole('button', { name: 'Continue with GitHub' });
+      const button = await screen.findByRole('button', { name: 'Continue to sign in' });
       expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
 
       await userEvent.click(button);
       expect(button).toBeDisabled();
-      expect(button).toHaveTextContent('Opening GitHub…');
+      expect(button).toHaveTextContent('Redirecting to sign-in…');
       expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/factory/board');
     });
   });
@@ -255,7 +217,7 @@ describe('SignInPage', () => {
 
   describe('given an IdP access_denied redirect', () => {
     it('shows the denial with the IdP description and still allows a retry', async () => {
-      stubAuthMe({ provider: 'mastra-studio' });
+      stubAuthMe({ provider: 'sso-fake' });
       const description = encodeURIComponent('You do not have access to this application.');
       renderSignIn(`/signin?error=access_denied&error_description=${description}`);
 
@@ -264,12 +226,12 @@ describe('SignInPage', () => {
       expect(alert).toHaveTextContent('You do not have access to this application.');
       expect(alert).toHaveTextContent('Ask an organization admin to add your account');
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Sign in with Mastra Platform' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Continue to sign in' }));
       expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/');
     });
 
     it('falls back to the admin hint when the IdP sends no description', async () => {
-      stubAuthMe({ provider: 'workos' });
+      stubAuthMe({ provider: 'sso-fake' });
       renderSignIn('/signin?error=access_denied');
 
       const alert = await screen.findByRole('alert');

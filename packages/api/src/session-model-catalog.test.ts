@@ -61,9 +61,9 @@ async function setup(visibility: 'org' | 'private' = 'org') {
   await seed.modelDefaults.set({ orgId: 'org-1', userId: 'owner', modelId: 'anthropic/claude-opus-4-6' });
   await seed.modelDefaults.set({ orgId: 'org-1', userId: 'viewer', modelId: 'openai/gpt-5.5' });
   let orgId = 'org-1';
-  const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
+  const app = new Hono<{ Variables: { factoryAuthUser: { id: string; organizationId: string } } }>();
   app.use('*', async (c, next) => {
-    c.set('factoryAuthUser', { workosId: 'viewer', organizationId: orgId });
+    c.set('factoryAuthUser', { id: 'viewer', organizationId: orgId });
     await next();
   });
   mountApiRoutes(

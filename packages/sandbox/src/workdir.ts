@@ -58,8 +58,8 @@ export function repoDirUnder(parent: string, repoFullName: string): string {
 
 /**
  * The directory a repository checks out into, under the workspace root. Must
- * agree with the repo templates' private `repoDirName`
- * (`workspaces/platform-workspace/src/repo-template.ts`): the last segment
+ * agree with Mastra's repo templates' private `repoDirName` (upstream
+ * Mastra workspace providers): the last segment
  * of the clone URL, `[^A-Za-z0-9._-]` replaced by `-`, leading dots dropped,
  * `repo` when nothing is left. A repository slug never ends in `.git`, so
  * both derive the same name for every slug; `workdir.test.ts` pins the

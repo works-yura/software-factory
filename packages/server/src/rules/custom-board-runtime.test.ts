@@ -222,9 +222,9 @@ describe('custom board public runtime', () => {
         const args = await factory.prepare();
         mastra = new Mastra(args);
         await factory.finalize();
-        const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
+        const app = new Hono<{ Variables: { factoryAuthUser: { id: string; organizationId: string } } }>();
         app.use('*', async (c, next) => {
-          c.set('factoryAuthUser', { workosId: 'release-user', organizationId: 'release-org' });
+          c.set('factoryAuthUser', { id: 'release-user', organizationId: 'release-org' });
           await next();
         });
         mountApiRoutes(app, args.server?.apiRoutes ?? []);

@@ -1,7 +1,7 @@
 /**
  * Browser-side helpers for Factory work items (the kanban board records).
  *
- * Talks to the server's `/web/factory/*` routes, which sit behind the WorkOS
+ * Talks to the server's `/web/factory/*` routes, which sit behind the
  * auth gate and scope everything to the caller's organization — the board is
  * org-wide, so every member of the org reads and moves the same cards.
  */
@@ -29,7 +29,7 @@ export interface WorkItemSessionRef {
   sessionId: string;
   branch: string;
   threadId: string;
-  /** WorkOS user id whose sandbox the session runs in (stamped server-side). */
+  /** User id whose sandbox the session runs in (stamped server-side). */
   startedBy: string;
 }
 

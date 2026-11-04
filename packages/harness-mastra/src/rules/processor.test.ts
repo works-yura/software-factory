@@ -23,7 +23,7 @@ function requestContext(
 ) {
   const context = new RequestContext();
   if (overrides.authenticated !== false) {
-    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('user', { id: 'user-1', organizationId: 'org-1' });
   }
   context.set('controller', {
     resourceId: 'resource-1',
@@ -185,7 +185,7 @@ describe('FactoryPhaseStateProcessor', () => {
       loadMemorySettings,
     });
     const context = new RequestContext();
-    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('user', { id: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
       resourceId: 'resource-2',
       threadId: 'thread-2',
@@ -213,7 +213,7 @@ describe('FactoryPhaseStateProcessor', () => {
     // the binding table is the only remaining link to the project row. Without
     // this lookup the run reads the caller's personal row instead.
     const context = new RequestContext();
-    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('user', { id: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
       resourceId: 'resource-1',
       threadId: 'thread-1',
@@ -267,7 +267,7 @@ describe('FactoryPhaseStateProcessor', () => {
     // Resumed runs skip the input-processor phase, so the step hook must reach
     // the same recovery path rather than passing a null binding through.
     const context = new RequestContext();
-    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('user', { id: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
       resourceId: 'resource-1',
       threadId: 'thread-1',

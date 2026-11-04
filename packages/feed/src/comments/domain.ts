@@ -45,7 +45,7 @@ export interface CommentsDomainOptions {
   workItems: WorkItemsStorage;
   projects: FactoryProjectsStorage;
   channelIdentity?: ChannelIdentityStorage;
-  /** Host-wired org membership listing for the mention roster (e.g. WorkOS). */
+  /** Host-wired org membership listing for the mention roster. */
   members?: OrganizationMembersProvider;
   audit?: AuditEmitter;
   /** Outbound platform mirrors (COR-1174); empty until a platform wires one. */

@@ -9,7 +9,7 @@
  */
 
 export interface RuntimeConfig {
-  /** Whether the server has WorkOS auth configured. Absent = unknown. */
+  /** Whether the server has auth configured. Absent = unknown. */
   authEnabled?: boolean;
 }
 

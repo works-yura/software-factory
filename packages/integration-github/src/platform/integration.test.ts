@@ -18,7 +18,7 @@ const config = {
 function fakeAuth(tenant: { orgId?: string; userId: string } | undefined = { orgId: 'org-1', userId: 'user-1' }) {
   return {
     enabled: () => true,
-    ensureUser: vi.fn(async () => ({ workosId: tenant?.userId ?? 'user-1', organizationId: tenant?.orgId })),
+    ensureUser: vi.fn(async () => ({ id: tenant?.userId ?? 'user-1', organizationId: tenant?.orgId })),
     tenant: () => tenant,
     isOrganizationAdmin: vi.fn(async () => true),
   };
@@ -1053,7 +1053,7 @@ describe('PlatformGithubIntegration', () => {
     expect(routes.some(route => route.path === '/auth/github/callback')).toBe(false);
     expect(routes.some(route => route.path === '/web/github/webhook')).toBe(false);
     const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
     requestContext.set('controller', {
       resourceId: 'resource-1',
       threadId: 'thread-1',
@@ -1200,7 +1200,7 @@ describe('PlatformGithubIntegration', () => {
     integration.versionControl.initialize({ storage: sourceControl });
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('webAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, integration.routes(context));
@@ -1264,7 +1264,7 @@ describe('PlatformGithubIntegration', () => {
     integration.versionControl.initialize({ storage: context.storage.sourceControl });
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('webAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, integration.routes(context));
@@ -1342,7 +1342,7 @@ describe('PlatformGithubIntegration', () => {
     integration.versionControl.initialize({ storage: context.storage.sourceControl });
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('webAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, integration.routes(context));
@@ -1390,7 +1390,7 @@ describe('PlatformGithubIntegration', () => {
     integration.versionControl.initialize({ storage: context.storage.sourceControl });
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('webAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, integration.routes(context));

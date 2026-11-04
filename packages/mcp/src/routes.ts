@@ -10,7 +10,6 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 
 import { getFactoryAuthUser } from '@factory/auth';
-import { PLATFORM_AUTH_PROVIDER } from '@factory/auth';
 import type { RouteAuth } from '@factory/http';
 import { ensureFactorySourceSession, FactorySourceSessionResolutionError, supervisorResourceId } from '@factory/session';
 import type { SourceControlSessionLookup } from '@factory/session';
@@ -70,18 +69,13 @@ const FACTORY_MCP_INSTRUCTIONS = [
   'Every call runs as the signed-in user. When the Factory has a repository, session tools act from a private connector session of theirs.',
 ].join(' ');
 
-/** Mastra Platform's WorkOS AuthKit, which issues tokens Platform's `/auth/verify` accepts. */
-export const PLATFORM_MCP_AUTHORIZATION_SERVER = 'https://auth-kit.mastra.ai';
-
 export function resolveMcpAuthorizationServers(
-  providerName: string | undefined,
   config: FactoryMcpConfig | undefined,
   env: Record<string, string | undefined> = process.env,
 ): string[] {
   if (config?.authorizationServers?.length) return config.authorizationServers;
   const fromEnv = env.MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER?.trim();
   if (fromEnv) return [fromEnv];
-  if (providerName === PLATFORM_AUTH_PROVIDER) return [PLATFORM_MCP_AUTHORIZATION_SERVER];
   return [];
 }
 

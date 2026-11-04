@@ -127,7 +127,7 @@ export function createClaudeCodeHarness(config: ClaudeCodeHarnessConfig): Claude
     runContext(agentSession: AgentSession, input: AgentRunContextInput): AgentRunContext {
       const session = claudeSession(agentSession);
       return new ClaudeCodeRunContext()
-        .set('user', { workosId: input.userId, organizationId: input.orgId })
+        .set('user', { id: input.userId, organizationId: input.orgId })
         .set('controller', {
           threadId: input.threadId,
           resourceId: input.resourceId,

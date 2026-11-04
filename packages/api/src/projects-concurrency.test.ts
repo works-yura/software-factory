@@ -83,7 +83,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           await storage.init();
           const app = new Hono();
           app.use('*', async (context, next) => {
-            context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+            context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
             await next();
           });
           mountApiRoutes(
@@ -183,7 +183,7 @@ describe.each(['libsql', 'libsql-memory', ...(postgresUrl ? ['postgres'] : [])])
           await storage.init();
           const app = new Hono();
           app.use('*', async (context, next) => {
-            context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+            context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
             await next();
           });
           mountApiRoutes(

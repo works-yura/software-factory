@@ -95,7 +95,7 @@ describe('createClaudeCodeHarness', () => {
     const session = await harness.createSession({ sessionId: 'card-1', threadId: 'thread-1' });
     const context = harness.runContext(session, { userId: 'user-2', orgId: 'org-1', threadId: 'thread-1', resourceId: 'fp-1' });
 
-    expect(context.get('user')).toEqual({ workosId: 'user-2', organizationId: 'org-1' });
+    expect(context.get('user')).toEqual({ id: 'user-2', organizationId: 'org-1' });
     expect(context.get('controller')).toMatchObject({ threadId: 'thread-1', resourceId: 'fp-1', session: { id: 'card-1' } });
   });
 

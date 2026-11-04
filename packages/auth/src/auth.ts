@@ -1,4 +1,3 @@
-import { MastraAuthWorkos } from '@mastra/auth-workos';
 import type { MessageAuthor } from '@mastra/core/agent-controller';
 import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
 import {
@@ -13,11 +12,6 @@ import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/co
 import type { Context, Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
-import {
-  CUSTOM_DOMAIN_UNSUPPORTED_ERROR,
-  PLATFORM_AUTH_PROVIDER,
-  isPlatformAuthSupportedHost,
-} from './platform-auth-host.ts';
 import type { RouteAuth } from '@factory/http';
 import { actorFromAuthUser } from '@factory/store';
 import { isFactoryTelemetryEnabled } from '@factory/observability';
@@ -29,17 +23,16 @@ const ORGANIZATION_ID_HEADER = 'X-Mastra-Organization-Id';
  * Provider-neutral factory auth gating for the MastraCode web server.
  *
  * When an auth provider is active (a `MastraAuthProvider` instance passed to
- * `MastraFactory`'s `auth` slot, or — back-compat for suites/paths that never
- * boot the factory — implied by the WorkOS env vars), every route on the web
- * server is placed behind it: unauthenticated browser navigations are
+ * `MastraFactory`'s `auth` slot), every route on the web server is placed
+ * behind it: unauthenticated browser navigations are
  * redirected to the SPA's `/signin` page, API/XHR calls receive a 401, and a
  * small set of public routes stay reachable while signed out — the provider's
  * `/auth/*` routes plus `/auth/me`, the `/signin` page, its `/assets/*` bundle,
  * and the SPA manifest metadata. When no provider is active, `mountFactoryAuth` is a no-op and the server
  * behaves exactly as it does without auth.
  *
- * Provider specifics stay in the providers (`@mastra/auth-workos`,
- * `@mastra/auth-better-auth`, or any custom `IMastraAuthProvider`); this
+ * Provider specifics stay in the providers (`@mastra/auth-better-auth`, the
+ * local dev provider, or any custom `IMastraAuthProvider`); this
  * module composes them capability-first via the core type guards:
  * - `authenticateToken` — session/bearer validation (all providers)
  * - `ISSOProvider` — hosted-login `/auth/login`, `/auth/callback`, `/auth/logout`
@@ -51,9 +44,7 @@ const ORGANIZATION_ID_HEADER = 'X-Mastra-Organization-Id';
 
 /** Minimal shape of the signed-in user surfaced to the SPA (no tokens). */
 export interface FactoryAuthUser {
-  /** Stable WorkOS user id used to scope per-user data (GitHub installs etc.). */
-  workosId?: string;
-  /** Provider user id; WorkOS shapes may use `workosId` instead (see {@link workosId}). */
+  /** Stable provider user id used to scope per-user data (GitHub installs etc.). */
   id?: string;
   email?: string;
   name?: string;
@@ -134,7 +125,7 @@ export function getFactoryAuthUser(c: Context): FactoryAuthUser | undefined {
  *
  * The server's auth layer writes the provider's `authenticateToken` result into
  * the request context's `user` slot verbatim, so the value's shape follows the
- * provider: WorkOS writes a flat user, better-auth writes a `{ session, user }`
+ * provider: flat providers write a flat user, better-auth writes a `{ session, user }`
  * wrapper whose org lives on the session. Reading that slot as a
  * {@link FactoryAuthUser} therefore yields `undefined` for both the id and the
  * org under better-auth, which reads as "this session belongs to somebody else"
@@ -149,7 +140,7 @@ export function getFactoryAuthUserFromContext(
 
 /** Resolve the stable user id from an authenticated user shape. */
 export function getFactoryAuthUserId(user: FactoryAuthUser | undefined): string | undefined {
-  return user?.workosId ?? user?.id;
+  return user?.id;
 }
 
 /** Resolve the organization id from a user shape, if present. */
@@ -194,32 +185,11 @@ function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {
   };
 }
 
-/** True when both WorkOS credential env vars are present (legacy env gate). */
-function envWorkosConfigured(): boolean {
-  return Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
-}
-
-/**
- * WorkOS provider implied by the `WORKOS_*` env vars — back-compat for test
- * suites exercised without booting the factory (route suites set `WORKOS_*`
- * directly and call {@link mountFactoryAuth} without an explicit provider).
- * `fetchMemberships: true` lets `authenticateToken` resolve `organizationId`
- * from a single membership when the JWT has no org claim — required so a
- * bootstrapped personal org resolves without re-auth.
- */
-function envFallbackAuthProvider(redirectUri: string | undefined): MastraAuthWorkos | undefined {
-  if (!envWorkosConfigured()) return undefined;
-  return new MastraAuthWorkos({
-    redirectUri: redirectUri ?? process.env.WORKOS_REDIRECT_URI,
-    fetchMemberships: true,
-  });
-}
-
 /**
  * Map a provider `authenticateToken` result onto the neutral SPA user shape.
  *
  * Two result families exist today:
- * - flat provider users (WorkOS `WorkOSUser` et al.): `id`/`workosId`/`email`/
+ * - flat provider users (local dev auth, custom providers): `id`/`email`/
  *   `name`/`organizationId` directly on the object;
  * - session-shaped results (better-auth `BetterAuthUser`): `{ session, user }`
  *   with the active org on the session.
@@ -248,7 +218,6 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
   // Flat provider users.
   const flat = record as {
     id?: unknown;
-    workosId?: unknown;
     email?: unknown;
     name?: unknown;
     avatarUrl?: unknown;
@@ -257,8 +226,7 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     memberOrgIds?: unknown;
   };
   const id = typeof flat.id === 'string' ? flat.id : undefined;
-  const workosId = typeof flat.workosId === 'string' ? flat.workosId : undefined;
-  if (!id && !workosId) return null;
+  if (!id) return null;
   const membershipOrganizationIds = Array.isArray(flat.memberships)
     ? flat.memberships.flatMap(membership => {
         if (!membership || typeof membership !== 'object') return [];
@@ -272,7 +240,6 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
   const organizationMembershipIds = [...new Set([...membershipOrganizationIds, ...memberOrgIds])];
   return {
     id,
-    workosId,
     email: typeof flat.email === 'string' ? flat.email : undefined,
     name: typeof flat.name === 'string' ? flat.name : undefined,
     avatarUrl: typeof flat.avatarUrl === 'string' ? flat.avatarUrl : undefined,
@@ -413,21 +380,6 @@ export function createFactoryRouteAuth(provider: IMastraAuthProvider | undefined
   };
 }
 
-/** True when the given provider is WorkOS. Gates WorkOS-only capabilities. */
-export function isWorkOSAuth(provider: IMastraAuthProvider | undefined): boolean {
-  return provider instanceof MastraAuthWorkos;
-}
-
-/**
- * The raw WorkOS provider, for features that need the WorkOS client directly
- * (audit-log export, Admin Portal links). Callers must gate on
- * {@link isWorkOSAuth} first — throws when the provider is not WorkOS.
- */
-export function getWorkOSProvider(provider: IMastraAuthProvider | undefined): MastraAuthWorkos {
-  if (provider instanceof MastraAuthWorkos) return provider;
-  throw new Error('WorkOS provider requested but the active factory auth provider is not WorkOS');
-}
-
 /**
  * Resolve the authenticated user for a request, stashing it on the context.
  *
@@ -477,17 +429,8 @@ export async function ensureFactoryAuthUser(
 }
 
 export interface MountFactoryAuthOptions {
-  /**
-   * Explicit auth provider to mount. When omitted, falls back to a WorkOS
-   * provider implied by the `WORKOS_*` env vars (back-compat for suites that
-   * never boot the factory).
-   */
+  /** Auth provider to mount. When omitted, auth stays off (no-op). */
   provider?: IMastraAuthProvider;
-  /**
-   * Absolute URL the identity provider redirects back to after login (WorkOS
-   * env-fallback path only). Defaults to the `WORKOS_REDIRECT_URI` env var.
-   */
-  redirectUri?: string;
   /** Browser-facing origin used to derive the SSO callback URL. */
   publicUrl?: string;
 }
@@ -502,31 +445,22 @@ function isNavigationRequest(path: string, accept: string | undefined): boolean 
   return (accept ?? '').includes('text/html');
 }
 
-function isPlatformAuthCustomDomain(provider: IMastraAuthProvider, publicUrl?: string): boolean {
-  return (
-    provider.name === PLATFORM_AUTH_PROVIDER &&
-    Boolean(publicUrl && !isPlatformAuthSupportedHost(new URL(publicUrl).hostname))
-  );
-}
-
 /**
  * Handle the provider-neutral `/auth/me` route: validate the session with the
  * active provider and report the signed-in user (no tokens) to the SPA.
  * `/auth/me` is public (the gate skips `/auth/*`), so it validates the session
  * itself rather than reading a value the gate would have stashed.
  */
-async function handleAuthMe(provider: IMastraAuthProvider, c: Context, publicUrl?: string): Promise<Response> {
+async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<Response> {
   const token = getBearerToken(c.req.header('Authorization'));
   const user = await authenticateRequest(provider, token, c.req.raw);
   // Provider identity for the SPA: `/signin` renders the hosted-login button
-  // for WorkOS and an email/password form for better-auth (with sign-up hidden
-  // when the provider disables it).
+  // for SSO providers and an email/password form for better-auth (with sign-up
+  // hidden when the provider disables it).
   const signUpDisabled = isCredentialsProvider(provider) && provider.isSignUpEnabled?.() === false;
-  const customDomainUnsupported = isPlatformAuthCustomDomain(provider, publicUrl);
   const meta = {
     provider: provider.name,
     ...(signUpDisabled ? { signUpDisabled: true } : {}),
-    ...(customDomainUnsupported ? { customDomainUnsupported: true } : {}),
   };
   if (!user) {
     return c.json({ authenticated: false, user: null, ...meta });
@@ -549,11 +483,8 @@ async function handleAuthMe(provider: IMastraAuthProvider, c: Context, publicUrl
 }
 
 /**
- * Encode a validated returnTo path into the OAuth `state` parameter.
- *
- * Pipe format (`uuid|encodedPath`) is the contract `MastraAuthStudio` parses
- * to forward the path as the platform's `post_login_redirect`; a JSON blob
- * here silently degrades every post-login redirect to `/`.
+ * Encode a validated returnTo path into the OAuth `state` parameter as
+ * `uuid|encodedPath` ({@link decodeState} reads it back).
  */
 function encodeState(returnTo: string): string {
   return `${crypto.randomUUID()}|${encodeURIComponent(returnTo)}`;
@@ -647,19 +578,13 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
         method: 'GET',
         handler: async c => {
           const returnTo = sanitizeReturnTo(c.req.query('returnTo'));
-          if (isPlatformAuthCustomDomain(provider, publicUrl)) {
-            const query = new URLSearchParams({ error: CUSTOM_DOMAIN_UNSUPPORTED_ERROR });
-            if (returnTo !== '/') query.set('returnTo', returnTo);
-            return c.redirect(`/signin?${query.toString()}`);
-          }
           const state = encodeState(returnTo);
           // Build the callback URL from the browser-facing public origin so
           // the OAuth round-trip lands back on the SPA's origin (in dev the
           // SPA is on :5173 and Vite proxies /auth/* to the API on :4111 —
           // deriving from c.req.url would use :4111 and the post-callback
           // redirect to `/` would miss the SPA). Providers that ignore the
-          // caller's URI in favor of their own config (e.g. MastraAuthWorkos
-          // with an explicit `redirectUri` option) still take precedence.
+          // caller's URI in favor of their own config still take precedence.
           const redirectUri = publicUrl ? new URL('/auth/callback', publicUrl).toString() : '';
           const loginUrl = await provider.getLoginUrl(redirectUri, state);
           for (const cookie of (await provider.getLoginCookies?.(redirectUri, state)) ?? []) {
@@ -698,17 +623,15 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
           try {
             const result = await provider.handleCallback(code, c.req.query('state') ?? '');
             if (result.cookies?.length) {
-              // Provider populated cookies directly (e.g. WorkOS AuthKit builds
-              // its own sealed session cookie inside handleCallback).
+              // Provider populated cookies directly (it built its own session
+              // cookie inside handleCallback).
               for (const cookie of result.cookies) {
                 c.header('Set-Cookie', cookie, { append: true });
               }
             } else if (isSessionProvider(provider) && result.tokens) {
               // Fallback for providers that expose ISessionProvider but leave
-              // cookie construction to the server (e.g. MastraAuthStudio, which
-              // returns just the sealed session as accessToken so
-              // getSessionHeaders can scope the cookie to this deployment's
-              // domain via MASTRA_COOKIE_DOMAIN / sharedApiUrl auto-detection).
+              // cookie construction to the server: mint the session and let
+              // the provider's getSessionHeaders shape the cookie.
               // Mirrors packages/server/src/server/handlers/auth.ts:492-503.
               const resultUser = result.user as { id: string; organizationId?: string };
               const session = await provider.createSession(resultUser.id, {
@@ -805,7 +728,7 @@ export function registerAuthRoutes(
     const methods = route.method === 'ALL' ? ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] : [route.method];
     app.on(methods, route.path, c => route.handler(c));
   }
-  app.get('/auth/me', c => handleAuthMe(provider, c, options.publicUrl));
+  app.get('/auth/me', c => handleAuthMe(provider, c));
 }
 
 /**
@@ -835,7 +758,7 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
     registerApiRoute('/auth/me', {
       method: 'GET',
       requiresAuth: false,
-      handler: c => handleAuthMe(provider, c as unknown as Context, options.publicUrl),
+      handler: c => handleAuthMe(provider, c as unknown as Context),
     }),
   ];
 }
@@ -986,7 +909,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
  * and the platform Mastra entry stay behavior-identical.
  */
 export function mountFactoryAuth(app: Hono<any>, options: MountFactoryAuthOptions = {}): boolean {
-  const provider = options.provider ?? envFallbackAuthProvider(options.redirectUri);
+  const provider = options.provider;
   if (!provider) return false;
 
   registerAuthRoutes(app, provider, { publicUrl: options.publicUrl });

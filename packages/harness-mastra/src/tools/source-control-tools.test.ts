@@ -13,7 +13,7 @@ import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-cont
 
 function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
   const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: userId, organizationId: orgId });
+  requestContext.set('user', { id: userId, organizationId: orgId });
   requestContext.set('controller', {
     // The session runs under its Factory, so only its session id names the source-control session.
     sessionId: 'session-1',

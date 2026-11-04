@@ -551,7 +551,7 @@ describe('GithubTokenIntegration: connect through the mounted routes', () => {
     const app = (orgId: string) => {
       const hono = new Hono();
       hono.use('*', async (c, next) => {
-        c.set('factoryAuthUser' as never, { workosId: `user-${orgId}`, organizationId: orgId } as never);
+        c.set('factoryAuthUser' as never, { id: `user-${orgId}`, organizationId: orgId } as never);
         await next();
       });
       mountApiRoutes(hono as never, routes);

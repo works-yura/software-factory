@@ -9,7 +9,7 @@ import {
 
 function context(threadId: string | null) {
   const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+  requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
   requestContext.set('controller', {
     threadId,
     resourceId: 'project-1',

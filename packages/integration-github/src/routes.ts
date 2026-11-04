@@ -185,7 +185,7 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 
 /**
  * Resolve the org-scoped tenant for a GitHub request. GitHub project features
- * are org-owned, so they require both a signed-in user and a WorkOS
+ * are org-owned, so they require both a signed-in user and an
  * organization. Returns the `(orgId, userId)` tenant (with `orgId` narrowed to a
  * non-null string) or a ready-to-return error response: 401 when unauthenticated,
  * 403 when the user has no organization (personal account).
@@ -208,7 +208,7 @@ async function resolveOrgTenant(
       response: c.json(
         {
           error: 'organization_required',
-          message: 'GitHub projects require a WorkOS organization. Personal accounts cannot connect repositories.',
+          message: 'GitHub projects require an organization. Personal accounts cannot connect repositories.',
         },
         403,
       ),
@@ -1584,7 +1584,7 @@ function buildProjectGitRoutes({
           ? await memorySettings.get({ orgId: row.orgId, userId: factoryMemorySettingsUserId(row.factoryProjectId) })
           : null;
         const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+        requestContext.set('user', { id: row.userId, organizationId: row.orgId });
         requestContext.set('mastra__factoryMemorySettings', stored);
 
         try {

@@ -14,6 +14,7 @@ const DEPRECATION =
 function construct(config: Partial<ConstructorParameters<typeof MastraFactory>[0]> = {}) {
   return new MastraFactory({
     storage: new LibSQLFactoryStorage({ id: 'deprecation', url: ':memory:' }),
+    auth: null,
     secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
     ...config,
   });

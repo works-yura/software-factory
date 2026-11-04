@@ -19,7 +19,7 @@ describe('MastraFactory disableBuiltinTools', () => {
 
   it('forwards disableBuiltinTools to the controller mount', async () => {
     const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'disable-builtin-tools-test' });
-    await new MastraFactory({ storage, disableBuiltinTools: ['submit_plan'] }).prepare();
+    await new MastraFactory({ storage, auth: null, disableBuiltinTools: ['submit_plan'] }).prepare();
 
     expect(prepareMock).toHaveBeenCalledOnce();
     expect(prepareMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['submit_plan']);
@@ -27,7 +27,7 @@ describe('MastraFactory disableBuiltinTools', () => {
 
   it('leaves built-in tools enabled by default', async () => {
     const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'disable-builtin-tools-default-test' });
-    await new MastraFactory({ storage }).prepare();
+    await new MastraFactory({ storage, auth: null }).prepare();
 
     expect(prepareMock).toHaveBeenCalledOnce();
     expect(prepareMock.mock.calls[0]![0]).not.toHaveProperty('disableBuiltinTools');

@@ -196,8 +196,7 @@ const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
 /**
  * Upper bound for both TTL caches. Entries expire lazily on re-access, so
  * without a hard cap keys that stop being queried would accumulate for the
- * integration's (long) lifetime. Insertion-order eviction — matches the
- * bounded verification cache in `@mastra/auth-studio`.
+ * integration's (long) lifetime. Insertion-order eviction.
  */
 const MAX_CACHE_ENTRIES = 1000;
 

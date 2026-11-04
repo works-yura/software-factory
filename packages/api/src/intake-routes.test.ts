@@ -90,7 +90,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     const app = new Hono();
     app.use('*', async (c, next) => {
       const user = c.req.header('x-user') ?? ADMIN;
-      if (user !== SIGNED_OUT) c.set('factoryAuthUser' as never, { workosId: user, organizationId: orgId } as never);
+      if (user !== SIGNED_OUT) c.set('factoryAuthUser' as never, { id: user, organizationId: orgId } as never);
       await next();
     });
     mountApiRoutes(app, [

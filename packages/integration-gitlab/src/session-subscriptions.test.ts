@@ -59,7 +59,7 @@ function gitlabStub(overrides: Partial<typeof rows> = {}) {
 
 function authenticatedRequestContext() {
   const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+  requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
   // The session runs under its Factory resource; only its session id names it.
   requestContext.set('controller', {
     sessionId: 'session-1',
@@ -127,7 +127,7 @@ describe('GitLab subscription entry points', () => {
     expect(createGitLabSubscriptionTools(noUser, gitlabStub())).toEqual({});
 
     const noThread = new RequestContext();
-    noThread.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    noThread.set('user', { id: 'user-1', organizationId: 'org-1' });
     noThread.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
     expect(createGitLabSubscriptionTools(noThread, gitlabStub())).toEqual({});
 
@@ -139,7 +139,7 @@ describe('GitLab subscription entry points', () => {
 
   it('gates on the factory, reading the session own link from its row when the state has none', async () => {
     const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
     requestContext.set('controller', {
       sessionId: 'session-1',
       resourceId: 'resource-1',

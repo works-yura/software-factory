@@ -27,13 +27,13 @@ const ACME = {
   models: ['fast-1'],
 };
 
-function tenantContext(user: { workosId: string; organizationId?: string }): RequestContext {
+function tenantContext(user: { id: string; organizationId?: string }): RequestContext {
   const ctx = new RequestContext();
   ctx.set('user', user);
   return ctx;
 }
 
-function buildApp(user: { workosId: string; organizationId?: string } | null, authEnabled: boolean) {
+function buildApp(user: { id: string; organizationId?: string } | null, authEnabled: boolean) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -57,9 +57,9 @@ describe('registerCustomProvidersSource (tenant mode)', () => {
     await seed.customProviders.upsert({ orgId: ORG, userId: USER, input: ACME });
     registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: true });
 
-    await buildApp({ workosId: USER, organizationId: ORG }, true).request('/ok');
+    await buildApp({ id: USER, organizationId: ORG }, true).request('/ok');
 
-    expect(resolveCustomProviders(tenantContext({ workosId: USER, organizationId: ORG }))).toEqual([
+    expect(resolveCustomProviders(tenantContext({ id: USER, organizationId: ORG }))).toEqual([
       { name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk-acme', models: ['fast-1'] },
     ]);
   });
@@ -68,9 +68,9 @@ describe('registerCustomProvidersSource (tenant mode)', () => {
     await seed.customProviders.upsert({ orgId: ORG, userId: USER, input: ACME });
     registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: true });
 
-    await buildApp({ workosId: 'user-b', organizationId: 'org2' }, true).request('/ok');
+    await buildApp({ id: 'user-b', organizationId: 'org2' }, true).request('/ok');
 
-    expect(resolveCustomProviders(tenantContext({ workosId: 'user-b', organizationId: 'org2' }))).toEqual([]);
+    expect(resolveCustomProviders(tenantContext({ id: 'user-b', organizationId: 'org2' }))).toEqual([]);
   });
 
   it('fails closed without an authenticated tenant', async () => {
@@ -83,8 +83,8 @@ describe('registerCustomProvidersSource (tenant mode)', () => {
 
   it('invalidation makes a write visible on the next prime, before the TTL', async () => {
     registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: true });
-    const app = buildApp({ workosId: USER, organizationId: ORG }, true);
-    const ctx = tenantContext({ workosId: USER, organizationId: ORG });
+    const app = buildApp({ id: USER, organizationId: ORG }, true);
+    const ctx = tenantContext({ id: USER, organizationId: ORG });
 
     await app.request('/ok');
     expect(resolveCustomProviders(ctx)).toEqual([]);
@@ -101,7 +101,7 @@ describe('primeCustomProvidersForRequestContext', () => {
   it('primes the run owner org for a wake with no inbound request', async () => {
     await seed.customProviders.upsert({ orgId: ORG, userId: USER, input: ACME });
     registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: true });
-    const ctx = tenantContext({ workosId: USER, organizationId: ORG });
+    const ctx = tenantContext({ id: USER, organizationId: ORG });
 
     await primeCustomProvidersForRequestContext(ctx);
 
@@ -116,7 +116,7 @@ describe('primeCustomProvidersForRequestContext', () => {
 
     await primeCustomProvidersForRequestContext(new RequestContext());
 
-    expect(resolveCustomProviders(tenantContext({ workosId: USER, organizationId: ORG }))).toEqual([]);
+    expect(resolveCustomProviders(tenantContext({ id: USER, organizationId: ORG }))).toEqual([]);
   });
 });
 

@@ -36,9 +36,9 @@ export interface OrgSeedableSession {
 }
 
 /**
- * A request context carrying the tenant on its `user` key. Slack stamps
- * `{ id, organizationId }` and the GitHub webhook `{ workosId, organizationId }`,
- * so only the shared `organizationId` field may be read here.
+ * A request context carrying the tenant on its `user` key, stamped as
+ * `{ id, organizationId }` by the host paths; only the shared
+ * `organizationId` field is read here.
  */
 export interface OrgBearingRequestContext {
   get: (key: string) => unknown;

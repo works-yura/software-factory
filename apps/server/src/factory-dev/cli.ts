@@ -29,13 +29,6 @@ interface Project {
   slug: string | null;
 }
 
-interface Environment {
-  id: string;
-  name: string;
-  slug: string;
-  type: string;
-}
-
 interface PlatformDatabase {
   id: string;
   name: string;
@@ -140,26 +133,6 @@ async function configure(): Promise<FactoryDevSettings> {
   }
   const project = projects.find(item => item.id === projectId)!;
 
-  const environments = await apiJson<{ environments: Environment[] }>(
-    `${MASTRA_PLATFORM_API_URL}/v1/projects/${encodeURIComponent(projectId)}/environments`,
-    token,
-    orgId,
-  ).then(result => result.environments);
-  if (environments.length === 0) throw new Error('The selected project has no environments.');
-  const preferredEnvironment = environments.find(environment => environment.type === 'production') ?? environments[0]!;
-  const environmentId =
-    environments.length === 1
-      ? preferredEnvironment.id
-      : await choose(
-          'Select a project environment',
-          environments.map(environment => ({
-            value: environment.id,
-            label: environment.name,
-            hint: environment.type,
-          })),
-        );
-  const environment = environments.find(item => item.id === environmentId)!;
-
   const databaseProvider = await choose('Select a database', [
     { value: 'libsql', label: 'LibSQL', hint: 'Local file, no Docker' },
     { value: 'postgres-local', label: 'PostgreSQL', hint: 'Local Docker container' },
@@ -185,19 +158,12 @@ async function configure(): Promise<FactoryDevSettings> {
     database = { provider: databaseProvider };
   }
 
-  const sandboxProvider = await choose('Select a sandbox provider', [
-    { value: 'local', label: 'Local', hint: 'Runs commands on this machine' },
-    { value: 'platform', label: 'Platform', hint: 'Uses the selected project environment' },
-  ] as const);
-
   const settings: FactoryDevSettings = {
     version: 1,
     auth: { source: 'mastra-cli-session' },
     organization,
     project: { id: project.id, name: project.name },
-    environment: { id: environment.id, name: environment.name },
     database,
-    sandbox: { provider: sandboxProvider },
   };
   await saveSettings(root, settings);
   p.outro('Saved local configuration to .factory/settings.json');
@@ -207,10 +173,13 @@ async function configure(): Promise<FactoryDevSettings> {
 async function resolveEnvironment(settings: FactoryDevSettings): Promise<NodeJS.ProcessEnv> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    MASTRA_ORGANIZATION_ID: settings.organization.id,
     MASTRA_PROJECT_ID: settings.project.id,
-    MASTRA_ENVIRONMENT_ID: settings.environment.id,
-    FACTORY_SANDBOX_PROVIDER: settings.sandbox.provider === 'local' ? 'local' : undefined,
+    // Sandboxes always run on this machine; local dev auth signs in the one
+    // loopback developer (it requires development mode on 127.0.0.1).
+    FACTORY_SANDBOX_PROVIDER: 'local',
+    FACTORY_LOCAL_DEV_AUTH: '1',
+    NODE_ENV: 'development',
+    HOST: '127.0.0.1',
   };
 
   delete env.MASTRA_PLATFORM_ACCESS_TOKEN;
@@ -298,9 +267,9 @@ async function run() {
       MASTRA_PLATFORM_SECRET_KEY: env.MASTRA_PLATFORM_SECRET_KEY,
       FACTORY_PLATFORM_TOKEN_ID: settings.auth.tokenId,
       FACTORY_PLATFORM_TOKEN_ORGANIZATION_ID: settings.auth.tokenOrganizationId,
-      MASTRA_ORGANIZATION_ID: env.MASTRA_ORGANIZATION_ID,
+      MASTRA_ORGANIZATION_ID: undefined,
       MASTRA_PROJECT_ID: env.MASTRA_PROJECT_ID,
-      MASTRA_ENVIRONMENT_ID: env.MASTRA_ENVIRONMENT_ID,
+      MASTRA_ENVIRONMENT_ID: undefined,
       FACTORY_SANDBOX_PROVIDER: env.FACTORY_SANDBOX_PROVIDER,
       DATABASE_URL: env.DATABASE_URL,
       APP_DATABASE_URL: undefined,

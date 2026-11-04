@@ -35,7 +35,7 @@ describe('ProjectRoutes', () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed));
@@ -77,7 +77,7 @@ describe('ProjectRoutes', () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed));
@@ -113,7 +113,7 @@ describe('ProjectRoutes', () => {
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed));
@@ -138,7 +138,7 @@ describe('ProjectRoutes', () => {
   it('requires an organization and scopes project access by organization', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Private' } });
-    const buildApp = (user?: { workosId: string; organizationId?: string }) => {
+    const buildApp = (user?: { id: string; organizationId?: string }) => {
       const app = new Hono();
       app.use('*', async (context, next) => {
         if (user) context.set('factoryAuthUser' as never, user as never);
@@ -149,8 +149,8 @@ describe('ProjectRoutes', () => {
     };
 
     expect((await buildApp().request('/web/factory/projects')).status).toBe(401);
-    expect((await buildApp({ workosId: 'user-1' }).request('/web/factory/projects')).status).toBe(403);
-    const otherOrg = buildApp({ workosId: 'user-2', organizationId: 'org-2' });
+    expect((await buildApp({ id: 'user-1' }).request('/web/factory/projects')).status).toBe(403);
+    const otherOrg = buildApp({ id: 'user-2', organizationId: 'org-2' });
     expect((await otherOrg.request(`/web/factory/projects/${project.id}`)).status).toBe(404);
     expect(
       (
@@ -169,7 +169,7 @@ describe('ProjectRoutes', () => {
     const isOrganizationAdmin = vi.fn(async () => false);
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'member', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(
@@ -202,7 +202,7 @@ describe('ProjectRoutes', () => {
     const isOrganizationAdmin = vi.fn(async () => false);
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'member', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(
@@ -243,7 +243,7 @@ describe('ProjectRoutes', () => {
     const isOrganizationAdmin = vi.fn(async () => false);
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'member', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(
@@ -284,7 +284,7 @@ describe('ProjectRoutes', () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed));
@@ -308,8 +308,8 @@ describe('ProjectRoutes', () => {
     const mount = (
       seed: FactoryStorageTestSeed,
       overrides?: Partial<ConstructorParameters<typeof ProjectRoutes>[0]>,
-      user: { workosId: string; organizationId?: string } | null = {
-        workosId: 'user-1',
+      user: { id: string; organizationId?: string } | null = {
+        id: 'user-1',
         organizationId: 'org-1',
       },
     ) => {
@@ -330,7 +330,7 @@ describe('ProjectRoutes', () => {
       expect((await mount(seed, undefined, null).request(path, { method: 'POST' })).status).toBe(401);
       expect(
         (
-          await mount(seed, undefined, { workosId: 'user-2', organizationId: 'org-2' }).request(path, {
+          await mount(seed, undefined, { id: 'user-2', organizationId: 'org-2' }).request(path, {
             method: 'POST',
           })
         ).status,
@@ -507,7 +507,7 @@ describe('ProjectRoutes', () => {
     });
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed, ['github'], { retireProjectRepositorySessions } as any));
@@ -571,7 +571,7 @@ describe('ProjectRoutes', () => {
     });
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed, ['github']));
@@ -623,7 +623,7 @@ describe('ProjectRoutes', () => {
     });
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed, ['github', 'gitlab'], undefined, resolveRepository));
@@ -742,7 +742,7 @@ describe('ProjectRoutes', () => {
     });
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed, ['github']));
@@ -826,7 +826,7 @@ describe('ProjectRoutes', () => {
 
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed, ['github'], undefined, undefined, { onProjectRepositoryLinked }));
@@ -881,7 +881,7 @@ describe('ProjectRoutes', () => {
 
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed, ['github']));
@@ -932,7 +932,7 @@ describe('ProjectRoutes', () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, projectRoutes(seed));
@@ -1030,7 +1030,7 @@ describe('ProjectRoutes', () => {
       }
       const app = new Hono();
       app.use('*', async (context, next) => {
-        context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
         await next();
       });
       mountApiRoutes(
@@ -1221,7 +1221,7 @@ describe('ProjectRoutes', () => {
       }
       const switched = new Hono();
       switched.use('*', async (context, next) => {
-        context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
         await next();
       });
       mountApiRoutes(
@@ -1273,7 +1273,7 @@ describe('ProjectRoutes', () => {
       const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
       const app = new Hono();
       app.use('*', async (context, next) => {
-        context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
         await next();
       });
       mountApiRoutes(app as never, projectRoutes(seed));
@@ -1441,7 +1441,7 @@ vi.mock('@factory/integration-github', async importOriginal => ({
         await runner.probeSchedules();
         const app = new Hono();
         app.use('*', async (context, next) => {
-          context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+          context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
           await next();
         });
         mountApiRoutes(
@@ -1581,7 +1581,7 @@ vi.mock('@factory/integration-github', async importOriginal => ({
         const { seed, project } = await seedEnvironment();
         const plain = new Hono();
         plain.use('*', async (context, next) => {
-          context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+          context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
           await next();
         });
         mountApiRoutes(
@@ -1702,7 +1702,7 @@ vi.mock('@factory/integration-github', async importOriginal => ({
       const { seed, project, links } = await seedEnvironment();
       const app = new Hono();
       app.use('*', async (context, next) => {
-        context.set('factoryAuthUser' as never, { workosId: 'user-2', organizationId: 'org-2' } as never);
+        context.set('factoryAuthUser' as never, { id: 'user-2', organizationId: 'org-2' } as never);
         await next();
       });
       mountApiRoutes(app as never, projectRoutes(seed, ['github']));

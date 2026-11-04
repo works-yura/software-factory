@@ -67,7 +67,7 @@ const githubRepositories = {
 };
 
 function buildApp(
-  user: { workosId: string; organizationId?: string } | null,
+  user: { id: string; organizationId?: string } | null,
   intakeIntegrations = integrations,
   boards: typeof boardRegistry | ProjectBoardSource = boardRegistry,
 ) {
@@ -111,7 +111,7 @@ const triageBoard = defineBoard({
 });
 const boardRegistry = createBoardRegistry({ boards: [releaseBoard, triageBoard] });
 
-const orgUser = { workosId: 'u1', organizationId: 'org1' };
+const orgUser = { id: 'u1', organizationId: 'org1' };
 
 /** Project boards whose database can't be read: the boards domain was never attached to storage. */
 const unreadableProjectBoards = () =>
@@ -133,7 +133,7 @@ beforeEach(async () => {
 describe('intake configuration', () => {
   it('requires an authenticated organization', async () => {
     expect((await buildApp(null).request('/web/intake/config')).status).toBe(401);
-    expect((await buildApp({ workosId: 'u1' }).request('/web/intake/config')).status).toBe(403);
+    expect((await buildApp({ id: 'u1' }).request('/web/intake/config')).status).toBe(403);
   });
 
   it('defaults every configured capability to enabled with no selected sources', async () => {
@@ -181,7 +181,7 @@ describe('intake configuration', () => {
 
     it('requires an authenticated organization', async () => {
       expect((await buildApp(null).request('/web/intake/bindings')).status).toBe(401);
-      expect((await buildApp({ workosId: 'u1' }).request('/web/intake/bindings')).status).toBe(403);
+      expect((await buildApp({ id: 'u1' }).request('/web/intake/bindings')).status).toBe(403);
     });
 
     it('binds a source to a Factory project and reads it back', async () => {
@@ -648,7 +648,7 @@ describe('intake configuration', () => {
 
     it('requires an authenticated organization', async () => {
       expect((await buildApp(null).request('/web/intake/label-routes')).status).toBe(401);
-      expect((await buildApp({ workosId: 'u1' }).request('/web/intake/label-routes')).status).toBe(403);
+      expect((await buildApp({ id: 'u1' }).request('/web/intake/label-routes')).status).toBe(403);
     });
 
     it("saves no route when the project's boards can't be read", async () => {

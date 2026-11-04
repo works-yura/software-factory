@@ -1,11 +1,8 @@
-import { CUSTOM_DOMAIN_UNSUPPORTED_ERROR, isPlatformAuthSupportedHost } from '@factory/auth/platform-auth-host';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
@@ -33,38 +30,6 @@ export function safeReturnTo(raw?: string): string {
   } catch {
     return '/';
   }
-}
-
-function CustomDomainAuthError({ hostname }: { hostname: string }) {
-  const { t } = useTranslation('auth');
-  return (
-    <div role="alert" className="border-destructive-edge bg-card rounded-lg border px-4 py-3">
-      <Txt as="h2" variant="subheading" className="text-destructive-foreground">
-        {t('customDomain.title')}
-      </Txt>
-      <Txt as="p" variant="caption" tone="muted" className="mt-2">
-        {t('customDomain.body', { hostname })}
-      </Txt>
-      <Txt as="p" variant="caption" tone="muted" className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
-        <a
-          href="https://mastra.ai/docs/auth/overview"
-          target="_blank"
-          rel="noreferrer"
-          className="text-foreground hover:underline"
-        >
-          {t('customDomain.authOverview')}
-        </a>
-        <a
-          href="https://mastra.ai/integrations/auth/workos"
-          target="_blank"
-          rel="noreferrer"
-          className="text-foreground hover:underline"
-        >
-          {t('customDomain.workosIntegration')}
-        </a>
-      </Txt>
-    </div>
-  );
 }
 
 function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; signUpDisabled: boolean }) {
@@ -178,14 +143,6 @@ export function SignInPage() {
   const authErrorDescription = searchParams.get('error_description');
   const accessDenied = authError === 'access_denied';
   const credentialForm = auth.data?.provider === 'better-auth';
-  const studioAuth = auth.data?.provider === 'mastra-studio';
-  const customDomainBlocked =
-    studioAuth &&
-    (auth.data?.customDomainUnsupported === true ||
-      authError === CUSTOM_DOMAIN_UNSUPPORTED_ERROR ||
-      !isPlatformAuthSupportedHost(window.location.hostname));
-  const hostedLoginLabel = studioAuth ? t('hosted.mastraPlatform') : t('hosted.github');
-  const hostedLoginPendingLabel = studioAuth ? t('hosted.openingMastraPlatform') : t('hosted.openingGithub');
 
   // A cached signed-in result may predate the redirect here. Check the cookie
   // again before sending the user back into the protected app.
@@ -208,7 +165,7 @@ export function SignInPage() {
           </Txt>
 
           <section aria-label={t('section')} className="mt-10 w-full max-w-md lg:mt-12">
-            {authError && !customDomainBlocked ? (
+            {authError ? (
               <div role="alert" className="border-destructive-edge bg-card mb-6 rounded-lg border px-4 py-3">
                 <Txt as="p" variant="subheading" className="text-destructive-foreground">
                   {accessDenied ? t('failure.accessDenied') : t('failure.signInFailed')}
@@ -234,8 +191,6 @@ export function SignInPage() {
                   {t('failure.tryAgain')}
                 </Button>
               </div>
-            ) : customDomainBlocked ? (
-              <CustomDomainAuthError hostname={window.location.hostname} />
             ) : credentialForm ? (
               <>
                 <div className="mb-6">
@@ -259,12 +214,7 @@ export function SignInPage() {
                   redirectToLogin(baseUrl, returnTo);
                 }}
               >
-                {studioAuth ? (
-                  <LogoWithoutText className="w-4" aria-hidden="true" />
-                ) : (
-                  <GithubIcon aria-hidden="true" />
-                )}
-                {redirecting ? hostedLoginPendingLabel : hostedLoginLabel}
+                {redirecting ? t('hosted.opening') : t('hosted.signIn')}
               </Button>
             )}
           </section>

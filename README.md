@@ -16,7 +16,7 @@
 | `@factory/capabilities` | `packages/capabilities` | Capability contracts integrations implement: connection, intake, version control. |
 | `@factory/observability` | `packages/observability` | Request timing and product telemetry. |
 | `@factory/http` | `packages/http` | HTTP route helpers, server errors, SPA static serving. |
-| `@factory/auth` | `packages/auth` | Factory auth: WorkOS/Studio providers, platform auth host, signed OAuth state. |
+| `@factory/auth` | `packages/auth` | Factory auth: provider-neutral auth gate and routes, signed OAuth state. |
 | `@factory/contracts` | `packages/contracts` | Wire contracts of the Factory HTTP API, shared by server and UI. |
 | `@factory/credentials` | `packages/credentials` | Provider and tenant model credentials, provider display names. |
 | `@factory/feed` | `packages/feed` | Work-item feed over HTTP: audit and comments domains, wire formats, feed events. |

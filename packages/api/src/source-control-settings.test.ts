@@ -10,7 +10,7 @@ const route = (id: string) => `/web/source-control/projects/${id}/settings`;
 
 function buildApp(
   sourceControls: readonly SourceControlStorageHandle[],
-  user?: { workosId: string; organizationId?: string },
+  user?: { id: string; organizationId?: string },
 ) {
   const app = new Hono();
   if (user) {
@@ -61,7 +61,7 @@ async function seedRepository(integrationId: 'github' | 'gitlab') {
 describe('provider-neutral repository settings', () => {
   it.each(['github', 'gitlab'] as const)('reads and writes %s sandbox commands', async integrationId => {
     const { sourceControl, linked } = await seedRepository(integrationId);
-    const app = buildApp([sourceControl], { workosId: 'user-1', organizationId: 'org-1' });
+    const app = buildApp([sourceControl], { id: 'user-1', organizationId: 'org-1' });
 
     const initial = await app.request(route(linked.id));
     expect(initial.status).toBe(200);
@@ -90,7 +90,7 @@ describe('provider-neutral repository settings', () => {
 
   it('keeps another organization and unauthenticated callers out', async () => {
     const { sourceControl, linked } = await seedRepository('gitlab');
-    const otherOrg = buildApp([sourceControl], { workosId: 'user-2', organizationId: 'org-2' });
+    const otherOrg = buildApp([sourceControl], { id: 'user-2', organizationId: 'org-2' });
     expect((await otherOrg.request(route(linked.id))).status).toBe(404);
     expect(
       (
@@ -102,7 +102,7 @@ describe('provider-neutral repository settings', () => {
       ).status,
     ).toBe(404);
     expect((await buildApp([sourceControl]).request(route(linked.id))).status).toBe(401);
-    expect((await buildApp([sourceControl], { workosId: 'user-3' }).request(route(linked.id))).status).toBe(403);
+    expect((await buildApp([sourceControl], { id: 'user-3' }).request(route(linked.id))).status).toBe(403);
     await expect(sourceControl.projectRepositories.get({ orgId: 'org-1', id: linked.id })).resolves.toMatchObject({
       setupCommand: null,
     });
@@ -114,7 +114,7 @@ describe('provider-neutral repository settings', () => {
     { name: 'control character', body: { setupCommand: 'echo \u001b[31m' } },
   ])('rejects a $name command without persisting it', async ({ body }) => {
     const { sourceControl, linked } = await seedRepository('gitlab');
-    const app = buildApp([sourceControl], { workosId: 'user-1', organizationId: 'org-1' });
+    const app = buildApp([sourceControl], { id: 'user-1', organizationId: 'org-1' });
     const response = await app.request(route(linked.id), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -128,7 +128,7 @@ describe('provider-neutral repository settings', () => {
 
   it('fails closed when multiple provider handles resolve the same repository', async () => {
     const { sourceControl, linked } = await seedRepository('gitlab');
-    const app = buildApp([sourceControl, sourceControl], { workosId: 'user-1', organizationId: 'org-1' });
+    const app = buildApp([sourceControl, sourceControl], { id: 'user-1', organizationId: 'org-1' });
     expect((await app.request(route(linked.id))).status).toBe(409);
   });
 });

@@ -332,7 +332,7 @@ export function createFactorySessionTools(
       // Only the new row's owner as `user`. The tool call's context carries the
       // interactive marker and the parent's controller entry; neither may reach the child.
       const kickoffContext = new RequestContext();
-      kickoffContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
+      kickoffContext.set('user', { id: scope.userId, organizationId: scope.orgId });
 
       const tags = { factoryProjectId: scope.factoryProjectId, projectRepositoryId: ensured.projectRepositoryId };
       const session = await messaging.controller.createSession({
@@ -415,7 +415,7 @@ export function createFactorySessionTools(
     if (!session) throw new Error(`This server can't start ${harness} sessions.`);
     await sourceControl.sessions.rename({ sessionId: ensured.sessionId, title: threadTitle });
     const kickoffContext = new RequestContext();
-    kickoffContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
+    kickoffContext.set('user', { id: scope.userId, organizationId: scope.orgId });
     await session.sendSignal(
       { id: globalThis.crypto.randomUUID(), type: 'user', tagName: 'user', contents: prompt },
       { requestContext: kickoffContext, requireDelivery: true },
@@ -552,7 +552,7 @@ export function createFactorySessionTools(
     // The run's end reaches this item's followers through the session's listener.
     const heartbeat = heartbeatOpenRunUntilEnd(session, kickoffId);
     const kickoffContext = new RequestContext();
-    kickoffContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
+    kickoffContext.set('user', { id: scope.userId, organizationId: scope.orgId });
     try {
       await session.sendSignal(
         { id: kickoffId, type: 'user', tagName: 'user', contents: prompt },
