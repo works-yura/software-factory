@@ -1,7 +1,8 @@
-import { Brain } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import type { ActivityCall } from './activity-members';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
+import type { AgentIndicatorState } from '@/ds/components/AgentIndicator';
 import { presentTool, toolPhrases } from '@/ds/components/ai/tool-call';
 import { libText } from '@/lib/lib-text';
 import { formatDuration } from '@/utils/duration';
@@ -46,10 +47,20 @@ function summarize(calls: readonly WordedCall[]): string {
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
+export function callPose(toolName: string): AgentIndicatorState {
+  return presentTool(toolName, undefined).pose;
+}
+
+export function stretchPose(calls: readonly WordedCall[], live: boolean): AgentIndicatorState {
+  if (!live) return 'idle';
+  const running = calls.findLast(call => call.status === 'running');
+  return running ? callPose(running.toolName) : 'thinking';
+}
+
 /** What the stretch is doing now: the latest running call, or thinking between calls. */
 export function liveWords(calls: readonly WordedCall[]): ActivityWords {
   const running = calls.findLast(call => call.status === 'running');
-  if (!running) return { icon: Brain, label: libText('Thinking') };
+  if (!running) return { icon: agentGlyph('thinking'), label: libText('Thinking') };
   const { icon, kind, label, detail, description } = presentTool(running.toolName, running.args);
   if (description) return { icon, label: description };
   return { icon, label: libText(toolPhrases(kind ?? label).live), detail };
@@ -59,10 +70,13 @@ export function liveWords(calls: readonly WordedCall[]): ActivityWords {
 export function settledWords(calls: readonly WordedCall[], elapsedMs?: number): ActivityWords {
   const duration = secondsDuration(elapsedMs);
   const [first] = calls;
-  if (!first) return { icon: Brain, label: duration ? `${libText('Thought for')} ${duration}` : libText('Thought') };
+  if (!first) {
+    return { icon: agentGlyph('idle'), label: duration ? `${libText('Thought for')} ${duration}` : libText('Thought') };
+  }
   const { icon, kind, label, detail } = presentTool(first.toolName, first.args);
   if (calls.length === 1) return { icon, label: libText(toolPhrases(kind ?? label).done), detail, duration };
-  return { icon, label: summarize(calls), duration };
+  const oneKind = new Set(calls.map(call => callPose(call.toolName))).size === 1;
+  return { icon: oneKind ? icon : agentGlyph('tool'), label: summarize(calls), duration };
 }
 
 /** The line's accessible name: what it says, as one phrase. */

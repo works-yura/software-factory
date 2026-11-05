@@ -374,5 +374,15 @@
     "reconnecting": "Reconnecting…",
     "error": "Connection lost. It reconnects once the server answers.",
     "reconnected": "Reconnected"
+  },
+  "runLine": {
+    "memory": "Updating memory",
+    "thinking": "Thinking",
+    "waiting": "Waiting for you",
+    "done": "Done",
+    "error": "Something went wrong"
+  },
+  "turnGap": {
+    "later": "{{amount}} later"
   }
 }

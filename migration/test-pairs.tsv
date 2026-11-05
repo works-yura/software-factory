@@ -293,7 +293,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/auth/services/__tests__/auth-storage.msw.test.tsx	../apps/ui/src/ui/domains/auth/services/__tests__/auth-storage.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/transcript-parts.test.ts	../apps/ui/src/ui/domains/chat/components/transcript-parts.test.ts
 ../../../apps/ui/src/ui/domains/chat/components/useInitializingPlaceholder.test.ts	../apps/ui/src/ui/domains/chat/components/useInitializingPlaceholder.test.ts
-../../../apps/ui/src/ui/domains/chat/components/__tests__/ActivityLine.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ActivityLine.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/__tests__/ActivityLine.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ActivityLine.msw.test.tsx	+10	upstream #28834: the run line stays live past its first row (+10)
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/AskUserCustomAnswer.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/AskUserCustomAnswer.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ChannelOriginBadge.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ChannelOriginBadge.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ChatOverlays.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ChatOverlays.msw.test.tsx
@@ -321,17 +321,17 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptApprovals.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptApprovals.msw.test.tsx	+2	Claude Code tool approvals shown as their Mastra equivalents
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptAttachments.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptAttachments.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptEntryMemo.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptEntryMemo.msw.test.tsx	+1	upstream #28709: a settled entry skips re-rendering with its activity plan (+1)
-../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptMessageMeta.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptMessageMeta.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptMessageMeta.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptMessageMeta.msw.test.tsx	+2	upstream #28834: reply footer once the turn settles (+2)
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptNotifications.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptNotifications.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptProse.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptProse.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptProse.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptProse.msw.test.tsx	+2	upstream #28834: prose reveal per turn (+2)
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptRevealOrder.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptRevealOrder.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSender.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSender.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSignalRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSignalRows.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	+2	typed skill signal row ported from upstream a5a9179daa; a Claude Code Skill call is a skill row
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolBurst.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolBurst.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolOutcomes.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolOutcomes.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx	+5	upstream #28709: tool work folds into one activity line (+9; 4 cases on thoughts folding into it dropped: v4 keeps reasoning open on its own)
-../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptTurnGroups.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptTurnGroups.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx	+7	upstream #28709: tool work folds into one activity line (+9; 4 cases on thoughts folding into it dropped: v4 keeps reasoning open on its own); upstream #28834: live stretch rows and relative paths (its thinking-placeholder case dropped: v4 keeps reasoning on its own) (+2)
+../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptTurnGroups.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptTurnGroups.msw.test.tsx	+1	upstream #28834: a pause of ten minutes draws a divider (+1)
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/submit-plan-source.test.ts	../apps/ui/src/ui/domains/chat/components/__tests__/submit-plan-source.test.ts
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/transcript-notifications.test.ts	../apps/ui/src/ui/domains/chat/components/__tests__/transcript-notifications.test.ts
 ../../../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ConnectionActivity.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/StatusLine/__tests__/ConnectionActivity.msw.test.tsx

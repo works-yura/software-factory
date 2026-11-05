@@ -29,6 +29,7 @@ function renderStatus(runtime: Partial<ChatRuntimeApi>) {
     <ChatRuntimeContext.Provider
       value={{
         followUpCount: 0,
+        runsStarted: 0,
         omProgress,
         omPhase: 'idle',
         bufferingMessages: false,
@@ -61,6 +62,7 @@ function renderForHarness(harness: HarnessDescriptor) {
     >
       <ChatRuntimeContext.Provider
         value={{
+          runsStarted: 0,
           followUpCount: 0,
           omProgress,
           omPhase: 'idle',

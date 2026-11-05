@@ -1,3 +1,4 @@
+import { agentGlyph } from '@mastra/playground-ui/components/AgentIndicator';
 import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
 import { Brain } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +10,7 @@ import type { OMWorkByBudget } from '../../services/om';
 import { omWork } from '../../services/om';
 
 const tk = translator('chat');
+const MemoryGlyph = agentGlyph('memory');
 
 const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
 
@@ -27,7 +29,7 @@ export function RuntimeActivity() {
     <>
       {label && (
         <span className={statusItem}>
-          <Brain size={13} /> <Shimmer>{label}</Shimmer>
+          <MemoryGlyph size={13} /> <Shimmer>{label}</Shimmer>
         </span>
       )}
       {runtime.tokensPerSec > 0 && <span className={statusItem}>{t('status.tokensPerSecond', { rate: runtime.tokensPerSec })}</span>}

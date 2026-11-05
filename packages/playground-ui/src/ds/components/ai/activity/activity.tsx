@@ -1,7 +1,9 @@
 import { X } from 'lucide-react';
 import { createContext, useContext, useId, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
-import { useArriving } from '@/ds/components/Arrival';
+
+import { useRelativePaths, WorkingDirectoryContext } from './use-relative-paths';
+import { ArrivalScope, useArriving } from '@/ds/components/Arrival';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Shimmer } from '@/ds/components/Shimmer';
@@ -19,6 +21,7 @@ interface ActivityContextValue {
   foldable: boolean;
   status: ActivityStatus;
   appearance: ActivityAppearance;
+  nested: boolean;
   toggle: () => void;
 }
 
@@ -64,6 +67,7 @@ export function Activity({
   children,
   ...props
 }: ActivityProps) {
+  const nested = useContext(ActivityContext) !== undefined;
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
   const open = controlledOpen ?? (foldable && uncontrolledOpen);
   const statusId = useId();
@@ -74,7 +78,9 @@ export function Activity({
   };
 
   return (
-    <ActivityContext.Provider value={{ open, foldable, status, appearance, toggle: () => handleOpenChange(!open) }}>
+    <ActivityContext.Provider
+      value={{ open, foldable, status, appearance, nested, toggle: () => handleOpenChange(!open) }}
+    >
       <Collapsible
         open={open}
         onOpenChange={handleOpenChange}
@@ -172,7 +178,11 @@ export const ActivityIcon = ({ className, ...props }: ComponentProps<'span'>) =>
   );
 };
 
-export const ActivityLabel = ({ className, ...props }: ComponentProps<typeof Txt>) => {
+export interface ActivityLabelProps extends ComponentProps<typeof Txt> {
+  wrap?: boolean;
+}
+
+export const ActivityLabel = ({ wrap = false, className, ...props }: ActivityLabelProps) => {
   const inline = useInline();
 
   return (
@@ -180,30 +190,40 @@ export const ActivityLabel = ({ className, ...props }: ComponentProps<typeof Txt
       as="span"
       variant="caption"
       tone="muted"
-      className={cn('shrink-0 truncate', inline ? `max-w-none ${LIFTS_TO_FOREGROUND}` : 'max-w-[55%]', className)}
+      className={cn(
+        wrap ? 'min-w-0 break-words' : 'shrink-0 truncate',
+        inline ? `max-w-none ${LIFTS_TO_FOREGROUND}` : 'max-w-[55%]',
+        className,
+      )}
       {...props}
     />
   );
 };
 
+/** Paths under the agent's working directory read relative to it, the way the agent itself refers to them. */
+export function ActivityWorkingDirectory({ path, children }: { path: string | undefined; children: ReactNode }) {
+  return <WorkingDirectoryContext value={path}>{children}</WorkingDirectoryContext>;
+}
+
 export interface ActivityDetailProps extends Omit<ComponentProps<typeof Txt>, 'font'> {
-  font?: 'mono' | 'sans';
   wrap?: boolean;
 }
 
-export const ActivityDetail = ({ font = 'mono', wrap = false, className, ...props }: ActivityDetailProps) => {
+export const ActivityDetail = ({ wrap = false, className, children, ...props }: ActivityDetailProps) => {
   const arriving = useArriving();
   const inline = useInline();
+  const relative = useRelativePaths();
 
   return (
     <Txt
       as="span"
-      variant="meta"
+      variant="caption"
       tone="muted"
-      font={font === 'mono' ? 'mono' : undefined}
       className={cn('min-w-0', wrap ? 'break-words' : 'truncate', inline && LIFTS_TO_FOREGROUND, arriving, className)}
       {...props}
-    />
+    >
+      {typeof children === 'string' ? relative(children) : children}
+    </Txt>
   );
 };
 
@@ -237,10 +257,18 @@ export const ActivityTrailing = ({ className, ...props }: ComponentProps<'span'>
 );
 
 export const ActivityDisclosure = ({ className, children, ...props }: ComponentProps<'span'>) => {
-  const { open, foldable } = useActivity();
+  const { open, foldable, nested } = useActivity();
 
   return (
-    <span className={cn('flex size-4 shrink-0 items-center justify-center', className)} {...props}>
+    <span
+      className={cn(
+        'flex size-4 shrink-0 items-center justify-center transition-opacity duration-150 motion-reduce:transition-none starting:opacity-0',
+        !foldable && 'hidden',
+        foldable && nested && 'hidden group-hover/row:flex group-has-focus-visible/row:flex',
+        className,
+      )}
+      {...props}
+    >
       <span
         aria-hidden
         className={cn(
@@ -248,7 +276,6 @@ export const ActivityDisclosure = ({ className, children, ...props }: ComponentP
           'group-hover/row:text-muted-foreground group-has-focus-visible/row:text-muted-foreground',
           open && 'text-muted-foreground',
           open && children != null && 'rotate-90',
-          !foldable && 'opacity-0',
         )}
       >
         {children ?? <DisclosureChevron direction="right" open={open} className="size-3.25" />}
@@ -263,7 +290,6 @@ export interface ActivityHeadlineProps extends Omit<ComponentProps<typeof Activi
   label: ReactNode;
   detail?: string;
   description?: string;
-  detailFont?: ActivityDetailProps['font'];
   wrapDetail?: boolean;
   badges?: ReactNode;
 }
@@ -274,7 +300,6 @@ export const ActivityHeadline = ({
   label,
   detail,
   description,
-  detailFont,
   wrapDetail,
   badges,
   ...props
@@ -293,7 +318,7 @@ export const ActivityHeadline = ({
         </ActivityLabel>
         {badges}
         {!description && detail && (
-          <ActivityDetail font={detailFont} wrap={wrapDetail} className={cn(hasBadges && 'grow basis-40')}>
+          <ActivityDetail wrap={wrapDetail} className={cn(hasBadges && 'grow basis-40')}>
             {detail}
           </ActivityDetail>
         )}
@@ -328,7 +353,7 @@ export const ActivityContent = ({ flush = false, className, children, ...props }
           className,
         )}
       >
-        {children}
+        <ArrivalScope>{children}</ArrivalScope>
       </div>
     </CollapsibleContent>
   );
@@ -338,7 +363,6 @@ export interface ActivityItemProps extends Omit<ActivityProps, 'children' | 'ope
   icon: ReactNode;
   label: string;
   detail?: string;
-  detailFont?: ActivityDetailProps['font'];
   badges?: ReactNode;
   collapsible?: boolean;
   children?: ReactNode;
@@ -349,7 +373,6 @@ export function ActivityItem({
   icon,
   label,
   detail,
-  detailFont,
   badges,
   collapsible = true,
   children,
@@ -360,14 +383,7 @@ export function ActivityItem({
   return (
     <Activity {...props} foldable={folds} open={collapsible ? undefined : true}>
       <ActivityTrigger>
-        <ActivityHeadline
-          icon={icon}
-          label={label}
-          detail={detail}
-          detailFont={detailFont}
-          wrapDetail={!folds}
-          badges={badges}
-        />
+        <ActivityHeadline icon={icon} label={label} detail={detail} wrapDetail={!folds} badges={badges} />
       </ActivityTrigger>
       {children && <ActivityContent>{children}</ActivityContent>}
     </Activity>
