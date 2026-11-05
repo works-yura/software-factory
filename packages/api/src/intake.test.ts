@@ -12,6 +12,7 @@ import { createFactoryStorageForTests } from '@factory/testing';
 import type { FactoryStorageTestSeed } from '@factory/testing';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.ts';
 import { ProjectRoutes } from './projects.ts';
+import { createFactoryWorkItem } from '@factory/work-items';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 const auditEvents: Array<Record<string, unknown>> = [];
@@ -353,30 +354,30 @@ describe('intake configuration', () => {
             sessions: {},
             metadata,
             externalSource: {
-              integrationId: 'linear',
+              integrationId: 'gitlab',
               type: 'issue',
               externalId,
-              url: `https://linear.app/acme/issue/${externalId}`,
+              url: `https://gitlab.test/acme/-/issues/${externalId}`,
             },
           },
         });
-      const routed = (await create('linear:ENG-20', { intakeRouteId: 'route-1' })).item;
-      const bound = (await create('linear:ENG-21', {})).item;
+      const routed = (await create('gitlab:ENG-20', { intakeRouteId: 'route-1' })).item;
+      const bound = (await create('gitlab:ENG-21', {})).item;
       const issue = (identifier: string) => ({
         source: { type: 'issue', externalId: `uuid-${identifier}` },
-        sourceId: 'team-2',
+        sourceId: 'team-1',
         title: identifier,
         metadata: { identifier },
       });
-      vi.mocked(linear.listItems).mockResolvedValueOnce({
+      vi.mocked(gitlab.listItems).mockResolvedValueOnce({
         items: [issue('ENG-20'), issue('ENG-21')],
         nextCursor: null,
       });
-      await put({ integrationId: 'linear', sourceId: 'team-2', factoryProjectId: project.id });
+      await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id });
 
       const response = await put({
-        integrationId: 'linear',
-        sourceId: 'team-2',
+        integrationId: 'gitlab',
+        sourceId: 'team-1',
         factoryProjectId: project.id,
         board: 'release',
       });
@@ -860,7 +861,7 @@ describe('intake configuration', () => {
         userId: 'u1',
         factoryProjectId: project.id,
         input,
-        intakeRoutes: seed.boards,
+        intakeRoutes: seed.storedBoards,
       });
       expect(again).toMatchObject({ status: 'reused', item: { id: existing.id } });
       if (again.status !== 'reused') return;
