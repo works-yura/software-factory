@@ -969,47 +969,39 @@ export class GithubRules {
         // pull request's Review card still records it open, so a redelivery
         // after the close cannot block the Work item again.
         const trusted = (actor.type === 'github' && actor.trusted) || pullRequestFactoryAuthored;
-        const reviewCard =
-          authoringItem && trusted
-            ? await this.#linkedClosureItem(
-                project.orgId,
-                project.factoryProjectId,
-                repositoryId,
-                repositoryName,
-                pullRequestNumber,
-                authoringItem,
-              )
-            : undefined;
+        const repository = repositoryName ?? '';
+        // A replayed opening of a pull request the card already records writes nothing.
+        if (!authoringItem || !trusted) return;
+        if (isOpenChangeRequest(authoringItem.metadata, repository, pullRequestNumber)) return;
+        const reviewCard = await this.#linkedClosureItem(
+          project.orgId,
+          project.factoryProjectId,
+          repositoryId,
+          repositoryName,
+          pullRequestNumber,
+          authoringItem,
+        );
         const stillOpen =
           companionStatus === 'replayed'
             ? reviewCard !== undefined && !['closed', 'merged'].includes(reviewCard.workItem.state ?? '')
             : !['closed', 'merged'].includes(reviewCard?.workItem.state ?? '');
-        if (authoringItem && trusted && stillOpen) {
-          // The head comes along so a head recorded for an earlier pull
-          // request cannot mark this one's verdict outdated. A replayed opening
-          // of the pull request already recorded keeps the head its pushes left.
-          // A card spanning several repositories has one pull request out per
-          // repository it changed; this one joins the others.
-          const repository = repositoryName ?? '';
-          const rebinding = !isOpenChangeRequest(authoringItem.metadata, repository, pullRequestNumber);
-          const head = rebinding
-            ? {
-                pullRequestHeadSha: string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null,
-                pullRequestHeadAt: timestamp(pullRequest?.updated_at) ?? null,
-              }
-            : {};
-          await this.options.storage.update({
-            orgId: authoringItem.orgId,
-            id: authoringItem.id,
-            userId: 'factory-rule-dispatcher',
-            patch: {
-              metadata: {
-                ...changeRequestOpenedPatch(authoringItem.metadata, repository, pullRequestNumber, 'github'),
-                ...head,
-              },
+        if (!stillOpen) return;
+        // The head comes along so a head recorded for an earlier pull
+        // request cannot mark this one's verdict outdated. A card spanning
+        // several repositories has one pull request out per repository it
+        // changed; this one joins the others.
+        await this.options.storage.update({
+          orgId: authoringItem.orgId,
+          id: authoringItem.id,
+          userId: 'factory-rule-dispatcher',
+          patch: {
+            metadata: {
+              ...changeRequestOpenedPatch(authoringItem.metadata, repository, pullRequestNumber, 'github'),
+              pullRequestHeadSha: string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null,
+              pullRequestHeadAt: timestamp(pullRequest?.updated_at) ?? null,
             },
-          });
-        }
+          },
+        });
         return;
       }
       if (event !== 'pullRequestMerged' && event !== 'pullRequestClosed') return;
