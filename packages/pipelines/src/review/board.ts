@@ -1,13 +1,11 @@
 import { compileBoardDefinition } from '@factory/core';
 
 import { reviewPullRequest } from './phase-rules.ts';
-import { reviewTransitionPolicy } from './transition-policy.ts';
 
 export const reviewBoard = compileBoardDefinition({
   id: 'review',
   name: 'Review',
   initialPhase: 'intake',
-  transitionPolicy: reviewTransitionPolicy,
   phases: {
     intake: {
       name: 'Intake',

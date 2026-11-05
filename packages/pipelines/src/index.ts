@@ -7,7 +7,6 @@ import { isWorkBoardPhase, workBoard } from './work/board.ts';
 export { createDefaultBoardRegistry, defaultBoards } from './defaults.ts';
 export { isReviewBoardPhase, reviewBoard } from './review/board.ts';
 export { hasRecordedVerdict, reviewPullRequest } from './review/phase-rules.ts';
-export { rejectAgentDone, reviewTransitionPolicy } from './review/transition-policy.ts';
 export type { ReviewBoardPhase } from './review/board.ts';
 export {
   legacyGithubWorkItemBranch,
@@ -18,7 +17,7 @@ export {
   workItemThreadTitle,
 } from './shared/work-item-branch.ts';
 export type { WorkItemBranchInput, WorkItemBranchSource } from './shared/work-item-branch.ts';
-export { isWorkBoardPhase, workBoard } from './work/board.ts';
+export { isWorkBoardPhase, workBoard, workPullRequestCardRejection } from './work/board.ts';
 export type { WorkBoardPhase } from './work/board.ts';
 export { workLaneForRole, workStageCarries } from './work/legacy-plan-role.ts';
 export { SELF_REVIEW_ROUND_LIMIT } from './work/phase-rules.ts';

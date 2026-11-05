@@ -250,16 +250,12 @@ describe('Work board runtime: a bug', () => {
     expect(skills.at(-1)).toBe('factory-triage');
     expect(delivered.at(-1)).toContain('Run factory-triage.');
 
-    // Triage must classify; a non-bug waits for a person before Planning.
+    // Triage records no classification (upstream #29039): it moves a confirmed bug to Planning
+    // itself and sends anything else back to Intake, where a person decides.
     const triage = { type: 'agent' as const, bindingId: 'binding-triage', role: 'triage' };
-    await expect(move('planning', triage)).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
-    await expect(move('planning', triage, { triageType: 'feature request' })).resolves.toMatchObject({
-      status: 'rejected',
-      code: 'approval_required',
-    });
-    await expect(move('planning', triage, { triageType: 'bug' })).resolves.toMatchObject({ status: 'accepted' });
+    await expect(move('planning', triage)).resolves.toMatchObject({ status: 'accepted' });
     await drain();
-    expect(await card()).toMatchObject({ stages: ['planning'], triageType: 'bug' });
+    expect(await card()).toMatchObject({ stages: ['planning'], triageType: null });
     expect(skills.at(-1)).toBe('factory-plan');
     expect(delivered.at(-1)).toContain('Run factory-plan.');
 
@@ -292,8 +288,7 @@ describe('Work board runtime: a bug', () => {
     );
     expect(reviewCard).toMatchObject({ board: 'work', parentWorkItemId: building.id, stages: ['intake'] });
 
-    // With the pull request open, an agent cannot close the card; the merge does.
-    await expect(move('done', work)).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    // The merge closes the card (the board no longer refuses an agent's Done; the build prompt tells it when).
     await rules.ingest(pullRequest('closed', 'work-pr-merged', true));
     await drain();
     expect(await card()).toMatchObject({ board: 'work', stages: ['done'] });

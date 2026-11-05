@@ -18,7 +18,6 @@ import type {
   FactoryRuleCausalEntry,
   FactoryRuleRejectionCode,
   FactoryRuleStage,
-  FactoryTriageType,
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from '@factory/core';
@@ -57,10 +56,10 @@ export interface FactoryTransitionRequest {
   initialEntry?: boolean;
   /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
   reenter?: boolean;
-  /** Structured verdict required from a bound triage-agent terminal request. */
-  triageType?: FactoryTriageType;
   /** Internal proof that this move consumes an approved `submit_plan` result. */
   planApproved?: true;
+  /** Internal: the tool whose successful result this move consumes (a tool-result rule's move). */
+  completedTool?: string;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -105,9 +104,9 @@ export interface FactoryTransitionServiceOptions {
    * in the background past the bound. */
   terminalCleanupTimeoutMs?: number;
   /**
-   * Called after a transition first records a person's acceptance of a
-   * non-bug item (see `WorkItemRow.acceptedAt`). Fire-and-forget: failures
-   * are swallowed, the committed transition never depends on it.
+   * Called after a person moves a Work card from Intake or Triage into Planning or
+   * Building, which approves the work. Fire-and-forget: failures are swallowed, the committed transition never
+   * depends on it.
    */
   onAccepted?: (args: {
     orgId: string;
@@ -115,11 +114,6 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     item: WorkItemRow;
   }) => Promise<void> | void;
-  /**
-   * Resolves whether a project auto-approves produced plans. Unset means off:
-   * a plan without explicit approval is a plan a person must review.
-   */
-  autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   /** Resolves whether a project self-reviews Work items before the change request opens. Unset means off. */
   selfReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
@@ -170,8 +164,8 @@ export function currentStage(stages: readonly string[]): FactoryRuleStage | unde
 interface TransitionConsentOptions {
   autonomy?: 'arm' | 'disarm';
   consentedBy?: string;
-  accept?: boolean;
-  triageType?: FactoryTriageType;
+  /** A person moved a Work card out of Intake or Triage into Planning or Building: that move approves the work. */
+  accepted?: boolean;
 }
 
 // Entering a resting lane disarms whoever rests it; only a person's move into a working lane arms.
@@ -213,10 +207,6 @@ function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRul
   return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
 }
 
-function isTriageAgent(actor: FactoryRuleActor): actor is Extract<FactoryRuleActor, { type: 'agent' }> {
-  return actor.type === 'agent' && actor.role === 'triage';
-}
-
 function isHumanTransition(request: FactoryTransitionRequest): boolean {
   return request.actor.type === 'human' && request.ingress.type === 'human';
 }
@@ -249,7 +239,6 @@ export class FactoryTransitionService {
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
   readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
-  readonly #autoApprovePlans: FactoryTransitionServiceOptions['autoApprovePlans'];
   readonly #selfReviewEnabled: FactoryTransitionServiceOptions['selfReviewEnabled'];
   readonly #audit: AuditRecorder | undefined;
 
@@ -262,7 +251,6 @@ export class FactoryTransitionService {
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
     this.#onTransitionCommitted = options.onTransitionCommitted;
-    this.#autoApprovePlans = options.autoApprovePlans;
     this.#selfReviewEnabled = options.selfReviewEnabled;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
@@ -398,7 +386,7 @@ export class FactoryTransitionService {
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
       );
     }
-    // Review holds only pull requests; Work holds both, and its policy keeps a pull request's card to review.
+    // Review holds only pull requests; Work holds both, and keeps a pull request's card to review.
     if (itemBoard === 'review' && !isPullRequest) {
       return this.#commitRejection(
         request,
@@ -481,14 +469,32 @@ export class FactoryTransitionService {
     try {
       evaluation = await withRuleTimeout(
         (async () => {
-          // Resolve the project switch inside the timed block so a resolver rejection
-          // surfaces as a committed rule_error and a slow lookup is bounded.
-          // A phase whose submit_plan exit tool is auto-approved for this card approves its plans too.
-          const plansAutoApproved =
-            autoApprovedExitTool(boards, item) === 'submit_plan' ||
-            (this.#autoApprovePlans
-              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-              : false);
+          // Plans are approved without a person only where the card's phase auto-approves submit_plan.
+          const plansAutoApproved = autoApprovedExitTool(boards, item) === 'submit_plan';
+          // When the board's own rule for a phase's exit tool moves the card on success, that
+          // result is the handoff to the next working phase (for submit_plan, only an approved
+          // plan). Anyone but a person needs it, unless the tool is auto-approved for this card.
+          const fromPhase = board.phases[fromStage];
+          const exitTool = fromPhase?.kind === 'working' ? fromPhase.exitTool : undefined;
+          if (
+            request.actor.type !== 'human' &&
+            exitTool &&
+            board.tools[exitTool.id] &&
+            fromStage !== request.stage &&
+            entersWorking &&
+            !(exitTool.id === 'submit_plan' ? request.planApproved === true : request.completedTool === exitTool.id)
+          ) {
+            if (autoApprovedExitTool(boards, item) !== exitTool.id) {
+              return {
+                outcome: 'rejected' as const,
+                code: 'approval_required',
+                reason:
+                  exitTool.id === 'submit_plan'
+                    ? `A person has to approve this plan. Ask them to say so in a chat they are signed in to (Slack, terminal, web); that turn can move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
+                    : `${fromPhase!.name} ends when ${exitTool.id} succeeds, and that moves the card. A person can also move it from the Factory board or a chat they are signed in to.`,
+              };
+            }
+          }
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
               immutablePolicySnapshot({
@@ -499,23 +505,12 @@ export class FactoryTransitionService {
                 isHumanTransition: isHumanTransition(request),
                 plansAutoApproved,
                 planApproved: request.planApproved === true,
-                requestedTriageType: request.triageType,
+                requestedTriageType: undefined,
               }),
             ),
           );
           if (policy?.type === 'reject') {
             return { outcome: 'rejected' as const, code: policy.code, reason: policy.reason };
-          }
-          if (
-            policy?.triageType !== undefined &&
-            (!isTriageAgent(request.actor) ||
-              policy.triageType !== request.triageType ||
-              (item.triageType !== null && item.triageType !== policy.triageType))
-          ) {
-            throw new Error('Board policy requested an unauthorized classification.');
-          }
-          if (policy?.accept && !isHumanTransition(request)) {
-            throw new Error('Board policy requested unauthorized acceptance.');
           }
           // Self-review sits between a board's build and its change request, so only boards that
           // ship change requests (Work) read the project switch.
@@ -568,7 +563,13 @@ export class FactoryTransitionService {
           }
           return {
             outcome: 'accepted' as const,
-            intents: { triageType: policy?.triageType, accept: policy?.accept === true && !item.acceptedAt },
+            intents: {
+              accepted:
+                request.board === 'work' &&
+                isHumanTransition(request) &&
+                (fromStage === 'intake' || fromStage === 'triage') &&
+                (request.stage === 'planning' || request.stage === 'execute'),
+            },
             decisions: validateFactoryRuleDecisions(validated) as unknown as Record<string, unknown>[],
           };
         })(),
@@ -620,7 +621,6 @@ export class FactoryTransitionService {
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
       consentedBy: options.consentedBy,
-      ...(options.accept ? { accept: true } : {}),
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       workItemId: request.workItemId,
@@ -631,7 +631,6 @@ export class FactoryTransitionService {
       configVersion: this.#configVersion,
       causalChain: [...(request.causalChain ?? [])],
       evaluation,
-      ...(options.triageType ? { triageType: options.triageType } : {}),
     });
     if (committed.status === 'missing') {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');
@@ -639,10 +638,10 @@ export class FactoryTransitionService {
     const result = committed.result as unknown as FactoryTransitionResult;
     if (
       this.#onAccepted &&
-      options.accept &&
+      options.accepted &&
       committed.status === 'committed' &&
       result.status === 'accepted' &&
-      committed.item?.acceptedAt
+      committed.item
     ) {
       const item = committed.item;
       const onAccepted = this.#onAccepted;

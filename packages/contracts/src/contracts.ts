@@ -175,6 +175,7 @@ export const updateProjectBodySchema = z
     claudeCodeModel: claudeCodeModelSchema.optional(),
     toolPermissions: toolPermissionsSchema.nullable().optional(),
     autoRunEnabled: z.boolean().optional(),
+    /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
     reviewTestChecksEnabled: z.boolean().optional(),
     selfReviewEnabled: z.boolean().optional(),
@@ -387,7 +388,6 @@ export const updateWorkItemBodySchema = z
     stages: stagesSchema.optional(),
     sessions: sessionsSchema.optional(),
     metadata: metadataSchema.optional(),
-    plansPreapproved: z.literal(true).optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one work-item field is required' });
 

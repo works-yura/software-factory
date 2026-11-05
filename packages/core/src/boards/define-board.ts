@@ -231,6 +231,7 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly tools: BoardToolRules;
   /** Integration event handlers for cards on this board; empty when the board declares none. */
   readonly events: BoardEventRules;
+  /** @deprecated Express the flow with each phase's `nextPhases` and `exitTool`; still enforced when set. */
   readonly transitionPolicy?: BoardTransitionPolicy;
   /** Where source-closed rules move a card; absent when the board opts out of auto-closing. */
   readonly sourceClosed?: BoardSourceClosed<PhaseId>;
@@ -267,6 +268,7 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   phases: Phases;
   tools?: Record<string, BoardToolRule>;
   events?: BoardEventRules;
+  /** @deprecated Express the flow with each phase's `nextPhases` and `exitTool`; still enforced when set. */
   transitionPolicy?: BoardTransitionPolicy;
   sourceClosed?: { completed: keyof Phases & string; canceled: keyof Phases & string };
   changeRequests?: { build: keyof Phases & string; review: keyof Phases & string; merged: keyof Phases & string };
@@ -517,6 +519,7 @@ type DeclaredBoard = {
   readonly id: string;
   readonly name?: string;
   readonly title?: string;
+  readonly transitionPolicy?: BoardTransitionPolicy;
   readonly phases: Readonly<Record<string, BoardPhaseDefinition<string>>>;
 };
 
@@ -525,9 +528,13 @@ type DeclaredBoard = {
  * replacement. A deprecated field next to its replacement adds nothing, so it is not reported:
  * that is how a resolved board, which carries both, is declared again.
  */
-function deprecatedFields(config: DeclaredBoard): string[] {
+function deprecatedFields(config: DeclaredBoard, compiled: boolean): string[] {
   const found: string[] = [];
   if (config.title !== undefined && config.name === undefined) found.push('title → name');
+  // A board Factory compiles itself (v4's Work) may keep a policy for the one rule phases can't say.
+  if (config.transitionPolicy !== undefined && !compiled) {
+    found.push('transitionPolicy → phases.*.nextPhases and exitTool');
+  }
   for (const [phaseId, phase] of Object.entries(config.phases)) {
     if (phase.title !== undefined && phase.name === undefined) found.push(`phases.${phaseId}.title → name`);
     if (phase.next !== undefined && !phase.nextPhases?.includes(phase.next)) {
@@ -540,9 +547,9 @@ function deprecatedFields(config: DeclaredBoard): string[] {
   return found;
 }
 
-function warnDeprecatedFields(config: DeclaredBoard): void {
+function warnDeprecatedFields(config: DeclaredBoard, compiled: boolean): void {
   if (warnedBoards.has(config.id)) return;
-  const found = deprecatedFields(config);
+  const found = deprecatedFields(config, compiled);
   if (found.length === 0) return;
   warnedBoards.add(config.id);
   console.warn(
@@ -605,7 +612,7 @@ function buildBoard<
   if (config.phases[config.initialPhase]!.kind !== 'resting') {
     throw new BoardDefinitionError(`Initial phase "${config.initialPhase}" must be a resting phase.`);
   }
-  warnDeprecatedFields(config);
+  warnDeprecatedFields(config, !defined);
   const sourceClosed = validateSourceClosed(config.sourceClosed, config.phases) as
     | BoardSourceClosed<PhaseId>
     | undefined;

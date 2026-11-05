@@ -82,6 +82,7 @@
   },
   "moves": {
     "investigate": "Дослідити",
+    "plan": "Спланувати",
     "build": "Реалізувати",
     "prepareApproval": "Підготувати до затвердження",
     "review": "Перевірити",
@@ -89,7 +90,6 @@
   },
   "triageDecisions": {
     "acceptAndPlan": "Прийняти й спланувати",
-    "acceptAndBuild": "Прийняти й реалізувати",
     "close": "Закрити"
   },
   "primaryAction": {
@@ -110,7 +110,7 @@
     "starting": "Запускаємо…",
     "retrying": "Повторюємо…",
     "failedRetrying": "{{failed}} — повторюємо…",
-    "heldNeedsApproval": "{{kind}} · потребує вашого затвердження"
+    "heldWaiting": "Розібрано · чекає на вас"
   },
   "linkedSource": {
     "githubIssue": "задача GitHub",

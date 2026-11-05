@@ -77,8 +77,6 @@ export interface FactoryProject {
   toolPermissions: FactoryToolPermissions | null;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
   autoRunEnabled: boolean;
-  /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
-  autoApprovePlans: boolean;
   /** Workspace root in the sandbox; linked repositories are checked out beneath it. */
   sandboxWorkingDirectory: string | null;
   /** Provider settings document validated by the configured FactorySandbox. Only keys the user set. */
@@ -135,7 +133,6 @@ export interface UpdateFactoryProjectInput {
   claudeCodeModel?: ClaudeCodeModel | null;
   toolPermissions?: FactoryToolPermissions | null;
   autoRunEnabled?: boolean;
-  autoApprovePlans?: boolean;
   sandboxWorkingDirectory?: string | null;
   sandboxSettings?: Record<string, unknown> | null;
   workspaceSetupCommand?: string | null;
@@ -172,6 +169,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     // work items back. Drop it in a later migration.
     slack_work_items_enabled: { type: 'boolean', default: false },
     auto_run_enabled: { type: 'boolean', default: false },
+    // Retired project switch: no longer read or written. Plans are approved per board (`exitTool.autoApprove`).
     auto_approve_plans: { type: 'boolean', default: false },
     sandbox_working_directory: { type: 'text', nullable: true },
     sandbox_settings: { type: 'json', nullable: true },
@@ -251,7 +249,6 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     claudeCodeModel: isClaudeCodeModel(row.claude_code_model) ? row.claude_code_model : null,
     toolPermissions: parseFactoryToolPermissions(row.tool_permissions),
     autoRunEnabled: row.auto_run_enabled,
-    autoApprovePlans: row.auto_approve_plans ?? false,
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
     sandboxSettings: row.sandbox_settings ?? null,
     workspaceSetupCommand: row.workspace_setup_command ?? null,
@@ -308,7 +305,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       harness: input.harness ?? DEFAULT_FACTORY_HARNESS,
       claude_code_model: input.claudeCodeModel ?? null,
       auto_run_enabled: false,
-      auto_approve_plans: false,
       created_at: now,
       updated_at: now,
     });
@@ -370,7 +366,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.claudeCodeModel !== undefined ? { claude_code_model: changes.claudeCodeModel } : {}),
           ...(changes.toolPermissions !== undefined ? { tool_permissions: changes.toolPermissions } : {}),
           ...(changes.autoRunEnabled !== undefined ? { auto_run_enabled: changes.autoRunEnabled } : {}),
-          ...(changes.autoApprovePlans !== undefined ? { auto_approve_plans: changes.autoApprovePlans } : {}),
           ...(changes.sandboxWorkingDirectory !== undefined
             ? { sandbox_working_directory: changes.sandboxWorkingDirectory }
             : {}),

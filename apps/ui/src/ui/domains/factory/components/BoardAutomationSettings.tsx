@@ -39,19 +39,16 @@ function AutomationSwitch({
 export function BoardAutomationSettings({
   factoryProjectId,
   autoRunEnabled,
-  autoApprovePlans,
   reviewTestChecksEnabled,
   selfReviewEnabled,
 }: {
   factoryProjectId: string;
   autoRunEnabled: boolean;
-  autoApprovePlans: boolean;
   reviewTestChecksEnabled: boolean;
   selfReviewEnabled: boolean;
 }) {
   const { t } = useTranslation('board');
   const autoRun = useSetFactoryAutomationMutation(factoryProjectId, 'autoRunEnabled');
-  const autoApprove = useSetFactoryAutomationMutation(factoryProjectId, 'autoApprovePlans');
   const testChecks = useSetFactoryAutomationMutation(factoryProjectId, 'reviewTestChecksEnabled');
   const selfReview = useSetFactoryAutomationMutation(factoryProjectId, 'selfReviewEnabled');
 
@@ -78,12 +75,6 @@ export function BoardAutomationSettings({
             enabled={autoRunEnabled}
             mutation={autoRun}
             description={t('automationSettings.autoRun.description')}
-          />
-          <AutomationSwitch
-            label={t('automationSettings.autoApprove.label')}
-            enabled={autoApprovePlans}
-            mutation={autoApprove}
-            description={t('automationSettings.autoApprove.description')}
           />
           <AutomationSwitch
             label={t('automationSettings.selfReview.label')}

@@ -16,6 +16,7 @@ import {
 import { allowsBuiltInBoardTransition, createPipelines } from './index.ts';
 import { reviewBoard } from './review/board.ts';
 import { workBoard } from './work/board.ts';
+import type { WorkBoardPhase } from './work/board.ts';
 
 describe('factory pipelines', () => {
   const installed = createPipelines();
@@ -52,12 +53,24 @@ describe('factory pipelines', () => {
 
   it('defines the Work lifecycle', () => {
     expect(workBoard.initialPhase).toBe('intake');
-    const phases = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
-    for (const from of phases) {
-      for (const to of phases) {
-        expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(true);
+    // Each phase names where a card goes next (upstream #29039); the board no longer allows every move.
+    const flow: Record<WorkBoardPhase, string[]> = {
+      intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
+      triage: ['intake', 'planning', 'done', 'canceled'],
+      planning: ['execute', 'intake', 'done', 'canceled'],
+      execute: ['review', 'planning', 'done', 'canceled'],
+      review: ['execute', 'intake', 'done', 'canceled'],
+      'pr-review': ['intake', 'done', 'canceled'],
+      done: ['pr-review'],
+      canceled: ['intake', 'pr-review'],
+    };
+    for (const from of Object.keys(flow) as WorkBoardPhase[]) {
+      for (const to of Object.keys(flow) as WorkBoardPhase[]) {
+        // Staying put is always allowed.
+        expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(from === to || flow[from].includes(to));
       }
     }
+    expect(workBoard.phases.planning).toMatchObject({ exitTool: { id: 'submit_plan', autoApprove: false } });
     expect(workBoard.rules.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.planning?.manual?.onEnter).toBeTypeOf('function');
     expect(workBoard.roleForPhase('execute')).toBe('work');

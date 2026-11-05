@@ -43,7 +43,7 @@ export interface ClaudeStartCoordinatorOptions {
   approvedPermissionMode?: ClaudePermissionMode;
   /**
    * The boards, for the card phase's own plan auto-approval (`autoApprovedExitTool`), as the dispatcher
-   * decides it for a Mastra run. Without them only the project's `autoApprovePlans` counts.
+   * decides it for a Mastra run. Without them every plan waits for a person.
    */
   boards?: BoardRegistry | ProjectBoardSource;
 }
@@ -120,8 +120,7 @@ export class ClaudeStartCoordinator {
     // Once untrusted, always: a later role on the same session still runs in that checkout.
     if (untrustedCheckout) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout, value: true });
 
-    const project = await projects.get({ orgId: request.orgId, id: request.factoryProjectId });
-    await this.#applyRoleMode(session, request, await this.#plansAreAutoApproved(request, storedItem, project));
+    await this.#applyRoleMode(session, request, await this.#plansAreAutoApproved(request, storedItem));
 
     return commitRunStart({
       storage,
@@ -135,13 +134,13 @@ export class ClaudeStartCoordinator {
   }
 
   /**
-   * The dispatcher's `#plansAreAutoApproved`: the card's phase ends with an auto-approved `submit_plan`,
-   * or the project approves plans itself. The phase is the one the start moves the card into.
+   * The dispatcher's `#plansAreAutoApproved`: the card's phase ends with an auto-approved `submit_plan`.
+   * Plans are approved per board (`exitTool.autoApprove`); the retired project switch no longer counts.
+   * The phase is the one the start moves the card into.
    */
   async #plansAreAutoApproved(
     request: FactoryStartRequest,
     storedItem: WorkItemRow | null,
-    project: { autoApprovePlans?: boolean | null } | null,
   ): Promise<boolean> {
     const boards = this.#options.boards;
     if (storedItem && boards) {
@@ -149,7 +148,7 @@ export class ClaudeStartCoordinator {
       const registry = await toBoardSource(boards).load({ orgId: request.orgId, factoryProjectId: request.factoryProjectId });
       if (autoApprovedExitTool(registry, item) === 'submit_plan') return true;
     }
-    return project?.autoApprovePlans === true;
+    return false;
   }
 
   async #applyRoleMode(

@@ -7,9 +7,8 @@ boards/semantics.test.ts	core/src/boards/semantics.test.ts
 boards/transition-policy.test.ts	core/src/boards/transition-policy.test.ts
 rules/resolve.test.ts	core/src/rules/resolve.test.ts	-1	built-in handler case moved to pipelines/src/pipelines.test.ts
 rules/validation.test.ts	core/src/rules/validation.test.ts	+1	regression: every rejection code, approval_required included
-boards/review.test.ts	pipelines/src/review/board.test.ts	+1	session-branch refresh case ported from upstream c3a2784881
-boards/work.test.ts	pipelines/src/work/board.test.ts	+1	work spanning several repositories: Done waits for every open change request
-boards/work-transition-policy.test.ts	pipelines/src/work/transition-policy.test.ts
+boards/review.test.ts	pipelines/src/review/board.test.ts	0	session-branch refresh case ported from upstream c3a2784881; upstream #29039: board transitions as phase config (-1)
+boards/work.test.ts	pipelines/src/work/board.test.ts	-4	work spanning several repositories: Done waits for every open change request; upstream #29039: board transitions as phase config (-5)
 work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts	+2	Linear/Jira identifier branches dropped with the vocabulary (-1); per-item GitHub suffix cases ported from upstream c3a2784881 (+3)
 storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts	+1	upstream #28889: the board poll reads the list cache without cloning (+1)
 storage/domains/work-items/attention-events.test.ts	store/src/work-items/attention-events.test.ts
@@ -19,7 +18,7 @@ rules/dispatch-errors.test.ts	store/src/dispatch-errors.test.ts
 storage/domains/comments/base.test.ts	store/src/comments/base.test.ts
 storage/domains/comments/activity.test.ts	store/src/comments/activity.test.ts
 storage/domains/comments/feed-context.test.ts	store/src/comments/feed-context.test.ts
-rules/transition-service.test.ts	runtime/src/transition-service.test.ts	+11	upstream #28604: a phase that auto-approves submit_plan lets the planner move on; upstream #28978: pull requests reviewed on the Work board (+10)
+rules/transition-service.test.ts	runtime/src/transition-service.test.ts	+19	upstream #28604: a phase that auto-approves submit_plan lets the planner move on; upstream #28978: pull requests reviewed on the Work board (+10); upstream #29039: board transitions as phase config (+8)
 rules/terminal-cleanup.test.ts	runtime/src/terminal-cleanup.test.ts
 rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts	+3	upstream #28721: decisions held for Work's shared context (+3)
 rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+9	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3); upstream #28971: a deleted project files no linked card and frees the claims its cards hold (+2); upstream #29109: outside authors' cards follow the person's gesture and phase conditions instead of a hard-coded refusal (3 rewritten, +1 split); upstream #28978: pull requests reviewed on the Work board (+2)
@@ -102,7 +101,7 @@ routes/intake.test.ts	api/src/intake.test.ts	+7	upstream #28877: an unreadable p
 routes/knowledge.test.ts	api/src/knowledge.test.ts
 routes/oauth.test.ts	api/src/oauth.test.ts
 routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts
-routes/projects.test.ts	api/src/projects.test.ts	+1	harness and Claude Code model on create and update
+routes/projects.test.ts	api/src/projects.test.ts	+2	harness and Claude Code model on create and update; upstream #29039: board transitions as phase config (+1)
 routes/session-access.test.ts	session/src/session-access.test.ts	+2	model-switch guard and multipart body cases ported from upstream 8fb8a82428
 routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts	-1	user and hybrid scope catalogs removed; one Factory-catalog case remains
 routes/skills.test.ts	api/src/skills.test.ts	+12	upstream #28823: skills catalog origin (+2); upstream #29042: frontmatter in the catalog, project skill edit routes (+10)
@@ -119,11 +118,11 @@ rules/bindings.test.ts	runtime/src/bindings.test.ts
 rules/custom-board-lifecycle.test.ts	server/src/rules/custom-board-lifecycle.test.ts
 rules/custom-board-runtime.test.ts	server/src/rules/custom-board-runtime.test.ts
 rules/default-handlers.test.ts	server/src/rules/default-handlers.test.ts	-1	Linear integration cases dropped with the integration (-3); Linear triage entry cases dropped with the vocabulary (-2); change-request flow on a custom board (+4)
-rules/processor.test.ts	harness-mastra/src/rules/processor.test.ts	+2	upstream #29104: a tool rule re-entering the current stage runs onEnter (+1); upstream #28978: pull requests reviewed on the Work board (+1)
+rules/processor.test.ts	harness-mastra/src/rules/processor.test.ts	+4	upstream #29104: a tool rule re-entering the current stage runs onEnter (+1); upstream #28978: pull requests reviewed on the Work board (+1); upstream #29039: board transitions as phase config (+2)
 rules/review-source-tool.test.ts	harness-mastra/src/rules/review-source-tool.test.ts
 rules/start-coordinator.scenario.test.ts	harness-mastra/src/rules/start-coordinator.scenario.test.ts
 rules/start-coordinator.test.ts	harness-mastra/src/rules/start-coordinator.test.ts	0	owner-default (user scope) case removed with the personal model scope; a card naming no repository runs in any environment session (+1)
-rules/tools.test.ts	harness-mastra/src/rules/tools.test.ts	+2	work spanning several repositories: self-review records a head per repository; upstream #28978: pull requests reviewed on the Work board (+1)
+rules/tools.test.ts	harness-mastra/src/rules/tools.test.ts	+1	work spanning several repositories: self-review records a head per repository; upstream #28978: pull requests reviewed on the Work board (+1); upstream #29039: board transitions as phase config (-1)
 sandbox/callback-factory-sandbox.test.ts	sandbox/src/callback-factory-sandbox.test.ts
 sandbox/local-factory-sandbox.test.ts	sandbox/src/local-factory-sandbox.test.ts
 sandbox/session-retirement.test.ts	sandbox/src/session-retirement.test.ts	+9	upstream 7e428dc80e resetSessionSandbox (+7), v4 local-sandbox reset probe (+1), host cleanup after a session is deleted (+1)
@@ -364,7 +363,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/factory/boardSort.test.ts	../apps/ui/src/ui/domains/factory/boardSort.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	-3	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/factory/boardStages.test.ts	../apps/ui/src/ui/domains/factory/boardStages.test.ts	+2	upstream #28978: pull requests reviewed on the Work board (+2)
-../../../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	0	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28978: pull requests reviewed on the Work board (+1)
+../../../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	+1	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28978: pull requests reviewed on the Work board (+1); upstream #29039: board transitions as phase config (+1)
 ../../../apps/ui/src/ui/domains/factory/stageTones.test.ts	../apps/ui/src/ui/domains/factory/stageTones.test.ts
 ../../../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	-7	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary

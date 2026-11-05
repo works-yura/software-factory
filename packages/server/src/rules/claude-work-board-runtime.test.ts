@@ -305,7 +305,7 @@ async function runToPlanGate(nextTurnText: string) {
     expect(await claude.store.get(sessionId)).toMatchObject({ threadId: sessionId, resourceId: project.id });
 
     // 2. Plan: the triage move started the plan role in the same session, in planning mode behind the gate.
-    expect(item).toMatchObject({ stages: ['planning'], triageType: 'bug' });
+    expect(item).toMatchObject({ stages: ['planning'], triageType: null });
     await drain();
     const plan = fake.calls[1]!;
     expect(plan.args).toEqual(expect.arrayContaining(['--resume', CLAUDE_SESSION, '--permission-mode', 'default']));

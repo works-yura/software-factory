@@ -127,8 +127,16 @@ describe('defineBoard phase fields', () => {
       lowEffort: { name: 'Low effort', kind: 'working', autoStart: true, autoStartWhen: LOW_EFFORT },
       manual: { name: 'Manual', kind: 'working' },
     });
-    const lowEffort = cardRuleFacts({ title: 'Fix', metadata: { labels: ['effort:low'] }, externalSource: null });
-    const highEffort = cardRuleFacts({ title: 'Fix', metadata: { labels: ['effort:high'] }, externalSource: null });
+    const lowEffort = cardRuleFacts({
+      title: 'Fix',
+      metadata: { labels: ['effort:low'] },
+      externalSource: null,
+    });
+    const highEffort = cardRuleFacts({
+      title: 'Fix',
+      metadata: { labels: ['effort:high'] },
+      externalSource: null,
+    });
 
     expect(board.startsAutomatically('always')).toBe(true);
     expect(board.startsAutomatically('lowEffort', lowEffort)).toBe(true);
@@ -289,7 +297,35 @@ describe('defineBoard phase fields', () => {
     expect(copy.phases.build).toMatchObject({ role: 'work' });
   });
 
-  it('stays quiet for new fields', () => {
+  it('warns once per board that a transition policy is deprecated, and still keeps the policy', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const transitionPolicy = () => undefined;
+    const gated = {
+      id: 'policy-release',
+      name: 'Release',
+      initialPhase: 'backlog',
+      transitionPolicy,
+      phases: {
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    } as const;
+
+    const board = defineBoard(gated);
+    defineBoard(gated);
+    defineBoard({ ...gated, id: 'policy-release-2' });
+
+    expect(board.transitionPolicy).toBe(transitionPolicy);
+    expect(warn.mock.calls.map(([message]) => message)).toEqual([
+      '[Factory] Board "policy-release" uses deprecated fields: transitionPolicy → phases.*.nextPhases and exitTool. ' +
+        'They still work but will be removed in a future release.',
+      '[Factory] Board "policy-release-2" uses deprecated fields: transitionPolicy → phases.*.nextPhases and exitTool. ' +
+        'They still work but will be removed in a future release.',
+    ]);
+  });
+
+  it('stays quiet for new fields, built-in boards and defined phases declared again', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     onTestFinished(() => warn.mockRestore());
 

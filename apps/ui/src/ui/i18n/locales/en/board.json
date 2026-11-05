@@ -80,6 +80,7 @@
   },
   "moves": {
     "investigate": "Investigate",
+    "plan": "Plan",
     "build": "Build",
     "prepareApproval": "Prepare approval",
     "review": "Review",
@@ -87,7 +88,6 @@
   },
   "triageDecisions": {
     "acceptAndPlan": "Accept and plan",
-    "acceptAndBuild": "Accept and build",
     "close": "Close"
   },
   "primaryAction": {
@@ -108,7 +108,7 @@
     "starting": "Starting…",
     "retrying": "Retrying…",
     "failedRetrying": "{{failed}} — retrying…",
-    "heldNeedsApproval": "{{kind}} · needs your approval"
+    "heldWaiting": "Triaged · waiting for you"
   },
   "linkedSource": {
     "githubIssue": "GitHub issue",
