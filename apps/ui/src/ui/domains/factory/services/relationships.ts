@@ -1,4 +1,4 @@
-import { gitlabIdentifierForItem, githubNumberForItem } from '../boardItems';
+import { gitlabIdentifierForItem, githubNumberForItem, sourceMetadata } from '../boardItems';
 import { rememberedBoardPath } from './boardViews';
 import type { WorkItem } from './workItems';
 import { isPullRequestSource } from './workItems';
@@ -7,17 +7,17 @@ import { translator } from '../../../i18n/t';
 const tk = translator('board');
 
 /** Intake candidates carry a source and metadata but no card, so identifiers work on both. */
-type IdentifiableItem = Pick<WorkItem, 'source' | 'metadata' | 'sourceKey'>;
+type IdentifiableItem = Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'sourceKey'>;
 
 export function workItemNumber(item: IdentifiableItem): string | undefined {
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return String(githubNumber);
   if (item.source === 'gitlab-pr') {
-    const iid = item.metadata.gitlabMergeRequestIid;
+    const iid = sourceMetadata(item).gitlabMergeRequestIid;
     return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? String(iid) : undefined;
   }
 
-  const number = item.metadata.number;
+  const number = sourceMetadata(item).number;
   if (typeof number === 'number' || typeof number === 'string') return String(number);
   return item.sourceKey?.split(':').at(-1) || undefined;
 }
@@ -27,7 +27,7 @@ function sessionBranches(item: WorkItem): Set<string> {
 }
 
 function headBranch(item: WorkItem): string | undefined {
-  const branch = item.metadata.headBranch;
+  const branch = sourceMetadata(item).headBranch;
   return typeof branch === 'string' ? branch : undefined;
 }
 

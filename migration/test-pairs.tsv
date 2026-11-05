@@ -94,7 +94,7 @@ routes/apply-default-model.scenario.test.ts	api/src/apply-default-model.scenario
 routes/attention.test.ts	api/src/attention.test.ts
 routes/automation-runs.test.ts	api/src/automation-runs.test.ts
 routes/config.test.ts	api/src/config.test.ts	0	personal default-model routes removed (7 cases), one case checks they are gone (-6); Factory fallback model cases ported from upstream a9f392e60e (+5); harness descriptors in the features
-routes/contracts.test.ts	api/src/contracts.test.ts
+routes/contracts.test.ts	api/src/contracts.test.ts	+1	upstream #28961: card responses carry the normalized work item (+1)
 routes/custom-provider-source.test.ts	api/src/custom-provider-source.test.ts
 routes/fs.test.ts	api/src/fs.test.ts	-2	upstream 7573972d0c (#28274): /changes/diff and its truncation cases replaced by /changes/patches cases; upstream #28829: the host filesystem routes need a signed-in user (+3)
 routes/intake.test.ts	api/src/intake.test.ts	+7	upstream #28877: an unreadable project board source saves no binding or route (+2); upstream #28971: a binding refused while its project is deleted, a deleted project releases its sources (+2); upstream #29109: a rebind or label-route change leaves a routed card where its route put it (+3)
@@ -111,7 +111,7 @@ routes/supervisor.test.ts	api/src/supervisor.test.ts
 routes/surface.test.ts	api/src/surface.test.ts	+2	work spanning several repositories: a card naming no repository dispatches across the environment; ambiguity only without one; upstream #28721: a replacement work board has only its own lanes (+1)
 routes/telemetry.test.ts	api/src/telemetry.test.ts
 routes/tenant-credentials.test.ts	credentials/src/tenant-credentials.test.ts
-routes/work-items.test.ts	api/src/work-items.test.ts	+2	upstream #28604: the board catalog sends autoStart/exitTool conditions; upstream #28823: phase skill in the board catalog (+1)
+routes/work-items.test.ts	api/src/work-items.test.ts	+3	upstream #28604: the board catalog sends autoStart/exitTool conditions; upstream #28823: phase skill in the board catalog (+1); upstream #28961: card responses expose source facts apart from board metadata (+1)
 rules/automation-stamping.test.ts	runtime/src/automation-stamping.test.ts
 rules/binding-context.test.ts	session/src/binding-context.test.ts
 rules/bindings.test.ts	runtime/src/bindings.test.ts
@@ -355,11 +355,11 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/factory/activity.test.ts	../apps/ui/src/ui/domains/factory/activity.test.ts	-17	Activity retired as upstream 63d7d5cbd4 (#28257): only the day helpers stay in the app; the full suite is parked in packages/activity/ui
 ../../../apps/ui/src/ui/domains/factory/auditPresentation.test.ts	activity/ui/src/ui/domains/factory/auditPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardCardState.test.ts	../apps/ui/src/ui/domains/factory/boardCardState.test.ts	+1	a card whose run needs its repository asks for it
-../../../apps/ui/src/ui/domains/factory/boardItems.test.ts	../apps/ui/src/ui/domains/factory/boardItems.test.ts	-2	Linear/Jira/incident.io UI cases dropped with the vocabulary
+../../../apps/ui/src/ui/domains/factory/boardItems.test.ts	../apps/ui/src/ui/domains/factory/boardItems.test.ts	+0	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28961: session branches and card keys read the normalized work item (its Linear/Jira/incident.io rows dropped) (+2)
 ../../../apps/ui/src/ui/domains/factory/boardLabels.test.ts	../apps/ui/src/ui/domains/factory/boardLabels.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardOrder.test.ts	../apps/ui/src/ui/domains/factory/boardOrder.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardPeople.test.ts	../apps/ui/src/ui/domains/factory/boardPeople.test.ts
-../../../apps/ui/src/ui/domains/factory/boardRepository.test.ts	../apps/ui/src/ui/domains/factory/boardRepository.test.ts
+../../../apps/ui/src/ui/domains/factory/boardRepository.test.ts	../apps/ui/src/ui/domains/factory/boardRepository.test.ts	+1	upstream #28961: the normalized provider id picks the repository (+1)
 ../../../apps/ui/src/ui/domains/factory/boardSort.test.ts	../apps/ui/src/ui/domains/factory/boardSort.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	-3	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/factory/boardStages.test.ts	../apps/ui/src/ui/domains/factory/boardStages.test.ts	+2	upstream #28978: pull requests reviewed on the Work board (+2)
@@ -456,7 +456,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	-2	upstream 74761d4c2e (#28245): defaultSessionFilters removed
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionPresentation.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionPresentation.test.ts
-../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	+2	a session without a checkout initializes only once a message went out
+../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	+3	a session without a checkout initializes only once a message went out; upstream #28961: a normalized merged state marks a pull request merged; its external-links cases dropped with Slack/Linear (+1)
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionStatus.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionStatus.test.ts
 ../../../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	../apps/ui/src/ui/layouts/__tests__/AppLayout.msw.test.tsx	+3	upstream c583bc9549 (#28271): New session opens a fresh draft (+1); f39f5d64d2 (#28300): New session and + close the mobile drawer (+1); the supervisor Chat link only when enabled (+1)

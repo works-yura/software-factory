@@ -1,6 +1,7 @@
 import type { AuditAction } from '@factory/store/audit/actions';
 import { isHumanActorId } from '@factory/store/audit/actors';
 
+import { sourceMetadata } from './boardItems';
 import type { AuditActorProfile, AuditEvent, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
 
@@ -31,7 +32,7 @@ function metadataString(source: Record<string, unknown>, key: string): string | 
  */
 function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
   if (item.source === 'github-issue' || item.source === 'github-pr') {
-    const author = metadataString(item.metadata, 'author');
+    const author = metadataString(sourceMetadata(item), 'author');
     if (!author) return undefined;
     return {
       id: `github:${author}`,
@@ -40,7 +41,7 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
     };
   }
   if (item.source === 'gitlab-issue' || item.source === 'gitlab-pr') {
-    const author = metadataString(item.metadata, 'author');
+    const author = metadataString(sourceMetadata(item), 'author');
     return author ? { id: `gitlab:${author}`, name: author } : undefined;
   }
   return undefined;
@@ -52,9 +53,9 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
  */
 function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined {
   if (item.source === 'gitlab-issue' || item.source === 'gitlab-pr') {
-    const assignees = item.metadata.assignees;
+    const assignees = sourceMetadata(item).assignees;
     const assignee =
-      metadataString(item.metadata, 'assignee') ??
+      metadataString(sourceMetadata(item), 'assignee') ??
       (Array.isArray(assignees)
         ? assignees.find(value => typeof value === 'string' && value.trim())?.trim()
         : undefined);

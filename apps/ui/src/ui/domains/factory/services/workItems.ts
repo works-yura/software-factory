@@ -7,6 +7,7 @@
  */
 
 import type { FactoryRuleStage, FactoryTriageType } from '@factory/core/rules/types';
+import type { ProviderWorkItem } from '@factory/core/card';
 
 import { requestJson } from './request';
 import { translator } from '../../../i18n/t';
@@ -41,16 +42,9 @@ export interface WorkItemStageEntry {
   exitedBy?: string;
 }
 
-/** Provider facts the server normalized for the card's source item, apart from board metadata. */
-export interface WorkItemFacts {
-  key: string | null;
-  url: string | null;
-  state: string | null;
-  labels: string[];
-  author: string | null;
-}
-
 export interface WorkItem {
+  /** Optional during the one-release legacy wire migration. */
+  workItem?: Pick<ProviderWorkItem, 'provider' | 'key' | 'url' | 'title' | 'state' | 'labels' | 'author' | 'metadata'>;
   id: string;
   orgId: string;
   createdBy: string;
@@ -69,11 +63,7 @@ export interface WorkItem {
   triageType: FactoryTriageType | null;
   /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
   acceptedAt: string | null;
-  /** The provider's facts about the card's source item; absent on cards from an older server. */
-  workItem?: WorkItemFacts;
   commentCount: number;
-  /** Bumped server-side on every feed mutation; clients refetch comments when it moves. */
-  feedActivityAt: string | null;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -107,21 +97,12 @@ interface ExternalWorkItemSource {
 
 interface WireWorkItem extends Omit<
   WorkItem,
-  | 'githubProjectId'
-  | 'source'
-  | 'sourceKey'
-  | 'url'
-  | 'metadata'
-  | 'commentCount'
-  | 'feedActivityAt'
-  | 'triageType'
-  | 'acceptedAt'
+  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'commentCount' | 'triageType' | 'acceptedAt'
 > {
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
   commentCount?: number;
-  feedActivityAt?: string | null;
   triageType?: WorkItem['triageType'];
   acceptedAt?: string | null;
 }
@@ -174,17 +155,16 @@ function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput 
 }
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
-  const { factoryProjectId, externalSource, metadata, commentCount, feedActivityAt, triageType, acceptedAt, ...rest } =
-    item;
+  const { factoryProjectId, externalSource, metadata, commentCount, triageType, acceptedAt, ...rest } = item;
   return {
     ...rest,
     githubProjectId: factoryProjectId,
     source: sourceFromExternalSource(externalSource),
     sourceKey: externalSource?.externalId ?? null,
-    url: externalSource?.url ?? null,
+    title: item.workItem?.title ?? item.title,
+    url: item.workItem?.url ?? externalSource?.url ?? null,
     metadata: metadata ?? {},
     commentCount: commentCount ?? 0,
-    feedActivityAt: feedActivityAt ?? null,
     triageType: triageType ?? null,
     acceptedAt: acceptedAt ?? null,
   };

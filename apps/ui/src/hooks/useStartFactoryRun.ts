@@ -9,7 +9,7 @@ import { createUserSession } from '../ui/domains/workspaces/services/user-sessio
 import { useFactoryQuery } from './useFactories';
 import { sessionRepositoryFor } from '../ui/domains/factory/boardRepository';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
-import type { WorkItemSource } from '../ui/domains/factory/services/workItems';
+import type { WorkItem, WorkItemSource } from '../ui/domains/factory/services/workItems';
 import { translator } from '../ui/i18n/t';
 
 const tk = translator('app');
@@ -23,6 +23,7 @@ export interface StartFactoryRunWorkItem {
   title: string;
   url?: string | null;
   metadata?: Record<string, unknown>;
+  workItem?: WorkItem['workItem'];
 }
 
 export interface StartFactoryRunInput {
@@ -54,7 +55,12 @@ export function useStartFactoryRun() {
       const target = sessionRepositoryFor(repositories, workItem);
       if ('error' in target) throw new Error(tk('errors.noEnvironmentRepository'));
       const { repository, namedByCard } = target;
-      const metadata = namedByCard ? { ...workItem.metadata, repository: repository.slug } : { ...workItem.metadata };
+      // A normalized card patches only the repository: its provider facts are the work item's, not the board's.
+      const metadata = namedByCard
+        ? workItem.workItem
+          ? { repository: repository.slug }
+          : { ...workItem.metadata, repository: repository.slug }
+        : { ...workItem.metadata };
       if (namedByCard && workItem.metadata?.repository !== repository.slug) {
         await updateWorkItem(baseUrl, workItem.id, { metadata });
       }

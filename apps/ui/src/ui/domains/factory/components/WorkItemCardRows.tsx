@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardState';
 import type { CardAction } from '../cardPrimaryAction';
-import { workItemMeta } from '../boardItems';
+import { sourceMetadata, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
@@ -75,7 +75,12 @@ export function WorkItemCardRows({
           </Txt>
         </div>
       </div>
-      <MetadataLabels metadata={item.metadata} />
+      {item.workItem?.provider !== 'factory' && item.workItem?.state && (
+        <Badge size="xs" variant="neutral" className="self-start" aria-label={`Source state: ${item.workItem.state}`}>
+          {item.workItem.state}
+        </Badge>
+      )}
+      <MetadataLabels metadata={sourceMetadata(item)} />
       <OpenChangeRequests metadata={item.metadata} />
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">

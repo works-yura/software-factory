@@ -10,6 +10,7 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../
 import type { GithubIssue } from '../domains/factory/services/factory';
 import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
+import { providerFactsCard } from './fixtures/providerFactsCard';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';

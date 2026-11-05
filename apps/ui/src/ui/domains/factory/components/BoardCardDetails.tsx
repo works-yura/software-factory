@@ -3,7 +3,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 import { useGitHubIssueDetail, useGitHubPullRequestDetail } from '../../../../hooks/useFactoryData';
 import { useGitLabIssueDetail, useGitLabMergeRequestDetail } from '../../../../hooks/useGitLabData';
-import { githubNumberForItem } from '../boardItems';
+import { changeRequestNumberForItem, githubNumberForItem } from '../boardItems';
 import type { WorkItem } from '../services/workItems';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { translator } from '../../../i18n/t';
@@ -11,7 +11,7 @@ import { translator } from '../../../i18n/t';
 const tk = translator('board');
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
-type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'metadata'>;
+type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'workItem' | 'metadata'>;
 
 function descriptionSource(
   item: SourceItem,
@@ -21,7 +21,7 @@ function descriptionSource(
     if (item.source === 'github-pr') return 'pull';
   }
   if (item.source === 'gitlab-issue' && item.sourceKey) return 'gitlab';
-  if (item.source === 'gitlab-pr' && typeof item.metadata.gitlabMergeRequestIid === 'number') return 'gitlab-pr';
+  if (item.source === 'gitlab-pr' && changeRequestNumberForItem(item) !== undefined) return 'gitlab-pr';
   return undefined;
 }
 
@@ -49,7 +49,7 @@ export function useSourceDescription(
   const gitlabPull = useGitLabMergeRequestDetail(
     source === 'gitlab-pr' ? factoryProjectId : undefined,
     source === 'gitlab-pr' ? projectRepositoryId : undefined,
-    source === 'gitlab-pr' ? (item.metadata.gitlabMergeRequestIid as number) : undefined,
+    source === 'gitlab-pr' ? changeRequestNumberForItem(item) : undefined,
   );
   return source === undefined ? undefined : { issue, pull, gitlab, 'gitlab-pr': gitlabPull }[source];
 }

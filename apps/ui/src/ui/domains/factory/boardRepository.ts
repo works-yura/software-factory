@@ -43,10 +43,15 @@ export function cardRepositorySlug(
 /** The linked repository a card's source lives in, else the board's primary repository. */
 export function cardProjectRepositoryId(
   repositories: LinkedRepositoryPayload[],
-  card: { source: string; metadata?: Record<string, unknown> },
+  card: {
+    source: string;
+    metadata?: Record<string, unknown>;
+    workItem?: { metadata: Record<string, unknown> | null };
+  },
   fallback: string,
 ) {
-  return findUniqueRepositoryByProviderId(repositories, card.source, card.metadata)?.projectRepositoryId ?? fallback;
+  const metadata = { ...card.metadata, ...card.workItem?.metadata };
+  return findUniqueRepositoryByProviderId(repositories, card.source, metadata)?.projectRepositoryId ?? fallback;
 }
 
 /**
@@ -57,13 +62,15 @@ export function cardProjectRepositoryId(
  */
 export function sessionRepositoryFor(
   repositories: LinkedRepositoryPayload[],
-  card: { source: string; metadata?: Record<string, unknown> },
+  card: { source: string; metadata?: Record<string, unknown>; workItem?: { metadata: Record<string, unknown> | null } },
 ):
   | { repository: LinkedRepositoryPayload; namedByCard: boolean }
   | { error: 'none' | 'environment' | 'unlinked'; slug?: string } {
   const compatible = repositories.filter(repository => repositoryMatchesCardSource(repository, card.source));
   if (compatible.length === 0) return { error: 'none' };
-  const slug = cardRepositorySlug(card.source, card.metadata, repositories);
+  // Provider ids (which survive a rename) come from the normalized work item over stale legacy wire metadata.
+  const metadata = { ...card.metadata, ...card.workItem?.metadata };
+  const slug = cardRepositorySlug(card.source, metadata, repositories);
   if (slug) {
     const named = compatible.find(repository => repository.slug === slug);
     return named ? { repository: named, namedByCard: true } : { error: 'unlinked', slug };

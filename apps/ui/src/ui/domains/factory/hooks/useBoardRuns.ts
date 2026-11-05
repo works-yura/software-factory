@@ -104,6 +104,7 @@ export function useBoardRuns({
           sourceKey: refreshed.sourceKey,
           title: refreshed.title,
           metadata: refreshed.metadata,
+          workItem: refreshed.workItem,
         },
       });
     } finally {

@@ -1,6 +1,7 @@
 import { isHumanActorId } from '@factory/store/audit/actors';
 
 import type { BoardCandidate } from './boardCandidates';
+import { sourceMetadata } from './boardItems';
 import type { BoardFilterFieldId, BoardFilterState } from './boardFilters';
 import type { AuditActorProfile, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
@@ -69,6 +70,7 @@ export function withPeopleUnfolded(filters: BoardFilterState, personId: PersonId
 }
 
 interface RelatedCard {
+  workItem?: WorkItem['workItem'];
   source: WorkItem['source'];
   metadata: Record<string, unknown>;
 }
@@ -112,7 +114,7 @@ function externalCreator(card: RelatedCard): string | undefined {
     card.source === 'gitlab-issue' ||
     card.source === 'gitlab-pr'
   ) {
-    return metadataString(card.metadata, 'author');
+    return metadataString(sourceMetadata(card), 'author');
   }
   return undefined;
 }
@@ -124,8 +126,8 @@ function externalAssignees(card: RelatedCard): string[] {
     card.source === 'gitlab-issue' ||
     card.source === 'gitlab-pr'
   ) {
-    const assignees = metadataStrings(card.metadata, 'assignees');
-    const assignee = metadataString(card.metadata, 'assignee');
+    const assignees = metadataStrings(sourceMetadata(card), 'assignees');
+    const assignee = metadataString(sourceMetadata(card), 'assignee');
     return [...new Set([...assignees, ...(assignee ? [assignee] : [])])];
   }
   return [];
@@ -133,7 +135,7 @@ function externalAssignees(card: RelatedCard): string[] {
 
 function requestedReviewers(card: RelatedCard): string[] {
   if (card.source !== 'github-pr' && card.source !== 'gitlab-pr') return [];
-  return metadataStrings(card.metadata, 'requestedReviewers');
+  return metadataStrings(sourceMetadata(card), 'requestedReviewers');
 }
 
 function externalIds(source: RelatedCard['source'], names: readonly string[]): Set<string> {

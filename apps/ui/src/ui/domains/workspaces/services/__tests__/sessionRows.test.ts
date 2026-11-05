@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { releaseBoard } from '../../../../../../e2e/ui/board-catalog';
+import { providerFactsCard } from '../../../../__tests__/fixtures/providerFactsCard';
 import { sessionActivityStatus, sessionBoard } from '../sessionRows';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
@@ -74,4 +75,18 @@ describe('title regeneration', () => {
   ] as const)('is offered for %s: %s', (_case, offered, row) => {
     expect(row.canRegenerateTitle).toBe(offered);
   });
+});
+
+describe('external links', () => {
+  it.each(['github-pr', 'gitlab-pr'] as const)('shows a normalized merged %s without a legacy merged flag', source => {
+    const pullRequest = testWorkItem({
+      source,
+      metadata: { merged: false },
+      workItem: { ...providerFactsCard.workItem, state: 'merged', metadata: {} },
+    });
+    const row = factoryRow(testSession('s1'), { pullRequest });
+
+    expect(row.pullRequest).toMatchObject({ knownMerged: true });
+  });
+
 });
