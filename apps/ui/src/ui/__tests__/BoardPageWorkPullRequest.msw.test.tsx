@@ -5,6 +5,7 @@
  * stay there and keep their own board.
  */
 import type { WorkItemRow } from '@factory/store/work-items/base';
+import type { Card } from '@factory/store/work-items/base';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -19,9 +20,9 @@ import { reviewCandidate, reviewItem } from './fixtures/reviewCard';
 
 const FACTORY_ID = reviewItem.factoryProjectId;
 const projectUrl = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`;
-const workPullRequest: WorkItemRow = { ...reviewItem, id: 'work-pr', board: 'work' };
+const workPullRequest: Card = { ...reviewItem, id: 'work-pr', board: 'work' };
 
-function stubBoards({ items = [] as WorkItemRow[], candidates = [] as (typeof reviewCandidate)[] } = {}) {
+function stubBoards({ items = [] as Card[], candidates = [] as (typeof reviewCandidate)[] } = {}) {
   const data = { items };
   const created: Array<Record<string, unknown>> = [];
   const transitions: Array<Record<string, unknown>> = [];
@@ -74,7 +75,7 @@ function stubBoards({ items = [] as WorkItemRow[], candidates = [] as (typeof re
     http.post(`${projectUrl}/work-items`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       created.push(body);
-      const filed: WorkItemRow = { ...reviewItem, id: 'filed-pr', board: String(body.board) };
+      const filed: Card = { ...reviewItem, id: 'filed-pr', board: String(body.board) };
       data.items = [filed];
       return HttpResponse.json({ workItem: filed });
     }),

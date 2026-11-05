@@ -9,6 +9,15 @@ import { describe, expect, it } from 'vitest';
 import { createFactoryStorageForTests } from '../testing.ts';
 import type { FactoryActorRef } from './actor.ts';
 import { supersedesFeedActivity } from './base.ts';
+import type { WorkItemDbRow } from '../work-items/base.ts';
+
+async function storedFeedClock(seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>, id: string) {
+  const row = await seed.storage.ops.findOne<WorkItemDbRow>(
+    seed.workItems.legacyMode ? 'work_items' : 'factory_board_items',
+    { id },
+  );
+  return row?.feed_activity_at;
+}
 
 const scope = { orgId: 'org-1', factoryProjectId: 'project-1', workItemId: 'item-1' };
 
@@ -367,7 +376,8 @@ describe('WorkItemCommentsStorage', () => {
     });
     const itemScope = { ...scope, workItemId: item.id };
     expect(item.commentCount).toBe(0);
-    expect(item.feedActivityAt).toBeNull();
+    expect(item).not.toHaveProperty('feedActivityAt');
+    expect(await storedFeedClock(seed, item.id)).toBeNull();
 
     const first = await seed.comments.create({ ...itemScope, author: alice, body: 'one' });
     await seed.comments.refreshWorkItemFeedActivity(itemScope);
@@ -376,7 +386,8 @@ describe('WorkItemCommentsStorage', () => {
 
     const afterCreates = await seed.workItems.get({ orgId: scope.orgId, id: item.id });
     expect(afterCreates?.commentCount).toBe(2);
-    expect(afterCreates?.feedActivityAt).toBeInstanceOf(Date);
+    const afterCreatesClock = await storedFeedClock(seed, item.id);
+    expect(afterCreatesClock).toBeInstanceOf(Date);
     expect(afterCreates?.revision).toBe(item.revision);
     expect(afterCreates?.updatedAt.getTime()).toBe(item.updatedAt.getTime());
 
@@ -388,7 +399,7 @@ describe('WorkItemCommentsStorage', () => {
     await seed.comments.refreshWorkItemFeedActivity(itemScope);
     const afterDelete = await seed.workItems.get({ orgId: scope.orgId, id: item.id });
     expect(afterDelete?.commentCount).toBe(1);
-    expect(afterDelete?.feedActivityAt!.getTime()).toBeGreaterThanOrEqual(afterCreates!.feedActivityAt!.getTime());
+    expect((await storedFeedClock(seed, item.id))!.getTime()).toBeGreaterThanOrEqual(afterCreatesClock!.getTime());
   });
 
   it('leaves feed activity where it was when a create is replayed', async () => {
@@ -403,7 +414,7 @@ describe('WorkItemCommentsStorage', () => {
     const token = 'token-replayed';
     await seed.comments.create({ ...itemScope, author: alice, body: 'hello', clientToken: token });
     await seed.comments.refreshWorkItemFeedActivity(itemScope);
-    const landed = (await seed.workItems.get({ orgId: scope.orgId, id: item.id }))?.feedActivityAt;
+    const landed = await storedFeedClock(seed, item.id);
 
     // A lost response and a retry: the row is recovered, so the feed has not
     // moved and the work item must not jump on a wall clock much later.
@@ -412,7 +423,7 @@ describe('WorkItemCommentsStorage', () => {
 
     const afterReplay = await seed.workItems.get({ orgId: scope.orgId, id: item.id });
     expect(afterReplay?.commentCount).toBe(1);
-    expect(afterReplay?.feedActivityAt?.getTime()).toBe(landed?.getTime());
+    expect((await storedFeedClock(seed, item.id))?.getTime()).toBe(landed?.getTime());
   });
 
   it('keeps a refresh from undoing a newer one, ties included', async () => {

@@ -1,6 +1,7 @@
 import { workItemPhaseSemantics } from '@factory/core';
 import type { PullRequest } from '@factory/capabilities';
 import type { FactoryProject } from '@factory/store';
+import type { Card } from '@factory/store';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '@factory/store';
 import type { WorkItemRow } from '@factory/store';
 import type { IntegrationContext } from '@factory/integrations';
@@ -11,12 +12,12 @@ import { attachGitLabRules } from './rules.ts';
 import { retireMergeRequestSubscriptions } from './subscriptions.ts';
 import type { ParsedGitLabWebhook } from './webhook.ts';
 
-function stringMetadata(item: WorkItemRow, key: string): string | undefined {
+function stringMetadata(item: Card, key: string): string | undefined {
   const value = item.metadata?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function numberMetadata(item: WorkItemRow, key: string): number | undefined {
+function numberMetadata(item: Card, key: string): number | undefined {
   const value = item.metadata?.[key];
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
@@ -31,7 +32,7 @@ function reconciledOutcome(metadata: Record<string, unknown>): 'merged' | 'close
   return metadata.merged ? 'merged' : 'closed';
 }
 
-function identityForItem(item: WorkItemRow): { projectId: number; mergeRequestIid: number; host: string } | null {
+function identityForItem(item: Card): { projectId: number; mergeRequestIid: number; host: string } | null {
   const reference = decodeMergeRequestReference(item.externalSource?.externalId ?? '');
   if (!reference) return null;
   const metadataProjectId = numberMetadata(item, 'gitlabProjectId');
@@ -64,7 +65,7 @@ function projectPathFromUrl(url: string, host: string, mergeRequestIid: number):
 }
 
 function terminalEvent(
-  item: WorkItemRow,
+  item: Card,
   pullRequest: PullRequest,
   identity: { projectId: number; mergeRequestIid: number; host: string },
 ): ParsedGitLabWebhook {

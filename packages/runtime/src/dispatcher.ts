@@ -41,7 +41,7 @@ import type {
   FactoryDispatchFailureCode,
   FactoryPendingStartRecord,
   FactoryRunBindingRecord,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
   UpsertWorkItemResult,
 } from '@factory/store';
@@ -318,7 +318,7 @@ type DispatcherSession = AgentSession;
 
 export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
-  item: WorkItemRow;
+  item: Card;
   role: string;
 }
 
@@ -470,7 +470,7 @@ function requestsConsent(
 // The Factory reviewing code it wrote is part of the same work, not new work to
 // consent to: a push to a Factory-authored PR re-reviews without a person's click.
 function reviewsFactoryAuthoredCode(
-  item: Pick<WorkItemRow, 'metadata' | 'externalSource'>,
+  item: Pick<Card, 'metadata' | 'externalSource'>,
   decision: FactoryCommitDecision,
 ): boolean {
   if (item.metadata?.factoryAuthored !== true) return false;
@@ -1473,7 +1473,7 @@ export class FactoryDecisionDispatcher {
    */
   async #resumeRoutedCard(
     record: FactoryDeferredDecisionRecord,
-    existing: WorkItemRow,
+    existing: Card,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     boards: BoardRegistry,
   ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
@@ -1500,7 +1500,7 @@ export class FactoryDecisionDispatcher {
    * An explicit placement (`skipRules`) still wins.
    */
   #keepRoutedCard(
-    existing: WorkItemRow,
+    existing: Card,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     boards: BoardRegistry,
   ): Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }> {

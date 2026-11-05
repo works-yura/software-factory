@@ -248,7 +248,7 @@ async function startFactory(board: ReturnType<typeof defineBoard>, skills?: Inli
   });
 
   const workItems = storage.getDomain<WorkItemsStorage>('work-items');
-  const card = async (title: string, labels: string[]): Promise<WorkItemRow> => {
+  const card = async (title: string, labels: string[]): Promise<Card> => {
     const response = await send('POST', `/web/factory/projects/${project.id}/work-items`, {
       board: board.id,
       title,
@@ -257,10 +257,10 @@ async function startFactory(board: ReturnType<typeof defineBoard>, skills?: Inli
     });
     const created = await response.json();
     expect(created, JSON.stringify(created)).toMatchObject({ workItem: { board: board.id } });
-    return created.workItem as WorkItemRow;
+    return created.workItem as Card;
   };
-  const read = async (item: WorkItemRow) => (await workItems.get({ orgId: ORG, id: item.id }))!;
-  const decisionsFor = async (item: WorkItemRow) =>
+  const read = async (item: Card) => (await workItems.get({ orgId: ORG, id: item.id }))!;
+  const decisionsFor = async (item: Card) =>
     (await workItems.listDeferredDecisions(ORG, project.id)).filter(record => record.workItemId === item.id);
   return { project, workItems, card, read, decisionsFor, close };
 }
@@ -347,7 +347,7 @@ describe('board phase fields at runtime', () => {
     const runtime = await startFactory(release);
     try {
       const { project, workItems, card, read, decisionsFor } = runtime;
-      const stagesOf = async (item: WorkItemRow) => (await read(item)).stages;
+      const stagesOf = async (item: Card) => (await read(item)).stages;
 
       const quick = await card('quick fix', ['effort:low']);
       const large = await card('large rewrite', ['effort:high']);

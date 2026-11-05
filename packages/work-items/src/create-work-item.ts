@@ -8,6 +8,7 @@ import { cardRuleFacts, INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from
 import type { FactoryTransitionRequest, FactoryTransitionService } from '@factory/runtime';
 import type { EmitAuditInput } from '@factory/feed';
 import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
+import type { Card } from '@factory/store';
 
 /** Records one audit event for the caller; routes bind it to the request, tools to the session's person. */
 export type FactoryAuditEmit = (input: EmitAuditInput) => Promise<void>;
@@ -16,9 +17,9 @@ type TransitionResult = Awaited<ReturnType<FactoryTransitionService['transition'
 
 export type CreateFactoryWorkItemResult =
   /** A new card, entered into its board's first phase and audited. */
-  | { status: 'created'; item: WorkItemRow }
+  | { status: 'created'; item: Card }
   /** The source key matched an existing card, which was updated instead (the caller audits the patch). */
-  | { status: 'reused'; item: WorkItemRow }
+  | { status: 'reused'; item: Card }
   | {
       status: 'refused';
       code: 'invalid_board' | 'governed_transition_required' | 'factory_transitions_unavailable';

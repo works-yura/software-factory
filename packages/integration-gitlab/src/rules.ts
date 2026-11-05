@@ -22,6 +22,7 @@ import type {
 } from '@factory/core';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '@factory/core';
 import type { IntakeStorage } from '@factory/store';
+import type { Card } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type {
   ExternalRepositoryProjectTarget,
@@ -419,7 +420,7 @@ export class GitLabRules {
       }
       pushedReviewItem = (await this.options.storage.get({ orgId: reviewItem.orgId, id: reviewItem.id })) ?? reviewItem;
     }
-    const candidates: Array<WorkItemRow | undefined> =
+    const candidates: Array<Card | undefined> =
       event === 'mergeRequestMerged'
         ? [...new Map([reviewItem, authoringItem].filter(Boolean).map(item => [item!.id, item!])).values()]
         : event === 'mergeRequestCommented'
@@ -583,7 +584,7 @@ export class GitLabRules {
       mergeRequestIid: number | undefined;
       mergeRequestKey: string | undefined;
       factoryAuthored: boolean;
-      item: WorkItemRow | undefined;
+      item: Card | undefined;
       ingressIdentity: string;
       mergeRequestOpenedScope?: 'intake' | 'board';
     },

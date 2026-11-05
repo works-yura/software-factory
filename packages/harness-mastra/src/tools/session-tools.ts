@@ -25,6 +25,7 @@ import type { ProjectBoardSource } from '@factory/runtime';
 import { resolveWorkItemRepository } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
+import type { Card } from '@factory/store';
 import type { CustomProvidersStorage } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
@@ -104,7 +105,7 @@ function startErrorMessage(error: unknown): string | null {
   return null;
 }
 
-function workItemLabel(item: WorkItemRow): string {
+function workItemLabel(item: Card): string {
   const number = workItemNumber(item);
   return number === null ? `"${item.title}"` : `#${number}`;
 }

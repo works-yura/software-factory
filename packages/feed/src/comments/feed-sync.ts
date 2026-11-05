@@ -9,6 +9,7 @@
  */
 
 import type { ExternalWorkItemSource, WorkItemRow } from '@factory/store';
+import type { Card } from '@factory/store';
 
 import type { WorkItemCommentRow } from '@factory/store';
 
@@ -17,5 +18,5 @@ export interface WorkItemFeedPublisher {
   /** Matches `ExternalWorkItemSource.integrationId`; fan-out skips a comment's own platform. */
   readonly id: string;
   /** `null` when the work item is not bound to this platform — nothing to mirror. */
-  publish(comment: WorkItemCommentRow, workItem: WorkItemRow): Promise<{ source: ExternalWorkItemSource } | null>;
+  publish(comment: WorkItemCommentRow, workItem: Card): Promise<{ source: ExternalWorkItemSource } | null>;
 }

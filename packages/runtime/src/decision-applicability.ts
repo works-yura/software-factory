@@ -7,6 +7,7 @@ import type {
   WorkItemsStorage,
 } from '@factory/store';
 import { factoryDispatchFailureMetadata } from '@factory/store';
+import type { Card } from '@factory/store';
 
 type ApplicabilityRecord = Pick<FactoryDeferredDecisionRecord, 'id' | 'evaluationId' | 'createdAt' | 'decision'>;
 
@@ -36,7 +37,7 @@ export function decisionRetryable(
  */
 export function decisionOvertaken(input: {
   boards: BoardRegistry;
-  item: WorkItemRow | null;
+  item: Card | null;
   record: ApplicabilityRecord;
   role: string;
   /** Decisions from the same rule evaluation as `record`. */

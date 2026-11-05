@@ -146,7 +146,9 @@ import { CallbackFactorySandbox } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
 import { peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
+import { WorkItemSplitModeError } from '@factory/store';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
+import type { Card } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
 import { handleServerError } from '@factory/http';
 import { FactoryChannelReplyProcessor } from '@factory/session';
@@ -781,6 +783,8 @@ export class MastraFactory {
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
     await timedPhase('prepare.storage.init', () => storage.init());
+    const workItemsInitError = storage.domainInitError('work-items');
+    if (workItemsInitError instanceof WorkItemSplitModeError) throw workItemsInitError;
 
     // Each project's boards are the code boards plus the boards it stored. Load every project
     // before anything reads its boards; without the boards domain the code boards serve directly.
@@ -1107,7 +1111,7 @@ export class MastraFactory {
           }),
           ...(githubIntegration
             ? {
-                onAccepted: (args: { orgId: string; factoryProjectId: string; item: WorkItemRow }) =>
+                onAccepted: (args: { orgId: string; factoryProjectId: string; item: Card }) =>
                   reconcileGithubAcceptanceLabels(
                     githubIntegration,
                     sourceControlStorage.forIntegration(githubIntegration.id),

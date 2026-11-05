@@ -29,6 +29,7 @@ import type {
 } from '@factory/core';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '@factory/core';
 import { resolveIntakeLabelRoute } from '@factory/store';
+import type { Card } from '@factory/store';
 import type { IntakeStorage } from '@factory/store';
 import type { IntegrationStorageHandle } from '@factory/store';
 import type { FactoryProjectsStorage } from '@factory/store';
@@ -183,7 +184,7 @@ function editedRequestChangesVerdict(payload: Record<string, unknown>, post: unk
  */
 const MAX_STALE_RULE_ATTEMPTS = 3;
 
-export function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
+export function cardBelongsToRepository(item: Card, repositoryId: number, repositoryFullName: string): boolean {
   const url = item.externalSource?.url;
   if (url) {
     const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(url);
@@ -206,12 +207,12 @@ export function provenanceTarget(repositoryId: number, pullRequestNumber: number
   return `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
 }
 
-function workItemSource(item: WorkItemRow) {
+function workItemSource(item: Card) {
   if (!item.externalSource) return 'manual' as const;
   return item.externalSource.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
 }
 
-function workItemSourceKey(item: WorkItemRow): string | null {
+function workItemSourceKey(item: Card): string | null {
   return item.externalSource?.externalId ?? null;
 }
 
@@ -231,7 +232,7 @@ export async function trustedCollaborator(
 
 // Terminal cards leave the reconcile loop below, so the ones that got there before author
 // trust was recorded have no other path to an answer.
-function authorAwaitingTrust(item: WorkItemRow, repository: ReconcileRepository): string | undefined {
+function authorAwaitingTrust(item: Card, repository: ReconcileRepository): string | undefined {
   const metadata = item.metadata ?? {};
   if (typeof metadata.author !== 'string' || metadata.authorTrusted !== undefined) return undefined;
   const tracked = reconcilablePullRequestNumber(item, repository) ?? reconcilableIssueNumber(item, repository);
@@ -707,7 +708,7 @@ export class GithubRules {
     // item's revision. So the evaluation, not the decision, is what fans out:
     // the rule runs once per bound item, each with its own ingress identity.
     const evaluate = async (
-      item: WorkItemRow | undefined,
+      item: Card | undefined,
       ingressIdentity: string,
       /** Set on the evaluation that files the pull request's own Review card. */
       pullRequestIntake = false,
@@ -1080,8 +1081,8 @@ export class GithubRules {
     repositoryId: number,
     repositoryFullName: string,
     pullRequestNumber: number,
-    resolved: WorkItemRow,
-  ): Promise<WorkItemRow | undefined> {
+    resolved: Card,
+  ): Promise<Card | undefined> {
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
     const linked =
       resolved.externalSource?.type === 'pull-request'
@@ -1111,7 +1112,7 @@ export class GithubRules {
     pullRequestHeadBranch: string | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
     preferAuthoringItem = false,
-  ): Promise<WorkItemRow | undefined> {
+  ): Promise<Card | undefined> {
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
     const resolved = this.#resolveItem(
       items,
@@ -1136,14 +1137,14 @@ export class GithubRules {
   }
 
   #resolveItem(
-    items: WorkItemRow[],
+    items: Card[],
     repositoryId: number,
     repositoryFullName: string,
     issueNumber: number | undefined,
     pullRequestNumber: number | undefined,
     pullRequestHeadBranch: string | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
-  ): WorkItemRow | undefined {
+  ): Card | undefined {
     if (provenance) return items.find(item => item.id === provenance.workItemId);
     if (issueNumber) {
       return (
@@ -1274,7 +1275,7 @@ export function sameStrings(left: unknown, right: string[] | undefined): boolean
  * a project mapped to multiple repositories must not reconcile one repo's
  * card against another repo's PR number.
  */
-function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
+function reconcilablePullRequestNumber(item: Card, repository: ReconcileRepository): number | undefined {
   if (item.externalSource?.type !== 'pull-request') return undefined;
   const url = item.externalSource.url;
   if (url) {
@@ -1296,7 +1297,7 @@ function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileR
  * trusted when the intake-stamped `githubRepositoryId` confirms the
  * repository, because the sweep initiates closes on its own.
  */
-export function reconcilableIssueNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
+export function reconcilableIssueNumber(item: Card, repository: ReconcileRepository): number | undefined {
   if (item.externalSource?.type !== 'issue') return undefined;
   const url = item.externalSource.url;
   if (url) {
@@ -1478,7 +1479,7 @@ function githubLabels(names: readonly string[] = []): Array<{ name: string }> {
 
 function reconciledPullRequestMetadata(
   state: ReconcilePullRequestState,
-  reconciliation: 'clear' | 'settled',
+  reconciliation: 'clear' | 'settled' | undefined,
   authorTrusted?: boolean,
 ): Record<string, unknown> {
   return {
@@ -1490,8 +1491,12 @@ function reconciledPullRequestMetadata(
     ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
     ...(state.labels ? { labels: state.labels } : {}),
     ...(authorTrusted === undefined ? {} : { authorTrusted }),
-    [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]:
-      reconciliation === 'settled' ? (state.merged ? 'merged' : 'closed') : null,
+    ...(reconciliation === undefined
+      ? {}
+      : {
+          [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]:
+            reconciliation === 'settled' ? (state.merged ? 'merged' : 'closed') : null,
+        }),
   };
 }
 
@@ -1569,15 +1574,15 @@ export function createGithubPullRequestReconciler(
     for (const repository of scoped) {
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
-      let cardsByNumber: Map<number, WorkItemRow[]>;
-      let unanswered: Array<{ item: WorkItemRow; author: string }>;
+      let cardsByNumber: Map<number, Card[]>;
+      let unanswered: Array<{ item: Card; author: string }>;
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
           installationExternalId: String(repository.installationId),
           repositoryExternalId: String(repository.id),
         });
         if (projects.length === 0) continue;
-        cardsByNumber = new Map<number, WorkItemRow[]>();
+        cardsByNumber = new Map<number, Card[]>();
         unanswered = [];
         for (const project of projects) {
           const items = await options.storage.list({
@@ -1660,7 +1665,11 @@ export function createGithubPullRequestReconciler(
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
                 patch: {
-                  metadata: reconciledPullRequestMetadata(state, 'clear', trustStale ? authorTrusted : undefined),
+                  metadata: reconciledPullRequestMetadata(
+                    state,
+                    reconciliation === 'merged' || reconciliation === 'closed' ? 'clear' : undefined,
+                    trustStale ? authorTrusted : undefined,
+                  ),
                 },
               });
             } catch (error) {

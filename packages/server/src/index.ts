@@ -45,7 +45,9 @@ export type {
 export { FactoryProjectsStorage } from '@factory/store';
 export type { FactoryProject } from '@factory/store';
 export { WorkItemsStorage } from '@factory/store';
-export type { CreateWorkItemInput, WorkItemRow } from '@factory/store';
+export type { BoardItemRow, Card, CreateWorkItemInput, WorkItemRow } from '@factory/store';
+export { primarySource } from '@factory/store';
+export type { ProviderWorkItemRow, WorkItemProvider, WorkItemSourceRow } from '@factory/store';
 export { createStateSigner } from '@factory/auth';
 export type { StateSigner, StateTenant } from '@factory/auth';
 export { createFactorySecretEncryption, createPlaintextFactorySecretEncryption } from '@factory/store';

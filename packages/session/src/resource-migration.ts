@@ -3,6 +3,7 @@ import type { MemoryStorage } from '@mastra/core/storage';
 
 import { externallyAuthoredWorkItem } from '@factory/core';
 import type { SourceControlSession } from '@factory/store';
+import type { Card } from '@factory/store';
 import type { WorkItemRow } from '@factory/store';
 import { sessionStampCounts } from './session-threads.ts';
 
@@ -24,7 +25,7 @@ export interface SessionResourceMigrationDeps {
     markResourcesMigrated(sessionId: string): Promise<void>;
   };
   workItems: {
-    listRunBoundItems(sessionId: string): Promise<(Pick<WorkItemRow, 'externalSource' | 'metadata'> | null)[]>;
+    listRunBoundItems(sessionId: string): Promise<(Pick<Card, 'externalSource' | 'metadata'> | null)[]>;
     moveRunBindingsToResource(input: { sessionId: string; resourceId: string }): Promise<number>;
   };
   /** Absent when the integrations domain is not ready; subscriptions then stay where they are. */
@@ -72,7 +73,7 @@ export interface SessionResourceMigrationReport {
  */
 export function sessionMemoryResource(
   session: SourceControlSession,
-  boundItems: (Pick<WorkItemRow, 'externalSource' | 'metadata'> | null)[],
+  boundItems: (Pick<Card, 'externalSource' | 'metadata'> | null)[],
 ): { owner: 'factory' | 'user' | 'isolated'; resourceId: string | null } {
   if (boundItems.some(item => item === null || untrustedWorkItem(item))) {
     return { owner: 'isolated', resourceId: session.sessionId };
@@ -87,7 +88,7 @@ export function sessionMemoryResource(
     : { owner: 'user', resourceId: session.userId };
 }
 
-function untrustedWorkItem(item: Pick<WorkItemRow, 'externalSource' | 'metadata'>): boolean {
+function untrustedWorkItem(item: Pick<Card, 'externalSource' | 'metadata'>): boolean {
   return item.externalSource?.type === 'pull-request' || externallyAuthoredWorkItem(item);
 }
 

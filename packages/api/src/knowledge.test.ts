@@ -1363,7 +1363,7 @@ describe('KnowledgeRoutes', () => {
     expect(cursor).toBeUndefined();
     expect(seen.map(event => event.recordId)).toContain(evidence.id);
     expect(JSON.stringify(seen)).not.toContain('other-thread');
-  });
+  }, 30_000); // Over a thousand cards: each write fills the work, source and board item tables.
 
   it('flags structural-lens activity as truncated when the scope has more members than the route reads', async () => {
     const seed = async (maxNodes: number) => {

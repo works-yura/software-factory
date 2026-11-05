@@ -1,12 +1,13 @@
 import { NEEDS_APPROVAL_LABEL } from '@factory/core';
 import type { SourceControlStorageHandle } from '@factory/store';
+import type { Card } from '@factory/store';
 import type { WorkItemRow } from '@factory/store';
 import type { GithubIntegration } from './integration.ts';
 
 export interface ReconcileAcceptanceLabelsInput {
   orgId: string;
   factoryProjectId: string;
-  item: WorkItemRow;
+  item: Card;
 }
 
 /**

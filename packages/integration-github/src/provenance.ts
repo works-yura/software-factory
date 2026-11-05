@@ -1,5 +1,6 @@
 import type { FactoryRuleJsonValue } from '@factory/core';
 import type { IntegrationStorageHandle } from '@factory/store';
+import type { Card } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { FactoryRunBindingRecord, WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { GithubIntegration } from './integration.ts';
@@ -8,7 +9,7 @@ import { parseCreatedPullRequest } from './session-subscriptions.ts';
 
 export interface RecordFactoryPullRequestProvenanceInput {
   binding: FactoryRunBindingRecord;
-  item: WorkItemRow;
+  item: Card;
   assistantMessageId: string;
   toolCallId: string;
   toolName: string;

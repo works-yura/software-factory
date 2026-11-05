@@ -4,7 +4,7 @@ import type { LiveSessions } from '@factory/session';
 import type {
   FactoryAttentionIdentity,
   FactoryAttentionReceiptRecord,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '@factory/store';
 import { factoryAgentWaitingAttentionIdentity, factoryAttentionKey } from '@factory/store';
@@ -21,7 +21,7 @@ import type {
 import { matchesView, receiptScope } from '@factory/runtime';
 
 interface ParkedSession {
-  item: WorkItemRow;
+  item: Card;
   role: string;
   sessionId: string;
   threadId: string;

@@ -14,6 +14,7 @@ import type {
 import { boardForWorkItem, resolveBoardToolRule, reviewsPullRequest, workItemPhaseSemantics } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '@factory/store';
+import type { Card } from '@factory/store';
 import { findSessionRunBinding, getFactorySessionCoordinates } from '@factory/session';
 import { toBoardSource } from '@factory/runtime';
 import type { FactoryTransitionService, ProjectBoardSource } from '@factory/runtime';
@@ -35,11 +36,11 @@ const STATE_ID = 'factory-phase';
 const RULE_TIMEOUT_MS = 5_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
-function ruleStage(boards: BoardRegistry, item: WorkItemRow | null | undefined): string | undefined {
+function ruleStage(boards: BoardRegistry, item: Card | null | undefined): string | undefined {
   return item && workItemPhaseSemantics(boards, item) ? item.stages[0] : undefined;
 }
 
-function itemInRuleStage(boards: BoardRegistry, item: WorkItemRow | null | undefined): item is WorkItemRow {
+function itemInRuleStage(boards: BoardRegistry, item: Card | null | undefined): item is Card {
   return ruleStage(boards, item) !== undefined;
 }
 
@@ -113,7 +114,7 @@ function reviewRuntimeFromRequestContext(
   };
 }
 
-function workItemSourceKey(item: WorkItemRow): string | null {
+function workItemSourceKey(item: Card): string | null {
   const source = item.externalSource;
   return source ? `${source.integrationId}:${source.type}:${source.externalId}` : null;
 }
@@ -195,7 +196,7 @@ function currentCompletedToolMessage(
   return undefined;
 }
 
-async function phaseCacheKey(value: ActivePhaseSnapshotValue, linked: WorkItemRow[]): Promise<string> {
+async function phaseCacheKey(value: ActivePhaseSnapshotValue, linked: Card[]): Promise<string> {
   const serialized = JSON.stringify({
     ...value,
     linked: linked.map(item => [item.id, item.revision, item.stages[0]]),
@@ -572,7 +573,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     binding: FactoryRunBindingRecord,
     messages: MastraDBMessage[],
     toolCallIds?: ReadonlySet<string>,
-    preloadedItem?: WorkItemRow,
+    preloadedItem?: Card,
   ): Promise<void> {
     const item = preloadedItem ?? (await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId }));
     if (!itemInRuleStage(await this.boards.load(binding), item)) return;
@@ -603,7 +604,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
 
   private async ingestToolResult(
     binding: FactoryRunBindingRecord,
-    item: WorkItemRow,
+    item: Card,
     toolResult: CompletedToolResult,
   ): Promise<void> {
     const board = boardForWorkItem(item);

@@ -19,6 +19,7 @@ import { resolveWorkItemRepository } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
 import type { CommentsDomain } from '@factory/feed';
 import { WorkItemRelationError } from '@factory/store';
+import type { Card } from '@factory/store';
 import type { UpdateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { createFactoryWorkItem } from '@factory/work-items';
 import type { FactoryAuditEmit } from '@factory/work-items';
@@ -66,7 +67,7 @@ const repositorySchema = z
 
 const decisionId = z.string().trim().uuid().describe('Decision id, from factory_list_attention or inspect.');
 
-function briefItem(item: WorkItemRow) {
+function briefItem(item: Card) {
   return {
     id: item.id,
     number: workItemNumber(item),
@@ -134,7 +135,7 @@ export function createFactoryWorkItemTools(
         : `${slug} is not linked to this Factory, and it has no linked repositories.`,
     );
   };
-  const follow = (item: WorkItemRow, reason: 'created' | 'subscribed') =>
+  const follow = (item: Card, reason: 'created' | 'subscribed') =>
     deps.workItems.subscribeToWorkItem({
       ...project,
       workItemId: item.id,

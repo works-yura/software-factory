@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { __clearSessionEnvironmentsForTests, recordSessionEnvironment } from './environment-state-processor.ts';
 import type { CreateSourceControlSessionInput, ProjectRepository, SourceControlSession } from '@factory/store';
+import type { Card } from '@factory/store';
 import { SourceControlStorageInMemory } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { LocalFactorySandbox } from './local-factory-sandbox.ts';
@@ -39,6 +40,34 @@ function workItem(sessionId: string): WorkItemRow {
     id: 'item-1',
     orgId: 'org-1',
     factoryProjectId: 'project-1',
+    workItemId: 'work-item-1',
+    parentBoardItemId: null,
+    board: 'work',
+    triageType: null,
+    acceptedAt: null,
+    autonomyArmedAt: null,
+    plansPreapprovedAt: null,
+    commentCount: 0,
+    workItem: {
+      id: 'work-item-1',
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      sources: [],
+      provider: 'factory',
+      externalId: 'item-1',
+      key: null,
+      url: null,
+      title: 'Fix the bug',
+      state: null,
+      labels: [],
+      author: null,
+      parentWorkItemId: null,
+      metadata: null,
+      revision: 1,
+      syncedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
     externalSource: null,
     parentWorkItemId: null,
     title: 'Fix the bug',
@@ -53,7 +82,7 @@ function workItem(sessionId: string): WorkItemRow {
   } as unknown as WorkItemRow;
 }
 
-function workItems(item: WorkItemRow): Pick<WorkItemsStorage, 'get'> {
+function workItems(item: Card): Pick<WorkItemsStorage, 'get'> {
   return { get: async () => item };
 }
 

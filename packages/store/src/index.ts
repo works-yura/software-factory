@@ -24,3 +24,24 @@ export * from './source-control/base.ts';
 export * from './source-control/inmemory.ts';
 export * from './supervisor-finding.ts';
 export * from './work-items/base.ts';
+export { Cards, splitCardRows } from './work-items/cards.ts';
+export type { CardInsert } from './work-items/cards.ts';
+export {
+  FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
+  FACTORY_BOARD_ITEMS_SCHEMA,
+  FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+  FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
+  FACTORY_WORK_ITEMS_SCHEMA,
+  primarySource,
+  WORK_ITEMS_SCHEMA,
+} from './work-items/work-item-schema.ts';
+// The provider work item is `ProviderWorkItemRow` here: `WorkItemRow` stays the joined card v4 callers read.
+export type {
+  BoardItemDbRecord,
+  WorkItemDbRecord,
+  WorkItemProvider,
+  WorkItemRow as ProviderWorkItemRow,
+  WorkItemSourceDbRecord,
+  WorkItemSourceRow,
+} from './work-items/work-item-schema.ts';
+export * from './work-items/split-migration.ts';

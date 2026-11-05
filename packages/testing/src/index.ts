@@ -28,6 +28,9 @@ export class FactoryDecisionDispatcher extends DecisionDispatcher {
   }
 }
 
-export function createFactoryStorageForTests() {
-  return createStorage({ boards: createDefaultBoardRegistry() });
+type TestBackend = NonNullable<NonNullable<Parameters<typeof createStorage>[0]>['storage']>;
+
+/** Fresh storage with Work and Review installed; pass a backend (an isolated Postgres schema, say) to use it. */
+export function createFactoryStorageForTests<T extends TestBackend = TestBackend>(storage?: T) {
+  return createStorage<T>({ boards: createDefaultBoardRegistry(), ...(storage ? { storage } : {}) });
 }
