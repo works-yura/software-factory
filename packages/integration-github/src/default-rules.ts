@@ -39,39 +39,6 @@ function pullRequestCardNoun(context: FactoryGithubRuleContext): string {
   return context.board === 'review' ? 'Review card' : 'pull request card';
 }
 
-function retriageGithubIssue(context: FactoryGithubRuleContext) {
-  if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
-  if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
-  // The stage checks below use Work lane names; other boards opt in with their own rules.
-  if (context.board !== 'work') return;
-  // A card in Intake waits for a person to move it; talk on it starts nothing. Re-triage would
-  // take over a card that is being built or reviewed.
-  const stage = context.item.stages?.length === 1 ? context.item.stages[0] : undefined;
-  if (stage === 'intake' || stage === 'execute' || stage === 'review') return;
-  // A finished card has nothing left to triage; talk on a closed issue must not park a run on it.
-  if (isTerminalFactoryRuleStage(context.item.stages)) return;
-
-  const reason =
-    context.event === 'issueEdited'
-      ? context.issueChange?.title && context.issueChange.body
-        ? 'issue title and body edited'
-        : context.issueChange?.title
-          ? 'issue title edited'
-          : 'issue body edited'
-      : context.event === 'issueCommentDeleted'
-        ? 'comment deleted'
-        : context.event === 'issueCommentEdited'
-          ? 'comment edited'
-          : 'comment created';
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-triage`,
-    role: 'triage',
-    skillName: 'factory-triage',
-    arguments: `Re-triage GitHub issue (${context.item.url}) after ${reason}.`,
-  } as const;
-}
-
 function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: string): boolean {
   if (!createdAt) return false;
   const sourceCreatedAt = Date.parse(createdAt);
@@ -453,11 +420,13 @@ function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
 
 export const defaultGithubRules = Object.freeze({
   issueOpened: issueOpened,
-  issueEdited: retriageGithubIssue,
+  // Triage runs once, when a person moves the card into Triage or starts the run; later edits and
+  // comments on the issue don't run it again.
+  issueEdited: null,
   issueClosed: issueClosed,
-  issueCommentCreated: retriageGithubIssue,
-  issueCommentEdited: retriageGithubIssue,
-  issueCommentDeleted: retriageGithubIssue,
+  issueCommentCreated: null,
+  issueCommentEdited: null,
+  issueCommentDeleted: null,
   pullRequestOpened: pullRequestOpened,
   pullRequestUpdated: reReviewUpdatedPullRequest,
   pullRequestCommentCreated: addressPullRequestComment,
