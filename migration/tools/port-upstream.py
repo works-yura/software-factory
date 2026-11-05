@@ -84,12 +84,15 @@ def similarity(a, b):
 
 
 def index_v4():
+    """Tracked v4 files by name. Ignored copies (synced skills, build output) are never merge targets."""
     by_name = collections.defaultdict(list)
+    tracked = set(git(ROOT, 'ls-files').stdout.splitlines())
     for root, dirs, files in os.walk(ROOT):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for name in files:
-            if name.endswith(SOURCE_EXT):
-                by_name[name].append(os.path.relpath(os.path.join(root, name), ROOT))
+            path = os.path.relpath(os.path.join(root, name), ROOT)
+            if name.endswith(SOURCE_EXT) and path in tracked:
+                by_name[name].append(path)
     return by_name
 
 
