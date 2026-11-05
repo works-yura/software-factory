@@ -57,7 +57,7 @@ describe('factory pipelines', () => {
     const flow: Record<WorkBoardPhase, string[]> = {
       intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
       triage: ['intake', 'planning', 'done', 'canceled'],
-      planning: ['execute', 'intake', 'done', 'canceled'],
+      planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
       execute: ['review', 'planning', 'done', 'canceled'],
       review: ['execute', 'intake', 'done', 'canceled'],
       'pr-review': ['intake', 'done', 'canceled'],
