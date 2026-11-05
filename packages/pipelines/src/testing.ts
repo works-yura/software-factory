@@ -1,5 +1,5 @@
 import { defineBoard } from '@factory/core';
-import type { BoardDefinition, BoardRegistry } from '@factory/core';
+import type { BoardDefinition, BoardRegistry, ProviderWorkItem } from '@factory/core';
 
 export { createTestBoard } from '@factory/core/testing';
 
@@ -68,3 +68,29 @@ export function createToolRuleTestRegistry(tools: BoardDefinition<string, string
   ]);
 }
 
+
+/** A provider work item for rule-context fixtures: the facts a card's source holds apart from board metadata. */
+export function providerWorkItemForTests(
+  input: Partial<Pick<ProviderWorkItem, 'provider' | 'key' | 'url' | 'state' | 'labels' | 'author' | 'metadata'>> = {},
+): ProviderWorkItem {
+  return {
+    sources: [],
+    id: 'work-item-1',
+    orgId: 'org-1',
+    factoryProjectId: 'project-1',
+    provider: input.provider ?? 'github',
+    externalId: 'external-1',
+    key: input.key ?? null,
+    url: input.url ?? null,
+    title: 'Work item',
+    state: input.state ?? null,
+    labels: input.labels ?? [],
+    author: input.author ?? null,
+    parentWorkItemId: null,
+    metadata: input.metadata ?? null,
+    revision: 1,
+    syncedAt: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
+}

@@ -173,7 +173,10 @@ export async function resolveStartRepository({
     sourceControl,
     orgId: request.orgId,
     factoryProjectId: request.factoryProjectId,
-    item: storedItem ?? { metadata: request.workItem.input.metadata ?? null },
+    item: storedItem ?? {
+      metadata: request.workItem.input.metadata ?? null,
+      workItem: { metadata: request.workItem.input.metadata ?? null },
+    },
   });
   if (repository.status === 'ambiguous') {
     // A retry of this role's existing session keeps its already-chosen
@@ -364,7 +367,9 @@ export class FactoryStartCoordinator {
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's
     // base branch; fall back to the intake metadata captured from the PR.
-    const metadataBaseBranch = request.workItem.input.metadata?.baseBranch;
+    const metadataBaseBranch = storedItem
+      ? storedItem.workItem.metadata?.baseBranch
+      : request.workItem.input.metadata?.baseBranch;
     const baseRef =
       (sourceSession.baseBranch || undefined) ??
       (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined);

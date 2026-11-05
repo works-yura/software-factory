@@ -172,7 +172,7 @@ function readReviewTarget(item: Card): ReviewSourceOutput['reviewTarget'] {
 }
 
 function readBoundRepository(item: Card): ReviewSourceOutput['boundRepository'] {
-  const metadata = item.metadata;
+  const metadata = item.workItem.metadata;
   if (!metadata) return null;
   // Intake stamps repository identity on every PR/MR card:
   // `github/default-rules.ts` writes `githubRepositoryId`, and
@@ -191,9 +191,7 @@ function readBoundRepository(item: Card): ReviewSourceOutput['boundRepository'] 
 }
 
 function readPullRequestAuthor(item: Card): string | null {
-  const metadata = item.metadata;
-  if (!metadata) return null;
-  const author = metadata.author;
+  const author = item.workItem.author;
   if (typeof author === 'string' && author.trim()) return author.trim();
   return null;
 }

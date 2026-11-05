@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { defineBoard, workItemPhaseSemantics } from '@factory/core';
+import { createProviderWorkItemForTests } from '@factory/store/testing';
 import { createBoardRegistry } from '@factory/testing';
 import { createTestBoard } from '@factory/pipelines/testing';
 import { NEEDS_APPROVAL_LABEL } from '@factory/core';
@@ -40,6 +41,14 @@ function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
     createdAt: ago(3 * HOUR),
     updatedAt: ago(HOUR),
     ...overrides,
+    workItem:
+      overrides.workItem ??
+      createProviderWorkItemForTests({
+        id: overrides.id,
+        title: `Card ${overrides.id}`,
+        source: overrides.externalSource ?? null,
+        metadata: null,
+      }),
   } as WorkItemRow;
 }
 

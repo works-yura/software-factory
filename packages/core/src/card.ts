@@ -16,6 +16,8 @@ export interface ExternalWorkItemSource {
 }
 
 export interface PipelineCard {
+  /** The source's facts (labels among them) since storage split work items from board items. */
+  readonly workItem?: { readonly labels: readonly string[] };
   id: string;
   orgId: string;
   factoryProjectId: string;
@@ -61,4 +63,58 @@ export interface CardMoveStore {
     workItemId: string;
     supersededAt: Date;
   }): Promise<unknown>;
+}
+
+export type WorkItemProvider =
+  | 'github'
+  | 'gitlab'
+  | 'jira'
+  | 'linear'
+  | 'slack'
+  | 'incidentio'
+  | 'factory'
+  | (string & {});
+
+/** One external identity of a work item and the facts its provider last reported. */
+export interface WorkItemSourceRow {
+  id: string;
+  workItemId: string;
+  provider: WorkItemProvider;
+  integrationId: string;
+  sourceType: string;
+  workspaceId: string | null;
+  externalId: string;
+  sourceKey: string | null;
+  key: string | null;
+  url: string | null;
+  state: string | null;
+  labels: string[];
+  author: string | null;
+  metadata: Record<string, unknown> | null;
+  revision: number;
+  syncedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** The work itself, as its provider describes it; Factory's process state lives on the board item. */
+export interface ProviderWorkItem {
+  sources: WorkItemSourceRow[];
+  id: string;
+  orgId: string;
+  factoryProjectId: string;
+  provider: WorkItemProvider;
+  externalId: string;
+  key: string | null;
+  url: string | null;
+  title: string;
+  state: string | null;
+  labels: string[];
+  author: string | null;
+  parentWorkItemId: string | null;
+  metadata: Record<string, unknown> | null;
+  revision: number;
+  syncedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }

@@ -1,7 +1,7 @@
 import { FACTORY_ROLE_STAGES, needsApproval } from '@factory/core/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@factory/core/rules/types';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
-import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
+import { itemSessionSpec, metadataLabels, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { translator } from '../../i18n/t';
 import { isTerminalStage } from './stages';
@@ -30,7 +30,10 @@ export interface CardMove {
 }
 
 /** A persisted card or a candidate feed entry: both are moved by the same lane rules. */
-export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> & Partial<Pick<WorkItem, 'board' | 'stages'>>;
+export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> &
+  Partial<Pick<WorkItem, 'board' | 'stages'>> & {
+    workItem?: { labels: string[] };
+  };
 
 const tk = translator('board');
 
@@ -103,7 +106,11 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [reviewMoves(item).reReview] : [];
   if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
-  if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : issueMoves(columnStage);
+  if (item.source === 'github-issue') {
+    return needsApproval({ ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } })
+      ? [PREPARE_APPROVAL]
+      : issueMoves(columnStage);
+  }
   if (item.source === 'gitlab-issue') {
     return issueMoves(columnStage);
   }

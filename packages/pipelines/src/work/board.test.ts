@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '@factory/core';
+import { providerWorkItemForTests } from '../testing.ts';
 import { workBoard } from './board.ts';
 import { openApprovedChangeRequest } from './tool-rules.ts';
 
@@ -21,7 +22,12 @@ function executeContext(source: FactoryRuleItemContext['source']): FactoryStageR
       url: 'https://gitlab.com/acme/app/-/issues/3',
       stages: ['execute'],
       acceptedAt: null,
-      metadata: { identifier: 'acme/app#3' },
+      metadata: {},
+      workItem: providerWorkItemForTests({
+        provider: source === 'gitlab-issue' ? 'gitlab' : 'github',
+        key: 'acme/app#3',
+        metadata: { identifier: 'acme/app#3' },
+      }),
     },
     board: 'work',
     itemRevision: 1,

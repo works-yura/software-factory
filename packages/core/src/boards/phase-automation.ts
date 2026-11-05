@@ -2,6 +2,7 @@ import type { ExternalWorkItemSource } from '../card.ts';
 import { evaluateRuleGroup } from '../rules/rule-group.ts';
 import type { FactoryCommitDecision } from '../rules/types.ts';
 import { cardRuleFacts } from './card-facts.ts';
+import type { CardSourceFacts } from './card-facts.ts';
 import type { BoardRegistry } from './registry.ts';
 import { boardForWorkItem } from './semantics.ts';
 
@@ -11,6 +12,7 @@ type Card = {
   readonly stages: readonly string[];
   readonly title: string;
   readonly metadata: Record<string, unknown> | null;
+  readonly workItem?: CardSourceFacts;
 };
 
 /**

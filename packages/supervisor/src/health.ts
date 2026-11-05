@@ -60,12 +60,15 @@ const FINDING_KINDS: FactoryHealthFindingKind[] = [
 const IN_FLIGHT_DECISION_STATUSES = new Set(['pending', 'retry', 'leased', 'proposed']);
 
 function itemNumber(item: WorkItemRow | undefined): number | null {
-  const number = item?.metadata?.number ?? item?.metadata?.githubIssueNumber ?? item?.metadata?.githubPullRequestNumber;
+  // A sourced card's number lives on its work item since upstream #28960; a native card's in its metadata.
+  const facts = item && { ...item.metadata, ...item.workItem.metadata };
+  const number = facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber;
   return typeof number === 'number' ? number : null;
 }
 
 function itemLabels(item: WorkItemRow): string[] {
-  const labels = item.metadata?.labels;
+  // A sourced card's labels are its provider's; a Factory-native card keeps them in its metadata.
+  const labels = item.externalSource ? item.workItem.labels : item.metadata?.labels;
   return Array.isArray(labels) ? labels.filter((label): label is string => typeof label === 'string') : [];
 }
 

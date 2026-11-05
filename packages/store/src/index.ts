@@ -45,3 +45,11 @@ export type {
   WorkItemSourceRow,
 } from './work-items/work-item-schema.ts';
 export * from './work-items/split-migration.ts';
+export {
+  BOARD_METADATA_KEYS,
+  SHARED_PROVIDER_METADATA_KEYS,
+  splitCardMetadata,
+  WORK_ITEM_PROVIDER_ADAPTERS,
+  workItemProviderAdapter,
+} from './work-items/providers/index.ts';
+export type { ProviderWorkItemSource, WorkItemProviderAdapter } from './work-items/providers/index.ts';

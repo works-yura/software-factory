@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FactoryStageRuleContext } from '@factory/core';
 
+import { providerWorkItemForTests } from '../testing.ts';
 import { workBoard } from './board.ts';
 
 function entering(source: string): FactoryStageRuleContext {
@@ -15,7 +16,8 @@ function entering(source: string): FactoryStageRuleContext {
       url: 'https://app.clickup.com/t/abc',
       stages: ['triage'],
       triageType: null,
-      metadata: { identifier: 'abc', description: 'Steps: open the app' },
+      metadata: { description: 'Steps: open the app' },
+      workItem: providerWorkItemForTests({ provider: 'clickup', key: 'abc', metadata: { identifier: 'abc' } }),
     },
     source: 'manual',
     stage: 'triage',

@@ -1,4 +1,4 @@
-import type { ExternalWorkItemSource } from '../card.ts';
+import type { ExternalWorkItemSource, ProviderWorkItem } from '../card.ts';
 
 export const WORK_ITEM_SOURCES = [
   'github-issue',
@@ -35,8 +35,13 @@ export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
 
 // The label only holds a card at rest: once a person moves it into a working lane, the
 // label is stale until the source catches up (Factory removes it on that move).
-export function needsApproval(item: { metadata: Record<string, unknown> | null; stages?: readonly string[] }): boolean {
-  const labels = item.metadata?.labels;
+export function needsApproval(item: {
+  workItem?: Pick<ProviderWorkItem, 'labels'>;
+  metadata?: Record<string, unknown> | null;
+  stages?: readonly string[];
+}): boolean {
+  // The source's labels live on its work item (upstream #28960); a card without one still has them in metadata.
+  const labels = item.workItem?.labels ?? item.metadata?.labels;
   if (!Array.isArray(labels)) return false;
   return (
     labels.some(label => typeof label === 'string' && label.toLowerCase() === NEEDS_APPROVAL_LABEL) &&
@@ -195,6 +200,8 @@ export type FactoryRuleJsonValue =
   | { [key: string]: FactoryRuleJsonValue };
 
 export interface FactoryRuleItemContext {
+  /** The source's own facts: title, state, labels, author, key. */
+  workItem: ProviderWorkItem;
   id: string;
   source: WorkItemSource;
   sourceKey: string | null;
@@ -207,7 +214,7 @@ export interface FactoryRuleItemContext {
    * cards, and `null` for every card since. A person moving the card on is the approval.
    */
   acceptedAt: Date | null;
-  /** Intake-stamped facts about the source — repository id, reporter login, labels. */
+  /** Factory-owned process state and trust stamps. */
   metadata: Record<string, unknown> | null;
 }
 
@@ -316,6 +323,7 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     assignees?: string[];
     labels?: string[];
     state?: 'open' | 'closed';
+    author?: string;
     /** GitHub close reason: `completed`, `not_planned`, or `duplicate`. */
     stateReason?: string;
   };

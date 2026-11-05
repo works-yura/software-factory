@@ -111,7 +111,8 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
   ): Promise<boolean> => {
     const board = item.board ? options.boards.get(item.board) : undefined;
     if (!board || !(phase in board.phases) || item.stages.includes(phase)) return false;
-    const previous = typeof item.metadata?.state === 'string' ? item.metadata.state : undefined;
+    const state = item.workItem.metadata?.state;
+    const previous = typeof state === 'string' ? state : undefined;
     // Only a status change we have not filed yet moves a card, and only while the card is still
     // where the previous status put it: a person or an agent that moved it owns it from then on.
     if (previous === undefined || previous === task.status.name) return false;
@@ -179,12 +180,14 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
       if (closing) return closeCard(project, existing, task);
       const moved = rule.action === 'phase' ? await moveCard(project, existing, task, rule.phase, rules) : false;
       const metadata = taskMetadata(task);
-      if (sameMetadata(existing.metadata, metadata)) return moved ? 'moved' : 'unchanged';
+      // Provider facts live on the work item, Factory's stamps on the board item; compare both.
+      const current = { ...existing.workItem.metadata, ...existing.metadata };
+      if (sameMetadata(current, metadata)) return moved ? 'moved' : 'unchanged';
       await options.workItems.update({
         orgId: project.orgId,
         id: existing.id,
         userId: USER_ID,
-        patch: { metadata: { ...(existing.metadata ?? {}), ...metadata } },
+        patch: { metadata: { ...current, ...metadata } },
       });
       return moved ? 'moved' : 'refreshed';
     }

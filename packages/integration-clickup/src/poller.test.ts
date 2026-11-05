@@ -194,7 +194,8 @@ describe('createClickUpPoller', () => {
       stages,
       revision: 3,
       externalSource: null,
-      metadata: { state: 'BACKLOG' },
+      metadata: {},
+      workItem: { metadata: { state: 'BACKLOG' } },
     });
     const moved = setup({ rules, tasks: [task()], existing: card(['intake']) });
     expect(await moved.poll()).toMatchObject({ updated: 1 });
@@ -208,7 +209,7 @@ describe('createClickUpPoller', () => {
   it('refreshes a known card instead of creating a second one', async () => {
     const { poll, commitRuleEvaluation, update } = setup({
       tasks: [task({ tags: ['bug', 'urgent'] })],
-      existing: { id: 'card', metadata: { labels: ['bug'], keep: 1 } },
+      existing: { id: 'card', metadata: { keep: 1 }, workItem: { metadata: { labels: ['bug'] } } },
     });
     await poll();
     expect(commitRuleEvaluation).not.toHaveBeenCalled();

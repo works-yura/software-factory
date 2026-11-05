@@ -63,7 +63,14 @@ export type {
   BoardTransitionPolicyResult,
 } from './boards/transition-policy.ts';
 export { WorkItemUpdateConflictError } from './card.ts';
-export type { CardMoveStore, ExternalWorkItemSource, PipelineCard } from './card.ts';
+export type {
+  CardMoveStore,
+  ExternalWorkItemSource,
+  PipelineCard,
+  ProviderWorkItem,
+  WorkItemProvider,
+  WorkItemSourceRow,
+} from './card.ts';
 export {
   composeEventRule,
   hasExplicitRuleOverride,

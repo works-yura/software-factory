@@ -29,6 +29,51 @@ import { QueueHealthStorage } from './queue-health/base.ts';
 import { SkillOverridesStorage } from './skill-overrides/base.ts';
 import { SourceControlStorage } from './source-control/base.ts';
 import { WorkItemsStorage } from './work-items/base.ts';
+import type { ExternalWorkItemSource } from './work-items/base.ts';
+import { workItemProviderAdapter } from './work-items/providers/index.ts';
+import type { WorkItemRow, WorkItemSourceRow } from './work-items/work-item-schema.ts';
+
+export function createProviderWorkItemForTests(input: {
+  id: string;
+  title: string;
+  source: ExternalWorkItemSource | null;
+  metadata: Record<string, unknown> | null;
+}): WorkItemRow {
+  const source = workItemProviderAdapter(input.source).toSource(input.source, input.metadata);
+  const sources: WorkItemSourceRow[] = source
+    ? [
+        {
+          ...source,
+          id: `source-${input.id}`,
+          workItemId: `work-${input.id}`,
+          revision: 1,
+          syncedAt: null,
+          createdAt: new Date(0),
+          updatedAt: new Date(0),
+        },
+      ]
+    : [];
+  return {
+    sources,
+    title: input.title,
+    provider: source?.provider ?? 'factory',
+    externalId: source?.externalId ?? input.id,
+    key: source ? source.key : input.id.slice(0, 8),
+    url: source?.url ?? null,
+    state: source?.state ?? null,
+    labels: source?.labels ?? [],
+    author: source?.author ?? null,
+    metadata: source?.metadata ?? null,
+    id: `work-${input.id}`,
+    orgId: 'org-1',
+    factoryProjectId: 'project-1',
+    parentWorkItemId: null,
+    revision: 1,
+    syncedAt: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
+}
 
 /** Keep migration tests from clearing tables another Postgres test is using. */
 export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {

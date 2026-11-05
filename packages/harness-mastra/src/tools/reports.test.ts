@@ -1,4 +1,5 @@
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
+import { createProviderWorkItemForTests } from '@factory/store/testing';
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -287,7 +288,20 @@ describe('sendRunEndReport', () => {
 describe('createWorkItemRunEndReporter', () => {
   const workItems = (subscribers: WorkItemSubscription[]) => ({
     listWorkItemSubscribers: vi.fn(async () => subscribers),
-    getForProject: vi.fn(async () => ({ id: 'item-7', title: 'Item', metadata: { number: 7 } }) as never),
+    getForProject: vi.fn(
+      async () =>
+        ({
+          id: 'item-7',
+          title: 'Item',
+          workItem: createProviderWorkItemForTests({
+            id: 'item-7',
+            title: 'Item',
+            source: { integrationId: 'github', type: 'issue', externalId: '7' },
+            metadata: { number: 7 },
+          }),
+          metadata: {},
+        }) as never,
+    ),
   });
 
   it('reports to every subscriber but the sender, labelled with the item and role', async () => {
@@ -344,7 +358,20 @@ describe('createStageChangeNotifier', () => {
           subscriber('item-7', 'session-1'),
           subscriber('item-7', 'session-2'),
         ]),
-        getForProject: vi.fn(async () => ({ id: 'item-7', title: 'Item', metadata: { number: 7 } }) as never),
+        getForProject: vi.fn(
+          async () =>
+            ({
+              id: 'item-7',
+              title: 'Item',
+              workItem: createProviderWorkItemForTests({
+                id: 'item-7',
+                title: 'Item',
+                source: { integrationId: 'github', type: 'issue', externalId: '7' },
+                metadata: { number: 7 },
+              }),
+              metadata: {},
+            }) as never,
+        ),
       },
       reporting: async () => env.reporting,
     });

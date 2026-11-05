@@ -1,6 +1,6 @@
 import { SourceControlConnectionNotFoundError } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
-import type { WorkItemRow } from '@factory/store';
+import type { Card } from '@factory/store';
 
 import { resolveEnvironmentRepositories } from './environment-repositories.ts';
 
@@ -106,12 +106,12 @@ export async function resolveWorkItemRepository(args: {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   factoryProjectId: string;
-  item: Pick<WorkItemRow, 'metadata'>;
+  item: Pick<Card, 'metadata'> & { workItem: Pick<Card['workItem'], 'metadata'> };
 }): Promise<WorkItemRepositoryResolution> {
   const { sourceControl, item } = args;
-  const metadata = item.metadata ?? {};
+  const metadata = item.workItem.metadata ?? {};
   const linked = await listLinkedRepositories(args);
-  const repositorySignal = typeof metadata.repository === 'string' ? metadata.repository : undefined;
+  const repositorySignal = typeof item.metadata?.repository === 'string' ? item.metadata.repository : undefined;
   const externalRepositorySignal = getExternalRepositoryId(sourceControl.integrationId, metadata);
 
   // The provider id survives repository renames, so it outranks a possibly stale slug.

@@ -41,6 +41,15 @@ export interface WorkItemStageEntry {
   exitedBy?: string;
 }
 
+/** Provider facts the server normalized for the card's source item, apart from board metadata. */
+export interface WorkItemFacts {
+  key: string | null;
+  url: string | null;
+  state: string | null;
+  labels: string[];
+  author: string | null;
+}
+
 export interface WorkItem {
   id: string;
   orgId: string;
@@ -60,6 +69,8 @@ export interface WorkItem {
   triageType: FactoryTriageType | null;
   /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
   acceptedAt: string | null;
+  /** The provider's facts about the card's source item; absent on cards from an older server. */
+  workItem?: WorkItemFacts;
   commentCount: number;
   /** Bumped server-side on every feed mutation; clients refetch comments when it moves. */
   feedActivityAt: string | null;

@@ -1,4 +1,5 @@
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
+import { createProviderWorkItemForTests } from '@factory/store/testing';
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -127,7 +128,19 @@ function setup({
           bindings.find(binding => binding.sessionId === sessionId && binding.status === 'active') ?? null,
       ),
       getForProject: vi.fn(async (_org: string, _project: string, id: string) =>
-        id === 'item-7' ? ({ id, metadata: { number: 7 }, stages: ['execute'] } as never) : null,
+        id === 'item-7'
+          ? ({
+              id,
+              workItem: createProviderWorkItemForTests({
+                id,
+                title: 'Item',
+                source: { integrationId: 'github', type: 'issue', externalId: '7' },
+                metadata: { number: 7 },
+              }),
+              metadata: {},
+              stages: ['execute'],
+            } as never)
+          : null,
       ),
       listSessionSubscriptions: vi.fn(async ({ sessionId }: { sessionId: string }) =>
         subscriptions.filter(subscription => subscription.sessionId === sessionId),

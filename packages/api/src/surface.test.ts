@@ -9,6 +9,7 @@ import type { FactoryBindingPreparationInput } from '@factory/testing';
 import type { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { FactoryTransitionService } from '@factory/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
+import { createProviderWorkItemForTests } from '@factory/store/testing';
 import { prepareFactoryRuleBinding } from './surface.ts';
 
 async function seedFactoryWithRepository(options?: { defaultModelId?: string }) {
@@ -63,7 +64,13 @@ function bindingInput(
       stages,
       sessions: [],
       externalSource: { integrationId: 'github', type: board === 'review' ? 'pull-request' : 'issue' },
-      metadata: { githubIssueNumber: 49, repository: 'mastra-ai/mastra' },
+      metadata: { repository: 'mastra-ai/mastra' },
+      workItem: createProviderWorkItemForTests({
+        id: 'item-1',
+        title: 'Broken login',
+        source: { integrationId: 'github', type: board === 'review' ? 'pull-request' : 'issue', externalId: '49' },
+        metadata: { githubIssueNumber: 49 },
+      }),
     },
     role,
   } as unknown as FactoryBindingPreparationInput;

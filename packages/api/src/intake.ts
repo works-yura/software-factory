@@ -12,6 +12,7 @@ import type { AuditEmitter } from '@factory/feed';
 import { FactoryProjectNotFoundError, normalizeIntakeLabel, resolveIntakeLabelRoute } from '@factory/store';
 import type { IntakeConfig, IntakeLabelRoute, IntakeStorage } from '@factory/store';
 import type { SourceControlStorageHandle } from '@factory/store';
+import type { Card } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
@@ -234,11 +235,8 @@ async function githubRepositoryBoards({
   return boards;
 }
 
-function cardInRepository(
-  item: { metadata?: Record<string, unknown> | null; externalSource?: { url?: string } | null },
-  repository: GithubRepositoryBoard,
-): boolean {
-  const repositoryId = item.metadata?.githubRepositoryId;
+function cardInRepository(item: Card, repository: GithubRepositoryBoard): boolean {
+  const repositoryId = item.workItem.metadata?.githubRepositoryId;
   if (
     repository.externalId !== undefined &&
     repositoryId !== undefined &&
