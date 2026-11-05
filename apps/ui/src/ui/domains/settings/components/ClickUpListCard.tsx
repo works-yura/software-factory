@@ -10,15 +10,14 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useClickUpSettingsQuery } from '../../../../hooks/useClickUp';
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
 import { ClickUpStatusTable } from './ClickUpStatusRules';
-import { ClickUpTagRoutes } from './ClickUpTagRoutes';
 import { BoardPicker, FactorySelect } from './RoutingSelects';
 
 const INTEGRATION_ID = 'clickup';
 
 /**
- * One connected ClickUp List: where its tasks go (a Factory and a board), what each ClickUp status
- * does, and optional tag routes. Collapsed it shows only the List and where it is routed, so a long
- * list of Lists stays scannable.
+ * One connected ClickUp List: the Factory its tasks go to, an optional board for tasks no intake route
+ * places, and what each ClickUp status does. Tags pick a board through the Factory's intake routes.
+ * Collapsed it shows only the List and where it is routed, so a long list of Lists stays scannable.
  */
 export function ClickUpListCard({
   listId,
@@ -73,7 +72,7 @@ export function ClickUpListCard({
         </Txt>
         <Txt as="span" variant="caption" tone="muted" className="shrink-0">
           {summary}
-          {factory && board !== null ? ` · ${t('intake.clickup.card.mapped', { count: mapped })}` : ''}
+          {factory ? ` · ${t('intake.clickup.card.mapped', { count: mapped })}` : ''}
         </Txt>
       </CollapsibleTrigger>
       <CollapsibleContent>
@@ -100,29 +99,23 @@ export function ClickUpListCard({
                 />
               )}
             </div>
-            {(!factory || board === null) && (
-              <Txt as="p" variant="caption" tone="muted">
-                {t('intake.clickup.card.routingHint')}
-              </Txt>
-            )}
+            <Txt as="p" variant="caption" tone="muted">
+              {!factory ? t('intake.clickup.card.routingHint') : t('intake.clickup.card.boardHint')}
+            </Txt>
           </section>
 
           <section aria-label={t('intake.clickup.card.statuses')} className="flex flex-col gap-2">
             <Txt as="h4" variant="meta" tone="muted">
               {t('intake.clickup.card.statuses')}
             </Txt>
-            {factory && board !== null ? (
+            {factory ? (
               <ClickUpStatusTable listId={listId} factoryProjectId={factory.id} board={board} />
             ) : (
               <Txt as="p" variant="caption" tone="muted">
-                {t('intake.clickup.rules.needsBoard')}
+                {t('intake.clickup.rules.needsFactory')}
               </Txt>
             )}
           </section>
-
-          {factory && (
-            <TagRoutesDisclosure factoryProjectId={factory.id} factoryName={factory.name} />
-          )}
 
           <div className="flex justify-end">
             <Button
@@ -135,27 +128,6 @@ export function ClickUpListCard({
               {t('intake.clickup.card.disconnect')}
             </Button>
           </div>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-/** Tag routes are optional and shared by every List of the Factory, so they start folded away. */
-function TagRoutesDisclosure({ factoryProjectId, factoryName }: { factoryProjectId: string; factoryName: string }) {
-  const { t } = useTranslation('settings');
-  const [open, setOpen] = useState(false);
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 text-left">
-        <ChevronRight aria-hidden className={`size-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-        <Txt as="span" variant="meta" tone="muted">
-          {t('intake.clickup.card.tags', { factory: factoryName })}
-        </Txt>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="pt-3">
-          <ClickUpTagRoutes factoryProjectId={factoryProjectId} name={factoryName} />
         </div>
       </CollapsibleContent>
     </Collapsible>

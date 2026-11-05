@@ -123,15 +123,10 @@ export interface IntakeLabelRoute {
   board: string;
 }
 
-async function requestIntakeLabelRoutes(
-  baseUrl: string,
-  query: string,
-  init?: RequestInit,
-): Promise<IntakeLabelRoute[]> {
+async function requestIntakeLabelRoutes(baseUrl: string, query: string): Promise<IntakeLabelRoute[]> {
   const res = await fetch(`${baseUrl}/web/intake/label-routes${query}`, {
-    headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
+    headers: { Accept: 'application/json' },
     credentials: 'include',
-    ...init,
   });
   if (!res.ok) {
     let message = tk('errors.requestFailed', { status: res.status });
@@ -151,14 +146,6 @@ async function requestIntakeLabelRoutes(
 /** Read the label → board routes of one Factory project. */
 export async function fetchIntakeLabelRoutes(baseUrl: string, factoryProjectId: string): Promise<IntakeLabelRoute[]> {
   return requestIntakeLabelRoutes(baseUrl, `?factoryProjectId=${encodeURIComponent(factoryProjectId)}`);
-}
-
-/** Route a label to a board, or clear it with `board: null`. Resolves to the project's routes. */
-export async function saveIntakeLabelRoute(
-  baseUrl: string,
-  route: { factoryProjectId: string; integrationId: string; label: string; board: string | null },
-): Promise<IntakeLabelRoute[]> {
-  return requestIntakeLabelRoutes(baseUrl, '', { method: 'PUT', body: JSON.stringify(route) });
 }
 
 /** Route one source to a Factory project, or clear it with `factoryProjectId: null`. */

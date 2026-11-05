@@ -148,6 +148,7 @@ import { isValidGitRef } from '@factory/sandbox';
 import { peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { WorkItemSplitModeError } from '@factory/store';
+import { migrateLabelRoutesToIntakeRoutes } from '@factory/store';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { Card } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
@@ -822,6 +823,20 @@ export class MastraFactory {
       );
     }
     const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
+
+    // ClickUp tag routes became intake routes: move each one into its project's routes, once.
+    // A failure stops the boot: the poller no longer reads tag routes, so they would go unapplied.
+    if (storage.isDomainReady('intake') && storage.isDomainReady('boards')) {
+      await timedPhase('prepare.intake.clickupTagRoutes', async () => {
+        const moved = await migrateLabelRoutesToIntakeRoutes({
+          integrationId: 'clickup',
+          routeName: label => `ClickUp tag "${label}"`,
+          intake: intakeStorage,
+          boards: storedBoardsStorage,
+        });
+        if (moved > 0) console.info(`[factory] moved ${moved} ClickUp tag route(s) into intake routes`);
+      });
+    }
 
     // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
     // back to Intake. Move the cards the old rule left there, once.

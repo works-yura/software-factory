@@ -38,7 +38,6 @@
       "listsFailed": "ClickUp Lists could not be loaded. Try again in a minute.",
       "rules": {
         "listHint": "Columns of the \"{{board}}\" board. Tasks that already existed when the server started land in the first column and start nothing; starting applies to new tasks and when you change a status in ClickUp.",
-        "needsBoard": "Choose a factory and a board for this List above to set status rules.",
         "boardMissing": "The \"{{board}}\" board is not installed.",
         "unavailable": "Could not load the statuses or columns. Try again in a minute.",
         "loading": "Loading statuses…",
@@ -48,23 +47,26 @@
         "statusAction": "Action for status {{status}}",
         "saved": "Status rules saved",
         "saveFailed": "Could not save the status rules",
-        "typical": "Typical set"
+        "typical": "Typical set",
+        "import": "Import",
+        "listHintNoBoard": "This List has no board: an imported task lands where the Factory’s intake routes say, and is skipped when none matches. Choose a board above to file tasks in its columns.",
+        "needsFactory": "Choose a factory for this List above to set status rules."
       },
       "connectedLists": "Connected Lists",
       "addLists": "Add Lists",
       "noLists": "No Lists connected yet. Add one to start importing tasks.",
       "card": {
         "notRouted": "Not routed",
-        "noBoard": "{{factory}} · no board",
+        "noBoard": "{{factory}} · intake routes only",
         "routedTo": "{{factory}} · {{board}}",
         "routing": "Where tasks go",
-        "routingHint": "Choose a factory and a board — until then this List’s tasks are not picked up.",
+        "routingHint": "Choose a factory — until then this List’s tasks are not picked up.",
         "statuses": "Statuses",
-        "tags": "Tag routes for {{factory}} (optional)",
         "disconnect": "Disconnect",
         "disconnectAria": "Disconnect {{name}}",
         "mapped_one": "{{count}} status mapped",
-        "mapped_other": "{{count}} statuses mapped"
+        "mapped_other": "{{count}} statuses mapped",
+        "boardHint": "The board is optional: intake routes place a task first, and the board takes the tasks no route matches. To send tasks with a tag to a board, add an intake route with the condition “has tag”."
       },
       "picker": {
         "title": "Choose ClickUp Lists",
@@ -740,25 +742,9 @@
       "failed": "Claude sign-in failed."
     }
   },
-  "tagRouting": {
-    "saved": "ClickUp tag routing updated",
-    "saveFailed": "Failed to save ClickUp tag routing",
-    "description": "A task with one of these tags files onto that board instead of the List's board.",
-    "unavailable": "ClickUp tag routes are unavailable right now.",
-    "boardFor": "Board for tag {{label}}",
-    "removeRoute": "Remove route for tag {{label}}",
-    "remove": "Remove",
-    "addRoute": "Add tag route",
-    "duplicate": "This tag already has a route.",
-    "tagFor": "Tag for {{name}}",
-    "tagPlaceholder": "Tag, e.g. bug",
-    "boardForNew": "Board for new tag in {{name}}",
-    "chooseBoard": "Choose board",
-    "add": "Add"
-  },
   "intakeRoutes": {
     "title": "Intake routes",
-    "description": "Where new cards of the Factory \"{{name}}\" land. The first enabled route that matches a card places it; with no match, the card lands by its ClickUp tag and List board, as before. A route places a card once, when it arrives.",
+    "description": "Where new cards of the Factory \"{{name}}\" land. The first enabled route that matches a card places it; with no match, a ClickUp task lands on its List’s board. A route places a card once, when it arrives.",
     "add": "Add route",
     "loading": "Loading routes…",
     "unavailable": "Couldn't load intake routes.",

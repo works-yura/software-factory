@@ -53,3 +53,4 @@ export {
   workItemProviderAdapter,
 } from './work-items/providers/index.ts';
 export type { ProviderWorkItemSource, WorkItemProviderAdapter } from './work-items/providers/index.ts';
+export * from './intake/label-route-migration.ts';

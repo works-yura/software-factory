@@ -32,9 +32,8 @@ interface SetupOptions {
   rules?: Record<string, { action: string; phase?: string }>;
   enabled?: boolean;
   binding?: { board: string | null } | null;
-  routes?: Array<{ label: string; board: string }>;
   closure?: boolean;
-  /** Intake routes of the project; set, the poller applies them ahead of tag routes and the List's board. */
+  /** Intake routes of the project; set, the poller applies them ahead of the List's board. */
   intakeRoutes?: IntakeRoute[];
 }
 
@@ -85,7 +84,6 @@ function setup(options: SetupOptions) {
     intake: {
       getConfig: async () => ({ clickup: { enabled: options.enabled ?? true, sourceIds: ['L1'] } }),
       listBindings: async () => (binding ? [{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'proj', ...binding }] : []),
-      listLabelRoutes: async () => (options.routes ?? []).map(route => ({ factoryProjectId: 'proj', integrationId: 'clickup', ...route })),
     } as never,
     rules: async () => ({ L1: { statuses: options.rules ?? { 'to do': { action: 'phase', phase: 'intake' } } } }) as never,
     projects: { listAll: async () => [{ id: 'proj', orgId: 'org' }] as never },
@@ -106,8 +104,8 @@ function setup(options: SetupOptions) {
 const decisionOf = (mock: { mock: { calls: unknown[][] } }) => (mock.mock.calls[0]![0] as any).decisions[0];
 
 describe('createClickUpPoller', () => {
-  it('files a new task on the board its tag routes to, in the initial phase', async () => {
-    const { poll, commitRuleEvaluation } = setup({ tasks: [task()], routes: [{ label: 'Bug', board: 'bug' }] });
+  it("files a new task on the List's board, in the phase its status maps to", async () => {
+    const { poll, commitRuleEvaluation } = setup({ tasks: [task()], binding: { board: 'bug' } });
     expect(await poll()).toMatchObject({ checked: 1, updated: 1, failed: 0 });
     const input = commitRuleEvaluation.mock.calls[0]![0] as any;
     expect(input.ingress.identity).toBe('clickup:task:abc:created');
@@ -122,10 +120,10 @@ describe('createClickUpPoller', () => {
     expect(input.decisions[0].metadata).toMatchObject({ labels: ['bug'], description: 'Steps: open app' });
   });
 
-  it('falls back to the List binding board when no tag route matches', async () => {
-    const { poll, commitRuleEvaluation } = setup({ tasks: [task({ tags: ['idea'] })], routes: [{ label: 'bug', board: 'bug' }] });
+  it("files a task whose status imports it in the first phase of the List's board, even a new one", async () => {
+    const { poll, commitRuleEvaluation } = setup({ tasks: [task()], rules: { 'to do': { action: 'import' } } });
     await poll();
-    expect(decisionOf(commitRuleEvaluation).board).toBe('work');
+    expect(decisionOf(commitRuleEvaluation)).toMatchObject({ board: 'work', stage: 'intake' });
   });
 
   it('ignores a List that is not routed, disabled, or has no board', async () => {
@@ -252,10 +250,10 @@ describe('createClickUpPoller', () => {
       target: { boardKey: 'docs', phaseKey: 'drafting' },
     };
 
-    it('files a new task where the first matching route says, ahead of its tag route, and names the route', async () => {
+    it("files a new task where the first matching route says, ahead of the List's board, and names the route", async () => {
       const { poll, commitRuleEvaluation } = setup({
         tasks: [task({ tags: ['docs', 'bug'] })],
-        routes: [{ label: 'Bug', board: 'bug' }],
+        binding: { board: 'bug' },
         intakeRoutes: [docsRoute],
       });
       expect(await poll()).toMatchObject({ checked: 1, updated: 1, failed: 0 });
@@ -285,16 +283,31 @@ describe('createClickUpPoller', () => {
       expect(unrouted.commitRuleEvaluation).not.toHaveBeenCalled();
     });
 
-    it('places a task no route matches by its tag route as before, without naming a route', async () => {
+    it("places a task no route matches on the List's board, without naming a route", async () => {
       const { poll, commitRuleEvaluation } = setup({
         tasks: [task({ tags: ['bug'] })],
-        routes: [{ label: 'Bug', board: 'bug' }],
+        binding: { board: 'bug' },
         intakeRoutes: [docsRoute, { ...docsRoute, id: 'route-off', enabled: false, when: null }],
       });
       await poll();
       const decision = decisionOf(commitRuleEvaluation);
       expect(decision).toMatchObject({ board: 'bug', stage: 'intake' });
       expect(decision.metadata).not.toHaveProperty('intakeRouteId');
+    });
+
+    it('imports a task from a List without a board when its status imports it and a route takes it', async () => {
+      const rules = { 'to do': { action: 'import' } };
+      const routed = setup({ rules, tasks: [task({ tags: ['docs'] })], binding: { board: null }, intakeRoutes: [docsRoute] });
+      await routed.poll();
+      expect(decisionOf(routed.commitRuleEvaluation)).toMatchObject({
+        board: 'docs',
+        stage: 'drafting',
+        metadata: { intakeRouteId: 'route-docs' },
+      });
+
+      const unrouted = setup({ rules, tasks: [task({ tags: ['bug'] })], binding: { board: null }, intakeRoutes: [docsRoute] });
+      await unrouted.poll();
+      expect(unrouted.commitRuleEvaluation).not.toHaveBeenCalled();
     });
 
     it("leaves a task out when its List's status rules do not import it, whatever the routes say", async () => {

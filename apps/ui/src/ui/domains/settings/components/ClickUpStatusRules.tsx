@@ -14,38 +14,50 @@ import { statusKey } from '../../factory/services/clickup';
 import type { ClickUpListRules, ClickUpListStatus, ClickUpStatusRule } from '../../factory/services/clickup';
 
 const IGNORE = 'ignore';
+const IMPORT = 'import';
 const CLOSE = 'close';
 const PHASE_PREFIX = 'phase:';
 
 const encode = (rule: ClickUpStatusRule | undefined): string =>
-  !rule || rule.action === 'ignore' ? IGNORE : rule.action === 'close' ? CLOSE : `${PHASE_PREFIX}${rule.phase}`;
+  !rule || rule.action === 'ignore'
+    ? IGNORE
+    : rule.action === 'import'
+      ? IMPORT
+      : rule.action === 'close'
+        ? CLOSE
+        : `${PHASE_PREFIX}${rule.phase}`;
 
 const decode = (value: string): ClickUpStatusRule =>
   value === CLOSE
     ? { action: 'close' }
-    : value.startsWith(PHASE_PREFIX)
-      ? { action: 'phase', phase: value.slice(PHASE_PREFIX.length) }
-      : { action: 'ignore' };
+    : value === IMPORT
+      ? { action: 'import' }
+      : value.startsWith(PHASE_PREFIX)
+        ? { action: 'phase', phase: value.slice(PHASE_PREFIX.length) }
+        : { action: 'ignore' };
 
 /**
- * The rules most boards want, derived from ClickUp's own status types: an open status files the task in
- * the board's triage column (or its first working column when it has none), a finished one closes the card,
- * everything else is left alone. The user can still change any row.
+ * The rules most Lists want, derived from ClickUp's own status types: an open status files the task in
+ * the board's triage column (or its first working column when it has none), or, for a List without a
+ * board, imports it where the intake routes say; a finished one closes the card; everything else is left
+ * alone. The user can still change any row.
  */
-export function typicalRules(statuses: ClickUpListStatus[], phaseIds: string[]): ClickUpListRules {
-  const entry = phaseIds.includes('triage') ? 'triage' : phaseIds[0];
+export function typicalRules(statuses: ClickUpListStatus[], phaseIds: string[] | null): ClickUpListRules {
+  const entry = phaseIds && (phaseIds.includes('triage') ? 'triage' : phaseIds[0]);
   const rules: Record<string, ClickUpStatusRule> = {};
   for (const status of statuses) {
     if (status.type === 'closed' || status.type === 'done') rules[statusKey(status.name)] = { action: 'close' };
-    else if (status.type === 'open' && entry) rules[statusKey(status.name)] = { action: 'phase', phase: entry };
+    else if (status.type === 'open') {
+      rules[statusKey(status.name)] = entry ? { action: 'phase', phase: entry } : { action: 'import' };
+    }
   }
   return { statuses: rules };
 }
 
 /**
- * What the factory does with a task by its ClickUp status, for one List: leave it, file it in a column
- * of the List's board, or close its card. Phases come from the board the List is routed to, so custom
- * boards and other projects' statuses work without code changes.
+ * What the factory does with a task by its ClickUp status, for one List: leave it, import it where the
+ * intake routes say, file it in a column of the List's board, or close its card. Columns come from the
+ * List's board, so a List without one offers only import and close.
  */
 export function ClickUpStatusTable({
   listId,
@@ -54,7 +66,7 @@ export function ClickUpStatusTable({
 }: {
   listId: string;
   factoryProjectId: string;
-  board: string;
+  board: string | null;
 }) {
   const { t } = useTranslation('settings');
   const settings = useClickUpSettingsQuery(true);
@@ -70,8 +82,8 @@ export function ClickUpStatusTable({
       </Txt>
     );
   }
-  const installed = catalog.data?.find(candidate => candidate.id === board);
-  if (catalog.isSuccess && !installed) {
+  const installed = board === null ? undefined : catalog.data?.find(candidate => candidate.id === board);
+  if (board !== null && catalog.isSuccess && !installed) {
     return (
       <Txt tone="muted" as="p" variant="caption">
         {t('intake.clickup.rules.boardMissing', { board })}
@@ -95,9 +107,11 @@ export function ClickUpStatusTable({
   const label = (value: string): string =>
     value === IGNORE
       ? t('intake.clickup.rules.ignore')
-      : value === CLOSE
-        ? t('intake.clickup.rules.close')
-        : (phases.find(phase => `${PHASE_PREFIX}${phase.id}` === value)?.title ?? value.slice(PHASE_PREFIX.length));
+      : value === IMPORT
+        ? t('intake.clickup.rules.import')
+        : value === CLOSE
+          ? t('intake.clickup.rules.close')
+          : (phases.find(phase => `${PHASE_PREFIX}${phase.id}` === value)?.title ?? value.slice(PHASE_PREFIX.length));
 
   if (statuses.isPending) {
     return (
@@ -111,7 +125,9 @@ export function ClickUpStatusTable({
     <div className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-3">
         <Txt tone="muted" as="p" variant="caption">
-          {t('intake.clickup.rules.listHint', { board: installed?.title ?? board })}
+          {board === null
+            ? t('intake.clickup.rules.listHintNoBoard')
+            : t('intake.clickup.rules.listHint', { board: installed?.title ?? board })}
         </Txt>
         <Button
           size="sm"
@@ -122,7 +138,7 @@ export function ClickUpStatusTable({
             persist(
               typicalRules(
                 statuses.data ?? [],
-                phases.map(phase => phase.id),
+                board === null ? null : phases.map(phase => phase.id),
               ),
             )
           }
@@ -151,6 +167,7 @@ export function ClickUpStatusTable({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={IGNORE}>{t('intake.clickup.rules.ignore')}</SelectItem>
+                  <SelectItem value={IMPORT}>{t('intake.clickup.rules.import')}</SelectItem>
                   {phases.map(phase => (
                     <SelectItem key={phase.id} value={`${PHASE_PREFIX}${phase.id}`}>
                       {t('intake.clickup.rules.intoPhase', { phase: phase.title })}

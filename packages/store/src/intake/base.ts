@@ -546,6 +546,16 @@ export class IntakeStorage extends FactoryStorageDomain {
     }
   }
 
+  /** Every org's label routes for one integration, for moving them into another model. */
+  async listLabelRoutesForIntegration(integrationId: string): Promise<(IntakeLabelRoute & { orgId: string })[]> {
+    const rows = await this.#db.findMany<IntakeLabelRouteRow & { org_id: string }>('intake_label_routes', {
+      integration_id: integrationId,
+    });
+    return rows
+      .map(row => ({ ...toIntakeLabelRoute(row), orgId: row.org_id }))
+      .sort((a, b) => a.orgId.localeCompare(b.orgId) || a.label.localeCompare(b.label));
+  }
+
   /** Remove a label route; returns the route that was removed, or `null` when none existed. */
   async clearLabelRoute({
     orgId,

@@ -18,15 +18,15 @@ const normalizeIdentity = (value: string): string => value.trim().toLowerCase().
 
 export interface ClickUpPollerOptions {
   client: ClickUpTaskSource;
-  intake: Pick<IntakeStorage, 'getConfig' | 'listBindings' | 'listLabelRoutes'>;
-  /** Status → phase rules per List, chosen in Settings › Intake. */
+  intake: Pick<IntakeStorage, 'getConfig' | 'listBindings'>;
+  /** Status rules per List (import, file in a phase, close), chosen in Settings › Intake. */
   rules: (orgId: string) => Promise<Record<string, ListRules>>;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
   workItems: Pick<WorkItemsStorage, 'getByProjectSource' | 'commitRuleEvaluation' | 'update'>;
   boards: Pick<BoardRegistry, 'get'>;
   /**
    * The project's intake routes. A new task goes where the first matching route says, ahead
-   * of its tag route and its List's board; without a match those place it as before.
+   * of its List's board; without a match the List's board places it.
    */
   intakeRoutes?: IntakeRoutesReader;
   /** A project's boards, stored ones included, which an intake route may name. Defaults to `boards`. */
@@ -163,7 +163,7 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
 
   const fileTask = async (
     project: FactoryProject,
-    /** The tag route's or the List's board; null when neither names one. */
+    /** The List's board; null when the List names none and only intake routes place its tasks. */
     fallbackBoard: string | null,
     rules: ListRules | undefined,
     task: ClickUpTask,
@@ -192,7 +192,7 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
       return moved ? 'moved' : 'refreshed';
     }
     // The List's status rules decide which tasks are imported at all; a route only decides where.
-    if (closing || rule.action !== 'phase') return 'unchanged';
+    if (closing || (rule.action !== 'phase' && rule.action !== 'import')) return 'unchanged';
 
     // Tasks that already existed when the server started never start work on their own: the first
     // sweep would otherwise launch an agent for every open task in the List.
@@ -208,10 +208,14 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
       board = fallbackBoard;
       const installed = options.boards.get(board);
       if (!installed) throw new Error(`Board "${board}" is not installed.`);
-      if (!(rule.phase in installed.phases)) {
-        throw new Error(`Board "${board}" has no phase "${rule.phase}" for status "${task.status.name}".`);
+      if (rule.action === 'import') {
+        stage = installed.initialPhase;
+      } else {
+        if (!(rule.phase in installed.phases)) {
+          throw new Error(`Board "${board}" has no phase "${rule.phase}" for status "${task.status.name}".`);
+        }
+        stage = fresh ? rule.phase : installed.initialPhase;
       }
-      stage = fresh ? rule.phase : installed.initialPhase;
     }
     const identity = `clickup:task:${task.id}:created`;
     await options.workItems.commitRuleEvaluation({
@@ -272,11 +276,6 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
         if (!binding || !project || project.orgId !== orgId) continue;
         touched.add(project.id);
 
-        const routes = await options.intake.listLabelRoutes({
-          orgId,
-          factoryProjectId: project.id,
-          integrationId: CLICKUP_INTEGRATION_ID,
-        });
         const cursorKey = `${orgId}:${listId}`;
         const since = cursors.get(cursorKey) ?? new Date(startedAt.getTime() - lookbackMs);
         let newest = since;
@@ -284,8 +283,7 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
         try {
           const tasks = await options.client.listTasks({ listId, updatedAfter: since, includeClosed: true });
           for (const task of tasks) {
-            const tags = new Set(task.tags.map(tag => tag.toLowerCase()));
-            const board = routes.find(route => tags.has(route.label.toLowerCase()))?.board ?? binding.board ?? null;
+            const board = binding.board ?? null;
             // Without a board of its own a task can still be placed by an intake route.
             if (!board && !options.intakeRoutes) continue;
             summary.checked += 1;

@@ -76,7 +76,11 @@ export async function fetchClickUpLists(baseUrl: string): Promise<ClickUpList[]>
 }
 
 /** What happens to a task carrying a ClickUp status; mirrors the server's rule shape. */
-export type ClickUpStatusRule = { action: 'ignore' } | { action: 'phase'; phase: string } | { action: 'close' };
+export type ClickUpStatusRule =
+  | { action: 'ignore' }
+  | { action: 'import' }
+  | { action: 'phase'; phase: string }
+  | { action: 'close' };
 
 /** Rules per List, keyed by lower-cased status name. A status without a rule is ignored. */
 export interface ClickUpListRules {

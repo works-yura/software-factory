@@ -8,7 +8,6 @@ import {
   fetchIntakeLabelRoutes,
   saveIntakeBinding,
   saveIntakeConfig,
-  saveIntakeLabelRoute,
 } from '../ui/domains/factory/services/intake';
 import type { IntakeConfig } from '../ui/domains/factory/services/intake';
 
@@ -72,22 +71,5 @@ export function useIntakeLabelRoutesQuery(factoryProjectId: string | undefined) 
     queryKey: queryKeys.intakeLabelRoutes(factoryProjectId),
     queryFn: () => fetchIntakeLabelRoutes(baseUrl, factoryProjectId!),
     enabled: Boolean(factoryProjectId),
-  });
-}
-
-/**
- * Route a label to a board (or clear it with `board: null`). Work items are
- * invalidated because the server relocates cards carrying the label.
- */
-export function useSaveIntakeLabelRouteMutation() {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (route: { factoryProjectId: string; integrationId: string; label: string; board: string | null }) =>
-      saveIntakeLabelRoute(baseUrl, route),
-    onSuccess: (routes, route) => {
-      queryClient.setQueryData(queryKeys.intakeLabelRoutes(route.factoryProjectId), routes);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(route.factoryProjectId) });
-    },
   });
 }

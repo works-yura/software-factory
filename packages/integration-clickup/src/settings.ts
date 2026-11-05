@@ -6,7 +6,12 @@ import type { IntegrationStorageHandle } from '@factory/store';
 export const statusRuleSchema = z.discriminatedUnion('action', [
   /** Leave the task alone: not imported, and a card already on the board stays where it is. */
   z.object({ action: z.literal('ignore') }),
-  /** File the task on the board in this phase, and follow later status changes into it. */
+  /**
+   * File the task where the project's intake routes say, or in the first phase of the List's board
+   * when no route matches. Later status changes do not move the card.
+   */
+  z.object({ action: z.literal('import') }),
+  /** File the task on the List's board in this phase, and follow later status changes into it. */
   z.object({ action: z.literal('phase'), phase: z.string().min(1) }),
   /** The work is over: finish the card the way the board does when a source closes. */
   z.object({ action: z.literal('close') }),

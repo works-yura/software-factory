@@ -19,7 +19,7 @@ function toggleId(ids: string[] | null, id: string): string[] | null {
 
 /**
  * Everything about ClickUp intake in one place: the import switch, the connected Lists (each a card that
- * holds its routing, status rules and tag routes) and a dialog to connect more.
+ * holds its routing and status rules) and a dialog to connect more. Tags pick a board through intake routes.
  */
 export function ClickUpIntakeSection({
   config,

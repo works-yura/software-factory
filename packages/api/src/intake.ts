@@ -651,6 +651,12 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           if (!route || !integrationIds.includes(route.integrationId)) {
             return c.json({ error: 'invalid_label_route' }, 400);
           }
+          if (route.integrationId === 'clickup') {
+            return c.json(
+              { error: 'invalid_label_route', message: 'ClickUp tags are routed by intake routes, not label routes.' },
+              400,
+            );
+          }
           if (projects) {
             const project = await projects.get({ orgId: tenant.orgId, id: route.factoryProjectId });
             if (!project) return c.json({ error: 'factory_project_not_found' }, 404);

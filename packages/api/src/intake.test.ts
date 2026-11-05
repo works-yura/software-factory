@@ -692,6 +692,20 @@ describe('intake configuration', () => {
       expect(await (await list()).json()).toEqual({ routes: [] });
     });
 
+    it('refuses a ClickUp label route: ClickUp tags are routed by intake routes', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const withClickUp = [...integrations, { id: 'clickup', intake: github }];
+      const response = await buildApp(orgUser, withClickUp).request('/web/intake/label-routes', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ integrationId: 'clickup', factoryProjectId: project.id, label: 'bug', board: 'work' }),
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ message: 'ClickUp tags are routed by intake routes, not label routes.' });
+      expect(await seed.intake.listLabelRoutes({ orgId: 'org1' })).toEqual([]);
+    });
+
     it('rejects uninstalled boards, unknown integrations, malformed bodies, and foreign projects', async () => {
       const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
       const foreign = await seed.projects.create({ orgId: 'org2', userId: 'u9', input: { name: 'other' } });

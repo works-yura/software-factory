@@ -268,14 +268,14 @@ describe('IntakeSection', () => {
       await waitFor(() => expect(savedBindings.at(-1)).toEqual({ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: 'bug' }));
     });
 
-    it('asks for a board before offering status rules', async () => {
+    it('asks for a factory before offering status rules', async () => {
       useClickUpHandlers();
       const user = userEvent.setup();
       renderIntakeSection();
 
       await openCard(user, /Eng \/ Mobile \/ Backlog/);
 
-      expect(await screen.findByText(/Choose a factory and a board for this List above/)).toBeInTheDocument();
+      expect(await screen.findByText(/Choose a factory for this List above/)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Typical set' })).not.toBeInTheDocument();
     });
   });
@@ -340,31 +340,37 @@ describe('IntakeSection', () => {
     });
   });
 
-  describe('tag routes', () => {
-    it('keeps them folded away as an optional extra, and adds a route when opened', async () => {
-      useClickUpHandlers({ bindings: routedToBug });
-      const saved: unknown[] = [];
-      server.use(
-        http.put(LABEL_ROUTES_URL, async ({ request }) => {
-          saved.push(await request.json());
-          return HttpResponse.json({ routes: [] });
-        }),
-      );
+  describe('a List without a board', () => {
+    const routedWithoutBoard = [{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: null }];
+
+    it('imports through intake routes: no board columns, and the typical set imports open statuses', async () => {
+      const { savedRules } = useClickUpHandlers({ bindings: routedWithoutBoard });
       const user = userEvent.setup();
       renderIntakeSection();
 
       await openCard(user, /Eng \/ Mobile \/ Backlog/);
-      expect(screen.queryByRole('textbox', { name: /Tag for/ })).not.toBeInTheDocument();
+      expect(await screen.findByText(/This List has no board/)).toBeInTheDocument();
+      await user.click(await screen.findByRole('combobox', { name: 'Action for status TO DO' }));
+      expect(screen.queryByRole('option', { name: 'Into "Triage"' })).not.toBeInTheDocument();
+      await user.click(await screen.findByRole('option', { name: 'Import' }));
+      await waitFor(() => expect(savedRules).toEqual([{ statuses: { 'to do': { action: 'import' } } }]));
 
-      await user.click(await screen.findByRole('button', { name: /Tag routes for Acme Web \(optional\)/ }));
-      await user.type(await screen.findByRole('textbox', { name: 'Tag for Acme Web' }), 'bug');
-      await user.click(screen.getByRole('combobox', { name: 'Board for new tag in Acme Web' }));
-      await user.click(await screen.findByRole('option', { name: 'Bug' }));
-      await user.click(screen.getByRole('button', { name: 'Add' }));
-
+      await user.click(screen.getByRole('button', { name: 'Typical set' }));
       await waitFor(() =>
-        expect(saved).toEqual([{ factoryProjectId: 'fp-1', integrationId: 'clickup', label: 'bug', board: 'bug' }]),
+        expect(savedRules.at(-1)).toEqual({
+          statuses: { 'to do': { action: 'import' }, backlog: { action: 'import' }, 'dev fixed': { action: 'close' } },
+        }),
       );
+    });
+
+    it('offers no tag routes: tags pick a board through intake routes', async () => {
+      useClickUpHandlers({ bindings: routedToBug });
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+      expect(await screen.findByText(/add an intake route with the condition “has tag”/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Tag routes for/ })).not.toBeInTheDocument();
     });
   });
 });
