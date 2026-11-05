@@ -48,7 +48,8 @@ UNSUPPORTED = re.compile(
     r'|\.generated\.'
     r'|^\.changeset/'
     r'|^mastracode/[\w-]+/README\.md$'
-    r'|/e2e/',
+    # Playwright suites; `e2e/ui/` is the MSW harness unit tests run on, which is ported.
+    r'|/e2e/(?!ui/)',
     re.IGNORECASE,
 )
 SKIP_DIRS = {'node_modules', 'dist', '.git', '.mastra', 'migration', 'coverage', '.turbo'}
