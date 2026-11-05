@@ -28,7 +28,6 @@ function item(overrides: Partial<PipelineCard> = {}): PipelineCard {
     factoryProjectId: 'project-1',
     board: 'work',
     externalSource: null,
-    claimKey: null,
     parentWorkItemId: null,
     title: 'Card',
     stages: ['intake'],

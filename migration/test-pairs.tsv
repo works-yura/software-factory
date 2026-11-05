@@ -10,7 +10,7 @@ rules/validation.test.ts	core/src/rules/validation.test.ts	+1	regression: every 
 boards/review.test.ts	pipelines/src/review/board.test.ts	0	session-branch refresh case ported from upstream c3a2784881; upstream #29039: board transitions as phase config (-1)
 boards/work.test.ts	pipelines/src/work/board.test.ts	-4	work spanning several repositories: Done waits for every open change request; upstream #29039: board transitions as phase config (-5)
 work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts	+2	Linear/Jira identifier branches dropped with the vocabulary (-1); per-item GitHub suffix cases ported from upstream c3a2784881 (+3)
-storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts	+1	upstream #28889: the board poll reads the list cache without cloning (+1)
+storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts	-2	upstream #28889: the board poll reads the list cache without cloning (+1); upstream #29059: org-wide claims dropped, claim cases folded into one per-project case (-3)
 storage/domains/work-items/attention-events.test.ts	store/src/work-items/attention-events.test.ts
 storage/domains/audit/base.test.ts	store/src/audit/base.test.ts	+3	forward paging (`after`) ported from upstream f3bc1caddb
 storage/domains/audit/actions.test.ts	store/src/audit/actions.test.ts
@@ -21,7 +21,7 @@ storage/domains/comments/feed-context.test.ts	store/src/comments/feed-context.te
 rules/transition-service.test.ts	runtime/src/transition-service.test.ts	+19	upstream #28604: a phase that auto-approves submit_plan lets the planner move on; upstream #28978: pull requests reviewed on the Work board (+10); upstream #29039: board transitions as phase config (+8)
 rules/terminal-cleanup.test.ts	runtime/src/terminal-cleanup.test.ts
 rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts	+3	upstream #28721: decisions held for Work's shared context (+3)
-rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+9	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3); upstream #28971: a deleted project files no linked card and frees the claims its cards hold (+2); upstream #29109: outside authors' cards follow the person's gesture and phase conditions instead of a hard-coded refusal (3 rewritten, +1 split); upstream #28978: pull requests reviewed on the Work board (+2)
+rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+7	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3); upstream #28971: a deleted project files no linked card and frees the claims its cards hold (+2); upstream #29109: outside authors' cards follow the person's gesture and phase conditions instead of a hard-coded refusal (3 rewritten, +1 split); upstream #28978: pull requests reviewed on the Work board (+2); upstream #29059: claims dropped (claim-release case from #28971 and the Linear renamed-issue cases removed) (-2)
 session/run-audit.test.ts	runtime/src/run-audit.test.ts
 skills/service.test.ts	runtime/src/skills/service.test.ts	-1	the two skill-cache rescan cases moved to harness-mastra/src/harness.test.ts with the Mastra harness adapter (-2); formatSkillMessage case ported from upstream a5a9179daa (+1)
 storage/domains/channel-identity/base.test.ts	store/src/channel-identity/base.test.ts

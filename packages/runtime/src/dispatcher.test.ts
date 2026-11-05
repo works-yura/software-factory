@@ -5342,36 +5342,40 @@ describe('FactoryDecisionDispatcher', () => {
     expect(await decisionByKey(storage, 'linked-1')).toMatchObject({ status: 'succeeded' });
   });
 
-  it('spends a linked-item decision when another project holds the claim for its record', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    await storage.upsert({
+  it('files a linked card even when another project holds a card for the same record', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const storage = seeded.workItems;
+    const elsewhere = await storage.upsert({
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: 'other-project',
       input: {
         externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab:ENG-1' },
-        claimKey: 'gitlab:issue:1',
         title: 'ENG-1: held elsewhere',
         stages: ['intake'],
         sessions: {},
         metadata: {},
       },
     });
+    // The other project's card was filed while claims were enforced and still holds the record's claim.
+    await seeded.storage.ops.updateMany('work_items', { id: elsewhere.item.id }, { claim_key: 'linear:issue:1' });
     const parent = await createItem(storage);
     const boards = createLifecycleTestRegistry({
       execute: {
         issue: {
-          onEnter: () => ({
-            type: 'upsertLinkedWorkItem',
-            idempotencyKey: 'linked-claimed',
-            board: 'work',
-            source: 'gitlab-issue',
-            sourceKey: 'gitlab:ENG-1',
-            claimKey: 'gitlab:issue:1',
-            title: 'ENG-1: held elsewhere',
-            url: null,
-            stage: 'intake',
-          }),
+          // A rule written before claims were dropped still returns one.
+          onEnter: () =>
+            ({
+              type: 'upsertLinkedWorkItem',
+              idempotencyKey: 'linked-claimed',
+              board: 'work',
+              source: 'gitlab-issue',
+              sourceKey: 'gitlab:ENG-1',
+              claimKey: 'gitlab:issue:1',
+              title: 'ENG-1: held elsewhere',
+              url: null,
+              stage: 'intake',
+            }) as FactoryCommitDecision,
         },
       },
     });
@@ -5387,6 +5391,16 @@ describe('FactoryDecisionDispatcher', () => {
       ingress: { type: 'human', identity: 'move-claimed' },
       cause: 'test',
     });
+    // The committed decision is validated, which drops the claim; one persisted before
+    // claims were dropped still carries it.
+    const committed = await decisionByKey(storage, 'linked-claimed');
+    expect(committed?.decision).not.toHaveProperty('claimKey');
+    await seeded.storage.ops.updateMany(
+      'factory_deferred_decisions',
+      { id: committed!.id },
+      { decision: { ...committed!.decision, claimKey: 'linear:issue:1' } },
+    );
+    expect((await decisionByKey(storage, 'linked-claimed'))?.decision).toMatchObject({ claimKey: 'linear:issue:1' });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       harness: controller as never,
@@ -5400,102 +5414,28 @@ describe('FactoryDecisionDispatcher', () => {
     const filedHere = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
       item => item.externalSource?.externalId === 'gitlab:ENG-1',
     );
-    expect(filedHere).toEqual([]);
+    expect(filedHere).toMatchObject([{ parentWorkItemId: parent.id, stages: ['intake'] }]);
+    const filedRow = await seeded.storage.ops.findOne<{ claim_key: string | null }>('work_items', {
+      id: filedHere[0]!.id,
+    });
+    expect(filedRow?.claim_key).toBeNull();
     expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
-  });
-
-  it('releases the claim of a deleted project and files the linked card here', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    await storage.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: 'other-project',
-      input: {
-        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab:ENG-1' },
-        claimKey: 'gitlab:issue:1',
-        title: 'ENG-1: held elsewhere',
-        stages: ['intake'],
-        sessions: {},
-        metadata: {},
-      },
-    });
-    const parent = await createItem(storage);
-    const boards = createLifecycleTestRegistry({
-      execute: {
-        issue: {
-          onEnter: () => ({
-            type: 'upsertLinkedWorkItem',
-            idempotencyKey: 'linked-claimed',
-            board: 'work',
-            source: 'gitlab-issue',
-            sourceKey: 'gitlab:ENG-1',
-            claimKey: 'gitlab:issue:1',
-            title: 'ENG-1: held elsewhere',
-            url: null,
-            stage: 'intake',
-          }),
-        },
-      },
-    });
-    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
-    await transitionService.transition({
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: parent.id,
-      board: 'work',
-      stage: 'execute',
-      expectedRevision: parent.revision,
-      actor: { type: 'human', id: 'user-1' },
-      ingress: { type: 'human', identity: 'move-claimed' },
-      cause: 'test',
-    });
-    const { controller } = createSession();
-    const dispatcher = new FactoryDecisionDispatcher({
-      harness: controller as never,
-      isAutoRunEnabled: async () => true,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-      factoryProjectExists: async ({ factoryProjectId }) => factoryProjectId !== 'other-project',
-    });
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-    const filedHere = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
-      item => item.externalSource?.externalId === 'gitlab:ENG-1',
-    );
-    expect(filedHere).toEqual([expect.objectContaining({ claimKey: 'gitlab:issue:1', stages: ['intake'] })]);
-    const [heldBefore] = await storage.list({ orgId: 'org-1', factoryProjectId: 'other-project' });
-    expect(heldBefore?.claimKey).toBeNull();
-    expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
+    expect(await storage.get({ orgId: 'org-1', id: elsewhere.item.id })).toEqual(elsewhere.item);
   });
 
   it('spends a linked-item decision unfiled when its own project was deleted', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    await storage.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: 'other-project',
-      input: {
-        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab:ENG-1' },
-        claimKey: 'gitlab:issue:1',
-        title: 'ENG-1: held elsewhere',
-        stages: ['intake'],
-        sessions: {},
-        metadata: {},
-      },
-    });
     const parent = await createItem(storage);
     const boards = createLifecycleTestRegistry({
       execute: {
         issue: {
           onEnter: () => ({
             type: 'upsertLinkedWorkItem',
-            idempotencyKey: 'linked-claimed',
+            idempotencyKey: 'linked-deleted',
             board: 'work',
             source: 'gitlab-issue',
             sourceKey: 'gitlab:ENG-1',
-            claimKey: 'gitlab:issue:1',
-            title: 'ENG-1: held elsewhere',
+            title: 'ENG-1: filed for a deleted project',
             url: null,
             stage: 'intake',
           }),
@@ -5511,7 +5451,7 @@ describe('FactoryDecisionDispatcher', () => {
       stage: 'execute',
       expectedRevision: parent.revision,
       actor: { type: 'human', id: 'user-1' },
-      ingress: { type: 'human', identity: 'move-claimed' },
+      ingress: { type: 'human', identity: 'move-deleted' },
       cause: 'test',
     });
     const { controller } = createSession();
@@ -5529,66 +5469,7 @@ describe('FactoryDecisionDispatcher', () => {
       item => item.externalSource?.externalId === 'gitlab:ENG-1',
     );
     expect(filedHere).toEqual([]);
-    expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
-  });
-
-  it('adopts the claim on a linked card filed before claims existed', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const legacy = await storage.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: PROJECT_ID,
-      input: {
-        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab:ENG-1' },
-        title: 'ENG-1: filed earlier',
-        stages: ['intake'],
-        sessions: {},
-        metadata: {},
-      },
-    });
-    expect(legacy.item.claimKey).toBeNull();
-    const parent = await createItem(storage);
-    const boards = createLifecycleTestRegistry({
-      execute: {
-        issue: {
-          onEnter: () => ({
-            type: 'upsertLinkedWorkItem',
-            idempotencyKey: 'linked-adopt',
-            board: 'work',
-            source: 'gitlab-issue',
-            sourceKey: 'gitlab:ENG-1',
-            claimKey: 'gitlab:issue:1',
-            title: 'ENG-1: filed earlier',
-            url: null,
-            stage: 'intake',
-          }),
-        },
-      },
-    });
-    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
-    await transitionService.transition({
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: parent.id,
-      board: 'work',
-      stage: 'execute',
-      expectedRevision: parent.revision,
-      actor: { type: 'human', id: 'user-1' },
-      ingress: { type: 'human', identity: 'move-adopt' },
-      cause: 'test',
-    });
-    const { controller } = createSession();
-    const dispatcher = new FactoryDecisionDispatcher({
-      harness: controller as never,
-      isAutoRunEnabled: async () => true,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-    });
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-    expect(await storage.get({ orgId: 'org-1', id: legacy.item.id })).toMatchObject({ claimKey: 'gitlab:issue:1' });
-    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toHaveLength(2);
+    expect(await decisionByKey(storage, 'linked-deleted')).toMatchObject({ status: 'succeeded' });
   });
 
   it('removes a newly materialized linked item when its initial Intake entry is rejected', async () => {
