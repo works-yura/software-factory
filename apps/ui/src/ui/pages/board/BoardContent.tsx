@@ -334,6 +334,7 @@ export function BoardContent({
               cardProjectRepositoryId(factory.repositories, candidate, repository.projectRepositoryId)
             }
             factoryProjectId={factoryProjectId}
+            board={builtin ? kind : undefined}
             onRun={(candidate, move, prompt) =>
               dropOnStage(candidatePayload(candidate, prompt), move.stage, 'card_action')
             }

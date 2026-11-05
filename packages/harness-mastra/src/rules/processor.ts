@@ -11,7 +11,7 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
-import { boardForWorkItem, resolveBoardToolRule, workItemPhaseSemantics } from '@factory/core';
+import { boardForWorkItem, resolveBoardToolRule, reviewsPullRequest, workItemPhaseSemantics } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '@factory/store';
 import { findSessionRunBinding, getFactorySessionCoordinates } from '@factory/session';
@@ -302,14 +302,14 @@ export async function describeFactoryPhase(input: {
     role: binding.role,
     configVersion: input.configVersion,
   };
-  const value: ActivePhaseSnapshotValue =
-    board === 'review'
-      ? {
-          ...baseValue,
-          board,
-          ...((await input.runtime?.()) as RuntimeSnapshot | undefined),
-        }
-      : { ...baseValue, board };
+  // A pull request's own card (on Review, or on Work's `pr-review`) carries the review runtime.
+  const value: ActivePhaseSnapshotValue = reviewsPullRequest({ board, item: { source: workItemSource(item.externalSource) } })
+    ? {
+        ...baseValue,
+        board,
+        ...((await input.runtime?.()) as RuntimeSnapshot | undefined),
+      }
+    : { ...baseValue, board };
 
   const linkedText = linked.length
     ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`

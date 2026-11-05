@@ -10,10 +10,11 @@ import {
   selfReviewWorkItem,
   triageIssueEntry,
 } from './phase-rules.ts';
+import { reviewPullRequest } from '../review/phase-rules.ts';
 import { advanceApprovedPlan, openApprovedChangeRequest } from './tool-rules.ts';
 import { workTransitionPolicy } from './transition-policy.ts';
 
-/** Rule sources that land on Work; pull requests and merge requests go to Review. */
+/** Rule sources of Work's own work items; pull and merge requests are reviewed in `pr-review` (or on Review). */
 const WORK_RULE_SOURCES = ['issue', 'gitlabIssue', 'manual'] as const;
 
 function onEveryWorkSource(
@@ -22,7 +23,15 @@ function onEveryWorkSource(
   return Object.fromEntries(WORK_RULE_SOURCES.map(source => [source, handler]));
 }
 
-export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled';
+export type WorkBoardPhase =
+  | 'intake'
+  | 'triage'
+  | 'planning'
+  | 'execute'
+  | 'review'
+  | 'pr-review'
+  | 'done'
+  | 'canceled';
 
 /** Every Work phase: a card may move from any phase to any other; the transition policy guards the moves. */
 const ALL_PHASES: readonly WorkBoardPhase[] = [
@@ -31,6 +40,7 @@ const ALL_PHASES: readonly WorkBoardPhase[] = [
   'planning',
   'execute',
   'review',
+  'pr-review',
   'done',
   'canceled',
 ];
@@ -88,6 +98,19 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       runner: { context: 'work' },
       nextPhases: ALL_PHASES,
       onEnter: onEveryWorkSource(selfReviewWorkItem),
+    },
+    'pr-review': {
+      name: 'PR review',
+      // A pull request's own card is reviewed here by the independent reviewer, in its own
+      // review seat. Kept apart from Review, the builder's self-review, so a card never
+      // reaches the builder's lanes through a pull request's.
+      kind: 'working',
+      runner: { context: 'work' },
+      nextPhases: ALL_PHASES,
+      onEnter: {
+        pullRequest: reviewPullRequest,
+        gitlabPullRequest: reviewPullRequest,
+      },
     },
     done: {
       name: 'Done',

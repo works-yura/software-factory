@@ -72,7 +72,11 @@
     "filteredWork": "No work items match filters",
     "filteredDescription": "Try adjusting or clearing your filters.",
     "alreadyMaterialized_one": "{{count}} item from this source already has a card on another board, so the feed only offers new ones.",
-    "alreadyMaterialized_other": "{{count}} items from this source already have a card on another board, so the feed only offers new ones."
+    "alreadyMaterialized_other": "{{count}} items from this source already have a card on another board, so the feed only offers new ones.",
+    "prReview": {
+      "title": "No pull requests in review",
+      "description": "Press Review on a pull request card in Intake to start a review."
+    }
   },
   "moves": {
     "investigate": "Investigate",

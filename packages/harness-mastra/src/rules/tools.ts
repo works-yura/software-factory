@@ -2,7 +2,15 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardClassifiesTriage, boardForWorkItem, workItemPhaseSemantics } from '@factory/core';
+import {
+  boardClassifiesTriage,
+  boardForWorkItem,
+  isPullRequestCard,
+  pullRequestReviewPhase,
+  reviewsPullRequest,
+  workItemPhaseSemantics,
+  workItemSource,
+} from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import { SELF_REVIEW_ROUND_LIMIT } from '@factory/pipelines';
 import type { IntegrationTools } from '@factory/integrations';
@@ -238,7 +246,7 @@ function createReviewVerdictTool(
     factory_record_review_verdict: createTool({
       id: 'factory_record_review_verdict',
       description:
-        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On a Review card it records the published PR verdict and the card stays in Reviewing. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
+        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On the card of a pull request it records the published PR verdict and the card stays in Review. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
       inputSchema: reviewVerdictInputSchema,
       requireApproval: false,
       execute: async ({ verdict, reviewedHeadSha, reviewedHeads, findings }, execution) => {
@@ -253,7 +261,10 @@ function createReviewVerdictTool(
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
-        const selfReview = selfReviewFlow(options.boards, item);
+        const board = boardForWorkItem(item);
+        const source = workItemSource(item.externalSource);
+        // A pull request's own card can sit in Work's phases too; it is never self-reviewed.
+        const selfReview = isPullRequestCard({ source }) ? undefined : selfReviewFlow(options.boards, item);
         if (
           selfReview &&
           item.stages[0] === selfReview.review &&
@@ -272,7 +283,7 @@ function createReviewVerdictTool(
             toolCallId: execution.agent?.toolCallId,
           });
         }
-        if (boardForWorkItem(item) !== 'review' || item.stages[0] !== 'review') {
+        if (!reviewsPullRequest({ board, item: { source } }) || item.stages[0] !== pullRequestReviewPhase(board)) {
           throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
         }
         const reviewedAt = new Date().toISOString();

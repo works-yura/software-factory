@@ -38,6 +38,8 @@ function boardColumnEmptyCopy(
       return emptyCopy('execute');
     case 'review':
       return emptyCopy(kind === 'review' ? 'reviewActive' : 'review');
+    case 'pr-review':
+      return emptyCopy('prReview');
     case 'done':
       return emptyCopy(kind === 'review' ? 'reviewDone' : 'done');
     case 'canceled':

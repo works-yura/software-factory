@@ -3,7 +3,10 @@ import type { AgentHarness, AgentNotificationResult, AgentSession } from '@facto
 import {
   autoApprovedExitTool,
   boardForWorkItem,
+  isPullRequestCard,
+  pullRequestReviewPhase,
   resolvePhaseSemantics,
+  reviewsPullRequest,
   startsInAutoPhase,
   workItemPhaseSemantics,
 } from '@factory/core';
@@ -47,7 +50,7 @@ import { decisionOvertaken } from './decision-applicability.ts';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from '@factory/store';
 import type { FactoryTransitionService } from './transition-service.ts';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from '@factory/core';
-import { externalSourceForWorkItem, FACTORY_RULE_STAGES } from '@factory/core';
+import { externalSourceForWorkItem, FACTORY_RULE_STAGES, workItemSource } from '@factory/core';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -469,11 +472,16 @@ function requestsConsent(
 // The Factory reviewing code it wrote is part of the same work, not new work to
 // consent to: a push to a Factory-authored PR re-reviews without a person's click.
 function reviewsFactoryAuthoredCode(
-  item: { metadata: Record<string, unknown> | null },
+  item: Pick<WorkItemRow, 'metadata' | 'externalSource'>,
   decision: FactoryCommitDecision,
 ): boolean {
   if (item.metadata?.factoryAuthored !== true) return false;
-  if (decision.type === 'transition') return decision.board === 'review' && decision.stage === 'review';
+  if (decision.type === 'transition') {
+    return (
+      decision.stage === pullRequestReviewPhase(decision.board) &&
+      reviewsPullRequest({ board: decision.board, item: { source: workItemSource(item.externalSource) } })
+    );
+  }
   return decision.type === 'invokeSkill' && decision.role === 'review';
 }
 
@@ -1349,8 +1357,16 @@ export class FactoryDecisionDispatcher {
       if (claimed) result = { ...result, item: claimed };
     }
     const itemBoard = boardForWorkItem(result.item);
-    if (!skipRules && itemBoard !== decision.board) {
-      throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
+    // New pull request cards are filed on Work, but one filed on Review before
+    // that stays there: filing its pull request again acts on it where it sits.
+    const board =
+      itemBoard === 'review' &&
+      decision.board === 'work' &&
+      isPullRequestCard({ source: workItemSource(result.item.externalSource) })
+        ? itemBoard
+        : decision.board;
+    if (!skipRules && itemBoard !== board) {
+      throw new Error(`The work item belongs to board "${itemBoard}", not "${board}".`);
     }
     // A re-evaluation for an already-filed card (poll/reconcile re-emitting
     // "opened") resolves the card itself as the triggering item; it is not
@@ -1397,7 +1413,7 @@ export class FactoryDecisionDispatcher {
           boardRegistry: boards,
           userId: 'factory-rule-dispatcher',
           item: result.item,
-          targetBoard: decision.board,
+          targetBoard: board,
           targetStage: decision.stage,
         });
       }
@@ -1407,7 +1423,6 @@ export class FactoryDecisionDispatcher {
     if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))
       return;
 
-    const board = decision.board;
     let expectedRevision = result.item.revision;
     if (materializedByDecision) {
       const initial = await this.#transitionService.transition({

@@ -19,10 +19,10 @@ rules/dispatch-errors.test.ts	store/src/dispatch-errors.test.ts
 storage/domains/comments/base.test.ts	store/src/comments/base.test.ts
 storage/domains/comments/activity.test.ts	store/src/comments/activity.test.ts
 storage/domains/comments/feed-context.test.ts	store/src/comments/feed-context.test.ts
-rules/transition-service.test.ts	runtime/src/transition-service.test.ts	+1	upstream #28604: a phase that auto-approves submit_plan lets the planner move on
+rules/transition-service.test.ts	runtime/src/transition-service.test.ts	+11	upstream #28604: a phase that auto-approves submit_plan lets the planner move on; upstream #28978: pull requests reviewed on the Work board (+10)
 rules/terminal-cleanup.test.ts	runtime/src/terminal-cleanup.test.ts
 rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts	+3	upstream #28721: decisions held for Work's shared context (+3)
-rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+7	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3); upstream #28971: a deleted project files no linked card and frees the claims its cards hold (+2); upstream #29109: outside authors' cards follow the person's gesture and phase conditions instead of a hard-coded refusal (3 rewritten, +1 split)
+rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+9	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3); upstream #28971: a deleted project files no linked card and frees the claims its cards hold (+2); upstream #29109: outside authors' cards follow the person's gesture and phase conditions instead of a hard-coded refusal (3 rewritten, +1 split); upstream #28978: pull requests reviewed on the Work board (+2)
 session/run-audit.test.ts	runtime/src/run-audit.test.ts
 skills/service.test.ts	runtime/src/skills/service.test.ts	-1	the two skill-cache rescan cases moved to harness-mastra/src/harness.test.ts with the Mastra harness adapter (-2); formatSkillMessage case ported from upstream a5a9179daa (+1)
 storage/domains/channel-identity/base.test.ts	store/src/channel-identity/base.test.ts
@@ -56,7 +56,7 @@ integrations/github/provenance.test.ts	integration-github/src/provenance.test.ts
 integrations/github/reconcile-worker.test.ts	integration-github/src/reconcile-worker.test.ts
 integrations/github/routes-scenario.test.ts	integration-github/src/routes-scenario.test.ts
 integrations/github/routes.test.ts	integration-github/src/routes.test.ts	+4	connect registers the access-token account without a GitHub App, and reports an unreadable token (+2); status connects an access token by itself (+2)
-integrations/github/rules.test.ts	server/src/integrations/github/rules.test.ts	+15	edited Factory verdict cases ported from upstream f7d8e6bb96; upstream #29109: GithubRules with intake routes (+12)
+integrations/github/rules.test.ts	server/src/integrations/github/rules.test.ts	+29	edited Factory verdict cases ported from upstream f7d8e6bb96; upstream #29109: GithubRules with intake routes (+12); upstream #28978: pull requests reviewed on the Work board (+14)
 integrations/github/sandbox-release.test.ts	sandbox/src/github/sandbox-release.test.ts
 integrations/github/sandbox-scenario.test.ts	sandbox/src/github/sandbox-scenario.test.ts
 integrations/github/sandbox.git.test.ts	sandbox/src/github/sandbox.git.test.ts	+1	git identity matrix ported from upstream ca08ed414a; its provider block lives in integration-github/src/git-identity.git.test.ts
@@ -73,7 +73,7 @@ integrations/gitlab/issue-reconciler.test.ts	integration-gitlab/src/issue-reconc
 integrations/gitlab/merge-request-reconciler.test.ts	integration-gitlab/src/merge-request-reconciler.test.ts
 integrations/gitlab/reconciliation-config.test.ts	integration-gitlab/src/reconciliation-config.test.ts
 integrations/gitlab/routes.test.ts	integration-gitlab/src/routes.test.ts
-integrations/gitlab/rules.test.ts	integration-gitlab/src/rules.test.ts	+1	work spanning several repositories: merge requests sharing an iid in two projects, tracked from a project that is not an intake source
+integrations/gitlab/rules.test.ts	integration-gitlab/src/rules.test.ts	+7	work spanning several repositories: merge requests sharing an iid in two projects, tracked from a project that is not an intake source; upstream #28978: pull requests reviewed on the Work board (+6)
 integrations/gitlab/session-subscriptions.test.ts	integration-gitlab/src/session-subscriptions.test.ts	+1	work spanning several repositories: subscribing to a merge request in another environment repository
 integrations/gitlab/subscriptions.test.ts	integration-gitlab/src/subscriptions.test.ts
 integrations/gitlab/version-control.test.ts	integration-gitlab/src/version-control.test.ts
@@ -119,11 +119,11 @@ rules/bindings.test.ts	runtime/src/bindings.test.ts
 rules/custom-board-lifecycle.test.ts	server/src/rules/custom-board-lifecycle.test.ts
 rules/custom-board-runtime.test.ts	server/src/rules/custom-board-runtime.test.ts
 rules/default-handlers.test.ts	server/src/rules/default-handlers.test.ts	-1	Linear integration cases dropped with the integration (-3); Linear triage entry cases dropped with the vocabulary (-2); change-request flow on a custom board (+4)
-rules/processor.test.ts	harness-mastra/src/rules/processor.test.ts	+1	upstream #29104: a tool rule re-entering the current stage runs onEnter (+1)
+rules/processor.test.ts	harness-mastra/src/rules/processor.test.ts	+2	upstream #29104: a tool rule re-entering the current stage runs onEnter (+1); upstream #28978: pull requests reviewed on the Work board (+1)
 rules/review-source-tool.test.ts	harness-mastra/src/rules/review-source-tool.test.ts
 rules/start-coordinator.scenario.test.ts	harness-mastra/src/rules/start-coordinator.scenario.test.ts
 rules/start-coordinator.test.ts	harness-mastra/src/rules/start-coordinator.test.ts	0	owner-default (user scope) case removed with the personal model scope; a card naming no repository runs in any environment session (+1)
-rules/tools.test.ts	harness-mastra/src/rules/tools.test.ts	+1	work spanning several repositories: self-review records a head per repository
+rules/tools.test.ts	harness-mastra/src/rules/tools.test.ts	+2	work spanning several repositories: self-review records a head per repository; upstream #28978: pull requests reviewed on the Work board (+1)
 sandbox/callback-factory-sandbox.test.ts	sandbox/src/callback-factory-sandbox.test.ts
 sandbox/local-factory-sandbox.test.ts	sandbox/src/local-factory-sandbox.test.ts
 sandbox/session-retirement.test.ts	sandbox/src/session-retirement.test.ts	+9	upstream 7e428dc80e resetSessionSandbox (+7), v4 local-sandbox reset probe (+1), host cleanup after a session is deleted (+1)
@@ -363,8 +363,8 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/factory/boardRepository.test.ts	../apps/ui/src/ui/domains/factory/boardRepository.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardSort.test.ts	../apps/ui/src/ui/domains/factory/boardSort.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	-3	Linear/Jira/incident.io UI cases dropped with the vocabulary
-../../../apps/ui/src/ui/domains/factory/boardStages.test.ts	../apps/ui/src/ui/domains/factory/boardStages.test.ts
-../../../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
+../../../apps/ui/src/ui/domains/factory/boardStages.test.ts	../apps/ui/src/ui/domains/factory/boardStages.test.ts	+2	upstream #28978: pull requests reviewed on the Work board (+2)
+../../../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	0	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28978: pull requests reviewed on the Work board (+1)
 ../../../apps/ui/src/ui/domains/factory/stageTones.test.ts	../apps/ui/src/ui/domains/factory/stageTones.test.ts
 ../../../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	-7	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
@@ -383,10 +383,10 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/factory/components/knowledge/graphModel.test.ts	../apps/ui/src/ui/domains/factory/components/knowledge/graphModel.test.ts
 ../../../apps/ui/src/ui/domains/factory/components/knowledge/useInteractionIdle.test.ts	../apps/ui/src/ui/domains/factory/components/knowledge/useInteractionIdle.test.ts
 ../../../apps/ui/src/ui/domains/factory/context/__tests__/FeedEventsProvider.msw.test.tsx	../apps/ui/src/ui/domains/factory/context/__tests__/FeedEventsProvider.msw.test.tsx	-1	upstream 63d7d5cbd4 (#28257): no attention list to refresh (-1)
-../../../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	-10	Linear/Jira/incident.io UI cases dropped with the vocabulary
+../../../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	-9	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28978: pull requests reviewed on the Work board (+1)
 ../../../apps/ui/src/ui/domains/factory/services/attention.test.ts	activity/ui/src/ui/domains/factory/services/attention.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/boardViews.test.ts	../apps/ui/src/ui/domains/factory/services/boardViews.test.ts
-../../../apps/ui/src/ui/domains/factory/services/relationships.test.ts	../apps/ui/src/ui/domains/factory/services/relationships.test.ts
+../../../apps/ui/src/ui/domains/factory/services/relationships.test.ts	../apps/ui/src/ui/domains/factory/services/relationships.test.ts	+1	upstream #28978: pull requests reviewed on the Work board (+1)
 ../../../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts	../apps/ui/src/ui/domains/factory/services/workItemPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/services/workItems.test.ts	../apps/ui/src/ui/domains/factory/services/workItems.test.ts	1	added: a stored card from a dropped integration reads as manual
 ../../../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	../apps/ui/src/ui/domains/search/__tests__/GlobalSearch.msw.test.tsx	+3	upstream 22084b780f (#28100): Memory found by its former page name (+1); 9173231506 (#28312): sidebar search button hands focus back (+1); 63d7d5cbd4 (#28257): retired Activity URLs open the board (+1)

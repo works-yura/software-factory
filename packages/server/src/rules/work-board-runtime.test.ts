@@ -206,8 +206,9 @@ describe('Work board runtime: a bug', () => {
       }
     };
     const card = async () => {
+      // The bug's own card: a pull request's card sits on Work too.
       const [found] = (await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).filter(
-        item => item.board === 'work',
+        item => item.board === 'work' && item.externalSource?.type !== 'pull-request',
       );
       if (!found) throw new Error('Missing Work card.');
       return found;
@@ -272,7 +273,7 @@ describe('Work board runtime: a bug', () => {
     expect(building).toMatchObject({ stages: ['execute'] });
 
     // The fix seat moves to Review, then opens the pull request. Provenance binds it to the Work
-    // card, and it gets its own Review card.
+    // card, and the pull request gets its own card in Work's Intake.
     const work = { type: 'agent' as const, bindingId: 'binding-work', role: 'work' };
     await expect(move('review', work)).resolves.toMatchObject({ status: 'accepted' });
     await drain();
@@ -287,9 +288,9 @@ describe('Work board runtime: a bug', () => {
     await drain();
     expect(await card()).toMatchObject({ stages: ['review'], metadata: expect.objectContaining({ openPullRequestNumber: 17 }) });
     const reviewCard = (await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).find(
-      item => item.board === 'review',
+      item => item.externalSource?.type === 'pull-request',
     );
-    expect(reviewCard).toMatchObject({ parentWorkItemId: building.id, stages: ['intake'] });
+    expect(reviewCard).toMatchObject({ board: 'work', parentWorkItemId: building.id, stages: ['intake'] });
 
     // With the pull request open, an agent cannot close the card; the merge does.
     await expect(move('done', work)).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
@@ -297,7 +298,7 @@ describe('Work board runtime: a bug', () => {
     await drain();
     expect(await card()).toMatchObject({ board: 'work', stages: ['done'] });
     expect(await workItems.get({ orgId: 'org-1', id: reviewCard!.id })).toMatchObject({
-      board: 'review',
+      board: 'work',
       stages: ['done'],
     });
     expect(

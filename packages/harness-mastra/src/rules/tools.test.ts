@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import { workBoard } from '@factory/pipelines';
 import { defineBoard } from '@factory/core';
 import { createBoardRegistry } from '@factory/testing';
 import { createLifecycleTestRegistry } from '@factory/pipelines/testing';
@@ -809,6 +810,81 @@ describe('factory_transition_work_item', () => {
         reviewVerdict: 'request changes',
         reviewedHeadSha: 'abc1234def000000000000000000000000000000',
       });
+    });
+
+    it('records the published PR verdict on a pull request card reviewed on the Work board', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const id = await reviewingItem(storage, 'pr-review');
+      const parent = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: { board: 'work', title: 'Authoring work', stages: ['review'], metadata: { openPullRequestNumber: 1 } },
+      });
+      await storage.update({
+        orgId: 'org-1',
+        id,
+        userId: 'user-1',
+        patch: { board: 'work', parentWorkItemId: parent.item.id },
+      });
+      const context = requestContext();
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+      });
+
+      await expect(
+        execute(tools.factory_record_review_verdict as ExecutableTool, context, {
+          verdict: 'approve',
+          reviewedHeadSha: 'ABC1234DEF000000000000000000000000000000',
+          findings: 'Looks good',
+        }),
+      ).resolves.toMatchObject({ status: 'recorded', verdict: 'approve' });
+
+      const item = await storage.get({ orgId: 'org-1', id });
+      expect(item?.board).toBe('work');
+      expect(item?.stages).toEqual(['pr-review']);
+      expect(item?.metadata).toMatchObject({
+        reviewVerdict: 'approve',
+        reviewedHeadSha: 'abc1234def000000000000000000000000000000',
+      });
+      // A PR verdict is not a self-review: no self-review rounds, no builder wake-up.
+      expect(item?.metadata).not.toHaveProperty('selfReviewVerdict');
+      expect(item?.metadata).not.toHaveProperty('selfReviewRounds');
+      expect((await storage.get({ orgId: 'org-1', id: parent.item.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 1,
+        reviewVerdict: 'approve',
+      });
+      const onResult = workBoard.tools.factory_record_review_verdict?.onResult;
+      expect(
+        onResult?.({
+          tenant: { orgId: 'org-1', projectId: PROJECT_ID },
+          actor: { type: 'agent', id: 'binding-1', role: 'review' },
+          ingress: { type: 'rule', id: 'ingress-1' },
+          cause: 'test',
+          causalChain: [],
+          configVersion: 'rules-v1',
+          item: {
+            id,
+            source: 'github-pr',
+            sourceKey: null,
+            parentWorkItemId: parent.item.id,
+            title: item!.title,
+            url: null,
+            stages: item!.stages,
+            acceptedAt: null,
+            metadata: item!.metadata,
+          },
+          board: 'work',
+          itemRevision: item!.revision,
+          toolName: 'factory_record_review_verdict',
+          threadId: 'thread-1',
+          assistantMessageId: 'message-1',
+          toolCallId: 'call-1',
+          result: { status: 'success', value: { status: 'recorded' } },
+        }),
+      ).toBeUndefined();
     });
 
     it('rejects a verdict for a card that is no longer Reviewing', async () => {

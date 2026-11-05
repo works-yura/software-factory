@@ -6,7 +6,8 @@ import { isWorkBoardPhase, workBoard } from './work/board.ts';
 
 export { createDefaultBoardRegistry, defaultBoards } from './defaults.ts';
 export { isReviewBoardPhase, reviewBoard } from './review/board.ts';
-export { hasRecordedVerdict } from './review/phase-rules.ts';
+export { hasRecordedVerdict, reviewPullRequest } from './review/phase-rules.ts';
+export { rejectAgentDone, reviewTransitionPolicy } from './review/transition-policy.ts';
 export type { ReviewBoardPhase } from './review/board.ts';
 export {
   legacyGithubWorkItemBranch,

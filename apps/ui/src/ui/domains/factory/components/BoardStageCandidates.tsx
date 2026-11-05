@@ -14,6 +14,7 @@ export function BoardStageCandidates({
   layout,
   projectRepositoryId,
   factoryProjectId,
+  board,
   onRun,
 }: {
   candidates: BoardCandidate[];
@@ -22,6 +23,8 @@ export function BoardStageCandidates({
   /** The linked repository each candidate comes from. */
   projectRepositoryId: (candidate: BoardCandidate) => string;
   factoryProjectId: string;
+  /** Board the candidates are filed on, which decides the lane a pull request is reviewed in. */
+  board?: string;
   onRun: (candidate: BoardCandidate, move: CardMove, prompt?: string) => void;
 }) {
   const showDivider = afterWorkItems && candidates.length > 0;
@@ -46,6 +49,7 @@ export function BoardStageCandidates({
             candidate={candidate}
             projectRepositoryId={projectRepositoryId(candidate)}
             factoryProjectId={factoryProjectId}
+            board={board}
             onRun={(move, prompt) => onRun(candidate, move, prompt)}
           />
         )}

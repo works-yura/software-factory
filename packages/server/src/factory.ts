@@ -53,7 +53,7 @@ import {
 import { createBoardRegistry, isDefinedBoard, isTerminalWorkItem } from '@factory/core';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
-import { boardForWorkItem, namesRepository, openChangeRequests } from '@factory/core';
+import { boardForWorkItem, isPullRequestCard, namesRepository, openChangeRequests, workItemSource } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import { createRoutingHarness } from '@factory/harness';
 import { createFactorySessionTokenSigner } from '@factory/mcp';
@@ -1392,6 +1392,8 @@ export class MastraFactory {
                 if (!item || !(await toBoardSource(boards).load(binding)).get(boardForWorkItem(item))?.changeRequests) {
                   return undefined;
                 }
+                // A pull request's own card is reviewed, never self-reviewed.
+                if (isPullRequestCard({ source: workItemSource(item.externalSource) })) return undefined;
                 // A repository whose change request is already out is past
                 // self-review; the others are still gated.
                 if (

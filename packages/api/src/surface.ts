@@ -7,7 +7,7 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import { boardForWorkItem, legacyPlanRoleFor } from '@factory/core';
+import { boardForWorkItem, isPullRequestCard, legacyPlanRoleFor, pullRequestReviewPhase } from '@factory/core';
 import type { BoardRegistry, IntakeRoutesReader } from '@factory/core';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '@factory/integrations';
 import { getGithubFeatureDiagnostics } from '@factory/integration-github';
@@ -280,7 +280,10 @@ async function legacyPlanSession(
 function restingExitLane(
   board: { phaseForRole(role: string): string | undefined } | undefined,
   role: string,
+  pullRequestCard: boolean,
 ): string | undefined {
+  // A pull request's own card is reviewed in PR review; Work's Review lane is the builder's self-review.
+  if (pullRequestCard && role === 'review' && workLaneForRole(board, role)) return pullRequestReviewPhase('work');
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 
@@ -317,7 +320,7 @@ export async function prepareFactoryRuleBinding(
       currentKind === undefined
         ? undefined
         : currentKind === 'resting'
-          ? restingExitLane(board, input.role)
+          ? restingExitLane(board, input.role, isPullRequestCard({ source: workItemSource(input.item.externalSource) }))
           : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(

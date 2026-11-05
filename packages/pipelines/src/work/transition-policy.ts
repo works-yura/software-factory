@@ -1,7 +1,29 @@
-import { describeChangeRequests, openChangeRequests } from '@factory/core';
+import { describeChangeRequests, isPullRequestCard, openChangeRequests } from '@factory/core';
+
+import { rejectAgentDone } from '../review/transition-policy.ts';
 import type { BoardTransitionPolicy } from '@factory/core';
 
+/** Phases a pull request's own card may hold on Work: it is reviewed, never triaged, planned, or built. */
+const PULL_REQUEST_PHASES = new Set(['intake', 'pr-review', 'done', 'canceled']);
+
 export const workTransitionPolicy: BoardTransitionPolicy = context => {
+  if (isPullRequestCard(context.item)) {
+    if (!PULL_REQUEST_PHASES.has(context.toStage)) {
+      return {
+        type: 'reject',
+        code: 'invalid_transition',
+        reason: `A pull request card is reviewed on the Work board; it cannot enter ${context.toStage}. Move it to pr-review, done, or canceled.`,
+      };
+    }
+    return rejectAgentDone(context) ?? { type: 'allow' };
+  }
+  if (context.toStage === 'pr-review') {
+    return {
+      type: 'reject',
+      code: 'invalid_transition',
+      reason: 'PR review holds only pull request cards; this work item goes to Review after Building.',
+    };
+  }
   const { item, requestedTriageType, actor, fromStage, toStage, isHumanTransition, plansAutoApproved, planApproved } =
     context;
   const triageAgent = actor.type === 'agent' && actor.role === 'triage';
