@@ -343,6 +343,8 @@ export async function describeFactoryPhase(input: {
 
 export interface FactoryPhaseStateProcessorOptions {
   configVersion: string;
+  /** Called on every step of a run on an active bound thread, so an idle dispatcher reconciles its tool results. */
+  onBoundThreadRun?: () => void;
   storage: WorkItemsStorage;
   boards: BoardRegistry | ProjectBoardSource;
   loadMemorySettings?: (args: {
@@ -416,6 +418,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // recovered session reaches its project row from this hook too.
     await this.loadCallerMemorySettings(args.requestContext, binding);
     if (!binding || binding.status !== 'active') return;
+    this.options.onBoundThreadRun?.();
     const completedToolCallIds = completedStepToolCallIds(args.steps);
     const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
     if (completedMessage) {

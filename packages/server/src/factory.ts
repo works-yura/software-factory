@@ -94,6 +94,7 @@ import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools }
 import { reconcileGithubAcceptanceLabels } from '@factory/integration-github';
 import type { GithubRuleOverrides } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
+import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.ts';
 import {
   recordFactoryPullRequestProvenance,
   resolveFactoryPullRequestParentWorkItemId,
@@ -525,6 +526,9 @@ export class MastraFactory {
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
+  /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
+  readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
+  #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
@@ -693,6 +697,17 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
+    // The dispatcher sleeps while idle. It wakes itself on this replica's writes
+    // that leave claimable work; the bus carries those wakes to other replicas.
+    workItemsStorage.onClaimableWork(() => publishDispatchWake(eventBus, this.#dispatchWakeOrigin));
+    this.#unsubscribeDispatchWakes = subscribeDispatchWakes(eventBus, this.#dispatchWakeOrigin, () =>
+      this.#dispatcher?.wake(),
+    ).catch(error => {
+      console.warn(
+        `[factory] subscribing to dispatcher wakes failed; other replicas' work waits for this replica's own wakes: ${error instanceof Error ? error.message : error}`,
+      );
+      return undefined;
+    });
     workItemsStorage.useTerminalPhasePredicate(item =>
       isTerminalWorkItem(this.#projectBoards?.forProject(item) ?? this.#boards, item),
     );
@@ -1293,6 +1308,7 @@ export class MastraFactory {
           factoryThinkingLevel: factoryProjectId => readFactoryThinkingLevel(factoryProjectsStorage, factoryProjectId),
           // A Claude Code session's transcript names the Factory's tools as its MCP client does.
           bareToolName: claudeFactoryToolName,
+          onBoundThreadRun: () => this.#dispatcher?.noteBoundThreadRun(),
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -2701,6 +2717,15 @@ export class MastraFactory {
 
   /** Stop Factory-owned background dispatch before the host process shuts down. */
   async shutdown(): Promise<void> {
+    const unsubscribeDispatchWakes = this.#unsubscribeDispatchWakes;
+    this.#unsubscribeDispatchWakes = undefined;
+    await unsubscribeDispatchWakes
+      ?.then(unsubscribe => unsubscribe?.())
+      .catch(error =>
+        console.warn(
+          `[factory] unsubscribing from dispatcher wakes failed: ${error instanceof Error ? error.message : error}`,
+        ),
+      );
     await this.#dispatcher?.stop();
   }
 }
