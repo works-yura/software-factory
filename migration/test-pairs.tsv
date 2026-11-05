@@ -320,7 +320,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/ToolCardRunEnd.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/ToolCardRunEnd.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptApprovals.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptApprovals.msw.test.tsx	+2	Claude Code tool approvals shown as their Mastra equivalents
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptAttachments.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptAttachments.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptEntryMemo.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptEntryMemo.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptEntryMemo.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptEntryMemo.msw.test.tsx	+1	upstream #28709: a settled entry skips re-rendering with its activity plan (+1)
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptMessageMeta.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptMessageMeta.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptNotifications.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptNotifications.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptProse.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptProse.msw.test.tsx
@@ -330,7 +330,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptSkillRows.msw.test.tsx	+2	typed skill signal row ported from upstream a5a9179daa; a Claude Code Skill call is a skill row
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolBurst.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolBurst.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolOutcomes.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolOutcomes.msw.test.tsx
-../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx
+../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptToolRows.msw.test.tsx	+5	upstream #28709: tool work folds into one activity line (+9; 4 cases on thoughts folding into it dropped: v4 keeps reasoning open on its own)
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptTurnGroups.msw.test.tsx	../apps/ui/src/ui/domains/chat/components/__tests__/TranscriptTurnGroups.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/submit-plan-source.test.ts	../apps/ui/src/ui/domains/chat/components/__tests__/submit-plan-source.test.ts
 ../../../apps/ui/src/ui/domains/chat/components/__tests__/transcript-notifications.test.ts	../apps/ui/src/ui/domains/chat/components/__tests__/transcript-notifications.test.ts
@@ -351,7 +351,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/handoffFiles.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/handoffFiles.test.ts
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/message-author.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/message-author.test.ts
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/runtime.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/runtime.test.ts
-../../../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	+6	run error notice cases ported from upstream 38ff787998
+../../../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	+8	run error notice cases ported from upstream 38ff787998; upstream #28709: transcript parts for the activity line (+2)
 ../../../apps/ui/src/ui/domains/factory/activity.test.ts	../apps/ui/src/ui/domains/factory/activity.test.ts	-17	Activity retired as upstream 63d7d5cbd4 (#28257): only the day helpers stay in the app; the full suite is parked in packages/activity/ui
 ../../../apps/ui/src/ui/domains/factory/auditPresentation.test.ts	activity/ui/src/ui/domains/factory/auditPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardCardState.test.ts	../apps/ui/src/ui/domains/factory/boardCardState.test.ts	+1	a card whose run needs its repository asks for it

@@ -20,8 +20,12 @@ function assistant(parts: MastraDBMessage['content']['parts'], streaming?: boole
   };
 }
 
-function renderEntries(entries: TimelineEntry[]) {
-  return renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
+function entriesView(entries: TimelineEntry[], running = false) {
+  return <TranscriptEntries entries={entries} running={running} onApprove={() => {}} onRespond={() => {}} />;
+}
+
+function renderEntries(entries: TimelineEntry[], running = false) {
+  return renderWithProviders(entriesView(entries, running));
 }
 
 /** A streaming passage opens once the first words are paced in. */
@@ -82,11 +86,11 @@ describe('assistant prose', () => {
 
   it('shows waiting reasoning and removes it if the stream finishes without text', () => {
     const part = { type: 'reasoning' as const, reasoning: '', details: [], state: 'streaming' as const };
-    const { rerender } = renderEntries([assistant([part], true)]);
+    const { rerender } = renderEntries([assistant([part], true)], true);
     expect(screen.getByRole('group', { name: 'Reasoning' }).getAttribute('aria-busy')).toBe('true');
 
     const finished = { ...part, state: 'done' as const };
-    rerender(<TranscriptEntries entries={[assistant([finished])]} onApprove={() => {}} onRespond={() => {}} />);
+    rerender(entriesView([assistant([finished])]));
     expect(screen.queryByRole('group', { name: 'Reasoning' })).toBeNull();
   });
 
@@ -127,7 +131,7 @@ describe('assistant prose', () => {
       { type: 'reasoning', reasoning: 'Need the core first.', details: [] },
       { type: 'text', text },
     ];
-    const { container, rerender } = renderEntries([assistant(parts('Let me look at'), true)]);
+    const { container, rerender } = renderEntries([assistant(parts('Let me look at'), true)], true);
 
     act(() => void vi.advanceTimersByTime(4000));
     const thinking = () =>
@@ -135,13 +139,7 @@ describe('assistant prose', () => {
     const settled = thinking();
     expect(container.textContent).toContain('Need the core first.');
 
-    rerender(
-      <TranscriptEntries
-        entries={[assistant(parts('Let me look at the core package now.'), true)]}
-        onApprove={() => {}}
-        onRespond={() => {}}
-      />,
-    );
+    rerender(entriesView([assistant(parts('Let me look at the core package now.'), true)], true));
     act(() => void vi.advanceTimersByTime(4000));
 
     expect(thinking()).toBe(settled);

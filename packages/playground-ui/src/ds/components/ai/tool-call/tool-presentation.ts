@@ -17,10 +17,14 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { libText } from '@/lib/lib-text';
 
+import type { ToolKind } from './tool-phrases';
+
 export interface ToolPresentation {
   icon: LucideIcon;
-  /** Stable name of the kind of tool, e.g. "Run"; also groups calls by kind. */
+  /** The tool's name for people, translated: "Run". */
   label: string;
+  /** Stable English kind behind `label` ("Run"), which groups calls and picks their phrases; unset for unknown tools. */
+  kind?: ToolKind;
   /** Salient argument shown next to the label: command, path, pattern… */
   detail?: string;
   /**
@@ -63,40 +67,40 @@ function firstStringArg(args: unknown, keys: string[]): string | undefined {
 
 interface ToolStyle {
   icon: LucideIcon;
-  label: string;
+  label: ToolKind;
   detailKeys?: string[];
   isCommand?: boolean;
 }
 
 const TOOL_STYLES: Record<string, ToolStyle> = {
-  view: { icon: Eye, label: libText('Read'), detailKeys: ['path'] },
-  read_file: { icon: Eye, label: libText('Read'), detailKeys: ['path'] },
-  write_file: { icon: SquarePen, label: libText('Write'), detailKeys: ['path'] },
-  create_file: { icon: SquarePen, label: libText('Write'), detailKeys: ['path'] },
-  edit_file: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
-  string_replace: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
-  string_replace_lsp: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
-  str_replace: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
-  ast_edit: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
-  ast_smart_edit: { icon: SquarePen, label: libText('Edit'), detailKeys: ['path'] },
-  execute_command: { icon: SquareTerminal, label: libText('Run'), detailKeys: ['command'], isCommand: true },
-  get_process_output: { icon: ScrollText, label: libText('Process output'), detailKeys: ['pid'] },
-  kill_process: { icon: CircleStop, label: libText('Stop process'), detailKeys: ['pid'] },
-  find_files: { icon: FolderSearch, label: libText('Find files'), detailKeys: ['pattern', 'path'] },
-  list_files: { icon: FolderSearch, label: libText('List files'), detailKeys: ['pattern', 'path'] },
-  grep: { icon: Search, label: libText('Search'), detailKeys: ['pattern', 'path'] },
-  search_content: { icon: Search, label: libText('Search'), detailKeys: ['pattern', 'query'] },
-  search: { icon: Search, label: libText('Search'), detailKeys: ['query'] },
-  web_search: { icon: Globe, label: libText('Search the web'), detailKeys: ['query'] },
-  web_fetch: { icon: Globe, label: libText('Fetch'), detailKeys: ['url'] },
-  lsp_inspect: { icon: Braces, label: libText('Inspect code'), detailKeys: ['path'] },
-  file_stat: { icon: FileSearch, label: libText('File info'), detailKeys: ['path'] },
-  delete: { icon: Trash2, label: libText('Delete'), detailKeys: ['path'] },
-  delete_file: { icon: Trash2, label: libText('Delete'), detailKeys: ['path'] },
-  mkdir: { icon: FolderPlus, label: libText('New folder'), detailKeys: ['path'] },
-  skill: { icon: BookOpen, label: libText('Skill'), detailKeys: ['name'] },
-  skill_search: { icon: BookOpen, label: libText('Search skills'), detailKeys: ['query'] },
-  skill_read: { icon: BookOpen, label: libText('Skill file'), detailKeys: ['path'] },
+  view: { icon: Eye, label: 'Read', detailKeys: ['path'] },
+  read_file: { icon: Eye, label: 'Read', detailKeys: ['path'] },
+  write_file: { icon: SquarePen, label: 'Write', detailKeys: ['path'] },
+  create_file: { icon: SquarePen, label: 'Write', detailKeys: ['path'] },
+  edit_file: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
+  string_replace: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
+  string_replace_lsp: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
+  str_replace: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
+  ast_edit: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
+  ast_smart_edit: { icon: SquarePen, label: 'Edit', detailKeys: ['path'] },
+  execute_command: { icon: SquareTerminal, label: 'Run', detailKeys: ['command'], isCommand: true },
+  get_process_output: { icon: ScrollText, label: 'Process output', detailKeys: ['pid'] },
+  kill_process: { icon: CircleStop, label: 'Stop process', detailKeys: ['pid'] },
+  find_files: { icon: FolderSearch, label: 'Find files', detailKeys: ['pattern', 'path'] },
+  list_files: { icon: FolderSearch, label: 'List files', detailKeys: ['pattern', 'path'] },
+  grep: { icon: Search, label: 'Search', detailKeys: ['pattern', 'path'] },
+  search_content: { icon: Search, label: 'Search', detailKeys: ['pattern', 'query'] },
+  search: { icon: Search, label: 'Search', detailKeys: ['query'] },
+  web_search: { icon: Globe, label: 'Search the web', detailKeys: ['query'] },
+  web_fetch: { icon: Globe, label: 'Fetch', detailKeys: ['url'] },
+  lsp_inspect: { icon: Braces, label: 'Inspect code', detailKeys: ['path'] },
+  file_stat: { icon: FileSearch, label: 'File info', detailKeys: ['path'] },
+  delete: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
+  delete_file: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
+  mkdir: { icon: FolderPlus, label: 'New folder', detailKeys: ['path'] },
+  skill: { icon: BookOpen, label: 'Skill', detailKeys: ['name'] },
+  skill_search: { icon: BookOpen, label: 'Search skills', detailKeys: ['query'] },
+  skill_read: { icon: BookOpen, label: 'Skill file', detailKeys: ['path'] },
 };
 
 function prettifyToolName(toolName: string): string {
@@ -199,12 +203,14 @@ export function presentTool(toolName: string, rawArgs: unknown): ToolPresentatio
   if (!style) return { icon: Wrench, label: server ? `${server} · ${prettifyToolName(name)}` : prettifyToolName(name) };
 
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;
-  if (!detail) return { icon: style.icon, label: style.label };
-  if (!style.isCommand) return { icon: style.icon, label: style.label, detail };
+  // The kind stays English for grouping and phrases; people read it through the host's translator.
+  const named = { icon: style.icon, label: libText(style.label), kind: style.label };
+  if (!detail) return named;
+  if (!style.isCommand) return { ...named, detail };
   // Workspaces with `requireDescription` have the agent say what a command does; that reads better
   // on a one-line row than "Run" and the command, which stays in the expanded body.
   const description = stringArg(args, 'description')?.replace(/\s+/g, ' ').trim() || undefined;
-  return { icon: style.icon, label: style.label, detail: withoutCdPrefix(detail), description, command: detail };
+  return { ...named, detail: withoutCdPrefix(detail), description, command: detail };
 }
 
 export type ToolEdit = { path?: string } & ({ oldText: string; newText: string } | { content: string });

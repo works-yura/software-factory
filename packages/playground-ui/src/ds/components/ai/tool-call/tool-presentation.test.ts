@@ -99,6 +99,7 @@ describe('Claude Code tools', () => {
     expect(presentTool('Bash', { command, description: 'Build core', run_in_background: false })).toEqual({
       icon: presentTool('execute_command', { command }).icon,
       label: 'Run',
+      kind: 'Run',
       detail: 'pnpm build',
       description: 'Build core',
       command,
