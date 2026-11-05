@@ -13,6 +13,7 @@ import type { AuditRecorder } from '@factory/feed';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { SupervisorScope } from './session.ts';
 import type { WorkerMessageResult } from './session-messaging.ts';
+import { acceptedAtOf } from './acceptance.ts';
 
 interface SupervisorWriteDependencies {
   scope: SupervisorScope;
@@ -182,7 +183,7 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
         if (!deps.reconcileAcceptanceLabels) throw new Error('Acceptance-label reconciliation is unavailable.');
         const item = await deps.workItems.get({ orgId: deps.scope.orgId, id: workItemId });
         if (!item || item.factoryProjectId !== deps.scope.factoryProjectId) throw new Error('Work item not found.');
-        if (!item.acceptedAt) throw new Error('The work item has not been accepted.');
+        if (!acceptedAtOf(item)) throw new Error('The work item has not been accepted.');
         await deps.reconcileAcceptanceLabels({ ...deps.scope, item });
         await audit('factory.work_item.labels_reconciled', { type: 'work_item', id: workItemId });
         return { workItemId, reconciled: true };

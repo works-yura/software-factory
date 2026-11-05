@@ -50,7 +50,8 @@ async function queueDecision(storage: WorkItemsStorage, number: number) {
     ...SCOPE,
     workItemId: item.id,
     board: 'work',
-    stage: 'execute',
+    // Intake leads to Planning, not straight to Building (upstream #29039).
+    stage: 'planning',
     expectedRevision: item.revision,
     actor: { type: 'human', id: 'user-1' },
     ingress: { type: 'human', identity: `move-${number}` },
@@ -296,15 +297,11 @@ describe('createFactorySupervisorWriteTools', () => {
       execute(context.tools.factory_transition_work_item, { workItemId: item.id, stage: 'planning' }),
     ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
     const moved = await context.workItems.get({ orgId: 'org-1', id: item.id });
-    expect(moved?.acceptedAt).toBeInstanceOf(Date);
+    // The person's move is the approval (upstream #29039): the hook fires, no acceptedAt is stamped.
+    expect(moved?.acceptedAt).toBeNull();
     await vi.waitFor(() =>
       expect(context.onAccepted).toHaveBeenCalledWith(
-        expect.objectContaining({
-          orgId: 'org-1',
-          factoryProjectId: PROJECT_ID,
-          workItemId: item.id,
-          item: expect.objectContaining({ acceptedAt: expect.any(Date) }),
-        }),
+        expect.objectContaining({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: item.id }),
       ),
     );
     expect(await latestAudit(context.audit)).toMatchObject({
@@ -320,7 +317,7 @@ describe('createFactorySupervisorWriteTools', () => {
     });
     expect(context.reconcileAcceptanceLabels).toHaveBeenCalledWith({
       ...SCOPE,
-      item: expect.objectContaining({ id: item.id, acceptedAt: expect.any(Date) }),
+      item: expect.objectContaining({ id: item.id }),
     });
     expect(await auditByAction(context.audit, 'factory.work_item.labels_reconciled')).toMatchObject({
       actorId: 'user-supervisor',

@@ -337,14 +337,17 @@ describe('computeFactoryHealth', () => {
     expect(report.findings).toEqual([]);
   });
 
-  it('treats a triaged non-bug card as held, and only nags once it has waited long enough', () => {
-    const fresh = item({ id: 'fresh', stages: ['triage'], triageType: 'feature request' });
+  it('treats a card triage left in Intake as held, and only nags once it has waited long enough', () => {
+    // Triage sends an open non-bug back to Intake for a person (upstream #29039).
+    const triaged = { triage: { sessionId: 's-triage', branch: 'b', threadId: 't', startedAt: ago(HOUR).toISOString() } };
+    const fresh = item({ id: 'fresh', stages: ['intake'], sessions: triaged as never });
     const stale = item({
       id: 'stale',
-      stages: ['triage'],
-      triageType: 'feature request',
+      stages: ['intake'],
+      sessions: triaged as never,
       stageHistory: [
-        { stage: 'triage', enteredAt: ago(2 * DEFAULT_HEALTH_THRESHOLDS.waitingOnPersonMs).toISOString(), by: 'agent' },
+        { stage: 'triage', enteredAt: ago(3 * DEFAULT_HEALTH_THRESHOLDS.waitingOnPersonMs).toISOString(), by: 'user-1' },
+        { stage: 'intake', enteredAt: ago(2 * DEFAULT_HEALTH_THRESHOLDS.waitingOnPersonMs).toISOString(), by: 'agent' },
       ],
     });
     const report = computeFactoryHealth({ ...empty, items: [fresh, stale] }, NOW);
@@ -355,7 +358,7 @@ describe('computeFactoryHealth', () => {
         suggestedRepair: { action: 'accept-work-item', workItemId: 'stale' },
       }),
     ]);
-    expect(report.findings[0]!.evidence).toContain('feature request');
+    expect(report.findings[0]!.evidence).toContain('waiting in Intake');
   });
 
   it('flags an accepted card that still wears the needs-approval label', () => {

@@ -22,6 +22,7 @@ import type {
 // The finding shape is stored by WorkItemsStorage, so it lives in @factory/store.
 export type { FactoryHealthFinding, FactoryHealthFindingKind, FactoryHealthRepair } from '@factory/store';
 import type { FactoryHealthFinding, FactoryHealthFindingKind } from '@factory/store';
+import { acceptedAtOf, heldForPerson } from './acceptance.ts';
 
 export interface FactoryHealthReport {
   checkedAt: string;
@@ -221,31 +222,28 @@ export function computeFactoryHealth(
   for (const item of inputs.items) {
     const stage = factoryRuleStage(item.stages);
     const semantics = stage ? inputs.phaseSemantics(item) : undefined;
-    if (!stage || semantics?.kind !== 'working') continue;
+    if (!stage) continue;
     const base = subject(item.id);
     const enteredAt = stageEnteredAt(item);
     const inStageMs = enteredAt ? now.getTime() - enteredAt.getTime() : null;
 
-    // Work's triage seat holds a classified non-bug until a maintainer accepts it. Only
-    // Work has that gate, so this is keyed on the board, not on the phase name.
-    const held =
-      boardForWorkItem(item) === 'work' &&
-      stage === 'triage' &&
-      item.triageType !== null &&
-      item.triageType !== 'bug' &&
-      !item.acceptedAt;
+    // Triage leaves an open non-bug resting in Work's Intake for a maintainer (upstream #29039).
+    // Only Work has that gate, so this is keyed on the board, not on the phase name.
+    const held = heldForPerson(item);
+    if (!held && semantics?.kind !== 'working') continue;
     if (held) {
       if (inStageMs !== null && inStageMs > thresholds.waitingOnPersonMs) {
         findings.push({
           kind: 'held-waiting',
           id: `held-waiting:${item.id}`,
           ...base,
-          evidence: `Triaged as "${item.triageType}" and waiting for a maintainer's decision since ${enteredAt!.toISOString()}.`,
+          evidence: `Triaged and waiting in Intake for a maintainer's decision since ${enteredAt!.toISOString()}.`,
           beganAt: enteredAt!.toISOString(),
           suggestedRepair: { action: 'accept-work-item', workItemId: item.id },
         });
       }
     } else if (
+      semantics &&
       !seatedFor(item.id, rolesFor(item, stage, semantics.role)) &&
       !movingFor(item.id, rolesFor(item, stage, semantics.role))
     ) {
@@ -261,13 +259,14 @@ export function computeFactoryHealth(
       });
     }
 
-    if (item.acceptedAt && itemLabels(item).includes(NEEDS_APPROVAL_LABEL)) {
+    const acceptedAt = acceptedAtOf(item);
+    if (acceptedAt && itemLabels(item).includes(NEEDS_APPROVAL_LABEL)) {
       findings.push({
         kind: 'label-drift',
         id: `label-drift:${item.id}`,
         ...base,
-        evidence: `Accepted at ${item.acceptedAt.toISOString()} but the last observed labels still include "${NEEDS_APPROVAL_LABEL}".`,
-        beganAt: item.acceptedAt.toISOString(),
+        evidence: `Accepted at ${acceptedAt.toISOString()} but the last observed labels still include "${NEEDS_APPROVAL_LABEL}".`,
+        beganAt: acceptedAt.toISOString(),
         suggestedRepair: { action: 'reconcile-labels', workItemId: item.id },
       });
     }

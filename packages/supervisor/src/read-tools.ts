@@ -12,6 +12,7 @@ import type { BoardRegistry } from '@factory/core';
 import type { IntegrationTools } from '@factory/integrations';
 import { decisionRetryable, overtakenDecisionIds } from '@factory/runtime';
 import { factoryDispatchFailureMetadata } from '@factory/store';
+import { acceptedAtOf, heldForPerson } from './acceptance.ts';
 import { FACTORY_RULE_STAGES, factoryRuleStage } from '@factory/core';
 import type { FactoryRuleStage } from '@factory/core';
 import type { AuditStorage } from '@factory/store';
@@ -80,7 +81,7 @@ function summarizeItem(item: WorkItemRow) {
     source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
     url: typeof item.metadata?.url === 'string' ? item.metadata.url : null,
     triageType: item.triageType,
-    acceptedAt: iso(item.acceptedAt),
+    acceptedAt: iso(acceptedAtOf(item)),
     autonomyArmedAt: iso(item.autonomyArmedAt),
     parentWorkItemId: item.parentWorkItemId,
     revision: item.revision,
@@ -201,7 +202,7 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
         for (const item of items) {
           const stage = factoryRuleStage(item.stages);
           if (stage) stages[stage] += 1;
-          if (stage === 'triage' && item.triageType && item.triageType !== 'bug' && !item.acceptedAt) held += 1;
+          if (heldForPerson(item)) held += 1;
         }
         const decisionsByStatus: Record<string, number> = {};
         for (const decision of decisions) {
