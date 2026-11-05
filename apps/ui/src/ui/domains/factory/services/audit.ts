@@ -1,3 +1,4 @@
+import type { AuditAction } from '@factory/store/audit/actions';
 import { isAuditActorType } from '@factory/store/audit/actors';
 import type { AuditTarget } from '@factory/store/audit/base';
 import type { WireAuditActor, WireAuditEvent, WireAuditPage } from '@factory/feed/audit/wire';
@@ -86,11 +87,14 @@ async function throwRequestError(res: Response): Promise<never> {
   throw new Error(message);
 }
 
+export const MAX_AUDIT_PAGE_SIZE = 200;
+
 export async function fetchAuditEvents(
   baseUrl: string,
   factoryProjectId: string,
   options: {
     namespaces?: string[];
+    actions?: AuditAction[];
     actor?: string;
     actorIds?: string[];
     before?: string;
@@ -100,6 +104,7 @@ export async function fetchAuditEvents(
 ): Promise<AuditEventPage> {
   const query = new URLSearchParams();
   if (options.namespaces && options.namespaces.length > 0) query.set('namespaces', options.namespaces.join(','));
+  if (options.actions && options.actions.length > 0) query.set('actions', options.actions.join(','));
   if (options.actor) query.set('actor', options.actor);
   if (options.actorIds && options.actorIds.length > 0) query.set('actorIds', options.actorIds.join(','));
   if (options.before) query.set('before', options.before);

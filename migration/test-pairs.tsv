@@ -154,7 +154,7 @@ skills/review-skill-publish.test.ts	harness-mastra/src/skills/review-skill-publi
 spa-static.test.ts	http/src/spa-static.test.ts
 state-signing.test.ts	auth/src/state-signing.test.ts
 storage/domains/audit/agent-audit.test.ts	harness-mastra/src/agent-audit.test.ts
-storage/domains/audit/domain.test.ts	feed/src/audit/domain.test.ts
+storage/domains/audit/domain.test.ts	feed/src/audit/domain.test.ts	+1	upstream #28394: the feed filters by audit action (+1)
 storage/domains/comments/domain.test.ts	feed/src/comments/domain.test.ts
 storage/domains/comments/feed-events.test.ts	feed/src/comments/feed-events.test.ts
 storage/domains/work-items/metrics.test.ts	api/src/metrics.test.ts

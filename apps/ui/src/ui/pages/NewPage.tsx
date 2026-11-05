@@ -3,10 +3,10 @@ import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Bot, GitBranch } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useLocation, useMatch, useParams } from 'react-router';
 
-import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
 import { useHarness } from '../../hooks/useHarness';
@@ -21,13 +21,17 @@ import { newUserSessionPath } from '../domains/workspaces/services/factoryPaths'
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
+import { StarterBoard } from '../domains/chat/components/starters/StarterBoard';
 import { TranscriptEntries } from '../domains/chat/components/Transcript';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { FactoryActivity } from '../domains/factory/components/activity/FactoryActivity';
+import { traySurface } from '../ui/tray';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
-const draftStartClass = 'flex min-w-0 w-full max-w-xl flex-col items-stretch gap-6';
+const draftStartClass = 'flex min-w-0 w-full flex-col items-stretch gap-6';
 
 export function NewPage() {
   const { t } = useTranslation('chat');
@@ -87,6 +91,7 @@ export function NewPage() {
         <NewPageContent
           activeFactory={activeFactory}
           claudeCode={claudeCode}
+          userDraft={draftSessionId !== undefined}
           missingModel={missingModel}
           missingCredential={missingCredential}
           configurationError={configurationError}
@@ -110,12 +115,14 @@ function readRouteErrorNotice(state: unknown): string | undefined {
 function NewPageContent({
   activeFactory,
   claudeCode,
+  userDraft,
   missingModel,
   missingCredential,
   configurationError,
 }: {
   activeFactory: FactoryProject | undefined;
   claudeCode: boolean;
+  userDraft: boolean;
   missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
   configurationError: Error | undefined;
@@ -126,16 +133,18 @@ function NewPageContent({
   const routeErrorNotice = readRouteErrorNotice(location.state);
   const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
   const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
+  const startsFromPrompt = userDraft && activeFactory && !missingModel && !missingCredential;
 
   return (
-    <div className="grid min-h-full place-items-center px-4 py-10 md:px-6">
-      <div className="flex w-full max-w-xl min-w-0 flex-col items-center gap-4">
+    <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-10 px-4 pt-[14vh] pb-16 md:px-6">
+      <div className="flex w-full min-w-0 flex-col items-center gap-4">
         <DraftStart
           activeFactory={activeFactory}
           claudeCode={claudeCode}
           configurationError={configurationError}
           missingModel={missingModel}
           missingCredential={missingCredential}
+          starters={startsFromPrompt && <StarterBoard factoryId={activeFactory.id} />}
         />
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">
@@ -144,6 +153,7 @@ function NewPageContent({
           </div>
         )}
       </div>
+      {startsFromPrompt && <FactoryActivity factoryId={activeFactory.id} />}
     </div>
   );
 }
@@ -154,15 +164,19 @@ function DraftStart({
   configurationError,
   missingModel,
   missingCredential,
+  starters,
 }: {
   activeFactory: FactoryProject | undefined;
   claudeCode: boolean;
   configurationError: Error | undefined;
   missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
+  starters: ReactNode;
 }) {
   const { t } = useTranslation('chat');
   const features = useServerFeatures();
+  const firstName = useFactoryAuth().data?.user?.name?.trim().split(/\s+/)[0];
+
   if (activeFactory && claudeCode) {
     const blocker = claudeCodeBlocker(activeFactory, features.data?.claudeCode);
     if (blocker) {
@@ -192,7 +206,7 @@ function DraftStart({
   return (
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0 text-center">
-        {t('newPage.heading')}
+        {firstName ? t('newPage.headingNamed', { name: firstName }) : t('newPage.heading')}
       </Txt>
       {configurationError && (
         <Notice variant="destructive">
@@ -201,8 +215,12 @@ function DraftStart({
       )}
 
       <div className="flex min-w-0 flex-col gap-2">
-        {activeFactory && <ComposerPanel composerVariant="textarea" />}
-        <FactoryContext activeFactory={activeFactory} />
+        {activeFactory && (
+          <div className={cn(traySurface, 'flex flex-col gap-1.5 p-1.5')}>
+            <ComposerPanel composerVariant="textarea" />
+            {starters}
+          </div>
+        )}
         {claudeCode && (
           <Txt as="p" variant="caption" tone="muted" className="m-0">
             {t('newPage.claudeCode.note')}
@@ -285,48 +303,5 @@ function MissingModelState({ factoryId }: { factoryId: string }) {
         </Link>
       }
     />
-  );
-}
-
-function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | undefined }) {
-  const { sessionId } = useParams<{ sessionId: string }>();
-  const sessionQuery = useUserSessionQuery(sessionId);
-  const repository = activeFactory?.repositories.find(
-    repo => repo.projectRepositoryId === sessionQuery.data?.projectRepositoryId,
-  );
-  const projectPath = sessionQuery.data?.sessionId;
-  const gitBranch = repository?.gitBranch;
-  return (
-    <div className="text-muted-foreground flex max-w-full items-center gap-1.5">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <FolderIcon size={13} className="text-placeholder shrink-0" />
-        <Txt as="span" variant="column" title={activeFactory?.name} className="min-w-0 truncate">
-          {activeFactory?.name ?? 'Factory'}
-        </Txt>
-        {projectPath && (
-          <>
-            <Txt as="span" variant="caption" tone="faint" className="shrink-0">
-              ·
-            </Txt>
-            <Txt as="span" variant="caption" tone="faint" title={projectPath} className="min-w-0 truncate">
-              {projectPath}
-            </Txt>
-          </>
-        )}
-      </div>
-      {gitBranch && (
-        <>
-          <Txt as="span" variant="caption" tone="faint" aria-hidden className="shrink-0">
-            ·
-          </Txt>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <GitBranch size={13} aria-hidden className="text-placeholder shrink-0" />
-            <Txt as="span" variant="caption" title={gitBranch} className="min-w-0 truncate">
-              {gitBranch}
-            </Txt>
-          </div>
-        </>
-      )}
-    </div>
   );
 }

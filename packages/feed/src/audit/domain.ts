@@ -7,7 +7,7 @@ import type { Context } from 'hono';
 import { getFactoryAuthUser } from '@factory/auth';
 import type { RouteAuth } from '@factory/http';
 import type { FactoryProjectsStorage } from '@factory/store';
-import { auditActionsInNamespaces, isAuditNamespace } from '@factory/store';
+import { auditActionsInNamespaces, isAuditAction, isAuditNamespace } from '@factory/store';
 import type { AuditAction } from '@factory/store';
 import { isHumanActorId } from '@factory/store';
 import { ACTOR_PROFILE_METADATA_KEY, auditActorProfile } from '@factory/store';
@@ -102,6 +102,14 @@ function actionsInRequestedNamespaces(raw: string | undefined): string[] | undef
       .map(namespace => namespace.trim())
       .filter(isAuditNamespace),
   );
+}
+
+function requestedActions(raw: string | undefined): string[] | undefined {
+  if (!raw) return undefined;
+  return raw
+    .split(',')
+    .map(action => action.trim())
+    .filter(isAuditAction);
 }
 
 function parseActorIdsParam(raw: string | undefined): string[] {
@@ -334,8 +342,12 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
           const project = await this.#projects.get({ orgId: tenant.orgId, id: projectId });
           if (!project) return c.json({ error: 'Project not found' }, 404);
 
-          const actions = actionsInRequestedNamespaces(c.req.query('namespaces'));
-          if (actions?.length === 0) return c.json({ error: 'unknown_namespaces' }, 400);
+          const inNamespaces = actionsInRequestedNamespaces(c.req.query('namespaces'));
+          if (inNamespaces?.length === 0) return c.json({ error: 'unknown_namespaces' }, 400);
+          const named = requestedActions(c.req.query('actions'));
+          const actions =
+            named && inNamespaces ? named.filter(action => inNamespaces.includes(action)) : (named ?? inNamespaces);
+          if (actions?.length === 0) return c.json({ error: 'unknown_actions' }, 400);
 
           const page = await this.list({
             orgId: tenant.orgId,

@@ -44,7 +44,8 @@
         "description": "Харнес цієї Factory — Claude Code, але на сервері його не налаштовано. Перемкніть Factory на Mastra в налаштуваннях моделей або попросіть адміністратора налаштувати Claude Code.",
         "action": "Відкрити налаштування моделей"
       }
-    }
+    },
+    "headingNamed": "Над чим хочете попрацювати, {{name}}?"
   },
   "threadPage": {
     "loadingSession": "Завантаження сесії",
@@ -386,5 +387,86 @@
   },
   "turnGap": {
     "later": "{{amount}} по тому"
+  },
+  "starters": {
+    "board": "Почати з дошки",
+    "unblock": {
+      "label": "Невдалі запуски",
+      "actionOne": "Розібратися й перезапустити",
+      "actionMany": "Розібратися й перезапустити {{count}}"
+    },
+    "feedback": {
+      "label": "Просять змін",
+      "action": "Внести зміни"
+    },
+    "review": {
+      "label": "Найдовше чекає рев’ю",
+      "unit_one": "день",
+      "unit_few": "дні",
+      "unit_many": "днів",
+      "unit_other": "днів",
+      "actionOne": "Переглянути",
+      "actionMany": "Переглянути {{count}} найстаріших"
+    },
+    "decide": {
+      "label": "Після тріажу чекають на вас",
+      "action": "Допоможи вирішити"
+    },
+    "triage": {
+      "label": "Без тріажу в Intake",
+      "actionOne": "Провести тріаж",
+      "actionMany": "Тріаж {{count}} найновіших"
+    },
+    "bug": {
+      "label": "Баги без плану",
+      "actionOne": "Спланувати виправлення",
+      "actionMany": "Спланувати виправлення одного"
+    },
+    "sweep": {
+      "label": "Беклог {{area}}",
+      "action": "Згрупувати за причиною"
+    },
+    "stale": {
+      "label": "Застарілі pull request-и",
+      "action": "Позначити, що закрити"
+    }
+  },
+  "activity": {
+    "period": {
+      "today": "Сьогодні",
+      "week": "Цього тижня",
+      "month": "Цього місяця"
+    },
+    "kind": {
+      "cameIn": {
+        "label": "Надійшло",
+        "counted_one": "надійшла",
+        "counted_few": "надійшли",
+        "counted_many": "надійшло",
+        "counted_other": "надійшло"
+      },
+      "ran": {
+        "label": "Запуски агентів",
+        "counted_one": "запуск агента",
+        "counted_few": "запуски агентів",
+        "counted_many": "запусків агентів",
+        "counted_other": "запусків агентів"
+      },
+      "shipped": {
+        "label": "Готово",
+        "counted_one": "готова",
+        "counted_few": "готові",
+        "counted_many": "готово",
+        "counted_other": "готово"
+      }
+    },
+    "loading": "{{noun}}: завантаження",
+    "unavailable": "{{noun}}: недоступно",
+    "recap": {
+      "today": "Підсумок дня",
+      "week": "Підсумок тижня",
+      "month": "Підсумок місяця"
+    },
+    "empty": "{{period}} нічого не надійшло, не запускалося й не завершилося."
   }
 }

@@ -46,6 +46,8 @@ interface DraftRouteOptions {
   modelSwitchGate?: Promise<void>;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
+  /** The Factory's cards, in the wire shape the work-items route answers with. */
+  workItems?: unknown[];
 }
 
 function readSentMessage(body: unknown): string {
@@ -59,6 +61,7 @@ export function stubDraftRoute({
   failedCreates = 0,
   modelSwitchGate,
   persistedMessages = [],
+  workItems = [],
 }: DraftRouteOptions = {}): DraftRoute {
   let releaseWorkspace = () => {};
   // The server creates the session's thread only once the controller session
@@ -119,8 +122,9 @@ export function stubDraftRoute({
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: [] }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+      HttpResponse.json({ decisions: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({

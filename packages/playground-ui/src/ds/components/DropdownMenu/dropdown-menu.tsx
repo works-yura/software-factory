@@ -304,12 +304,15 @@ type DropdownMenuRadioOptionsProps<V extends string> = {
   options: readonly DropdownMenuRadioOption<V>[];
   value: V;
   onValueChange: (value: V) => void;
+  /** Closes the menu once an option is picked, for a menu that holds only this choice. Default `false`. */
+  closeOnSelect?: boolean;
 };
 
 function DropdownMenuRadioOptions<V extends string>({
   options,
   value,
   onValueChange,
+  closeOnSelect = false,
 }: DropdownMenuRadioOptionsProps<V>) {
   return (
     <DropdownMenuRadioGroup
@@ -320,7 +323,7 @@ function DropdownMenuRadioOptions<V extends string>({
       }}
     >
       {options.map(option => (
-        <DropdownMenuRadioItem key={option.value} value={option.value}>
+        <DropdownMenuRadioItem key={option.value} value={option.value} closeOnClick={closeOnSelect}>
           {option.icon}
           <span>{option.label}</span>
         </DropdownMenuRadioItem>

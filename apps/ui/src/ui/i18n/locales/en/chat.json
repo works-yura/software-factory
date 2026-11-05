@@ -44,7 +44,8 @@
         "description": "This Factory’s harness is Claude Code, but the server has no Claude Code harness configured. Switch the Factory to Mastra in Models settings, or ask an admin to set up Claude Code.",
         "action": "Open Models settings"
       }
-    }
+    },
+    "headingNamed": "What do you want to work on, {{name}}?"
   },
   "threadPage": {
     "loadingSession": "Loading session",
@@ -384,5 +385,78 @@
   },
   "turnGap": {
     "later": "{{amount}} later"
+  },
+  "starters": {
+    "board": "Start from the board",
+    "unblock": {
+      "label": "Failed runs",
+      "actionOne": "Debug and retry it",
+      "actionMany": "Debug and retry {{count}}"
+    },
+    "feedback": {
+      "label": "Changes requested",
+      "action": "Make the changes"
+    },
+    "review": {
+      "label": "Longest review wait",
+      "unit_one": "day",
+      "unit_other": "days",
+      "actionOne": "Review it",
+      "actionMany": "Review the {{count}} oldest"
+    },
+    "decide": {
+      "label": "Triaged, waiting for you",
+      "action": "Help me decide"
+    },
+    "triage": {
+      "label": "Untriaged in Intake",
+      "actionOne": "Triage it",
+      "actionMany": "Triage the {{count}} newest"
+    },
+    "bug": {
+      "label": "Bugs with no plan",
+      "actionOne": "Plan a fix",
+      "actionMany": "Plan a fix for one"
+    },
+    "sweep": {
+      "label": "{{area}} backlog",
+      "action": "Group by root cause"
+    },
+    "stale": {
+      "label": "Stale pull requests",
+      "action": "Flag what to close"
+    }
+  },
+  "activity": {
+    "period": {
+      "today": "Today",
+      "week": "This week",
+      "month": "This month"
+    },
+    "kind": {
+      "cameIn": {
+        "label": "Came in",
+        "counted_one": "came in",
+        "counted_other": "came in"
+      },
+      "ran": {
+        "label": "Agent runs",
+        "counted_one": "agent run",
+        "counted_other": "agent runs"
+      },
+      "shipped": {
+        "label": "Shipped",
+        "counted_one": "shipped",
+        "counted_other": "shipped"
+      }
+    },
+    "loading": "{{noun}} loading",
+    "unavailable": "{{noun}} unavailable",
+    "recap": {
+      "today": "Recap today",
+      "week": "Recap the week",
+      "month": "Recap the month"
+    },
+    "empty": "Nothing came in, ran or shipped {{period}}."
   }
 }

@@ -66,6 +66,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const {
     commands,
     composerDraft: draft,
+    composerPreview: preview,
     composerInputRef: inputRef,
     setComposerDraft,
     runComposerCommand,
@@ -99,7 +100,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const composerDisabled = startingDraft || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading;
-  const hasSubmittableDraft = (draft.trim().length > 0 || images.length > 0) && !(planFeedback.pending && !draft.trim());
+  // A starter card previews its prompt in the composer; sending sends what is shown.
+  const shownText = preview?.text ?? draft;
+  const hasSubmittableDraft = shownText.trim().length > 0 || (images.length > 0 && !planFeedback.pending);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -209,15 +212,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    if (sendDisabled) return;
-    const text = draft.trim();
-    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
-    submitInput(text);
+    if (sendDisabled || !hasSubmittableDraft) return;
+    submitInput(shownText.trim());
   };
 
   const commandMenu = useComposerCommands({
     commands,
-    value: draft,
+    value: shownText,
     onValueChange: updateDraft,
     inputRef,
     enabled: !planFeedback.pending,
@@ -288,6 +289,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onPaste={onPaste}
             placeholder={placeholder}
             disabled={textareaDisabled}
+            readOnly={preview !== undefined}
+            style={preview ? { height: preview.height } : undefined}
             variant={variant}
             aria-label={t('composer.message')}
           />
