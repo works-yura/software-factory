@@ -349,7 +349,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/commands.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/commands.test.ts
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/handoffFiles.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/handoffFiles.test.ts
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/message-author.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/message-author.test.ts
-../../../apps/ui/src/ui/domains/chat/services/__tests__/runtime.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/runtime.test.ts
+../../../apps/ui/src/ui/domains/chat/services/__tests__/runtime.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/runtime.test.ts	+1	upstream f342ac3915 (#29596): unchanged snapshots keep their references (+1)
 ../../../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	../apps/ui/src/ui/domains/chat/services/__tests__/transcript.test.ts	+9	run error notice cases ported from upstream 38ff787998; upstream #28709: transcript parts for the activity line (+2); upstream #28808: live shell output keeps its latest megabyte (+1)
 ../../../apps/ui/src/ui/domains/factory/activity.test.ts	../apps/ui/src/ui/domains/factory/activity.test.ts	-17	Activity retired as upstream 63d7d5cbd4 (#28257): only the day helpers stay in the app; the full suite is parked in packages/activity/ui
 ../../../apps/ui/src/ui/domains/factory/auditPresentation.test.ts	activity/ui/src/ui/domains/factory/auditPresentation.test.ts
