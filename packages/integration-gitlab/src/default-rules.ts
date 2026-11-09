@@ -1,4 +1,4 @@
-import { recordExplicitRuleOverrides } from '@factory/core';
+import { closedByRoutes, recordExplicitRuleOverrides } from '@factory/core';
 import { changeRequestFlow, factoryRuleStage, isPullRequestCard, isTerminalFactoryRuleStage, pullRequestReviewPhase, reviewsPullRequest } from '@factory/core';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '@factory/core';
 
@@ -77,20 +77,20 @@ function issueOpened(context: FactoryGitLabRuleContext) {
 
 function issueClosed(context: FactoryGitLabRuleContext) {
   if (!context.item || context.item.source !== 'gitlab-issue') return;
-  // The card's board decides where a closed source sends it; boards that declare no
-  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  // The project's intake routes decide where a closed source sends the card. The board's
+  // `sourceClosed` mapping applies only when no route on the board handles closes; without
+  // one the close goes to the routes alone (see `routeEventDecision`).
   const closure = context.boardClosure;
   if (!context.board || !closure || closure.itemTerminal) return;
   // GitLab reports no close reason, so every closure counts as completed.
-  return {
-    type: 'transition',
+  return closedByRoutes(false, {
     idempotencyKey: `${context.ingress.id}:issue-closed`,
     board: context.board,
     stage: closure.completed.phase,
     message: {
       text: `GitLab issue #${context.issue?.number ?? ''} was closed; this ${closure.boardTitle} card was moved to ${closure.completed.title}.`,
     },
-  } as const;
+  });
 }
 
 function materializeMergeRequest(context: FactoryGitLabRuleContext) {
@@ -209,6 +209,9 @@ export const defaultGitLabRules = Object.freeze({
   // comments on the issue don't run it again.
   issueUpdated: null,
   issueClosed,
+  // A reopen files a card when the issue has none, as an open does. A card the issue already has
+  // is left to the project's intake routes.
+  issueReopened: context => (context.item ? undefined : issueOpened(context)),
   issueCommented: null,
   mergeRequestOpened: materializeMergeRequest,
   mergeRequestUpdated,

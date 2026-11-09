@@ -30,6 +30,8 @@ function route(overrides: Partial<IntakeRouteInfo> & Pick<IntakeRouteInfo, 'id' 
     position: 0,
     when: null,
     target: { boardKey: 'work', phaseKey: null },
+    on: ['work_item.created'],
+    allowWorkingPhase: false,
     revision: 1,
     createdBy: 'admin',
     createdAt: '2026-11-04T00:00:00.000Z',

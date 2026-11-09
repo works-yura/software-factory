@@ -91,6 +91,8 @@ export interface AgentNotificationInput {
   payload?: unknown;
   dedupeKey?: string;
   sourceId?: string;
+  /** Notifications with the same key that wait while the session is busy merge into one. */
+  coalesceKey?: string;
 }
 
 export interface AgentNotificationOptions {

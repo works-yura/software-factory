@@ -15,7 +15,10 @@ export {
   intakeTargetProblem,
   landingPhase,
   placedByIntakeRoute,
+  placesNewCards,
+  resolveEventRoute,
   resolveIntakePlacement,
+  routesHandleEvent,
 } from './boards/intake-routing.ts';
 export type { IntakeRoute, IntakeRoutesReader, IntakeTargetProblem } from './boards/intake-routing.ts';
 export { holdsLegacyPlanner, LEGACY_PLAN_ROLE, legacyPlanRoleFor } from './boards/legacy-plan-role.ts';
@@ -75,12 +78,17 @@ export type {
   WorkItemSourceRow,
 } from './card.ts';
 export {
+  closedByRoutes,
   composeEventRule,
+  deploymentOwnsEvent,
   hasExplicitRuleOverride,
+  isStatusEventDecision,
   recordExplicitRuleOverrides,
+  routeEventDecision,
   selectEventRule,
+  withoutRouteEvent,
 } from './rules/event-rules.ts';
-export { cardRuleGroupSchema, evaluateRuleGroup, RULE_OPERATORS } from './rules/rule-group.ts';
+export { cardRuleGroupSchema, evaluateRuleGroup, RULE_OPERATORS, ruleGroupSchema } from './rules/rule-group.ts';
 export type { RuleCondition, RuleFacts, RuleGroup, RuleOperator } from './rules/rule-group.ts';
 export { resolveFactoryStageRules } from './rules/resolve.ts';
 export type { ResolvedFactoryStageRule } from './rules/resolve.ts';
@@ -144,6 +152,8 @@ export type {
   FactorySendMessageDecision,
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
+  FactoryRouteEventDecision,
+  FactorySignalActivityDecision,
   FactoryTransitionDecision,
   FactoryTransitionResult,
   FactoryTransitionResultAccepted,
@@ -185,3 +195,4 @@ export type {
   FactoryReviewStatusPhase,
   FactoryReviewStatusReporter,
 } from './rules/review-status.ts';
+export * from './boards/board-events.ts';
