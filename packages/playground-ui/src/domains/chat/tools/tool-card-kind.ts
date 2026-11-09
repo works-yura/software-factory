@@ -3,9 +3,11 @@ import type { ToolPartFields } from '../messages/renderers/tool-part';
 import { isRecord } from '../messages/signal-data';
 import { getCodeModeCall } from './code-mode';
 import { SUBMIT_PLAN_TOOL_ID } from './submit-plan-tool-id';
+import { sandboxExit } from './badges/workspace-data-parts';
+import type { DataMessagePart } from './tool-card';
 import { WORKSPACE_TOOLS } from './workspace-tool-constants';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { isTaskTool } from '@/ds/components/ai/tool-call';
+import { exitedWithFailure, isTaskTool } from '@/ds/components/ai/tool-call';
 
 /** Which card draws a call. Decided once, shared by the dispatcher and the fold. */
 export type ToolCardKind =
@@ -52,10 +54,24 @@ export const isWorkflowCall = (metadata: MessageMetadata | undefined, toolName: 
 export const isSettledState = (state: string | undefined): boolean =>
   state === 'output-available' || state === 'result';
 
-/** A call neither settled nor carried by a live run reads as idle, so stale history never shimmers. */
-export function badgeStatus(state: string | undefined, chatRunning: boolean): ActivityStatus {
-  if (state === 'output-error') return 'error';
-  if (isSettledState(state) || !chatRunning) return 'idle';
+interface StatusCall {
+  toolName: string;
+  toolCallId: string;
+  state?: string;
+}
+
+/**
+ * A call that threw, or a command that exited non-zero, failed. A call neither settled nor carried by a
+ * live run reads as idle, so stale history never shimmers.
+ */
+export function badgeStatus(
+  call: StatusCall,
+  dataParts: ReadonlyArray<DataMessagePart> | undefined,
+  chatRunning: boolean,
+): ActivityStatus {
+  if (call.state === 'output-error') return 'error';
+  if (exitedWithFailure(call.toolName, sandboxExit(dataParts, call.toolCallId)?.exitCode)) return 'error';
+  if (isSettledState(call.state) || !chatRunning) return 'idle';
   return 'running';
 }
 

@@ -291,5 +291,9 @@
   "annotation": "анотація",
   "annotations": "анотації",
   "Remove all": "Прибрати всі",
-  "just now": "щойно"
+  "just now": "щойно",
+  "error": "помилка",
+  "timed out": "час вичерпано",
+  "killed": "зупинено",
+  "exit {code}": "вихід {code}"
 }

@@ -90,7 +90,7 @@ export const ToolCardInner = ({
     toolName,
     toolCallId,
   );
-  const status = badgeStatus(state, isRunning);
+  const status = badgeStatus({ toolName, toolCallId, state }, dataParts, isRunning);
   const isNetwork = metadata?.mode === 'network';
   const toolCalled = isNetwork && metadata?.hasMoreMessages ? true : undefined;
   const agentToolName = stripPrefix(toolName, 'agent-');

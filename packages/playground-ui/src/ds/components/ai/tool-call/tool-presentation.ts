@@ -182,9 +182,14 @@ export function displayToolName(toolName: string): string {
   return mcp.server === FACTORY_MCP_SERVER ? mcp.tool : `${mcp.server} · ${mcp.tool}`;
 }
 
+function toolStyle(toolName: string): ToolStyle | undefined {
+  const { toolName: name, server } = presentedToolCall(toolName);
+  return server ? undefined : TOOL_STYLES[name.replace(/^mastra_workspace_/, '')];
+}
+
 export function presentTool(toolName: string, rawArgs: unknown): ToolPresentation {
   const { toolName: name, args, server } = presentedToolCall(toolName, rawArgs);
-  const style = server ? undefined : TOOL_STYLES[name.replace(/^mastra_workspace_/, '')];
+  const style = toolStyle(toolName);
   if (!style) {
     const label = server ? `${server} · ${humanize(name)}` : humanize(name);
     return { pose: 'tool', icon: agentGlyph('tool'), label };
@@ -238,6 +243,11 @@ export function visibleToolArgumentsText({ args, argsText, hideArguments }: Tool
 
 export function hasToolArguments(input: ToolArgumentsInput): boolean {
   return Boolean(toolEdit(input.toolName, input.args) || visibleToolArgumentsText(input));
+}
+
+/** Only a command's own exit is its outcome: `kill_process` and `get_process_output` report another process's. */
+export function exitedWithFailure(toolName: string, exitCode: number | undefined): boolean {
+  return toolStyle(toolName)?.isCommand === true && exitCode !== undefined && exitCode !== 0;
 }
 
 /** Task tools draw in the docked task list, never as a transcript row. */
