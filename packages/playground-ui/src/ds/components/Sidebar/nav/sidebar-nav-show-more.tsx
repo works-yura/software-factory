@@ -2,7 +2,7 @@ import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from '../root/sidebar-context';
 import { useMaybeSidebarState } from '../root/sidebar-context';
 import { textStyle } from '@/ds/primitives/text';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import { libText } from '@/lib/lib-text';
 
@@ -33,7 +33,6 @@ export function SidebarNavShowMore({
       className={cn(
         textStyle({ variant: 'caption', tone: 'muted' }),
         'self-start rounded-md pl-3 text-left hover:text-foreground',
-        controlStateColorTransition,
         focusRing,
         className,
       )}
