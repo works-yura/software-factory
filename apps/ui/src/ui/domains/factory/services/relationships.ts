@@ -1,4 +1,4 @@
-import { gitlabIdentifierForItem, githubNumberForItem, sourceMetadata } from '../boardItems';
+import { gitlabIdentifierForItem, githubNumberForItem, sourceMetadata, workItemKey } from '../boardItems';
 import { rememberedBoardPath } from './boardViews';
 import type { WorkItem } from './workItems';
 import { isPullRequestSource } from './workItems';
@@ -114,14 +114,14 @@ export function relationshipLabel(item: WorkItem): string {
     : tk('relationship.workItem', { reference });
 }
 
-/** What a person types to find the item: `#20456` on GitHub. */
+/** What a person types to find the item: `#20456` on GitHub, `!12` on GitLab, the provider key elsewhere (ClickUp). */
 export function workItemIdentifier(item: IdentifiableItem): string | undefined {
   if (item.source === 'gitlab-pr') return gitlabIdentifierForItem(item);
   if (item.source === 'github-pr' || item.source === 'github-issue') {
     const number = workItemNumber(item);
     return number ? `#${number}` : undefined;
   }
-  return undefined;
+  return workItemKey(item);
 }
 
 export function workItemReferenceLabel(item: IdentifiableItem): string | undefined {

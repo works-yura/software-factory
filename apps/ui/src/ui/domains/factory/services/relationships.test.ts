@@ -145,6 +145,28 @@ describe('Factory work item relationships', () => {
     expect(workItemReferenceLabel(review)).toBe('PR #202');
     expect(workItemReferenceLabel(issue)).toBe('Issue #24');
   });
+
+  it('names a GitLab issue card by its key', () => {
+    const item = workItem({ id: 'gitlab-issue-1', source: 'gitlab-issue', metadata: { identifier: 'acme/app#7' } });
+
+    expect(relationshipLabel(item)).toBe('Work item: acme/app#7');
+  });
+
+  it('names a ClickUp card by its task key', () => {
+    const item = workItem({
+      id: 'clickup-task-1',
+      source: 'clickup-task',
+      workItem: { provider: 'clickup', key: '86c2x7k' } as WorkItem['workItem'],
+    });
+
+    expect(relationshipLabel(item)).toBe('Work item: 86c2x7k');
+  });
+
+  it('reads a GitHub issue number off its source key when metadata lost it', () => {
+    const item = workItem({ id: 'github-issue-legacy', source: 'github-issue', sourceKey: 'github-issue:24' });
+
+    expect(relationshipLabel(item)).toBe('Work item: Issue #24');
+  });
 });
 
 describe('related work item index', () => {
