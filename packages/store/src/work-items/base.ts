@@ -29,7 +29,14 @@ import {
   trackBoardWrites,
 } from './board-version.ts';
 import { Cards, splitCardRows } from './cards.ts';
-import { migrateWorkItemSplit } from './split-migration.ts';
+import {
+  copyLegacyRows,
+  migrateWorkItemSplit,
+  readLegacyWatermark,
+  readWorkItemSplitMarker,
+  recordWorkItemSplitComplete,
+} from './split-migration.ts';
+import type { LegacyWatermark, WorkItemSplitReport } from './split-migration.ts';
 import { splitCardMetadata, workItemProviderAdapter } from './providers/index.ts';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.ts';
 import type { FactoryClaimableWorkScope } from './claimable-work.ts';
@@ -45,6 +52,7 @@ import {
   FACTORY_WORK_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
   FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
+  FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
   FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
   WORK_ITEMS_SCHEMA,
 } from './work-item-schema.ts';
@@ -832,6 +840,16 @@ function priorState(row: WorkItemDbRow): WorkItemPriorState {
 
 export class WorkItemSplitModeError extends Error {}
 
+const OPEN_PASS_PAGE_SIZE = 500;
+
+function logSplit(line: string): void {
+  console.info(`[factory] ${line}`);
+}
+
+function sameWatermark(a: LegacyWatermark | null, b: LegacyWatermark): boolean {
+  return a !== null && a.id === b.id && new Date(a.updatedAt).getTime() === new Date(b.updatedAt).getTime();
+}
+
 export class WorkItemRelationError extends Error {
   readonly code = 'invalid_work_item_relation';
 }
@@ -1363,9 +1381,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   #isTerminal: (item: Card) => boolean = () => false;
 
   #legacyMode = false;
+  /**
+   * Legacy cards this replica may still have to copy. While pending, lookups by id or source
+   * copy a missed card on demand; `since` limits the passes to rows written after the last
+   * finished pass.
+   */
+  #split: { pending: boolean; since: LegacyWatermark | null } = { pending: false, since: null };
 
   get legacyMode(): boolean {
     return this.#legacyMode;
+  }
+
+  get legacyBackfillPending(): boolean {
+    return this.#split.pending;
   }
 
   constructor() {
@@ -1447,6 +1475,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       FACTORY_WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEM_SOURCES_SCHEMA,
       FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
+      FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
       FACTORY_BOARD_ITEMS_SCHEMA,
       FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
       FACTORY_BOARD_VERSIONS_SCHEMA,
@@ -1461,13 +1490,110 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         'MASTRA_FACTORY_WORK_ITEM_SPLIT=dry-run cannot serve a database with migrated board items.',
       );
     }
-    // Before anything reads cards: this replica serves them from the split tables only.
-    await migrateWorkItemSplit(this.storage, {
-      dryRun: this.#legacyMode,
-      ops: super.ops,
-      log: (message, details) => console.info(`[factory] ${message}`, details),
-    });
+    if (this.#legacyMode) {
+      this.#split = { pending: false, since: null };
+      await migrateWorkItemSplit(this.storage, { dryRun: true, ops: super.ops, log: logSplit });
+      await this.repairLegacyAttentionState();
+      return;
+    }
+    const [marker, newest] = await Promise.all([readWorkItemSplitMarker(super.ops), readLegacyWatermark(super.ops)]);
+    const finished = !newest || (marker !== null && sameWatermark(marker.watermark, newest));
+    // The factory copies open cards once boards load, and the rest in the background.
+    this.#split = { pending: !finished, since: marker?.watermark ?? null };
     await this.repairLegacyAttentionState();
+  }
+
+  /**
+   * Copy the legacy cards `isTerminal` rejects, before Factory serves. Terminal cards are left
+   * to `backfillLegacyCards`. A no-op once the split finished.
+   */
+  async migrateOpenLegacyCards(
+    isTerminal: (card: Card) => boolean | Promise<boolean>,
+  ): Promise<WorkItemSplitReport | null> {
+    if (this.#legacyMode || !this.#split.pending) return null;
+    return migrateWorkItemSplit(this.storage, {
+      ops: super.ops,
+      since: this.#split.since,
+      // Mostly unchanged rows on a re-boot: larger pages mean fewer round trips.
+      pageSize: OPEN_PASS_PAGE_SIZE,
+      include: async row => !(await isTerminal(toWorkItem(row))),
+      label: 'boot pass',
+      log: logSplit,
+    });
+  }
+
+  /**
+   * Copy every remaining legacy card, then record the newest legacy row seen before the pass
+   * began, so later boots skip rows up to it. Skipped cards are logged and count as done: they
+   * conflict with newer split state and a rescan would only skip them again.
+   */
+  async backfillLegacyCards({ signal }: { signal?: AbortSignal } = {}): Promise<WorkItemSplitReport | null> {
+    if (this.#legacyMode || !this.#split.pending) return null;
+    // Captured first: a legacy write during the pass sorts after it and is rescanned next boot.
+    const watermark = await readLegacyWatermark(super.ops);
+    const report = await migrateWorkItemSplit(this.storage, {
+      ops: super.ops,
+      since: this.#split.since,
+      signal,
+      label: 'background pass',
+      log: logSplit,
+    });
+    if (!report.aborted) {
+      await recordWorkItemSplitComplete(super.ops, watermark);
+      this.#split = { pending: false, since: watermark };
+    }
+    return report;
+  }
+
+  /**
+   * Copy the legacy cards filed for these external records, so a lookup that matches on `list()`
+   * finds them. A no-op once the split finished.
+   */
+  async copyLegacyCards({
+    orgId,
+    factoryProjectId,
+    sources,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    sources: readonly ExternalWorkItemSource[];
+  }): Promise<void> {
+    if (this.#legacyMode || !this.#split.pending || !sources.length) return;
+    const sourceKeys = new Set(sources.map(source => externalSourceKey(source)!));
+    await this.#cards(this.#db, { transaction: false }).findMany({
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: { in: [...sourceKeys] },
+    });
+  }
+
+  /**
+   * Card row access. While legacy cards remain uncopied, a lookup that misses copies the card:
+   * inside the caller's transaction when `ops` is one (a nested transaction would deadlock
+   * LibSQL), else in a transaction of its own.
+   */
+  #cards(ops: FactoryStorageOps, { transaction }: { transaction: boolean }): Cards {
+    if (this.#legacyMode || !this.#split.pending) return new Cards(ops, this.#legacyMode);
+    return new Cards(ops, false, {
+      copy: async rows => {
+        if (transaction) {
+          await copyLegacyRows(ops, rows);
+          return;
+        }
+        try {
+          await this.#withTransaction(tx => copyLegacyRows(tx, rows));
+        } catch (error) {
+          // A concurrent first copy won (its retry lost again); the re-read finds its rows.
+          if (!(error instanceof UniqueViolationError)) throw error;
+        }
+      },
+    });
+  }
+
+  /** Validation reads the split tables only, so a parent still in legacy is copied first. */
+  async #copyLegacyParent(ops: FactoryStorageOps, orgId: string, parentId: string | null | undefined) {
+    if (parentId && this.#split.pending)
+      await this.#cards(ops, { transaction: true }).findOne({ org_id: orgId, id: parentId });
   }
 
   /** Refresh source evidence without changing work identity or board concurrency tokens. */
@@ -1550,7 +1676,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
     return this.#withTransaction(async ops => {
       let previous = emptyPrior();
-      const row = await new Cards(ops, this.#legacyMode).updateAtomic({ org_id: orgId, id }, async current => {
+      const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
         previous = priorState(current);
         const item = toWorkItem(current);
         const source = primarySource(item);
@@ -1611,7 +1737,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.#withTransaction(ops => new Cards(ops, this.#legacyMode).deleteMany({}));
+    await this.#withTransaction(ops => this.#cards(ops, { transaction: true }).deleteMany({}));
     await super.ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {});
     // A project with no version row is never served from cache, so this invalidates every replica.
     await super.ops.deleteMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, {});
@@ -1924,7 +2050,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async #listWithOps(ops: FactoryStorageOps, orgId: string, factoryProjectId: string): Promise<Card[]> {
-    const rows = await new Cards(ops, this.#legacyMode).findMany(
+    const rows = await this.#cards(ops, { transaction: true }).findMany(
       { org_id: orgId, factory_project_id: factoryProjectId },
       {
         orderBy: [
@@ -2001,7 +2127,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     ids: string[];
   }): Promise<Card[]> {
     if (ids.length === 0) return [];
-    const rows = await new Cards(this.#db, this.#legacyMode).findMany({
+    const rows = await this.#cards(this.#db, { transaction: false }).findMany({
       org_id: orgId,
       factory_project_id: factoryProjectId,
       id: { in: [...new Set(ids)] },
@@ -2019,12 +2145,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       this.#legacyMode ? WORK_ITEMS_SCHEMA.name : FACTORY_BOARD_ITEMS_SCHEMA.name,
       { org_id: orgId },
     );
+    if (this.#split.pending) {
+      // An uncopied card holding the session would bring the reference back when copied; the
+      // update below copies it first.
+      const split = new Set(rows.map(row => row.id));
+      const legacy = await this.#db.findMany<Pick<WorkItemDbRow, 'id' | 'sessions'> & Record<string, unknown>>(
+        WORK_ITEMS_SCHEMA.name,
+        { org_id: orgId },
+      );
+      rows.push(...legacy.filter(row => !split.has(row.id)));
+    }
     const holding = rows.filter(row => Object.values(row.sessions).some(ref => ref.sessionId === sessionId));
     let cleared = 0;
     for (const row of holding) {
       let changed = false;
       await this.#withTransaction(ops =>
-        new Cards(ops, this.#legacyMode).updateAtomic({ id: row.id }, current => {
+        this.#cards(ops, { transaction: true }).updateAtomic({ id: row.id }, current => {
           const kept = Object.entries(current.sessions).filter(([, ref]) => ref.sessionId !== sessionId);
           if (kept.length === Object.keys(current.sessions).length) return null;
           changed = true;
@@ -2045,7 +2181,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     source: ExternalWorkItemSource;
   }): Promise<Card | null> {
-    const row = await new Cards(this.#db, this.#legacyMode).findOne({
+    const row = await this.#cards(this.#db, { transaction: false }).findOne({
       org_id: orgId,
       factory_project_id: factoryProjectId,
       source_key: externalSourceKey(source),
@@ -2054,7 +2190,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async get({ orgId, id }: { orgId: string; id: string }): Promise<Card | null> {
-    const row = await new Cards(this.#db, this.#legacyMode).findOne({ org_id: orgId, id });
+    const row = await this.#cards(this.#db, { transaction: false }).findOne({ org_id: orgId, id });
     return row ? toWorkItem(row) : null;
   }
 
@@ -2065,7 +2201,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * `workspaceId` instead. Ambiguous matches resolve to nothing, not a guess.
    */
   async getBySource(source: ExternalWorkItemSource): Promise<Card | null> {
-    const rows = await new Cards(this.#db, this.#legacyMode).findMany({ source_key: externalSourceKey(source) });
+    const rows = await this.#cards(this.#db, { transaction: false }).findMany({
+      source_key: externalSourceKey(source),
+    });
     return rows.length === 1 ? toWorkItem(rows[0]!) : null;
   }
 
@@ -2076,7 +2214,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * consults this before creating another.
    */
   async listBySource({ orgId, source }: { orgId: string; source: ExternalWorkItemSource }): Promise<Card[]> {
-    const rows = await new Cards(this.#db, this.#legacyMode).findMany({
+    const rows = await this.#cards(this.#db, { transaction: false }).findMany({
       org_id: orgId,
       source_key: externalSourceKey(source),
     });
@@ -2084,7 +2222,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async getForProject(orgId: string, factoryProjectId: string, id: string): Promise<Card | null> {
-    const row = await new Cards(this.#db, this.#legacyMode).findOne({
+    const row = await this.#cards(this.#db, { transaction: false }).findOne({
       id,
       org_id: orgId,
       factory_project_id: factoryProjectId,
@@ -2116,7 +2254,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         if (prior) {
           // Read through the transaction: on a single-connection database the
           // root client waits for this transaction, which would never finish.
-          const row = await new Cards(ops, this.#legacyMode).findOne({
+          const row = await this.#cards(ops, { transaction: true }).findOne({
             id: input.workItemId,
             org_id: input.orgId,
             factory_project_id: input.factoryProjectId,
@@ -2129,7 +2267,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         let code: string | null = null;
         let reason: string | null = null;
         let result: Record<string, unknown>;
-        const updated = await new Cards(ops, this.#legacyMode).updateAtomic(
+        const updated = await this.#cards(ops, { transaction: true }).updateAtomic(
           {
             id: input.workItemId,
             org_id: input.orgId,
@@ -2297,7 +2435,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               sourceKey: string;
               idempotencyKey: string;
             };
-            const item = await new Cards(ops, this.#legacyMode).findOne({
+            const item = await this.#cards(ops, { transaction: true }).findOne({
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
               source_key: externalSourceKey(
@@ -2331,7 +2469,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           return { status: 'replayed' as const, result };
         }
         const itemRow = input.workItemId
-          ? await new Cards(ops, this.#legacyMode).findOne({
+          ? await this.#cards(ops, { transaction: true }).findOne({
               id: input.workItemId,
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
@@ -2919,7 +3057,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       const record = toDeferredDecision(row);
       await ops.deleteMany('factory_attention_receipts', proposalReceiptFilter(orgId, factoryProjectId, decisionId));
       if (record.workItemId) {
-        await new Cards(ops, this.#legacyMode).updateAtomic({ org_id: orgId, id: record.workItemId }, current =>
+        await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id: record.workItemId }, current =>
           current.autonomy_armed_at ? null : { autonomy_armed_at: now },
         );
       }
@@ -3064,7 +3202,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async returnHeldTriageCards(): Promise<Card[]> {
     // Cards filed before boards were recorded carry no board; outside pull requests they are Work cards.
     const held = (
-      await new Cards(this.#db, this.#legacyMode).findMany({
+      await this.#cards(this.#db, { transaction: false }).findMany({
         board: { in: ['work', null] },
         triage_type: { in: FACTORY_TRIAGE_TYPES.filter(type => type !== 'bug') },
         accepted_at: null,
@@ -3499,7 +3637,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           const itemRow =
             bindingRow &&
-            (await new Cards(ops, this.#legacyMode).findOne({
+            (await this.#cards(ops, { transaction: true }).findOne({
               id: String(bindingRow.work_item_id),
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
@@ -3526,13 +3664,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const now = new Date();
         const create = input.workItem.input;
         let row = input.workItem.id
-          ? await new Cards(ops, this.#legacyMode).findOne({
+          ? await this.#cards(ops, { transaction: true }).findOne({
               id: input.workItem.id,
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
             })
           : externalSourceKey(create.externalSource)
-            ? await new Cards(ops, this.#legacyMode).findOne({
+            ? await this.#cards(ops, { transaction: true }).findOne({
                 org_id: input.orgId,
                 factory_project_id: input.factoryProjectId,
                 source_key: externalSourceKey(create.externalSource),
@@ -3540,7 +3678,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             : null;
         let item: Card;
         if (row) {
-          row = await new Cards(ops, this.#legacyMode).updateAtomic({ id: row.id }, current => {
+          row = await this.#cards(ops, { transaction: true }).updateAtomic({ id: row.id }, current => {
             // Stamp only the starting role — `applyUpdate` merges sessions, so
             // other roles keep their own session and `startedBy` (#22254).
             // The binding below shares this clock, so a run started on an existing card
@@ -3554,10 +3692,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           item = toRow(row!);
         } else {
+          if (create.parentWorkItemId) await this.#copyLegacyParent(ops, input.orgId, create.parentWorkItemId);
           if (create.parentWorkItemId)
             validateParentRelation(
               (
-                await new Cards(ops, this.#legacyMode).findMany({
+                await this.#cards(ops, { transaction: true }).findMany({
                   org_id: input.orgId,
                   factory_project_id: input.factoryProjectId,
                 })
@@ -3565,7 +3704,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               undefined,
               create.parentWorkItemId,
             );
-          row = await new Cards(ops, this.#legacyMode).insertOne({
+          row = await this.#cards(ops, { transaction: true }).insertOne({
             org_id: input.orgId,
             created_by: input.userId,
             factory_project_id: input.factoryProjectId,
@@ -3729,7 +3868,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const key = externalSourceKey(input.externalSource);
     const reuse = async (): Promise<UpsertWorkItemResult | null> => {
       if (!key) return null;
-      const existing = await new Cards(ops, this.#legacyMode).findOne({
+      const existing = await this.#cards(ops, { transaction: true }).findOne({
         org_id: orgId,
         factory_project_id: factoryProjectId,
         source_key: key,
@@ -3740,7 +3879,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
 
       let previous = emptyPrior();
-      const updated = await new Cards(ops, this.#legacyMode).updateAtomic(
+      const updated = await this.#cards(ops, { transaction: true }).updateAtomic(
         { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
         async current => {
           previous = priorState(current);
@@ -3754,6 +3893,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 }
               : fullPatch;
           if (patch.parentWorkItemId !== undefined) {
+            await this.#copyLegacyParent(ops, orgId, patch.parentWorkItemId);
             validateParentRelation(
               await this.#listWithOps(ops, orgId, factoryProjectId),
               current.id,
@@ -3779,9 +3919,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const now = new Date();
     const stages = input.stages ?? ['intake'];
     if (input.parentWorkItemId != null) {
+      await this.#copyLegacyParent(ops, orgId, input.parentWorkItemId);
       validateParentRelation(await this.#listWithOps(ops, orgId, factoryProjectId), undefined, input.parentWorkItemId);
     }
-    const row = await new Cards(ops, this.#legacyMode).insertOne({
+    const row = await this.#cards(ops, { transaction: true }).insertOne({
       org_id: orgId,
       factory_project_id: factoryProjectId,
       board: input.board ?? null,
@@ -3812,12 +3953,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     userId: string;
     parentWorkItemId: string;
   }): Promise<Card | null> {
-    const candidate = await new Cards(this.#db, this.#legacyMode).findOne({ org_id: orgId, id });
+    const candidate = await this.#cards(this.#db, { transaction: false }).findOne({ org_id: orgId, id });
     if (!candidate) return null;
 
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
-      const row = await new Cards(ops, this.#legacyMode).updateAtomic({ org_id: orgId, id }, async current => {
+      const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
         if (current.parent_work_item_id !== null) return current;
+        await this.#copyLegacyParent(ops, orgId, parentWorkItemId);
         validateParentRelation(
           await this.#listWithOps(ops, orgId, current.factory_project_id),
           current.id,
@@ -3846,7 +3988,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
     const run = async (ops: FactoryStorageOps) => {
       let previous = emptyPrior();
-      const row = await new Cards(ops, this.#legacyMode).updateAtomic({ org_id: orgId, id }, async current => {
+      const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
         previous = priorState(current);
         if (expectedBoard !== undefined && current.board !== expectedBoard) {
           throw new WorkItemUpdateConflictError('board');
@@ -3855,6 +3997,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           throw new WorkItemUpdateConflictError('revision');
         }
         if (patch.parentWorkItemId !== undefined) {
+          await this.#copyLegacyParent(ops, orgId, patch.parentWorkItemId);
           validateParentRelation(
             await this.#listWithOps(ops, orgId, current.factory_project_id),
             current.id,
@@ -3867,7 +4010,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     };
 
     if (patch.parentWorkItemId === undefined) return this.#withTransaction(run);
-    const candidate = await new Cards(this.#db, this.#legacyMode).findOne({ org_id: orgId, id });
+    const candidate = await this.#cards(this.#db, { transaction: false }).findOne({ org_id: orgId, id });
     if (!candidate) return null;
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, run);
   }
@@ -4071,13 +4214,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       ...(expectedRevision === undefined ? {} : { revision: expectedRevision }),
       ...(expectedUpdatedAt === undefined ? {} : { updated_at: expectedUpdatedAt }),
     };
-    const candidate = await new Cards(this.#db, this.#legacyMode).findOne(where);
+    const candidate = await this.#cards(this.#db, { transaction: false }).findOne(where);
     if (!candidate) return null;
 
     const removed = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
-      const existing = await new Cards(ops, this.#legacyMode).findOne(where);
+      const existing = await this.#cards(ops, { transaction: true }).findOne(where);
       if (!existing) return null;
-      const deleted = await new Cards(ops, this.#legacyMode).deleteMany(where);
+      const deleted = await this.#cards(ops, { transaction: true }).deleteMany(where);
       if (deleted === 0) return null;
       await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
       await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id });
@@ -4088,7 +4231,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           sourceKeys: [existing.external_source.externalId],
         });
       }
-      await new Cards(ops, this.#legacyMode).updateMany(
+      await this.#cards(ops, { transaction: true }).updateMany(
         { org_id: orgId, parent_work_item_id: id },
         { parent_work_item_id: null, updated_at: new Date() },
       );

@@ -148,7 +148,7 @@ import { CallbackFactorySandbox } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
 import { peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
-import { WorkItemSplitModeError } from '@factory/store';
+import { backfillUntilDone, WorkItemSplitModeError } from '@factory/store';
 import { migrateLabelRoutesToIntakeRoutes } from '@factory/store';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { Card } from '@factory/store';
@@ -206,7 +206,13 @@ import { messageWorkerSession } from '@factory/supervisor';
 import { persistFactoryToolPermissions, supervisorProjectIdFromContext } from '@factory/session';
 import { hydrateSupervisorSession, resolveSupervisorScope } from '@factory/supervisor';
 import { createFactorySupervisorWriteTools } from '@factory/supervisor';
-import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from '@factory/observability';
+import {
+  createRequestTimingMiddleware,
+  factoryTimingEnabled,
+  instrumentAsyncMethods,
+  logTiming,
+  timedPhase,
+} from '@factory/observability';
 import { deliverFactorySessionNotification } from '@factory/harness-mastra';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from '@factory/harness-mastra';
 import type { FactoryToolDependencies } from '@factory/harness-mastra';
@@ -538,6 +544,8 @@ export class MastraFactory {
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
   #sessionResourceMigration: Promise<boolean> | undefined;
+  #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
+  #prepareStartedAt: number | undefined;
   #preparing = false;
   /** Serves the chat's session routes for Claude Code sessions; inert until a session is attached or resolvable. */
   readonly #claudeSessionUi: ClaudeSessionUi;
@@ -682,6 +690,7 @@ export class MastraFactory {
     // registry or double-run one-time adapter init.
     if (this.#preparing) throw new Error('MastraFactory.prepare() called twice');
     this.#preparing = true;
+    this.#prepareStartedAt = performance.now();
 
     const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:4111').replace(/\/+$/, '');
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
@@ -907,6 +916,30 @@ export class MastraFactory {
     }
     const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
 
+    // Copy the legacy cards still in play before anything reads cards; done and canceled cards
+    // follow in the background. A failure fails the boot: serving without open cards would let
+    // rules file duplicates.
+    if (storage.isDomainReady('work-items') && !workItemsStorage.legacyMode) {
+      const projectBoards = this.#projectBoards;
+      const projects = projectBoards
+        ? new Set((await factoryProjectsStorage.listAll()).map(project => `${project.orgId}\u0000${project.id}`))
+        : undefined;
+      // A card whose project or board cannot be resolved counts as open, so it is copied now.
+      const isTerminal = async (card: Card) => {
+        let registry: BoardRegistry = this.#boards;
+        if (projectBoards) {
+          if (!projects!.has(`${card.orgId}\u0000${card.factoryProjectId}`)) return false;
+          try {
+            registry = await projectBoards.load(card);
+          } catch {
+            return false;
+          }
+        }
+        return registry.has(boardForWorkItem(card)) && isTerminalWorkItem(registry, card);
+      };
+      await timedPhase('prepare.migrate.workItemSplit', () => workItemsStorage.migrateOpenLegacyCards(isTerminal));
+    }
+
     // ClickUp tag routes became intake routes: move each one into its project's routes, once.
     // A failure stops the boot: the poller no longer reads tag routes, so they would go unapplied.
     if (storage.isDomainReady('intake') && storage.isDomainReady('boards')) {
@@ -1040,6 +1073,18 @@ export class MastraFactory {
           return false;
         }
       });
+    }
+    if (workItemsStorage.legacyBackfillPending) {
+      const controller = new AbortController();
+      this.#workItemSplitBackfill = {
+        controller,
+        promise: timedPhase('background.migrate.workItemSplit', () =>
+          backfillUntilDone(
+            () => workItemsStorage.backfillLegacyCards({ signal: controller.signal }),
+            controller.signal,
+          ),
+        ),
+      };
     }
     const knowledgeEnabled =
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
@@ -2812,6 +2857,9 @@ export class MastraFactory {
         ),
       );
     this.#dispatcher?.start();
+    // Unconditional and outside the Mastra logger, which production runs at WARN.
+    if (this.#prepareStartedAt !== undefined)
+      logTiming(`boot ${Math.round(performance.now() - this.#prepareStartedAt)}ms`);
   }
 
   /** Stop Factory-owned background dispatch before the host process shuts down. */
@@ -2825,6 +2873,12 @@ export class MastraFactory {
           `[factory] unsubscribing from dispatcher wakes failed: ${error instanceof Error ? error.message : error}`,
         ),
       );
-    await this.#dispatcher?.stop();
+    const backfill = this.#workItemSplitBackfill;
+    backfill?.controller.abort();
+    await Promise.all([
+      this.#dispatcher?.stop(),
+      // Stops between cards; failures are already logged.
+      backfill?.promise,
+    ]);
   }
 }

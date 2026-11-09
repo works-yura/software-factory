@@ -31,6 +31,7 @@ export {
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
   FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
+  FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
   primarySource,
   WORK_ITEMS_SCHEMA,
@@ -45,6 +46,7 @@ export type {
   WorkItemSourceRow,
 } from './work-items/work-item-schema.ts';
 export * from './work-items/split-migration.ts';
+export { backfillUntilDone, splitBackfillRetry } from './work-items/split-backfill.ts';
 export {
   BOARD_METADATA_KEYS,
   SHARED_PROVIDER_METADATA_KEYS,

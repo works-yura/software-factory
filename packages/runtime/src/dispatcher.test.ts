@@ -11,6 +11,7 @@ import { Cards, FactoryDispatchError, FactoryFeedReader } from '@factory/store';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import { createFactoryStorageForTests } from './test-support.ts';
+import { demoteCardsToLegacyForTests } from '@factory/store/testing';
 import type { FactoryRunEndReporter } from './run-end-report.ts';
 import { FACTORY_DISPATCH_CONSTANTS } from './dispatcher.ts';
 import { FactoryDecisionDispatcher, FactoryTransitionService } from './test-support.ts';
@@ -5454,6 +5455,96 @@ describe('FactoryDecisionDispatcher', () => {
     expect(filedRow).not.toHaveProperty('claim_key');
     expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
     expect(await storage.get({ orgId: 'org-1', id: elsewhere.item.id })).toEqual(elsewhere.item);
+  });
+
+  it('reuses a finished GitLab card that is still only in the legacy table when its issue reopens', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item: finished } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab:ENG-7' },
+        title: 'ENG-7: reopened',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await seed.comments.create({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: finished.id,
+      author: { kind: 'user', id: 'user-2', displayName: 'Bob' },
+      body: 'shipped last week',
+    });
+    const binding = await bindWorkRun(storage, finished.id);
+    const done = await storage.update({
+      orgId: 'org-1',
+      id: finished.id,
+      userId: 'user-1',
+      patch: { stages: ['done'] },
+    });
+    await demoteCardsToLegacyForTests(seed.storage, [finished.id]);
+    expect(storage.legacyBackfillPending).toBe(true);
+
+    const parent = await createItem(storage);
+    const boards = createLifecycleTestRegistry({
+      execute: {
+        issue: {
+          onEnter: () => ({
+            type: 'upsertLinkedWorkItem',
+            idempotencyKey: 'linked-reopened',
+            board: 'work',
+            source: 'gitlab-issue',
+            sourceKey: 'gitlab:ENG-7',
+            title: 'ENG-7: reopened',
+            url: null,
+            stage: 'intake',
+            metadata: {},
+          }),
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: parent.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: parent.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-reopened' },
+      cause: 'test',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(await decisionByKey(storage, 'linked-reopened')).toMatchObject({ status: 'succeeded' });
+    const cards = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
+      item => item.externalSource?.externalId === 'gitlab:ENG-7',
+    );
+    expect(cards.map(card => card.id)).toEqual([finished.id]);
+    expect(cards[0]!.stageHistory.slice(0, done!.item.stageHistory.length)).toEqual(done!.item.stageHistory);
+    const { comments } = await seed.comments.list({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: finished.id,
+    });
+    expect(comments.map(comment => comment.body)).toEqual(['shipped last week']);
+    expect((await storage.listRunBindings('org-1', PROJECT_ID, finished.id)).map(b => b.id)).toEqual([binding.id]);
+
+    const backfill = await storage.backfillLegacyCards();
+    expect(backfill).toMatchObject({ cards: 1, unchanged: 1, workItems: 0, skipped: [] });
   });
 
   it('spends a linked-item decision unfiled when its own project was deleted', async () => {
