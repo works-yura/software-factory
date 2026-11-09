@@ -225,6 +225,7 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | `4eeccd5c51` (#28878) і `c4f1cb1d3e` (#29042), частини для CLI й README | `mastra api` (дескриптори, `factory-route-metadata.generated.ts`, команди `mastra api factory skills / skill update / revert`), розділи README «Stored boards» і про скіли | CLI `mastra` — опублікований пакет, його змінити не можемо; README upstream не переносили (опис змін — у рядках вище); API й UI працюють без CLI |
 | `75a4a45478` (#28979), `lazyPage`/`PageSuspense` | `lazyPage().preload()`, предзавантаження `ThreadPage` у `router.tsx` | у нашому UI нема лазі-сторінок, роутер імпортує їх статично |
 | `b4fdcf59a5` (#29132) | плани з користувацьких сесій пишуться в `.artifacts/plans` (опція `plansDir` у `createMastraCode`), страж запису в режимі плану | потрібна `@mastra/code-sdk` ≥ 1.18.0 (опція `plansDir`), у v4 — 1.15.0 з патчами під `@mastra/core` 1.79.0; перенесемо разом з оновленням SDK |
+| `1e66043c1d` (#29366), `8d07b0b293` (#29573) | голосове введення в композері: запис у браузері, розпізнавання на сервері тими самими моделлю й ключами, що й чат; налаштування «Voice input», ключі speech-to-text, живе диктування Mistral | серверна частина бере `@mastra/code-sdk/voice/transcribe` (`createSTTTranscriber`, `resolveSTTApiKey`) і Mistral Voxtral (#29363), яких у `@mastra/code-sdk` 1.15.0 нема; перенесемо разом з оновленням SDK, як і #29132 |
 
 ## Власна копія playground-ui
 
