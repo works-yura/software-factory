@@ -810,6 +810,22 @@
       "issue": "задача (issue)",
       "pull_request": "pull request",
       "task": "задача ClickUp"
+    },
+    "defaults": {
+      "outsideAuthors": "Сторонні автори чекають у Вхідних",
+      "pullRequests": "Pull request-и йдуть на рев’ю PR",
+      "closedCompleted": "Закриті задачі йдуть у Готово",
+      "closedCanceled": "Задачі, закриті як «не заплановано», йдуть у Скасовано",
+      "reopened": "Перевідкриті задачі повертаються у Вхідні"
+    },
+    "events": {
+      "work_item.created": "нова картка",
+      "work_item.closed": "задачу закрито",
+      "work_item.reopened": "задачу перевідкрито"
+    },
+    "closeReasons": {
+      "completed": "як виконану",
+      "canceled": "як «не заплановано»"
     }
   },
   "workBoard": {

@@ -796,6 +796,22 @@
       "issue": "issue",
       "pull_request": "pull request",
       "task": "ClickUp task"
+    },
+    "defaults": {
+      "outsideAuthors": "Outside authors wait in Intake",
+      "pullRequests": "Pull requests go to PR review",
+      "closedCompleted": "Closed issues go to Done",
+      "closedCanceled": "Issues closed as not planned go to Canceled",
+      "reopened": "Reopened issues go back to Intake"
+    },
+    "events": {
+      "work_item.created": "new card",
+      "work_item.closed": "issue closed",
+      "work_item.reopened": "issue reopened"
+    },
+    "closeReasons": {
+      "completed": "as completed",
+      "canceled": "as not planned"
     }
   },
   "workBoard": {

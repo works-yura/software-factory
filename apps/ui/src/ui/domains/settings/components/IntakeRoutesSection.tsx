@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
-import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
+import type { CardRuleGroup, InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import {
   useCreateIntakeRouteMutation,
@@ -20,6 +20,7 @@ import {
   useUpdateIntakeRouteMutation,
 } from '../../../../hooks/useIntakeRoutes';
 import type { IntakeRouteDraft } from '../../../../hooks/useIntakeRoutes';
+import { phaseTitle, boardTitle } from '../../../i18n/boardLabels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import {
   defaultCondition,
@@ -138,7 +139,7 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                 <li
                   key={route.id}
                   className="flex flex-col gap-1 rounded-md border border-border1 px-3 py-2"
-                  aria-label={route.name}
+                  aria-label={routeName(route, t)}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2">
@@ -146,12 +147,12 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                         {index + 1}.
                       </Txt>
                       <Txt as="span" variant="body" tone="ink" className="truncate">
-                        {route.name}
+                        {routeName(route, t)}
                       </Txt>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       <Switch
-                        aria-label={t('intakeRoutes.enabledFor', { name: route.name })}
+                        aria-label={t('intakeRoutes.enabledFor', { name: routeName(route, t) })}
                         checked={route.enabled}
                         disabled={busy}
                         onCheckedChange={enabled => saveEdit(route, { enabled })}
@@ -159,7 +160,7 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                       <Button
                         size="sm"
                         variant="ghost"
-                        aria-label={t('intakeRoutes.moveUp', { name: route.name })}
+                        aria-label={t('intakeRoutes.moveUp', { name: routeName(route, t) })}
                         disabled={busy || index === 0}
                         onClick={() => move(index, -1)}
                       >
@@ -168,7 +169,7 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                       <Button
                         size="sm"
                         variant="ghost"
-                        aria-label={t('intakeRoutes.moveDown', { name: route.name })}
+                        aria-label={t('intakeRoutes.moveDown', { name: routeName(route, t) })}
                         disabled={busy || index === routes.length - 1}
                         onClick={() => move(index, 1)}
                       >
@@ -190,7 +191,7 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                         <Button
                           size="sm"
                           variant="ghost"
-                          aria-label={t('intakeRoutes.deleteRoute', { name: route.name })}
+                          aria-label={t('intakeRoutes.deleteRoute', { name: routeName(route, t) })}
                           disabled={busy}
                           onClick={() => setConfirmingDelete(route.id)}
                         >
@@ -240,11 +241,50 @@ function describeCondition(condition: RouteCondition, t: T): string {
   }
 }
 
+/** Factory's own routes keep the name it gave them; show that name in the interface language. */
+const DEFAULT_ROUTE_NAMES: Readonly<Record<string, string>> = {
+  'Outside authors wait in Intake': 'outsideAuthors',
+  'Pull requests go to PR review': 'pullRequests',
+  'Closed issues go to Done': 'closedCompleted',
+  'Issues closed as not planned go to Canceled': 'closedCanceled',
+  'Reopened issues go back to Intake': 'reopened',
+};
+
+function routeName(route: IntakeRouteInfo, t: T): string {
+  const key = DEFAULT_ROUTE_NAMES[route.name];
+  return key ? t(`intakeRoutes.defaults.${key}` as never) : route.name;
+}
+
+const ROUTE_EVENTS = ['work_item.created', 'work_item.closed', 'work_item.reopened'] as const;
+const CLOSE_REASONS = ['completed', 'canceled'] as const;
+
+function describeEventCondition(condition: CardRuleGroup['conditions'][number], t: T): string | undefined {
+  if (!('field' in condition) || condition.operator !== 'equals') return undefined;
+  if (condition.field === 'event.reason' && CLOSE_REASONS.includes(condition.value as never))
+    return t(`intakeRoutes.closeReasons.${condition.value as (typeof CLOSE_REASONS)[number]}`);
+  if (condition.field === 'event.type' && ROUTE_EVENTS.includes(condition.value as never))
+    return t(`intakeRoutes.events.${condition.value as (typeof ROUTE_EVENTS)[number]}`);
+  return undefined;
+}
+
 function describeWhen(route: IntakeRouteInfo, t: T): string {
-  const conditions = readRouteConditions(route.when);
-  if (!conditions) return t('intakeRoutes.customCondition');
-  if (conditions.length === 0) return t('intakeRoutes.everyCard');
-  return conditions.map(condition => describeCondition(condition, t)).join(' · ');
+  const events = route.on.filter(event => event !== 'work_item.created').map(event => t(`intakeRoutes.events.${event}`));
+  const eventConditions: string[] = [];
+  let cardConditions = route.when;
+  if (events.length > 0 && route.when?.operator === 'AND') {
+    const rest = route.when.conditions.filter(condition => {
+      const described = describeEventCondition(condition, t);
+      if (described) eventConditions.push(described);
+      return !described;
+    });
+    cardConditions = rest.length > 0 ? { ...route.when, conditions: rest } : null;
+  }
+  const conditions = readRouteConditions(cardConditions);
+  const card = !conditions
+    ? [t('intakeRoutes.customCondition')]
+    : conditions.map(condition => describeCondition(condition, t));
+  if (events.length === 0) return card.length > 0 ? card.join(' · ') : t('intakeRoutes.everyCard');
+  return [events.join(t('intakeRoutes.or')), ...eventConditions, ...card].join(' · ');
 }
 
 function describeTarget(
@@ -253,10 +293,13 @@ function describeTarget(
   t: T,
 ): string {
   const board = boards.find(candidate => candidate.id === target.boardKey);
-  const boardName = board?.name ?? board?.title ?? target.boardKey;
+  const boardName = boardTitle(target.boardKey, board?.name ?? board?.title ?? target.boardKey);
   if (!target.phaseKey) return t('intakeRoutes.targetFirstPhase', { board: boardName });
   const phase = board?.phases.find(candidate => candidate.id === target.phaseKey);
-  return t('intakeRoutes.target', { board: boardName, phase: phase?.name ?? phase?.title ?? target.phaseKey });
+  return t('intakeRoutes.target', {
+    board: boardName,
+    phase: phaseTitle(target.boardKey, target.phaseKey, phase?.name ?? phase?.title ?? target.phaseKey),
+  });
 }
 
 function RouteEditor({

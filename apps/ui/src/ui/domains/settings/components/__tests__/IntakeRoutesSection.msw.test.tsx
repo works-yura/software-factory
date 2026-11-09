@@ -207,6 +207,31 @@ describe('IntakeRoutesSection', () => {
     expect(written.patched[0]).toMatchObject({ name: 'Docs and release', when: either.when, expectedRevision: 1 });
   });
 
+  it('says which issue event a status route handles and why the issue closed', async () => {
+    useRouteHandlers([
+      route({
+        id: '00000000-0000-4000-8000-000000000005',
+        name: 'Issues closed as not planned go to Canceled',
+        on: ['work_item.closed'],
+        when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'canceled' }] },
+        target: { boardKey: 'work', phaseKey: 'done' },
+      }),
+      route({
+        id: '00000000-0000-4000-8000-000000000006',
+        name: 'Reopened issues go back to Intake',
+        position: 1,
+        on: ['work_item.reopened'],
+        target: { boardKey: 'work', phaseKey: 'intake' },
+      }),
+    ]);
+    renderSection();
+
+    await waitFor(() => expect(routeRows()).toHaveLength(2));
+    const [closed, reopened] = routeRows();
+    expect(within(closed!).getByText('When: issue closed · as not planned → Work › Done')).toBeTruthy();
+    expect(within(reopened!).getByText('When: issue reopened → Work › Intake')).toBeTruthy();
+  });
+
   it('shows why a route is skipped', async () => {
     useRouteHandlers([route({ id: '00000000-0000-4000-8000-000000000004', name: 'To Docs', problems: ['Board "docs" is not installed in this project.'] })]);
     renderSection();

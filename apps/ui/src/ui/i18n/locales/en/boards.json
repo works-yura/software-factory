@@ -8,7 +8,8 @@
       "execute": "Building",
       "review": "Review",
       "done": "Done",
-      "canceled": "Canceled"
+      "canceled": "Canceled",
+      "pr-review": "PR review"
     }
   },
   "review": {

@@ -8,7 +8,8 @@
       "execute": "Реалізація",
       "review": "Перевірка",
       "done": "Готово",
-      "canceled": "Скасовано"
+      "canceled": "Скасовано",
+      "pr-review": "Рев’ю PR"
     }
   },
   "review": {
