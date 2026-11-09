@@ -337,6 +337,5 @@ overrides:
 
 patchedDependencies:
   '@mastra/core@1.79.0': patches/@mastra__core@1.79.0.patch
-  '@mastra/deployer@1.79.0': patches/@mastra__deployer@1.79.0.patch
   '@mastra/mcp@2.5.0': patches/@mastra__mcp@2.5.0.patch
   '@mastra/server@1.79.0': patches/@mastra__server@1.79.0.patch

@@ -14,7 +14,7 @@
 //  - it plays a scenario: tools it calls go through the same permission rules
 //    as the real CLI (deny, then ask, then allow), and an "ask" goes to the
 //    permission prompt tool over MCP; a refusal becomes the tool result the real
-//    CLI writes (see packages/harness-claude-code/src/__fixtures__/turn-permission.jsonl);
+//    CLI writes (see packages/harness-claude-code-core/src/__fixtures__/turn-permission.jsonl);
 //  - it writes stream-json lines shaped like the real CLI's.
 //
 // Scenario: `FAKE_CLAUDE_SCENARIO`, else a `[fake:<name>]` marker in the

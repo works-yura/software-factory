@@ -337,7 +337,6 @@ overrides:
 
 patchedDependencies:
   '@mastra/core@1.79.0': 345dcf8da05efd43dabed4a60a79f2fb31e36e6361a9613683027924dd8f25a1
-  '@mastra/deployer@1.79.0': 5e076185d75430cdaa40b51fd4c72d05631e56c5cd2e1f6301550899913db7e6
   '@mastra/mcp@2.5.0': e6ee761047c02ecaf310545eb0195b35671bec63c2fd2ab96dc56dda88ad785c
   '@mastra/server@1.79.0': 802b8ff78b59b6f0899e158488823af13f14f78a22fdbdbf40dd20da74b0eaa5
 
@@ -644,7 +643,7 @@ importers:
         version: link:../feed
       '@factory/harness':
         specifier: workspace:*
-        version: link:../harness
+        version: link:../harness-core
       '@factory/harness-mastra':
         specifier: workspace:*
         version: link:../harness-mastra
@@ -866,23 +865,11 @@ importers:
         specifier: 'catalog:'
         version: 4.1.11(@opentelemetry/api@1.10.0)(@types/node@22.20.1)(@vitest/coverage-v8@4.1.11)(jsdom@30.1.1)(msw@2.14.6(@types/node@22.20.1)(typescript@7.0.2))(vite@8.3.5(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
 
-  packages/harness:
-    devDependencies:
-      '@types/node':
-        specifier: 22.20.1
-        version: 22.20.1
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.11(@opentelemetry/api@1.10.0)(@types/node@22.20.1)(@vitest/coverage-v8@4.1.11)(jsdom@30.1.1)(msw@2.14.6(@types/node@22.20.1)(typescript@7.0.2))(vite@8.3.5(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
-
-  packages/harness-claude-code:
+  packages/harness-claude-code-core:
     dependencies:
       '@factory/harness':
         specifier: workspace:*
-        version: link:../harness
+        version: link:../harness-core
     devDependencies:
       '@stryker-mutator/core':
         specifier: 'catalog:'
@@ -907,10 +894,10 @@ importers:
     dependencies:
       '@factory/harness':
         specifier: workspace:*
-        version: link:../harness
+        version: link:../harness-core
       '@factory/harness-claude-code':
         specifier: workspace:*
-        version: link:../harness-claude-code
+        version: link:../harness-claude-code-core
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(patch_hash=345dcf8da05efd43dabed4a60a79f2fb31e36e6361a9613683027924dd8f25a1)(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(rxjs@7.8.2)(supports-color@7.2.0)(zod@4.6.7)
@@ -924,6 +911,18 @@ importers:
       '@factory/session':
         specifier: workspace:*
         version: link:../session
+      '@types/node':
+        specifier: 22.20.1
+        version: 22.20.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@opentelemetry/api@1.10.0)(@types/node@22.20.1)(@vitest/coverage-v8@4.1.11)(jsdom@30.1.1)(msw@2.14.6(@types/node@22.20.1)(typescript@7.0.2))(vite@8.3.5(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+
+  packages/harness-core:
+    devDependencies:
       '@types/node':
         specifier: 22.20.1
         version: 22.20.1
@@ -956,7 +955,7 @@ importers:
         version: link:../feed
       '@factory/harness':
         specifier: workspace:*
-        version: link:../harness
+        version: link:../harness-core
       '@factory/http':
         specifier: workspace:*
         version: link:../http
@@ -1585,7 +1584,7 @@ importers:
         version: link:../core
       '@factory/harness':
         specifier: workspace:*
-        version: link:../harness
+        version: link:../harness-core
       '@factory/store':
         specifier: workspace:*
         version: link:../store
@@ -1668,10 +1667,10 @@ importers:
         version: link:../feed
       '@factory/harness':
         specifier: workspace:*
-        version: link:../harness
+        version: link:../harness-core
       '@factory/harness-claude-code':
         specifier: workspace:*
-        version: link:../harness-claude-code
+        version: link:../harness-claude-code-core
       '@factory/harness-claude-code-ui':
         specifier: workspace:*
         version: link:../harness-claude-code-ui
@@ -3118,10 +3117,6 @@ packages:
     resolution: {integrity: sha512-dwrc+1aqVZpHNkNDswXGtn1typ+Pxpo5FHZRyBw1le7onEJUkPUkYOY1FIFC1LvFMYUqqLuWBwElhAmencL7MQ==}
     engines: {node: '>=23.5.0 || ^22.13.0 || ^20.17.0'}
 
-  '@inquirer/ansi@2.0.9':
-    resolution: {integrity: sha512-0Ywt3S8tqM6TWUcsRlBFQ1x+X3/o8kktX0ZiKAnByYb9GFDknnOhse1PVtfiD2BXPI8ar+BWx9PV9R0lQIcygw==}
-    engines: {node: '>=23.5.0 || ^22.13.0 || ^20.17.0'}
-
   '@inquirer/checkbox@5.2.7':
     resolution: {integrity: sha512-/+QmGE/9bvE/EobaZDnzYe+T+QWoJrnmxwBQNtoi2OVSUR9d1znYsNyEoUrOZvFSxDYttrhzRIpXpaLkN+iIsg==}
     engines: {node: '>=23.5.0 || ^22.13.0 || ^20.17.0'}
@@ -3187,10 +3182,6 @@ packages:
 
   '@inquirer/figures@2.0.10':
     resolution: {integrity: sha512-51elrUJV3jZpvD0ygz8+U10Kc6+Lzqln+/tYmnbhy6jo5oXpE6hMCcv+OTBC0enwJXsb3JIuT3VtEinRNCSK2A==}
-    engines: {node: '>=23.5.0 || ^22.13.0 || ^20.17.0'}
-
-  '@inquirer/figures@2.0.9':
-    resolution: {integrity: sha512-EAWgUTGQ/Umgga51dE3B2PUHbufuXarDfg86uVgoSgNHNNQnyFKcOrQLWVqYMghuSyHh8+2HUH0Js9cTC1WAdg==}
     engines: {node: '>=23.5.0 || ^22.13.0 || ^20.17.0'}
 
   '@inquirer/input@5.1.8':
@@ -4651,7 +4642,9 @@ packages:
   '@smithy/core@3.31.1':
     resolution: {integrity: sha512-CyogUINxvi7C7LDsh8Syo6hVJOT9ckz4rG8dRZfTJ8r91HkMY59PnNooaj7WcHyxEkxPfBAmbgztZU+xTo76lg==}
     engines: {node: '>=18.0.0'}
-    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.4.16':
     resolution: {integrity: sha512-QfuLWAkLzptffFW980AFeHZFdqds2B64rpEd3uJ6lgs3xVn9QegGMUgUcj+4d7dRrAsya3r58ZKpku97WcFb4w==}
@@ -10364,13 +10357,11 @@ snapshots:
 
   '@inquirer/ansi@2.0.10': {}
 
-  '@inquirer/ansi@2.0.9': {}
-
   '@inquirer/checkbox@5.2.7(@types/node@22.20.1)':
     dependencies:
-      '@inquirer/ansi': 2.0.9
+      '@inquirer/ansi': 2.0.10
       '@inquirer/core': 12.0.6(@types/node@22.20.1)
-      '@inquirer/figures': 2.0.9
+      '@inquirer/figures': 2.0.10
       '@inquirer/type': 4.2.0(@types/node@22.20.1)
     optionalDependencies:
       '@types/node': 22.20.1
@@ -10430,8 +10421,6 @@ snapshots:
 
   '@inquirer/figures@2.0.10': {}
 
-  '@inquirer/figures@2.0.9': {}
-
   '@inquirer/input@5.1.8(@types/node@22.20.1)':
     dependencies:
       '@inquirer/core': 12.0.6(@types/node@22.20.1)
@@ -10448,7 +10437,7 @@ snapshots:
 
   '@inquirer/password@5.2.4(@types/node@22.20.1)':
     dependencies:
-      '@inquirer/ansi': 2.0.9
+      '@inquirer/ansi': 2.0.10
       '@inquirer/core': 12.0.6(@types/node@22.20.1)
       '@inquirer/type': 4.2.0(@types/node@22.20.1)
     optionalDependencies:
@@ -10479,16 +10468,16 @@ snapshots:
   '@inquirer/search@4.3.5(@types/node@22.20.1)':
     dependencies:
       '@inquirer/core': 12.0.6(@types/node@22.20.1)
-      '@inquirer/figures': 2.0.9
+      '@inquirer/figures': 2.0.10
       '@inquirer/type': 4.2.0(@types/node@22.20.1)
     optionalDependencies:
       '@types/node': 22.20.1
 
   '@inquirer/select@5.2.7(@types/node@22.20.1)':
     dependencies:
-      '@inquirer/ansi': 2.0.9
+      '@inquirer/ansi': 2.0.10
       '@inquirer/core': 12.0.6(@types/node@22.20.1)
-      '@inquirer/figures': 2.0.9
+      '@inquirer/figures': 2.0.10
       '@inquirer/type': 4.2.0(@types/node@22.20.1)
     optionalDependencies:
       '@types/node': 22.20.1
@@ -11182,7 +11171,7 @@ snapshots:
       - utf-8-validate
       - workflow
 
-  '@mastra/deployer@1.79.0(patch_hash=5e076185d75430cdaa40b51fd4c72d05631e56c5cd2e1f6301550899913db7e6)(@hono/node-server@1.19.17(hono@4.13.11))(@mastra/core@1.79.0(patch_hash=345dcf8da05efd43dabed4a60a79f2fb31e36e6361a9613683027924dd8f25a1)(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(rxjs@7.8.2)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7)':
+  '@mastra/deployer@1.79.0(@hono/node-server@1.19.17(hono@4.13.11))(@mastra/core@1.79.0(patch_hash=345dcf8da05efd43dabed4a60a79f2fb31e36e6361a9613683027924dd8f25a1)(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(rxjs@7.8.2)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7)':
     dependencies:
       '@babel/core': 8.0.1
       '@babel/preset-typescript': 8.0.7(@babel/core@8.0.1)
@@ -15094,7 +15083,7 @@ snapshots:
       '@clack/prompts': 1.8.1
       '@expo/devcert': 1.2.1(supports-color@7.2.0)
       '@mastra/core': 1.79.0(patch_hash=345dcf8da05efd43dabed4a60a79f2fb31e36e6361a9613683027924dd8f25a1)(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(rxjs@7.8.2)(supports-color@7.2.0)(zod@4.6.7)
-      '@mastra/deployer': 1.79.0(patch_hash=5e076185d75430cdaa40b51fd4c72d05631e56c5cd2e1f6301550899913db7e6)(@hono/node-server@1.19.17(hono@4.13.11))(@mastra/core@1.79.0(patch_hash=345dcf8da05efd43dabed4a60a79f2fb31e36e6361a9613683027924dd8f25a1)(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(rxjs@7.8.2)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7)
+      '@mastra/deployer': 1.79.0(@hono/node-server@1.19.17(hono@4.13.11))(@mastra/core@1.79.0(patch_hash=345dcf8da05efd43dabed4a60a79f2fb31e36e6361a9613683027924dd8f25a1)(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(rxjs@7.8.2)(supports-color@7.2.0)(zod@4.6.7))(bufferutil@4.1.0)(supports-color@7.2.0)(zod@4.6.7)
       '@mastra/loggers': 1.3.9(@mastra/core@1.79.0(patch_hash=345dcf8da05efd43dabed4a60a79f2fb31e36e6361a9613683027924dd8f25a1)(@bufbuild/protobuf@2.16.0)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7))(@types/json-schema@7.0.15)(ai@6.0.315(zod@4.6.7))(bufferutil@4.1.0)(express@5.3.0(supports-color@7.2.0))(openapi-types@12.1.3)(rxjs@7.8.2)(supports-color@7.2.0)(zod@4.6.7))
       archiver: 8.0.0
       commander: 14.0.3
