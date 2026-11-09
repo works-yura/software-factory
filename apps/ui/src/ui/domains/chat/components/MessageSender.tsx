@@ -11,15 +11,24 @@ const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
   slack: 'Slack',
 };
 
-export function ChannelOriginBadge({ origin }: { origin: ChannelOrigin }) {
+export function ChannelOriginBadge({ origin, author }: { origin: ChannelOrigin; author?: MessageAuthor }) {
   const { t } = useTranslation('chat');
   const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
+  const authorName = origin.authorName ?? author?.name;
   return (
     <div aria-label={t('messages.sentFrom', { platform: label })} className="text-muted-foreground mt-1 flex items-center gap-1">
       {origin.platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
-      <Txt as="span" variant="meta">
-        {t('messages.via', { platform: label })}
-        {origin.authorName ? ` · ${origin.authorName}` : ''}
+      <Txt as="span" variant="meta" className="inline-flex items-center gap-1">
+        <span>{t('messages.via', { platform: label })}</span>
+        {authorName && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span aria-hidden="true">
+              <Avatar name={authorName} src={author?.avatarUrl} size="xs" />
+            </span>
+            <span>{authorName}</span>
+          </>
+        )}
       </Txt>
     </div>
   );

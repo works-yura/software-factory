@@ -2,7 +2,6 @@ import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
@@ -148,7 +147,7 @@ export function MessageBubble({
         from="user"
         pending={steeringPending}
         attachments={attachments.length > 0 && <MessageAttachments parts={attachments} />}
-        avatar={sender && <SenderAvatar author={sender} />}
+        avatar={!origin && sender && <SenderAvatar author={sender} />}
         footer={
           <>
             {steeringStatus && (
@@ -162,7 +161,7 @@ export function MessageBubble({
                 {steeringStatus}
               </Txt>
             )}
-            {origin && <ChannelOriginBadge origin={origin} />}
+            {origin && <ChannelOriginBadge origin={origin} author={author} />}
             {messageActions}
           </>
         }
@@ -177,17 +176,10 @@ export function MessageBubble({
           messageActions && (
             <div className="flex flex-wrap items-center gap-2">
               {replyModelId && (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <MessageMetadata tabIndex={0}>
-                        {formatModelName(replyModelId)}
-                        {credentialLabel && ` · ${credentialLabel}`}
-                      </MessageMetadata>
-                    }
-                  />
-                  <TooltipContent>{replyModelId}</TooltipContent>
-                </Tooltip>
+                <MessageMetadata>
+                  {formatModelName(replyModelId)}
+                  {credentialLabel && ` · ${credentialLabel}`}
+                </MessageMetadata>
               )}
               {messageActions}
             </div>
