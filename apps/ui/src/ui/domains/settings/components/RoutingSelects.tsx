@@ -66,19 +66,15 @@ export function BoardPicker({
   const boards = (catalog.data ?? []).filter(candidate => candidate.id !== 'review');
   const current = boards.find(candidate => candidate.id === board);
   const label = current?.title ?? (board ? t('linearRouting.notInstalled', { board }) : t('linearRouting.chooseBoard'));
+  // A List needs a board: its status rules move cards between that board's columns, so there is no "no board" choice.
   return (
-    <Select
-      value={current?.id ?? NO_BOARD}
-      disabled={disabled || catalog.isPending}
-      onValueChange={value => onChange(value === NO_BOARD ? null : value)}
-    >
+    <Select value={current?.id ?? ''} disabled={disabled || catalog.isPending} onValueChange={value => onChange(value)}>
       <SelectTrigger size="sm" aria-label={t('linearRouting.boardFor', { name })} className="w-auto">
         <Txt as="span" variant="caption">
           {label}
         </Txt>
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={NO_BOARD}>{t('linearRouting.noBoard')}</SelectItem>
         {boards.map(candidate => (
           <SelectItem key={candidate.id} value={candidate.id}>
             {candidate.title}

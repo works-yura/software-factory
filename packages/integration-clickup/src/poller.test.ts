@@ -131,7 +131,7 @@ describe('createClickUpPoller', () => {
       const { poll, listTasks, commitRuleEvaluation } = setup({ tasks: [task()], ...options });
       await poll();
       expect(commitRuleEvaluation).not.toHaveBeenCalled();
-      if (options.binding === null || options.enabled === false) expect(listTasks).not.toHaveBeenCalled();
+      expect(listTasks).not.toHaveBeenCalled();
     }
   });
 
@@ -246,6 +246,7 @@ describe('createClickUpPoller', () => {
     const docsRoute: IntakeRoute = {
       id: 'route-docs',
       enabled: true,
+      on: ['work_item.created'],
       when: tagged('docs'),
       target: { boardKey: 'docs', phaseKey: 'drafting' },
     };
@@ -273,14 +274,15 @@ describe('createClickUpPoller', () => {
       expect(decisionOf(commitRuleEvaluation)).toMatchObject({ board: 'docs', stage: 'inbox' });
     });
 
-    it('files a task from a List without a board when a route takes it, and skips it when none does', async () => {
-      const routed = setup({ tasks: [task({ tags: ['docs'] })], binding: { board: null }, intakeRoutes: [docsRoute] });
-      await routed.poll();
-      expect(decisionOf(routed.commitRuleEvaluation)).toMatchObject({ board: 'docs', stage: 'drafting' });
-
-      const unrouted = setup({ tasks: [task({ tags: ['bug'] })], binding: { board: null }, intakeRoutes: [docsRoute] });
-      await unrouted.poll();
-      expect(unrouted.commitRuleEvaluation).not.toHaveBeenCalled();
+    it('skips a List without a board even when a route would take its task, as upstream skips an unboarded source', async () => {
+      const { poll, listTasks, commitRuleEvaluation } = setup({
+        tasks: [task({ tags: ['docs'] })],
+        binding: { board: null },
+        intakeRoutes: [docsRoute],
+      });
+      await poll();
+      expect(listTasks).not.toHaveBeenCalled();
+      expect(commitRuleEvaluation).not.toHaveBeenCalled();
     });
 
     it("places a task no route matches on the List's board, without naming a route", async () => {
@@ -293,21 +295,6 @@ describe('createClickUpPoller', () => {
       const decision = decisionOf(commitRuleEvaluation);
       expect(decision).toMatchObject({ board: 'bug', stage: 'intake' });
       expect(decision.metadata).not.toHaveProperty('intakeRouteId');
-    });
-
-    it('imports a task from a List without a board when its status imports it and a route takes it', async () => {
-      const rules = { 'to do': { action: 'import' } };
-      const routed = setup({ rules, tasks: [task({ tags: ['docs'] })], binding: { board: null }, intakeRoutes: [docsRoute] });
-      await routed.poll();
-      expect(decisionOf(routed.commitRuleEvaluation)).toMatchObject({
-        board: 'docs',
-        stage: 'drafting',
-        metadata: { intakeRouteId: 'route-docs' },
-      });
-
-      const unrouted = setup({ rules, tasks: [task({ tags: ['bug'] })], binding: { board: null }, intakeRoutes: [docsRoute] });
-      await unrouted.poll();
-      expect(unrouted.commitRuleEvaluation).not.toHaveBeenCalled();
     });
 
     it("leaves a task out when its List's status rules do not import it, whatever the routes say", async () => {
@@ -326,6 +313,7 @@ describe('createClickUpPoller', () => {
           {
             id: 'route-clickup',
             enabled: true,
+            on: ['work_item.created'],
             when: {
               operator: 'AND',
               conditions: [

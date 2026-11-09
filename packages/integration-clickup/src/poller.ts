@@ -163,8 +163,8 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
 
   const fileTask = async (
     project: FactoryProject,
-    /** The List's board; null when the List names none and only intake routes place its tasks. */
-    fallbackBoard: string | null,
+    /** The List's board: where a new task lands when no intake route matches. */
+    fallbackBoard: string,
     rules: ListRules | undefined,
     task: ClickUpTask,
   ): Promise<Outcome> => {
@@ -204,7 +204,6 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
       board = routed.board;
       stage = fresh ? routed.phase : routed.initialPhase;
     } else {
-      if (!fallbackBoard) return 'unchanged';
       board = fallbackBoard;
       const installed = options.boards.get(board);
       if (!installed) throw new Error(`Board "${board}" is not installed.`);
@@ -272,8 +271,11 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
       for (const listId of selection.sourceIds) {
         const binding = bindings.find(candidate => candidate.sourceId === listId);
         const project = binding ? projectsById.get(binding.factoryProjectId) : undefined;
-        // A List must be routed to a Factory before its tasks mean anything.
-        if (!binding || !project || project.orgId !== orgId) continue;
+        // A List must be routed to a Factory and a board before its tasks mean anything: the board's
+        // columns are what its status rules move cards between. Intake routes still decide where a new
+        // task lands; the List's board is where it goes when no route matches.
+        if (!binding || !project || project.orgId !== orgId || !binding.board) continue;
+        const board = binding.board;
         touched.add(project.id);
 
         const cursorKey = `${orgId}:${listId}`;
@@ -283,9 +285,6 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
         try {
           const tasks = await options.client.listTasks({ listId, updatedAfter: since, includeClosed: true });
           for (const task of tasks) {
-            const board = binding.board ?? null;
-            // Without a board of its own a task can still be placed by an intake route.
-            if (!board && !options.intakeRoutes) continue;
             summary.checked += 1;
             try {
               const outcome = await fileTask(project, board, rules[listId], task);

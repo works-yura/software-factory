@@ -15,7 +15,7 @@ import { BoardPicker, FactorySelect } from './RoutingSelects';
 const INTEGRATION_ID = 'clickup';
 
 /**
- * One connected ClickUp List: the Factory its tasks go to, an optional board for tasks no intake route
+ * One connected ClickUp List: the Factory its tasks go to, the board for tasks no intake route
  * places, and what each ClickUp status does. Tags pick a board through the Factory's intake routes.
  * Collapsed it shows only the List and where it is routed, so a long list of Lists stays scannable.
  */
@@ -108,7 +108,11 @@ export function ClickUpListCard({
             <Txt as="h4" variant="meta" tone="muted">
               {t('intake.clickup.card.statuses')}
             </Txt>
-            {factory ? (
+            {factory && board === null ? (
+              <Txt as="p" variant="caption" tone="muted">
+                {t('intake.clickup.rules.needsBoard')}
+              </Txt>
+            ) : factory ? (
               <ClickUpStatusTable listId={listId} factoryProjectId={factory.id} board={board} />
             ) : (
               <Txt as="p" variant="caption" tone="muted">

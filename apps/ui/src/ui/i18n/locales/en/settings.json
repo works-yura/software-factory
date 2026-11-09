@@ -49,15 +49,15 @@
         "saveFailed": "Could not save the status rules",
         "typical": "Typical set",
         "import": "Import",
-        "listHintNoBoard": "This List has no board: an imported task lands where the Factory’s intake routes say, and is skipped when none matches. Choose a board above to file tasks in its columns.",
-        "needsFactory": "Choose a factory for this List above to set status rules."
+        "needsFactory": "Choose a factory for this List above to set status rules.",
+        "needsBoard": "Choose a board above: ClickUp statuses map to its columns."
       },
       "connectedLists": "Connected Lists",
       "addLists": "Add Lists",
       "noLists": "No Lists connected yet. Add one to start importing tasks.",
       "card": {
         "notRouted": "Not routed",
-        "noBoard": "{{factory}} · intake routes only",
+        "noBoard": "{{factory}} · choose a board; its tasks are not imported without one",
         "routedTo": "{{factory}} · {{board}}",
         "routing": "Where tasks go",
         "routingHint": "Choose a factory — until then this List’s tasks are not picked up.",
@@ -66,7 +66,7 @@
         "disconnectAria": "Disconnect {{name}}",
         "mapped_one": "{{count}} status mapped",
         "mapped_other": "{{count}} statuses mapped",
-        "boardHint": "The board is optional: intake routes place a task first, and the board takes the tasks no route matches. To send tasks with a tag to a board, add an intake route with the condition “has tag”."
+        "boardHint": "Without a board this List's tasks are not imported. Intake routes place a new task first, and the board takes the ones no route matched; the statuses below move cards between its columns. To send tagged tasks to another board, add an intake route with the condition “has tag”."
       },
       "picker": {
         "title": "Choose ClickUp Lists",

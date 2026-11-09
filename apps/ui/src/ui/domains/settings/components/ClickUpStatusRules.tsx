@@ -126,7 +126,7 @@ export function ClickUpStatusTable({
       <div className="flex items-start justify-between gap-3">
         <Txt tone="muted" as="p" variant="caption">
           {board === null
-            ? t('intake.clickup.rules.listHintNoBoard')
+            ? t('intake.clickup.rules.needsBoard')
             : t('intake.clickup.rules.listHint', { board: installed?.title ?? board })}
         </Txt>
         <Button
