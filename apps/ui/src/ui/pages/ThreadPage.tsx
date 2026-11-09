@@ -1,28 +1,25 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquareOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navigate, useLocation, useNavigate, useParams } from 'react-router';
+import { Navigate, useNavigate, useParams } from 'react-router';
 
-import { useFactoryQuery } from '../../hooks/useFactories';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { PageTitle } from '../domains/chat/components/PageTitle';
 import { SessionChatSurface } from '../domains/chat/components/SessionChatSurface';
-import { SessionFavicon } from '../domains/chat/components/SessionFavicon';
 import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
 import { TeammateSessionLine } from '../domains/chat/components/TeammateSessionLine';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { DraftSessionCreateError } from '../domains/workspaces/services/user-sessions';
-import { opensWithPrompt, useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
+import { DraftSessionCreateError, isSessionNotFound } from '../domains/workspaces/services/user-sessions';
+import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { failedDraftState } from '../domains/chat/services/handoffFiles';
 import { FactorySessionPage } from '../domains/factory/components/RelatedFactorySessions';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
@@ -43,85 +40,45 @@ const threadShellClass = cn(
 
 export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
-  const factoryQuery = useFactoryQuery(factoryId);
   const workspace = useThreadWorkspacePath();
-  const location = useLocation();
-  // A thread opened with its first prompt renders while its session is created,
-  // so the prompt shows straight away instead of a loader.
-  const opening = opensWithPrompt(location.state);
-  const resolvingSession = factoryQuery.isPending || (workspace.isPending && !opening);
+
+  if (workspace.error instanceof DraftSessionCreateError) {
+    return (
+      <Navigate
+        replace
+        to={workspace.error.draftPath}
+        state={failedDraftState(workspace.error.draft, workspace.error.message)}
+      />
+    );
+  }
+
+  if (workspace.error && isSessionNotFound(workspace.error)) return <SessionNotFoundMain factoryId={factoryId} />;
 
   return (
-    <>
-      {workspace.error instanceof DraftSessionCreateError ? (
-        <Navigate
-          replace
-          to={workspace.error.draftPath}
-          state={failedDraftState(workspace.error.draft, workspace.error.message)}
-        />
-      ) : workspace.error ? (
-        <SessionUnavailableMain error={workspace.error} factoryId={factoryId} onRetry={workspace.retry} />
-      ) : resolvingSession ? (
-        <ResolvingSessionMain />
-      ) : (
-        <ChatSessionBoundary threadId={threadId}>
-          <PageTitle />
-          <WorkspaceFilesProvider>
-            <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
-          </WorkspaceFilesProvider>
-        </ChatSessionBoundary>
-      )}
-    </>
+    <ChatSessionBoundary threadId={threadId}>
+      <PageTitle />
+      <WorkspaceFilesProvider>
+        <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
+      </WorkspaceFilesProvider>
+    </ChatSessionBoundary>
   );
 }
 
-function ResolvingSessionMain() {
-  const { t } = useTranslation('chat');
-  return (
-    <ChatPageLayout>
-      <SessionFavicon state="initializing" />
-      <div className="grid min-h-0 place-items-center">
-        <Spinner aria-label={t('threadPage.loadingSession')} className="text-muted-foreground" />
-      </div>
-    </ChatPageLayout>
-  );
-}
-
-function SessionUnavailableMain({
-  error,
-  factoryId,
-  onRetry,
-}: {
-  error: Error;
-  factoryId: string | undefined;
-  onRetry: () => void;
-}) {
+function SessionNotFoundMain({ factoryId }: { factoryId: string | undefined }) {
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
-  // The server answers a missing session and a teammate's private one with the same 404.
-  const notFound = (error as { status?: number }).status === 404;
   return (
     <ChatPageLayout>
       <div className="grid min-h-0 place-items-center">
         <EmptyState
           as="h1"
           iconSlot={<MessageSquareOff />}
-          titleSlot={notFound ? t('threadPage.notFoundTitle') : t('threadPage.loadFailedTitle')}
-          descriptionSlot={
-            notFound
-              ? t('threadPage.notFoundDescription')
-              : t('threadPage.loadFailedDescription', { message: error.message })
-          }
+          titleSlot={t('threadPage.notFoundTitle')}
+          descriptionSlot={t('threadPage.notFoundDescription')}
           actionSlot={
-            notFound ? (
-              factoryId && (
-                <Button variant="primary" onClick={() => void navigate(newUserSessionPath(factoryId))}>
-                  {t('threadPage.startNewSession')}
-                </Button>
-              )
-            ) : (
-              <Button variant="primary" onClick={onRetry}>
-                {t('common.retry')}
+            factoryId && (
+              <Button variant="primary" onClick={() => void navigate(newUserSessionPath(factoryId))}>
+                {t('threadPage.startNewSession')}
               </Button>
             )
           }

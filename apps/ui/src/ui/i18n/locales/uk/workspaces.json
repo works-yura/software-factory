@@ -464,7 +464,9 @@
     "changedCount_few": "{{count}} змінено",
     "changedCount_many": "{{count}} змінено",
     "changedCount_other": "{{count}} змінено",
-    "unavailable": "Недоступно"
+    "unavailable": "Недоступно",
+    "loadingChanges": "Завантаження змін",
+    "loadingDetails": "Завантаження даних робочого простору"
   },
   "fileViewer": {
     "label": "Перегляд файлу робочого простору",

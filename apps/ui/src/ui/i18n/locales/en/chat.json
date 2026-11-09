@@ -70,7 +70,8 @@
     "loadingOlder": "Loading older messages",
     "currentTasks": "Current tasks",
     "teammateNamed": "You’re steering {{name}}’s session",
-    "teammate": "You’re steering a teammate’s session"
+    "teammate": "You’re steering a teammate’s session",
+    "conversation": "Conversation"
   },
   "emptyThread": {
     "title": "What can I help you build?",

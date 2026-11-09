@@ -456,7 +456,9 @@
     "noChanges": "No changes",
     "changedCount_one": "{{count}} changed",
     "changedCount_other": "{{count}} changed",
-    "unavailable": "Unavailable"
+    "unavailable": "Unavailable",
+    "loadingChanges": "Loading changes",
+    "loadingDetails": "Loading workspace details"
   },
   "fileViewer": {
     "label": "Workspace file viewer",
