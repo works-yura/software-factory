@@ -276,5 +276,19 @@
   "Wrote": "Записав",
   "wrote a file": "записав файл",
   "wrote files": "записав файли",
-  "and {count} more": "і ще {count}"
+  "and {count} more": "і ще {count}",
+  "Add to chat": "Додати в чат",
+  "Selected text": "Виділений текст",
+  "Annotation {number}": "Анотація {number}",
+  "Annotation {number}, with a comment": "Анотація {number}, з коментарем",
+  "Remove annotation {number}": "Прибрати анотацію {number}",
+  "Comment on annotation {number}": "Коментар до анотації {number}",
+  "Add a comment": "Додайте коментар",
+  "Sent with your next message": "Надійде з наступним повідомленням",
+  "Done": "Готово",
+  "Annotations": "Анотації",
+  "Show in chat": "Показати в чаті",
+  "annotation": "анотація",
+  "annotations": "анотації",
+  "Remove all": "Прибрати всі"
 }

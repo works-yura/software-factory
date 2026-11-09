@@ -16,10 +16,7 @@ import { DraftSessionCreateError } from '../../../workspaces/services/user-sessi
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
 import { failedDraftState } from '../../services/handoffFiles';
 import { useThreadWorkspacePath } from '../../../workspace-viewer/hooks/useThreadWorkspacePath';
-import { ActivityLine } from '../ActivityLine';
-import { Composer } from '../Composer';
-import { TaskPanel } from '../TaskPanel';
-import { Transcript } from '../Transcript';
+import { SessionChatSurface } from '../SessionChatSurface';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -30,7 +27,7 @@ export const FACTORY_ID = 'fp-preparing';
 export const PROJECT_REPOSITORY_ID = 'repo-preparing';
 export const SESSION_ID = '20000000-0000-4000-8000-000000000003';
 
-interface PreparingSession {
+export interface PreparingSession {
   finishWorkspace: () => void;
   /** Push an event down the session stream; resolves once the stream is open. */
   emit: (event: AgentControllerEvent) => Promise<void>;
@@ -43,7 +40,7 @@ interface PreparingSession {
   steerAttempts: number;
 }
 
-interface StubPreparingSessionOptions {
+export interface StubPreparingSessionOptions {
   createdSessionTitle?: string;
   tasks?: AgentControllerTaskSnapshot[];
   failDispatch?: boolean;
@@ -260,9 +257,7 @@ function ThreadSurface() {
   return (
     <>
       <Link to="/away">go-away</Link>
-      <Transcript tail={stretchLive => <ActivityLine stretchLive={stretchLive} />} />
-      <TaskPanel />
-      <Composer />
+      <SessionChatSurface emptyState={null} composerLabel="Thread composer" />
     </>
   );
 }
