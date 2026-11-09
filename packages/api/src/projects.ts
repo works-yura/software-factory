@@ -29,6 +29,7 @@ import type { IntakeStorage } from '@factory/store';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
+import type { ProjectBoardCache } from '@factory/runtime';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
@@ -201,6 +202,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   sandbox?: FactorySandbox;
   /** Environment builds, present only when the sandbox has a `builds` capability. */
   environmentBuilds?: EnvironmentBuildRunner;
+  /** The per-project boards; loading a new project stores its copies of the code boards. */
+  boards?: Pick<ProjectBoardCache, 'describe'>;
 }
 
 /** Provider output is shown to the user; strip any clone credential from it first. */
@@ -552,6 +555,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
+          // The project's first board load retries anything this misses.
+          await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
+            console.warn('[factory] could not store the boards of a new project:', error);
+          });
           return context.json({ project }, 201);
         },
       }),

@@ -14,6 +14,7 @@ import {
   Inbox,
   Palette,
   SlidersHorizontal,
+  SquareKanban,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -145,6 +146,15 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: Inbox,
         searchText: 'work intake sources tasks issues pull requests github feed sync',
+      },
+      {
+        id: 'board',
+        get label() {
+          return SETTINGS_SECTION_LABELS.board;
+        },
+        icon: SquareKanban,
+        searchText:
+          'work board phases triage planning building review pr review auto start auto approve plans next phases runner instructions reset default',
       },
       {
         id: 'factory',

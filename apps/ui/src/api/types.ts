@@ -19,6 +19,10 @@ export type IntakeRouteListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.int
 export type IntakeRouteInfo = IntakeRouteListResponse['intakeRoutes'][number];
 /** A card condition, as `autoStartWhen` and an intake route's `when` carry it. */
 export type CardRuleGroup = NonNullable<IntakeRouteInfo['when']>;
+export type StoredBoardResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardGet.responseSchema>;
+export type StoredBoardInfo = StoredBoardResponse['board'];
+export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
+export type ReplaceBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema>;
 
 import type {
   CustomProviderInfo,

@@ -27,6 +27,7 @@ import { ClaudeBehaviorSettings } from './ClaudeBehaviorSettings';
 import { useFactoryHarness } from './models/harness/HarnessSettings';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
+import { WorkBoardSection } from './WorkBoardSection';
 
 const tk = translator('settings');
 
@@ -75,6 +76,7 @@ export function SettingsPanel() {
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
+      {section === 'board' && <WorkBoardSection factoryId={factoryId} />}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} />}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}

@@ -1,4 +1,4 @@
-import type { AgentHarness, AgentNotificationResult, AgentSession } from '@factory/harness';
+import type { AgentHarness, AgentNotificationResult, AgentRunContext, AgentSession } from '@factory/harness';
 
 import {
   autoApprovedExitTool,
@@ -175,12 +175,15 @@ function watchRun(
   {
     timeoutMs,
     approvePlans,
+    requestContext,
     onAgentEnd,
     label,
     runStillActive,
   }: {
     timeoutMs: number;
     approvePlans: boolean;
+    /** The run's own request context; resuming an approved plan resolves the session's workspace with it. */
+    requestContext?: AgentRunContext;
     onAgentEnd?: () => Promise<boolean>;
     label: string;
     /** Level-triggered check against the run registry, consulted at every heartbeat the edge-triggered wait misses. */
@@ -265,7 +268,7 @@ function watchRun(
           const { toolCallId } = parked;
           parked = undefined;
           arm();
-          await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId });
+          await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId, requestContext });
           observed = await wait();
         }
       }
@@ -1203,6 +1206,7 @@ export class FactoryDecisionDispatcher {
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved(record),
+            requestContext,
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
@@ -1966,6 +1970,7 @@ export class FactoryDecisionDispatcher {
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved({ ...record, workItemId: binding.workItemId }),
+            requestContext,
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#harness.listActiveThreadRuns().some(active => active.threadId === binding.threadId),

@@ -1,11 +1,14 @@
 export {
   BoardDefinitionError,
+  codeBoardOf,
   compileBoardDefinition,
+  declarationOf,
   DEFAULT_PHASE_CONTEXT,
   defineBoard,
   FACTORY_AGENT_ID,
   isDefinedBoard,
 } from './boards/define-board.ts';
+export type { AnyBoardConfig } from './boards/define-board.ts';
 export { cardRuleFacts } from './boards/card-facts.ts';
 export {
   INTAKE_ROUTE_METADATA_KEY,

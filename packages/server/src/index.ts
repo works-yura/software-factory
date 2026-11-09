@@ -21,6 +21,8 @@ export type {
   RuleGroup,
   RuleOperator,
 } from '@factory/core';
+export { BoardWriteError } from '@factory/runtime';
+export type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from '@factory/store';
 export { MastraFactory } from './factory.ts';
 export { waitForPendingFilesystemCapture } from '@factory/session';
 export type {

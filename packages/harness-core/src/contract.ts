@@ -127,7 +127,12 @@ export interface AgentSession {
   ): Promise<AgentNotificationResult>;
   subscribe(listener: AgentEventListener): () => void;
   /** Answers the human gate the run is parked on; for `submit_plan` the resume data is a {@link PlanDecision}. */
-  respondToToolSuspension(input: { resumeData: PlanDecision; toolCallId?: string }): Promise<void>;
+  respondToToolSuspension(input: {
+    resumeData: PlanDecision;
+    toolCallId?: string;
+    /** The run's own context, so resuming it resolves the session's workspace as the run does. */
+    requestContext?: AgentRunContext;
+  }): Promise<void>;
 }
 
 /** A skill as the harness can activate it in a session. */

@@ -19,7 +19,7 @@ export const AUDIT_ACTIONS = {
   git: ['commit', 'push', 'pr_opened'],
   agent: ['commit', 'push', 'pr_opened', 'signaled'],
   intake: ['config_updated', 'binding_updated', 'label_route_updated'],
-  board: ['created', 'updated', 'deleted'],
+  board: ['created', 'updated', 'deleted', 'reset'],
   skill: ['updated', 'reverted'],
   intake_route: ['created', 'updated', 'deleted', 'reordered'],
 } as const;

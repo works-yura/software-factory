@@ -9,7 +9,7 @@ import { MastraFactory } from '../factory.ts';
 // of these tests is part of what they check.
 
 const DEPRECATION =
-  '[Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and these definitions are served read-only next to the boards each project stores. Manage boards through the boards API (`/web/factory/projects/:id/boards`).';
+  '[Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards live in the database, and each project stores these definitions once. Write board definitions into projects with factory.upsertBoard(), or manage them through the boards API (`/web/factory/projects/:id/boards`).';
 
 function construct(config: Partial<ConstructorParameters<typeof MastraFactory>[0]> = {}) {
   return new MastraFactory({

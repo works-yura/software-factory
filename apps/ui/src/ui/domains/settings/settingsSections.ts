@@ -8,6 +8,7 @@ export type SettingsSection =
   | 'repositories'
   | 'environment'
   | 'intake'
+  | 'board'
   | 'models'
   | 'memory'
   | 'skills'
@@ -21,6 +22,7 @@ const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'repositories',
   'environment',
   'intake',
+  'board',
   'models',
   'memory',
   'skills',
