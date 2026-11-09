@@ -286,7 +286,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	+6	Factory-routed built-in model start ported from upstream a9f392e60e (+1); Claude Code Factory needs no Mastra model (+3); a Factory without sessionless chat opens a personal draft
 ../../../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	+1	no supervisor shortcut while the supervisor chat is hidden (+1)
 ../../../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx
-../../../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
+../../../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	0	personal model scope removed (Your models, scope choice, personal keys) (-1); retired Connections links open Repositories, after #29588 (+1)
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	-3	Mastra Platform sign-in and custom-domain cases dropped with @mastra/auth-studio
 ../../../apps/ui/src/ui/domains/auth/services/__tests__/auth-storage.msw.test.tsx	../apps/ui/src/ui/domains/auth/services/__tests__/auth-storage.msw.test.tsx

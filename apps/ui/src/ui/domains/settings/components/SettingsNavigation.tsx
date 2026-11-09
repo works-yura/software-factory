@@ -8,7 +8,6 @@ import {
   Box,
   Brain,
   Building2,
-  Cable,
   CircleUserRound,
   GitBranch,
   Inbox,
@@ -61,14 +60,6 @@ const ACCOUNT_SETTINGS_GROUP = {
       },
       icon: Palette,
       searchText: 'preferences general theme appearance color scheme completion sound',
-    },
-    {
-      id: 'connections',
-      get label() {
-        return SETTINGS_SECTION_LABELS.connections;
-      },
-      icon: Cable,
-      searchText: 'your personal connections connected accounts communication integrations mcp claude chatgpt',
     },
   ],
 } satisfies SettingsNavGroup;

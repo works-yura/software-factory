@@ -4,7 +4,6 @@ export type SettingsSection =
   | 'account'
   | 'preferences'
   | 'factory'
-  | 'connections'
   | 'repositories'
   | 'environment'
   | 'intake'
@@ -18,7 +17,6 @@ const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'account',
   'preferences',
   'factory',
-  'connections',
   'repositories',
   'environment',
   'intake',
@@ -50,6 +48,8 @@ type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor }
 const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
   ['personal-models', { section: 'models', anchor: MODEL_DEFAULTS_ANCHORS.factory }],
   ['factory-memory', { section: 'memory' }],
+  // Connections held only the MCP clients card; providers connect in Repositories.
+  ['connections', { section: 'repositories' }],
 ]);
 
 export function retiredSettingsTarget(section: string | undefined, hash: string): SettingsTarget | undefined {

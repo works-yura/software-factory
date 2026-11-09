@@ -42,7 +42,7 @@ describe('SettingsNavigation', () => {
       within(screen.getByRole('region', { name: group }))
         .getAllByRole('link')
         .map(link => link.textContent);
-    expect(linksIn('Account')).toEqual(['My account', 'Preferences', 'Connections']);
+    expect(linksIn('Account')).toEqual(['My account', 'Preferences']);
     expect(linksIn('Agent')).toEqual(['Harness', 'Memory', 'Skills', 'Behavior']);
     expect(linksIn('Factory')).toEqual(['Repositories', 'Environment', 'Work Intake', 'Work board', 'Manage Factory']);
     expect(screen.getByRole('link', { name: 'Harness' })).toHaveAttribute('href', '/factories/fp-1/settings/models');

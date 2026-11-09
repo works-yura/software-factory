@@ -99,8 +99,8 @@ function ChannelThreadRedirect() {
 }
 
 /**
- * Factory-agnostic entry to Connections, used by server-built links that do not
- * know a Factory id. Routing through the SPA guarantees the visitor is
+ * Factory-agnostic entry to the old Connections page, kept for links that do not
+ * know a Factory id. Connections is gone, so it opens Repositories. Routing through the SPA guarantees the visitor is
  * authenticated before they start the OIDC flow.
  */
 function ConnectionsRedirect() {
@@ -112,7 +112,7 @@ function ConnectionsRedirect() {
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
 
-  return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
+  return <Navigate to={`/factories/${firstFactory.id}/settings/repositories`} replace />;
 }
 
 function KnowledgeRoute() {

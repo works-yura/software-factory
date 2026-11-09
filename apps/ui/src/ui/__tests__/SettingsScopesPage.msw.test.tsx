@@ -132,4 +132,13 @@ describe('Settings ownership', () => {
     expect(router.state.location.pathname).toBe('/factories/fp-1/settings/memory');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('aria-current', 'page');
   });
+
+  it('sends retired Connections links to Repositories', async () => {
+    const router = renderSettings('connections');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/settings/repositories'));
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Repositories' })).toHaveAttribute('aria-current', 'page'),
+    );
+  });
 });

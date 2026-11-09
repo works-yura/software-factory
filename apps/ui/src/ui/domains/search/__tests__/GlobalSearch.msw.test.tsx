@@ -488,7 +488,6 @@ describe('Global search', () => {
       'Rules',
       'Preferences',
       'Manage Factory',
-      'Connections',
       'Repositories',
       'Work Intake',
       'Harness',

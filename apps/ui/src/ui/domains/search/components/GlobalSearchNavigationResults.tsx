@@ -71,13 +71,6 @@ export function GlobalSearchNavigationResults({
       />
       <CommandPaletteItem
         icon={<Settings />}
-        title={SETTINGS_SECTION_LABELS.connections}
-        subtitle={t('subtitles.settings')}
-        value={searchValue(SETTINGS_SECTION_LABELS.connections, t('subtitles.settings'), `Connections Settings connections ${settingsSectionPath(factoryId, 'connections')}`)}
-        onSelect={() => onSelect(settingsSectionPath(factoryId, 'connections'), true)}
-      />
-      <CommandPaletteItem
-        icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.repositories}
         subtitle={t('subtitles.settings')}
         value={searchValue(SETTINGS_SECTION_LABELS.repositories, t('subtitles.settings'), `Repositories Settings repositories ${settingsSectionPath(factoryId, 'repositories')}`)}

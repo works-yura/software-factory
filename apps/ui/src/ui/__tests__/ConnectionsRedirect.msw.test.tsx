@@ -14,7 +14,7 @@ function renderAt(url: string) {
 }
 
 describe('Connections entry (/settings/connections)', () => {
-  it('forwards to the first Factory Connections settings', async () => {
+  it('forwards to the first Factory Repositories settings', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -29,6 +29,6 @@ describe('Connections entry (/settings/connections)', () => {
 
     const router = renderAt('/settings/connections');
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/settings/connections'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/settings/repositories'));
   });
 });
