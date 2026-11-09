@@ -286,7 +286,7 @@ export async function describeFactoryPhase(input: {
   const boards = await toBoardSource(input.boards).load(binding);
   const stage = ruleStage(boards, item);
   if (!item || !stage) return undefined;
-  const allItems = await input.storage.list({
+  const allItems = await input.storage.listShared({
     orgId: binding.orgId,
     factoryProjectId: binding.factoryProjectId,
   });

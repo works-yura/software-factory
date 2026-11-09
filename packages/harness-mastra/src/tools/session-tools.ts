@@ -62,7 +62,7 @@ export interface FactorySessionToolDependencies {
   messaging: () => Promise<FactoryMessaging | null>;
   workItems: Pick<
     WorkItemsStorage,
-    | 'list'
+    | 'listShared'
     | 'getForProject'
     | 'listRunBindings'
     | 'findActiveRunBindingForSession'

@@ -110,7 +110,7 @@ routes/source-control-settings.test.ts	api/src/source-control-settings.test.ts
 routes/supervisor.test.ts	api/src/supervisor.test.ts
 routes/surface.test.ts	api/src/surface.test.ts	+2	work spanning several repositories: a card naming no repository dispatches across the environment; ambiguity only without one; upstream #28721: a replacement work board has only its own lanes (+1)
 routes/telemetry.test.ts	api/src/telemetry.test.ts
-routes/tenant-credentials.test.ts	credentials/src/tenant-credentials.test.ts
+routes/tenant-credentials.test.ts	credentials/src/tenant-credentials.test.ts	+1	upstream #29519: unavailable credential storage retried every 15 s, not per request (+1)
 routes/work-items.test.ts	api/src/work-items.test.ts	+3	upstream #28604: the board catalog sends autoStart/exitTool conditions; upstream #28823: phase skill in the board catalog (+1); upstream #28961: card responses expose source facts apart from board metadata (+1)
 rules/automation-stamping.test.ts	runtime/src/automation-stamping.test.ts
 rules/binding-context.test.ts	session/src/binding-context.test.ts
@@ -173,7 +173,7 @@ tools/reports.test.ts	harness-mastra/src/tools/reports.test.ts
 tools/run-watch.test.ts	harness-mastra/src/tools/run-watch.test.ts
 tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
 tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	+2	hybrid scope cases removed with the personal model scope; upstream #28721: the old plan role still starts (+1); side and role sessions on Claude Code
-tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts
+tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts	+1	upstream #29519: one batch of queries per step however many cards a session follows (+1)
 tools/work-item-tools.test.ts	harness-mastra/src/tools/work-item-tools.test.ts
 workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/mastra/factory-skills (+1); upstream #29042: project skill edits in session workspaces (+6); workosId owner case dropped with the workosId field (-1)
 ../../internal-workspace/src/file-commands.test.ts	internal-workspace/src/file-commands.test.ts
