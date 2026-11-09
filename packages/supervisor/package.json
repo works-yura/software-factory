@@ -22,8 +22,8 @@
     "@factory/runtime": "workspace:*",
     "@factory/session": "workspace:*",
     "@factory/store": "workspace:*",
-    "@mastra/code-sdk": "1.15.0",
-    "@mastra/core": "1.79.0",
+    "@mastra/code-sdk": "1.18.0",
+    "@mastra/core": "1.82.0",
     "zod": "catalog:"
   },
   "devDependencies": {

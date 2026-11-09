@@ -263,7 +263,8 @@ export interface MastraFactoryConfig {
   vector?: MastraVector;
   /**
    * Host-owned Knowledge runtime. Factory registers this exact instance under `key` and uses that
-   * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
+   * key for its read surfaces. Its scope declarations must declare `org:$orgId` and `project:$projectId`,
+   * the scopes every Factory session run holds. Omitted turns Knowledge off.
    */
   knowledge?: { key: string; instance: Knowledge };
   /**
@@ -1087,8 +1088,15 @@ export class MastraFactory {
         ),
       };
     }
-    const knowledgeEnabled =
-      this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    // Mastra 1.82 removed Subconscious, the curator this flag turned on, and dropped its node store. Refuse
+    // to boot rather than run with Knowledge silently off.
+    if (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1') {
+      throw new Error(
+        '[Factory] MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS is no longer supported: Subconscious was removed in Mastra 1.82. ' +
+          'Unset it, and pass `knowledge: { key, instance: new Knowledge({ scopes }) }` to MastraFactory to turn Knowledge on.',
+      );
+    }
+    const knowledgeEnabled = this.#config.knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
@@ -2219,7 +2227,9 @@ export class MastraFactory {
         },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
+        // Factory owns Knowledge: without its own config, Knowledge stays off
+        // rather than following the host's Mastra Code settings toggle.
+        knowledge: this.#config.knowledge ?? false,
         // The environment signal tells the agent which repositories its
         // sandbox holds and where; the phase signal, when work items are on,
         // comes after it.

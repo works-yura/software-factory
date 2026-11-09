@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 // The runtime starts a Factory skill run with a typed `skill` signal (see
 // `AgentSignalInput`); Mastra sessions take that shape as is. These cases pin how
-// Mastra renders it for the model, which `patches/@mastra__core@1.79.0.patch`
-// changes the way upstream core does in a5a9179daa (packages/core/src/agent/signals.ts).
+// Mastra renders it for the model: since @mastra/core 1.82.0 only the signal's own
+// closing tag is escaped in its contents (upstream a5a9179daa, packages/core/src/agent/signals.ts).
 describe('skill signal contents', () => {
   const skill = (contents: string, tagName = 'skill') =>
     createSignal({ type: 'reactive', tagName, attributes: { name: 'a&"<b>' }, contents }).toLLMMessage().content;

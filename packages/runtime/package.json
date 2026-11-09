@@ -21,8 +21,8 @@
   "devDependencies": {
     "@factory/integration-github": "workspace:*",
     "@factory/pipelines": "workspace:*",
-    "@mastra/libsql": "1.27.0",
-    "@mastra/pg": "1.32.0",
+    "@mastra/libsql": "1.29.0",
+    "@mastra/pg": "1.35.0",
     "@types/node": "22.20.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

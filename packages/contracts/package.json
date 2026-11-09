@@ -14,7 +14,7 @@
   "dependencies": {
     "@factory/core": "workspace:*",
     "@factory/store": "workspace:*",
-    "@mastra/code-sdk": "1.15.0",
+    "@mastra/code-sdk": "1.18.0",
     "zod": "catalog:"
   },
   "devDependencies": {

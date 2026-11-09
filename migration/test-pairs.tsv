@@ -42,7 +42,7 @@ environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule
 environment/build.test.ts	harness-mastra/src/environment/build.test.ts
 environment/heads.test.ts	harness-mastra/src/environment/heads.test.ts
 factory-disable-builtin-tools.test.ts	server/src/factory-disable-builtin-tools.test.ts
-factory.test.ts	server/src/factory.test.ts	-4	Platform Jira registration cases dropped with the vocabulary (-3); upstream a95f079204 (browser) and 7e428dc80e (recreate sandbox), after 4c22623ea3 (+2); upstream #28823: app skills are checked at construction (+2); Studio default auth and cookie-domain cases and the Platform-only recreate-sandbox case dropped with @mastra/auth-studio and @mastra/platform-workspace (-7); missing-auth refusal (+1); upstream #29494: the boot time is reported once when finalize() finishes (+1)
+factory.test.ts	server/src/factory.test.ts	-2	Platform Jira registration cases dropped with the vocabulary (-3); upstream a95f079204 (browser) and 7e428dc80e (recreate sandbox), after 4c22623ea3 (+2); upstream #28823: app skills are checked at construction (+2); Studio default auth and cookie-domain cases and the Platform-only recreate-sandbox case dropped with @mastra/auth-studio and @mastra/platform-workspace (-7); missing-auth refusal (+1); upstream #29494: the boot time is reported once when finalize() finishes (+1); Mastra 1.82: Knowledge is off without its config, the removed Subconscious flag refuses to boot (+2)
 index.test.ts	server/src/index.test.ts
 integrations/github/acceptance-labels.test.ts	integration-github/src/acceptance-labels.test.ts
 integrations/github/app-identity.test.ts	integration-github/src/app-identity.test.ts
@@ -98,7 +98,7 @@ routes/contracts.test.ts	api/src/contracts.test.ts	+1	upstream #28961: card resp
 routes/custom-provider-source.test.ts	api/src/custom-provider-source.test.ts
 routes/fs.test.ts	api/src/fs.test.ts	-2	upstream 7573972d0c (#28274): /changes/diff and its truncation cases replaced by /changes/patches cases; upstream #28829: the host filesystem routes need a signed-in user (+3)
 routes/intake.test.ts	api/src/intake.test.ts	+9	upstream #28877: an unreadable project board source saves no binding or route (+2); upstream #28971: a binding refused while its project is deleted, a deleted project releases its sources (+2); upstream #29109: a rebind or label-route change leaves a routed card where its route put it (+3); v4: a ClickUp label route is refused, ClickUp tags go through intake routes (+1); upstream #29630: sources for one integration only (+1)
-routes/knowledge.test.ts	api/src/knowledge.test.ts
+routes/knowledge.test.ts	api/src/knowledge.test.ts	-35	Mastra 1.82 (upstream #28353, #28362): the node/record routes are replaced by the page-store routes, rewritten as upstream
 routes/oauth.test.ts	api/src/oauth.test.ts
 routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts
 routes/projects.test.ts	api/src/projects.test.ts	+2	harness and Claude Code model on create and update; upstream #29039: board transitions as phase config (+1)
@@ -377,8 +377,6 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/factory/components/feed/mentions.test.ts	../apps/ui/src/ui/domains/factory/components/feed/mentions.test.ts
 ../../../apps/ui/src/ui/domains/factory/components/feed/__tests__/CommentComposer.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/feed/__tests__/CommentComposer.msw.test.tsx
 ../../../apps/ui/src/ui/domains/factory/components/feed/__tests__/CommentList.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/feed/__tests__/CommentList.msw.test.tsx
-../../../apps/ui/src/ui/domains/factory/components/knowledge/graphDiff.test.ts	../apps/ui/src/ui/domains/factory/components/knowledge/graphDiff.test.ts
-../../../apps/ui/src/ui/domains/factory/components/knowledge/graphModel.test.ts	../apps/ui/src/ui/domains/factory/components/knowledge/graphModel.test.ts
 ../../../apps/ui/src/ui/domains/factory/components/knowledge/useInteractionIdle.test.ts	../apps/ui/src/ui/domains/factory/components/knowledge/useInteractionIdle.test.ts
 ../../../apps/ui/src/ui/domains/factory/context/__tests__/FeedEventsProvider.msw.test.tsx	../apps/ui/src/ui/domains/factory/context/__tests__/FeedEventsProvider.msw.test.tsx	-1	upstream 63d7d5cbd4 (#28257): no attention list to refresh (-1)
 ../../../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	../apps/ui/src/ui/domains/factory/hooks/__tests__/useBoardIntake.msw.test.tsx	-9	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28978: pull requests reviewed on the Work board (+1)
@@ -468,7 +466,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/lib/pwa/usePwaInstall.msw.test.tsx	../apps/ui/src/ui/lib/pwa/usePwaInstall.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/ActivityPage.msw.test.tsx	activity/ui/src/ui/pages/__tests__/ActivityPage.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/BoardPageFilters.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/BoardPageFilters.msw.test.tsx
-../../../apps/ui/src/ui/pages/__tests__/KnowledgePage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/KnowledgePage.msw.test.tsx
+../../../apps/ui/src/ui/pages/__tests__/KnowledgePage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/KnowledgePage.msw.test.tsx	-18	Mastra 1.82 (upstream #28353, #28361, #28362): the Knowledge page is the page-store explorer, its cases rewritten as upstream
 ../../../apps/ui/src/ui/pages/__tests__/PrivateSessionNotFound.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/PrivateSessionNotFound.msw.test.tsx
 ../../../apps/ui/src/ui/pages/__tests__/SupervisorPage.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/SupervisorPage.msw.test.tsx	+2	the Factory chat on a Claude Code Factory runs on Claude Code (+1); a bookmarked link redirects while the chat is hidden (+1)
 ../../../apps/ui/src/ui/pages/__tests__/ThreadPageDocumentTitle.msw.test.tsx	../apps/ui/src/ui/pages/__tests__/ThreadPageDocumentTitle.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary

@@ -7,6 +7,7 @@ export default defineConfig({
         test: {
           name: 'unit:mastracode-web',
           environment: 'node',
+          setupFiles: ['./vitest.setup.ts'],
           include: ['src/**/*.test.ts'],
           exclude: ['**/node_modules/**', '**/dist/**'],
         },
@@ -17,6 +18,7 @@ export default defineConfig({
           // need network + node builtins, so run in the node environment.
           name: 'e2e:mastracode-web',
           environment: 'node',
+          setupFiles: ['./vitest.setup.ts'],
           include: ['e2e/web/**/*.scenario.test.ts'],
           testTimeout: 30_000,
           hookTimeout: 30_000,

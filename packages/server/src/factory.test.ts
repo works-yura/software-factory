@@ -571,12 +571,28 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
-    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
+    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge', scopes: {} });
     const knowledge = { key: 'mastra', instance };
 
     const config = await prepareFactory({ storage: fakeStorage(), knowledge });
 
     expect(config.knowledge).toEqual(knowledge);
+  });
+
+  it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+
+    expect(config.knowledge).toBe(false);
+  });
+
+  it('refuses to prepare while the removed Subconscious flag is set', async () => {
+    vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '1');
+    try {
+      const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+      await expect(factory.prepare()).rejects.toThrow(/MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS is no longer supported/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('throws when called twice', async () => {

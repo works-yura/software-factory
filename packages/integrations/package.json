@@ -23,12 +23,12 @@
     "@factory/sandbox": "workspace:*",
     "@factory/session": "workspace:*",
     "@factory/store": "workspace:*",
-    "@mastra/code-sdk": "1.15.0",
-    "@mastra/core": "1.79.0",
+    "@mastra/code-sdk": "1.18.0",
+    "@mastra/core": "1.82.0",
     "hono": "4.13.13"
   },
   "devDependencies": {
-    "@mastra/libsql": "1.27.0",
+    "@mastra/libsql": "1.29.0",
     "@types/node": "22.20.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
