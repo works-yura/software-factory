@@ -180,3 +180,8 @@ export {
   ownsChangeRequest,
 } from './change-requests.ts';
 export type { OpenChangeRequest } from './change-requests.ts';
+export type {
+  FactoryReviewStatusEvent,
+  FactoryReviewStatusPhase,
+  FactoryReviewStatusReporter,
+} from './rules/review-status.ts';

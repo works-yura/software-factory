@@ -102,6 +102,7 @@ import {
 import type { FactoryPullRequestProvenanceData } from '@factory/integration-github';
 import { isFactoryGithubLogin, trustedCollaborator } from '@factory/integration-github';
 import { dismissStaleFactoryReviews } from '@factory/integration-github';
+import { createGithubReviewStatusReporter, reviewStatusAnimationFromEnv } from '@factory/integration-github';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '@factory/integrations';
 import { buildPlatformConnectRoutes } from '@factory/integrations';
 import { PlatformGithubIntegration } from '@factory/integration-github';
@@ -2438,6 +2439,13 @@ export class MastraFactory {
                             }),
                         );
                       },
+                      reportReviewStatus: createGithubReviewStatusReporter({
+                        github: githubIntegration,
+                        sourceControl: sourceControlStorage.forIntegration(githubIntegration.id),
+                        workItems: workItemsStorage,
+                        reviewerName: process.env.FACTORY_REVIEW_STATUS_NAME?.trim() || 'Factory',
+                        ...reviewStatusAnimationFromEnv(process.env),
+                      }),
                     }
                   : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),

@@ -19,6 +19,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@factory/integration-github": "workspace:*",
     "@factory/pipelines": "workspace:*",
     "@mastra/libsql": "1.27.0",
     "@mastra/pg": "1.32.0",

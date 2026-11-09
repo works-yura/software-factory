@@ -38,7 +38,7 @@ export async function reconcileGithubAcceptanceLabels(
   }
 }
 
-async function resolveRepository(
+export async function resolveRepository(
   sourceControl: SourceControlStorageHandle,
   orgId: string,
   factoryProjectId: string,
