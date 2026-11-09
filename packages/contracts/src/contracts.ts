@@ -183,6 +183,31 @@ const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema }
 
 const projectSchema = entitySchema;
 const projectResponseSchema = z.object({ project: projectSchema });
+
+/**
+ * A repository linked to a project, as the project list returns it: fields of the link and of the repository
+ * only, never the installation behind the connection.
+ */
+export const projectListRepositorySchema = z.object({
+  projectRepositoryId: z.string(),
+  connectionId: z.string(),
+  integrationId: z.string(),
+  repositoryId: z.string(),
+  // These three are null when the repository row behind the link is missing.
+  externalId: z.string().nullable(),
+  slug: z.string().nullable(),
+  defaultBranch: z.string().nullable(),
+  /** The branch set on the link; null means the repository's default branch. */
+  branch: z.string().nullable(),
+  sandboxWorkdir: z.string(),
+  /** Environment order; position 1 is the link a session row is filed under. */
+  position: z.number(),
+  /** False when the link stays out of the project's environment. */
+  inEnvironment: z.boolean(),
+});
+export type ProjectListRepository = z.infer<typeof projectListRepositorySchema>;
+
+const projectListItemSchema = projectSchema.and(z.object({ repositories: z.array(projectListRepositorySchema) }));
 const cardSchema = z
   .object({
     workItem: z
@@ -672,8 +697,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
     path: '/web/factory/projects',
-    description: 'List Factory projects for the current organization',
-    responseSchema: z.object({ projects: z.array(projectSchema) }),
+    description: 'List Factory projects for the current organization, each with its linked repositories',
+    responseSchema: z.object({ projects: z.array(projectListItemSchema) }),
   },
   projectCreate: {
     method: 'POST',

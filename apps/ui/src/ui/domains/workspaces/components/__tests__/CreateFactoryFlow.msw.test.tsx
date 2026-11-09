@@ -528,7 +528,7 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
   let created = false;
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: created ? [{ id: 'fp-1', name: 'Mastra' }] : [] }),
+      HttpResponse.json({ projects: created ? [{ id: 'fp-1', name: 'Mastra', repositories: [] }] : [] }),
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
       calls.push('create');
@@ -617,7 +617,7 @@ describe('back navigation', () => {
     sessionStorage.setItem(FACTORY_KEY, 'fp-existing');
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-existing', name: 'Mastra' }] }),
+        HttpResponse.json({ projects: [{ id: 'fp-existing', name: 'Mastra', repositories: [] }] }),
       ),
       http.get(`${TEST_BASE_URL}/web/om`, () => HttpResponse.json({})),
     );

@@ -101,7 +101,7 @@ routes/intake.test.ts	api/src/intake.test.ts	+9	upstream #28877: an unreadable p
 routes/knowledge.test.ts	api/src/knowledge.test.ts	-35	Mastra 1.82 (upstream #28353, #28362): the node/record routes are replaced by the page-store routes, rewritten as upstream
 routes/oauth.test.ts	api/src/oauth.test.ts
 routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts
-routes/projects.test.ts	api/src/projects.test.ts	+2	harness and Claude Code model on create and update; upstream #29039: board transitions as phase config (+1)
+routes/projects.test.ts	api/src/projects.test.ts	+4	harness and Claude Code model on create and update; upstream #29039: board transitions as phase config (+1); upstream 6650c2687c (#29322): repositories in the project list (+2)
 routes/session-access.test.ts	session/src/session-access.test.ts	+2	model-switch guard and multipart body cases ported from upstream 8fb8a82428
 routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts	-1	user and hybrid scope catalogs removed; one Factory-catalog case remains
 routes/skills.test.ts	api/src/skills.test.ts	+12	upstream #28823: skills catalog origin (+2); upstream #29042: frontmatter in the catalog, project skill edit routes (+10)
@@ -242,7 +242,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/hooks/__tests__/useAgentControllerReadHooks.msw.test.tsx	../apps/ui/src/hooks/__tests__/useAgentControllerReadHooks.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useAgentControllerSessionSeam.msw.test.tsx	../apps/ui/src/hooks/__tests__/useAgentControllerSessionSeam.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useAvailableModels.msw.test.tsx	../apps/ui/src/hooks/__tests__/useAvailableModels.msw.test.tsx
-../../../apps/ui/src/hooks/__tests__/useFactories.msw.test.tsx	../apps/ui/src/hooks/__tests__/useFactories.msw.test.tsx
+../../../apps/ui/src/hooks/__tests__/useFactories.msw.test.tsx	../apps/ui/src/hooks/__tests__/useFactories.msw.test.tsx	+1	upstream 6650c2687c (#29322): Factories and their repositories from the project list alone (+1)
 ../../../apps/ui/src/hooks/__tests__/useFactoryAttention.msw.test.tsx	activity/ui/src/hooks/__tests__/useFactoryAttention.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useFactoryAuth.msw.test.tsx	../apps/ui/src/hooks/__tests__/useFactoryAuth.msw.test.tsx
 ../../../apps/ui/src/hooks/__tests__/useFactoryData.msw.test.tsx	../apps/ui/src/hooks/__tests__/useFactoryData.msw.test.tsx

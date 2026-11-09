@@ -10,9 +10,8 @@ import { FactoryManagementSection } from '../FactoryManagementSection';
 
 function serveFactory(project: FactoryProjectPayload) {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [project] })),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${project.id}/source-control-connections`, () =>
-      HttpResponse.json({ connections: [] }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ ...project, repositories: [] }] }),
     ),
   );
 }

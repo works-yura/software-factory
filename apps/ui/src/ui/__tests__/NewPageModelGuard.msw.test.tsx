@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
@@ -19,7 +20,7 @@ function stubFactoryShell() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
+      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra', repositories: [] }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/decisions`, () => HttpResponse.json({ decisions: [] })),
@@ -195,31 +196,28 @@ describe('NewPage in a Claude Code Factory', () => {
   function stubClaudeFactory({ repositories, claudeCode = true }: { repositories: boolean; claudeCode?: boolean }) {
     stubFactory(claudeFactory);
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [claudeFactory] })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              ...claudeFactory,
+              repositories: repositories
+                ? [
+                    listedRepository('repo-1', 'octo/hello', {
+                      connectionId: 'conn-1',
+                      branch: 'main',
+                      sandboxWorkdir: '/workspace/hello',
+                    }),
+                  ]
+                : [],
+            },
+          ],
+        }),
+      ),
       http.get(`${TEST_BASE_URL}/web/config/features`, () => HttpResponse.json({ knowledge: false, claudeCode })),
       // No Mastra model anywhere: a Claude Code chat must not ask for one.
       http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [], fallbackModelId: null })),
       http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({
-          connections: repositories
-            ? [
-                {
-                  id: 'conn-1',
-                  installationId: 'inst-1',
-                  repositories: [
-                    {
-                      id: 'repo-1',
-                      branch: 'main',
-                      sandboxWorkdir: '/workspace/hello',
-                      repository: { slug: 'octo/hello', defaultBranch: 'main' },
-                    },
-                  ],
-                },
-              ]
-            : [],
-        }),
-      ),
     );
   }
 

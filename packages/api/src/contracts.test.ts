@@ -262,7 +262,8 @@ describe('Factory route contracts', () => {
       'agent-waiting',
     ];
     expect(
-      FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId }] }).success,
+      FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId, repositories: [] }] })
+        .success,
     ).toBe(true);
     expect(
       FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.safeParse({

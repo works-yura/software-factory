@@ -16,7 +16,7 @@ const ENVIRONMENT_URL = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/env
 function useFactory() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme' }] }),
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme', repositories: [] }] }),
     ),
   );
 }
@@ -303,8 +303,8 @@ describe('Environment settings', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
           projects: [
-            { id: FACTORY_ID, name: 'Acme' },
-            { id: 'factory-b', name: 'Beta' },
+            { id: FACTORY_ID, name: 'Acme', repositories: [] },
+            { id: 'factory-b', name: 'Beta', repositories: [] },
           ],
         }),
       ),

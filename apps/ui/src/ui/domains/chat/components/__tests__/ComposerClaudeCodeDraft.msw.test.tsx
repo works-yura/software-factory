@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import {
@@ -26,7 +27,21 @@ function serveClaudeCodeFactory() {
     defaultModelId: null,
   };
   server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [factory] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({
+        projects: [
+          {
+            ...factory,
+            repositories: [
+              listedRepository(PROJECT_REPOSITORY_ID, 'octo/hello', {
+                branch: 'main',
+                sandboxWorkdir: '/workspace/preparing',
+              }),
+            ],
+          },
+        ],
+      }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () => HttpResponse.json({ project: factory })),
     http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [], fallbackModelId: null })),
     http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),

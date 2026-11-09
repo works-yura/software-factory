@@ -7,9 +7,11 @@
  * Drives the real services + React Query cache; only the network is mocked
  * (MSW) on the ApiConfig base URL the test providers inject.
  */
+import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
@@ -236,5 +238,82 @@ describe('useLinkRepositoryMutation', () => {
     await waitForMutationsIdle(client);
     expect(result.current.link.error?.message).toBe('invalid_config');
     expect(factoryListReads).toBe(2);
+  });
+});
+
+describe('useFactoriesQuery', () => {
+  it('loads every Factory with its linked repositories from the project list alone', async () => {
+    const requested: string[] = [];
+    const onRequest = ({ request }: { request: Request }) => {
+      requested.push(new URL(request.url).pathname);
+    };
+    server.events.on('request:start', onRequest);
+    onTestFinished(() => server.events.removeListener('request:start', onRequest));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: 'fp-1',
+              name: 'Acme',
+              repositories: [
+                listedRepository('ghp_1', 'octo/hello', { branch: 'release', externalId: '99' }),
+                listedRepository('glp_1', 'acme/app', {
+                  integrationId: 'gitlab',
+                  connectionId: 'conn-gl-1',
+                  defaultBranch: 'trunk',
+                  externalId: '10',
+                }),
+                listedRepository('ghp_2', 'unused', { slug: null, defaultBranch: null }),
+              ],
+            },
+            { id: 'fp-2', name: 'Empty', repositories: [] },
+          ],
+        }),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() => useFactoriesQuery());
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.map(({ id, repositories }) => ({ id, repositories }))).toEqual([
+      {
+        id: 'fp-1',
+        repositories: [
+          {
+            projectRepositoryId: 'ghp_1',
+            provider: 'github',
+            externalId: '99',
+            slug: 'octo/hello',
+            gitBranch: 'release',
+            sandboxWorkdir: '/workspace/octo/hello',
+            inEnvironment: true,
+            position: 1,
+          },
+          {
+            projectRepositoryId: 'glp_1',
+            provider: 'gitlab',
+            externalId: '10',
+            slug: 'acme/app',
+            gitBranch: 'trunk',
+            sandboxWorkdir: '/workspace/acme/app',
+            inEnvironment: true,
+            position: 1,
+          },
+          {
+            projectRepositoryId: 'ghp_2',
+            provider: 'github',
+            externalId: undefined,
+            slug: 'Acme',
+            gitBranch: undefined,
+            sandboxWorkdir: '/workspace/unused',
+            inEnvironment: true,
+            position: 1,
+          },
+        ],
+      },
+      { id: 'fp-2', repositories: [] },
+    ]);
+    expect(requested).toEqual(['/web/factory/projects']);
   });
 });

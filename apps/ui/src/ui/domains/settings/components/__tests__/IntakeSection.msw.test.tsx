@@ -72,7 +72,7 @@ function useClickUpHandlers({
     http.get(CLICKUP_STATUS_URL, () => HttpResponse.json(readyStatus)),
     http.get(CLICKUP_LISTS_URL, () => HttpResponse.json({ lists })),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme Web' }] }),
+      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme Web', repositories: [] }] }),
     ),
     http.get(BINDINGS_URL, () => HttpResponse.json({ bindings: savedBindings })),
     http.put(BINDINGS_URL, async ({ request }) => {
