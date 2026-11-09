@@ -46,6 +46,8 @@ UNSUPPORTED = re.compile(
     r'|^mastracode/sdk/'
     r'|^templates?/|create-factory'
     r'|\.generated\.'
+    # Binary assets (git show would hand them back as undecodable text).
+    r'|\.(gif|png|jpe?g|webp|ico|woff2?)$'
     r'|^\.changeset/'
     r'|^mastracode/[\w-]+/README\.md$'
     # Playwright suites; `e2e/ui/` is the MSW harness unit tests run on, which is ported.
