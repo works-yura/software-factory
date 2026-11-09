@@ -354,7 +354,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/factory/activity.test.ts	../apps/ui/src/ui/domains/factory/activity.test.ts	-17	Activity retired as upstream 63d7d5cbd4 (#28257): only the day helpers stay in the app; the full suite is parked in packages/activity/ui
 ../../../apps/ui/src/ui/domains/factory/auditPresentation.test.ts	activity/ui/src/ui/domains/factory/auditPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardCardState.test.ts	../apps/ui/src/ui/domains/factory/boardCardState.test.ts	+1	a card whose run needs its repository asks for it
-../../../apps/ui/src/ui/domains/factory/boardItems.test.ts	../apps/ui/src/ui/domains/factory/boardItems.test.ts	+0	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28961: session branches and card keys read the normalized work item (its Linear/Jira/incident.io rows dropped) (+2)
+../../../apps/ui/src/ui/domains/factory/boardItems.test.ts	../apps/ui/src/ui/domains/factory/boardItems.test.ts	+7	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28961: session branches and card keys read the normalized work item (its Linear/Jira/incident.io rows dropped) (+2); upstream ee911eb3e5 (#29650): cardContextSessions and cardThreadSession (+7)
 ../../../apps/ui/src/ui/domains/factory/boardLabels.test.ts	../apps/ui/src/ui/domains/factory/boardLabels.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardOrder.test.ts	../apps/ui/src/ui/domains/factory/boardOrder.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardPeople.test.ts	../apps/ui/src/ui/domains/factory/boardPeople.test.ts
@@ -365,7 +365,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	+3	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28978: pull requests reviewed on the Work board (+1); upstream #29039: board transitions as phase config (+1); upstream #28960: approval reads normalized work item labels (+3, its Linear/Jira/incident.io case dropped)
 ../../../apps/ui/src/ui/domains/factory/stageTones.test.ts	../apps/ui/src/ui/domains/factory/stageTones.test.ts
 ../../../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	-7	Linear/Jira/incident.io UI cases dropped with the vocabulary
-../../../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
+../../../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	../apps/ui/src/ui/domains/factory/__tests__/RelatedFactorySessions.msw.test.tsx	+2	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream ee911eb3e5 (#29650): session context in the breadcrumb, the phase a card moved on to, self-review context (+3)
 ../../../apps/ui/src/ui/domains/factory/components/CardStatus.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/CardStatus.msw.test.tsx
 ../../../apps/ui/src/ui/domains/factory/components/FactoryBoardLanding.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/FactoryBoardLanding.msw.test.tsx
 ../../../apps/ui/src/ui/domains/factory/components/WorkItemMenuItems.msw.test.tsx	../apps/ui/src/ui/domains/factory/components/WorkItemMenuItems.msw.test.tsx
@@ -451,7 +451,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/workspaces/hooks/useSessionListView.msw.test.tsx	../apps/ui/src/ui/domains/workspaces/hooks/useSessionListView.msw.test.tsx
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/onboardingFlow.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/onboardingFlow.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionFilters.test.ts	-2	upstream 74761d4c2e (#28245): defaultSessionFilters removed
-../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts
+../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionGroups.test.ts	+3	upstream ee911eb3e5 (#29650): nestCardSessions (+3)
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionPresentation.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionPresentation.test.ts
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionRows.test.ts	+3	a session without a checkout initializes only once a message went out; upstream #28961: a normalized merged state marks a pull request merged; its external-links cases dropped with Slack/Linear (+1)
 ../../../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts	../apps/ui/src/ui/domains/workspaces/services/__tests__/sessionSort.test.ts

@@ -33,6 +33,7 @@ const tk = translator('workspaces');
  */
 export function SessionNavRow({
   name,
+  label,
   title,
   url,
   source,
@@ -54,6 +55,8 @@ export function SessionNavRow({
   changingVisibility,
 }: {
   name: string;
+  /** Visible text when it differs from `name`, such as a card session's context under the card's heading. */
+  label?: string;
   /** Hover tooltip, typically the branch name. */
   title?: string;
   url: string;
@@ -94,7 +97,7 @@ export function SessionNavRow({
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
-      aria-label={name}
+      aria-label={label ? `${label}: ${name}` : name}
       disabled={disabled || loading}
       onClick={() => {
         sidebar?.setOpenMobile(false);
@@ -103,7 +106,7 @@ export function SessionNavRow({
       title={preview ? undefined : title}
     >
       {source ? <SessionSourceIcon source={source} /> : null}
-      <Sidebar.NavLabel>{name}</Sidebar.NavLabel>
+      <Sidebar.NavLabel>{label ?? name}</Sidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={t('sessionRow.pinned', { name })} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}

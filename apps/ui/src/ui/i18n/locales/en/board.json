@@ -170,7 +170,8 @@
     "userSessions": "User sessions",
     "sessions": "Sessions",
     "open": "Open {{label}}",
-    "openRelated": "Open {{label}}: {{title}}"
+    "openRelated": "Open {{label}}: {{title}}",
+    "cardNowIn": "card is now in {{phase}}"
   },
   "automationSettings": {
     "title": "Automation settings",
@@ -366,5 +367,34 @@
     "loadFailed": "Failed to load the board",
     "actionFailed": "Board action failed",
     "columns": "Board columns"
+  },
+  "sessionContext": {
+    "triage": "Triage",
+    "work": "Work",
+    "review": "Review",
+    "plan": "Planning",
+    "chat": "Chat"
+  },
+  "cardSessions": {
+    "title": "Sessions",
+    "current": "current",
+    "running": "running"
+  },
+  "exitTool": {
+    "description": "{{phase}} ends when {{tool}} succeeds. {{approval}}",
+    "personApproves": "A person approves it.",
+    "autoApprovesMatching": "It is approved on its own for matching cards.",
+    "autoApproves": "It is approved on its own."
+  },
+  "rework": {
+    "backFrom": "Back from {{phase}}",
+    "backFromWithReason": "Back from {{phase}}: {{reason}}",
+    "sectionLabel": "Why it moved back",
+    "title": "Why it moved back from {{phase}}",
+    "movedBy": {
+      "human": "Moved back by a person",
+      "agent": "Moved back by an agent",
+      "system": "Moved back by Factory"
+    }
   }
 }

@@ -2,7 +2,9 @@ import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@factory/core/rules/ty
 import { workItemBranch, workItemThreadTitle } from '@factory/pipelines/shared/work-item-branch';
 import { isValid } from 'date-fns';
 
+import type { InstalledPhaseInfo } from '../../../api/types';
 import { relativeTime } from '../../../lib/date/relativeTime';
+import { phaseTitle } from '../../i18n/boardLabels';
 import { lazyLabels } from '../../i18n/lazy';
 import { translator } from '../../i18n/t';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
@@ -198,6 +200,118 @@ export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>):
   return (
     sessions.triage ?? sessions.plan ?? sessions.work ?? sessions.review ?? sessions.chat ?? Object.values(sessions)[0]
   );
+}
+
+export type ContextPhase = Pick<InstalledPhaseInfo, 'id' | 'title' | 'name' | 'context' | 'role'>;
+
+export interface CardContextSession {
+  context: string;
+  label: string;
+  ref: WorkItemSessionRef;
+  /** The card's current phase runs in this context. */
+  current: boolean;
+}
+
+const KNOWN_CONTEXTS = ['triage', 'work', 'review', 'plan', 'chat'] as const;
+
+const CONTEXT_LABELS: Readonly<Record<string, string>> = lazyLabels(
+  KNOWN_CONTEXTS,
+  context => `board:sessionContext.${context}`,
+);
+
+/** A phase's name, translated for built-in boards when the board is known. */
+export function phaseLabel(phase: Pick<ContextPhase, 'id' | 'title' | 'name'>, boardId?: string): string {
+  const fallback = phase.name ?? phase.title;
+  return boardId === undefined ? fallback : phaseTitle(boardId, phase.id, fallback);
+}
+
+/** The session context a phase runs in; `role` is its deprecated name. */
+export function phaseContext(phase: Pick<ContextPhase, 'context' | 'role'>): string | undefined {
+  return phase.context ?? phase.role;
+}
+
+/** A context named after its one phase, else by its well-known name, else by its key. */
+export function contextLabel(
+  context: string,
+  phases: readonly ContextPhase[] | undefined,
+  boardId?: string,
+): string {
+  const running = phases?.filter(phase => phaseContext(phase) === context) ?? [];
+  if (running.length === 1) return phaseLabel(running[0], boardId);
+  if (Object.hasOwn(CONTEXT_LABELS, context)) return CONTEXT_LABELS[context];
+  return context.charAt(0).toUpperCase() + context.slice(1);
+}
+
+/**
+ * The session a card holds in a context. Cards planned before Planning moved
+ * into `work` hold their planner under the old `plan` key, which stands in for
+ * `work` until the card gets a `work` session, unless a phase runs in `plan`.
+ */
+function contextSession(
+  item: Pick<WorkItem, 'sessions'>,
+  phases: readonly ContextPhase[],
+  context: string,
+): WorkItemSessionRef | undefined {
+  const legacyPlanner = context === 'work' && !phases.some(phase => phaseContext(phase) === 'plan');
+  return item.sessions[context] ?? (legacyPlanner ? item.sessions.plan : undefined);
+}
+
+/** Contexts holding a session, by the card's current phase first, then its most recently visited phases. */
+function visitedContexts(
+  item: Pick<WorkItem, 'sessions' | 'stageHistory'>,
+  phases: readonly ContextPhase[],
+  columnStage: string,
+): string[] {
+  const contexts: string[] = [];
+  for (const stage of [columnStage, ...item.stageHistory.map(entry => entry.stage).reverse()]) {
+    const phase = phases.find(candidate => candidate.id === stage);
+    const context = phase && phaseContext(phase);
+    if (context !== undefined && contextSession(item, phases, context) && !contexts.includes(context)) {
+      contexts.push(context);
+    }
+  }
+  return contexts;
+}
+
+/**
+ * Every session a card holds, one per context: the context its current phase
+ * runs in first, then the contexts of its most recently visited phases, then
+ * the rest. A session filed under two keys is listed once, under the first.
+ */
+export function cardContextSessions(
+  item: Pick<WorkItem, 'sessions' | 'stageHistory'>,
+  phases: readonly ContextPhase[] | undefined,
+  columnStage: string,
+  boardId?: string,
+): CardContextSession[] {
+  const currentPhase = phases?.find(phase => phase.id === columnStage);
+  const currentContext = currentPhase && phaseContext(currentPhase);
+  const visited = phases ? visitedContexts(item, phases, columnStage) : [];
+  const order = [...new Set([...visited, ...Object.keys(item.sessions)])];
+  const seen = new Set<string>();
+  return order.flatMap(context => {
+    const ref = (phases && contextSession(item, phases, context)) ?? item.sessions[context];
+    if (!ref) return [];
+    const key = `${ref.sessionId}:${ref.threadId}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ context, label: contextLabel(context, phases, boardId), ref, current: context === currentContext }];
+  });
+}
+
+/**
+ * The session a card opens: its current phase's context, else the context of
+ * the phase it last visited. Without a board catalog, or when no visited phase
+ * holds a session, it keeps the lifecycle order of `itemThreadSession`.
+ */
+export function cardThreadSession(
+  item: Pick<WorkItem, 'sessions' | 'stageHistory'>,
+  phases: readonly ContextPhase[] | undefined,
+  columnStage: string,
+): WorkItemSessionRef | undefined {
+  const context = phases && visitedContexts(item, phases, columnStage)[0];
+  if (phases === undefined || context === undefined) return itemThreadSession(item.sessions);
+  return contextSession(item, phases, context);
 }
 
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */

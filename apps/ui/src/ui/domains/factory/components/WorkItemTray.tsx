@@ -1,10 +1,15 @@
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
+import type { CardContextSession } from '../boardItems';
 import { itemBoard } from '../boardStages';
+import type { ReworkReason } from '../reworkReason';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { factoryAttentionTargetPath } from '../services/attention';
 import type { WorkItem } from '../services/workItems';
 import { CardSourceDescription, useSourceDescription } from './BoardCardDetails';
+import { CardSessions } from './CardSessions';
 import { CommentComposer } from './feed/CommentComposer';
 import { CommentList } from './feed/CommentList';
 import type { FeedUser } from './feed/CommentList';
@@ -21,6 +26,8 @@ export function WorkItemTray({
   highlightCommentId,
   events,
   actors,
+  contextSessions,
+  rework,
 }: {
   item: WorkItem;
   factoryId: string;
@@ -31,6 +38,8 @@ export function WorkItemTray({
   highlightCommentId?: string;
   events: AuditEvent[];
   actors: Record<string, AuditActorProfile>;
+  contextSessions: readonly CardContextSession[];
+  rework?: ReworkReason;
 }) {
   const factoryProjectId = factoryId || undefined;
   const [quote, setQuote] = useState<CommentQuoteDraft>();
@@ -57,6 +66,8 @@ export function WorkItemTray({
               projectRepositoryId={projectRepositoryId}
               factoryProjectId={factoryProjectId}
             />
+            {rework && <WhyItMovedBack rework={rework} />}
+            <CardSessions factoryId={factoryId} sessions={contextSessions} />
           </div>
         }
         commentUrl={commentId =>
@@ -80,5 +91,25 @@ export function WorkItemTray({
         />
       </div>
     </>
+  );
+}
+
+function WhyItMovedBack({ rework }: { rework: ReworkReason }) {
+  const { t } = useTranslation('board');
+  return (
+    <section aria-label={t('rework.sectionLabel')} className="flex flex-col gap-1">
+      <Txt as="h4" variant="eyebrow" tone="muted" className="m-0">
+        {t('rework.title', { phase: rework.fromLabel })}
+      </Txt>
+      {rework.reason ? (
+        <MarkdownRenderer className="text-foreground text-caption max-w-none [&>*:first-child]:mt-0">
+          {rework.reason}
+        </MarkdownRenderer>
+      ) : (
+        <Txt variant="meta" tone="muted" className="m-0">
+          {t(`rework.movedBy.${rework.movedBy}`)}
+        </Txt>
+      )}
+    </section>
   );
 }

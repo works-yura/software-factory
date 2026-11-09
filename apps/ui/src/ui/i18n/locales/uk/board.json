@@ -172,7 +172,8 @@
     "userSessions": "Сесії користувачів",
     "sessions": "Сесії",
     "open": "Відкрити: {{label}}",
-    "openRelated": "Відкрити {{label}}: {{title}}"
+    "openRelated": "Відкрити {{label}}: {{title}}",
+    "cardNowIn": "картка зараз на етапі «{{phase}}»"
   },
   "automationSettings": {
     "title": "Налаштування автоматизації",
@@ -372,5 +373,34 @@
     "loadFailed": "Не вдалося завантажити дошку",
     "actionFailed": "Не вдалося виконати дію на дошці",
     "columns": "Стовпці дошки"
+  },
+  "sessionContext": {
+    "triage": "Розбір",
+    "work": "Робота",
+    "review": "Перевірка",
+    "plan": "Планування",
+    "chat": "Чат"
+  },
+  "cardSessions": {
+    "title": "Сесії",
+    "current": "поточна",
+    "running": "працює"
+  },
+  "exitTool": {
+    "description": "Етап «{{phase}}» завершується, коли {{tool}} виконується успішно. {{approval}}",
+    "personApproves": "Його схвалює людина.",
+    "autoApprovesMatching": "Для відповідних карток він схвалюється автоматично.",
+    "autoApproves": "Він схвалюється автоматично."
+  },
+  "rework": {
+    "backFrom": "Повернуто з етапу «{{phase}}»",
+    "backFromWithReason": "Повернуто з етапу «{{phase}}»: {{reason}}",
+    "sectionLabel": "Чому картку повернули",
+    "title": "Чому картку повернули з етапу «{{phase}}»",
+    "movedBy": {
+      "human": "Повернула людина",
+      "agent": "Повернув агент",
+      "system": "Повернула Factory"
+    }
   }
 }

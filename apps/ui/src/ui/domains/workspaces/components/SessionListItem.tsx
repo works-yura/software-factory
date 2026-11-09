@@ -42,6 +42,7 @@ export function SessionListItem({
   return (
     <SessionNavRow
       name={row.name}
+      label={row.contextLabel}
       url={row.url}
       source={row.source}
       active={row.active}
