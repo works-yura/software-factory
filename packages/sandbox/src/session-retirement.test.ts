@@ -20,6 +20,8 @@ import { SourceControlStorageInMemory } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { LocalFactorySandbox } from './local-factory-sandbox.ts';
 import { SessionRetirementCoordinator } from './session-retirement.ts';
+import { workItemFolder } from './work-item-folder.ts';
+import type { WorkItemFolders } from './work-item-folder.ts';
 import {
   __clearSessionSandboxesForTests,
   getSessionSandbox,
@@ -1236,6 +1238,233 @@ describe('SessionRetirementCoordinator.retireSession on a LocalFactorySandbox', 
       await expect(readFile(join(root, other.id, 'repo', 'a.txt'), 'utf8')).resolves.toBe('x');
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// A card's sessions share one folder: it outlives a retired or deleted session
+// while the card still has another one, and goes with the card or its last session.
+describe('SessionRetirementCoordinator with a card folder on a LocalFactorySandbox', () => {
+  const CARD_BRANCH = 'factory/item-item-1';
+
+  async function cardFolderSetup() {
+    const root = await mkdtemp(join(tmpdir(), 'factory-card-'));
+    const log = join(root, 'teardown.log');
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage, `echo torn >> ${log}`);
+    const make = (branch: string, userId = 'user-1') =>
+      storage.sessions.create({
+        sessionId: randomUUID(),
+        projectRepositoryId: 'repo-link-1',
+        orgId: 'org-1',
+        userId,
+        branch,
+        baseBranch: 'main',
+      } as CreateSourceControlSessionInput);
+    // Triage runs on the card's branch; work was started on its own branch and bound to the card.
+    const triage = await make(CARD_BRANCH);
+    const work = await make('user/session-work');
+    const folder = workItemFolder({ factoryProjectId: 'project-1', branch: CARD_BRANCH, workItemId: 'item-1' });
+    const bound = new Set([triage.sessionId, work.sessionId]);
+    const folders: WorkItemFolders = {
+      forSession: async session =>
+        session.branch === CARD_BRANCH || bound.has(session.sessionId) ? folder : undefined,
+      boundSessionIds: async () => [...bound],
+    };
+    const local = new LocalFactorySandbox({ root });
+    const open = async (session: SourceControlSession) => {
+      const sandbox = local.create({ sessionId: session.id, workItemFolder: folder.key, getRepositoryAccess: undefined });
+      getSessionSandbox(session.id, 'acme/repo', () => sandbox, undefined, folder);
+      await sandbox.start();
+      return sandbox;
+    };
+    const directory = local.workItemFolderPath(folder.key);
+    await mkdir(join(directory, 'repo'), { recursive: true });
+    await writeFile(join(directory, 'repo', 'findings.md'), 'triage findings');
+    const coordinator = new SessionRetirementCoordinator({ sandbox: local, workItemFolders: folders });
+    const teardowns = async () => (await readFile(log, 'utf8').catch(() => '')).split('\n').filter(Boolean).length;
+    const folderExists = async () =>
+      readFile(join(directory, 'repo', 'findings.md'), 'utf8').then(
+        () => true,
+        () => false,
+      );
+    return { root, storage, triage, work, folder, directory, open, coordinator, teardowns, folderExists };
+  }
+
+  it("roots every session of the card in the card's folder", async () => {
+    const setup = await cardFolderSetup();
+    try {
+      const triage = await setup.open(setup.triage);
+      const work = await setup.open(setup.work);
+      expect(triage.workingDirectory).toBe(setup.directory);
+      expect(work.workingDirectory).toBe(setup.directory);
+      expect(setup.directory).toBe(join(setup.root, 'work-items', 'project-1', 'factory-item-item-1'));
+    } finally {
+      await rm(setup.root, { recursive: true, force: true });
+    }
+  });
+
+  it("stops a retired session's sandbox and keeps the card's folder for its other sessions", async () => {
+    const setup = await cardFolderSetup();
+    try {
+      const triage = await setup.open(setup.triage);
+      const work = await setup.open(setup.work);
+
+      await setup.coordinator.retireSession({
+        sourceControl: setup.storage,
+        orgId: 'org-1',
+        sessionId: setup.triage.sessionId,
+        deleteSession: false,
+      });
+
+      expect(triage.status).toBe('stopped');
+      expect(work.status).toBe('running');
+      expect(peekSessionSandbox(setup.triage.id)).toBeUndefined();
+      expect(await setup.folderExists()).toBe(true);
+      expect(await setup.teardowns()).toBe(0);
+    } finally {
+      await rm(setup.root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the folder while another session of the card is left, and its last deleted session takes it, torn down once', async () => {
+    const setup = await cardFolderSetup();
+    try {
+      await setup.open(setup.triage);
+      const work = await setup.open(setup.work);
+
+      await setup.coordinator.retireSession({
+        sourceControl: setup.storage,
+        orgId: 'org-1',
+        sessionId: setup.work.sessionId,
+        deleteSession: true,
+      });
+      expect(work.status).toBe('stopped');
+      expect(await setup.folderExists()).toBe(true);
+      expect(await setup.teardowns()).toBe(0);
+
+      await setup.coordinator.retireSession({
+        sourceControl: setup.storage,
+        orgId: 'org-1',
+        sessionId: setup.triage.sessionId,
+        deleteSession: true,
+      });
+      expect(await setup.folderExists()).toBe(false);
+      expect(await setup.teardowns()).toBe(1);
+      expect(await setup.storage.sessions.getBySessionId(setup.triage.sessionId)).toBeNull();
+    } finally {
+      await rm(setup.root, { recursive: true, force: true });
+    }
+  });
+
+  it('releases the folder exactly once when every session of the card is deleted at once', async () => {
+    const setup = await cardFolderSetup();
+    try {
+      await setup.open(setup.triage);
+      await setup.open(setup.work);
+
+      await Promise.all(
+        [setup.triage, setup.work].map(session =>
+          setup.coordinator.retireSession({
+            sourceControl: setup.storage,
+            orgId: 'org-1',
+            sessionId: session.sessionId,
+            deleteSession: true,
+          }),
+        ),
+      );
+
+      expect(await setup.folderExists()).toBe(false);
+      expect(await setup.teardowns()).toBe(1);
+    } finally {
+      await rm(setup.root, { recursive: true, force: true });
+    }
+  });
+
+  it("tears a finished card's folder down once, removes it, and retires each of its sessions", async () => {
+    const setup = await cardFolderSetup();
+    try {
+      const triage = await setup.open(setup.triage);
+      const work = await setup.open(setup.work);
+      const invalidated: string[] = [];
+      const coordinator = new SessionRetirementCoordinator({
+        sandbox: new LocalFactorySandbox({ root: setup.root }),
+        workItemFolders: { forSession: async () => setup.folder, boundSessionIds: async () => [] },
+        invalidateSession: sessionId => {
+          invalidated.push(sessionId);
+        },
+      });
+
+      await coordinator.retireWorkItemSessions({
+        workItems: { get: async () => null },
+        sourceControl: setup.storage,
+        orgId: 'org-1',
+        workItemId: 'item-1',
+        sessionIds: [setup.triage.sessionId, setup.work.sessionId],
+      });
+
+      expect(await setup.teardowns()).toBe(1);
+      expect(await setup.folderExists()).toBe(false);
+      expect([triage.status, work.status]).toEqual(['stopped', 'stopped']);
+      expect(invalidated.sort()).toEqual([setup.triage.sessionId, setup.work.sessionId].sort());
+      expect(peekSessionSandbox(setup.triage.id)).toBeUndefined();
+      // Finishing the card keeps its sessions: only their sandboxes go.
+      expect(await setup.storage.sessions.getBySessionId(setup.work.sessionId)).not.toBeNull();
+    } finally {
+      await rm(setup.root, { recursive: true, force: true });
+    }
+  });
+
+  it('still deletes a session whose card cannot be told apart, touching no card folder', async () => {
+    const setup = await cardFolderSetup();
+    try {
+      const warn = vi.fn();
+      const coordinator = new SessionRetirementCoordinator({
+        sandbox: new LocalFactorySandbox({ root: setup.root }),
+        workItemFolders: {
+          forSession: async () => {
+            throw new Error('bound to several work items');
+          },
+          boundSessionIds: async () => [],
+        },
+        warn,
+      });
+
+      await coordinator.retireSession({
+        sourceControl: setup.storage,
+        orgId: 'org-1',
+        sessionId: setup.work.sessionId,
+        deleteSession: true,
+      });
+
+      expect(await setup.storage.sessions.getBySessionId(setup.work.sessionId)).toBeNull();
+      expect(await setup.folderExists()).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        'Factory card folder of a session could not be resolved',
+        expect.objectContaining({ error: 'bound to several work items' }),
+      );
+    } finally {
+      await rm(setup.root, { recursive: true, force: true });
+    }
+  });
+
+  it("removes a finished card's folder that no session of this process holds (after a restart)", async () => {
+    const setup = await cardFolderSetup();
+    try {
+      await setup.coordinator.retireWorkItemSessions({
+        workItems: { get: async () => null },
+        sourceControl: setup.storage,
+        orgId: 'org-1',
+        workItemId: 'item-1',
+        sessionIds: [setup.triage.sessionId],
+        folders: [setup.folder],
+      });
+
+      expect(await setup.folderExists()).toBe(false);
+      // Nothing here set the folder up, so nothing here tears it down.
+      expect(await setup.teardowns()).toBe(0);
+    } finally {
+      await rm(setup.root, { recursive: true, force: true });
     }
   });
 });

@@ -15,6 +15,8 @@ import type {
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
 import { timedPhase } from '@factory/observability';
+import type { FactoryWorkspaceSandboxContext } from './local-factory-sandbox.ts';
+import type { WorkItemFolder } from './work-item-folder.ts';
 import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder, repositoryDirectoryName } from './workdir.ts';
 
 /**
@@ -54,7 +56,7 @@ export type FactorySandboxContext = CoreFactorySandboxContext;
  * A FactorySandbox instance (for example `new LocalFactorySandbox({ root })`)
  * additionally exposes settings and template builds to the environment.
  */
-export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => MastraSandbox;
+export type MastraFactorySandboxConfig = (ctx: FactoryWorkspaceSandboxContext) => MastraSandbox;
 
 /**
  * The `sandbox` option of `MastraFactoryConfig`: a FactorySandbox instance
@@ -133,9 +135,32 @@ interface SessionSandboxEntry {
   ownRepo: string;
   /** Environment repositories in position order; the session's own repository is among them. */
   repos?: string[];
+  /**
+   * The card folder this session works in (`work-items/<factory>/<card
+   * branch>`), shared with every other session of the card. Absent for a
+   * session with a folder of its own. Recorded so retirement acts on the
+   * folder the sandbox actually runs in.
+   */
+  folder?: WorkItemFolder;
 }
 
 const sessionSandboxes = new Map<string, SessionSandboxEntry>();
+
+/**
+ * The session already holds a started sandbox in another folder than the one
+ * it resolves to now: it was opened before it was bound to its card. Its
+ * checkout is not moved behind its back; the error names what to do.
+ */
+export class WorkItemFolderChangedError extends Error {
+  constructor(sessionId: string, from: string | undefined, to: string | undefined) {
+    super(
+      `Factory session ${sessionId} is running in ${from ? `card folder ${from}` : 'a folder of its own'} but now works ${
+        to ? `card folder ${to}` : 'no card'
+      }. Stop the session (or restart the server) so it reopens in its card's folder.`,
+    );
+    this.name = 'WorkItemFolderChangedError';
+  }
+}
 
 /** One environment repository as the file readers see it. */
 export interface SessionLayoutRepository {
@@ -185,9 +210,18 @@ export function getSessionSandbox(
   repoFullName: string,
   construct: () => WorkspaceSandbox,
   repos?: string[],
+  folder?: WorkItemFolder,
 ): SessionSandboxEntry {
   const existing = sessionSandboxes.get(sessionId);
-  if (existing) {
+  if (existing && existing.folder?.key !== folder?.key) {
+    // Bound to its card after its sandbox was built. A never-started instance
+    // holds nothing on disk, so it is rebuilt in the right folder; a started
+    // one is refused rather than silently kept in the old folder.
+    if (existing.sandbox.status !== 'pending') {
+      throw new WorkItemFolderChangedError(sessionId, existing.folder?.key, folder?.key);
+    }
+    sessionSandboxes.delete(sessionId);
+  } else if (existing) {
     // The environment can change between boots; the layout follows the latest.
     if (repos) existing.repos = repos;
     return existing;
@@ -199,6 +233,7 @@ export function getSessionSandbox(
     ownRepo: repoFullName,
     ...(local ? { workdir: local } : {}),
     ...(repos ? { repos } : {}),
+    ...(folder ? { folder } : {}),
   };
   sessionSandboxes.set(sessionId, entry);
   return entry;
@@ -264,6 +299,31 @@ export function peekSessionSandbox(sessionId: string): SessionSandboxEntry | und
   return sessionSandboxes.get(sessionId);
 }
 
+/** Every session of this process working in the card folder `folder`, with its memoized sandbox. */
+export function peekWorkItemFolderSessions(folder: string): Array<{ sessionId: string; entry: SessionSandboxEntry }> {
+  return [...sessionSandboxes]
+    .filter(([, entry]) => entry.folder?.key === folder)
+    .map(([sessionId, entry]) => ({ sessionId, entry }));
+}
+
+const folderLocks = new Map<string, Promise<unknown>>();
+
+/**
+ * Run `work` while no other work holds the card folder `folder` in this
+ * process. The sessions of a card share one checkout: their setups (clone,
+ * branch, setup commands) and the folder's release must not interleave.
+ */
+export async function withWorkItemFolderLock<T>(folder: string, work: () => Promise<T>): Promise<T> {
+  const previous = folderLocks.get(folder) ?? Promise.resolve();
+  const current = previous.catch(() => {}).then(work);
+  folderLocks.set(folder, current);
+  try {
+    return await current;
+  } finally {
+    if (folderLocks.get(folder) === current) folderLocks.delete(folder);
+  }
+}
+
 /** Drop the memoized instance (on stop/destroy/retirement or construction failure). */
 export function evictSessionSandbox(sessionId: string): void {
   sessionSandboxes.delete(sessionId);
@@ -273,6 +333,7 @@ export function evictSessionSandbox(sessionId: string): void {
 /** Test-only: reset the process-wide memo between tests. */
 export function __clearSessionSandboxesForTests(): void {
   sessionSandboxes.clear();
+  folderLocks.clear();
   failedSetupCommands.clear();
 }
 

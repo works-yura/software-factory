@@ -1,6 +1,7 @@
 import { FactorySandbox } from '@mastra/core/workspace';
-import type { FactorySandboxContext, MastraSandbox } from '@mastra/core/workspace';
+import type { MastraSandbox } from '@mastra/core/workspace';
 
+import type { FactoryWorkspaceSandboxContext } from './local-factory-sandbox.ts';
 import type { MastraFactorySandboxConfig } from './session-sandbox.ts';
 
 /**
@@ -18,7 +19,8 @@ export class CallbackFactorySandbox extends FactorySandbox<Record<string, never>
     this.#callback = callback;
   }
 
-  create(ctx: FactorySandboxContext): MastraSandbox {
+  /** The callback receives the card folder too (`workItemFolder`); sharing it across sessions is the host's call. */
+  create(ctx: FactoryWorkspaceSandboxContext): MastraSandbox {
     return this.#callback(ctx);
   }
 }

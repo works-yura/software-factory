@@ -10,6 +10,7 @@ import type { IntegrationTools } from '@factory/integrations';
 import type { AgentSession } from '@factory/harness';
 import { buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 import { USER_SESSION_BRANCH_PREFIX } from '@factory/session';
+import { CardSessionRunningError, runningCardSession } from '@factory/session';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.ts';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
@@ -89,6 +90,12 @@ export interface FactorySessionToolDependencies {
     resourceId: string;
     title: string;
   }) => Promise<AgentSession | undefined>;
+  /**
+   * Whether a session is running now, whichever harness runs it. A role does
+   * not start on a card while another of its sessions runs: they share the
+   * card's one sandbox folder. Without it the check is skipped.
+   */
+  isSessionRunning?: (sessionId: string) => boolean;
 }
 
 const LISTED_MODELS = 8;
@@ -457,6 +464,8 @@ export function createFactorySessionTools(
         `${label} already has a ${role} session ${seated.sessionId}; message it with factory_signal_session.`,
       );
     }
+    const running = deps.isSessionRunning && runningCardSession(item.sessions, undefined, deps.isSessionRunning);
+    if (running) throw new CardSessionRunningError(role, running);
 
     const parent = await deps.sessions.getBySessionId(scope.sessionId);
     const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);

@@ -145,7 +145,7 @@ import { BoardWriteError, BoardWrites, FactoryTransitionService, ProjectBoardCac
 import type { BoardWriter } from '@factory/runtime';
 import type { ProjectBoardSource } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
-import { CallbackFactorySandbox } from '@factory/sandbox';
+import { CallbackFactorySandbox, LocalFactorySandbox } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
 import { peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
@@ -162,6 +162,7 @@ import { hydrateSessionDefaultModel } from '@factory/session';
 import { environmentSlugs, resolveSessionRepositories } from '@factory/session';
 import { FactoryEnvironmentStateProcessor } from '@factory/sandbox';
 import { createSourceControlSessionLookup } from '@factory/session';
+import { createWorkItemFolders, workItemFolderForCard } from '@factory/session';
 import { observeSessionFilesystem } from '@factory/session';
 import { observeSessionFirstExec } from '@factory/session';
 import { observeSessionFirstMessage } from '@factory/session';
@@ -1108,32 +1109,45 @@ export class MastraFactory {
     let removeClaudeSessionConfig: ((sessionId: string) => Promise<void>) | undefined;
     // Set with it too: a side session of a Claude Code Factory is a Claude Code session.
     let createClaudeSideSession: FactoryToolDependencies['createHarnessSession'];
+    // Every session's run state, whichever harness runs it; assigned with the routes.
+    let liveSessionRegistry: LiveSessions | undefined;
+    // One sandbox folder per card, shared by the card's role sessions: the
+    // workspace, retirement and the Claude Code checkout all derive it here.
+    // Only the local sandbox shares disk between sessions; a host's own
+    // sandbox keeps one sandbox per session, as before.
+    const workItemFolders =
+      sandboxConfig instanceof LocalFactorySandbox
+        ? createWorkItemFolders(workItemsReady ? { workItems: workItemsStorage } : {})
+        : undefined;
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
             onSessionDeleted: sessionId => removeClaudeSessionConfig?.(sessionId),
             sandbox: sandboxConfig,
+            ...(workItemFolders ? { workItemFolders } : {}),
           })
         : undefined;
+    // A card that is done or deleted takes its sandbox folder with it: torn
+    // down once, removed, and every session of the card retired.
+    const retireWorkItemSandboxes = sessionRetirement
+      ? async (item: Card) => {
+          await sessionRetirement.retireWorkItemSessions({
+            workItems: workItemsStorage,
+            sourceControl: sessionId => sourceControlSessions.getSourceControlBySessionId(sessionId),
+            orgId: item.orgId,
+            workItemId: item.id,
+            sessionIds: Object.values(item.sessions).map(session => session.sessionId),
+            ...(workItemFolders ? { folders: [workItemFolderForCard(item)] } : {}),
+          });
+        }
+      : undefined;
     const retireTerminalSessions =
-      sessionRetirement && workItemsReady
+      retireWorkItemSandboxes && workItemsReady
         ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) => {
             const item = await workItemsStorage.get({ orgId, id: workItemId });
             if (!item) return;
-            const sessionIds = [...new Set(Object.values(item.sessions).map(session => session.sessionId))];
-            await Promise.all(
-              sessionIds.map(async sessionId => {
-                const sourceControl = await sourceControlSessions.getSourceControlBySessionId(sessionId);
-                if (!sourceControl) return;
-                await sessionRetirement.retireSession({
-                  sourceControl,
-                  orgId,
-                  sessionId,
-                  deleteSession: false,
-                });
-              }),
-            );
+            await retireWorkItemSandboxes(item);
           }
         : undefined;
     // Terminal-stage cleanup: ingest any trailing tool results from the item's
@@ -1314,6 +1328,8 @@ export class MastraFactory {
       startCoordinator: () => this.#startCoordinator,
       createHarnessSession: async input => createClaudeSideSession?.(input),
       messaging: factoryMessaging,
+      // The live-session registry is built with the routes; no session runs before then.
+      isSessionRunning: sessionId => liveSessionRegistry?.isRunning(sessionId) ?? false,
     };
     // Proactive environment builds exist only when the sandbox can build
     // templates on its own; the workflow is registered on the host's Mastra
@@ -1420,6 +1436,7 @@ export class MastraFactory {
           }
         : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
+      ...(retireWorkItemSandboxes ? { releaseWorkItemSandboxes: retireWorkItemSandboxes } : {}),
       ...(workItemsReady
         ? {
             workItems: workItemsStorage,
@@ -1549,6 +1566,7 @@ export class MastraFactory {
       ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
       ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
       workspaceRegistry,
+      ...(workItemFolders ? { workItemFolders } : {}),
     });
 
     // The brokered source-control tools (push, change requests, reviews, test checks): one build for both harnesses,
@@ -2331,7 +2349,7 @@ export class MastraFactory {
           ...assembleFactoryApiRoutes({
             controllerId: CONTROLLER_ID,
             controller,
-            liveSessions: liveSessionsTouchingTheFeed(eventBus, controller, claudeLiveSessions),
+            liveSessions: (liveSessionRegistry = liveSessionsTouchingTheFeed(eventBus, controller, claudeLiveSessions)),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,

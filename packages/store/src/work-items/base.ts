@@ -3469,6 +3469,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return toBinding(rows[0]!);
   }
 
+  /**
+   * The work items this session was ever bound to, active or revoked, each
+   * once. A session works one card, so more than one is a broken invariant
+   * the caller reports rather than picks from.
+   */
+  async listWorkItemIdsForSession(input: {
+    orgId: string;
+    factoryProjectId: string;
+    sessionId: string;
+  }): Promise<string[]> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+      session_id: input.sessionId,
+    });
+    return [...new Set(rows.map(row => String(row.work_item_id)))].sort();
+  }
+
   /** Whether this session was ever bound to a run, on any thread and whether or not the binding was revoked. */
   async hasRunBindingForSession(input: {
     orgId: string;

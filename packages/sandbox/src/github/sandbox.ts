@@ -463,6 +463,13 @@ export interface SessionBranchOptions {
   pullRequestNumber?: number;
   /** A GitLab merge-request card's session starts on the MR head instead of the base tip. */
   mergeRequestNumber?: number;
+  /**
+   * The checkout is a card's shared folder: a session branch it does not hold
+   * yet starts at the checkout's current branch (an earlier role's), carrying
+   * its commits and uncommitted work, instead of at the base tip. A checkout
+   * still on the base branch, or detached, starts at the base tip as usual.
+   */
+  inheritCheckout?: boolean;
 }
 
 /**
@@ -541,6 +548,8 @@ export interface SyncEnvironmentRepositoryOptions {
   repoFullName: string;
   cloneUrl?: string;
   authUsername?: string;
+  /** The checkout is a card's shared folder: see {@link SessionBranchOptions.inheritCheckout}. */
+  inheritCheckout?: boolean;
 }
 
 export interface EnvironmentSyncResult {
@@ -623,8 +632,18 @@ export async function syncEnvironmentRepository(
 
   // A checkout on any other branch stays where it is: it may hold work the
   // remote never saw. The default branch and a detached HEAD (the template
-  // image pinned at its build commit) become the session branch.
-  if (currentBranch && currentBranch !== defaultBranch) return kept;
+  // image pinned at its build commit) become the session branch. In a card's
+  // shared folder that other branch is an earlier role's: the session branch
+  // continues from it.
+  if (currentBranch && currentBranch !== defaultBranch) {
+    if (!options.inheritCheckout) return kept;
+    const inherit = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch], {
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment inherited branch',
+    });
+    if (inherit.exitCode === 0) return { outcome: 'created', branch };
+    throw classifyGitFailure(inherit, 'pull-failed');
+  }
   if (currentBranch) {
     const status = await execute(sandbox, 'git', ['-C', workdir, 'status', '--porcelain']);
     if (status.exitCode !== 0) throw classifyGitFailure(status, 'pull-failed');
@@ -773,6 +792,17 @@ async function checkoutSessionBranchImpl(
       if (isBlockedByLocalWork(checkout)) return;
       throw classifyGitFailure(checkout, 'clone-failed');
     }
+    return;
+  }
+
+  const currentBranch = current.exitCode === 0 ? current.stdout.trim() : '';
+  if (options.inheritCheckout && currentBranch && currentBranch !== baseBranch) {
+    // A later role of the card: continue from the branch the earlier role left.
+    const inherit = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch], {
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'inherited branch checkout',
+    });
+    if (inherit.exitCode !== 0) throw classifyGitFailure(inherit, 'clone-failed');
     return;
   }
 

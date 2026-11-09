@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   localRoot: null as string | null,
   /** When false, the stub models a provider with no separate physical id (undefined `sandboxId`). */
   physicalId: true,
-  createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
+  createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string; workItemFolder?: string }) => {
     // Models a well-behaved provider: lazy start via ensureRunning() on the
     // first command/info call (coalesced, failures never latch), the hook
     // installed through setOnStart invoked inside start() with outcome
@@ -35,7 +35,9 @@ const mocks = vi.hoisted(() => ({
       sandboxId: mocks.physicalId ? (ctx.sandboxId ?? `vm-${ctx.sessionId}`) : undefined,
       provider: mocks.localRoot ? 'local' : 'stub',
       status: 'pending',
-      ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
+      ...(mocks.localRoot
+        ? { workingDirectory: `${mocks.localRoot}/${ctx.workItemFolder ?? ctx.sessionId}` }
+        : {}),
       setOnStart: vi.fn((update: (previous: typeof onStart) => NonNullable<typeof onStart>) => {
         onStart = update(onStart);
       }),
@@ -140,7 +142,8 @@ vi.mock('@factory/sandbox', async importOriginal => ({
 import { MaterializeError, SetupCommandError } from '@factory/sandbox';
 import { createGithubSubscriptionTools } from '@factory/integration-github';
 import { requireGithubTokenInjector } from '@factory/integration-github';
-import { CallbackFactorySandbox } from '@factory/sandbox';
+import { CallbackFactorySandbox, peekSessionSandbox, workItemFolder } from '@factory/sandbox';
+import type { WorkItemFolders } from '@factory/sandbox';
 import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
@@ -1050,6 +1053,7 @@ describe('GitHub session workspace preparation', () => {
     rootPrefix = 'mastracode-web-local-sessions-',
     workspaceRegistry?: FactoryWorkspaceRegistry,
     skillOverrides?: SkillOverridesStorage,
+    workItemFolders?: WorkItemFolders,
   ) {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), rootPrefix));
     tempDirs.push(root);
@@ -1064,6 +1068,7 @@ describe('GitHub session workspace preparation', () => {
       } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
       ...(skillOverrides ? { skillOverrides } : {}),
+      ...(workItemFolders ? { workItemFolders } : {}),
     });
     return {
       root,
@@ -1125,6 +1130,55 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it("works every role session of a card in the card's one folder, continuing from its checkout", async () => {
+    const folder = workItemFolder({ factoryProjectId: 'factory-1', branch: 'factory/item-card-1', workItemId: 'card-1' });
+    const forSession = vi.fn(async (session: { sessionId: string; branch: string }) =>
+      session.branch === folder.branch || session.sessionId === 'session-work' ? folder : undefined,
+    );
+    const { root, workspace } = await createLocalFactory(undefined, undefined, undefined, {
+      forSession,
+      boundSessionIds: async () => [],
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    // Triage runs on the card's branch; work was started on its own branch and bound to the card.
+    addSession({ id: 'session-triage', branch: folder.branch, factoryProjectId: 'factory-1' });
+    addSession({ id: 'session-work', branch: 'user/session-work', factoryProjectId: 'factory-1' });
+    addSession({ id: 'session-chat', branch: 'feature-chat', factoryProjectId: 'factory-1' });
+
+    for (const id of ['session-triage', 'session-work', 'session-chat']) {
+      await workspace({ requestContext: createGithubRequestContext('project-1', id) });
+    }
+
+    expect(forSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-work', orgId: 'org-1', factoryProjectId: 'factory-1' }),
+    );
+    expect(mocks.createSandbox.mock.calls.map(([ctx]) => [ctx.sessionId, ctx.workItemFolder])).toEqual([
+      ['session-triage', folder.key],
+      ['session-work', folder.key],
+      ['session-chat', undefined],
+    ]);
+    const cardCheckout = path.join(root, folder.key, 'hello');
+    expect(mocks.materializeRepo.mock.calls.map(([input]) => (input as any).row.sandboxWorkdir)).toEqual([
+      cardCheckout,
+      cardCheckout,
+      path.join(root, 'session-chat', 'hello'),
+    ]);
+    // A role session's branch starts where the card's checkout is; a session of its own starts at the base.
+    expect(mocks.checkoutSessionBranch).toHaveBeenNthCalledWith(
+      2,
+      expect.any(Object),
+      cardCheckout,
+      expect.objectContaining({ branch: 'user/session-work', inheritCheckout: true }),
+    );
+    expect(mocks.checkoutSessionBranch).toHaveBeenNthCalledWith(
+      3,
+      expect.any(Object),
+      path.join(root, 'session-chat', 'hello'),
+      expect.not.objectContaining({ inheritCheckout: true }),
+    );
+    expect(peekSessionSandbox('session-work')?.folder).toEqual(folder);
   });
 
   it('materializes a GitLab-backed session through its provider storage and clone URL', async () => {

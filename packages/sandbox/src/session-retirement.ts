@@ -1,3 +1,5 @@
+import { access } from 'node:fs/promises';
+
 import type { FactorySandbox, WorkspaceSandbox } from '@mastra/core/workspace';
 
 import { destroyDetachedSessionSandbox, releaseSessionSandbox } from './github/sandbox-release.ts';
@@ -11,9 +13,23 @@ import type {
 import type { WorkItemsStorage } from '@factory/store';
 import { LocalFactorySandbox } from './local-factory-sandbox.ts';
 import { requireExec } from './materialization.ts';
-import { clearFailedSetupCommands, evictSessionSandbox, peekSessionSandbox } from './session-sandbox.ts';
+import {
+  clearFailedSetupCommands,
+  evictSessionSandbox,
+  peekSessionSandbox,
+  peekWorkItemFolderSessions,
+  withWorkItemFolderLock,
+} from './session-sandbox.ts';
+import type { WorkItemFolder, WorkItemFolders } from './work-item-folder.ts';
 
 type WarningLogger = (message: string, details: Record<string, unknown>) => void;
+
+/** A session's sandbox and recorded teardown, captured before its retirement drops them. */
+interface CapturedTeardown {
+  session: SourceControlSession;
+  entry: ReturnType<typeof peekSessionSandbox>;
+  environment: ReturnType<typeof peekSessionEnvironmentTeardown>;
+}
 
 export interface SessionRetirementCoordinatorOptions {
   invalidateSession?: (sessionId: string) => Promise<void> | void;
@@ -28,6 +44,13 @@ export interface SessionRetirementCoordinatorOptions {
   warn?: WarningLogger;
   /** How long recreate waits on a started sandbox's lifecycle destroy before falling back. */
   destroyTimeoutMs?: number;
+  /**
+   * Where the sessions of a card work. A session in its card's shared folder
+   * is only stopped when it retires; the folder goes when the card reaches its
+   * terminal stage or is deleted, or when its last session is deleted. Without
+   * it every session has a folder of its own.
+   */
+  workItemFolders?: WorkItemFolders;
 }
 
 export interface RecreateSessionSandboxInput {
@@ -84,6 +107,7 @@ export class SessionRetirementCoordinator {
   readonly #sandbox: FactorySandbox | undefined;
   readonly #warn: WarningLogger;
   readonly #destroyTimeoutMs: number;
+  readonly #workItemFolders: WorkItemFolders | undefined;
   readonly #locks = new Map<string, Promise<unknown>>();
 
   constructor(options: SessionRetirementCoordinatorOptions = {}) {
@@ -92,6 +116,7 @@ export class SessionRetirementCoordinator {
     this.#sandbox = options.sandbox;
     this.#warn = options.warn ?? ((message, details) => console.warn(`[Factory] ${message}`, details));
     this.#destroyTimeoutMs = options.destroyTimeoutMs ?? DEFAULT_DESTROY_TIMEOUT_MS;
+    this.#workItemFolders = options.workItemFolders;
   }
 
   async retireSession(input: RetireSessionInput): Promise<void> {
@@ -134,23 +159,70 @@ export class SessionRetirementCoordinator {
     }
   }
 
+  /**
+   * Retire every session of a card that is done (its terminal stage) or
+   * deleted: the card's shared folders are torn down once each and removed,
+   * then each session is retired. `sourceControl` is the handle every session
+   * of the card resolves through, or a lookup per session. `folders` adds card
+   * folders no listed session names (the card's own branch).
+   */
   async retireWorkItemSessions(options: {
     workItems: Pick<WorkItemsStorage, 'get'>;
-    sourceControl: SourceControlStorageHandle;
+    sourceControl:
+      | SourceControlStorageHandle
+      | ((sessionId: string) => Promise<SourceControlStorageHandle | null | undefined>);
     orgId: string;
     workItemId: string;
+    /** The card's sessions, when the card is already gone from storage. */
+    sessionIds?: string[];
+    folders?: WorkItemFolder[];
   }): Promise<void> {
-    const item = await options.workItems.get({ orgId: options.orgId, id: options.workItemId });
-    if (!item) return;
-    const sessionIds = [...new Set(Object.values(item.sessions).map(session => session.sessionId))];
+    let sessionIds = options.sessionIds;
+    if (!sessionIds) {
+      const item = await options.workItems.get({ orgId: options.orgId, id: options.workItemId });
+      if (!item) return;
+      sessionIds = Object.values(item.sessions).map(session => session.sessionId);
+    }
+    const handleFor = async (sessionId: string) =>
+      typeof options.sourceControl === 'function' ? await options.sourceControl(sessionId) : options.sourceControl;
+    const sessions: Array<{ sourceControl: SourceControlStorageHandle; session: SourceControlSession }> = [];
+    for (const sessionId of new Set(sessionIds)) {
+      const sourceControl = await handleFor(sessionId);
+      const session = await sourceControl?.sessions.getBySessionId(sessionId);
+      if (sourceControl && session && session.orgId === options.orgId) sessions.push({ sourceControl, session });
+    }
+
+    const folders = new Map<string, WorkItemFolder>();
+    for (const folder of options.folders ?? []) folders.set(folder.key, folder);
+    for (const { session } of sessions) {
+      try {
+        const folder = peekSessionSandbox(session.id)?.folder ?? (await this.#folderOf(session));
+        if (folder) folders.set(folder.key, folder);
+      } catch (error) {
+        this.#warn('Factory card folder of a session could not be resolved', {
+          orgId: session.orgId,
+          sessionId: session.sessionId,
+          error: boundedError(error),
+        });
+      }
+    }
+    // Each folder once: its teardown commands run in it while a session's
+    // sandbox can still run them, then its sessions stop and the folder goes.
+    for (const folder of folders.values()) {
+      const lead = sessions.find(({ session }) => peekSessionSandbox(session.id)?.folder?.key === folder.key);
+      try {
+        await this.#releaseFolder(
+          folder,
+          lead && { sourceControl: lead.sourceControl, teardown: this.#captureTeardown(lead.session) },
+        );
+      } catch (error) {
+        this.#warn('Factory card folder release failed', { folder: folder.key, error: boundedError(error) });
+      }
+    }
+
     await Promise.all(
-      sessionIds.map(sessionId =>
-        this.retireSession({
-          sourceControl: options.sourceControl,
-          orgId: options.orgId,
-          sessionId,
-          deleteSession: false,
-        }),
+      sessions.map(({ sourceControl, session }) =>
+        this.retireSession({ sourceControl, orgId: options.orgId, sessionId: session.sessionId, deleteSession: false }),
       ),
     );
   }
@@ -181,8 +253,36 @@ export class SessionRetirementCoordinator {
     const session = await input.sourceControl.sessions.getBySessionId(input.sessionId);
     if (!session || session.orgId !== input.orgId) return;
 
+    // The folder its sandbox was built in wins over a fresh derivation: that is where its processes run.
+    const memo = peekSessionSandbox(session.id);
+    let folder = memo?.folder;
     try {
-      await this.#teardownSessionSandbox(input, session);
+      folder ??= await this.#folderOf(session);
+    } catch (error) {
+      // A session whose card cannot be told apart still retires, as a session
+      // of its own: no card folder is touched for it.
+      this.#warn('Factory card folder of a session could not be resolved', {
+        orgId: session.orgId,
+        sessionId: session.sessionId,
+        error: boundedError(error),
+      });
+    }
+    // Captured before invalidation, which drops the memo and the recorded environment.
+    const teardown = folder ? this.#captureTeardown(session) : undefined;
+    try {
+      if (!folder) await this.#teardownSessionSandbox(input, session);
+      // A card's folder outlives a retired session: only its sandbox stops.
+      else if (!input.deleteSession) await this.#stopSandbox(session, teardown?.entry?.sandbox);
+      // The folder it had of its own before cards shared one, unless it moved into the card's.
+      if (folder && this.#sandbox instanceof LocalFactorySandbox) {
+        await this.#sandbox.removeLegacySessionFolder(session.id).catch((error: unknown) =>
+          this.#warn('Factory legacy session folder removal failed', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            error: boundedError(error),
+          }),
+        );
+      }
     } finally {
       await this.#invalidate(session);
 
@@ -199,7 +299,143 @@ export class SessionRetirementCoordinator {
             error: boundedError(error),
           });
         }
+        if (folder) await this.#releaseFolderOfDeletedSession(input, session, folder, teardown!);
       }
+    }
+  }
+
+  /** The card folder the session works in, derived from the session and its card. */
+  async #folderOf(session: SourceControlSession): Promise<WorkItemFolder | undefined> {
+    if (!this.#workItemFolders) return undefined;
+    return this.#workItemFolders.forSession({
+      sessionId: session.sessionId,
+      orgId: session.orgId,
+      factoryProjectId: session.factoryProjectId,
+      branch: session.branch,
+    });
+  }
+
+  /** What tearing a session's folder down needs, read while this process still holds it. */
+  #captureTeardown(session: SourceControlSession): CapturedTeardown {
+    return {
+      session,
+      entry: peekSessionSandbox(session.id),
+      environment: peekSessionEnvironmentTeardown(session.sessionId),
+    };
+  }
+
+  /**
+   * A session of a card's folder was deleted. Its row is gone, so when no
+   * other session works in the folder (on the card branch, or bound to the
+   * card) the folder goes too, torn down once; otherwise only its sandbox
+   * stops. Checked under the folder's lock after the row is gone, so of
+   * several sessions deleted at once the last one releases the folder.
+   */
+  async #releaseFolderOfDeletedSession(
+    input: RetireSessionInput,
+    session: SourceControlSession,
+    folder: WorkItemFolder,
+    teardown: CapturedTeardown,
+  ): Promise<void> {
+    try {
+      await withWorkItemFolderLock(folder.key, async () => {
+        if (await this.#folderHasOtherSessions(input, session, folder)) {
+          await this.#stopSandbox(session, teardown.entry?.sandbox);
+          return;
+        }
+        await this.#releaseFolderLocked(folder, { sourceControl: input.sourceControl, teardown });
+      });
+    } catch (error) {
+      this.#warn('Factory card folder release failed', {
+        orgId: session.orgId,
+        sessionId: session.sessionId,
+        folder: folder.key,
+        error: boundedError(error),
+      });
+    }
+  }
+
+  /** Whether a session other than `session` still works in `folder`: on the card branch, or bound to the card. */
+  async #folderHasOtherSessions(
+    input: RetireSessionInput,
+    session: SourceControlSession,
+    folder: WorkItemFolder,
+  ): Promise<boolean> {
+    const onBranch = await input.sourceControl.sessions.listByFactoryBranch({
+      factoryProjectId: folder.factoryProjectId,
+      branch: folder.branch,
+    });
+    if (onBranch.some(other => other.sessionId !== session.sessionId)) return true;
+    const bound = (await this.#workItemFolders?.boundSessionIds({ orgId: input.orgId, folder })) ?? [];
+    for (const sessionId of bound) {
+      if (sessionId === session.sessionId) continue;
+      const other = await input.sourceControl.sessions.getBySessionId(sessionId);
+      // A session whose card cannot be resolved counts as still there: the folder is kept, never lost.
+      if (other && (await this.#folderOf(other).catch(() => folder))?.key === folder.key) return true;
+    }
+    return false;
+  }
+
+  /** Tear a card's folder down once and remove it; see {@link #releaseFolderLocked}. */
+  async #releaseFolder(
+    folder: WorkItemFolder,
+    lead: { sourceControl: SourceControlStorageHandle; teardown: CapturedTeardown } | undefined,
+  ): Promise<void> {
+    await withWorkItemFolderLock(folder.key, () => this.#releaseFolderLocked(folder, lead));
+  }
+
+  /**
+   * Tear a card's folder down once and remove it, under its lock. The
+   * teardown commands run in the `lead` session's sandbox, which works in the
+   * folder; with none from this process nothing here set the folder up, so it
+   * is only removed, as a detached local session's directory is. Every
+   * sandbox of the folder stops before it goes.
+   */
+  async #releaseFolderLocked(
+    folder: WorkItemFolder,
+    lead: { sourceControl: SourceControlStorageHandle; teardown: CapturedTeardown } | undefined,
+  ): Promise<void> {
+    // A folder already gone (released by the card's other deleted session)
+    // has nothing left to tear down.
+    const present =
+      this.#sandbox instanceof LocalFactorySandbox
+        ? await access(this.#sandbox.workItemFolderPath(folder.key)).then(
+            () => true,
+            () => false,
+          )
+        : true;
+    if (present && lead?.teardown.entry?.folder?.key === folder.key) {
+      await this.#runTeardownCommands(lead, lead.teardown);
+    }
+    const stopping = new Set<WorkspaceSandbox>();
+    if (lead?.teardown.entry?.folder?.key === folder.key) stopping.add(lead.teardown.entry.sandbox);
+    for (const { sessionId, entry } of peekWorkItemFolderSessions(folder.key)) {
+      evictSessionSandbox(sessionId);
+      stopping.add(entry.sandbox);
+    }
+    for (const sandbox of stopping) await this.#stopSandbox(undefined, sandbox);
+    if (this.#sandbox instanceof LocalFactorySandbox) {
+      try {
+        await this.#sandbox.removeWorkItemFolder(folder.key);
+      } catch (error) {
+        this.#warn('Factory card folder removal failed', { folder: folder.key, error: boundedError(error) });
+      }
+    }
+  }
+
+  /** Stop a sandbox, logging a failure; the session (when given) leaves this process's memo first. */
+  async #stopSandbox(session: SourceControlSession | undefined, sandbox: WorkspaceSandbox | undefined): Promise<void> {
+    if (session && peekSessionSandbox(session.id)?.sandbox === sandbox) evictSessionSandbox(session.id);
+    if (!sandbox) return;
+    const lifecycle = sandbox as unknown as { _stop?: () => Promise<void>; stop?: () => Promise<void> };
+    try {
+      await (lifecycle._stop ? lifecycle._stop.call(sandbox) : lifecycle.stop?.call(sandbox));
+    } catch (error) {
+      this.#warn('Factory session sandbox stop failed', {
+        ...(session ? { orgId: session.orgId, sessionId: session.sessionId } : {}),
+        sandbox: sandbox.id,
+        error: boundedError(error),
+      });
     }
   }
 
@@ -209,13 +445,23 @@ export class SessionRetirementCoordinator {
       await this.#destroyDetachedSandbox(input, session);
       return;
     }
+    await this.#runTeardownCommands(input, this.#captureTeardown(session));
+    await this.#releaseSandbox(input, session);
+  }
 
-    // A session booted from its factory environment tears every repository
-    // down in position order, each in its own directory; a failure is logged
-    // and the next repository still runs.
-    const environmentTeardown = peekSessionEnvironmentTeardown(session.sessionId);
-    if (environmentTeardown.length > 0) {
-      for (const repo of environmentTeardown) {
+  /**
+   * Run the session's teardown commands in its sandbox. A session booted
+   * from its factory environment tears every repository down in position
+   * order, each in its own directory; a failure is logged and the next
+   * repository still runs.
+   */
+  async #runTeardownCommands(
+    input: { sourceControl: SourceControlStorageHandle },
+    { session, entry, environment }: CapturedTeardown,
+  ): Promise<void> {
+    if (!entry) return;
+    if (environment.length > 0) {
+      for (const repo of environment) {
         try {
           await runTeardownCommand(requireExec(entry.sandbox), repo.dir, repo.command, {
             timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
@@ -230,14 +476,13 @@ export class SessionRetirementCoordinator {
           });
         }
       }
-      await this.#releaseSandbox(input, session);
       return;
     }
 
     let projectRepository: ProjectRepository | null | undefined;
     try {
       projectRepository = session.projectRepositoryId
-        ? await input.sourceControl.projectRepositories.get({ orgId: input.orgId, id: session.projectRepositoryId })
+        ? await input.sourceControl.projectRepositories.get({ orgId: session.orgId, id: session.projectRepositoryId })
         : null;
     } catch (error) {
       this.#warn('Factory repository settings could not be loaded for session retirement', {
@@ -264,8 +509,6 @@ export class SessionRetirementCoordinator {
         });
       }
     }
-
-    await this.#releaseSandbox(input, session);
   }
 
   /**

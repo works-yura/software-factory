@@ -1102,6 +1102,30 @@ describe('factory_start_session in work-item mode', () => {
     }
   });
 
+  it("refuses a role while another of the card's sessions runs in the card's shared folder, creating nothing", async () => {
+    const env = await withItem();
+    await env.bindOther('running-session');
+    const rowsBefore = await env.sessionRows();
+    const running = new Set(['running-session']);
+    const tools = createFactorySessionTools(env.scope, { ...env.deps, isSessionRunning: id => running.has(id) });
+    const start = (input: Record<string, unknown>) =>
+      (tools.factory_start_session as unknown as { execute: (i: unknown, c: unknown) => Promise<unknown> }).execute(
+        input,
+        {},
+      );
+
+    await expect(start({ prompt: 'Review it.', workItem: env.item.id, role: 'review' })).rejects.toThrow(
+      "The card's work session running-session is still running, and every session of a card works in the card's one sandbox folder.",
+    );
+    expect(env.prepare).not.toHaveBeenCalled();
+    expect(await env.sessionRows()).toEqual(rowsBefore);
+
+    running.clear();
+    await expect(start({ prompt: 'Review it.', workItem: env.item.id, role: 'review' })).resolves.toMatchObject({
+      role: 'review',
+    });
+  });
+
   it("refuses a role the item's board doesn't seat", async () => {
     const { start, item, prepare } = await withItem();
     await expect(start({ prompt: 'Go.', workItem: item.id, role: 'deploy' })).rejects.toThrow(

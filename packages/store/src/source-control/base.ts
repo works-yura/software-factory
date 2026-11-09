@@ -561,6 +561,12 @@ export interface SourceControlStorageHandle {
     }): Promise<SourceControlSession | null>;
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
+    /**
+     * Every session of the factory on `branch`, whoever owns it and on whichever
+     * link, regardless of visibility. For internal flows only (a card's shared
+     * sandbox folder and its lifetime); never expose directly to a viewer.
+     */
+    listByFactoryBranch(args: { factoryProjectId: string; branch: string }): Promise<SourceControlSession[]>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
     setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
     /**
@@ -1635,6 +1641,12 @@ export class SourceControlStorage extends FactoryStorageDomain {
             branch: args.branch,
           });
           return row ? toSession(row) : null;
+        },
+        listByFactoryBranch: async ({ factoryProjectId, branch }) => {
+          const rows = await db().findMany<SessionDbRow>(SESSIONS, { factory_project_id: factoryProjectId, branch });
+          // Same integration scoping as `getBySessionId`: the tables are shared across providers.
+          const linked = await Promise.all(rows.map(row => getProjectRepositoryById(row.project_repository_id)));
+          return rows.filter((_, index) => linked[index]).map(toSession);
         },
         create: async input => {
           const link = await requireProjectRepositoryById(input.projectRepositoryId);

@@ -9,8 +9,8 @@ rules/resolve.test.ts	core/src/rules/resolve.test.ts	-1	built-in handler case mo
 rules/validation.test.ts	core/src/rules/validation.test.ts	+4	regression: every rejection code, approval_required included; upstream #29353: route events, close reasons and activity signals validated (+3)
 boards/review.test.ts	pipelines/src/review/board.test.ts	0	session-branch refresh case ported from upstream c3a2784881; upstream #29039: board transitions as phase config (-1)
 boards/work.test.ts	pipelines/src/work/board.test.ts	-4	work spanning several repositories: Done waits for every open change request; upstream #29039: board transitions as phase config (-5)
-work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts	+2	Linear/Jira identifier branches dropped with the vocabulary (-1); per-item GitHub suffix cases ported from upstream c3a2784881 (+3)
-storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts	-1	upstream #28889: the board poll reads the list cache without cloning (+1); upstream #29059: org-wide claims dropped, claim cases folded into one per-project case (-3); upstream #28959: card storage split into work and board items (+1)
+work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts	+4	Linear/Jira identifier branches dropped with the vocabulary (-1); per-item GitHub suffix cases ported from upstream c3a2784881 (+3); one sandbox folder per card: isWorkItemBranch (+2)
+storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts	0	upstream #28889: the board poll reads the list cache without cloning (+1); upstream #29059: org-wide claims dropped, claim cases folded into one per-project case (-3); upstream #28959: card storage split into work and board items (+1); one sandbox folder per card: the cards a session was bound to (+1)
 storage/domains/work-items/attention-events.test.ts	store/src/work-items/attention-events.test.ts
 storage/domains/audit/base.test.ts	store/src/audit/base.test.ts	+3	forward paging (`after`) ported from upstream f3bc1caddb
 storage/domains/audit/actions.test.ts	store/src/audit/actions.test.ts
@@ -21,7 +21,7 @@ storage/domains/comments/feed-context.test.ts	store/src/comments/feed-context.te
 rules/transition-service.test.ts	runtime/src/transition-service.test.ts	+19	upstream #28604: a phase that auto-approves submit_plan lets the planner move on; upstream #28978: pull requests reviewed on the Work board (+10); upstream #29039: board transitions as phase config (+8)
 rules/terminal-cleanup.test.ts	runtime/src/terminal-cleanup.test.ts
 rules/decision-applicability.test.ts	runtime/src/decision-applicability.test.ts	+3	upstream #28721: decisions held for Work's shared context (+3)
-rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+28	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3); upstream #28971: a deleted project files no linked card and frees the claims its cards hold (+2); upstream #29109: outside authors' cards follow the person's gesture and phase conditions instead of a hard-coded refusal (3 rewritten, +1 split); upstream #28978: pull requests reviewed on the Work board (+2); upstream #29059: claims dropped (claim-release case from #28971 and the Linear renamed-issue cases removed) (-2); upstream #29228: the idle dispatcher sleeps, wakes on claimable work, rechecks hourly (+6); upstream #29494: a finished card still in the legacy table is reused when its issue reopens (GitLab instead of Linear) (+1); upstream #29597: the review status comment through queued, reviewing, retrying and the final result, its reporter never failing a review (+12); upstream #29353: a route move waits for the card run without a slot, a terminal move does not (+2)
+rules/dispatcher.test.ts	runtime/src/dispatcher.test.ts	+29	a failure only a person can fix (the card's repository) stops at once (+1); upstream #28604: auto-start and auto-approved submit_plan by phase (+3); upstream #28971: a deleted project files no linked card and frees the claims its cards hold (+2); upstream #29109: outside authors' cards follow the person's gesture and phase conditions instead of a hard-coded refusal (3 rewritten, +1 split); upstream #28978: pull requests reviewed on the Work board (+2); upstream #29059: claims dropped (claim-release case from #28971 and the Linear renamed-issue cases removed) (-2); upstream #29228: the idle dispatcher sleeps, wakes on claimable work, rechecks hourly (+6); upstream #29494: a finished card still in the legacy table is reused when its issue reopens (GitLab instead of Linear) (+1); upstream #29597: the review status comment through queued, reviewing, retrying and the final result, its reporter never failing a review (+12); upstream #29353: a route move waits for the card run without a slot, a terminal move does not (+2); one sandbox folder per card: a role waits for the card's run in another session (+1)
 session/run-audit.test.ts	runtime/src/run-audit.test.ts
 skills/service.test.ts	runtime/src/skills/service.test.ts	-1	the two skill-cache rescan cases moved to harness-mastra/src/harness.test.ts with the Mastra harness adapter (-2); formatSkillMessage case ported from upstream a5a9179daa (+1)
 storage/domains/channel-identity/base.test.ts	store/src/channel-identity/base.test.ts
@@ -35,7 +35,7 @@ storage/domains/model-defaults/base.test.ts	store/src/model-defaults/base.test.t
 storage/domains/projects/base.test.ts	store/src/projects/base.test.ts	+2	one model scope: the scope round-trip cases become one "no scope" case (-1); harness and Claude Code model round-trip (+1); stored tool permissions parse and round-trip (+2)
 storage/domains/queue-health/base.test.ts	store/src/queue-health/base.test.ts
 secret-encryption.test.ts	store/src/secret-encryption.test.ts
-storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts
+storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts	+1	one sandbox folder per card: sessions of a factory on a branch (+1)
 auth-seam.test.ts	server/src/auth-seam.test.ts	-7	WorkOS env fallback, isWorkOSAuth/getWorkOSProvider and Studio custom-domain cases dropped with @mastra/auth-workos and @mastra/auth-studio (-8); /auth/me provider report (+1)
 auth.test.ts	auth/src/auth.test.ts	-1	WorkOS env fallback cases replaced by explicit-provider selection (3 cases → 2)
 environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule.test.ts
@@ -58,7 +58,7 @@ integrations/github/routes.test.ts	integration-github/src/routes.test.ts	+11	con
 integrations/github/rules.test.ts	server/src/integrations/github/rules.test.ts	+46	edited Factory verdict cases ported from upstream f7d8e6bb96; upstream #29109: GithubRules with intake routes (+12); upstream #28978: pull requests reviewed on the Work board (+14); upstream #29230: triage runs once (+1); upstream #28959: card storage split into work and board items (+1); upstream #28960: normalized source facts filed apart from process state (+1); upstream #29248: a replayed opening the card already records writes nothing (+1); upstream #29353: close, reopen and activity events through intake routes and activity signals (+13)
 integrations/github/sandbox-release.test.ts	sandbox/src/github/sandbox-release.test.ts
 integrations/github/sandbox-scenario.test.ts	sandbox/src/github/sandbox-scenario.test.ts
-integrations/github/sandbox.git.test.ts	sandbox/src/github/sandbox.git.test.ts	+1	git identity matrix ported from upstream ca08ed414a; its provider block lives in integration-github/src/git-identity.git.test.ts
+integrations/github/sandbox.git.test.ts	sandbox/src/github/sandbox.git.test.ts	+3	git identity matrix ported from upstream ca08ed414a; its provider block lives in integration-github/src/git-identity.git.test.ts; one sandbox folder per card: a role branch continues the card checkout (+2)
 integrations/github/sandbox.test.ts	sandbox/src/github/sandbox.test.ts
 integrations/github/session-subscriptions.test.ts	integration-github/src/session-subscriptions.test.ts
 integrations/github/stale-reviews.test.ts	integration-github/src/stale-reviews.test.ts
@@ -111,7 +111,7 @@ routes/supervisor.test.ts	api/src/supervisor.test.ts
 routes/surface.test.ts	api/src/surface.test.ts	+2	work spanning several repositories: a card naming no repository dispatches across the environment; ambiguity only without one; upstream #28721: a replacement work board has only its own lanes (+1)
 routes/telemetry.test.ts	api/src/telemetry.test.ts
 routes/tenant-credentials.test.ts	credentials/src/tenant-credentials.test.ts	+1	upstream #29519: unavailable credential storage retried every 15 s, not per request (+1)
-routes/work-items.test.ts	api/src/work-items.test.ts	+3	upstream #28604: the board catalog sends autoStart/exitTool conditions; upstream #28823: phase skill in the board catalog (+1); upstream #28961: card responses expose source facts apart from board metadata (+1)
+routes/work-items.test.ts	api/src/work-items.test.ts	+5	upstream #28604: the board catalog sends autoStart/exitTool conditions; upstream #28823: phase skill in the board catalog (+1); upstream #28961: card responses expose source facts apart from board metadata (+1); one sandbox folder per card: Start refused while another card session runs, card delete releases the folder (+2)
 rules/automation-stamping.test.ts	runtime/src/automation-stamping.test.ts
 rules/binding-context.test.ts	session/src/binding-context.test.ts
 rules/bindings.test.ts	runtime/src/bindings.test.ts
@@ -124,9 +124,9 @@ rules/start-coordinator.scenario.test.ts	harness-mastra/src/rules/start-coordina
 rules/start-coordinator.test.ts	harness-mastra/src/rules/start-coordinator.test.ts	0	owner-default (user scope) case removed with the personal model scope; a card naming no repository runs in any environment session (+1)
 rules/tools.test.ts	harness-mastra/src/rules/tools.test.ts	+1	work spanning several repositories: self-review records a head per repository; upstream #28978: pull requests reviewed on the Work board (+1); upstream #29039: board transitions as phase config (-1)
 sandbox/callback-factory-sandbox.test.ts	sandbox/src/callback-factory-sandbox.test.ts
-sandbox/local-factory-sandbox.test.ts	sandbox/src/local-factory-sandbox.test.ts
-sandbox/session-retirement.test.ts	sandbox/src/session-retirement.test.ts	+9	upstream 7e428dc80e resetSessionSandbox (+7), v4 local-sandbox reset probe (+1), host cleanup after a session is deleted (+1)
-sandbox/session-sandbox.test.ts	sandbox/src/session-sandbox.test.ts
+sandbox/local-factory-sandbox.test.ts	sandbox/src/local-factory-sandbox.test.ts	+4	one sandbox folder per card: card folder, shared destroy, legacy folder move, containment (+4)
+sandbox/session-retirement.test.ts	sandbox/src/session-retirement.test.ts	+16	upstream 7e428dc80e resetSessionSandbox (+7), v4 local-sandbox reset probe (+1), host cleanup after a session is deleted (+1); one sandbox folder per card: shared folder lifetime (+7)
+sandbox/session-sandbox.test.ts	sandbox/src/session-sandbox.test.ts	+3	one sandbox folder per card: folder memo, rebuild, lock (+3)
 sandbox/workdir.test.ts	sandbox/src/workdir.test.ts
 server-error.test.ts	http/src/server-error.test.ts
 session/channel-reply-processor.test.ts	session/src/channel-reply-processor.test.ts
@@ -172,10 +172,10 @@ tools/read-tools.test.ts	harness-mastra/src/tools/read-tools.test.ts
 tools/reports.test.ts	harness-mastra/src/tools/reports.test.ts
 tools/run-watch.test.ts	harness-mastra/src/tools/run-watch.test.ts
 tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
-tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	+2	hybrid scope cases removed with the personal model scope; upstream #28721: the old plan role still starts (+1); side and role sessions on Claude Code
+tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	+3	hybrid scope cases removed with the personal model scope; upstream #28721: the old plan role still starts (+1); side and role sessions on Claude Code; one sandbox folder per card: role refused while another card session runs (+1)
 tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts	+1	upstream #29519: one batch of queries per step however many cards a session follows (+1)
 tools/work-item-tools.test.ts	harness-mastra/src/tools/work-item-tools.test.ts
-workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/mastra/factory-skills (+1); upstream #29042: project skill edits in session workspaces (+6); workosId owner case dropped with the workosId field (-1)
+workspace.test.ts	harness-mastra/src/workspace.test.ts	+7	upstream #28838: src/mastra/factory-skills (+1); upstream #29042: project skill edits in session workspaces (+6); workosId owner case dropped with the workosId field (-1); one sandbox folder per card: role sessions share the card folder (+1)
 ../../internal-workspace/src/file-commands.test.ts	internal-workspace/src/file-commands.test.ts
 ../../internal-workspace/src/repo-clone.test.ts	internal-workspace/src/repo-clone.test.ts
 ../../internal-workspace/src/setup-marker.test.ts	internal-workspace/src/setup-marker.test.ts
@@ -185,7 +185,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/server/src/mastra/env-schema.test.ts	../apps/server/src/mastra/env-schema.test.ts
 ../../../apps/server/src/mastra/index.test.ts	../apps/server/src/mastra/index.test.ts	-12	Linear, Jira, incident.io, and Slack host wiring cases dropped with the integrations (-14); FACTORY_BROWSER wiring (+1); GitHub access-token wiring and App precedence (+2); WorkOS and MASTRA_SHARED_API_URL auth cases dropped (-4); auth selection: missing auth, MASTRACODE_AUTH_DISABLED, FACTORY_LOCAL_DEV_AUTH (+3)
 ../../../apps/server/src/mastra/production-boot-guards.test.ts	../apps/server/src/mastra/production-boot-guards.test.ts	+1	E2B provider replaced by FACTORY_SANDBOX_PROVIDER=local; a cloud provider value is refused (+1)
-../../../apps/server/src/mastra/sandbox-provider.test.ts	../apps/server/src/mastra/sandbox-provider.test.ts	-5	Platform and E2B sandbox selection cases dropped with @mastra/platform-workspace and @mastra/e2b (8 cases → local-only 3)
+../../../apps/server/src/mastra/sandbox-provider.test.ts	../apps/server/src/mastra/sandbox-provider.test.ts	-4	Platform and E2B sandbox selection cases dropped with @mastra/platform-workspace and @mastra/e2b (8 cases → local-only 3); one sandbox folder per card: card folder under the sandbox root (+1)
 ../../../apps/server/e2e/web/ask-user.scenario.test.ts	../apps/server/e2e/web/ask-user.scenario.test.ts
 ../../../apps/server/e2e/web/automated-chat.scenario.test.ts	../apps/server/e2e/web/automated-chat.scenario.test.ts
 ../../../apps/server/e2e/web/browser-tool-unavailable.scenario.test.ts	../apps/server/e2e/web/browser-tool-unavailable.scenario.test.ts

@@ -9,6 +9,7 @@ export { isReviewBoardPhase, reviewBoard } from './review/board.ts';
 export { hasRecordedVerdict, reviewPullRequest } from './review/phase-rules.ts';
 export type { ReviewBoardPhase } from './review/board.ts';
 export {
+  isWorkItemBranch,
   legacyGithubWorkItemBranch,
   mergeRequestNumberFromBranch,
   pullRequestNumberFromBranch,

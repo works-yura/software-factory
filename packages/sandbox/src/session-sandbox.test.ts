@@ -12,9 +12,13 @@ import {
   evictSessionSandbox,
   getSessionSandbox,
   peekSessionSandbox,
+  peekWorkItemFolderSessions,
   resolveSessionWorkdir,
   sessionLayout,
+  withWorkItemFolderLock,
+  WorkItemFolderChangedError,
 } from './session-sandbox.ts';
+import { workItemFolder } from './work-item-folder.ts';
 import type { SessionEnvironmentGate, SessionSetupGate } from './session-sandbox.ts';
 import { repositoryDirectoryName } from './workdir.ts';
 
@@ -162,6 +166,56 @@ describe('session sandbox memo', () => {
       }),
     ).toThrow('boom');
     expect(peekSessionSandbox('sess-1')).toBeUndefined();
+  });
+});
+
+describe('card folders in the session sandbox memo', () => {
+  const folder = workItemFolder({ factoryProjectId: 'p-1', branch: 'factory/item-1', workItemId: 'item-1' });
+  const sandbox = (id: string, status = 'pending') => ({ id, provider: 'test', status }) as unknown as WorkspaceSandbox;
+
+  it('lists the sessions of this process that work in a card folder', () => {
+    getSessionSandbox('triage', 'acme/api', () => sandbox('a'), undefined, folder);
+    getSessionSandbox('work', 'acme/api', () => sandbox('b'), undefined, folder);
+    getSessionSandbox('chat', 'acme/api', () => sandbox('c'));
+
+    expect(peekWorkItemFolderSessions(folder.key).map(({ sessionId }) => sessionId)).toEqual(['triage', 'work']);
+    expect(peekSessionSandbox('work')?.folder).toEqual(folder);
+  });
+
+  it("rebuilds a never-started sandbox in the card folder once the session is bound to its card, and refuses to move a started one", () => {
+    const first = getSessionSandbox('work', 'acme/api', () => sandbox('own'));
+    const rebuilt = getSessionSandbox('work', 'acme/api', () => sandbox('card'), undefined, folder);
+    expect(rebuilt).not.toBe(first);
+    expect(rebuilt.sandbox.id).toBe('card');
+    expect(rebuilt.folder).toEqual(folder);
+
+    getSessionSandbox('chat', 'acme/api', () => sandbox('running', 'running'));
+    expect(() => getSessionSandbox('chat', 'acme/api', () => sandbox('card'), undefined, folder)).toThrow(
+      WorkItemFolderChangedError,
+    );
+    expect(peekSessionSandbox('chat')?.sandbox.id).toBe('running');
+  });
+
+  it("runs one card folder's work at a time and leaves other folders alone", async () => {
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const first = withWorkItemFolderLock(folder.key, async () => {
+      order.push('first:start');
+      await new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      order.push('first:end');
+    });
+    const second = withWorkItemFolderLock(folder.key, async () => {
+      order.push('second');
+    });
+    await withWorkItemFolderLock('work-items/p-1/other', async () => {
+      order.push('other');
+    });
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(order).toEqual(['first:start', 'other', 'first:end', 'second']);
   });
 });
 

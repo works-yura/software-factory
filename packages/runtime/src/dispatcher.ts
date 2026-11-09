@@ -115,10 +115,19 @@ const RECONCILE_INTERVAL_MS = 30_000;
 class FactoryDecisionSuperseded extends Error {}
 
 /** The decision cannot act yet and did nothing: it goes back to the queue and is claimed again later. */
-class FactoryDecisionPostponed extends Error {}
+class FactoryDecisionPostponed extends Error {
+  readonly retryInMs: number;
+  constructor(retryInMs: number = POSTPONE_MS) {
+    super();
+    this.retryInMs = retryInMs;
+  }
+}
 
 // How often a decision that cannot act yet (a route move waiting on the card's run) is tried again.
 const POSTPONE_MS = 10_000;
+// How often a role waiting for the card's run in another session (they share the card's folder) is tried again:
+// that run is usually finishing its turn, so the wait is short.
+const CARD_RUN_POSTPONE_MS = 2_000;
 
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
 class RunEndedInError extends FactoryDispatchError {}
@@ -963,7 +972,7 @@ export class FactoryDecisionDispatcher {
       if (error instanceof FactoryDecisionPostponed) {
         await this.#storage.postponeDeferredDecision(
           leaseIdentity(record, this.#ownerId),
-          new Date(now.getTime() + POSTPONE_MS),
+          new Date(now.getTime() + error.retryInMs),
           new Date(),
         );
         return;
@@ -1192,6 +1201,13 @@ export class FactoryDecisionDispatcher {
         // for the live session, so a harness can answer what the earlier phase left parked (a plan).
         const refreshStart = decision.startsAfterOwnMove === true && !isAgentActor(record.approvedBy ?? undefined);
         const binding = await this.#requireOrPrepareBinding(record, decision.role, refreshStart);
+        // A card's sessions share one sandbox folder: a role waits, back in the
+        // queue, until the card's runs in its other sessions have ended. Checked
+        // once the role's session is known, since a role may continue in the
+        // session an earlier role ran in; preparing runs nothing in the folder.
+        if (await this.#cardRunInFlightElsewhere(record, binding.sessionId)) {
+          throw new FactoryDecisionPostponed(CARD_RUN_POSTPONE_MS);
+        }
         await this.#withBindingSkillRun(binding.id, async () => {
           const item = record.workItemId
             ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
@@ -2107,6 +2123,33 @@ export class FactoryDecisionDispatcher {
     if (open.length === 0) return false;
     if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
     return this.#harness.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
+  }
+
+  /**
+   * Whether a run is in flight on the card in a session other than `sessionId`.
+   * Every session of a card works in the card's one sandbox folder, so two
+   * roles never run there at once: the later one waits for the earlier to end.
+   * The same session's own runs are the per-binding wait's business. Sessions
+   * are looked up without switching their thread, so a live run is not
+   * disturbed by the check.
+   */
+  async #cardRunInFlightElsewhere(
+    record: Pick<FactoryDeferredDecisionRecord, 'orgId' | 'factoryProjectId' | 'workItemId'>,
+    sessionId: string | undefined,
+  ): Promise<boolean> {
+    if (!record.workItemId) return false;
+    const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
+    let active: Array<{ threadId: string }> | undefined;
+    for (const other of bindings) {
+      if (other.status !== 'active' || other.sessionId === sessionId) continue;
+      active ??= this.#harness.listActiveThreadRuns();
+      if (active.some(run => run.threadId === other.threadId)) return true;
+      const session = await this.#harness.getSession(other.sessionId);
+      if (!session) continue;
+      const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === other.id);
+      if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
+    }
+    return false;
   }
 
   /** Waits for the run in flight on `binding` to end, so a kickoff never overlaps it. */

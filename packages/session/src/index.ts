@@ -25,3 +25,4 @@ export * from './thread-session-stamp.ts';
 export * from './thread-title-mirror.ts';
 export * from './work-item-repository.ts';
 export * from './tool-permissions.ts';
+export * from './work-item-folders.ts';

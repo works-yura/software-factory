@@ -64,6 +64,7 @@ import type { FactoryStorageTestSeed } from '@factory/testing';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.ts';
+import type { WorkItemRoutesDeps } from './work-items.ts';
 
 // ── Test harness ─────────────────────────────────────────────────────────
 const PARKED_RUN = { toolName: 'ask_user', suspendedAt: 0 };
@@ -75,6 +76,7 @@ function buildApp(
   running: ReadonlySet<string> = new Set(),
   boardRegistry: BoardRegistry = createBoardRegistry(),
   parked: ReadonlySet<string> = new Set(),
+  releaseWorkItemSandboxes?: WorkItemRoutesDeps['releaseWorkItemSandboxes'],
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -104,6 +106,7 @@ function buildApp(
         parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
         parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
       },
+      ...(releaseWorkItemSandboxes ? { releaseWorkItemSandboxes } : {}),
     }).routes(),
   );
   return app;
@@ -1066,6 +1069,27 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     },
   );
 
+  it("refuses a role while another of the card's sessions runs in the card's shared sandbox folder", async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
+    const { workItem } = await created.json();
+    const prepare = vi.fn();
+    const busy = buildApp(orgUser, { prepare }, undefined, new Set(['session-1']));
+
+    const res = await busy.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(startBody(workItem.id)),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: 'card_session_running',
+      sessionId: 'session-1',
+      message: expect.stringContaining("The card's execute session session-1 is still running"),
+    });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
   it('rejects a start without a work item id', async () => {
     const prepare = vi.fn();
     const app = buildApp(orgUser, { prepare });
@@ -1094,6 +1118,30 @@ describe('DELETE /web/factory/work-items/:id', () => {
 
   it('404s for unknown or cross-org items', async () => {
     expect((await json('DELETE', `/web/factory/work-items/00000000-0000-4000-8000-000000000099`)).status).toBe(404);
+  });
+
+  it("releases the deleted card's shared sandbox folder, and stays deleted when that fails", async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
+    const { workItem } = await created.json();
+    const release = vi.fn(async () => {
+      throw new Error('folder busy');
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry(), new Set(), release).request(
+      `/web/factory/work-items/${workItem.id}`,
+      { method: 'DELETE' },
+    );
+
+    expect(res.status).toBe(200);
+    expect(release).toHaveBeenCalledWith(
+      expect.objectContaining({ id: workItem.id, sessions: expect.objectContaining({ execute: expect.anything() }) }),
+    );
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('sandbox folder'),
+      expect.objectContaining({ workItemId: workItem.id }),
+    );
+    expect(await listItems()).toHaveLength(0);
   });
 });
 

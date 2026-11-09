@@ -81,6 +81,22 @@ export function workItemBranch(item: WorkItemBranchInput): string {
   return `factory/item-${item.id}`;
 }
 
+/**
+ * Whether `branch` is a card branch {@link workItemBranch} names, carrying the
+ * card's identity (its id, or its per-item suffix). Sessions on such a branch
+ * work that card, whichever path opened them, so they share the card's
+ * sandbox folder. The pre-suffix GitHub branch (`factory/issue-12`) names a
+ * number only, which several repositories of one factory can hold at once, so
+ * it is not one: a session on it joins its card through the card's binding.
+ */
+export function isWorkItemBranch(branch: string): boolean {
+  return (
+    /^factory\/(?:issue|pr)-[1-9]\d*-[a-z0-9]{1,12}$/.test(branch) ||
+    /^factory\/gitlab-[a-z0-9._-]{1,60}-[a-z0-9]{1,12}$/.test(branch) ||
+    /^factory\/item-[A-Za-z0-9._-]+$/.test(branch)
+  );
+}
+
 /** The pre-suffix GitHub branch, for reusing sessions opened before card names were unique. */
 export function legacyGithubWorkItemBranch(branch: string): string | undefined {
   const match = /^(factory\/(?:issue|pr)-[1-9]\d*)-[a-z0-9]{1,12}$/.exec(branch);

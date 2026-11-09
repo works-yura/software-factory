@@ -26,6 +26,7 @@ import { FactoryStartTransitionError, WorkItemRepositoryError } from '@factory/h
 import type { FactoryTransitionRequest, FactoryTransitionService } from '@factory/runtime';
 import type { IntakeRoutesReader, WorkItemSource } from '@factory/core';
 import type { LiveSessions } from '@factory/session';
+import { CardSessionRunningError, runningCardSession } from '@factory/session';
 import { auditRequestOrigin } from '@factory/feed';
 import type { AuditEmitter } from '@factory/feed';
 import type { WorkItemCommentsStorage } from '@factory/store';
@@ -75,6 +76,12 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
   liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
+  /**
+   * Called once a card is deleted: its sandbox folder, shared by its sessions,
+   * is torn down and removed and its sessions stop. A failure is logged; the
+   * card stays deleted.
+   */
+  releaseWorkItemSandboxes?: (item: Card) => Promise<void>;
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
@@ -634,6 +641,14 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
           await workItems.ensureReady();
+          // The card's sessions share one sandbox folder: no second role starts while another one runs.
+          const card = input.workItem.id ? await workItems.get({ orgId: resolved.orgId, id: input.workItem.id }) : null;
+          const running =
+            card && runningCardSession(card.sessions, input.sessionId, sessionId => liveSessions.isRunning(sessionId));
+          if (running) {
+            const refused = new CardSessionRunningError(input.workItem.role, running);
+            return c.json({ error: refused.code, message: refused.message, sessionId: running.sessionId }, 409);
+          }
           let prepared: FactoryStartPreparedResult;
           try {
             prepared = await startCoordinator.prepare(input);
@@ -741,6 +756,14 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           await workItems.ensureReady();
           const deleted = await workItems.delete({ orgId: tenant.orgId, id });
           if (!deleted) return c.json({ error: 'Work item not found' }, 404);
+          if (this.deps.releaseWorkItemSandboxes) {
+            await this.deps.releaseWorkItemSandboxes(deleted).catch((error: unknown) => {
+              console.error('[Factory Work Items] Failed to release the deleted card\'s sandbox folder', {
+                workItemId: deleted.id,
+                error,
+              });
+            });
+          }
           await audit.emit({
             context: loose(c),
             input: {

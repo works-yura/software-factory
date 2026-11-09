@@ -155,6 +155,8 @@ export interface FactoryApiRoutesDeps {
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('@factory/sandbox').SessionRetirementCoordinator;
+  /** Releases a deleted card's sandbox folder and stops its sessions (see `WorkItemRoutes`). */
+  releaseWorkItemSandboxes?: (item: import('@factory/store').Card) => Promise<void>;
   /** Told when a session is deleted without a retirement coordinator (see `SourceControlSessionRoutes`). */
   onSessionDeleted?: (sessionId: string) => Promise<void> | void;
   /** Moves a thread with its observation vectors onto another memory resource. */
@@ -840,6 +842,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
+          ...(deps.releaseWorkItemSandboxes ? { releaseWorkItemSandboxes: deps.releaseWorkItemSandboxes } : {}),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards

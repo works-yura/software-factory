@@ -68,8 +68,8 @@ describe('entry host sandbox (src/mastra/index.ts)', () => {
     expect(factoryConfigs).toHaveLength(1);
     const host = factoryConfigs[0]?.sandbox;
     if (!isFactorySandbox(host)) throw new Error('entry factory config has no FactorySandbox');
-    return (ctx: Partial<FactorySandboxContext> & { sessionId: string }) =>
-      host.create({ getRepositoryAccess: undefined, ...ctx }, {});
+    return (ctx: Partial<FactorySandboxContext> & { sessionId: string; workItemFolder?: string }) =>
+      host.create({ getRepositoryAccess: undefined, ...ctx } as FactorySandboxContext, {});
   }
 
   it('creates a per-session LocalSandbox', { timeout: 60_000 }, async () => {
@@ -80,6 +80,20 @@ describe('entry host sandbox (src/mastra/index.ts)', () => {
     // `vi.resetModules()` reloads the entry's module graph, so provider classes
     // have a fresh identity — assert on the stable `provider` discriminator.
     expect(sandbox).toMatchObject({ provider: 'local' });
+  });
+
+  it("roots a card's sessions in the card's one folder under the sandbox root", { timeout: 60_000 }, async () => {
+    vi.stubEnv('MASTRACODE_LOCAL_SANDBOX_ROOT', '/tmp/factory-sandbox-provider-test');
+    const callback = await importSandboxCallback();
+
+    const folder = 'work-items/project-1/factory-issue-42-abc';
+    const triage = callback({ sessionId: 'session-triage', workItemFolder: folder }) as unknown as { workingDirectory: string };
+    const work = callback({ sessionId: 'session-work', workItemFolder: folder }) as unknown as { workingDirectory: string };
+    const own = callback({ sessionId: 'session-chat' }) as unknown as { workingDirectory: string };
+
+    expect(triage.workingDirectory).toBe(`/tmp/factory-sandbox-provider-test/${folder}`);
+    expect(work.workingDirectory).toBe(triage.workingDirectory);
+    expect(own.workingDirectory).toBe('/tmp/factory-sandbox-provider-test/session-chat');
   });
 
   it('stays local when platform credentials are configured', { timeout: 60_000 }, async () => {

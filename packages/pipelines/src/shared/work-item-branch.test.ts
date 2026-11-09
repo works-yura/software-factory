@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { workItemSource } from '@factory/core';
 
 import {
+  isWorkItemBranch,
+  legacyGithubWorkItemBranch,
   mergeRequestNumberFromBranch,
   pullRequestNumberFromBranch,
   workItemBranch,
@@ -140,5 +142,28 @@ describe('mergeRequestNumberFromBranch', () => {
     expect(mergeRequestNumberFromBranch('factory/gitlab-mr-6')).toBeUndefined();
     expect(mergeRequestNumberFromBranch('factory/gitlab-mr-6-unsafe!')).toBeUndefined();
     expect(mergeRequestNumberFromBranch('factory/pr-6')).toBeUndefined();
+  });
+});
+
+describe('isWorkItemBranch', () => {
+  it('accepts every branch workItemBranch names', () => {
+    const id = '9f1c3b2a-0000-4000-8000-000000000001';
+    const branches = [
+      workItemBranch({ id, source: 'github-issue', metadata: { githubIssueNumber: 42 } }),
+      workItemBranch({ id, source: 'github-pr', metadata: { githubPullRequestNumber: 7 } }),
+      workItemBranch({ id, source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 6 } }),
+      workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: 'Group/Proj#12' } }),
+      workItemBranch({ id, source: 'manual' }),
+      workItemBranch({ id, source: 'slack-thread' }),
+    ];
+    for (const branch of branches) expect(isWorkItemBranch(branch), branch).toBe(true);
+  });
+
+  it('rejects branches that do not name one card', () => {
+    const legacy = legacyGithubWorkItemBranch('factory/issue-42-000000000001');
+    expect(legacy).toBe('factory/issue-42');
+    for (const branch of [legacy!, 'user/session-1', 'main', 'factory/issue-0-abc', 'factory/item-', 'factory/item-a/b']) {
+      expect(isWorkItemBranch(branch), branch).toBe(false);
+    }
   });
 });

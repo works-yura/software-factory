@@ -188,4 +188,50 @@ describe('environment branch selection with real Git', () => {
     expect(await sync()).toEqual({ outcome: 'kept', branch: 'other-work' });
     expect(git(checkout, 'rev-parse', 'HEAD')).toBe(initial);
   });
+
+  it("continues a card's folder from the earlier role's branch, its commits and uncommitted work included", async () => {
+    // Triage worked on its own branch: a commit and an uncommitted plan.
+    git(checkout, 'checkout', '-b', 'session/triage');
+    await writeFile(path.join(checkout, 'findings.md'), 'triage findings\n');
+    git(checkout, 'add', 'findings.md');
+    git(checkout, 'commit', '-m', 'Triage findings');
+    const triageHead = git(checkout, 'rev-parse', 'HEAD');
+    await writeFile(path.join(checkout, 'plan.md'), 'the plan\n');
+
+    await checkoutSessionBranch(sandbox, checkout, {
+      branch: 'session/work',
+      baseBranch: 'main',
+      token: 'test-token',
+      repoFullName: 'test/repo',
+      inheritCheckout: true,
+    });
+    expect(git(checkout, 'branch', '--show-current')).toBe('session/work');
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(triageHead);
+    expect(await readFile(path.join(checkout, 'plan.md'), 'utf8')).toBe('the plan\n');
+
+    // A secondary repository of the environment follows the same rule.
+    git(checkout, 'checkout', 'session/triage');
+    expect(
+      await syncEnvironmentRepository(sandbox, checkout, {
+        branch: 'session/review',
+        defaultBranch: 'main',
+        token: 'test-token',
+        repoFullName: 'test/repo',
+        inheritCheckout: true,
+      }),
+    ).toEqual({ outcome: 'created', branch: 'session/review' });
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(triageHead);
+  });
+
+  it("starts a card's first session branch at the base tip, as a session of its own does", async () => {
+    await checkoutSessionBranch(sandbox, checkout, {
+      branch: 'session/triage',
+      baseBranch: 'main',
+      token: 'test-token',
+      repoFullName: 'test/repo',
+      inheritCheckout: true,
+    });
+    expect(git(checkout, 'branch', '--show-current')).toBe('session/triage');
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(latest);
+  });
 });

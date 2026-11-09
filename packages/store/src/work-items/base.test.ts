@@ -241,6 +241,37 @@ describe('WorkItemsStorage', () => {
     expect(bindings.find(binding => binding.id === work.binding.id)?.status).toBe('active');
   });
 
+  it('lists the cards a session was ever bound to, revoked bindings included', async () => {
+    const storage = await makeStorage();
+    const start = (kickoffKey: string, sessionId: string, externalId: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input, externalSource: { ...input.externalSource, externalId } } },
+        role: 'work',
+        session: { sessionId, branch: 'user/session-x', threadId: `thread-${kickoffKey}` },
+        resourceId: 'resource-1',
+        kickoffKey,
+        kickoffMessage: null,
+      });
+    const scope = { orgId: 'org1', factoryProjectId: 'project1' };
+
+    const first = await start('kickoff-1', 'session-a', '42');
+    await storage.revokeRunBindingsForWorkItem({ ...scope, workItemId: first.item.id, revokedAt: new Date() });
+    await expect(storage.listWorkItemIdsForSession({ ...scope, sessionId: 'session-a' })).resolves.toEqual([
+      first.item.id,
+    ]);
+    const second = await start('kickoff-2', 'session-a', '43');
+    await expect(storage.listWorkItemIdsForSession({ ...scope, sessionId: 'session-a' })).resolves.toEqual(
+      [first.item.id, second.item.id].sort(),
+    );
+    await expect(storage.listWorkItemIdsForSession({ ...scope, sessionId: 'session-b' })).resolves.toEqual([]);
+    await expect(
+      storage.listWorkItemIdsForSession({ orgId: 'org2', factoryProjectId: 'project1', sessionId: 'session-a' }),
+    ).resolves.toEqual([]);
+  });
+
   it('replays the same binding when re-entered while it is still live', async () => {
     const storage = await makeStorage();
     const start = (kickoffKey: string) =>

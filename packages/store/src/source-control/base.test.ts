@@ -1101,6 +1101,53 @@ describe('SourceControlStorage', () => {
       expect(await backend.ops.findMany('source_control_session_repositories', {})).toHaveLength(1);
     });
 
+    it("listByFactoryBranch finds the factory's sessions on a branch, whoever owns them and on whichever link", async () => {
+      const project = await createProject();
+      const other = await createProject({ name: 'other' });
+      const { first, second } = await twoLinks(project.id);
+      const elsewhere = await linkRepository({ factoryProjectId: other.id });
+      const card = 'factory/item-card-1';
+
+      const triage = await github.sessions.create(
+        fixtureSession(sessionInput('00000000-0000-4000-8000-000000000121', first.id, 'user-1', card)),
+      );
+      const work = await github.sessions.create(
+        fixtureSession({ ...sessionInput('00000000-0000-4000-8000-000000000122', second.id, 'user-2', card), visibility: 'private' }),
+      );
+      await github.sessions.create(fixtureSession(sessionInput('00000000-0000-4000-8000-000000000123', first.id, 'user-1', 'feat/x')));
+      await github.sessions.create(fixtureSession(sessionInput('00000000-0000-4000-8000-000000000124', elsewhere.id, 'user-1', card)));
+
+      const onCard = await github.sessions.listByFactoryBranch({ factoryProjectId: project.id, branch: card });
+      expect(onCard.map(session => session.id).sort()).toEqual([triage.id, work.id].sort());
+      await expect(github.sessions.listByFactoryBranch({ factoryProjectId: project.id, branch: 'nope' })).resolves.toEqual([]);
+
+      // The in-memory handle answers the same way.
+      const store = new SourceControlStorageInMemory('github');
+      const installation = await store.installations.upsert({ orgId: 'org-1', connectedByUserId: 'user-1', externalId: 'i' });
+      const repo = await store.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, externalId: 'a', slug: 'acme/a', defaultBranch: 'main' },
+      });
+      const connection = await store.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: 'project-1',
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const link = await store.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        ...projectRepositoryInput,
+        repositoryId: repo.id,
+      });
+      const mine = await store.sessions.create(fixtureSession(sessionInput('m-1', link.id, 'user-1', card)));
+      const theirs = await store.sessions.create(fixtureSession(sessionInput('m-2', link.id, 'user-2', card)));
+      await store.sessions.create(fixtureSession(sessionInput('m-3', link.id, 'user-1', 'feat/x')));
+      expect(
+        (await store.sessions.listByFactoryBranch({ factoryProjectId: 'project-1', branch: card })).map(s => s.id),
+      ).toEqual([mine.id, theirs.id]);
+    });
+
     it('the in-memory handle mirrors factory derivation, listByProject and session repositories', async () => {
       const store = new SourceControlStorageInMemory('github');
       const installation = await store.installations.upsert({

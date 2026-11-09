@@ -2216,6 +2216,63 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
   });
 
+  it("waits, back in the queue, for a run in another of the card's sessions before starting a role in the card's shared folder", async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'review',
+      skillName: 'understand-issue',
+      idempotencyKey: 'review-after-work',
+    });
+    // The card's work session (thread-1) is still running.
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      emitAgentEndDuringSignal: true,
+      agentEndReason: 'complete',
+    });
+    controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: 'thread-1' }]);
+    // The fake serves one session object for both of the card's sessions.
+    controller.getSession.mockImplementation(async () => session);
+    // Review runs in a session of its own, in the same card folder.
+    const prepareBinding = vi.fn(async () => {
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: { id: item.id, input: { title: item.title, stages: ['execute'], sessions: {}, metadata: {} } },
+        role: 'review',
+        session: { sessionId: 'session-2', branch: 'factory/issue-1', threadId: 'thread-2' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-review',
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(prepared.binding.id, 'sent');
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      harness: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledTimes(1);
+    expect(session.sendSignal).not.toHaveBeenCalled();
+    const [postponed] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(postponed).toMatchObject({ status: 'pending', attempts: 0 });
+
+    // The work run ended: the review kickoff goes out on the next claim, in its own session.
+    controller.listActiveThreadRuns.mockReturnValue([]);
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+  });
+
   describe('an intake route moving a card with a run in flight', () => {
     async function runningCard(phaseKey: string) {
       const seed = await createFactoryStorageForTests();

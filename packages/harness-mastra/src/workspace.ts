@@ -49,8 +49,15 @@ import {
   hasFailedSetupCommand,
   recordFailedSetupCommand,
   resolveSessionWorkdir,
+  withWorkItemFolderLock,
 } from '@factory/sandbox';
-import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from '@factory/sandbox';
+import type {
+  FactorySandboxContext,
+  FactoryWorkspaceSandboxContext,
+  SessionEnvironmentGate,
+  SessionSetupGate,
+  WorkItemFolders,
+} from '@factory/sandbox';
 import { repositoryDirectoryName } from '@factory/sandbox';
 import {
   clearSessionEnvironment,
@@ -475,6 +482,12 @@ export interface CreateWorkspaceFactoryOptions {
   skills?: readonly InlineSkill[];
   /** Per-project SKILL.md edits served over the Factory skills of each session's project. */
   skillOverrides?: Pick<SkillOverridesStorage, 'ensureReady' | 'revision' | 'snapshot'>;
+  /**
+   * Where the sessions of a card work. A session that works a card gets the
+   * card's shared folder (`work-items/<factory>/<card branch>`) instead of a
+   * folder of its own; without it every session has its own.
+   */
+  workItemFolders?: WorkItemFolders;
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -676,7 +689,7 @@ export function environmentSandboxContext(
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides, workItemFolders } = options;
   const sourceControls: WorkspaceSourceControlProvider[] =
     options.sourceControls ??
     (github
@@ -702,6 +715,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // observe the same Workspace object even when no Mastra registry is wired
   // (the registry stays the source of truth when present).
   const constructedWorkspaces = new Map<string, Workspace>();
+  // The session sandbox each workspace was built on, to notice a rebuilt one.
+  const workspaceSandboxes = new WeakMap<Workspace, WorkspaceSandbox>();
   // Review-skill visibility and override revision last used to populate each workspace's skill cache.
   const skillCacheState = new Map<string, string>();
   const skillCacheRefreshes = new Map<string, Promise<number>>();
@@ -804,6 +819,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       });
     }
 
+    // The card folder the session works in, derived afresh on every resolve
+    // (never read back from storage): every session of a card shares it, so a
+    // later role starts in the checkout the earlier ones left.
+    const folder = workItemFolders
+      ? await workItemFolders.forSession({
+          sessionId: session.sessionId,
+          orgId: session.orgId,
+          factoryProjectId: session.factoryProjectId,
+          branch: session.branch,
+        })
+      : undefined;
+
     // Construct (or fetch) the session's memoized sandbox instance.
     // Construction is cheap and side-effect-free by the callback contract —
     // the VM is provisioned on `start()`, which only the materialization
@@ -841,7 +868,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       }
       let setupError: SetupCommandError | undefined;
       try {
-        await guardedSetup(args);
+        // A card's sessions share one checkout: their setups take turns, so a
+        // later role finds the clone and markers the first one left instead of
+        // cloning beside it.
+        await (folder ? withWorkItemFolderLock(folder.key, async () => guardedSetup(args)) : guardedSetup(args));
       } catch (error) {
         if (!(error instanceof SetupCommandError)) throw error;
         setupError = error;
@@ -945,34 +975,34 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         () => {
           // The provider reads its own settings (resources, images) from the
           // project's stored document, never from the context.
-          const sandbox = instrumentMethods(
-            factorySandbox.create(
-              {
-                sessionId: session.id,
-                // Physical VM id persisted from a prior start (undefined on first
-                // start). Providers that reattach by physical id use it to resume the
-                // original VM instead of provisioning a replacement.
-                sandboxId: session.sandboxId ?? undefined,
-                repoFullName,
-                ...(environment
-                  ? environmentSandboxContext(environment, {
+          const sandboxContext: FactoryWorkspaceSandboxContext = {
+            sessionId: session.id,
+            // The card folder the session shares with the card's other sessions.
+            ...(folder ? { workItemFolder: folder.key } : {}),
+            // Physical VM id persisted from a prior start (undefined on first
+            // start). Providers that reattach by physical id use it to resume the
+            // original VM instead of provisioning a replacement.
+            sandboxId: session.sandboxId ?? undefined,
+            repoFullName,
+            ...(environment
+              ? environmentSandboxContext(environment, {
+                  orgId: session.orgId,
+                  getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                })
+              : {
+                  // Stored nullable; the context speaks `undefined` for absent.
+                  setupCommand: projectRepository.setupCommand ?? undefined,
+                  // Deferred call, only dereferenced when a provider needs the repo
+                  // outside the VM (template build time).
+                  getRepositoryAccess: () =>
+                    sourceControl.versionControl.getRepositoryAccess({
                       orgId: session.orgId,
-                      getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
-                    })
-                  : {
-                      // Stored nullable; the context speaks `undefined` for absent.
-                      setupCommand: projectRepository.setupCommand ?? undefined,
-                      // Deferred call, only dereferenced when a provider needs the repo
-                      // outside the VM (template build time).
-                      getRepositoryAccess: () =>
-                        sourceControl.versionControl.getRepositoryAccess({
-                          orgId: session.orgId,
-                          repositoryId: repository.id,
-                        }),
+                      repositoryId: repository.id,
                     }),
-              },
-              sandboxSettings,
-            ),
+                }),
+          };
+          const sandbox = instrumentMethods(
+            factorySandbox.create(sandboxContext, sandboxSettings),
             `sandbox(${session.id})`,
             ['start', 'stop', 'executeCommand', 'reconnect'],
           );
@@ -993,6 +1023,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           return sandbox;
         },
         environment?.repos.map(repo => repo.slug) ?? [],
+        folder,
       );
     let startEagerly = false;
     const fireEagerStart = () => {
@@ -1303,6 +1334,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       existing = undefined;
     }
     existing ??= constructedWorkspaces.get(workspaceId);
+    const builtOn = existing && workspaceSandboxes.get(existing);
+    if (builtOn && builtOn !== sessionEntry.sandbox) {
+      // The session's never-started sandbox was rebuilt in its card's folder
+      // (it was bound to the card after this workspace was built): the old
+      // workspace still holds the replaced instance, so it is built anew.
+      constructedWorkspaces.delete(workspaceId);
+      await mastra?.removeWorkspace?.(workspaceId);
+      existing = undefined;
+    }
     if (existing) {
       existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
       // The skill cache does not recheck the source on get(), so rescan when the
@@ -1414,6 +1454,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         authUsername: access.authorization?.username,
         pullRequestNumber: pullRequestNumberFromBranch(session.branch),
         mergeRequestNumber: sourceControl.id === 'gitlab' ? mergeRequestNumberFromBranch(session.branch) : undefined,
+        // In a card's folder a new session branch starts where the card's
+        // checkout is, so the role inherits what the earlier roles left.
+        ...(folder ? { inheritCheckout: true } : {}),
       });
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
@@ -1554,6 +1597,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                 identity: gitIdentity,
                 branch: session.branch,
                 defaultBranch: repo.defaultBranch,
+                ...(folder ? { inheritCheckout: true } : {}),
                 token,
                 repoFullName: repo.slug,
                 cloneUrl: access.cloneUrl,
@@ -1721,6 +1765,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // point, and a concurrent resolution for the same session must observe this
     // workspace rather than build a second one.
     constructedWorkspaces.set(workspaceId, workspace);
+    workspaceSandboxes.set(workspace, sessionEntry.sandbox);
     // A workspace evicted and rebuilt under this id reads the project's edits afresh.
     skillOverrideStates.delete(workspaceId);
     // Retirement is registered against the workspace itself rather than the

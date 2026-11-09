@@ -500,6 +500,14 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
           row.userId === args.userId &&
           row.branch === args.branch,
       ) ?? null,
+    listByFactoryBranch: async ({ factoryProjectId, branch }: { factoryProjectId: string; branch: string }) =>
+      this.sessionsRows.filter(
+        row =>
+          row.factoryProjectId === factoryProjectId &&
+          row.branch === branch &&
+          // Mirrors base.ts: only sessions on this integration's links resolve.
+          this.projectRepositoriesRows.some(link => link.id === row.projectRepositoryId),
+      ),
     create: async (input: CreateSourceControlSessionInput): Promise<SourceControlSession> => {
       const link = this.projectRepositoriesRows.find(row => row.id === input.projectRepositoryId);
       const connection = link && this.connectionsRows.find(row => row.id === link.connectionId);
