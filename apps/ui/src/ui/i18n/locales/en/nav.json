@@ -62,9 +62,7 @@
     "checkingSignIn": "Checking sign-in",
     "fallbackName": "User",
     "settings": "Settings",
-    "userMenu": "User menu",
-    "settingsMenu": "Settings menu",
-    "logOut": "Log out"
+    "settingsFor": "Settings for {{name}}"
   },
   "newSession": "New session",
   "searchAndNavigate": "Search and navigate"

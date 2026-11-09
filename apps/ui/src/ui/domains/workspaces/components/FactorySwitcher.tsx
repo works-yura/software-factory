@@ -33,7 +33,7 @@ export function FactorySwitcher() {
         aria-label={t('switcher.select')}
         variant="ghost"
         size="sm"
-        className="-ml-[calc(var(--button-px)-2px)] min-w-0 gap-1"
+        className="-ml-[calc(var(--control-px)-2px)] min-w-0 gap-1"
       >
         <FactoryIcon />
         <Txt tone="ink" as="span" variant="caption" className="min-w-0 truncate">

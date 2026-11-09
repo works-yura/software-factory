@@ -39,7 +39,7 @@ type SettingsNavGroup = {
   items: SettingsNavItem[];
 };
 
-export const ACCOUNT_SETTINGS_GROUP = {
+const ACCOUNT_SETTINGS_GROUP = {
   id: 'account',
   get label() {
     return i18n.t('groups.account', { ns: 'settings' });

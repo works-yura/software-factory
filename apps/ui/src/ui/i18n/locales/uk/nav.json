@@ -64,9 +64,7 @@
     "checkingSignIn": "Перевірка входу",
     "fallbackName": "Користувач",
     "settings": "Налаштування",
-    "userMenu": "Меню користувача",
-    "settingsMenu": "Меню налаштувань",
-    "logOut": "Вийти"
+    "settingsFor": "Налаштування: {{name}}"
   },
   "newSession": "Нова сесія",
   "searchAndNavigate": "Пошук і навігація"

@@ -288,7 +288,6 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	+6	upstream #28838: src/m
 ../../../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsBehaviorPage.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/SettingsScopesPage.msw.test.tsx	-1	personal model scope removed (Your models, scope choice, personal keys)
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/RootGuards.msw.test.tsx
-../../../apps/ui/src/ui/domains/auth/components/__tests__/SidebarUserMenu.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/SidebarUserMenu.msw.test.tsx
 ../../../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	../apps/ui/src/ui/domains/auth/components/__tests__/SignInPage.msw.test.tsx	-3	Mastra Platform sign-in and custom-domain cases dropped with @mastra/auth-studio
 ../../../apps/ui/src/ui/domains/auth/services/__tests__/auth-storage.msw.test.tsx	../apps/ui/src/ui/domains/auth/services/__tests__/auth-storage.msw.test.tsx
 ../../../apps/ui/src/ui/domains/chat/components/transcript-parts.test.ts	../apps/ui/src/ui/domains/chat/components/transcript-parts.test.ts

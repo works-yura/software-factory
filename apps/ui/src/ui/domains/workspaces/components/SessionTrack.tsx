@@ -181,7 +181,7 @@ export function SessionTrack({
             <span
               key={pinKey(pin)}
               className={cn(
-                'ring-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2',
+                'ring-popover bg-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2',
                 FADE_CLASSES,
                 fadedUnlessFocused(pinKey(pin)),
               )}
@@ -189,7 +189,9 @@ export function SessionTrack({
               style={{ left: `${pin.left}%` }}
               onPointerEnter={() => setFocus(pinFocus(pin, nameOf(pin.personId), t))}
             >
-              <Avatar src={person?.avatarUrl} name={nameOf(pin.personId)} size="xs" />
+              <span className={cn('flex', fadedUnlessFocused(pinKey(pin)))}>
+                <Avatar src={person?.avatarUrl} name={nameOf(pin.personId)} size="xs" />
+              </span>
             </span>
           );
         })}
