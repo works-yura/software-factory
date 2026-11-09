@@ -240,7 +240,9 @@ describe('KnowledgePage', () => {
     fireEvent.change(screen.getByLabelText('Search knowledge'), { target: { value: 'arch' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Archived runbook' }));
     expect(
-      await within(screen.getByRole('region', { name: 'Selected page' })).findByText('Archived runbook'),
+      await within(screen.getByRole('region', { name: 'Selected page' })).findByRole('heading', {
+        name: 'Archived runbook',
+      }),
     ).toBeInTheDocument();
   });
 
