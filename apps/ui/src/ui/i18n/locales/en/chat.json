@@ -295,6 +295,7 @@
     "steering": "Steering…",
     "notSent": "Not sent",
     "steered": "Steered message",
+    "projectInstructions": "Project instructions",
     "systemReminder": "System reminder",
     "sentFrom": "Sent from {{platform}}",
     "via": "via {{platform}}",

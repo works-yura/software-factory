@@ -297,6 +297,7 @@
     "steering": "Скерування…",
     "notSent": "Не надіслано",
     "steered": "Скероване повідомлення",
+    "projectInstructions": "Інструкції проєкту",
     "systemReminder": "Системне нагадування",
     "sentFrom": "Надіслано з {{platform}}",
     "via": "через {{platform}}",
