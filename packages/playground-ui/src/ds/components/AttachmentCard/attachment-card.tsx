@@ -11,11 +11,22 @@ export interface AttachmentCardProps {
   icon: ReactNode;
   preview?: ReactNode;
   onClick?: () => void;
+  /** The accessible name of the `onClick` control; `Preview <name>` by default. */
+  actionLabel?: string;
   href?: string;
 }
 
 /** Sent-file presentation. Upload state and removal controls belong to the composer. */
-export function AttachmentCard({ name, typeLabel, icon, preview, onClick, href, buttonRef }: AttachmentCardProps) {
+export function AttachmentCard({
+  name,
+  typeLabel,
+  icon,
+  preview,
+  onClick,
+  actionLabel,
+  href,
+  buttonRef,
+}: AttachmentCardProps) {
   const className = cn(
     messageSurfaceStyle,
     'relative isolate block w-64 max-w-full min-w-0 overflow-hidden text-left',
@@ -52,7 +63,7 @@ export function AttachmentCard({ name, typeLabel, icon, preview, onClick, href, 
         type="button"
         className={className}
         onClick={onClick}
-        aria-label={`Preview ${name}`}
+        aria-label={actionLabel ?? `Preview ${name}`}
         title={name}
       >
         {content}

@@ -111,6 +111,11 @@ export function MessageBubble({
   const { attachments, content } =
     entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
   const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
+  // Sessions and cards the person referenced sit with the sent files, outside the bubble.
+  const refs =
+    entry.message.role === 'user'
+      ? content.flatMap(part => (part.type === 'text' ? parseRefs(part.text).refs : []))
+      : [];
   const hasRenderablePart = written.some(part => draws(part, entry, suspensions));
   const drawsOwnPart = written.some((part, index) => {
     const key = activityPartKey(entry.id, part, index);
@@ -150,7 +155,16 @@ export function MessageBubble({
       <Message
         from="user"
         pending={steeringPending}
-        attachments={attachments.length > 0 && <MessageAttachments parts={attachments} />}
+        attachments={
+          refs.length > 0 ? (
+            <div className="flex flex-col items-end gap-2">
+              {attachments.length > 0 && <MessageAttachments parts={attachments} />}
+              <MessageFactoryRefs refs={refs} />
+            </div>
+          ) : (
+            attachments.length > 0 && <MessageAttachments parts={attachments} />
+          )
+        }
         avatar={!origin && sender && <SenderAvatar author={sender} />}
         footer={
           <>
@@ -204,15 +218,10 @@ export function MessageBubble({
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
         if (activation) return <SkillMessage activation={activation} appearance="inline" />;
-        // Sessions and cards the person referenced come back as chips, not as the raw block the agent reads.
-        const { body, refs } = parseRefs(part.text);
-        if (refs.length === 0) return <MarkdownRenderer>{part.text}</MarkdownRenderer>;
-        return (
-          <>
-            {body.trim() ? <MarkdownRenderer>{body}</MarkdownRenderer> : null}
-            <MessageFactoryRefs refs={refs} />
-          </>
-        );
+        // The raw block the agent reads is left out; its references show with the sent files.
+        const { body, refs: partRefs } = parseRefs(part.text);
+        if (partRefs.length === 0) return <MarkdownRenderer>{part.text}</MarkdownRenderer>;
+        return body.trim() ? <MarkdownRenderer>{body}</MarkdownRenderer> : null;
       }
 
       return (

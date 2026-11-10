@@ -98,7 +98,7 @@ describe('A session row as a chat reference', () => {
     renderSection();
     await user.click(await screen.findByRole('button', { name: `Session actions for ${TITLE}` }));
     await user.click(await screen.findByRole('menuitem', { name: 'Add to chat' }));
-    expect(added).toEqual([{ kind: 'session', sessionId: 'sess-1', title: TITLE }]);
+    expect(added).toEqual([{ kind: 'session', title: TITLE, fields: { sessionId: 'sess-1' } }]);
   });
 
   it('says so when no chat is open to take it', async () => {

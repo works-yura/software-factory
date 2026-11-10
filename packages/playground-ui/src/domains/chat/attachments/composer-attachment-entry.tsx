@@ -8,10 +8,13 @@ import { cn } from '@/utils/cn';
 export function ComposerAttachmentEntry({
   children,
   name,
+  description,
   variant = 'icon',
 }: {
   children: ReactNode;
   name?: string;
+  /** A second, muted line under the name, e.g. what kind of thing is attached. */
+  description?: ReactNode;
   variant?: 'image' | 'icon';
 }) {
   const composerName = useContext(ComposerAttachmentContext);
@@ -31,9 +34,20 @@ export function ComposerAttachmentEntry({
       >
         {children}
       </span>
-      <Txt as="span" variant="label" className="min-w-0 flex-1 truncate text-left">
-        {filename}
-      </Txt>
+      {description ? (
+        <span className="flex min-w-0 flex-1 flex-col text-left">
+          <Txt as="span" variant="label" className="truncate">
+            {filename}
+          </Txt>
+          <Txt as="span" variant="meta" tone="muted" className="truncate">
+            {description}
+          </Txt>
+        </span>
+      ) : (
+        <Txt as="span" variant="label" className="min-w-0 flex-1 truncate text-left">
+          {filename}
+        </Txt>
+      )}
     </span>
   );
 }

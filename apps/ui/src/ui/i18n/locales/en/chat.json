@@ -487,6 +487,9 @@
   "refs": {
     "attached": "Referenced sessions",
     "sent": "Referenced in this message",
-    "remove": "Remove reference to {{title}}"
+    "remove": "Remove reference to {{title}}",
+    "card": "Card",
+    "session": "Session",
+    "open": "Open {{title}}"
   }
 }

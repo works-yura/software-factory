@@ -23,6 +23,8 @@ export interface ComposerAttachmentProps {
   onPreview?: () => void;
   /** Inline entries allow a little more width for long filenames. */
   variant?: 'thumbnail' | 'inline';
+  /** The remove control's accessible name; `Remove <name>` by default. */
+  removeLabel?: string;
 }
 
 export function ComposerAttachment({
@@ -32,6 +34,7 @@ export function ComposerAttachment({
   onEdit,
   onPreview,
   variant = 'thumbnail',
+  removeLabel = `Remove ${name}`,
 }: ComposerAttachmentProps) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const focusTargetRef = useRef<HTMLElement | undefined>(undefined);
@@ -149,8 +152,8 @@ export function ComposerAttachment({
             size="icon-sm"
             className="h-auto w-full flex-1 rounded-(--attachment-action-radius)"
             onClick={onRemove}
-            aria-label={`Remove ${name}`}
-            title={`Remove ${name}`}
+            aria-label={removeLabel}
+            title={removeLabel}
           >
             <X />
           </Button>

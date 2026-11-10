@@ -66,11 +66,13 @@ export function SessionListItem({
       changingVisibility={changing}
       reference={{
         kind: row.itemId ? 'card' : 'session',
-        sessionId: row.session.sessionId,
-        ...(row.threadId ? { threadId: row.threadId } : {}),
-        ...(row.itemId ? { workItemId: row.itemId } : {}),
         title: row.name,
-        ...(row.board ? { board: row.board } : {}),
+        fields: {
+          sessionId: row.session.sessionId,
+          ...(row.threadId ? { threadId: row.threadId } : {}),
+          ...(row.itemId ? { workItemId: row.itemId } : {}),
+          ...(row.board ? { board: row.board } : {}),
+        },
       }}
     />
   );
