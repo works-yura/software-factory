@@ -56,6 +56,7 @@ export function BoardStageCards({
       {showEmptyState && (
         <BoardColumnEmptyState
           stage={stage.id}
+          stageTitle={stage.label}
           isInitialPhase={isInitialPhase}
           hasIntakeSource={hasIntakeSource}
           filtersExcludeAll={filtersExcludeAll}

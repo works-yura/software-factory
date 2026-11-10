@@ -21,7 +21,7 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useBoardQuery, useResetBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
 import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
-import { boardTitle } from '../../../i18n/boardLabels';
+import { boardTitle, phaseTitle } from '../../../i18n/boardLabels';
 import { SettingsSubsection } from './SettingsSubsection';
 
 const WORK_BOARD = 'work';
@@ -203,6 +203,7 @@ function RuleEditor({
 }
 
 function PhaseEditor({
+  boardKey,
   phase,
   phases,
   code,
@@ -211,6 +212,8 @@ function PhaseEditor({
   onChange,
   onRuleProblem,
 }: {
+  /** Board the phase belongs to: built-in phases show their translated names. */
+  boardKey: string;
   phase: StoredPhaseInfo;
   phases: StoredPhaseInfo[];
   code: CodeBehaviour | undefined;
@@ -222,6 +225,7 @@ function PhaseEditor({
   const { t } = useTranslation('settings');
   const id = useId();
   const working = phase.kind === 'working';
+  const title = (p: StoredPhaseInfo) => phaseTitle(boardKey, p.key, p.name);
   const next = nextPhasesOf(phase, phases);
   const required = new Set(code?.requiredNextPhases ?? []);
   const instructions = phase.runner?.instructions ?? '';
@@ -234,15 +238,15 @@ function PhaseEditor({
 
   return (
     <SettingsContainer>
-      <section aria-label={t('workBoard.phase.label', { name: phase.name })} className="flex flex-col gap-4 px-4 py-3">
+      <section aria-label={t('workBoard.phase.label', { name: title(phase) })} className="flex flex-col gap-4 px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <Txt tone="ink" as="h4" variant="body" className="m-0">
-            {phase.name}
+            {title(phase)}
           </Txt>
           <Txt font="mono" tone="muted" as="span" variant="caption">
             {phase.key}
           </Txt>
-          <Badge>{phase.kind}</Badge>
+          <Badge>{t(`workBoard.phase.kinds.${phase.kind}`)}</Badge>
           {code?.handlers && <Badge>{t('workBoard.phase.codeBehaviour')}</Badge>}
         </div>
         {code?.handlers && (
@@ -281,7 +285,7 @@ function PhaseEditor({
                   disabled={disabled || code?.handlers}
                   onValueChange={value => setRunner({ skill: value === NO_SKILL ? undefined : String(value) })}
                 >
-                  <SelectTrigger id={`${id}-skill`} size="sm" aria-label={t('workBoard.phase.skillOf', { name: phase.name })}>
+                  <SelectTrigger id={`${id}-skill`} size="sm" aria-label={t('workBoard.phase.skillOf', { name: title(phase) })}>
                     {phase.runner?.skill ?? (code?.handlers ? t('workBoard.phase.chosenByCode') : t('workBoard.phase.none'))}
                   </SelectTrigger>
                   <SelectContent>
@@ -327,7 +331,7 @@ function PhaseEditor({
               </div>
               <Switch
                 id={`${id}-auto-start`}
-                aria-label={t('workBoard.phase.autoStartOf', { name: phase.name })}
+                aria-label={t('workBoard.phase.autoStartOf', { name: title(phase) })}
                 checked={phase.autoStart ?? false}
                 disabled={disabled}
                 onCheckedChange={checked => {
@@ -338,7 +342,7 @@ function PhaseEditor({
             </Field>
             {phase.autoStart && (
               <RuleEditor
-                label={t('workBoard.phase.autoStartWhen', { name: phase.name })}
+                label={t('workBoard.phase.autoStartWhen', { name: title(phase) })}
                 description={t('workBoard.phase.autoStartWhenHint')}
                 rule={phase.autoStartWhen}
                 disabled={disabled}
@@ -377,7 +381,7 @@ function PhaseEditor({
                 </div>
                 <Switch
                   id={`${id}-auto-approve`}
-                  aria-label={t('workBoard.phase.autoApproveOf', { name: phase.name, tool: exitToolId })}
+                  aria-label={t('workBoard.phase.autoApproveOf', { name: title(phase), tool: exitToolId })}
                   checked={phase.exitTool?.autoApprove ?? false}
                   disabled={disabled}
                   onCheckedChange={checked => {
@@ -396,7 +400,7 @@ function PhaseEditor({
             )}
             {exitToolId !== '' && phase.exitTool?.autoApprove && (
               <RuleEditor
-                label={t('workBoard.phase.autoApproveWhen', { name: phase.name })}
+                label={t('workBoard.phase.autoApproveWhen', { name: title(phase) })}
                 description={t('workBoard.phase.autoApproveWhenHint')}
                 rule={phase.exitTool.autoApproveWhen}
                 disabled={disabled}
@@ -424,7 +428,7 @@ function PhaseEditor({
               .map(other => (
                 <label key={other.key} className="flex items-center gap-2">
                   <Checkbox
-                    aria-label={t('workBoard.phase.movesTo', { from: phase.name, to: other.name })}
+                    aria-label={t('workBoard.phase.movesTo', { from: title(phase), to: title(other) })}
                     checked={next.includes(other.key)}
                     disabled={disabled || required.has(other.key)}
                     onCheckedChange={checked =>
@@ -437,7 +441,7 @@ function PhaseEditor({
                     }
                   />
                   <Txt as="span" variant="caption">
-                    {other.name}
+                    {title(other)}
                   </Txt>
                 </label>
               ))}
@@ -521,6 +525,7 @@ function BoardEditor({
         {draft.phases.map(phase => (
           <PhaseEditor
             key={phase.key}
+            boardKey={boardKey}
             phase={phase}
             phases={draft.phases}
             code={board.codeBehaviour?.[phase.key]}

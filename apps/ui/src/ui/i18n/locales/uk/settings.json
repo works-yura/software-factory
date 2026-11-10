@@ -887,7 +887,12 @@
       "autoApproveWhen": "{{name}}: схвалювати лише коли",
       "autoApproveWhenHint": "Залиште порожнім, щоб схвалювати для кожної картки.",
       "nextPhases": "Наступні фази",
-      "movesTo": "{{from}} переходить у {{to}}"
+      "movesTo": "{{from}} переходить у {{to}}",
+      "kinds": {
+        "resting": "Очікування",
+        "working": "Працює агент",
+        "terminal": "Завершальна"
+      }
     }
   }
 }

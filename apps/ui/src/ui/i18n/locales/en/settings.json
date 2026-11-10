@@ -873,7 +873,12 @@
       "autoApproveWhen": "{{name}}: approve only when",
       "autoApproveWhenHint": "Leave empty to approve for every card.",
       "nextPhases": "Next phases",
-      "movesTo": "{{from}} moves to {{to}}"
+      "movesTo": "{{from}} moves to {{to}}",
+      "kinds": {
+        "resting": "Waiting",
+        "working": "Agent works",
+        "terminal": "Final"
+      }
     }
   }
 }

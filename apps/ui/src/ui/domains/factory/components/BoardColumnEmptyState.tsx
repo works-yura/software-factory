@@ -19,6 +19,7 @@ function emptyCopy(key: string): BoardColumnEmptyCopy {
 
 function boardColumnEmptyCopy(
   stage: BoardStageId,
+  stageTitle: string,
   hasIntakeSource: boolean,
   isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
@@ -43,7 +44,7 @@ function boardColumnEmptyCopy(
       return emptyCopy('canceled');
     default:
       return {
-        title: tk('emptyColumn.other.title', { stage: stageLabel(stage) }),
+        title: tk('emptyColumn.other.title', { stage: stageTitle }),
         description: tk('emptyColumn.other.description'),
       };
   }
@@ -51,6 +52,7 @@ function boardColumnEmptyCopy(
 
 function boardEmptyCopy(
   stage: BoardStageId,
+  stageTitle: string,
   hasIntakeSource: boolean,
   filtersExcludeAll: boolean,
   alreadyMaterialized: number,
@@ -62,7 +64,7 @@ function boardEmptyCopy(
       description: tk('emptyColumn.filteredDescription'),
     };
   }
-  const copy = boardColumnEmptyCopy(stage, hasIntakeSource, isInitialPhase);
+  const copy = boardColumnEmptyCopy(stage, stageTitle, hasIntakeSource, isInitialPhase);
   if (alreadyMaterialized <= 0) return copy;
   return {
     title: copy.title,
@@ -72,6 +74,7 @@ function boardEmptyCopy(
 
 export function BoardColumnEmptyState({
   stage,
+  stageTitle,
   isInitialPhase,
   hasIntakeSource,
   filtersExcludeAll = false,
@@ -80,6 +83,8 @@ export function BoardColumnEmptyState({
   actionSlot,
 }: {
   stage: BoardStageId;
+  /** The column's shown name; a custom board's phase id is not one. Defaults to the built-in stage label. */
+  stageTitle?: string;
   isInitialPhase: boolean;
   hasIntakeSource: boolean;
   filtersExcludeAll?: boolean;
@@ -88,7 +93,7 @@ export function BoardColumnEmptyState({
   layout: BoardLayout;
   actionSlot?: ReactNode;
 }) {
-  const copy = boardEmptyCopy(stage, hasIntakeSource, filtersExcludeAll, alreadyMaterialized, isInitialPhase);
+  const copy = boardEmptyCopy(stage, stageTitle ?? stageLabel(stage), hasIntakeSource, filtersExcludeAll, alreadyMaterialized, isInitialPhase);
   if (layout === 'list') {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
