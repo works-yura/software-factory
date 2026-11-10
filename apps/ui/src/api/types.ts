@@ -230,3 +230,8 @@ export interface UpdateOMResponse {
   ok: true;
   config: OMConfigInfo;
 }
+export type IntakeRuleListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRuleList.responseSchema>;
+export type IntakeRuleInfo = IntakeRuleListResponse['intakeRules'][number];
+export type IntakeRuleFireInfo = NonNullable<IntakeRuleInfo['lastFire']>;
+export type IntakeRuleKindsInfo = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRuleKinds.responseSchema>;
+export type IntakeTriggerPreviewInfo = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeTriggerPreview.responseSchema>;
