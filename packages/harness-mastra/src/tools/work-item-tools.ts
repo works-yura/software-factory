@@ -18,7 +18,8 @@ import type { SourceControlSessionLookup } from '@factory/session';
 import { resolveWorkItemRepository } from '@factory/session';
 import type { AuditRecorder } from '@factory/feed';
 import type { CommentsDomain } from '@factory/feed';
-import { WorkItemRelationError } from '@factory/store';
+import { PRODUCT_CHILDREN_KEY, productBoard, withProductChild } from '@factory/pipelines';
+import { WorkItemRelationError, WorkItemUpdateConflictError } from '@factory/store';
 import type { Card } from '@factory/store';
 import type { UpdateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { createFactoryWorkItem } from '@factory/work-items';
@@ -82,6 +83,57 @@ function settled(result: FactoryDecisionActionResult) {
   return { decisionId: decision.id, status: decision.status, workItemId: decision.workItemId };
 }
 
+/**
+ * Check `slug` is a repository linked to this Factory and that a card with
+ * `item`'s metadata would run in it (a card synced from an issue follows the
+ * issue's repository, which a slug can't override).
+ */
+export async function requireLinkedRepository({
+  sessions,
+  sessionId,
+  orgId,
+  factoryProjectId,
+  slug,
+  item,
+}: {
+  sessions: Pick<SourceControlSessionLookup, 'getSourceControlBySessionId'>;
+  sessionId: string;
+  orgId: string;
+  factoryProjectId: string;
+  slug: string;
+  item?: Pick<Card, 'metadata' | 'workItem'>;
+}): Promise<void> {
+  const sourceControl = await sessions.getSourceControlBySessionId(sessionId);
+  if (!sourceControl) throw new Error('This session has no source-control provider to look repositories up in.');
+  const resolve = (repository?: string) =>
+    resolveWorkItemRepository({
+      sourceControl,
+      orgId,
+      factoryProjectId,
+      item: {
+        metadata: repository ? { repository } : (item?.metadata ?? null),
+        workItem: item?.workItem ?? { metadata: null },
+      },
+    });
+  const resolution = await resolve(slug);
+  if (resolution.status === 'resolved' && resolution.slug === slug) return;
+  if (resolution.status === 'resolved') {
+    throw new Error(`This card runs in ${resolution.slug}, which comes from its linked issue and can't be changed.`);
+  }
+  const linked = await resolve();
+  const candidates =
+    linked.status === 'ambiguous'
+      ? linked.candidates
+      : linked.status === 'resolved'
+        ? (linked.environment?.map(entry => entry.slug) ?? [linked.slug])
+        : [];
+  throw new Error(
+    candidates.length > 0
+      ? `${slug} is not linked to this Factory. Linked repositories: ${candidates.join(', ')}.`
+      : `${slug} is not linked to this Factory, and it has no linked repositories.`,
+  );
+}
+
 /** The work-item write and subscription tools for one user session's turn. */
 export function createFactoryWorkItemTools(
   scope: FactoryToolScope,
@@ -103,40 +155,26 @@ export function createFactoryWorkItemTools(
     if (!item) throw workItemNotFound(ref);
     return item;
   };
-  /**
-   * Check `slug` is a repository linked to this Factory and that a card with
-   * `metadata` would run in it (a card synced from an issue follows the
-   * issue's repository, which a slug can't override).
-   */
-  const requireRepository = async (slug: string, item?: Pick<Card, 'metadata' | 'workItem'>) => {
-    const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
-    if (!sourceControl) throw new Error('This session has no source-control provider to look repositories up in.');
-    const resolve = (repository?: string) =>
-      resolveWorkItemRepository({
-        sourceControl,
-        ...project,
-        item: {
-          metadata: repository ? { repository } : (item?.metadata ?? null),
-          workItem: item?.workItem ?? { metadata: null },
-        },
-      });
-    const resolution = await resolve(slug);
-    if (resolution.status === 'resolved' && resolution.slug === slug) return;
-    if (resolution.status === 'resolved') {
-      throw new Error(`This card runs in ${resolution.slug}, which comes from its linked issue and can't be changed.`);
+  const requireRepository = (slug: string, item?: Pick<Card, 'metadata' | 'workItem'>) =>
+    requireLinkedRepository({ sessions: deps.sessions, sessionId: scope.sessionId, ...project, slug, item });
+  /** Adds `childId` to the cards a Product card lists, re-reading it when a concurrent write moved it. */
+  const recordChild = async (parentId: string, childId: string) => {
+    for (let attempt = 1; ; attempt++) {
+      const parent = await deps.workItems.get({ orgId: scope.orgId, id: parentId });
+      if (!parent) throw new Error('the Product card no longer exists');
+      try {
+        await deps.workItems.update({
+          orgId: scope.orgId,
+          id: parent.id,
+          userId: scope.userId,
+          expectedRevision: parent.revision,
+          patch: { metadata: { [PRODUCT_CHILDREN_KEY]: withProductChild(parent.metadata, childId)[PRODUCT_CHILDREN_KEY] } },
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof WorkItemUpdateConflictError) || attempt >= 3) throw error;
+      }
     }
-    const linked = await resolve();
-    const candidates =
-      linked.status === 'ambiguous'
-        ? linked.candidates
-        : linked.status === 'resolved'
-          ? (linked.environment?.map(entry => entry.slug) ?? [linked.slug])
-          : [];
-    throw new Error(
-      candidates.length > 0
-        ? `${slug} is not linked to this Factory. Linked repositories: ${candidates.join(', ')}.`
-        : `${slug} is not linked to this Factory, and it has no linked repositories.`,
-    );
   };
   const follow = (item: Card, reason: 'created' | 'subscribed') =>
     deps.workItems.subscribeToWorkItem({
@@ -164,10 +202,16 @@ export function createFactoryWorkItemTools(
             .max(8000)
             .describe('What needs doing and why; posted as the first comment on the card.'),
           repository: repositorySchema.optional(),
+          parentWorkItem: workItemRefSchema
+            .optional()
+            .describe(
+              'Parent work item (id or #number) in this Factory, e.g. the Product card whose phase this is. A Product card lists the cards filed under it.',
+            ),
         })
         .strict(),
-      execute: async ({ title, brief, repository }) => {
+      execute: async ({ title, brief, repository, parentWorkItem }) => {
         if (repository) await requireRepository(repository);
+        const parent = parentWorkItem === undefined ? undefined : await requireItem(parentWorkItem);
         const created = await createFactoryWorkItem({
           workItems: deps.workItems,
           boards: await toBoardSource(deps.boards).load(project),
@@ -177,7 +221,11 @@ export function createFactoryWorkItemTools(
           ...project,
           userId: scope.userId,
           ...(scope.actorProfile ? { origin: { actorProfile: scope.actorProfile } } : {}),
-          input: { title, ...(repository ? { metadata: { repository } } : {}) },
+          input: {
+            title,
+            ...(repository ? { metadata: { repository } } : {}),
+            ...(parent ? { parentWorkItemId: parent.id } : {}),
+          },
         });
         if (created.status === 'refused') throw new Error(created.message);
         if (created.status === 'rejected') throw new Error(`The board refused the new item: ${created.reason}`);
@@ -185,6 +233,16 @@ export function createFactoryWorkItemTools(
         // The card exists from here on: report follow-up failures alongside it
         // rather than failing the call, so the agent doesn't file it twice.
         const warnings: string[] = [];
+        if (parent && boardForWorkItem(parent) === productBoard.id) {
+          // Product's Done gate reads the cards its card filed from the card itself.
+          try {
+            await recordChild(parent.id, item.id);
+          } catch (error) {
+            warnings.push(
+              `The Product card does not list it yet: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
         try {
           const comment = await deps.feed.createComment({
             orgId: scope.orgId,

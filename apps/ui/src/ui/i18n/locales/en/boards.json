@@ -16,12 +16,13 @@
     "title": "Product",
     "phases": {
       "intake": "Intake",
+      "enrich": "Research",
       "brief": "Brief",
       "client-review": "Approval",
       "spec": "Spec",
       "spec-review": "Spec review",
-      "breakdown": "Breakdown",
-      "breakdown-review": "Breakdown review",
+      "phases": "Phases",
+      "phases-review": "Phases review",
       "done": "Done",
       "canceled": "Canceled"
     }

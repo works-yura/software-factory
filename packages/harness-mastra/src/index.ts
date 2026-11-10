@@ -7,6 +7,7 @@ export * from './environment/heads.ts';
 export * from './harness.ts';
 export * from './rules/index.ts';
 export * from './rules/processor.ts';
+export * from './rules/product-tools.ts';
 export * from './rules/review-source-tool.ts';
 export * from './rules/start-coordinator.ts';
 export * from './rules/tools.ts';

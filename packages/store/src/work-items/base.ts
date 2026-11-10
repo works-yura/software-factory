@@ -3268,6 +3268,48 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
+   * A board renamed some of its phases: move every card on `board` that still names an old phase
+   * (in its stages or its stage history) onto the new name, once. Sessions and metadata stay as
+   * they are. Returns the cards moved; a second run finds none.
+   */
+  async renameBoardStages(board: string, renames: Readonly<Record<string, string>>): Promise<Card[]> {
+    const oldNames = Object.keys(renames);
+    if (oldNames.length === 0) return [];
+    const rename = (stage: string) => renames[stage] ?? stage;
+    const named = (row: Pick<WorkItemDbRow, 'board' | 'stages' | 'stage_history'>) =>
+      row.board === board &&
+      (row.stages.some(stage => oldNames.includes(stage)) ||
+        (row.stage_history ?? []).some(entry => oldNames.includes(entry.stage)));
+    // Legacy cards not yet copied into the split tables are copied first, so none keeps an old name.
+    if (!this.#legacyMode && this.#split.pending) {
+      const legacy = await this.#db.findMany<WorkItemDbRow>(WORK_ITEMS_SCHEMA.name, { board });
+      for (const row of legacy.filter(named)) {
+        await this.#cards(this.#db, { transaction: false }).findOne({ org_id: row.org_id, id: row.id });
+      }
+    }
+    const candidates = (await this.#cards(this.#db, { transaction: false }).findMany({ board })).filter(named);
+    const moved: Card[] = [];
+    for (const candidate of candidates) {
+      const row = await this.#withTransaction(ops =>
+        this.#cards(ops, { transaction: true }).updateAtomic({ org_id: candidate.org_id, id: candidate.id }, current => {
+          if (!named(current)) return null;
+          return {
+            stages: current.stages.map(rename) as WorkItemDbRow['stages'],
+            stage_history: (current.stage_history ?? []).map(entry => ({
+              ...entry,
+              stage: rename(entry.stage),
+            })) as WorkItemDbRow['stage_history'],
+            revision: current.revision + 1,
+            updated_at: new Date(),
+          };
+        }),
+      );
+      if (row) moved.push(toWorkItem(row));
+    }
+    return moved;
+  }
+
+  /**
    * Factory used to hold a triaged non-bug in Triage until a person accepted it.
    * Triage now sends those cards back to Intake instead, so move the ones still
    * held there, once. A card with a live run, or one that changed under us, is

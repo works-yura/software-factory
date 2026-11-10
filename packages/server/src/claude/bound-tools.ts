@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { BoardRegistry } from '@factory/core';
 import type { IntegrationPostToolContext } from '@factory/integrations';
 import { createFactoryTransitionTools } from '@factory/harness-mastra';
+import type { ProductToolDependencies } from '@factory/harness-mastra';
 import type { FactoryMcpToolScope } from '@factory/mcp';
 import type { FactoryTransitionService } from '@factory/runtime';
 import type { FactorySessionSourceLookup } from '@factory/session';
@@ -130,6 +131,10 @@ export async function createClaudeBoundTools(
     transitionService: Pick<FactoryTransitionService, 'transition'>;
     boards: BoardRegistry;
     sessions?: FactorySessionSourceLookup;
+    /** What a Product session needs to file its phases and check its documents. */
+    product?: ProductToolDependencies;
+    /** The sandbox the session's checkout lives in; the document check reads from it. */
+    sandboxFor?: (sessionId: string) => Promise<unknown>;
     /** Runs after each call, as the Mastra controller's `postToolObserver`. */
     observe?: ClaudeToolObserver;
   },
@@ -141,10 +146,18 @@ export async function createClaudeBoundTools(
     transitionService: deps.transitionService,
     boards: deps.boards,
     ...(deps.sessions ? { sessions: deps.sessions } : {}),
+    ...(deps.product ? { product: deps.product } : {}),
   })) as Record<string, AnyTool>;
+  const sandboxFor = deps.sandboxFor;
+  const workspace = sandboxFor
+    ? async () => {
+        const sandbox = await sandboxFor(scope.sessionId);
+        return sandbox ? { sandbox } : undefined;
+      }
+    : undefined;
   const tools: Record<string, AnyTool> = {};
   for (const [name, tool] of Object.entries(transitionTools)) {
-    tools[name] = asMcpTool(tool, requestContext, undefined, deps.observe);
+    tools[name] = asMcpTool(tool, requestContext, workspace, deps.observe);
   }
   tools.factory_bound_work_item = createTool({
     id: 'factory_bound_work_item',

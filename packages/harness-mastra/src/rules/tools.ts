@@ -12,7 +12,9 @@ import {
   workItemSource,
 } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import { SELF_REVIEW_ROUND_LIMIT } from '@factory/pipelines';
+import { PRODUCT_CONTEXT, SELF_REVIEW_ROUND_LIMIT } from '@factory/pipelines';
+import { createProductTools, isProductBinding } from './product-tools.ts';
+import type { ProductToolDependencies } from './product-tools.ts';
 import type { IntegrationTools } from '@factory/integrations';
 import { WorkItemUpdateConflictError } from '@factory/store';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
@@ -78,6 +80,8 @@ export async function createFactoryTransitionTools(options: {
   sessions?: FactorySessionSourceLookup;
   /** A fixed registry, or the per-project boards. */
   boards?: BoardRegistry | ProjectBoardSource;
+  /** What a Product session needs to file cards and record document checks; absent hosts offer it neither. */
+  product?: ProductToolDependencies;
 }): Promise<IntegrationTools> {
   const boardSource = options.boards ? toBoardSource(options.boards) : undefined;
   const resolution = await resolveFactorySessionAddress({
@@ -114,7 +118,16 @@ export async function createFactoryTransitionTools(options: {
     isTriage = classifiesTriage(boards, item);
   }
 
+  let productTools: IntegrationTools = {};
+  if (availableBinding.role === PRODUCT_CONTEXT && options.product) {
+    const item = await options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
+    if (isProductBinding(availableBinding, item)) {
+      productTools = createProductTools({ ...bound, product: options.product }, availableBinding.workItemId);
+    }
+  }
+
   return {
+    ...productTools,
     ...(availableBinding.role === 'review' ? createReviewVerdictTool(bound, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',

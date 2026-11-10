@@ -15,8 +15,21 @@ export {
   workItemThreadTitle,
 } from './shared/work-item-branch.ts';
 export type { WorkItemBranchInput, WorkItemBranchSource } from './shared/work-item-branch.ts';
-export { isProductBoardPhase, PRODUCT_CONTEXT, productBoard } from './product/board.ts';
+export { isProductBoardPhase, PRODUCT_CONTEXT, PRODUCT_LEGACY_PHASE_RENAMES, productBoard } from './product/board.ts';
 export type { ProductBoardPhase } from './product/board.ts';
+export {
+  checkProductDocumentStructure,
+  PRODUCT_CHILDREN_KEY,
+  PRODUCT_DOC_CHECKS_KEY,
+  PRODUCT_DOCUMENT_TYPES,
+  productChildWorkItemIds,
+  productDocumentGateFailure,
+  productDocumentPassed,
+  recordedProductDocumentCheck,
+  withProductChild,
+  withProductDocumentCheck,
+} from './product/documents.ts';
+export type { ProductContradiction, ProductDocumentCheck, ProductDocumentType } from './product/documents.ts';
 export { isWorkBoardPhase, workBoard, workPullRequestCardRejection } from './work/board.ts';
 export type { WorkBoardPhase } from './work/board.ts';
 export { workLaneForRole, workStageCarries } from './work/legacy-plan-role.ts';

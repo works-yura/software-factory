@@ -51,7 +51,7 @@ import {
   getFactoryAuthUserId,
 } from '@factory/auth';
 import { createBoardRegistry, isDefinedBoard, isTerminalWorkItem } from '@factory/core';
-import { createDefaultBoardRegistry } from '@factory/pipelines';
+import { createDefaultBoardRegistry, PRODUCT_LEGACY_PHASE_RENAMES, productBoard } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { boardForWorkItem, isPullRequestCard, namesRepository, openChangeRequests, workItemSource } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
@@ -151,6 +151,7 @@ import { peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandb
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { backfillUntilDone, WorkItemSplitModeError } from '@factory/store';
 import { migrateLabelRoutesToIntakeRoutes, REVIEW_BOARD_RETIREMENT_ACTOR } from '@factory/store';
+import { boardDefinitionOf, PRODUCT_BOARD_UPGRADE_ACTOR } from '@factory/store';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { Card } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
@@ -979,6 +980,27 @@ export class MastraFactory {
             `[factory] moved ${bindings} intake source(s) and ${labelRoutes} label route(s) from the Review board to Work`,
           );
         }
+      });
+    }
+
+    // Product's Breakdown became Phases, and the board gained Enrich and Design. Rewrite each
+    // project's stored Product board, and move its cards and intake routes off the old phase
+    // names, once. A failure stops the boot: those cards would sit in phases the board lacks.
+    if (storage.isDomainReady('boards')) {
+      await timedPhase('prepare.boards.productPhases', async () => {
+        const rewritten = await storedBoardsStorage.renameStoredBoardPhases(
+          productBoard.id,
+          boardDefinitionOf(productBoard),
+          PRODUCT_LEGACY_PHASE_RENAMES,
+          PRODUCT_BOARD_UPGRADE_ACTOR,
+        );
+        if (rewritten > 0) console.info(`[factory] rewrote ${rewritten} stored Product board(s) with the new phases`);
+      });
+    }
+    if (storage.isDomainReady('work-items')) {
+      await timedPhase('prepare.workItems.productPhases', async () => {
+        const moved = await workItemsStorage.renameBoardStages(productBoard.id, PRODUCT_LEGACY_PHASE_RENAMES);
+        if (moved.length > 0) console.info(`[factory] moved ${moved.length} Product card(s) off Breakdown to Phases`);
       });
     }
 
@@ -2022,7 +2044,17 @@ export class MastraFactory {
             // Only offered while the source-control domain is ready — a
             // throwing lookup would abort recovery's catch block and also
             // skip the metadata baseRef fallback.
-            ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+            ...(storage.isDomainReady('source-control')
+              ? {
+                  sessions: sourceControlSessions,
+                  // A Product session files its phases as Work cards and records document checks.
+                  product: {
+                    feed: factoryToolDeps.feed,
+                    auditRecorder: factoryToolDeps.auditRecorder,
+                    sessions: sourceControlSessions,
+                  },
+                }
+              : {}),
           }),
         );
         // Review-role sessions get `factory_review_source` so the
@@ -2340,6 +2372,12 @@ export class MastraFactory {
                             transitionService,
                             boards: this.#boards,
                             sessions: sourceControlSessions,
+                            product: {
+                              feed: factoryToolDeps.feed,
+                              auditRecorder: factoryToolDeps.auditRecorder,
+                              sessions: sourceControlSessions,
+                            },
+                            sandboxFor: claudeSessionSandbox,
                             observe: postToolObserver,
                           }),
                         // The Factory chat on Claude Code: the supervisor's tools, acting as the person behind the turn.

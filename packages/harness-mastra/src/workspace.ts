@@ -115,8 +115,9 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-review',
   'factory-self-review',
   'factory-triage',
-  'product-breakdown',
   'product-brief',
+  'product-enrich',
+  'product-phases',
   'product-spec',
 ]);
 

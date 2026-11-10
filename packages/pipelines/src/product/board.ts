@@ -1,29 +1,80 @@
-import { compileBoardDefinition } from '@factory/core';
-import type { BoardPhaseDefinition } from '@factory/core';
+import { compileBoardDefinition, FACTORY_RULE_SOURCES } from '@factory/core';
+import type { BoardPhaseDefinition, FactoryRuleHandler, FactoryRuleSource, FactoryStageRuleContext } from '@factory/core';
+
+import { productChildWorkItemIds, productDocumentGateFailure } from './documents.ts';
+import type { ProductDocumentType } from './documents.ts';
 
 export type ProductBoardPhase =
   | 'intake'
+  | 'enrich'
   | 'brief'
   | 'client-review'
   | 'spec'
   | 'spec-review'
-  | 'breakdown'
-  | 'breakdown-review'
+  | 'phases'
+  | 'phases-review'
   | 'done'
   | 'canceled';
 
 /**
- * The session context every Product phase runs in. Brief, spec and breakdown share one session
- * per card, so the agent keeps the conversation that shaped the brief when it writes the spec.
+ * Phases the Product board had before it gained Research, and what each became. Stored boards,
+ * cards and intake routes that still name an old phase are moved onto the new one once, at startup.
+ */
+export const PRODUCT_LEGACY_PHASE_RENAMES: Readonly<Record<string, ProductBoardPhase>> = {
+  breakdown: 'phases',
+  'breakdown-review': 'phases-review',
+};
+
+/**
+ * The session context every Product phase runs in. All working phases share one session per
+ * card, so the conversation that shaped the brief carries into the spec and the phases, alongside
+ * the documents committed to the repository.
  */
 export const PRODUCT_CONTEXT = 'product';
 
+type StageHandler = FactoryRuleHandler<FactoryStageRuleContext>;
+
+/** The same handler for cards from every source: a gate holds whatever the card came from. */
+function everySource(handler: StageHandler): Partial<Record<FactoryRuleSource, StageHandler>> {
+  return Object.fromEntries(FACTORY_RULE_SOURCES.map(source => [source, handler]));
+}
+
+/** Moving the card to `next` needs the document's last check, recorded on the card, to have passed. */
+function documentGate(type: ProductDocumentType, next: ProductBoardPhase): StageHandler {
+  return context => {
+    if (context.toStage !== next) return undefined;
+    const reason = productDocumentGateFailure(context.item.metadata, type);
+    return reason ? { type: 'reject', code: 'invalid_transition', reason } : undefined;
+  };
+}
+
+/** Done needs the Work cards the phases were filed as. */
+const childrenGate: StageHandler = context => {
+  if (context.toStage !== 'done') return undefined;
+  return productChildWorkItemIds(context.item.metadata).length > 0
+    ? undefined
+    : {
+        type: 'reject',
+        code: 'invalid_transition',
+        reason:
+          'This card has filed no Development cards yet. Run Phases to file them (factory_create_work_item), then move it to Done.',
+      };
+};
+
+const resting = (description: string) => ({ kind: 'resting' as const, description });
+
 /**
- * Product: what to build, decided before any code. A request becomes a brief the client agrees
- * to, then a spec the team agrees to, then cards on Work. Each working phase is a conversation
- * with a person, so none starts on its own: a person starts the run, and moves the card on when
- * they accept the document. Where a project keeps its documents is told to the agent through
- * each phase's instructions, which each Factory sets.
+ * Product: what to build, decided before any code. No code is ever written on this board. A
+ * request gathers the engineer's context (Research), becomes a brief the client approves (goal,
+ * use cases, scope, user-level acceptance, phases, estimate, technology at the client's level),
+ * then one technical spec for the team (architecture and flows in Mermaid, contracts, data, what
+ * changes in every component, test plan), then phases filed as cards on Development (Work). Each
+ * working phase is a conversation with a person, so none starts on its own. A project keeps all
+ * its documentation in one folder (a docs repository, or one folder in a monorepo); each Factory
+ * says where in the phase instructions, or the agent finds it and confirms.
+ *
+ * Sending the brief for approval needs its document check to have passed, and so does leaving
+ * Spec review for Phases; Done needs the Development cards the phases were filed as.
  */
 export const productBoard = compileBoardDefinition<
   'product',
@@ -36,47 +87,60 @@ export const productBoard = compileBoardDefinition<
     intake: {
       name: 'Intake',
       kind: 'resting',
-      // Spec straight from Intake when the brief already exists.
+      // Brief or Spec straight from Intake when the research or the brief already exists.
+      nextPhases: ['enrich', 'brief', 'spec', 'canceled'],
+    },
+    enrich: {
+      name: 'Research',
+      description:
+        'Interview the engineer before anything is written: how the system works, pitfalls, constraints, how they would do it.',
+      kind: 'working',
+      runner: { context: PRODUCT_CONTEXT, skill: 'product-enrich' },
       nextPhases: ['brief', 'spec', 'canceled'],
     },
     brief: {
       name: 'Brief',
-      description: 'Shape the request with a person into a brief: goal, scope, phases and estimate.',
+      description:
+        'Shape the request with a person into the client-facing brief: goal, use cases, scope, acceptance, phases and estimate.',
       kind: 'working',
       runner: { context: PRODUCT_CONTEXT, skill: 'product-brief' },
       nextPhases: ['client-review', 'canceled'],
+      onExit: everySource(documentGate('brief', 'client-review')),
     },
     'client-review': {
       name: 'Approval',
-      description: 'The brief waits for approval (the client, or whoever signs it off). Back to Brief for revisions, on to Spec once agreed.',
-      kind: 'resting',
+      ...resting(
+        'The brief waits for approval (the client, or whoever signs it off). Back to Brief for revisions, on to Spec once agreed.',
+      ),
       nextPhases: ['brief', 'spec', 'canceled'],
     },
     spec: {
       name: 'Spec',
-      description: 'Turn the agreed brief into a specification per component, with a person.',
+      description:
+        'Write the technical spec for the team: how the feature fits the system, its diagrams, contracts, data, component changes and test plan. No code.',
       kind: 'working',
       runner: { context: PRODUCT_CONTEXT, skill: 'product-spec' },
       nextPhases: ['spec-review', 'canceled'],
     },
     'spec-review': {
       name: 'Spec review',
-      description: 'The team reads the spec. Back to Spec for changes, on to Breakdown once agreed.',
-      kind: 'resting',
-      nextPhases: ['spec', 'breakdown', 'canceled'],
+      ...resting('The team reads the spec. Back to Spec for changes, on to Phases once its check passed.'),
+      nextPhases: ['spec', 'phases', 'canceled'],
+      onExit: everySource(documentGate('spec', 'phases')),
     },
-    breakdown: {
-      name: 'Breakdown',
-      description: 'Cut the agreed spec into work items for each repository.',
+    phases: {
+      name: 'Phases',
+      description:
+        'Split the spec into independently verifiable phases and file each as a Development card per repository. No code.',
       kind: 'working',
-      runner: { context: PRODUCT_CONTEXT, skill: 'product-breakdown' },
-      nextPhases: ['breakdown-review', 'canceled'],
+      runner: { context: PRODUCT_CONTEXT, skill: 'product-phases' },
+      nextPhases: ['phases-review', 'canceled'],
     },
-    'breakdown-review': {
-      name: 'Breakdown review',
-      description: 'A person checks the work items filed on Work. Back to Breakdown to fix them, Done once right.',
-      kind: 'resting',
-      nextPhases: ['breakdown', 'done', 'canceled'],
+    'phases-review': {
+      name: 'Phases review',
+      ...resting('A person checks the filed cards. Back to Phases to fix them, Done once right.'),
+      nextPhases: ['phases', 'done', 'canceled'],
+      onExit: everySource(childrenGate),
     },
     done: {
       name: 'Done',

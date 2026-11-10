@@ -399,8 +399,9 @@ describe('bundled Factory skill assets', () => {
       'factory-review',
       'factory-self-review',
       'factory-triage',
-      'product-breakdown',
       'product-brief',
+      'product-enrich',
+      'product-phases',
       'product-spec',
     ]);
     await Promise.all(
@@ -455,9 +456,9 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('`removeLabels: ["status: needs triage"]`');
   });
 
-  it('keeps the Product skills interactive, with the documents location taken from the phase instructions', async () => {
+  it('keeps the Product skills interactive, code-free, with one documentation folder', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
-    for (const skillName of ['product-brief', 'product-spec', 'product-breakdown']) {
+    for (const skillName of ['product-enrich', 'product-brief', 'product-spec', 'product-phases']) {
       const prose = await fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
       expect(prose).toContain(`name: ${skillName}`);
       // Unlike the autonomous Factory skills, these ask the person and wait.
@@ -466,7 +467,17 @@ describe('bundled Factory skill assets', () => {
       expect(prose).toContain('phase instructions');
       expect(prose).toContain('factory_transition_work_item');
       expect(prose).toMatch(/Never merge/);
+      expect(prose).toContain('No code is ever written on the Product board.');
+      expect(prose).toMatch(/one folder/);
     }
+    // Document checks gate the reviews; the spec carries the test plan.
+    for (const skillName of ['product-enrich', 'product-brief', 'product-spec']) {
+      const prose = await fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
+      expect(prose).toContain('factory_check_product_document');
+    }
+    const spec = await fs.readFile(path.join(assetRoot, 'product-spec', 'SKILL.md'), 'utf8');
+    expect(spec).toContain('## Test plan');
+    expect(spec).toContain('Never split the spec into one document per component.');
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
@@ -3494,8 +3505,9 @@ describe('FactorySkillSource layering', () => {
       'factory-review',
       'factory-self-review',
       'factory-triage',
-      'product-breakdown',
       'product-brief',
+      'product-enrich',
+      'product-phases',
       'product-spec',
     ]);
     expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);
@@ -3513,8 +3525,9 @@ describe('FactorySkillSource layering', () => {
       'factory-complete-issue',
       'factory-plan',
       'factory-triage',
-      'product-breakdown',
       'product-brief',
+      'product-enrich',
+      'product-phases',
       'product-spec',
     ]);
     for (const name of REVIEW_ONLY_FACTORY_SKILLS) {

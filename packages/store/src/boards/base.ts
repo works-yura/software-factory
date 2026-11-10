@@ -344,6 +344,9 @@ class ConcurrentBoardWrite extends Error {}
 /** Who the intake routes moved off the retired Review board are attributed to. */
 export const REVIEW_BOARD_RETIREMENT_ACTOR = 'system:review-board-retirement';
 
+/** Who the Product board's phase renames are attributed to. */
+export const PRODUCT_BOARD_UPGRADE_ACTOR = 'system:product-board-phases';
+
 export class StoredBoardsStorage extends FactoryStorageDomain {
   constructor() {
     super('boards');
@@ -620,6 +623,61 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       });
     }
     return rows.length;
+  }
+
+  /**
+   * A code board renamed or added phases: every project's stored copy of board `key` that still
+   * names one of the old phases (`renames`' keys) is rewritten to `definition`, Factory's current
+   * one, once. What a Factory set per phase carries over to the phase it became (a renamed one) or
+   * kept its key: runner instructions, start rules, and plan approval rules. Intake routes that
+   * file cards into an old phase move to the new one. Returns the boards rewritten.
+   */
+  async renameStoredBoardPhases(
+    key: string,
+    definition: StoredBoardInput,
+    renames: Readonly<Record<string, string>>,
+    actor: string,
+  ): Promise<number> {
+    const oldNames = Object.keys(renames);
+    const rows = await this.ops.findMany<BoardRow>(BOARDS, { board_key: key });
+    let rewritten = 0;
+    for (const row of rows) {
+      const scope = { orgId: row.org_id, factoryProjectId: row.factory_project_id };
+      const changed = await this.#write(scope, async ops => {
+        const current = await ops.findOne<BoardRow>(BOARDS, { id: row.id });
+        if (!current) return { result: false, changed: false };
+        const phases = await ops.findMany<PhaseRow>(PHASES, { ...scopeWhere(scope), board_key: key });
+        if (!phases.some(phase => oldNames.includes(phase.phase_key))) return { result: false, changed: false };
+        const byNewKey = new Map(phases.map(phase => [renames[phase.phase_key] ?? phase.phase_key, phase]));
+        const upgraded: StoredBoardInput = {
+          ...definition,
+          key,
+          phases: definition.phases.map(phase => {
+            const previous = byNewKey.get(phase.key);
+            if (!previous || previous.kind !== phase.kind) return phase;
+            const instructions = previous.runner?.instructions;
+            return {
+              ...phase,
+              ...(phase.kind === 'working' && instructions ? { runner: { ...(phase.runner ?? {}), instructions } } : {}),
+              ...(previous.auto_start ? { autoStart: true } : {}),
+              ...(previous.auto_start_when ? { autoStartWhen: previous.auto_start_when } : {}),
+              ...(phase.exitTool && previous.exit_tool?.id === phase.exitTool.id
+                ? { exitTool: { ...phase.exitTool, ...previous.exit_tool } }
+                : {}),
+            };
+          }),
+        };
+        await writeBoard(ops, scope, current, upgraded, actor);
+        const routes = await ops.findMany<IntakeRouteRow>(INTAKE_ROUTES, { ...scopeWhere(scope), board_key: key });
+        for (const route of routes) {
+          const renamed = route.phase_key ? renames[route.phase_key] : undefined;
+          if (renamed) await updateIntakeRouteRow(ops, route, { phase_key: renamed, updated_by: actor });
+        }
+        return { result: true, changed: true };
+      });
+      if (changed) rewritten++;
+    }
+    return rewritten;
   }
 
   /** Puts the project's routes in the order of `ids`, which must name every route exactly once. */

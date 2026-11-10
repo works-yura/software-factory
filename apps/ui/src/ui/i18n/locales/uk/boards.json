@@ -16,12 +16,13 @@
     "title": "Продукт",
     "phases": {
       "intake": "Вхідні",
+      "enrich": "Дослідження",
       "brief": "Бриф",
       "client-review": "Погодження",
       "spec": "Специфікація",
       "spec-review": "Рев’ю специфікації",
-      "breakdown": "Розбиття",
-      "breakdown-review": "Перевірка розбиття",
+      "phases": "Фази",
+      "phases-review": "Рев’ю фаз",
       "done": "Готово",
       "canceled": "Скасовано"
     }
