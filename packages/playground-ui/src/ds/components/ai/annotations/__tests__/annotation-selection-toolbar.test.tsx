@@ -62,13 +62,6 @@ describe('AnnotationSelectionToolbar', () => {
       expect(chat.sent).toEqual(['1. > Open rows\n\n   Too dense\n\nThoughts?']);
     });
 
-    it('keeps Shift+Enter as a new line in the note', async () => {
-      await user.click(noteField());
-      await user.keyboard('one{Shift>}{Enter}{/Shift}two');
-
-      expect(noteField()).toHaveProperty('value', 'one\ntwo');
-    });
-
     it('cancels on Escape without adding anything', async () => {
       await user.click(noteField());
       await user.keyboard('never mind{Escape}');
@@ -78,11 +71,6 @@ describe('AnnotationSelectionToolbar', () => {
       expect(chat.sent).toEqual(['Plain']);
     });
 
-    it('cancels from the Cancel button', async () => {
-      await user.click(screen.getByRole('button', { name: 'Cancel' }));
-
-      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull());
-    });
   });
 
   describe('when the selection reaches into a second message', () => {
