@@ -36,6 +36,12 @@ export function productChangeOf(item: Pick<FactoryRuleItemContext, 'metadata'>):
 /** The change folder that holds a recorded Product document, e.g. `docs/changes/2026-11-10-x/tasks.md` → `docs/changes/2026-11-10-x`. */
 export function changeFolderOf(documentPath: string): string | undefined {
   const normalized = documentPath.trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  const segments = normalized.split('/').filter(Boolean);
+  // `…/changes/<change>/<file>` from any workspace or absolute prefix: the folder relative to the docs root,
+  // which is what a Development session in another workspace can find.
+  const at = segments.lastIndexOf('changes');
+  if (at >= 0 && at + 2 < segments.length) return `changes/${segments[at + 1]}`;
+  // Older layouts (`specify/<feature>/…`, `features/<feature>/spec.md`) keep the folder as recorded.
   const slash = normalized.lastIndexOf('/');
   return slash > 0 ? normalized.slice(0, slash) : undefined;
 }

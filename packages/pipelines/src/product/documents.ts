@@ -184,13 +184,14 @@ function mermaidKinds(markdown: string): string[] {
 /** The fields every task in tasks.md carries, as `- <field>: …` lines under its heading. */
 export const PRODUCT_TASK_FIELDS = ['role', 'depends-on', 'acceptance', 'verify'] as const;
 
-const TASK_ID = /^([A-Z][A-Z0-9]*-\d+[a-z]?)\b/;
+// `PT-01`, `PT-01a`, the docs-sync task `PT-DOCS`, and Ukrainian prefixes such as `ОП-01`.
+const TASK_ID = /^(\p{Lu}[\p{Lu}0-9]*-[\p{Lu}0-9]+[a-z]?)(?![\p{L}\p{N}_])/u;
 const NO_DEPENDENCY = /^(none|—|-|немає|нема)$/i;
 
 /**
  * Problems with the tasks under tasks.md's `## Tasks`: each `### <ID> — <title>` must carry every
  * field in {@link PRODUCT_TASK_FIELDS}, and every `depends-on` id must be a task of this file
- * (a cross-feature dependency is written `<feature>/<ID>` and is not resolved here).
+ * (a dependency on another change is written `<change>/<ID>` and is not resolved here).
  */
 export function productTaskProblems(markdown: string): string[] {
   const tasks = new Map<string, Set<string>>();

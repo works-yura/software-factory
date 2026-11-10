@@ -137,6 +137,7 @@ describe('Product session tools', () => {
     const product = await setup();
     expect(Object.keys(product.tools).sort()).toEqual([
       'factory_check_product_document',
+      'factory_comment_product_task',
       'factory_create_work_item',
       'factory_transition_work_item',
     ]);
@@ -165,6 +166,36 @@ describe('Product session tools', () => {
     await expect(
       create.execute({ ...input, title: 'Points screen', repository: 'acme/mobile' }, { requestContext: context }),
     ).rejects.toThrow('acme/mobile is not linked to this Factory');
+  });
+
+  it('comments on its own phase cards only', async () => {
+    const { tools, context, storage, comments } = await setup({ stage: 'phases' });
+    const create = tools.factory_create_work_item as ExecutableTool;
+    const comment = tools.factory_comment_product_task as ExecutableTool;
+    const filed = (await create.execute(
+      { title: 'Points API', brief: 'Implements spec.md#contracts.', repository: 'acme/api' },
+      { requestContext: context },
+    )) as { id: string };
+
+    await expect(
+      comment.execute({ workItem: filed.id, body: 'Scope changed: see tasks.md#PT-02.' }, { requestContext: context }),
+    ).resolves.toMatchObject({ workItem: filed.id, posted: true });
+    expect(comments.at(-1)).toMatchObject({ workItemId: filed.id, body: 'Scope changed: see tasks.md#PT-02.' });
+
+    const stranger = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { input: { board: 'work', title: 'Someone else', stages: ['execute'], sessions: {}, metadata: {} } },
+      role: 'work',
+      session: { sessionId: 'resource-2', branch: 'factory/other', threadId: 'thread-2' },
+      resourceId: 'resource-2',
+      kickoffKey: 'kickoff-2',
+      kickoffMessage: null,
+    });
+    await expect(
+      comment.execute({ workItem: stranger.item.id, body: 'x' }, { requestContext: context }),
+    ).rejects.toThrow('not filed by this Product card');
   });
 
   it("files the docs-sync task with the change folder, and refuses it before the change's tasks were checked", async () => {
@@ -203,11 +234,11 @@ describe('Product session tools', () => {
     )) as { id: string };
     expect((await storage.get({ orgId: 'org-1', id: task.id }))!.metadata).toEqual({
       repository: 'acme/api',
-      [PRODUCT_CHANGE_KEY]: 'docs/changes/2026-11-10-loyalty',
+      [PRODUCT_CHANGE_KEY]: 'changes/2026-11-10-loyalty',
     });
     const sync = (await create.execute(docsSync, { requestContext: context })) as { id: string };
     expect((await storage.get({ orgId: 'org-1', id: sync.id }))!.metadata).toMatchObject({
-      [PRODUCT_CHANGE_KEY]: 'docs/changes/2026-11-10-loyalty',
+      [PRODUCT_CHANGE_KEY]: 'changes/2026-11-10-loyalty',
       [PRODUCT_DOCS_SYNC_KEY]: true,
     });
   });

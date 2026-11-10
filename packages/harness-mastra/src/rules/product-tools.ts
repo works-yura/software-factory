@@ -251,6 +251,38 @@ export function createProductTools(
       },
     }),
 
+    factory_comment_product_task: createTool({
+      id: 'factory_comment_product_task',
+      description:
+        "Post a comment on a Development card this Product card filed (one of its phase tasks), e.g. when the agreed plan changed after it was filed: what changed in its task, which spec sections, and whether it should wait. Only this card's own children can be commented on; the comment is the agent's, under this session.",
+      inputSchema: z
+        .object({
+          workItem: z.string().trim().min(1).describe("The Development card's id, as factory_create_work_item returned it."),
+          body: z.string().trim().min(1).max(8000).describe("The comment, in the person's language."),
+        })
+        .strict(),
+      execute: async ({ workItem, body }, execution) => {
+        const { binding, item: parent } = await currentBinding(execution?.requestContext);
+        if (!productChildWorkItemIds(parent.metadata).includes(workItem)) {
+          throw new Error('That card was not filed by this Product card: only its own phase tasks can be commented on.');
+        }
+        const child = await options.storage.get({ orgId: binding.orgId, id: workItem });
+        if (!child || child.parentWorkItemId !== parent.id) {
+          throw new Error('That card is no longer a task of this Product card.');
+        }
+        const comment = await options.product.feed.createComment({
+          orgId: binding.orgId,
+          workItemId: child.id,
+          author: actorFromAgentBinding(binding.id),
+          body,
+        });
+        if (comment.status !== 'created') {
+          throw new Error(`The comment was not posted (${comment.status === 'invalid' ? comment.message : comment.status}).`);
+        }
+        return { workItem: child.id, title: child.title, posted: true };
+      },
+    }),
+
     factory_check_product_document: createTool({
       id: 'factory_check_product_document',
       description:

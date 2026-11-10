@@ -128,7 +128,12 @@ describe('Work board and the project documentation', () => {
   });
 
   it('reads the change folder from a recorded document path', () => {
-    expect(changeFolderOf('docs/changes/2026-11-10-loyalty/tasks.md')).toBe(CHANGE);
+    // Relative to the docs root, whatever workspace or absolute prefix the agent typed.
+    expect(changeFolderOf('docs/changes/2026-11-10-loyalty/tasks.md')).toBe('changes/2026-11-10-loyalty');
+    expect(changeFolderOf('/workspace/acme-docs/changes/2026-11-10-loyalty/design.md')).toBe('changes/2026-11-10-loyalty');
+    expect(changeFolderOf('syncta-docs\\changes\\2026-11-10-loyalty\\tasks.md')).toBe('changes/2026-11-10-loyalty');
+    // Older layouts keep the folder as recorded.
+    expect(changeFolderOf('docs/specify/loyalty/tasks.md')).toBe('docs/specify/loyalty');
     expect(changeFolderOf('tasks.md')).toBeUndefined();
   });
 });

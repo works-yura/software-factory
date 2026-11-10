@@ -178,6 +178,22 @@ describe('product document checks', () => {
     ).toEqual(['Not included', 'Done means']);
   });
 
+  it('reads task ids with Cyrillic prefixes and the docs-sync task', () => {
+    const tasks = [
+      '## Tasks',
+      '### ОП-01 — API сповіщень',
+      '- role: backend',
+      '- depends-on: none',
+      '- acceptance: …',
+      '- verify: …',
+      '### ОП-DOCS — синхронізація документації',
+      '- role: docs',
+      '- depends-on: ОП-01, 2026-11-01-billing/BL-03',
+      '- acceptance: …',
+    ].join('\n');
+    expect(productTaskProblems(tasks)).toEqual(['ОП-DOCS has no verify']);
+  });
+
   it('requires the brief to list its external dependencies and risks', () => {
     const without = BRIEF.replace('## External dependencies and risks', 'External dependencies and risks');
     expect(checkProductDocumentStructure('brief', without).missingSections).toEqual(['External dependencies and risks']);
