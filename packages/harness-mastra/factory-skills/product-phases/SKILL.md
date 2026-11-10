@@ -9,7 +9,7 @@ Turn the agreed **design** (`design.md`) on this Product card into the backlog t
 
 **No code is ever written on the Product board.** A task says *what* is delivered and *how it is checked*, never how it is coded. tasks.md is not an implementation document and holds no code.
 
-**Asking the person.** When you need the person's decisions (a batch of gaps, a choice between options), ask with the question tool when the session offers one (`AskUserQuestion` / `ask_user`), as `product-enrich` describes: up to 4 self-contained questions per call, 2–4 options each, your recommended answer first with ` (рекомендовано)` at the end of its label, then wait. Write the questions as text only when no question tool is offered.
+**Asking the person.** Every question to the person — a batch of gaps, a choice between options, a confirmation, "ready to send?", "move to the next phase?" — goes through the question tool when the session offers one (a question as plain text at the end of a message is a defect) (`AskUserQuestion` / `ask_user`), as `product-enrich` describes: up to 4 self-contained questions per call, 2–4 options each, your recommended answer first with ` (рекомендовано)` at the end of its label, then wait. Write the questions as text only when no question tool is offered.
 
 Ask only what passes `product-enrich`'s test (the person's call, changes what is built or the estimate, not settled by facts); do bookkeeping silently, and put every interpretation or scope point as a question with options, never in a "decided myself" note (`skill_read` skill `product-enrich`, section "What deserves a question").
 

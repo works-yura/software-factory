@@ -42,7 +42,7 @@ Ask round 0 only where the request and the black box leave intent unclear, and w
 
 Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask *now* without guessing at answers you haven't heard. Ask the whole frontier in one round.
 
-**Ask with the question tool, so the person answers in a form, not in prose.** When the session offers a tool for asking the person (`AskUserQuestion` in Claude Code, `ask_user` in Mastra), every round goes through it:
+**Ask with the question tool, so the person answers in a form, not in prose.** When the session offers a tool for asking the person (`AskUserQuestion` in Claude Code, `ask_user` in Mastra), **every** question to the person goes through it — not only interview rounds, but also confirmations ("have we reached a shared understanding?", "record these DEC entries?"), the next step ("move to Brief, or straight to Spec?") and any yes/no. A question written as plain text at the end of a message is a defect: the person cannot answer it with a click. Rounds go like this:
 
 - One round = one call with **up to 4 questions** (`questions: [...]`). A bigger frontier is split into consecutive calls of at most 4, the most fundamental decisions first. Where the tool takes only one question (`ask_user`), ask one question per call.
 - Each question is **self-contained**: the person may see only the card, not your message. Put the context they need to decide in the question itself; a short `header` (2–4 words) names the decision.
@@ -69,7 +69,7 @@ Only when no question tool is offered, write the round as text, numbered, each w
 - Each round's answers reshape the tree: settled decisions push the frontier outward. Recompute it and ask the next round.
 - **Facts are your job, never the person's.** When a question needs a fact from the code, the documents or the repository history, look it up yourself before or while you ask; never ask the person something you could read. Ask only for **decisions** and for knowledge that lives in heads (why it was built so, what broke last time, what the client really means).
 - **Wait** for the answers. Never fill a branch with a guess.
-- You are **done** when the frontier is empty: every branch visited, nothing silently assumed. Then ask the person to confirm you have reached a shared understanding. Do not move on until they do.
+- You are **done** when the frontier is empty: every branch visited, nothing silently assumed. Then ask the person, with the question tool, to confirm you have reached a shared understanding (options such as: confirmed, go to Brief / go straight to Spec / one more round on …). Do not move on until they do.
 
 Cover at least these branches, skipping what is already clear:
 
