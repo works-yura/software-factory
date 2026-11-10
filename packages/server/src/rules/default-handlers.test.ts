@@ -165,7 +165,7 @@ describe('built-in board and integration handlers', () => {
   it('ships ordinary visible default leaves', () => {
     expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
     expect(workBoard.rules.triage?.issue?.onEnter).toBeTypeOf('function');
-    expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
+    expect(workBoard.rules.done?.issue?.onEnter).toBeUndefined();
     expect(workBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
     expect(workBoard.rules['pr-review']?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
@@ -469,28 +469,6 @@ describe('built-in board and integration handlers', () => {
       prompt: expect.stringContaining('Prepare approval'),
     });
     expect(await rule?.(context([]))).toMatchObject({ skillName: 'factory-triage' });
-  });
-
-  it('cleans up triage labels whenever a GitHub issue moves to Done', async () => {
-    const rule = workBoard.rules.done?.issue?.onEnter;
-    const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
-      cause: 'board_drag',
-      stage: 'done',
-      fromStage: 'intake',
-      toStage: 'done',
-    } as FactoryStageRuleContext;
-
-    expect(await rule?.(context)).toMatchObject({
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'factory-complete-issue',
-      arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
-    });
-    expect(await rule?.({ ...context, fromStage: 'triage' })).toMatchObject({
-      type: 'invokeSkill',
-      skillName: 'factory-complete-issue',
-    });
   });
 
   it('starts PR understanding when a human moves a pull request into PR review', async () => {

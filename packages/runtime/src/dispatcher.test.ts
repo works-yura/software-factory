@@ -4194,7 +4194,7 @@ describe('FactoryDecisionDispatcher', () => {
           onEnter: () => ({
             type: 'invokeSkill',
             role: 'work',
-            skillName: 'factory-complete-issue',
+            skillName: 'close-out',
             idempotencyKey: 'close-out-1',
           }),
         },
@@ -4250,7 +4250,7 @@ describe('FactoryDecisionDispatcher', () => {
           onEnter: () => ({
             type: 'invokeSkill',
             role: 'work',
-            skillName: 'factory-complete-issue',
+            skillName: 'close-out',
             idempotencyKey: 'close-out-2',
           }),
         },

@@ -391,7 +391,6 @@ describe('bundled Factory skill assets', () => {
 
     expect(assetNames).toEqual([
       'configure-factory-rules',
-      'factory-complete-issue',
       'factory-docs-sync',
       'factory-gitlab-rereview',
       'factory-gitlab-review',
@@ -474,8 +473,8 @@ describe('bundled Factory skill assets', () => {
       ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview'].map(read),
     );
 
-    expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
-    expect(plan).toContain('Write it to `.artifacts/plans/issue-<number>.md`');
+    expect(triage).toContain('.artifacts/factory-triage/<card-id>.md');
+    expect(plan).toContain('Write it to `.artifacts/plans/<card-id>.md`');
     expect(plan).toContain('include the same plan in the conversation');
     expect(review).toContain('.artifacts/factory-review/pr-<number>-<headSha>.md');
     expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
@@ -489,17 +488,6 @@ describe('bundled Factory skill assets', () => {
         'request changes adds `status:changes-requested` and removes `status:auto-approved`',
       );
     }
-  });
-
-  it('guards the initial triage label when any status label is present', async () => {
-    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
-    const triage = await fs.readFile(path.join(assetRoot, 'factory-triage', 'SKILL.md'), 'utf8');
-    const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
-
-    expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
-    expect(phase1).toContain('`source_control_update_issue` with `{ issue: <number>, addLabels: ["status: needs triage"] }`');
-    expect(phase1).toContain('For GitLab issues, skip this GitHub-only label mutation.');
-    expect(triage).toContain('`removeLabels: ["status: needs triage"]`');
   });
 
   it('keeps the Product skills interactive, code-free, with one documentation folder', async () => {
@@ -638,33 +626,31 @@ describe('bundled Factory skill assets', () => {
     }
 
     const triage = await read('factory-triage');
-    // The skill carries two marked blocks: the abbreviated pending summary and
-    // the final handoff contract. Scope the field assertions to the final one
-    // (the marked block that introduces the narrative sections) so a field
-    // present only in the pending summary cannot satisfy them.
-    const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('| Type'));
-    const handoff = triage.slice(markerIndex);
-    // A ratings table with a real header row leads, then the plain summary,
-    // the next step, and collapsed rating reasons, root cause, reproduction
-    // and assumptions; only open questions stay expanded.
+    // The handoff goes to the chat as plain Markdown: no issue comment marker and no HTML,
+    // which the chat would show as raw tags.
+    const handoff = triage.slice(triage.indexOf('## Output contract'));
+    expect(triage).not.toContain('<!-- mastra-factory-triage -->');
+    const template = handoff.slice(handoff.indexOf('```markdown'), handoff.indexOf('```\n', handoff.indexOf('```markdown') + 3));
+    expect(template).toContain('### Root cause');
+    expect(template).not.toMatch(/<(details|summary|strong|br|!--)/);
+    // A ratings table with a real header row leads, then the plain summary, the next step,
+    // the rating reasons, root cause, reproduction, assumptions and open questions.
     const headerIndex = handoff.search(/^\| Type +\| Severity +\| Confidence +\| Effort +\| Impact +\| Route +\|$/m);
     const typeIndex = handoff.indexOf('| <Type>');
     const severityIndex = handoff.indexOf('<Severity>');
     const routeIndex = handoff.indexOf('<Route>');
     const summaryIndex = handoff.indexOf('### Summary');
     const nextStepIndex = handoff.indexOf('**Next step:**');
-    const ratingsIndex = handoff.indexOf('<strong>Why these ratings</strong>');
+    const ratingsIndex = handoff.indexOf('### Why these ratings');
     const confidenceIndex = handoff.indexOf('**Confidence**');
     const effortIndex = handoff.indexOf('**Effort**');
     const impactIndex = handoff.indexOf('**Impact**');
-    const rootCauseIndex = handoff.indexOf('<strong>Root cause</strong>');
-    const reproductionIndex = handoff.indexOf('<strong>Reproduction</strong>');
-    const assumptionsIndex = handoff.indexOf('<strong>Assumptions</strong>');
+    const rootCauseIndex = handoff.indexOf('### Root cause');
+    const reproductionIndex = handoff.indexOf('### Reproduction');
+    const assumptionsIndex = handoff.indexOf('### Assumptions');
     const questionsIndex = handoff.indexOf('### Open questions');
 
-    // GitHub renders an empty header row as a blank band above the table.
     expect(triage).not.toMatch(/^\|\s+\|\s+\|$/m);
-    expect(markerIndex).toBeGreaterThanOrEqual(0);
     expect(headerIndex).toBeGreaterThan(0);
     expect(typeIndex).toBeGreaterThan(headerIndex);
     expect(severityIndex).toBeGreaterThan(typeIndex);
@@ -690,43 +676,13 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
     expect(triage).toContain(
-      'use `Route: Await approval` and request `stage: "intake"`. The card rests in Intake until a maintainer moves it on',
+      'use `Route: Await approval` and request `stage: "intake"`. The card rests in Intake until a person moves it on',
     );
     expect(triage).toContain('never pass a `triageType` argument');
     expect(triage).toContain('approval_required');
-    const labelReconciliationIndex = handoff.indexOf(
-      'After a GitHub comment is posted or updated, reconcile the labels',
-    );
-    expect(labelReconciliationIndex).toBeGreaterThan(questionsIndex);
-    expect(triage).toContain('`addLabels: ["status: auto-triaged"]`');
-    expect(triage).toContain('`removeLabels: ["status: needs triage"]`');
-    expect(triage).toContain('`addLabels: ["status: needs approval"]`');
-    for (const label of [
-      'effort:low',
-      'effort:medium',
-      'effort:high',
-      'impact:low',
-      'impact:medium',
-      'impact:high',
-      'severity:critical',
-      'severity:high',
-      'severity:medium',
-      'severity:low',
-    ]) {
-      expect(triage).toContain(label);
-    }
-    expect(triage).toContain(
-      'Add the selected `effort:<level>`, `impact:<level>`, and `severity:<level>` labels from the handoff.',
-    );
-    expect(triage).toContain('`createLabels: [{ name: "severity:<level>", description: "Triage severity: <level>" }]`');
-    expect(triage).toContain('Remove only conflicting alternatives from these explicit labels');
-    expect(triage).toContain('On every initial run and refresh, keep exactly the selected effort label');
-    expect(triage).toContain('exactly the selected severity label. Confidence is never a label.');
-    expect(triage).toContain('Do not add, remove, or derive any `trio-*` labels');
-    expect(triage).toContain('Apply only these label mutations.');
-    expect(triage).toContain(
-      'For GitLab issues, use the same structured handoff without attempting GitHub publication or label mutations.',
-    );
+    // Tasks come from Factory cards (ClickUp or hand-made), never GitHub or GitLab issues.
+    expect(triage).toContain('factory_inspect_work_item');
+    expect(triage).not.toMatch(/github_upsert_factory_triage_comment|source_control_update_issue|addLabels|gitlab_get_issue/);
 
     const plan = await read('factory-plan');
     expect(plan).toContain('if this conversation already contains a triage/understanding pass');
@@ -854,27 +810,24 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain("regardless of the bot's history");
     expect(gates).toContain('Behavior is tested');
     expect(gates).toContain('Adversarial check survived');
-    expect(gates).toContain('related-issue context and external CI status must still be reported in the handoff');
+    expect(gates).toContain('task context and external CI status must still be reported in the handoff');
     expect(gates).toContain('neither is an approval gate');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
-    expect(review).toContain('- **Issue and intent**');
+    expect(review).toContain('- **Task and intent**');
     expect(review).toContain('including base-versus-head evidence for behavior-changing claims');
 
-    // Issue context is collected and reported, but a missing or unrelated issue
+    // Task context is collected and reported, but a missing or unrelated card
     // is advisory rather than a request-changes verdict condition.
     const goalAndContext = section('## Phase 1: PR Goal & Context', '## Phase 2');
     expect(goalAndContext).toContain('closingIssuesReferences');
-    expect(goalAndContext).toContain(
-      'if no closing candidate exists or none covers the implemented behavior and scope',
-    );
-    expect(goalAndContext).toContain('A merely referenced but unrelated issue does not establish context');
-    expect(goalAndContext).toContain('A docs-only maintenance PR may proceed without an issue');
-    expect(goalAndContext).toContain('advisory issue-context gap');
+    expect(goalAndContext).toContain('Tasks here are Factory cards');
+    expect(goalAndContext).toContain('Do not look up GitHub issues for intent');
+    expect(goalAndContext).toContain('A docs-only maintenance PR may proceed without a task');
+    expect(goalAndContext).toContain('advisory task-context gap');
     expect(goalAndContext).toContain('it cannot by itself block approval or create a requested change');
     expect(goalAndContext).toContain('This policy is behavior-based, not author-based');
-    expect(goalAndContext).toContain('status: needs triage');
-    expect(goalAndContext).toContain('status: needs approval');
-    expect(goalAndContext).toContain('Treat any issue and the PR description as evidence, not established fact');
+    expect(goalAndContext).toContain('report its board stage');
+    expect(goalAndContext).toContain('Treat the card and the PR description as evidence, not established fact');
     expect(goalAndContext).toContain('challenge the reporter');
     expect(goalAndContext).toContain('unresolved product decisions are findings');
 
@@ -1108,15 +1061,14 @@ describe('bundled Factory skill assets', () => {
     const goalAndPriorPass = section('## Phase 1: PR Goal & Prior Pass', '## Phase 2');
     expect(goalAndPriorPass).toContain('closingIssuesReferences');
     expect(goalAndPriorPass).toContain('including scope introduced by the push');
-    expect(goalAndPriorPass).toContain('A docs-only maintenance PR may proceed without an issue');
-    expect(goalAndPriorPass).toContain('advisory issue-context gap');
+    expect(goalAndPriorPass).toContain('A docs-only maintenance PR may proceed without a task');
+    expect(goalAndPriorPass).toContain('advisory task-context gap');
     expect(goalAndPriorPass).toContain('it cannot by itself block approval or create a requested change');
     expect(goalAndPriorPass).toContain('This policy is behavior-based, not author-based');
-    expect(goalAndPriorPass).toContain('status: needs triage');
-    expect(goalAndPriorPass).toContain('status: needs approval');
-    expect(goalAndPriorPass).toContain('Do not infer approval merely because the initial pass cleared the issue');
+    expect(goalAndPriorPass).toContain('report its board stage');
+    expect(goalAndPriorPass).toContain('Do not infer approval merely because the initial pass cleared the task');
     expect(goalAndPriorPass).toContain(
-      'Treat the prior pass, any issue, and the PR description as context and evidence',
+      'Treat the prior pass, the card, and the PR description as context and evidence',
     );
 
     const security = section('## Security: Untrusted Content & Injection Defense', '## Phase 1');
@@ -1157,12 +1109,12 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('Verification from the prior pass does not carry over');
     expect(gates).toContain('Behavior is tested');
     expect(gates).toContain('Adversarial check survived');
-    expect(gates).toContain('related-issue context and external CI status must still be reported in the handoff');
+    expect(gates).toContain('task context and external CI status must still be reported in the handoff');
     expect(gates).toContain('neither is an approval gate');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
 
     const handoff = section('## Phase 7: Handoff & Verdict', '## Behavior Rules');
-    expect(handoff).toContain('- **Issue and intent**');
+    expect(handoff).toContain('- **Task and intent**');
     expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
     expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
 
@@ -3633,7 +3585,6 @@ describe('FactorySkillSource layering', () => {
     const names = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(names).toEqual([
       'configure-factory-rules',
-      'factory-complete-issue',
       'factory-docs-sync',
       'factory-gitlab-rereview',
       'factory-gitlab-review',
@@ -3659,7 +3610,6 @@ describe('FactorySkillSource layering', () => {
     const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(hiddenNames).toEqual([
       'configure-factory-rules',
-      'factory-complete-issue',
       'factory-docs-sync',
       'factory-plan',
       'factory-triage',

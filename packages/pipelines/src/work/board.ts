@@ -3,7 +3,6 @@ import type { BoardPhaseDefinition, FactoryRuleHandler, FactoryRuleSource, Facto
 
 import {
   buildWorkItem,
-  completeIssue,
   investigateTriagedImportedTask,
   investigateTriagedGitLabIssue,
   planWorkItem,
@@ -133,7 +132,6 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       kind: 'terminal',
       // A review request on a finished pull request reopens its review.
       nextPhases: ['pr-review'],
-      onEnter: { issue: completeIssue },
     },
     canceled: {
       name: 'Canceled',

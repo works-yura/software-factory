@@ -20,7 +20,7 @@ function prepareApproval(context: FactoryStageRuleContext) {
     idempotencyKey: `${context.ingress.id}:prepare-approval`,
     role: 'triage',
     prompt:
-      `Prepare approval for ${sourceRef(context.item)}. Review the existing triage comment and summarize ` +
+      `Prepare approval for ${sourceRef(context.item)}. Review the triage handoff in this conversation and summarize ` +
       'the decision needed before implementation or closure.',
   } as const;
 }
@@ -182,15 +182,5 @@ export function selfReviewWorkItem(context: FactoryStageRuleContext) {
     arguments:
       `Self-review round ${selfReviewRounds(context.item) + 1} of at most ${SELF_REVIEW_ROUND_LIMIT}.\n\n` +
       untrustedSourceReference(context.item),
-  } as const;
-}
-
-export function completeIssue(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-complete-issue`,
-    role: 'triage',
-    skillName: 'factory-complete-issue',
-    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
   } as const;
 }

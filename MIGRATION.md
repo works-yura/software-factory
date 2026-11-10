@@ -293,6 +293,17 @@ Core 1.82.0 містить «Knowledge alpha» з upstream `0a553f0f6f` (#28353)
 | --- | --- | --- |
 | ~~`bug`~~ | прибрано | була окремою дошкою з фазою `tests`; потім злита у Work як test-first, а 2026-11-04 test-first прибрано, див. нижче. Від неї лишились оголошення дошки `changeRequests` і `triageClassification` |
 
+### Задачі з карток, не з GitHub issues (2026-11-10)
+
+Скіли Work з upstream побудовані на GitHub issues (мітки `status: …`, коментар-маркер `<!-- mastra-factory-triage -->` з `<details>`, лічильники PR автора). У нас задачі приходять лише з ClickUp або руками; GitHub — тільки код і PR. У чаті `<details>` показувався сирими тегами.
+
+- **triage:** читає картку (`$ARGUMENTS` з описом ClickUp-таски, `factory_inspect_work_item`), шукає схожі картки й PR; handoff — звичайний Markdown у чаті (`###` замість `<details>`, без HTML і маркера); без читання issue, міток і `github_upsert_factory_triage_comment`; файл `.artifacts/factory-triage/<card-id>.md`. Решта контракту (таблиця оцінок, маршрути, переходи, Bug Record) — як була.
+- **plan:** план у `.artifacts/plans/<card-id>.md`; звірка шляхів з описом картки замість issue.
+- **review / re-review / GitLab review / self-review, product-enrich, product-brief:** задум PR береться з картки Factory, не з GitHub issue (`Task and intent` у handoff, «advisory task-context gap»); бот-автор PR не отримує `Co-Authored-By` від автора issue. Мітки вердикту на самому PR лишились.
+- **Прибрано:** скіл `factory-complete-issue` і правило `completeIssue` (Done на джерелі `issue`): воно лише знімало мітки з GitHub issue. Промпт `prepareApproval` посилається на handoff у розмові, не на коментар.
+- **Лишилось:** джерела правил `issue` / `gitlabIssue` у Work (рушій їх розуміє, у нас таких карток нема).
+- **Тести:** `harness-mastra/src/workspace.test.ts` (контракт triage без HTML і без issue, review), `server/src/rules/default-handlers.test.ts` (тест complete-issue видалено), `api/src/skills.test.ts`, `runtime/src/dispatcher.test.ts` (ім'я скілу в тестовому реєстрі).
+
 ### Test-first прибрано, Work як в оригіналі (2026-11-04)
 
 Дошка Bug (2026-10-28), а потім фаза `tests` у Work (2026-10-29) — додатки v4, не з оригінального Mastra Factory. Work знову: intake → triage → planning → execute → review → done/canceled, як у v2/v3.
