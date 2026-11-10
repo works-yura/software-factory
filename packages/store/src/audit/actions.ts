@@ -23,6 +23,7 @@ export const AUDIT_ACTIONS = {
   skill: ['updated', 'reverted'],
   intake_route: ['created', 'updated', 'deleted', 'reordered'],
   intake_rule: ['created', 'updated', 'deleted'],
+  observability: ['connected', 'disconnected', 'mapping_updated'],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;

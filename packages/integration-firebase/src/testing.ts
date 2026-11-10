@@ -122,3 +122,31 @@ export function fakeGoogle(seed: ObservabilityContractSeed, options: FakeGoogleO
   };
   return { fetch, calls };
 }
+
+/** An in-memory stand-in for the integration's connection and settings rows. */
+export function memoryIntegrationStorage() {
+  const connections = new Map<string, { data: unknown; metadata: Record<string, unknown>; userId: string | null }>();
+  const settings = new Map<string, unknown>();
+  return {
+    rows: { connections, settings },
+    connections: {
+      get: async (orgId: string) => {
+        const row = connections.get(orgId);
+        return row
+          ? { id: `conn-${orgId}`, orgId, userId: row.userId, data: row.data as any, metadata: row.metadata, createdAt: new Date(0), updatedAt: new Date(0) }
+          : null;
+      },
+      upsert: async (orgId: string, input: { userId?: string | null; data: unknown; metadata?: Record<string, unknown> }) => {
+        connections.set(orgId, { data: input.data, metadata: input.metadata ?? {}, userId: input.userId ?? null });
+      },
+      update: async () => null,
+      delete: async (orgId: string) => connections.delete(orgId),
+    },
+    settings: {
+      get: async (orgId: string, userId: string) => (settings.get(`${orgId}:${userId}`) ?? null) as any,
+      save: async (orgId: string, userId: string, config: unknown) => {
+        settings.set(`${orgId}:${userId}`, config);
+      },
+    },
+  };
+}
