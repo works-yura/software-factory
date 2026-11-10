@@ -652,10 +652,9 @@ describe('serving a stored row that fell out of step with code', () => {
 
     const { board, problems } = mergeCodeBehaviour(row, workBoard);
 
-    expect(problems).toEqual([
-      'Phase "done" runs without its code behaviour: Phase "done" must stay terminal; its code behaviour depends on it.',
-      'Board "work" doesn\'t move cards when their source closes: phase "done" isn\'t terminal.',
-    ]);
+    // Done has no code handlers of its own since factory-complete-issue went (0248e95): only the
+    // source-closed move depends on it being terminal.
+    expect(problems).toEqual(['Board "work" doesn\'t move cards when their source closes: phase "done" isn\'t terminal.']);
     expect(board.phaseKind('done')).toBe('resting');
     expect(board.rules.done).toBeUndefined();
     expect(board.sourceClosed).toBeUndefined();
