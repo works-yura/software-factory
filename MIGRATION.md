@@ -232,6 +232,7 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | `2ac5d8228d` (#29828) | банер про ключ шифрування читається як виправлення конфігурації: «Factory needs its encryption key.», «This deployment doesn't have one set» / «…is using a different one than before», «Set `FACTORY_CREDENTIAL_ENCRYPTION_KEY` and redeploy» | `store/src/secret-encryption{,.test}.ts`, `apps/ui/src/ui/layouts/{ServerProblemBanner.tsx,__tests__/AppLayout.msw.test.tsx}`, переклади `app.json` (en, uk) | — |
 | `2b3e577135` (#29472) | після кількох перевстановлень GitHub App репозиторії не переносяться на мертву інсталяцію: відновлення бере ту, що справді бачить репозиторій | `integration-github/src/platform/integration{,.test}.ts` | — |
 | `b90afb8319` (#29481) | аудит переміщень на власних дошках записує `from` (фазу, з якої картка пішла), а коміт у ту саму фазу не пише подію | `runtime/src/transition-service{,.test}.ts` | У тесті реєстр дошок без `includeDefaultBoards`: `createBoardRegistry` з `@factory/core` не додає вбудованих дошок. |
+| `81b0b54c1f` (#29824) | токен GitHub у пісочниці оновлюється до того, як спливе: встановлений токен інсталяції старший за 45 хв перевипускається при reconcile і перепідключенні, PAT організації не чіпається | `harness-mastra/src/workspace{,.test}.ts`, `integration-github/src/{session-subscriptions{,.test},token-refresh}.ts` | — |
 
 ### Не перенесено з upstream
 
