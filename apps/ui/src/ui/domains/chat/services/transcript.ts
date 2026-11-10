@@ -338,11 +338,15 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
-      return withTool(state, event.toolCallId, t => ({
-        ...t,
-        status: event.isError ? 'error' : 'done',
-        result: event.result,
-      }));
+      // A call that ended no longer waits on anyone: its question or approval card goes read-only.
+      return dropPromptsFor(
+        withTool(state, event.toolCallId, t => ({
+          ...t,
+          status: event.isError ? 'error' : 'done',
+          result: event.result,
+        })),
+        new Set([event.toolCallId]),
+      );
 
     case 'tool_approval_required':
       return pushPrompt(state, {
@@ -620,7 +624,10 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 
   const onScreenIndex = claimOnScreenEntries(state.entries, messages);
   const confirmed = confirmPendingUserMessages(state, onScreenIndex);
-  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(confirmed, onScreenIndex), messages);
+  const reconciled = dropSettledPrompts(
+    reconcileToolResults(adoptCoveringWindowCopies(confirmed, onScreenIndex), messages),
+    messages,
+  );
 
   if (messages.every(message => onScreenIndex.has(message))) return reconciled;
 
@@ -860,6 +867,34 @@ function windowCopyCovers(onScreen: MastraMessagePart[], persisted: MastraMessag
 }
 
 // SSE gaps can swallow tool_start or tool_end; persisted invocations settle the row.
+/** Removes the question and approval prompts of the given calls. */
+function dropPromptsFor(state: TranscriptState, toolCallIds: ReadonlySet<string>): TranscriptState {
+  if (toolCallIds.size === 0) return state;
+  const entries = state.entries.filter(
+    entry => !((entry.kind === 'suspension' || entry.kind === 'approval') && toolCallIds.has(entry.toolCallId)),
+  );
+  return entries.length === state.entries.length ? state : { ...state, entries };
+}
+
+/**
+ * Prompts the server no longer has: a call whose stored part is settled and whose message no longer
+ * lists it as suspended or awaiting approval. A transcript first drawn from an older snapshot (a
+ * cached history from before the person answered) would otherwise keep an answerable card for it.
+ */
+function dropSettledPrompts(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  const stillWaiting = new Set<string>();
+  const settled = new Set<string>();
+  for (const message of messages) {
+    for (const prompt of persistedPrompts(message)) stillWaiting.add(prompt.toolCallId);
+    for (const part of message.content.parts) {
+      if (part.type === 'tool-invocation' && isTerminalInvocationState(part.toolInvocation.state)) {
+        settled.add(part.toolInvocation.toolCallId);
+      }
+    }
+  }
+  return dropPromptsFor(state, new Set([...settled].filter(id => !stillWaiting.has(id))));
+}
+
 function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
   const serverTerminalParts = new Map<string, ToolInvocationMessagePart>();
   for (const message of messages) {

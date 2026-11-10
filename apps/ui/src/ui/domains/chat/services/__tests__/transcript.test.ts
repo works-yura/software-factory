@@ -861,6 +861,59 @@ describe('transcript reducer message entries', () => {
 });
 
 describe('transcript reducer mergeWindow', () => {
+  it('drops a question card the server has settled when the transcript started from an older snapshot', () => {
+    // A cached history from before the person answered: the call is parked, its message lists it as suspended.
+    const questions = { questions: [{ question: 'Which channels?' }, { question: 'Who gets alerts?' }] };
+    const parked = dbMessage('msg-a', 'assistant', [
+      { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'toolu_q', toolName: 'ask_user', args: questions } },
+    ] as MastraMessagePart[]);
+    parked.content.metadata = {
+      suspendedTools: { toolu_q: { toolCallId: 'toolu_q', toolName: 'ask_user', args: questions, suspendPayload: questions } },
+    };
+    const onScreen = createInitialTranscript({ messages: [parked] });
+    expect(onScreen.entries.some(entry => entry.kind === 'suspension')).toBe(true);
+
+    // The server now has the call answered and the suspension cleared.
+    const answered = dbMessage('msg-a', 'assistant', [
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId: 'toolu_q', toolName: 'ask_user', args: questions, result: '1. Which channels?\n   → Push' },
+      },
+    ] as MastraMessagePart[]);
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: [answered] });
+
+    expect(next.entries.some(entry => entry.kind === 'suspension')).toBe(false);
+  });
+
+  it('keeps a question card the server still lists as suspended', () => {
+    const questions = { questions: [{ question: 'A?' }, { question: 'B?' }] };
+    const parked = dbMessage('msg-a', 'assistant', [
+      { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'toolu_q', toolName: 'ask_user', args: questions } },
+    ] as MastraMessagePart[]);
+    parked.content.metadata = {
+      suspendedTools: { toolu_q: { toolCallId: 'toolu_q', toolName: 'ask_user', args: questions, suspendPayload: questions } },
+    };
+    const onScreen = createInitialTranscript({ messages: [parked] });
+    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: [parked] });
+    expect(next.entries.some(entry => entry.kind === 'suspension')).toBe(true);
+  });
+
+  it('drops a question card once its call ends live', () => {
+    const questions = { questions: [{ question: 'A?' }, { question: 'B?' }] };
+    const parked = dbMessage('msg-a', 'assistant', [
+      { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'toolu_q', toolName: 'ask_user', args: questions } },
+    ] as MastraMessagePart[]);
+    parked.content.metadata = {
+      suspendedTools: { toolu_q: { toolCallId: 'toolu_q', toolName: 'ask_user', args: questions, suspendPayload: questions } },
+    };
+    const onScreen = createInitialTranscript({ messages: [parked] });
+    const next = transcriptReducer(onScreen, {
+      type: 'event',
+      event: { type: 'tool_end', toolCallId: 'toolu_q', result: 'answer', isError: false } as never,
+    });
+    expect(next.entries.some(entry => entry.kind === 'suspension')).toBe(false);
+  });
+
   it('prepends only messages older than the oldest entry already on screen', () => {
     // On screen: newest window (msg-3, msg-4). Grown fetch returns an older
     // window that overlaps at msg-3 (the anchor).

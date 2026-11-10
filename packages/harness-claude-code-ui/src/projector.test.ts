@@ -370,6 +370,46 @@ describe('ClaudeTranscriptProjector', () => {
       ]);
     });
 
+    it('stores an answered several-question card as answered, so a reload shows it read-only', () => {
+      const input = {
+        questions: [
+          { question: 'Which channels?', options: [{ label: 'Push (рекомендовано)' }, { label: 'Email' }] },
+          { question: 'Who gets deposit alerts?', options: [{ label: 'Owner' }, { label: 'Everyone' }] },
+        ],
+      };
+      const ask = { toolCallId: 'toolu_q', toolName: 'AskUserQuestion', input };
+      const p = projector();
+      const out = play(p, [
+        { kind: 'input', source: 'signal', text: 'Plan notifications', id: 'sig-1' },
+        { kind: 'tool_call', toolCallId: 'toolu_q', toolName: 'AskUserQuestion', input },
+        { kind: 'permission', ...ask },
+      ]);
+      for (const event of [{ type: 'tool_suspended', toolName: 'AskUserQuestion', toolCallId: 'toolu_q' }, { type: 'agent_end', reason: 'suspended' }] as const) {
+        const next = p.event(event, undefined, ask);
+        out.events.push(...next.events);
+        out.writes.push(...next.writes);
+      }
+      const answer = '1. Which channels?\n   → Push\n2. Who gets deposit alerts?\n   → Owner';
+      const answered = play(p, [{ kind: 'question_answer', toolCallId: 'toolu_q', answer }], { runId: 'run-2', threadId: 'thread-1' });
+      const after = play(p, [{ kind: 'text', text: 'Thanks, noted.' }, { kind: 'result' } as ClaudeTranscriptEntry], {
+        runId: 'run-2',
+        threadId: 'thread-1',
+      });
+      const end = p.event({ type: 'agent_end' });
+
+      const messages = stored([...out.writes, ...answered.writes, ...after.writes, ...end.writes]);
+      const holder = messages.find(message =>
+        message.content.parts.some(part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === 'toolu_q'),
+      )!;
+      const part = holder.content.parts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === 'toolu_q',
+      ) as { toolInvocation: { state: string; result?: unknown; isError?: boolean; toolName: string } };
+      expect(part.toolInvocation).toMatchObject({ state: 'result', result: answer, toolName: 'ask_user' });
+      expect(part.toolInvocation.isError).toBeUndefined();
+      expect(holder.content.metadata?.suspendedTools).toBeUndefined();
+      expect(p.pendingQuestion).toBeUndefined();
+    });
+
     it('settles a request parked before a restart once the stored message is adopted', () => {
       const holder = stored(parked().out.writes).find(message => message.role === 'assistant')!;
       const restarted = projector();
