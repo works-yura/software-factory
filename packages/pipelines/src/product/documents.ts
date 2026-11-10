@@ -84,7 +84,7 @@ export const PRODUCT_DOCUMENT_SECTIONS: Readonly<Record<ProductDocumentType, rea
     section('Running costs', /running costs?/i, /operating costs?/i, /витрати на експлуатац/i, /експлуатаційн/i),
     section('Approval gates', /approv/i, /погодж/i),
     section('Done means', /done means/i, /definition of done/i, /готово означає/i),
-    OPEN_QUESTIONS,
+    // No Open questions: the brief carries that section only when the person left a question for the client.
   ],
   // The technical spec for the team, as a delta against the areas' truth: every component in one place.
   spec: [

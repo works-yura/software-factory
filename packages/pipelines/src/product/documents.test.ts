@@ -219,6 +219,11 @@ describe('product document checks', () => {
     expect(checkProductDocumentStructure('brief', ukrainian)).toMatchObject({ missingSections: [], formatProblems: [] });
   });
 
+  it('does not require Open questions in the brief: only questions the person left for the client go there', () => {
+    const without = BRIEF.replace('## Open questions', 'Open questions');
+    expect(checkProductDocumentStructure('brief', without).missingSections).toEqual([]);
+  });
+
   it('accepts Ukrainian headings', () => {
     const uk = [
       '# Бриф',

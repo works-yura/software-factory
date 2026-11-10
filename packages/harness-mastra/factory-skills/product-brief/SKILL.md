@@ -15,6 +15,8 @@ Turn the request on this Product card into the **brief**: `<docs>/changes/<chang
 
 **Open questions for the client.** Questions only the client can answer stay listed under *Open questions* in the brief, **and** you put every one of them to the person with the question tool — **never as a plain list in the chat**. Each card question is self-contained (the person may not open the file): what the client asked, the situation in one line, then the options: **your proposed answer first**, labelled ` (рекомендовано)`, with its one-line why in the description; **1–2 real alternatives**, each with its consequence (hours, cost, risk, what the user sees); and **"leave it for <client>"** (it stays under *Open questions* in the brief). The proposed answer you wrote in the brief is the first option, word for word. What the person answers moves into the brief's body; only what they leave for the client stays open.
 
+**The brief's *Open questions* section holds ONLY questions the person explicitly chose to leave for the client** (the "leave it for <client>" option). Never keep a question there on your own, never list answered ones, never write a history of what was resolved ("answers from 10.11 were added: …"). When nothing was left for the client, **there is no *Open questions* section at all** — not "None", not a summary.
+
 ## Write for the client, not the developer
 
 This rule makes or breaks the brief. The reader is not a developer: they care about what they and their users will see and be able to do, not how it is built.
@@ -41,7 +43,7 @@ This phase writes `<docs>/changes/<change>/requirements.md`, `<docs>/changes/<ch
 ## How you work with the person
 
 - **Hunt the gaps, then ask.** Before writing, find everything a builder would have to guess or the client would be unsure about: undefined wording (a button or message with no exact text), missing "done" conditions, unhandled situations, unstated scope next to the ask, and genuinely open questions. Research ran the behaviour gap checklist (`references/gap-checklist.md` in `product-enrich`); **re-run it here as a self-check** (reassigned owner, who triggered it, one person in several businesses, paused or unpaid accounts, existing data and settings, second/empty/failure/retry, time zones and quiet hours, language, out-of-scope neighbours, fit with the literal request). What Research did not settle goes to the person **through the question tool, in rounds of up to 4**, each with your recommended answer. Ask only what you cannot infer from the material, the research or sensible defaults.
-- **Never invent** a requirement, a number, a price or a client preference. What stays unanswered goes under *Open questions*, never into the body as an assumption.
+- **Never invent** a requirement, a number, a price or a client preference. What stays unanswered is asked through the question tool, never put into the body as an assumption; it reaches *Open questions* only if the person leaves it for the client.
 - **Offer options** where the request is vague: 2–3 concrete ones with their trade-offs, and say which you would pick.
 - **The person moves the card.** You never decide the brief is accepted, and you never send anything to the client yourself.
 
