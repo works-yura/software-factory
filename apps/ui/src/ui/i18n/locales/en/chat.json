@@ -473,5 +473,17 @@
       "month": "Recap the month"
     },
     "empty": "Nothing came in, ran or shipped {{period}}."
+  },
+  "fileLinks": {
+    "openInFiles": "Open {{file}} in the Files panel",
+    "documents": "Documents to review",
+    "openDocument": "Open {{document}}",
+    "openDocumentIn": "Open {{document}} ({{language}})",
+    "document": {
+      "research": "research",
+      "brief": "brief",
+      "spec": "spec",
+      "tasks": "phases"
+    }
   }
 }

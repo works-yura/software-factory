@@ -7,6 +7,8 @@ import type { WorkspaceChangePatches, WorkspaceChangesScope } from '../../../../
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { openPropertiesMenu, openPropertySubmenu } from '../../../../../../e2e/ui/properties-menu';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { WorkspacePanelContext } from '../../context/WorkspacePanelContext';
+import type { WorkspacePanelApi } from '../../context/WorkspacePanelContext';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
 import {
   htmlFile,
@@ -661,5 +663,41 @@ describe('WorkspaceViewerPanel', () => {
       expect(await screen.findByText(/The sandbox isn.t running/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Wake sandbox' })).toBeInTheDocument();
     });
+  });
+});
+
+describe('WorkspaceViewerPanel opened from a chat link', () => {
+  it('shows the file asked for with openFile, and reopens it when asked again', async () => {
+    const requests = installHandlers();
+    const panel = (request: number): WorkspacePanelApi => ({
+      open: true,
+      setOpen: () => {},
+      workspacePath: WORKSPACE,
+      threadId: 'thread-1',
+      size: 'full',
+      setSize: () => {},
+      canDock: true,
+      readsChanges: false,
+      openFile: () => {},
+      requestedFile: { path: 'docs/changes/c/requirements.md', request },
+    });
+    const view = renderWithProviders(
+      <WorkspacePanelContext.Provider value={panel(1)}>
+        <WorkspaceViewerPanel workspacePath={WORKSPACE} />
+      </WorkspacePanelContext.Provider>,
+    );
+
+    expect(await screen.findByLabelText('Workspace file viewer')).toBeInTheDocument();
+    await waitFor(() => expect(requests).toContain('docs/changes/c/requirements.md'));
+
+    // Back to the tree, then the same link clicked again: the file comes back.
+    await userEvent.click(screen.getByRole('button', { name: /back/i }));
+    expect(screen.queryByLabelText('Workspace file viewer')).toBeNull();
+    view.rerender(
+      <WorkspacePanelContext.Provider value={panel(2)}>
+        <WorkspaceViewerPanel workspacePath={WORKSPACE} />
+      </WorkspacePanelContext.Provider>,
+    );
+    expect(await screen.findByLabelText('Workspace file viewer')).toBeInTheDocument();
   });
 });

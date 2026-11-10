@@ -1,5 +1,5 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useContext, useRef, useState } from 'react';
+import { useCallback, useContext, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { ChatTranscriptContext } from '../../chat/context/ChatTranscriptContext';
@@ -30,6 +30,14 @@ export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
   // the sandbox awake.
   const readsChanges = panelToggle?.open === true || (Boolean(workspacePath) && awakeWorkspace === workspacePath);
   const setOpen = (next: boolean) => setToggled({ layoutRevision, open: next });
+  const [requestedFile, setRequestedFile] = useState<{ path: string; request: number }>();
+  // Stable, so markdown that links files keeps its memoized renderers across renders.
+  const layoutRevisionRef = useRef(layoutRevision);
+  layoutRevisionRef.current = layoutRevision;
+  const openFile = useCallback((path: string) => {
+    setToggled({ layoutRevision: layoutRevisionRef.current, open: true });
+    setRequestedFile(previous => ({ path, request: (previous?.request ?? 0) + 1 }));
+  }, []);
   const size = sizing?.layoutRevision === layoutRevision ? sizing.size : 'compact';
   const setSize = (next: WorkspacePanelSize) => setSizing({ layoutRevision, size: next });
 
@@ -38,7 +46,7 @@ export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
 
   return (
     <WorkspacePanelContext.Provider
-      value={{ open, setOpen, workspacePath, threadId, size, setSize, canDock, readsChanges }}
+      value={{ open, setOpen, workspacePath, threadId, size, setSize, canDock, readsChanges, openFile, requestedFile }}
     >
       <div
         ref={chatRef}

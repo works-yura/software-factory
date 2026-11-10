@@ -28,6 +28,7 @@ import {
 } from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { RunErrorNotice } from './RunErrorNotice';
+import { useWorkspaceFileLinkComponents, WorkspaceDocumentButtons } from './WorkspaceFileLinks';
 import { ToolCard } from './tool/ToolCard';
 import { ToolFactory } from './ToolFactory';
 import {
@@ -101,6 +102,7 @@ export function MessageBubble({
   /** The stretches of tool work this entry hosts, and the parts an earlier entry's stretch draws instead. */
   activity?: EntryActivity;
 }) {
+  const fileLinks = useWorkspaceFileLinkComponents();
   const written = renderableParts(entry);
   const paced = useRevealedParts(written, Boolean(entry.streaming));
   const parts = withLiveHost(entry.id, written, paced, activity);
@@ -207,9 +209,12 @@ export function MessageBubble({
       }
 
       return (
-        <MarkdownRenderer className="my-3" streaming={entry.streaming}>
-          {part.text}
-        </MarkdownRenderer>
+        <>
+          <MarkdownRenderer className="my-3" streaming={entry.streaming} components={fileLinks}>
+            {part.text}
+          </MarkdownRenderer>
+          {!entry.streaming && <WorkspaceDocumentButtons text={part.text} />}
+        </>
       );
     },
     Reasoning: (part: ReasoningPart) => {

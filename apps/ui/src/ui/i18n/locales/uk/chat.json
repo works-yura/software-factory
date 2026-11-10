@@ -483,5 +483,17 @@
       "month": "Підсумок місяця"
     },
     "empty": "{{period}} нічого не надійшло, не запускалося й не завершилося."
+  },
+  "fileLinks": {
+    "openInFiles": "Відкрити {{file}} у панелі файлів",
+    "documents": "Документи на перегляд",
+    "openDocument": "Відкрити {{document}}",
+    "openDocumentIn": "Відкрити {{document}} ({{language}})",
+    "document": {
+      "research": "дослідження",
+      "brief": "бриф",
+      "spec": "специфікацію",
+      "tasks": "фази"
+    }
   }
 }

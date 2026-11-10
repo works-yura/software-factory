@@ -12,6 +12,10 @@ export interface WorkspacePanelApi {
   canDock: boolean;
   /** Whether the overview may read changes without waking an idle sandbox nobody asked for. */
   readsChanges: boolean;
+  /** Opens the panel on a workspace file, by its path relative to the workspace root. */
+  openFile: (path: string) => void;
+  /** The last file asked for with `openFile`; `request` changes on every ask, so asking twice reopens it. */
+  requestedFile?: { path: string; request: number };
 }
 
 export const WorkspacePanelContext = createContext<WorkspacePanelApi | undefined>(undefined);

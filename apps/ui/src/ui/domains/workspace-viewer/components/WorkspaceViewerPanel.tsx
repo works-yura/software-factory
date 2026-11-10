@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 
 import { useWorkspaceChanges, useWorkspaceFile } from '../../../../hooks/use-fs';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -11,6 +11,7 @@ import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 import { WorkspaceOverview } from './WorkspaceOverview';
+import { WorkspacePanelContext } from '../context/WorkspacePanelContext';
 import { selectWorkspaceFilePreview } from './workspace-file-preview';
 
 interface WorkspaceViewerPanelProps {
@@ -46,6 +47,14 @@ export function WorkspaceViewerPanel({
   const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [showHidden, setShowHidden] = useState(false);
+  // A file asked for from the chat (a document link) replaces whatever the panel shows, once per ask.
+  const requestedFile = useContext(WorkspacePanelContext)?.requestedFile;
+  const [shownRequest, setShownRequest] = useState<number>();
+  if (requestedFile && requestedFile.request !== shownRequest) {
+    setShownRequest(requestedFile.request);
+    setView({ type: 'file', path: requestedFile.path });
+    onSizeChange?.('full');
+  }
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
   const changes = useWorkspaceChanges(workspacePath, { enabled: visible && readsChanges });
   const factory = useFactoryQuery(factoryProjectId);
