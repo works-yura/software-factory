@@ -63,6 +63,7 @@ import {
   createClaudeSessionTools,
   createClaudePlanApproval,
   createClaudeCheckoutResolver,
+  createLocalCheckoutAttacher,
   createClaudeCodeCredentials,
   createClaudeFactoryHarness,
   createClaudeSignInService,
@@ -1823,6 +1824,16 @@ export class MastraFactory {
       if (!peekSessionSandbox(row.id) && claudeCheckout) await claudeCheckout(sessionId);
       return peekSessionSandbox(row.id)?.sandbox;
     };
+    // After a restart a Claude Code session's checkout is still on this host's disk, but its sandbox is not in the
+    // memo until its next turn. The file panels and its sandbox start attach it from disk without starting it
+    // (no clone, no setup, no network). Only for the Factory's own local sandbox, never a custom `cwdFor`.
+    const localCheckoutAttacher =
+      claudeCodeConfig && !claudeCodeConfig.cwdFor && sandboxConfig?.provider === 'local'
+        ? createLocalCheckoutAttacher({
+            workspaces: context => sessionWorkspaces(context as never) as never,
+            sessions: sourceControlSessions,
+          })
+        : undefined;
     const claudeCode: ClaudeFactoryHarness | undefined = claudeCodeConfig
       ? createClaudeFactoryHarness({
           ...claudeCodeConfig,
@@ -2453,6 +2464,15 @@ export class MastraFactory {
                       ? { custom: true }
                       : { custom: false, sandboxProvider: sandboxConfig?.provider },
                   }),
+                }
+              : {}),
+            // Only a session Claude Code runs is attached: a Mastra session's own turn builds its sandbox.
+            ...(claudeCode && localCheckoutAttacher
+              ? {
+                  attachLocalCheckout: async (session: { id: string; sessionId: string }) =>
+                    (await claudeCode.harness.getSession(session.sessionId))
+                      ? localCheckoutAttacher(session)
+                      : false,
                 }
               : {}),
             // Signing in opens the CLI's browser page on this machine: only where it is the person's own.

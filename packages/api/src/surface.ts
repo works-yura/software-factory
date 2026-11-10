@@ -63,6 +63,7 @@ import { CredentialAccountRoutes } from './credential-accounts.ts';
 import type { ClaudeSignInFlows } from './credential-accounts.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
 import { buildFsRoutes } from './fs.ts';
+import type { LocalCheckoutAttacher } from './fs.ts';
 import { IntakeRouteRoutes } from './intake-routes.ts';
 import { IntakeRoutes } from './intake.ts';
 import { KnowledgeRoutes } from './knowledge.ts';
@@ -142,6 +143,8 @@ export interface FactoryApiRoutesDeps {
   claudeSignIn?: ClaudeSignInFlows;
   /** Personal sessions of Claude Code Factories start in the Claude Code harness (see the session routes). */
   claudeCodeUserSessions?: ClaudeCodeUserSessions;
+  /** With a local sandbox: attaches a session's checkout on disk without starting it (file panels, sandbox start). */
+  attachLocalCheckout?: LocalCheckoutAttacher;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -672,6 +675,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
           ...(deps.claudeCodeUserSessions ? { claudeCode: deps.claudeCodeUserSessions } : {}),
+          ...(deps.attachLocalCheckout ? { attachLocalCheckout: deps.attachLocalCheckout } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
   // Absent known integrations still get their disabled-status stub.
@@ -748,6 +752,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sessionFs: {
         auth: deps.auth,
         sessions: sourceControlSessions,
+        ...(deps.attachLocalCheckout ? { attachLocalCheckout: deps.attachLocalCheckout } : {}),
       },
     }),
     ...new ConfigRoutes({

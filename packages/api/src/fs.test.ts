@@ -337,6 +337,12 @@ function treeCheck(args: string[]): { exitCode: number; stdout: string } | undef
 }
 
 async function seedHostCheckouts(repos: string[] = ['acme/repo']) {
+  const parent = await createHostCheckouts(repos);
+  const executeCommand = attachHostSandbox(parent, repos);
+  return { parent, executeCommand };
+}
+
+async function createHostCheckouts(repos: string[]) {
   const parent = await realpath(await mkdtemp(join(tmpdir(), 'factory-tree-')));
   for (const slug of repos) {
     const dir = join(parent, slug.split('/')[1]!);
@@ -352,8 +358,7 @@ async function seedHostCheckouts(repos: string[] = ['acme/repo']) {
     await writeFile(join(dir, 'dist', 'out.js'), '');
     await execFileAsync('git', ['init', '-q', dir]);
   }
-  const executeCommand = attachHostSandbox(parent, repos);
-  return { parent, executeCommand };
+  return parent;
 }
 
 function failedHostCommand(error: unknown) {
@@ -1390,5 +1395,68 @@ describe('workspace changes across environment repositories', () => {
       path: 'docs/guide.md',
       content: '# Guide',
     });
+  });
+});
+
+describe('a local checkout on disk after a restart', () => {
+  /** A local session sandbox built but never started, as the memo holds it after `attach`. */
+  function pendingLocalSandbox(parent: string, slugs: string[]) {
+    const executeCommand = vi.fn(async () => {
+      throw new Error('a passive read must not start the session sandbox');
+    });
+    getSessionSandbox(
+      'row-1',
+      slugs[0]!,
+      () => ({ id: 'sbx-1', provider: 'local', status: 'pending', workingDirectory: parent, executeCommand }) as never,
+      slugs.length > 1 ? slugs : undefined,
+    );
+    return executeCommand;
+  }
+
+  it('lists the checkout from disk through the attacher, never starting the session sandbox', async () => {
+    const parent = await createHostCheckouts(['acme/repo']);
+    let sessionStart: ReturnType<typeof vi.fn> | undefined;
+    const attach = vi.fn(async () => {
+      sessionStart = pendingLocalSandbox(parent, ['acme/repo']);
+      return true;
+    });
+
+    const listing = await listSessionWorkspaceTree(makeSession(), '', attach);
+
+    expect(attach).toHaveBeenCalledTimes(1);
+    expect(listing.available).toBe(true);
+    expect(listing.entries.map(entry => entry.name)).toEqual(['src', '.gitignore', 'README.md']);
+    await expect(readSessionWorkspaceFile(makeSession(), 'README.md', attach)).resolves.toMatchObject({
+      content: '# acme/repo',
+    });
+    // Attached once: the memo now holds the session's sandbox, still not started.
+    expect(attach).toHaveBeenCalledTimes(1);
+    expect(sessionStart).not.toHaveBeenCalled();
+  });
+
+  it('reads every repository of a multi-repository checkout', async () => {
+    const parent = await createHostCheckouts(['acme/api', 'acme/docs']);
+    pendingLocalSandbox(parent, ['acme/api', 'acme/docs']);
+
+    const listing = await listSessionWorkspaceTree(makeSession());
+
+    expect(listing.available).toBe(true);
+    expect(listing.entries.map(entry => entry.name)).toEqual(['api', 'docs']);
+  });
+
+  it('stays not running when the checkout is not on disk', async () => {
+    const parent = await realpath(await mkdtemp(join(tmpdir(), 'factory-empty-')));
+    const sessionStart = pendingLocalSandbox(parent, ['acme/repo']);
+
+    const listing = await listSessionWorkspaceTree(makeSession());
+
+    expect(listing.available).toBe(false);
+    expect(sessionStart).not.toHaveBeenCalled();
+  });
+
+  it('stays not running without an attacher, as for a remote sandbox', async () => {
+    const listing = await listSessionWorkspaceTree(makeSession());
+
+    expect(listing.available).toBe(false);
   });
 });

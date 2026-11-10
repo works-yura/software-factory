@@ -30,6 +30,7 @@ import type {
 } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import type { RouteAuth } from '@factory/http';
+import type { LocalCheckoutAttacher } from './fs.ts';
 import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from '@factory/session';
 
 type RouteContext = Context;
@@ -85,6 +86,12 @@ export interface SourceControlSessionRoutesOptions {
    * the server has no Claude Code harness.
    */
   claudeCode?: ClaudeCodeUserSessions;
+  /**
+   * Present with a local sandbox: attaches a session's checkout already on
+   * disk without starting it. Starting a Claude Code session's sandbox does
+   * this, since only its first turn may create a checkout.
+   */
+  attachLocalCheckout?: LocalCheckoutAttacher;
 }
 
 /** How the session routes reach the Claude Code harness for personal sessions. */
@@ -622,8 +629,24 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: "Only the session's owner or an organization admin can start its sandbox." }, 403);
         }
         if (await options.claudeCode?.get(session.sessionId)) {
+          // Its checkout may already be on this host's disk (a server restart): attach it, without
+          // starting, so the file panels read it. Only its first turn creates a checkout.
+          if (options.attachLocalCheckout) {
+            try {
+              if (await options.attachLocalCheckout(session)) return c.json({ started: true });
+            } catch (error) {
+              console.error('[Factory Sessions] Failed to attach the local checkout', {
+                sessionId: session.sessionId,
+                error,
+              });
+              return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+            }
+          }
           return c.json(
-            { error: 'A Claude Code session checks its repository out when it runs its first turn; send it a message.' },
+            {
+              error:
+                'This Claude Code session has no checkout on disk yet: its first message creates it, so send it a message.',
+            },
             409,
           );
         }

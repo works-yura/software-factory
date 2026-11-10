@@ -1,7 +1,13 @@
-import type { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it, vi } from 'vitest';
+import { mkdir, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { createClaudeCheckoutResolver } from './checkout.ts';
+import type { RequestContext } from '@mastra/core/request-context';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { __clearSessionSandboxesForTests, getSessionSandbox, peekSessionSandbox } from '@factory/sandbox';
+
+import { createClaudeCheckoutResolver, createLocalCheckoutAttacher } from './checkout.ts';
 import type { ClaudeSessionWorkspace } from './checkout.ts';
 
 const ROW = { orgId: 'org-1', userId: 'user-1', factoryProjectId: 'factory-1' };
@@ -124,5 +130,61 @@ describe('createClaudeCheckoutResolver', () => {
     const { resolve } = resolver({ workspace: fake.value });
     await expect(resolve('session-1')).rejects.toThrow('clone failed');
     expect(fake.calls).toEqual([]);
+  });
+});
+
+describe('createLocalCheckoutAttacher', () => {
+  const SESSION = { id: 'row-attach', sessionId: 'session-attach' };
+
+  afterEach(() => __clearSessionSandboxesForTests());
+
+  /** A workspace build that memoizes the session's local sandbox as `createWorkspaceFactory` does: unstarted. */
+  function attacher(root: string, provider = 'local') {
+    const start = vi.fn(async () => {});
+    const built: string[] = [];
+    const attach = createLocalCheckoutAttacher({
+      sessions: { getBySessionId: async () => ROW },
+      workspaces: async () => {
+        built.push('workspace');
+        getSessionSandbox(
+          SESSION.id,
+          'acme/app',
+          () => ({ id: 'sbx', provider, status: 'pending', workingDirectory: root, start }) as never,
+        );
+        return workspace({ provider }).value;
+      },
+    });
+    return { attach, start, built };
+  }
+
+  it('attaches a checkout already on disk without starting the sandbox', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'factory-attach-'));
+    await mkdir(join(root, 'app', '.git'), { recursive: true });
+    const { attach, start, built } = attacher(root);
+
+    await expect(attach(SESSION)).resolves.toBe(true);
+    // The memo now holds it: a second attach builds nothing.
+    await expect(attach(SESSION)).resolves.toBe(true);
+
+    expect(built).toEqual(['workspace']);
+    expect(start).not.toHaveBeenCalled();
+    expect(peekSessionSandbox(SESSION.id)?.sandbox.status).toBe('pending');
+  });
+
+  it('reports nothing to attach when the checkout is not on disk', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'factory-attach-'));
+    const { attach, start } = attacher(root);
+
+    await expect(attach(SESSION)).resolves.toBe(false);
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('never attaches a remote sandbox', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'factory-attach-'));
+    await mkdir(join(root, 'app', '.git'), { recursive: true });
+    const { attach, start } = attacher(root, 'e2b');
+
+    await expect(attach(SESSION)).resolves.toBe(false);
+    expect(start).not.toHaveBeenCalled();
   });
 });

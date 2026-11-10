@@ -11,7 +11,7 @@ import type { Context } from 'hono';
 
 import { requireExec } from '@factory/sandbox';
 import type { ExecutableSandbox } from '@factory/sandbox';
-import { peekSessionSandbox, sessionLayout } from '@factory/sandbox';
+import { peekSessionSandbox, sessionFilesSandbox, sessionLayout } from '@factory/sandbox';
 import type { SessionLayout, SessionLayoutRepository } from '@factory/sandbox';
 import { peekSessionEnvironment } from '@factory/sandbox';
 import type { SourceControlSession } from '@factory/store';
@@ -468,7 +468,16 @@ export async function listArtifacts(root: string, workspacePath: string): Promis
 export interface SessionFsDeps {
   auth: RouteAuth;
   sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
+  /** Present with a local sandbox: see {@link LocalCheckoutAttacher}. */
+  attachLocalCheckout?: LocalCheckoutAttacher;
 }
+
+/**
+ * Builds a session's local sandbox from its checkout already on this host's
+ * disk (after a restart, before the session's next turn) without starting it:
+ * no clone, no setup, no network. Resolves true when the checkout is on disk.
+ */
+export type LocalCheckoutAttacher = (session: SourceControlSession) => Promise<boolean>;
 
 /**
  * Resolve a `workspacePath` query param as a Factory session id. Returns the
@@ -508,16 +517,25 @@ interface SessionSandboxHandle {
  * one-repository session, the workspace root (one directory per repository)
  * otherwise. Returns `null` when the session has no sandbox in this process
  * (never opened here, or evicted by retirement). This is a passive read path,
- * so it never constructs or provisions: the session's files come back the
- * next time the workspace is actually opened (e.g. by sending a message).
+ * so it never provisions. A local session not opened in this process yet
+ * (after a restart) is attached from its checkout on disk by `attach`, without
+ * starting; a remote one's files come back the next time its workspace is
+ * actually opened (e.g. by sending a message).
  */
-async function sessionSandbox(session: SourceControlSession): Promise<SessionSandboxHandle | null> {
+async function sessionSandbox(
+  session: SourceControlSession,
+  attach?: LocalCheckoutAttacher,
+): Promise<SessionSandboxHandle | null> {
+  if (!peekSessionSandbox(session.id) && attach) await attach(session);
   const entry = peekSessionSandbox(session.id);
   // An unresolved workdir means the sandbox never started in this process —
   // nothing is materialized, so there are no files to browse.
   const layout = sessionLayout(entry);
   if (!entry || !layout) return null;
-  const sandbox = requireExec(entry.sandbox);
+  // A local sandbox not started yet is read from disk, never started by the read.
+  const files = await sessionFilesSandbox(entry, layout);
+  if (!files) return null;
+  const sandbox = requireExec(files);
   return {
     sandbox,
     // Session viewers read these files over HTTP, so a symlink must not lead
@@ -558,9 +576,10 @@ function repositoryBaseBranches(
 export async function listSessionRenderedPath(
   session: SourceControlSession,
   renderedRoot: string,
+  attach?: LocalCheckoutAttacher,
 ): Promise<WorkspaceRenderedListing> {
   const safeRoot = assertApprovedRenderedRoot(renderedRoot);
-  const handle = await sessionSandbox(session);
+  const handle = await sessionSandbox(session, attach);
   const rootPath = posixPath.join(handle?.layout.root ?? '', safeRoot);
   const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
   if (!handle) return empty;
@@ -741,9 +760,10 @@ async function ignoredTreePaths(
 export async function listSessionWorkspaceTree(
   session: SourceControlSession,
   path = '',
+  attach?: LocalCheckoutAttacher,
 ): Promise<WorkspaceTreeListing> {
   const requested = path.trim() ? path : '';
-  const handle = await sessionSandbox(session);
+  const handle = await sessionSandbox(session, attach);
   const listing = { workspacePath: session.sessionId, path: requested };
   if (!handle) return { ...listing, available: false, entries: [] };
 
@@ -800,10 +820,14 @@ export async function listSessionWorkspaceTree(
  * root, or anything the tree would list (not git internals, not ignored by its
  * checkout).
  */
-export async function readSessionWorkspaceFile(session: SourceControlSession, path: string): Promise<WorkspaceFile> {
+export async function readSessionWorkspaceFile(
+  session: SourceControlSession,
+  path: string,
+  attach?: LocalCheckoutAttacher,
+): Promise<WorkspaceFile> {
   const safePath = assertRelativePath(path, 'path');
 
-  const handle = await sessionSandbox(session);
+  const handle = await sessionSandbox(session, attach);
   if (!handle) throw new Error('Session workspace is not available');
   const { layout, sandbox } = handle;
   treeLocation(layout, safePath);
@@ -1050,8 +1074,11 @@ function assembleWorkspaceChanges(workspacePath: string, inspected: InspectedRep
   };
 }
 
-export async function listSessionWorkspaceChanges(session: SourceControlSession): Promise<WorkspaceChanges> {
-  const handle = await sessionSandbox(session);
+export async function listSessionWorkspaceChanges(
+  session: SourceControlSession,
+  attach?: LocalCheckoutAttacher,
+): Promise<WorkspaceChanges> {
+  const handle = await sessionSandbox(session, attach);
   if (!handle) return unavailableWorkspaceChanges(session.sessionId);
   const { sandbox, layout, baseBranches } = handle;
 
@@ -1137,8 +1164,9 @@ function unavailableWorkspacePatches(workspacePath: string, scope: WorkspaceChan
 export async function listSessionWorkspacePatches(
   session: SourceControlSession,
   scope: WorkspaceChangesScope,
+  attach?: LocalCheckoutAttacher,
 ): Promise<WorkspaceChangePatches> {
-  const handle = await sessionSandbox(session);
+  const handle = await sessionSandbox(session, attach);
   if (!handle) return unavailableWorkspacePatches(session.sessionId, scope);
   const { sandbox, layout, baseBranches } = handle;
 
@@ -1294,7 +1322,7 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (session && sessionFs) {
-            return c.json(await listSessionRenderedPath(session, renderedRoot));
+            return c.json(await listSessionRenderedPath(session, renderedRoot, sessionFs.attachLocalCheckout));
           }
           const unauthorized = await requireSignedIn(loose(c), sessionFs);
           if (unauthorized) return unauthorized;
@@ -1322,7 +1350,7 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (!session || !sessionFs) return c.json(unavailableWorkspaceChanges(workspacePath));
-          return c.json(await listSessionWorkspaceChanges(session));
+          return c.json(await listSessionWorkspaceChanges(session, sessionFs.attachLocalCheckout));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return c.json({ error: message }, message.includes('not available') ? 403 : 500);
@@ -1340,7 +1368,7 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (!session || !sessionFs) return c.json(unavailableWorkspacePatches(workspacePath, scope));
-          return c.json(await listSessionWorkspacePatches(session, scope));
+          return c.json(await listSessionWorkspacePatches(session, scope, sessionFs.attachLocalCheckout));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return c.json({ error: message }, message.includes('not available') ? 403 : 500);
@@ -1356,7 +1384,9 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
-          return c.json(await listSessionWorkspaceTree(session, c.req.query('path') ?? ''));
+          return c.json(
+            await listSessionWorkspaceTree(session, c.req.query('path') ?? '', sessionFs.attachLocalCheckout),
+          );
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           const status =
@@ -1379,7 +1409,9 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
-          if (session && sessionFs) return c.json(await readSessionWorkspaceFile(session, path));
+          if (session && sessionFs) {
+            return c.json(await readSessionWorkspaceFile(session, path, sessionFs.attachLocalCheckout));
+          }
           const unauthorized = await requireSignedIn(loose(c), sessionFs);
           if (unauthorized) return unauthorized;
           return c.json(await readWorkspaceFile(root, workspacePath, path));

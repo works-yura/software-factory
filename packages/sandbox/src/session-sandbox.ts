@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
   SETUP_FAILED_MARKER_PATH,
@@ -7,6 +8,7 @@ import {
   setupMarkerContent,
 } from '@internal/workspace';
 
+import { LocalSandbox } from '@mastra/core/workspace';
 import type {
   FactorySandbox,
   FactorySandboxContext as CoreFactorySandboxContext,
@@ -197,6 +199,46 @@ export function sessionLayout(entry: SessionSandboxEntry | undefined): SessionLa
       return { slug, dir, prefix: `${path.posix.basename(dir)}/` };
     }),
   };
+}
+
+/** True when every repository of a local layout is a checkout on this host's disk. */
+export async function localCheckoutPresent(layout: SessionLayout): Promise<boolean> {
+  const present = await Promise.all(
+    layout.repos.map(repo =>
+      stat(path.join(repo.dir, '.git')).then(
+        () => true,
+        () => false,
+      ),
+    ),
+  );
+  return present.length > 0 && present.every(Boolean);
+}
+
+/** Plain local sandboxes that passive readers run commands in, one per unstarted session sandbox. */
+const filesReaders = new WeakMap<WorkspaceSandbox, WorkspaceSandbox>();
+
+/**
+ * The sandbox passive readers (file browser, changes) run their commands in.
+ * A started sandbox reads its own files. A local sandbox built but not started
+ * in this process (after a restart, until the session's next turn) is read from
+ * its checkout on disk through a plain local sandbox without the session's
+ * start hook, so a read never clones, runs setup or reaches the network; it is
+ * undefined when the checkout is not on disk. Any other sandbox is returned as
+ * is: a remote one keeps its workdir unresolved until it starts, so passive
+ * readers never reach it before then.
+ */
+export async function sessionFilesSandbox(
+  entry: SessionSandboxEntry,
+  layout: SessionLayout,
+): Promise<WorkspaceSandbox | undefined> {
+  if (entry.sandbox.status !== 'pending' || entry.sandbox.provider !== 'local') return entry.sandbox;
+  if (!(await localCheckoutPresent(layout))) return undefined;
+  let reader = filesReaders.get(entry.sandbox);
+  if (!reader) {
+    reader = new LocalSandbox({ id: `${entry.sandbox.id}-files`, workingDirectory: layout.root, timeout: 30_000 });
+    filesReaders.set(entry.sandbox, reader);
+  }
+  return reader;
 }
 
 /**

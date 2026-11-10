@@ -1400,6 +1400,7 @@ describe('personal sessions of a Claude Code Factory', () => {
     seed: Awaited<ReturnType<typeof seedGitLabRepository>>,
     claudeCode: RouteOptions['claudeCode'],
     controller?: RouteOptions['controller'],
+    attachLocalCheckout?: RouteOptions['attachLocalCheckout'],
   ) {
     const app = new Hono();
     app.use('*', async (context, next) => {
@@ -1415,6 +1416,7 @@ describe('personal sessions of a Claude Code Factory', () => {
         memorySettings: seed.seed.memorySettings,
         ...(controller ? { controller } : {}),
         ...(claudeCode ? { claudeCode } : {}),
+        ...(attachLocalCheckout ? { attachLocalCheckout } : {}),
         workItems: seed.seed.workItems,
       }),
     );
@@ -1511,6 +1513,37 @@ describe('personal sessions of a Claude Code Factory', () => {
     });
     expect(visibility.status).toBe(409);
     const sandbox = await app.request(`/web/user-sessions/${sessionId}/sandbox/start`, { method: 'POST' });
+    expect(sandbox.status).toBe(409);
+    await expect(sandbox.json()).resolves.toEqual({
+      error: 'This Claude Code session has no checkout on disk yet: its first message creates it, so send it a message.',
+    });
+  });
+
+  it('starts a Claude Code session sandbox by attaching its checkout already on disk', async () => {
+    const seeded = await claudeFactory();
+    const claude = fakeClaude();
+    const attached: string[] = [];
+    const app = claudeApp(seeded, claude.claudeCode, undefined, async session => {
+      attached.push(session.sessionId);
+      return true;
+    });
+    expect((await create(app, seeded.projectRepository.id)).status).toBe(200);
+
+    const sandbox = await app.request(`/web/user-sessions/${sessionId}/sandbox/start`, { method: 'POST' });
+
+    expect(sandbox.status).toBe(200);
+    await expect(sandbox.json()).resolves.toEqual({ started: true });
+    expect(attached).toEqual([sessionId]);
+  });
+
+  it('keeps refusing a Claude Code sandbox start when nothing is on disk to attach', async () => {
+    const seeded = await claudeFactory();
+    const claude = fakeClaude();
+    const app = claudeApp(seeded, claude.claudeCode, undefined, async () => false);
+    expect((await create(app, seeded.projectRepository.id)).status).toBe(200);
+
+    const sandbox = await app.request(`/web/user-sessions/${sessionId}/sandbox/start`, { method: 'POST' });
+
     expect(sandbox.status).toBe(409);
   });
 });
