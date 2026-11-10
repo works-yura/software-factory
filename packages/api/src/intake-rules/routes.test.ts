@@ -5,19 +5,20 @@ import { AuditDomain } from '@factory/feed';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import { createBoardRegistry, createFactoryStorageForTests, FactoryTransitionService } from '@factory/testing';
 
-import { setupIntakeRules } from './index.ts';
-import { IntakeConfigError } from './kinds.ts';
-import type { IntakeTriggerKind } from './kinds.ts';
+import { IntakeConfigError, intakeKinds, parseWith } from '@factory/core';
+import type { IntakeTriggerKind } from '@factory/core';
+import { alwaysPolicy, IntakeRuleEngine, skipIfOpenPolicy } from '@factory/runtime';
+import { createCardAction } from '@factory/work-items';
+import { z } from 'zod';
+
 import { IntakeRuleRoutes } from './routes.ts';
-import { intakeRuleScheduleId } from './schedule-trigger.ts';
-import type { ScheduleRows } from './schedule-trigger.ts';
 
 const ADMIN = 'admin-user';
 const MEMBER = 'member-user';
 
 const scheduleRule = {
   name: 'Security audit',
-  trigger: { kind: 'schedule', config: { spec: { preset: 'weekdays', time: '14:18' }, timezone: 'Europe/Kyiv' } },
+  trigger: { kind: 'test-clock', config: { everyHours: 6 } },
   action: {
     kind: 'create-card',
     config: { boardKey: 'audits', phaseKey: 'analysis', titleTemplate: 'Аудит — {date}', description: 'Аудит: security', repository: null },
@@ -29,15 +30,19 @@ async function setup() {
   const orgId = 'org-1';
   const project = await seed.projects.create({ orgId, userId: ADMIN, input: { name: 'Syncta' } });
   const boards = createBoardRegistry();
-  const rows = new Map<string, Record<string, unknown>>();
-  const schedules = {
-    get: async (id: string) => (rows.get(id) as never) ?? null,
-    create: async (input: Record<string, unknown>) => (rows.set(input.id as string, { ...input, status: 'active' }), input) as never,
-    update: async (id: string, patch: Record<string, unknown>) => (rows.set(id, { ...rows.get(id), ...patch }), patch) as never,
-    pause: async () => ({}) as never,
-    resume: async () => ({}) as never,
-    delete: async (id: string) => void rows.delete(id),
-  } satisfies ScheduleRows;
+  // A trigger with a clock, as a test double for the server's Mastra-backed `schedule`.
+  const armed = new Set<string>();
+  const clock: IntakeTriggerKind<{ everyHours: number }> = {
+    kind: 'test-clock',
+    label: { uk: 'Годинник', en: 'Clock' },
+    parse: config => parseWith(z.object({ everyHours: z.number().int().min(1) }), config),
+    describe: (config, locale) => (locale === 'uk' ? `Кожні ${config.everyHours} год` : `Every ${config.everyHours} hours`),
+    nextFires: (config, after, count) =>
+      Array.from({ length: count }, (_, index) => new Date(after.getTime() + (index + 1) * config.everyHours * 3_600_000)),
+    start: () => {},
+    arm: async rule => void armed.add(rule.id),
+    disarm: async ruleId => void armed.delete(ruleId),
+  };
   const echo: IntakeTriggerKind<{ word: string }> = {
     kind: 'test-echo',
     label: { uk: 'Луна', en: 'Echo' },
@@ -51,18 +56,23 @@ async function setup() {
     arm: async () => {},
     disarm: async () => {},
   };
-  const { engine } = setupIntakeRules({
+  const loadBoards = { load: async () => boards };
+  const engine = new IntakeRuleEngine({
     rules: seed.intakeRules,
     now: () => new Date('2026-11-16T06:00:00Z'),
     logger: { warn: () => {} },
-    schedule: { schedules: () => schedules },
-    cards: {
-      workItems: seed.workItems,
-      boards: { load: async () => boards },
-      transitionService: () => new FactoryTransitionService({ storage: seed.workItems, configVersion: 't', boards }),
-      auditRecorder: { record: async () => null },
-    },
-    extra: { triggers: [echo] },
+    kinds: intakeKinds({
+      triggers: [clock, echo],
+      actions: [
+        createCardAction({
+          workItems: seed.workItems,
+          boards: loadBoards,
+          transitionService: () => new FactoryTransitionService({ storage: seed.workItems, configVersion: 't', boards }),
+          auditRecorder: { record: async () => null },
+        }),
+      ],
+      policies: [skipIfOpenPolicy({ cards: seed.workItems, boards: loadBoards }), alwaysPolicy],
+    }),
   });
   const auth = fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => userId === ADMIN });
   const audit = new AuditDomain({ auth, audit: seed.audit, projects: seed.projects });
@@ -82,7 +92,7 @@ async function setup() {
     const text = await response.text();
     return { status: response.status, body: text ? JSON.parse(text) : null };
   };
-  return { send, base, rows, seed };
+  return { send, base, armed, seed };
 }
 
 describe('intake rule routes', () => {
@@ -91,7 +101,7 @@ describe('intake rule routes', () => {
     const { status, body } = await send('GET', `${base}/kinds?locale=uk`);
     expect(status).toBe(200);
     expect(body.triggers).toEqual([
-      { kind: 'schedule', label: 'За розкладом' },
+      { kind: 'test-clock', label: 'Годинник' },
       { kind: 'test-echo', label: 'Луна' },
     ]);
     expect(body.actions).toEqual([{ kind: 'create-card', label: 'Створити картку' }]);
@@ -100,27 +110,27 @@ describe('intake rule routes', () => {
   });
 
   it('creates, pauses and deletes a rule, arming its schedule and auditing each change', async () => {
-    const { send, base, rows, seed } = await setup();
+    const { send, base, armed, seed } = await setup();
     const created = await send('POST', `${base}?locale=uk`, scheduleRule);
     expect(created.status).toBe(201);
     const rule = created.body.intakeRule;
     expect(rule).toMatchObject({
       name: 'Security audit',
-      trigger: { kind: 'schedule', summary: 'У будні о 14:18 (Europe/Kyiv)' },
+      trigger: { kind: 'test-clock', summary: 'Кожні 6 год' },
       action: { kind: 'create-card', summary: 'Картка «Аудит — {date}» на audits › analysis' },
       policy: { kind: 'skip-if-open' },
       enabled: true,
       revision: 1,
-      nextFires: ['2026-11-16T12:18:00.000Z', '2026-11-17T12:18:00.000Z', '2026-11-18T12:18:00.000Z'],
+      nextFires: ['2026-11-16T12:00:00.000Z', '2026-11-16T18:00:00.000Z', '2026-11-17T00:00:00.000Z'],
       lastFire: null,
       problems: [],
     });
-    expect(rows.has(intakeRuleScheduleId(rule.id))).toBe(true);
+    expect(armed.has(rule.id)).toBe(true);
 
     const paused = await send('PATCH', `${base}/${rule.id}`, { enabled: false, expectedRevision: 1 });
     expect(paused.status).toBe(200);
     expect(paused.body.intakeRule).toMatchObject({ enabled: false, revision: 2, nextFires: [] });
-    expect(rows.has(intakeRuleScheduleId(rule.id))).toBe(false);
+    expect(armed.has(rule.id)).toBe(false);
 
     expect((await send('PATCH', `${base}/${rule.id}`, { enabled: true, expectedRevision: 1 })).status).toBe(409);
     expect((await send('GET', `${base}/${rule.id}/fires`)).body).toEqual({ fires: [] });
@@ -137,11 +147,11 @@ describe('intake rule routes', () => {
   it('refuses unknown kinds, configs that do not fit their kind, targets that cannot take cards, and non-admins', async () => {
     const { send, base } = await setup();
     const refused = async (body: unknown, user = ADMIN) => send('POST', base, body, user);
-    expect((await refused({ ...scheduleRule, trigger: { kind: 'nope', config: {} } })).body.message).toMatch(/Unknown trigger/);
-    expect(
-      (await refused({ ...scheduleRule, trigger: { kind: 'schedule', config: { spec: { preset: 'daily', time: '9' }, timezone: 'UTC' } } }))
-        .body.message,
-    ).toMatch(/HH:MM/);
+    const unknown = await refused({ ...scheduleRule, trigger: { kind: 'nope', config: {} } });
+    expect(unknown).toMatchObject({ status: 422, body: { error: 'invalid_intake_rule', reason: 'unknown_kind' } });
+    expect(unknown.body.message).toMatch(/no "nope" trigger/);
+    const badConfig = await refused({ ...scheduleRule, trigger: { kind: 'test-clock', config: { everyHours: 0 } } });
+    expect(badConfig).toMatchObject({ status: 422, body: { reason: 'invalid_config' } });
     expect(
       (await refused({ ...scheduleRule, action: { kind: 'create-card', config: { ...scheduleRule.action.config, boardKey: 'gone' } } }))
         .body.message,
@@ -161,10 +171,10 @@ describe('intake rule routes', () => {
     expect(created.body.intakeRule).toMatchObject({ trigger: { kind: 'test-echo', summary: 'Echo "hi"' }, nextFires: [] });
   });
 
-  it('previews a schedule before it is saved', async () => {
+  it('previews a trigger before it is saved', async () => {
     const { send, base } = await setup();
     const preview = await send('POST', `${base}/preview`, { trigger: scheduleRule.trigger, locale: 'en' });
-    expect(preview.body).toMatchObject({ summary: 'Weekdays at 14:18 (Europe/Kyiv)', problems: [] });
+    expect(preview.body).toMatchObject({ summary: 'Every 6 hours', problems: [] });
     expect(preview.body.nextFires).toHaveLength(3);
   });
 });

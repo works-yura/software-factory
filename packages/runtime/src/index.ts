@@ -10,3 +10,4 @@ export type * from './run-end-report.ts';
 export * from './skills/service.ts';
 export * from './terminal-cleanup.ts';
 export * from './transition-service.ts';
+export * from './intake-rules/index.ts';

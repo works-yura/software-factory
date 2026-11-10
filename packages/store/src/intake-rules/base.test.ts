@@ -74,7 +74,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('IntakeRulesStor
   it('logs fires newest first, finds the last card made, and drops the log with the rule', async () => {
     const { rules, scope } = await makeStorage();
     const rule = await rules.create(scope, input(), 'user-1');
-    const fire = { ...scope, ruleId: rule.id, triggerKind: 'schedule' };
+    const fire = { ...scope, ruleId: rule.id, triggerKind: 'schedule', fireKey: null };
     await rules.recordFire({ ...fire, firedAt: new Date(1000), outcome: 'done', workItemId: 'card-1', reason: null });
     await rules.recordFire({ ...fire, firedAt: new Date(2000), outcome: 'done', workItemId: null, reason: null });
     await rules.recordFire({ ...fire, firedAt: new Date(3000), outcome: 'skipped', workItemId: null, reason: 'open' });
@@ -86,5 +86,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('IntakeRulesStor
     await rules.delete(scope, rule.id, { expectedRevision: 1 });
     expect(await rules.list(scope)).toEqual([]);
     expect(await rules.listFires(scope, rule.id)).toEqual([]);
+  });
+
+  it('finds a fire by the key its trigger gave it', async () => {
+    const { rules, scope } = await makeStorage();
+    const rule = await rules.create(scope, input(), 'user-1');
+    const fire = { ...scope, ruleId: rule.id, triggerKind: 'schedule', reason: null };
+    await rules.recordFire({ ...fire, firedAt: new Date(1000), outcome: 'done', workItemId: 'card-1', fireKey: 'claim-1' });
+    await rules.recordFire({ ...fire, firedAt: new Date(2000), outcome: 'done', workItemId: 'card-2', fireKey: null });
+
+    expect(await rules.findFire(rule.id, 'claim-1')).toMatchObject({ workItemId: 'card-1', fireKey: 'claim-1' });
+    expect(await rules.findFire(rule.id, 'claim-2')).toBeNull();
   });
 });

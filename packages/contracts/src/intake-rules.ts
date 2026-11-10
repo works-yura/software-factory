@@ -1,51 +1,26 @@
 /**
  * Intake rules on the wire: a trigger and an action, each `{ kind, config }`, plus an overlap
- * policy. The route bodies are generic; each kind's own config shape is a schema here, shared by the
- * server's registries (which validate with it) and the UI's forms (which build it). A new kind adds
- * its schema here, its descriptor on the server and its form in the UI.
+ * policy. The route bodies are generic; each kind's own config shape is a domain schema
+ * (`@factory/core`) re-exported here, shared by the server's kinds (which parse with it) and the
+ * UI's forms (which build it).
  */
 
 import { z } from 'zod';
 
-import { MAX_BOARD_IDENTIFIER_LENGTH, parseScheduleSpec, SCHEDULE_HOUR_STEPS } from '@factory/core';
-import type { ScheduleSpec } from '@factory/core';
+import { INTAKE_RULE_FIRE_OUTCOMES, INTAKE_RULE_LOCALES, SCHEDULE_HOUR_STEPS } from '@factory/core';
 
 const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const uuidSchema = z.string().regex(UUID);
 const KIND = /^[a-z][a-z0-9-]{0,47}$/;
 
-export const INTAKE_RULE_LOCALES = ['uk', 'en'] as const;
-export type IntakeRuleLocale = (typeof INTAKE_RULE_LOCALES)[number];
-
-/** The `schedule` trigger: when to fire, in which timezone. */
-export const scheduleTriggerConfigSchema = z.object({
-  spec: z.unknown().transform((value, ctx): ScheduleSpec => {
-    const parsed = parseScheduleSpec(value);
-    if ('error' in parsed) {
-      ctx.addIssue({ code: 'custom', message: parsed.error });
-      return z.NEVER;
-    }
-    return parsed.spec;
-  }),
-  /** An IANA timezone, e.g. `Europe/Kyiv`. */
-  timezone: z.string().trim().min(1).max(64),
-});
-export type ScheduleTriggerConfig = z.output<typeof scheduleTriggerConfigSchema>;
+// The built-in kinds' config shapes are domain (`@factory/core`); the wire re-exports them for the UI's forms.
+export {
+  createCardActionConfigSchema,
+  INTAKE_RULE_LOCALES,
+  scheduleTriggerConfigSchema,
+} from '@factory/core';
+export type { CreateCardActionConfig, IntakeRuleLocale, ScheduleTriggerConfig } from '@factory/core';
 export const SCHEDULE_TRIGGER_HOUR_STEPS = SCHEDULE_HOUR_STEPS;
-
-/** The `create-card` action: what card a fire files, and where. */
-export const createCardActionConfigSchema = z.object({
-  boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH),
-  /** `null`: the board's first phase. */
-  phaseKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).nullable(),
-  /** May use the intake template placeholders (`{date}`, `{time}`, `{rule}`, `{payload.<key>}`). */
-  titleTemplate: z.string().trim().min(1).max(200),
-  /** The card's description: what the board's agent is asked to do. Same placeholders. */
-  description: z.string().max(8_000),
-  /** A repository slug linked to the Factory; `null` runs in the whole environment. */
-  repository: z.string().trim().min(1).max(200).nullable(),
-});
-export type CreateCardActionConfig = z.output<typeof createCardActionConfigSchema>;
 
 const kindRefSchema = z.object({
   kind: z.string().regex(KIND, 'A kind is lower-case letters, digits and dashes.'),
@@ -81,7 +56,7 @@ export const intakeRuleFireSchema = z.object({
   id: z.string(),
   firedAt: z.string(),
   triggerKind: z.string(),
-  outcome: z.enum(['done', 'skipped', 'failed']),
+  outcome: z.enum(INTAKE_RULE_FIRE_OUTCOMES),
   workItemId: z.string().nullable(),
   reason: z.string().nullable(),
 });

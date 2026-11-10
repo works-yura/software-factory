@@ -59,6 +59,7 @@ import {
   productBoard,
 } from '@factory/pipelines';
 import { AUDITS_BOARD_UPGRADE_ACTOR, renameIntakeRuleTargetPhases } from './intake/migrations.ts';
+import { setupIntakeRules } from './intake/setup.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { boardForWorkItem, isPullRequestCard, namesRepository, openChangeRequests, workItemSource } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
@@ -133,7 +134,7 @@ import {
 } from '@factory/api';
 import { ProjectRoutes } from '@factory/api';
 import { createSessionAccessGuard } from '@factory/session';
-import { assembleFactoryApiRoutes, buildIntegrationContext, setupIntakeRules } from '@factory/api';
+import { assembleFactoryApiRoutes, buildIntegrationContext } from '@factory/api';
 import type { FactoryApiRoutesDeps } from '@factory/api';
 import { TelemetryRoutes } from '@factory/api';
 import {
@@ -1451,8 +1452,9 @@ export class MastraFactory {
         })
       : undefined;
     // Intake rules: Factory's own intake source (a schedule now, events later) filing cards through
-    // the same path as "New card". Their schedules live in core `Schedules` and fire a workflow
-    // registered on the host's Mastra below.
+    // the same path as "New card", placed by the project's intake routes. Their schedules live in
+    // core `Schedules` and fire a workflow registered on the host's Mastra below. This is the only
+    // place that names the concrete kinds (`./intake/setup.ts`).
     this.#intakeRules =
       workItemsReady && storage.isDomainReady('intake-rules')
         ? setupIntakeRules({
@@ -1461,6 +1463,7 @@ export class MastraFactory {
             cards: {
               workItems: workItemsStorage,
               boards: toBoardSource(boards),
+              ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
               transitionService: () => transitionService,
               auditRecorder: auditDomain,
             },

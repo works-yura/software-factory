@@ -68,7 +68,7 @@ import { buildFsRoutes } from './fs.ts';
 import type { LocalCheckoutAttacher } from './fs.ts';
 import { IntakeRouteRoutes } from './intake-routes.ts';
 import { IntakeRuleRoutes } from './intake-rules/routes.ts';
-import type { IntakeRuleEngine } from './intake-rules/engine.ts';
+import type { IntakeRuleEngine } from '@factory/runtime';
 import type { IntakeRulesStorage } from '@factory/store';
 import { IntakeRoutes } from './intake.ts';
 import { KnowledgeRoutes } from './knowledge.ts';

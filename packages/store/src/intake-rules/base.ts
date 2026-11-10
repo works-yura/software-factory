@@ -1,6 +1,14 @@
 import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema } from '@mastra/core/storage';
 
+import type {
+  IntakeRuleFireOutcome,
+  IntakeRuleFireRecord,
+  IntakeRuleRecord,
+  IntakeRuleRepository,
+  IntakeRuleScope,
+} from '@factory/core';
+
 /**
  * Intake rules: a Factory's own intake, next to ClickUp. A rule is a trigger (what fires it — a
  * schedule now, events later) and an action (what a fire does — file a card now, notify or file
@@ -9,24 +17,15 @@ import type { CollectionSchema } from '@mastra/core/storage';
  * the shapes and check them. The fire log keeps what each fire did.
  */
 
-export interface IntakeRuleRecord {
-  id: string;
-  orgId: string;
-  factoryProjectId: string;
-  name: string;
-  triggerKind: string;
-  triggerConfig: Record<string, unknown>;
-  actionKind: string;
-  actionConfig: Record<string, unknown>;
-  /** The overlap policy's kind, e.g. `skip-if-open`. */
-  policyKind: string;
-  enabled: boolean;
-  revision: number;
-  createdBy: string;
-  createdAt: Date;
-  updatedBy: string;
-  updatedAt: Date;
-}
+// The domain types live in `@factory/core`; this module is their persistence (it implements
+// `IntakeRuleRepository`). Re-exported so existing imports from the store keep working.
+export type {
+  IntakeRuleFireOutcome,
+  IntakeRuleFireRecord,
+  IntakeRuleRecord,
+  IntakeRuleScope,
+} from '@factory/core';
+export { INTAKE_RULE_FIRE_OUTCOMES } from '@factory/core';
 
 export interface IntakeRuleInput {
   name: string;
@@ -39,29 +38,6 @@ export interface IntakeRuleInput {
 }
 
 export type IntakeRulePatch = Partial<IntakeRuleInput>;
-
-/** `done`: the action ran; `skipped`: the policy held it back on purpose; `failed`: it could not run. */
-export const INTAKE_RULE_FIRE_OUTCOMES = ['done', 'skipped', 'failed'] as const;
-export type IntakeRuleFireOutcome = (typeof INTAKE_RULE_FIRE_OUTCOMES)[number];
-
-export interface IntakeRuleFireRecord {
-  id: string;
-  orgId: string;
-  factoryProjectId: string;
-  ruleId: string;
-  firedAt: Date;
-  /** The trigger kind that fired it (`schedule`, `manual`, …). */
-  triggerKind: string;
-  outcome: IntakeRuleFireOutcome;
-  /** What the action made, when it made a card. */
-  workItemId: string | null;
-  reason: string | null;
-}
-
-export interface IntakeRuleScope {
-  orgId: string;
-  factoryProjectId: string;
-}
 
 export class IntakeRuleError extends Error {
   readonly code: 'intake_rule_not_found' | 'intake_rule_conflict';
@@ -107,8 +83,13 @@ export const INTAKE_RULE_FIRES_SCHEMA: CollectionSchema = {
     outcome: { type: 'text' },
     work_item_id: { type: 'text', nullable: true },
     reason: { type: 'text', nullable: true },
+    /** The trigger's id for the fire (added after the first release: older rows hold null). */
+    fire_key: { type: 'text', nullable: true },
   },
-  indexes: [{ name: 'factory_intake_rule_fires_rule_idx', columns: ['rule_id', 'fired_at'] }],
+  indexes: [
+    { name: 'factory_intake_rule_fires_rule_idx', columns: ['rule_id', 'fired_at'] },
+    { name: 'factory_intake_rule_fires_key_idx', columns: ['rule_id', 'fire_key'] },
+  ],
 };
 
 type Json = Record<string, unknown>;
@@ -141,6 +122,7 @@ interface FireRow extends Record<string, unknown> {
   outcome: string;
   work_item_id: string | null;
   reason: string | null;
+  fire_key?: string | null;
 }
 
 function json(value: Json | string | null): Json {
@@ -179,6 +161,7 @@ function toFire(row: FireRow): IntakeRuleFireRecord {
     outcome: row.outcome as IntakeRuleFireOutcome,
     workItemId: row.work_item_id,
     reason: row.reason,
+    fireKey: row.fire_key ?? null,
   };
 }
 
@@ -198,7 +181,7 @@ const notFound = () => new IntakeRuleError('intake_rule_not_found', 'Intake rule
 const conflict = () =>
   new IntakeRuleError('intake_rule_conflict', 'The intake rule changed since it was read. Reload and try again.');
 
-export class IntakeRulesStorage extends FactoryStorageDomain {
+export class IntakeRulesStorage extends FactoryStorageDomain implements IntakeRuleRepository {
   constructor() {
     super('intake-rules');
   }
@@ -314,8 +297,14 @@ export class IntakeRulesStorage extends FactoryStorageDomain {
       outcome: input.outcome,
       work_item_id: input.workItemId,
       reason: input.reason,
+      fire_key: input.fireKey,
     });
     return toFire(row);
+  }
+
+  async findFire(ruleId: string, fireKey: string): Promise<IntakeRuleFireRecord | null> {
+    const row = await this.ops.findOne<FireRow>(INTAKE_RULE_FIRES_SCHEMA.name, { rule_id: ruleId, fire_key: fireKey });
+    return row ? toFire(row) : null;
   }
 
   /** A rule's fires, newest first. */

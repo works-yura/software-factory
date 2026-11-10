@@ -1,4 +1,5 @@
 import type { ExternalWorkItemSource } from '../card.ts';
+import { INTAKE_RULE_SOURCE_KIND, intakeRuleOrigin } from '../intake/card-origin.ts';
 import type { RuleFacts } from '../rules/rule-group.ts';
 import { authorTrusted } from '../rules/types.ts';
 
@@ -35,6 +36,8 @@ export function cardRuleFacts(item: FactsCard): RuleFacts {
   const provider = source && item.workItem ? item.workItem : undefined;
   const labels = provider ? [...provider.labels] : metadataLabels(metadata);
   const author = provider ? provider.author : typeof metadata.author === 'string' ? metadata.author : null;
+  // A card an intake rule filed has no provider record; its rule stands in as the source.
+  const ruleOrigin = source ? undefined : intakeRuleOrigin(item.metadata);
   return {
     'item.labels': labels,
     'item.title': item.title,
@@ -46,6 +49,12 @@ export function cardRuleFacts(item: FactsCard): RuleFacts {
           'source.kind': source.type === 'pull-request' ? 'pull_request' : source.type,
           'source.integration': source.integrationId,
         }
-      : {}),
+      : ruleOrigin
+        ? {
+            'source.kind': INTAKE_RULE_SOURCE_KIND,
+            'intake.rule': ruleOrigin.id,
+            'intake.trigger': ruleOrigin.triggerKind,
+          }
+        : {}),
   };
 }

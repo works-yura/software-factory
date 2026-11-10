@@ -1,41 +1,29 @@
 /**
- * The seams of intake rules. A rule is a trigger, an overlap policy and an action; each is a kind
- * looked up in its own registry by the `kind` stored on the rule. Triggers only say *when* (and
- * emit a fire); actions only say *what* a fire does; policies only decide *whether* a fire goes
- * ahead. None of them knows the others: `IntakeRuleEngine` joins them.
+ * The seams of intake rules: three Strategy ports, each looked up by name in its own Registry.
  *
- * Adding a kind is one descriptor registered here, its config schema in `@factory/contracts`, and
- * its form in the UI — the engine, the routes and the storage stay as they are.
+ * - A trigger says *when* a rule fires and emits `IntakeTriggerFired` to the sink it was started
+ *   with. A clock (`schedule`) or a subscription to provider events (`IntakeEventSource`) drives it.
+ * - A policy says *whether* a fire goes ahead (`skip-if-open`, `always`).
+ * - An action says *what* a fire does: a command that returns its outcome and is idempotent per
+ *   `fired.fireKey` (`create-card` now; `notify`, follow-up cards later).
+ *
+ * None of them knows the others; `IntakeRuleEngine` (`@factory/runtime`) joins them, and the
+ * server's composition root is the only place that names concrete kinds. A new kind is one
+ * implementation of a port registered there, with its config schema and its settings form.
  */
 
 import type { z } from 'zod';
 
-import type { IntakeRuleLocale } from '@factory/contracts';
-import type { IntakeRuleFireRecord, IntakeRuleRecord, IntakeRuleScope } from '@factory/store';
-
-export type { IntakeRuleLocale };
-
-/** One fire of a rule's trigger, as the trigger emits it. */
-export interface IntakeTriggerFired {
-  ruleId: string;
-  firedAt: Date;
-  triggerKind: string;
-  /** What the trigger knows about this fire (an event's fields); template placeholders may read it. */
-  payload?: Record<string, unknown>;
-}
-
-/** Where a trigger sends its fires; the engine is the only one listening. */
-export type IntakeFireSink = (fired: IntakeTriggerFired) => Promise<void>;
-
-/** A config that does not fit its kind; the routes answer 422 with `message`. */
-export class IntakeConfigError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'IntakeConfigError';
-  }
-}
-
-export type LocalizedLabel = Readonly<Record<IntakeRuleLocale, string>>;
+import { IntakeConfigError } from './errors.ts';
+import type {
+  IntakeFireSink,
+  IntakeRuleFireRecord,
+  IntakeRuleLocale,
+  IntakeRuleRecord,
+  IntakeRuleScope,
+  IntakeTriggerFired,
+  LocalizedLabel,
+} from './rule.ts';
 
 interface KindBase<C> {
   readonly kind: string;
@@ -58,9 +46,8 @@ export function parseWith<S extends z.ZodType>(schema: S, config: unknown): z.ou
 }
 
 /**
- * When a rule fires. `arm` makes the trigger fire for the rule from now on (idempotent: it also
- * applies a changed config), `disarm` stops it. A trigger reports fires through the sink it was
- * started with, carrying only the rule's id.
+ * When a rule fires. `start` connects the kind to the engine once; `arm` makes it fire for the
+ * rule from now on (idempotent: it also applies a changed config); `disarm` stops it.
  */
 export interface IntakeTriggerKind<C = unknown> extends KindBase<C> {
   start(sink: IntakeFireSink): void | Promise<void>;
@@ -85,7 +72,10 @@ export interface IntakeActionOutcome {
   note?: string;
 }
 
-/** What a fire does. */
+/**
+ * What a fire does: a command. `run` must be idempotent for a fire that carries a `fireKey`: a
+ * redelivered fire (a retried workflow step after a crash) returns what the first delivery made.
+ */
 export interface IntakeActionKind<C = unknown> extends KindBase<C> {
   /** Why the rule cannot run as configured right now (a board that is gone); empty when it can. */
   problems?(scope: IntakeRuleScope, config: C): Promise<string[]>;
@@ -135,4 +125,17 @@ export interface IntakeKinds {
   triggers: IntakeKindRegistry<IntakeTriggerKind<any>>;
   actions: IntakeKindRegistry<IntakeActionKind<any>>;
   policies: IntakeKindRegistry<IntakePolicyKind>;
+}
+
+/** The three registries from lists of kinds. */
+export function intakeKinds(kinds: {
+  triggers?: readonly IntakeTriggerKind<any>[];
+  actions?: readonly IntakeActionKind<any>[];
+  policies?: readonly IntakePolicyKind[];
+}): IntakeKinds {
+  return {
+    triggers: new IntakeKindRegistry(kinds.triggers ?? []),
+    actions: new IntakeKindRegistry(kinds.actions ?? []),
+    policies: new IntakeKindRegistry(kinds.policies ?? []),
+  };
 }
