@@ -1,3 +1,8 @@
+import {
+  AnnotationMarkers,
+  AnnotationSelectionToolbar,
+  useOptionalChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Code } from '@mastra/playground-ui/components/Code';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
@@ -6,6 +11,8 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { useRef } from 'react';
+import type { RefObject } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -14,6 +21,33 @@ import { translator } from '../../../i18n/t';
 import type { WorkspaceFilePreview } from './workspace-file-preview';
 
 const tk = translator('workspaces');
+
+/**
+ * Comments on a document, as the chat takes comments on a message: select a passage, Add to chat, write
+ * a note. Each passage is quoted with the file's path, and they all go to the session with the next
+ * message. Only inside a chat; a viewer without one shows the file as before.
+ */
+function FileAnnotations({ containerRef, filePath }: { containerRef: RefObject<HTMLElement | null>; filePath: string }) {
+  const chat = useOptionalChatAnnotations();
+  if (!chat) return null;
+  const { annotations, addAnnotation, removeAnnotation, setAnnotationComment } = chat;
+  const container = containerRef.current;
+  const own = annotations.filter(annotation => container?.contains(annotation.source.element));
+  return (
+    <>
+      <AnnotationMarkers
+        containerRef={containerRef}
+        annotations={own}
+        onRemove={removeAnnotation}
+        onCommentChange={setAnnotationComment}
+      />
+      <AnnotationSelectionToolbar
+        containerRef={containerRef}
+        onAnnotate={annotation => addAnnotation({ ...annotation, text: `\`${filePath}\`\n${annotation.text}` })}
+      />
+    </>
+  );
+}
 
 function formatBytes(size: number) {
   if (size < 1024) return tk('fileViewer.bytes', { size });
@@ -43,6 +77,7 @@ export function WorkspaceFileViewer({
   const { t } = useTranslation('workspaces');
   const content = file?.content ?? '';
   const isMarkdown = file?.language === 'markdown';
+  const documentRef = useRef<HTMLDivElement>(null);
 
   return (
     <section className="flex min-h-0 min-w-0 grow flex-col" aria-label={t('fileViewer.label')}>
@@ -112,7 +147,15 @@ export function WorkspaceFileViewer({
             {file?.contentType === 'unsupported' ? (
               <Txt tone="muted">{t('fileViewer.unsupported')}</Txt>
             ) : null}
-            {file?.contentType === 'text' && isMarkdown ? <MarkdownRenderer>{content}</MarkdownRenderer> : null}
+            {file?.contentType === 'text' && isMarkdown ? (
+              <div ref={documentRef} className="relative">
+                {/* The slot annotations select from, as a chat message marks its content. */}
+                <div data-slot="message-content">
+                  <MarkdownRenderer>{content}</MarkdownRenderer>
+                </div>
+                <FileAnnotations containerRef={documentRef} filePath={filePath} />
+              </div>
+            ) : null}
             {file?.contentType === 'text' && !isMarkdown ? (
               <Code
                 code={content}

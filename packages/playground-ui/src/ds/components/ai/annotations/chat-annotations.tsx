@@ -70,6 +70,11 @@ export function ChatAnnotationsProvider({ children }: { children: ReactNode }) {
   return <ChatAnnotationsContext.Provider value={value}>{children}</ChatAnnotationsContext.Provider>;
 }
 
+/** The annotations of the surrounding chat, or undefined outside one: for surfaces that also render without a chat. */
+export function useOptionalChatAnnotations(): ChatAnnotationsApi | undefined {
+  return useContext(ChatAnnotationsContext);
+}
+
 export function useChatAnnotations(): ChatAnnotationsApi {
   const value = useContext(ChatAnnotationsContext);
   if (!value) throw new Error('useChatAnnotations must be used within a ChatAnnotationsProvider');

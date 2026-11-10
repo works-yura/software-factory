@@ -16,7 +16,8 @@ export function TranscriptAnnotations() {
     <>
       <AnnotationMarkers
         containerRef={transcriptRef}
-        annotations={annotations}
+        // Passages from another surface (a document beside the chat) show their markers there.
+        annotations={annotations.filter(annotation => transcriptRef.current?.contains(annotation.source.element) ?? true)}
         onRemove={removeAnnotation}
         onCommentChange={setAnnotationComment}
       />
