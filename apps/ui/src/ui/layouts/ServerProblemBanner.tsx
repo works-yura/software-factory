@@ -55,7 +55,7 @@ export function ServerProblemBanner({ problem }: { problem: ServerStatusProblem 
         <TriangleAlertIcon className="size-icon-md shrink-0" aria-hidden />
         <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
           <Txt as="h2" variant="label" tone="ink" className="shrink-0">
-            {title}
+            {title}.
           </Txt>
           <Txt as="span" variant="body-sm" tone="ink">
             {message}
