@@ -81,6 +81,7 @@ export const PRODUCT_DOCUMENT_SECTIONS: Readonly<Record<ProductDocumentType, rea
     section('Technology', /technolog/i, /stack/i, /технолог/i, /стек/i),
     section('Phases', /phases?/i, /delivery/i, /фази/i, /етапи/i),
     section('Estimate', /estimate/i, /оцінк/i),
+    section('External dependencies and risks', /dependenc/i, /залежн/i),
     section('Approval gates', /approv/i, /погодж/i),
     section('Done means', /done means/i, /definition of done/i, /готово означає/i),
     OPEN_QUESTIONS,

@@ -50,6 +50,9 @@ Buyers who order twice a month.
 ## Technology
 Our existing app and server; no new vendor.
 
+## External dependencies and risks
+None found: no provider review, no new access.
+
 ## Phases and estimate
 | 1 | points | 3 | 5 | 9 | 5.3 | 9 |
 
@@ -172,6 +175,11 @@ describe('product document checks', () => {
     ).toEqual(['Not included', 'Done means']);
   });
 
+  it('requires the brief to list its external dependencies and risks', () => {
+    const without = BRIEF.replace('## External dependencies and risks', 'External dependencies and risks');
+    expect(checkProductDocumentStructure('brief', without).missingSections).toEqual(['External dependencies and risks']);
+  });
+
   it('accepts Ukrainian headings', () => {
     const uk = [
       '# Бриф',
@@ -183,6 +191,7 @@ describe('product document checks', () => {
       '## Не входить',
       '## Обмеження',
       '## Технології',
+      '## Зовнішні залежності й ризики',
       '## Фази та оцінка',
       '## Рішення, що потребують погодження клієнта',
       '## Готово означає',

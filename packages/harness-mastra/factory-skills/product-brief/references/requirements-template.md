@@ -58,10 +58,17 @@ revision: <round> · status: draft | in approval | approved · sources: <blackbo
 ## Technology  (Технології)
 <!-- At the client's level: platforms, which existing systems it builds on, any new vendor or paid service and what it means for them (cost, lock-in). No architecture. -->
 
+## External dependencies and risks  (Зовнішні залежності й ризики)
+<!-- Required. Everything outside the team that the work waits on or can be blocked by, found with the checklist in SKILL.md. Work hours and calendar time are different things: 10 hours of work can wait three weeks for a review. "None found" only after the checklist was run, saying so. -->
+| # | What | Who must act | Wait (calendar) | Blocks | Mitigation |
+|---|---|---|---|---|---|
+| D-1 | <e.g. Meta approves the WhatsApp message templates> | <Meta; we submit, client's business account> | <1–2 days, rejections restart it> | <go-live of #N> | <submit in week 1; text fallback> |
+| D-2 | <e.g. DNS records on syncta.app for email (SPF/DKIM)> | <whoever administers the domain: client> | <same day once access is given> | <email channel> | <ask for access now> |
+
 ## Phases and estimate  (Фази та оцінка)
-| Phase | What the client gets | Optimistic | Most likely | Pessimistic | Expected (PERT) | Commit to |
-|---|---|---|---|---|---|---|
-| 1 | … | … days | … days | … days | (O+4M+P)/6 | P75 / pessimistic |
+| Phase | What the client gets | Optimistic | Most likely | Pessimistic | Expected (PERT) | Commit to | Calendar, incl. waits |
+|---|---|---|---|---|---|---|---|
+| 1 | … | … days | … days | … days | (O+4M+P)/6 | P75 / pessimistic | <work + the longest dependency it waits on, e.g. "~1 week; ≥3 days after DNS access"> |
 
 **Team mode:** <people / people with agents (~share) / mostly agents>
 **Estimate assumptions:**
