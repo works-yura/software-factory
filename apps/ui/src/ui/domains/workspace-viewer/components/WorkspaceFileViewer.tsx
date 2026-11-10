@@ -5,13 +5,14 @@ import {
 } from '@mastra/playground-ui/components/ai/annotations';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Code } from '@mastra/playground-ui/components/Code';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
-import { useRef } from 'react';
+import { ArrowLeft, Maximize2, RefreshCw } from 'lucide-react';
+import { useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -78,6 +79,20 @@ export function WorkspaceFileViewer({
   const content = file?.content ?? '';
   const isMarkdown = file?.language === 'markdown';
   const documentRef = useRef<HTMLDivElement>(null);
+  const expandedRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const canExpand = file?.contentType === 'text';
+
+  /** The markdown document, annotatable; long lines wrap instead of running off the panel. */
+  const markdownDocument = (ref: typeof documentRef) => (
+    <div ref={ref} className="relative min-w-0 wrap-anywhere [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto">
+      {/* The slot annotations select from, as a chat message marks its content. */}
+      <div data-slot="message-content">
+        <MarkdownRenderer>{content}</MarkdownRenderer>
+      </div>
+      <FileAnnotations containerRef={ref} filePath={filePath} />
+    </div>
+  );
 
   return (
     <section className="flex min-h-0 min-w-0 grow flex-col" aria-label={t('fileViewer.label')}>
@@ -97,6 +112,11 @@ export function WorkspaceFileViewer({
         <div className="flex shrink-0 items-center gap-1">
           {file?.contentType === 'text' ? (
             <CopyButton content={content} size="icon-sm" variant="ghost" tooltip={t('fileViewer.copy')} />
+          ) : null}
+          {canExpand ? (
+            <Button size="icon-sm" variant="ghost" onClick={() => setExpanded(true)} aria-label={t('fileViewer.expand')}>
+              <Maximize2 />
+            </Button>
           ) : null}
           <Button
             size="icon-sm"
@@ -147,15 +167,7 @@ export function WorkspaceFileViewer({
             {file?.contentType === 'unsupported' ? (
               <Txt tone="muted">{t('fileViewer.unsupported')}</Txt>
             ) : null}
-            {file?.contentType === 'text' && isMarkdown ? (
-              <div ref={documentRef} className="relative">
-                {/* The slot annotations select from, as a chat message marks its content. */}
-                <div data-slot="message-content">
-                  <MarkdownRenderer>{content}</MarkdownRenderer>
-                </div>
-                <FileAnnotations containerRef={documentRef} filePath={filePath} />
-              </div>
-            ) : null}
+            {file?.contentType === 'text' && isMarkdown && !expanded ? markdownDocument(documentRef) : null}
             {file?.contentType === 'text' && !isMarkdown ? (
               <Code
                 code={content}
@@ -165,6 +177,31 @@ export function WorkspaceFileViewer({
             ) : null}
           </div>
         </ScrollArea>
+      ) : null}
+      {expanded && file?.contentType === 'text' ? (
+        <Dialog open onOpenChange={open => !open && setExpanded(false)}>
+          <DialogContent size="full" aria-label={file.name ?? filePath}>
+            <DialogHeader>
+              <DialogTitle>{file.name ?? filePath}</DialogTitle>
+              <Txt tone="muted" as="span" variant="caption" className="truncate">
+                {file.path}
+              </Txt>
+            </DialogHeader>
+            <DialogBody>
+              <div className="mx-auto w-full max-w-[52rem]">
+                {isMarkdown ? (
+                  markdownDocument(expandedRef)
+                ) : (
+                  <Code
+                    code={content}
+                    lang={file.language}
+                    className="border-border bg-background text-caption text-foreground m-0 rounded-md border p-3 font-mono"
+                  />
+                )}
+              </div>
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </section>
   );

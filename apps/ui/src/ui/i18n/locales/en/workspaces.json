@@ -470,7 +470,8 @@
     "unsupported": "This file type cannot be previewed as text.",
     "bytes": "{{size}} B",
     "kilobytes": "{{size}} KB",
-    "megabytes": "{{size}} MB"
+    "megabytes": "{{size}} MB",
+    "expand": "Open full screen"
   },
   "fileBrowser": {
     "back": "Back to workspace",

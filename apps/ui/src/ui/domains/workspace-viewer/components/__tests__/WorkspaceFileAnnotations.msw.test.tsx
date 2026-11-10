@@ -1,5 +1,6 @@
 import { ChatAnnotationsProvider, useChatAnnotations } from '@mastra/playground-ui/components/ai/annotations';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -51,5 +52,18 @@ describe('WorkspaceFileViewer annotations', () => {
     renderWithProviders(<Viewer />);
 
     expect(screen.getByText('The owner gets a push for every new booking.')).toBeInTheDocument();
+  });
+
+  it('opens the document full screen and keeps it annotatable there', async () => {
+    renderWithProviders(
+      <ChatAnnotationsProvider>
+        <Viewer />
+      </ChatAnnotationsProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open full screen' }));
+    const dialog = await screen.findByRole('dialog', { name: 'requirements.md' });
+    const paragraph = Array.from(dialog.querySelectorAll('p')).find(p => p.textContent?.includes('push for every new booking'));
+    expect(paragraph?.closest('[data-slot="message-content"]')).not.toBeNull();
   });
 });

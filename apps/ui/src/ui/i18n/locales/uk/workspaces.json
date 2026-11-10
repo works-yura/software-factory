@@ -478,7 +478,8 @@
     "unsupported": "Файл цього типу не можна переглянути як текст.",
     "bytes": "{{size}} Б",
     "kilobytes": "{{size}} КБ",
-    "megabytes": "{{size}} МБ"
+    "megabytes": "{{size}} МБ",
+    "expand": "Відкрити на весь екран"
   },
   "fileBrowser": {
     "back": "Назад до робочого простору",
