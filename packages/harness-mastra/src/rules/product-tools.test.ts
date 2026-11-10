@@ -48,12 +48,15 @@ sequenceDiagram
 flowchart LR
   api --> db
 \`\`\`
-## Contracts
+## Modules touched
+## API contract
 ## Data model
-## Components
+## Security
+## Shared resources
 ## Test plan
-## Technical risks
 ## Decisions
+## Consult round
+## Premortem outcome
 ## Open questions
 `;
 
@@ -148,13 +151,18 @@ describe('Product session tools', () => {
   it('records the spec check on the card, and the gate lets the card on to Phases only once it passed', async () => {
     const { tools, context, storage, prepared, transitionService } = await setup({ stage: 'spec' });
     const check = tools.factory_check_product_document as ExecutableTool;
-    const path = 'docs/features/loyalty/spec.md';
+    const path = 'docs/specify/loyalty/design.md';
 
     const failed = await check.execute(
       { type: 'spec', path, contradictions: [] },
       { requestContext: context, workspace: workspace({ [path]: SPEC.replace('## Test plan', '') }) },
     );
-    expect(failed).toMatchObject({ passed: false, missingSections: ['Test plan'], missingDiagrams: [] });
+    expect(failed).toMatchObject({
+      passed: false,
+      missingSections: ['Test plan'],
+      missingDiagrams: [],
+      taskProblems: [],
+    });
     await expect(
       check.execute(
         { type: 'spec', path: 'docs/missing.md', contradictions: [] },

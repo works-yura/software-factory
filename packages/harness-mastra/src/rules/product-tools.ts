@@ -226,7 +226,7 @@ export function createProductTools(
     factory_check_product_document: createTool({
       id: 'factory_check_product_document',
       description:
-        "Check a product document in the workspace and record the result on this Product card. It verifies the document type's required sections and, for the spec, its Mermaid C4, sequence and data-flow diagrams. List every contradiction you found between this document and the project's existing documents and decision records; the check passes only when every one is resolved. Sending the brief to Approval needs a passing brief check, and moving the card from Spec review to Phases a passing spec check.",
+        "Check a product document in the workspace and record the result on this Product card. Types and their files in <docs>/specify/<feature>/: enrich = research.md, brief = requirements.md (client-facing), spec = design.md (technical), tasks = tasks.md (phases). It verifies the type's required sections; for the spec, its Mermaid C4, sequence and data-flow diagrams; for tasks, that every task has role, depends-on, acceptance and verify and depends only on tasks that exist. List every contradiction you found between this document and the project's existing documents and decision records; the check passes only when every one is resolved. Sending the brief to Approval needs a passing brief check, moving the card from Spec review to Phases a passing spec check, and handing the phases to Phases review a passing tasks check.",
       inputSchema: z
         .object({
           type: z.enum(PRODUCT_DOCUMENT_TYPES).describe('Which document this is.'),

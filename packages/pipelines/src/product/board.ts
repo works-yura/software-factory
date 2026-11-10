@@ -70,11 +70,13 @@ const resting = (description: string) => ({ kind: 'resting' as const, descriptio
  * then one technical spec for the team (architecture and flows in Mermaid, contracts, data, what
  * changes in every component, test plan), then phases filed as cards on Development (Work). Each
  * working phase is a conversation with a person, so none starts on its own. A project keeps all
- * its documentation in one folder (a docs repository, or one folder in a monorepo); each Factory
- * says where in the phase instructions, or the agent finds it and confirms.
+ * its documentation in one folder (a docs repository, or one folder in a monorepo), laid out as
+ * `<docs>/specify/<feature>/{research,requirements,design,tasks}.md`; each Factory says where in
+ * the phase instructions, or the agent finds it and confirms.
  *
- * Sending the brief for approval needs its document check to have passed, and so does leaving
- * Spec review for Phases; Done needs the Development cards the phases were filed as.
+ * Sending the brief (requirements.md) for approval needs its document check to have passed, and
+ * so do leaving Spec review for Phases (design.md) and handing the phases (tasks.md) over for
+ * review; Done needs the Development cards the phases were filed as.
  */
 export const productBoard = compileBoardDefinition<
   'product',
@@ -135,6 +137,7 @@ export const productBoard = compileBoardDefinition<
       kind: 'working',
       runner: { context: PRODUCT_CONTEXT, skill: 'product-phases' },
       nextPhases: ['phases-review', 'canceled'],
+      onExit: everySource(documentGate('tasks', 'phases-review')),
     },
     'phases-review': {
       name: 'Phases review',

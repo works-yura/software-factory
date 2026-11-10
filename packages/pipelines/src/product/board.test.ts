@@ -41,7 +41,7 @@ function stageContext(
 
 const passedCheck = (type: string) => ({
   type,
-  path: `docs/features/loyalty/${type}.md`,
+  path: `docs/specify/loyalty/${type}.md`,
   sha256: 'a'.repeat(64),
   passed: true,
   missingSections: [],
@@ -126,7 +126,7 @@ describe('Product board', () => {
   });
 
   describe('gates', () => {
-    const exit = (from: 'brief' | 'spec-review' | 'phases-review', source = 'manual') => {
+    const exit = (from: 'brief' | 'spec-review' | 'phases' | 'phases-review', source = 'manual') => {
       const handler = productBoard.rules[from]?.[source as 'manual']?.onExit;
       if (!handler) throw new Error(`${from} has no exit gate for ${source} cards`);
       return async (context: FactoryStageRuleContext) => handler(context);
@@ -169,6 +169,26 @@ describe('Product board', () => {
           stageContext('brief', 'client-review', { [PRODUCT_DOC_CHECKS_KEY]: { brief: passedCheck('brief') } }),
         ),
       ).resolves.toBeUndefined();
+    });
+
+    it('hands the phases to review only once the tasks check passed', async () => {
+      const refused = await exit('phases')(stageContext('phases', 'phases-review'));
+      expect(refused).toMatchObject({ type: 'reject', code: 'invalid_transition' });
+      expect((refused as { reason: string }).reason).toContain('tasks.md');
+      const failed = await exit('phases')(
+        stageContext('phases', 'phases-review', {
+          [PRODUCT_DOC_CHECKS_KEY]: {
+            tasks: { ...passedCheck('tasks'), passed: false, taskProblems: ['LY-02 has no verify'] },
+          },
+        }),
+      );
+      expect((failed as { reason: string }).reason).toContain('task problems: LY-02 has no verify');
+      await expect(
+        exit('phases')(
+          stageContext('phases', 'phases-review', { [PRODUCT_DOC_CHECKS_KEY]: { tasks: passedCheck('tasks') } }),
+        ),
+      ).resolves.toBeUndefined();
+      await expect(exit('phases')(stageContext('phases', 'canceled'))).resolves.toBeUndefined();
     });
 
     it('lets a card go back for revisions or be canceled without a check', async () => {

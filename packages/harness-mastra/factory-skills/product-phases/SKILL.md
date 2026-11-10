@@ -1,54 +1,75 @@
 ---
 name: product-phases
-description: Split an agreed technical spec into independently verifiable phases with a person, then file each phase as a Development card per repository, linked to the exact spec sections it implements
+description: Cut the agreed design into an INVEST-atomic, dependency-ordered backlog (tasks.md) that passes a Definition of Ready, agree it with a person, then file exactly one Development card per task, per repository, linked back to its task and design sections and to this Product card
 ---
 
 # Product Phases
 
-Split the agreed technical **spec** on this Product card into **phases** the Development board can build: each a finished, checkable piece (a contract, a domain change, a screen), some able to run in parallel and some only after others. Then file each phase as a card on the Development (Work) board, one per repository, under this Product card. Agree on the list **with a person in this session** before filing anything.
+Turn the agreed **design** (`design.md`) on this Product card into the backlog the Development board builds: `<docs>/specify/<feature>/tasks.md`, every task **INVEST**-atomic, ordered by its dependency graph, foundation first, each carrying its slice of the acceptance criteria and how it is proven. Agree the list **with a person in this session**, then file **one Development (Work) card per task**, under this Product card. The failure this prevents: an engineer re-deciding the architecture per task, two tasks editing the same schema, and "done" being a matter of opinion.
 
-**No code is ever written on the Product board.** A phase says *what* is delivered and *how it is checked*, never how it is coded: it is not an implementation document, and it holds no code.
-
-> **Skeleton.** Adjust the sizing rules and the card template to the team's practice through Settings › Skills.
-
-## Inputs
-
-- **The spec**, agreed (its check passed in Spec review). Continue from this session if it wrote it; otherwise find it in the documentation folder named by the phase instructions or by the card. If it is missing, **stop and ask** the person.
-- **Repositories.** Every card names exactly one repository linked to this Factory, in `owner/name` form: the one the phase's code lives in. The spec's *Components* say which; if a component has no repository, **stop and ask**.
+**No code is ever written on the Product board.** A task says *what* is delivered and *how it is checked*, never how it is coded. tasks.md is not an implementation document and holds no code.
 
 ## Where the documents live
 
-A project keeps **all** its documentation in **one folder** (a documentation repository, or one folder in a monorepo), never split per component. The Development agents that build each phase have that folder in their workspace when the documentation repository is part of the Factory's environment, so every card links to the exact sections it implements, by path and heading, e.g. `docs/features/loyalty/spec.md#contracts` and `docs/features/loyalty/spec.md#sequences`.
+A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. Use the folder this card already used; otherwise the phase instructions' folder; otherwise **stop and ask**. The layout and what you may write are in `references/docs-layout.md` of the `product-enrich` skill (`skill_read` with skill `product-enrich`).
+
+This phase reads `<docs>/specify/<feature>/requirements.md` (use cases and acceptance criteria) and `design.md` (contract, data, shared resources, test plan, the answers to `<docs>/rules/`), and writes `<docs>/specify/<feature>/tasks.md` and the feature's row in `<docs>/specify/INDEX.md`. It never edits `features/`, `rules/`, `requests/`, `bugs/` or `audits/`.
+
+`<docs>/specify/` is the **source of truth**. Development cards are projections of `tasks.md`, one card per task, each linking back to `tasks.md#<task-id>`. When the plan changes, it changes here first.
+
+The Development agents that build each task have the documentation in their workspace when the documentation repository is part of the Factory's environment ("in environment" in Settings › Repositories). If it is not, say so to the person: the cards' links will not resolve for them.
+
+## Inputs
+
+- **The design**, agreed: its check passed in Spec review. If it is missing, **stop and ask**.
+- **The brief**: every acceptance criterion must end up owned by a task.
+- **Repositories.** Every card names exactly one repository linked to this Factory, as `owner/name`. *Modules touched* in the design says which; if a component has no repository, **stop and ask**.
 
 ## Steps
 
-1. **Propose the phases.** List them with, for each one:
-   - title;
-   - repository;
-   - what it delivers, in one or two lines;
-   - the spec sections it implements (path#heading: contracts, sequences, components, test-plan scenarios);
-   - acceptance criteria and test-plan scenarios it must pass, copied from the spec;
-   - dependencies: which phases must land first; which can run in parallel.
+1. **Draft `tasks.md`** from `references/tasks-template.md` (`skill_read` with skill `product-phases`), in the person's language, keeping the template's headings and field names so the check recognises them:
+   - **Foundation first.** Each shared resource named in the design (schema, auth, design tokens, shared widgets) is **one** foundation task; every task that touches it `depends-on` it and never edits it.
+   - **Default chain** per feature: foundation → backend → (design →) mobile / web → qa (the test plan's scenarios) → docs. Drop a link only when the feature truly has no such side.
+   - **INVEST:** Independent, Negotiable, Valuable, Estimable, Small (one engineer, one sitting, one reviewable change), Testable. A task whose title needs "and" is two tasks. A task whose `touches` spans two repositories (backend and mobile) is split along the API contract, both halves citing it.
+   - **Every task carries** `role`, `repository`, `depends-on`, `touches`, `acceptance` (its slice of the brief's criteria, each restated in one line), `design` (the design sections it implements, as `design.md#<heading>`), `verify` (how it is proven: unit / widget / golden / integration / e2e, or the exact manual step and expected result), and `gate: human` when it needs approval (destructive migration, paid service, public deploy, real customer data).
+   - **Never invent** a task the brief and design do not need, and never leave an acceptance criterion without a task. When the design has a gap, ask the person; don't improvise around it.
+   - Fill the **coverage check**: every criterion → its task(s).
+2. **Definition of Ready.** Every task must pass all of these; one missing means it is not ready — fix it or ask:
+   - maps to a use case / user story with clear value;
+   - its acceptance is checkable without asking the author;
+   - INVEST-atomic;
+   - `depends-on` identified, foundation sequenced before it, no cycles;
+   - `verify` says how it is proven;
+   - the design's consult round and pre-mortem covered what it touches.
+3. **Check** with `factory_check_product_document` (`type: tasks`, the path, and any contradictions with the design or the brief). It verifies the sections and that every task has `role`, `depends-on`, `acceptance` and `verify`, and depends only on tasks that exist. Fix what it reports and run it again. Handing the card to Phases review needs a passing check.
+4. **Agree.** Show the order and the task list in the session, with the open questions and the tasks marked `gate: human`, and **wait** for the person to accept, change or drop tasks. File nothing before they say so.
+5. **File the cards.** For each accepted task, in dependency order, call `factory_create_work_item` with:
+   - `title`: `<ID> — <title>`;
+   - `repository`: the task's `owner/name`;
+   - `brief`: what it delivers; its acceptance criteria; `verify`; its dependencies (by id, with the card titles already filed); the links `<docs>/specify/<feature>/tasks.md#<id>` and each `design.md#<heading>` it implements; and, at the end, the human gate below, verbatim.
 
-   Order them so that contracts land before the code that uses them. Prefer vertical slices that can be checked on their own over layers that cannot. A change that spans two repositories is two phases, one per repository, with the dependency between them.
-2. **Size them.** A phase that cannot be reviewed as one change request is too big; split it. One that only makes sense together with another may be merged with it. Flag every phase whose acceptance criteria you could not take from the spec: the spec has a gap there; ask the person rather than invent criteria.
-3. **Agree.** Show the list in the session and wait for the person to accept, change or drop phases. Do not file anything before they say so.
-4. **File them.** For each accepted phase, call `factory_create_work_item` with:
-   - `title`;
-   - `repository` (`owner/name`);
-   - `brief`: what it delivers, its acceptance criteria and test-plan scenarios, its dependencies, and the links to the spec sections and to this Product card.
+   The card lands in Development › Intake, its parent is this Product card, and this card lists it. Filing the same title again returns the existing card, so a retry never duplicates. If a call fails, report it and continue with the others; do not retry blindly.
 
-   The card lands in Development › Intake, its parent is this Product card, and this card lists it. Filing the same title again returns the existing card, so a retry never duplicates. If a call fails, report it and continue with the others. Do not retry blindly.
-5. **Record.** Add a *Phases* section to the spec listing each filed card with its dependencies, commit it (`docs(spec): <title>, phases`), and push with `source_control_push_branch`.
-6. **Hand off.** Post the list of filed cards in the session, then move this card to `phases-review` with `factory_transition_work_item`. Moving it to Done needs at least one filed card.
+   > **HUMAN-GATE:** if the implementation needs an architectural change, touches modules outside this card's scope, or needs a destructive or irreversible action, stop and hand back to a person with a concrete proposal. Do not expand the scope or loop. The plan lives in `docs/specify/`: change it there first.
+6. **Record.** In `tasks.md` set `status: approved` and add each filed card under its task (`- card: <link>`); update the feature's row in `<docs>/specify/INDEX.md` (status `phased`, foundation resources). Run the check again, commit (`docs(tasks): <feature>`), and push with `source_control_push_branch`; the card's change request picks it up.
+7. **Hand off.** Post the filed cards in order in the session, then move this card to `phases-review` with `factory_transition_work_item`. Done needs at least one filed card.
+
+## Amend: the plan changed
+
+When the brief or design changes after the cards exist, update only the affected tasks: bump `revision`, add new tasks with the next free id, and retire changed ones as `superseded-by: <id>` (never delete a task that has shipped, and never renumber). File cards for new tasks; comment on existing cards to change them. Never delete cards yourself.
 
 ## Revisions
 
-When the card comes back from `phases-review`, fix what the person points out. File missing phases and comment on cards to change; never delete cards yourself. Then hand off again.
+When the card comes back from Phases review, fix what the person points out the same way, check again, and hand off again.
 
 ## Never
 
 - Never write or change code, and never put code in a card.
-- Never start runs on the filed cards. People start them on the Development board.
+- Never start runs on the filed cards: people start them on the Development board.
+- Never invent tasks that tasks.md does not hold, or file a card for a task that is not in it.
 - Never merge the documents' change request.
 - Never copy content from one private repository into another, or into a public one.
+
+---
+
+Built from eclipt's `spec-driven-planning` (tasks.md, Definition of Ready, amend) and `decomposition` (one card per task, foundation first, never invent tasks, the HUMAN-GATE) skills.

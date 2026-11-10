@@ -469,15 +469,51 @@ describe('bundled Factory skill assets', () => {
       expect(prose).toMatch(/Never merge/);
       expect(prose).toContain('No code is ever written on the Product board.');
       expect(prose).toMatch(/one folder/);
-    }
-    // Document checks gate the reviews; the spec carries the test plan.
-    for (const skillName of ['product-enrich', 'product-brief', 'product-spec']) {
-      const prose = await fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
+      // The team's spec-driven layout, and every document is checked before its gate.
+      expect(prose).toContain('<docs>/specify/');
       expect(prose).toContain('factory_check_product_document');
+      // One shared layout page says what to read and what Product may never edit.
+      expect(prose).toContain('docs-layout.md');
+      expect(prose).toMatch(/never edits?.*`bugs\/`/i);
     }
-    const spec = await fs.readFile(path.join(assetRoot, 'product-spec', 'SKILL.md'), 'utf8');
-    expect(spec).toContain('## Test plan');
+    const layout = await fs.readFile(path.join(assetRoot, 'product-enrich', 'references', 'docs-layout.md'), 'utf8');
+    for (const part of ['README.md', 'repositories/', 'features/', 'rules/', 'requests/', 'bugs/', 'audits/', 'raw/']) {
+      expect(layout).toContain(part);
+    }
+    expect(layout).toContain('qa-round');
+    const read = (skillName: string, file: string) => fs.readFile(path.join(assetRoot, skillName, file), 'utf8');
+    // Each skill's templates and reference pages ship with it.
+    for (const [skillName, files] of [
+      [
+        'product-enrich',
+        [
+          'references/docs-layout.md',
+          'references/research-template.md',
+          'references/GLOSSARY-FORMAT.md',
+          'references/ADR-FORMAT.md',
+        ],
+      ],
+      [
+        'product-brief',
+        ['references/requirements-template.md', 'references/feedback-template.md', 'references/index-template.md'],
+      ],
+      ['product-spec', ['references/design-template.md', 'references/contract-lenses.md', 'references/premortem.md']],
+      ['product-phases', ['references/tasks-template.md']],
+    ] as const) {
+      const prose = await read(skillName, 'SKILL.md');
+      for (const file of files) {
+        expect(prose, `${skillName} names ${file}`).toContain(file.replace('references/', ''));
+        await expect(read(skillName, file)).resolves.not.toBe('');
+      }
+    }
+    const spec = await read('product-spec', 'SKILL.md');
+    expect(spec).toContain('Consult round');
+    expect(spec).toContain('Pre-mortem');
     expect(spec).toContain('Never split the spec into one document per component.');
+    await expect(read('product-spec', 'references/design-template.md')).resolves.toContain('## Test plan');
+    const phases = await read('product-phases', 'SKILL.md');
+    expect(phases).toContain('HUMAN-GATE');
+    expect(phases).toContain('Definition of Ready');
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
