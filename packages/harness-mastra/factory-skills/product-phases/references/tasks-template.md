@@ -31,7 +31,7 @@ revision: 1 · status: draft | approved | in-progress | shipped · design: desig
 - repository: acme/api
 - depends-on: SB-01
 - touches: POST /subscriptions
-- acceptance: AC-1, AC-3
+- acceptance: payments/Scenario: subscribe with a valid card; payments/Scenario: declined card
 - design: design.md#api-contract, design.md#sequences
 - verify: contract test against CreateSubscriptionDto / SubscriptionDto; e2e: declined card → 402 payment_failed
 
@@ -40,7 +40,7 @@ revision: 1 · status: draft | approved | in-progress | shipped · design: desig
 - repository: acme/mobile
 - depends-on: SB-02, auth/AU-02
 - touches: features/subscriptions
-- acceptance: AC-1, AC-3, AC-4
+- acceptance: payments/Scenario: paywall shows plans; payments/Scenario: declined card
 - design: design.md#api-contract, design.md#ui
 - verify: widget test per state (empty, loading, error, declined); golden for the paywall
 

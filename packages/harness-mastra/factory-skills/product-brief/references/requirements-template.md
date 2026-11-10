@@ -4,7 +4,7 @@ Path: `<docs>/changes/<change>/requirements.md`. Audience: **the client**, a non
 
 **Two language versions.** `requirements.md` is in the team's language (Ukrainian for this team); when the client works in another language (find it from how the client writes in `blackbox/sources/`; Alex writes English), also keep `requirements.<lang>.md` (e.g. `requirements.en.md`) — the same brief, translated, section for section, with the English headings. The client gets the client-language file; both are updated in the same round and must say the same thing. Each passes the check.
 
-Write it in the person's language: for this team, **the Ukrainian headings in brackets and Ukrainian labels** (Хто / Хоче / Кроки / Готово, коли / На екрані); the English names are only what the check also accepts. **Required** (the check fails without them; write `None` with a reason rather than dropping one): Goal, Users, Use cases, Edge cases, Acceptance criteria, Not included, Constraints, Technology, Running costs, External dependencies and risks, Phases and estimate, Decisions that need the client's approval, Done means, Open questions.
+Write it in the person's language: for this team, **the Ukrainian headings in brackets and Ukrainian labels** (Хто / Хоче / Кроки / Готово, коли / На екрані); the English names are only what the check also accepts. **Required** (the check fails without them; write `None` with a reason rather than dropping one): Goal, Users, Use cases, Edge cases, Not included, Constraints, Technology, Running costs, External dependencies and risks, Phases and estimate, Decisions that need the client's approval, Done means, Open questions.
 
 **Nothing internal in the client's text:** no file paths, no `blackbox/…` sources, no `DEC-nnn` / `OQ-nnn` ids, no estimation formulas or team mode. Sources and working figures go in the change request description (or `research.md`). The rest (Behaviour, Guided flow, What the app remembers, Look and feel) is a menu: keep a section only if it carries weight. Delete the comments.
 
@@ -48,10 +48,6 @@ Write it in the person's language: for this team, **the Ukrainian headings in br
 | Situation | What happens |
 |---|---|
 | <failure / empty / coming back later / already set up / no permission> | <exactly what the user sees> |
-
-## Acceptance criteria  (Критерії приймання)
-<!-- Numbered; each something the client can check themselves, without a developer. -->
-1. <observable, checkable outcome>
 
 ## Not included  (Не входить)
 - <thing> (<plain reason: needs more design first / a later phase / handled elsewhere>)
@@ -111,7 +107,6 @@ When the brief is for a whole product or an MVP ("an app that…"), not one feat
 4. **Main journeys** — first-time setup, the primary daily flow, any restricted or portal flow; screen by screen, in the user's words.
 5. **Look and behaviour** — navigation, density, status labels, empty states, validation messages, which screen sizes matter.
 6. **What the app keeps track of** — the minimum set of things it stores, what each holds in plain words, required vs optional. The seed of the data model.
-7. **Acceptance criteria** — numbered, each checkable by the client.
 8. **Not included in the first release** — with the reason.
 9. **Constraints.**
 10. **Technology** (client level), **running costs**, **external dependencies and risks**, **phases and estimate**.
@@ -121,4 +116,6 @@ When the brief is for a whole product or an MVP ("an app that…"), not one feat
 
 The check needs the same required headings as a feature brief (see the top of this file): name the sections so (e.g. "Edge cases (Крайові випадки)").
 
-Quality bar: every acceptance criterion is checkable by the client without asking you; every feature names the things it keeps track of and each appears in section 6; non-goals and approval gates are explicit; open questions are listed, not guessed.
+Quality bar: every use case says when it is done in terms the client can see; every feature names the things it keeps track of and each appears in section 6; non-goals and approval gates are explicit; open questions are listed, not guessed.
+
+<!-- No acceptance-criteria section in the brief: the client sees "Готово, коли" in each use case and "Done means"; testable acceptance criteria (GIVEN/WHEN/THEN) belong to the spec. -->

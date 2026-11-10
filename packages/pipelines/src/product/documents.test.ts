@@ -204,6 +204,11 @@ describe('product document checks', () => {
     expect(checkProductDocumentStructure('brief', without).missingSections).toEqual(['Running costs']);
   });
 
+  it('does not require acceptance criteria in the client brief: they live in the spec', () => {
+    const without = BRIEF.replace('## Acceptance criteria', 'Acceptance criteria');
+    expect(checkProductDocumentStructure('brief', without).missingSections).toEqual([]);
+  });
+
   it('accepts Ukrainian headings', () => {
     const uk = [
       '# Бриф',

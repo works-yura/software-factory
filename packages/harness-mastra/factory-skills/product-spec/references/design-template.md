@@ -133,11 +133,11 @@ flowchart LR
 **What a good test is here:** external behaviour only, not implementation details.
 **Prior art:** <similar tests already in the codebase, with paths>
 
-| Scenario | Kind (black-box / integration / contract / e2e) | Seam | Covers (UC / AC) | Data |
+| Scenario | Kind (black-box / integration / contract / e2e) | Seam | Covers (UC / scenario) | Data |
 |---|---|---|---|---|
-| A declined card shows "Payment failed" and no access is granted | e2e | mobile → API | UC-1, AC-3 | test card 4000…0002 |
+| A declined card shows "Payment failed" and no access is granted | e2e | mobile → API | UC-1, payments/Scenario: declined card | test card 4000…0002 |
 
-Every acceptance criterion of the brief appears in *Covers* at least once.
+Every use case of the brief and every requirement scenario appears in *Covers* at least once. The acceptance criteria live here, as the GIVEN/WHEN/THEN scenarios of the requirements — the brief has none.
 
 ## Decisions  (Рішення)
 ### ADR-1 — <decision title>

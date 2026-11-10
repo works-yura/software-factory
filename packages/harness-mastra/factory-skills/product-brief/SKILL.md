@@ -1,6 +1,6 @@
 ---
 name: product-brief
-description: Turn the request and the research into the client-facing brief (requirements.md) — goal, users, use cases with exact wording, edge cases, checkable acceptance criteria, what is not included, technology and a ranged estimate the client can read — and trace every client remark through the approval rounds
+description: Turn the request and the research into the client-facing brief (requirements.md) — goal, users, use cases with exact wording, edge cases, what is not included, technology and a ranged estimate the client can read — and trace every client remark through the approval rounds
 ---
 
 # Product Brief
@@ -70,7 +70,7 @@ This phase writes `<docs>/changes/<change>/requirements.md`, `<docs>/changes/<ch
    - all on-screen text is exact and quoted;
    - edge cases cover failure, empty, coming back later and the already-set-up user;
    - scope is bounded: a *Not included* list, each item with a plain reason;
-   - acceptance criteria are numbered, each something the client could check themselves;
+   - every use case says when it is done ("Готово, коли") in terms the client can see; there is no separate acceptance-criteria section (testable criteria belong to the spec);
    - every estimate is one committed range with calendar time and its assumptions in plain words;
    - no file path, document id or English label is left in the client's text.
 11. **Check** with `factory_check_product_document` (`type: brief`, the path — run it for each language version — and every contradiction with existing documents and decision records, each with whether it is resolved). Fix what it reports and run it again. Sending the brief to Approval needs a passing check.

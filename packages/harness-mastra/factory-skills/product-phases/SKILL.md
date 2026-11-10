@@ -17,7 +17,7 @@ Turn the agreed **design** (`design.md`) on this Product card into the backlog t
 
 A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. Use the folder this card already used; otherwise the phase instructions' folder; otherwise ask once with the question tool. The layout and what you may write are in `references/docs-layout.md` of the `product-enrich` skill (`skill_read` with skill `product-enrich`; in Claude Code `mcp__factory__skill_read`).
 
-This phase reads `<docs>/changes/<change>/requirements.md` (use cases and acceptance criteria) and `design.md` (contract, data, shared resources, test plan, the answers to `<docs>/rules/`), and writes `<docs>/changes/<change>/tasks.md` and this change's own row in `<docs>/features/INDEX.md` (without asking). It never edits another feature's documents, `rules/`, `bugs/` or `audits/`.
+This phase reads `<docs>/changes/<change>/requirements.md` (use cases) and `design.md` (contract, data, shared resources, test plan, the answers to `<docs>/rules/`), and writes `<docs>/changes/<change>/tasks.md` and this change's own row in `<docs>/features/INDEX.md` (without asking). It never edits another feature's documents, `rules/`, `bugs/` or `audits/`.
 
 `<docs>/changes/<change>/` is the **source of truth for this change's plan** (`features/<area>/design.md` stays the truth of how the system works). Development cards are projections of `tasks.md`, one card per task, each linking back to `tasks.md#<task-id>`. When the plan changes, it changes here first.
 
@@ -26,7 +26,7 @@ The Development agents that build each task have the documentation in their work
 ## Inputs
 
 - **The design**, agreed: its check passed in Spec review. If it is missing, ask the person with the question tool how to proceed.
-- **The brief**: every acceptance criterion must end up owned by a task.
+- **The acceptance criteria** are the requirement scenarios (GIVEN/WHEN/THEN) in `design.md`: every scenario, and every use case of the brief, must end up owned by a task.
 - **Repositories.** Every card names exactly one repository linked to this Factory, as `owner/name`. *Modules touched* in the design says which; if a component has no repository, ask the person with the question tool which repository it is.
 
 ## Steps
@@ -35,8 +35,8 @@ The Development agents that build each task have the documentation in their work
    - **Foundation first.** Each shared resource named in the design (schema, auth, design tokens, shared widgets) is **one** foundation task; every task that touches it `depends-on` it and never edits it.
    - **Default chain** per feature: foundation → backend → (design →) mobile / web → qa (the test plan's scenarios) → docs. Drop a link only when the feature truly has no such side.
    - **INVEST:** Independent, Negotiable, Valuable, Estimable, Small (one engineer, one sitting, one reviewable change), Testable. A task whose title needs "and" is two tasks. A task whose `touches` spans two repositories (backend and mobile) is split along the API contract, both halves citing it.
-   - **Every task carries** `role`, `repository`, `depends-on`, `touches`, `acceptance` (its slice of the brief's criteria, each restated in one line), `design` (the design sections it implements, as `design.md#<heading>`), `verify` (how it is proven: unit / widget / golden / integration / e2e, or the exact manual step and expected result), and `gate: human` when it needs approval (destructive migration, paid service, public deploy, real customer data).
-   - **Never invent** a task the brief and design do not need, and never leave an acceptance criterion without a task. When the design has a gap, ask the person; don't improvise around it.
+   - **Every task carries** `role`, `repository`, `depends-on`, `touches`, `acceptance` (its slice of the design's requirement scenarios, each restated in one line), `design` (the design sections it implements, as `design.md#<heading>`), `verify` (how it is proven: unit / widget / golden / integration / e2e, or the exact manual step and expected result), and `gate: human` when it needs approval (destructive migration, paid service, public deploy, real customer data).
+   - **Never invent** a task the brief and design do not need, and never leave a requirement scenario without a task. When the design has a gap, ask the person; don't improvise around it.
    - Fill the **coverage check**: every criterion → its task(s).
 2. **Definition of Ready.** Every task must pass all of these; one missing means it is not ready — fix it or ask:
    - maps to a use case / user story with clear value;
