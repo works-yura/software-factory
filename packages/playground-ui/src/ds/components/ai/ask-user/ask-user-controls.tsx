@@ -1,6 +1,7 @@
 import type { ChangeEvent, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { useAskUserContext, useOptionalAskUserContext } from './ask-user-context';
 import { AskUserOptionRow, AskUserSubmitButton } from './ask-user-layout';
+import { Badge } from '@/ds/components/Badge';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { FieldItem, FieldLabel, Fieldset } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
@@ -63,6 +64,8 @@ export interface AskUserOptionItemProps {
   value: string;
   children: ReactNode;
   description?: string;
+  /** Marks the option the asker recommends. */
+  recommended?: boolean;
   disabled?: boolean;
   className?: string;
 }
@@ -71,6 +74,7 @@ export function AskUserOptionItem({
   value,
   children,
   description,
+  recommended = false,
   disabled = false,
   className,
 }: AskUserOptionItemProps) {
@@ -83,7 +87,18 @@ export function AskUserOptionItem({
 
   return (
     <AskUserOptionRow
-      label={children}
+      label={
+        recommended ? (
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {children}
+            <Badge size="xs" variant="neutral">
+              {libText('Recommended')}
+            </Badge>
+          </span>
+        ) : (
+          children
+        )
+      }
       description={description}
       disabled={isDisabled}
       className={className}

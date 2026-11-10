@@ -1,7 +1,9 @@
 export { AskUser } from './ask-user-card';
 export type { AskUserProps } from './ask-user-card';
-export { AskUserRoot, AskUserRoot as Root } from './ask-user-root';
-export type { AskUserRootProps } from './ask-user-root';
+export { AskUserProvider, AskUserProvider as Provider, AskUserRoot, AskUserRoot as Root } from './ask-user-root';
+export type { AskUserProviderProps, AskUserRootProps } from './ask-user-root';
+export { AskUserQuestions, AskUserQuestions as Questions } from './ask-user-questions';
+export type { AskUserQuestionsItem, AskUserQuestionsOption, AskUserQuestionsProps } from './ask-user-questions';
 export {
   AskUserCustomAnswer,
   AskUserCustomAnswer as CustomAnswer,
