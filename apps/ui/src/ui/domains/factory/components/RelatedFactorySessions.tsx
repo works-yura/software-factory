@@ -106,7 +106,6 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const session = workspaces.data?.userSessions.find(entry => entry.sessionId === userSessionId) ?? sessionQuery.data;
   const workspaceTitle = !isUserThread && !currentItem ? session?.title?.trim() : undefined;
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
-  const isReview = currentItem ? isPullRequestSource(currentItem.source) : false;
   const currentBoard = currentItem && itemBoard(currentItem);
   const contextCrumb =
     currentItem && currentBoard && sessionId && threadId
@@ -122,8 +121,11 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const crumbs =
     currentItem && factoryId ? (
       <>
-        <Crumb as={Link} to={rememberedBoardPath(factoryId, isReview ? 'review' : 'work')}>
-          {isReview ? boardTitle('review', 'Review') : boardTitle('work', 'Work')}
+        <Crumb as={Link} to={rememberedBoardPath(factoryId, currentBoard ?? 'work')}>
+          {boardTitle(
+            currentBoard ?? 'work',
+            catalog.data?.find(board => board.id === (currentBoard ?? 'work'))?.title ?? 'Work',
+          )}
         </Crumb>
         <Crumb as="span" isCurrent={!contextCrumb}>
           {sessionTitle(currentItem)}

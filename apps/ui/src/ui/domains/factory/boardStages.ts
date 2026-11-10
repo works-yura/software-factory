@@ -1,47 +1,17 @@
-import type { FACTORY_RULE_STAGES, FactoryRuleBoard, FactoryRuleStage } from '@factory/core/rules/types';
+import type { FactoryRuleBoard, FactoryRuleStage } from '@factory/core/rules/types';
 
 import { isPullRequestSource } from './services/workItems';
 import type { WorkItem, WorkItemSource } from './services/workItems';
-import { phaseTitle } from '../../i18n/boardLabels';
 import { BOARD_STAGES, stageLabel, stageOrder } from './stages';
 import type { BoardStage, BoardStageId } from './stages';
 
 export type BoardKind = FactoryRuleBoard;
-
-const REVIEW_BOARD_STAGE_VISIBILITY: Partial<Record<FactoryRuleStage, boolean>> = {
-  intake: true,
-  triage: false,
-  planning: false,
-  execute: false,
-  review: true,
-  'pr-review': false,
-  done: true,
-  canceled: true,
-} satisfies Record<(typeof FACTORY_RULE_STAGES)[number], boolean>;
 
 /** A pull request's card on Work moves only through the lanes that review it; Review is the builder's self-review. */
 const PULL_REQUEST_LANES: ReadonlySet<FactoryRuleStage> = new Set(['intake', 'pr-review', 'done', 'canceled']);
 const PULL_REQUEST_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.filter(stage => PULL_REQUEST_LANES.has(stage.id));
 /** Every other card on Work moves through every lane but PR review. */
 const WORK_ITEM_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.filter(stage => stage.id !== 'pr-review');
-
-const REVIEW_BOARD_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.flatMap(stage => {
-  if (!REVIEW_BOARD_STAGE_VISIBILITY[stage.id]) return [];
-  const id = stage.id;
-  // Read at use time so the title follows the interface language.
-  return [
-    {
-      id,
-      get label() {
-        return phaseTitle('review', id, id === 'review' ? 'Reviewing' : stage.label);
-      },
-    },
-  ];
-});
-
-export function boardStages(kind: BoardKind): ReadonlyArray<BoardStage> {
-  return kind === 'review' ? REVIEW_BOARD_STAGES : BOARD_STAGES;
-}
 
 export function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
   return itemBoard(item) === kind;
@@ -76,14 +46,15 @@ export function boardLoadingStages({
   return loading;
 }
 
+/** Cards filed before boards were recorded belong to Work, pull request cards included. */
 export function itemBoard(item: WorkItem): string {
-  return item.board ?? (item.source === 'github-pr' || item.source === 'gitlab-pr' ? 'review' : 'work');
+  return item.board ?? 'work';
 }
 
 export function itemStageOptions(item: WorkItem): ReadonlyArray<BoardStage> {
   const board = itemBoard(item);
   if (board === 'work') return isPullRequestSource(item.source) ? PULL_REQUEST_STAGES : WORK_ITEM_STAGES;
-  return boardStages(board);
+  return BOARD_STAGES;
 }
 
 /** Whether a card from `source` on `board` may enter `stage`: on Work, PR review is a pull request's own lane. */

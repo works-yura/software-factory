@@ -15,6 +15,7 @@ import {
   MAX_INTAKE_ROUTES,
   PULL_REQUEST_INTAKE_ROUTE,
   REOPENED_ROUTE,
+  REVIEW_BOARD_RETIREMENT_ACTOR,
   StoredBoardsStorage,
 } from './base.ts';
 import type { StoredBoardScope, StoredIntakeRouteInput } from './base.ts';
@@ -631,5 +632,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     await boards.deleteIntakeRoute(scope, created.id, { expectedRevision: 2 });
 
     expect(await boards.readVersion(scope)).toBeNull();
+  });
+
+  it('moves routes off the retired Review board onto Work, once', async () => {
+    const { boards, scope } = await setup();
+    const reviewing = await boards.createIntakeRoute(
+      scope,
+      route('Bots to Reviewing', { target: { boardKey: 'review', phaseKey: 'review' } }),
+      'admin',
+    );
+    const landing = await boards.createIntakeRoute(scope, route('Bots to Review', { target: { boardKey: 'review' } }), 'admin');
+    const work = await boards.createIntakeRoute(scope, route('Work'), 'admin');
+
+    // Counts every project's routes; a shared Postgres database may hold other runs' too.
+    expect(await boards.moveReviewBoardRoutesToWork(REVIEW_BOARD_RETIREMENT_ACTOR)).toBeGreaterThanOrEqual(2);
+
+    const after = new Map((await boards.listIntakeRoutes(scope)).map(row => [row.id, row]));
+    expect(after.get(reviewing.id)).toMatchObject({
+      target: { boardKey: 'work', phaseKey: 'pr-review' },
+      revision: reviewing.revision + 1,
+      updatedBy: REVIEW_BOARD_RETIREMENT_ACTOR,
+    });
+    expect(after.get(landing.id)).toMatchObject({ target: { boardKey: 'work', phaseKey: null } });
+    expect(after.get(work.id)).toMatchObject({ revision: work.revision });
+    expect(await boards.moveReviewBoardRoutesToWork(REVIEW_BOARD_RETIREMENT_ACTOR)).toBe(0);
   });
 });

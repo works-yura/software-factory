@@ -1620,7 +1620,7 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([
       expect.objectContaining({
         workItemId: reviewed.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'pr-review' }),
       }),
     ]);
 
@@ -1631,7 +1631,7 @@ describe('GithubRules', () => {
       expect.arrayContaining([
         expect.objectContaining({
           workItemId: reviewed.item.id,
-          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'pr-review' }),
         }),
       ]),
     );
@@ -1720,7 +1720,7 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([
       expect.objectContaining({
         workItemId: card.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'pr-review' }),
       }),
     ]);
   });
@@ -1794,7 +1794,7 @@ describe('GithubRules', () => {
 
     // The card is back in Reviewing and the review onEnter rule queued a fresh pass.
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
-    expect(item).toMatchObject({ id: card.item.id, stages: ['review'] });
+    expect(item).toMatchObject({ id: card.item.id, stages: ['pr-review'] });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1864,7 +1864,7 @@ describe('GithubRules', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
-    expect(item).toMatchObject({ id: card.item.id, stages: ['review'] });
+    expect(item).toMatchObject({ id: card.item.id, stages: ['pr-review'] });
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
     // A completed pass has no active run to supersede. Its re-entry dispatches
@@ -1892,7 +1892,7 @@ describe('GithubRules', () => {
     expect(transitions).toHaveLength(2);
     // Without this the transition is inert: the card is already in the stage it
     // is being moved to, so the entry rule would never run.
-    expect(transitions.at(-1)!.decision).toMatchObject({ stage: 'review', reenter: true });
+    expect(transitions.at(-1)!.decision).toMatchObject({ stage: 'pr-review', reenter: true });
     const reruns = afterSecondPush.filter(entry => entry.decision.type === 'invokeSkill');
     expect(reruns).toHaveLength(2);
     expect(reruns.at(-1)!.decision).toMatchObject({
@@ -1921,7 +1921,7 @@ describe('GithubRules', () => {
           url: 'https://github.com/acme/repo/pull/17',
         },
         title: 'PR 17',
-        stages: ['review'],
+        stages: ['pr-review'],
         sessions: {},
         metadata: {
           authorTrusted: true,
@@ -2418,7 +2418,7 @@ describe('GithubRules', () => {
         },
         parentWorkItemId: work.item.id,
         title: 'PR 17',
-        stages: ['review'],
+        stages: ['pr-review'],
         sessions: {},
         metadata: {},
       },
@@ -2485,7 +2485,7 @@ describe('GithubRules', () => {
           url: 'https://github.com/acme/repo/pull/17',
         },
         title: 'PR 17',
-        stages: ['review'],
+        stages: ['pr-review'],
         sessions: {},
         metadata: {},
       },
@@ -3362,7 +3362,7 @@ describe('GithubRules', () => {
           url: 'https://github.com/acme/repo/pull/17',
         },
         title: 'PR 17',
-        stages: ['review'],
+        stages: ['pr-review'],
         sessions: {},
         metadata: { state: 'open', merged: false },
       },
@@ -3384,7 +3384,7 @@ describe('GithubRules', () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         workItemId: card.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
       }),
     ]);
     // The card must read merged straight away, not only after the next sweep.
@@ -3414,7 +3414,7 @@ describe('GithubRules', () => {
         },
         parentWorkItemId: work.id,
         title: 'PR 17',
-        stages: ['review'],
+        stages: ['pr-review'],
         sessions: {},
         metadata: {},
       },
@@ -3438,7 +3438,7 @@ describe('GithubRules', () => {
       expect.arrayContaining([
         expect.objectContaining({
           workItemId: card.item.id,
-          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
         }),
         expect.objectContaining({
           workItemId: work.id,
@@ -3474,7 +3474,7 @@ describe('GithubRules', () => {
         },
         parentWorkItemId: work.id,
         title: 'PR 17',
-        stages: ['review'],
+        stages: ['pr-review'],
         sessions: {},
         metadata: {},
       },
@@ -3507,7 +3507,7 @@ describe('GithubRules', () => {
         }),
         expect.objectContaining({
           workItemId: card.item.id,
-          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
         }),
       ]),
     );
@@ -4067,8 +4067,8 @@ describe('GithubRules with outside work in Intake', () => {
       const { deliver } = await setupCard({ permission: 'write', source: 'pull-request', stage: 'done', metadata });
       const { decisions, item } = await deliver(pullRequest('synchronize', 'delivery-push'));
       const [transition] = decisions.filter(entry => entry.decision.type === 'transition');
-      expect(transition).toMatchObject({ status: 'succeeded', decision: { board: 'review', stage: 'review' } });
-      expect(item?.stages).toEqual(['review']);
+      expect(transition).toMatchObject({ status: 'succeeded', decision: { board: 'work', stage: 'pr-review' } });
+      expect(item?.stages).toEqual(['pr-review']);
     });
 
     // Triage runs once: a comment on a card a person moved to Triage starts nothing, whoever wrote it.
@@ -4174,7 +4174,7 @@ describe('createGithubPullRequestReconciler', () => {
           url: input.url === null ? undefined : (input.url ?? `https://github.com/acme/repo/pull/${input.number}`),
         },
         title: `PR ${input.number}`,
-        stages: input.stages ?? ['review'],
+        stages: input.stages ?? ['pr-review'],
         sessions: {},
         metadata: input.metadata ?? {},
       },
@@ -4255,7 +4255,7 @@ describe('createGithubPullRequestReconciler', () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         workItemId: card.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
       }),
     ]);
 
@@ -4550,7 +4550,7 @@ describe('createGithubPullRequestReconciler', () => {
       )?.status,
     ).toBe('failed');
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
-      stages: ['review'],
+      stages: ['pr-review'],
     });
   });
 
@@ -4870,7 +4870,7 @@ describe('createGithubPullRequestReconciler', () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         workItemId: card.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'canceled' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'canceled' }),
       }),
     ]);
 
@@ -4901,7 +4901,7 @@ describe('createGithubPullRequestReconciler', () => {
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toEqual([
       expect.objectContaining({
         workItemId: card.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
       }),
     ]);
     await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ merged: 1, failed: 0 });
@@ -4939,7 +4939,7 @@ describe('createGithubPullRequestReconciler', () => {
     const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
     expect(decisions).toEqual([
       expect.objectContaining({
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
       }),
     ]);
   });
@@ -5228,9 +5228,9 @@ describe('GithubRules push hand-off', () => {
   });
 });
 
-/** Where a pull request's own card is reviewed: Work's PR review, or Review's Reviewing. */
-function reviewPhase(board: 'work' | 'review'): 'pr-review' | 'review' {
-  return board === 'work' ? 'pr-review' : 'review';
+/** Where a pull request's own card is reviewed: Work's PR review. */
+function reviewPhase(_board: 'work'): 'pr-review' {
+  return 'pr-review';
 }
 
 describe('pull request cards on the Work board', () => {
@@ -5305,7 +5305,7 @@ describe('pull request cards on the Work board', () => {
 
   async function lonePullRequestCard(
     harness: Awaited<ReturnType<typeof workBoardHarness>>,
-    board: 'work' | 'review',
+    board: 'work',
     stage: string,
     metadata: Record<string, unknown> = {},
   ) {
@@ -5333,9 +5333,8 @@ describe('pull request cards on the Work board', () => {
 
   it.each([
     ['work', 'intake'],
-    ['review', 'intake'],
-    ['review', 'review'],
-    ['review', 'done'],
+    ['work', 'pr-review'],
+    ['work', 'done'],
   ] as const)(
     'refiles a pull request opened again onto the %s card it already has in %s, leaving it there',
     async (board, stage) => {
@@ -5473,7 +5472,7 @@ describe('pull request cards on the Work board', () => {
     expect(messages.some(entry => entry.workItemId === pullRequestCard.id)).toBe(false);
   });
 
-  it.each(['work', 'review'] as const)(
+  it.each(['work'] as const)(
     'ignores a comment on a pull request whose only card is on the %s board',
     async board => {
       const harness = await workBoardHarness('read');
@@ -5487,7 +5486,7 @@ describe('pull request cards on the Work board', () => {
     },
   );
 
-  it.each(['work', 'review'] as const)('re-reviews a push to a reviewed pull request card on %s', async board => {
+  it.each(['work'] as const)('re-reviews a push to a reviewed pull request card on %s', async board => {
     const harness = await workBoardHarness('write');
     const card = await lonePullRequestCard(harness, board, reviewPhase(board), { reviewVerdict: 'approve' });
 
@@ -5511,7 +5510,7 @@ describe('pull request cards on the Work board', () => {
     });
   });
 
-  it.each(['work', 'review'] as const)('does not re-review a push to a %s pull request card in intake', async board => {
+  it.each(['work'] as const)('does not re-review a push to a %s pull request card in intake', async board => {
     const harness = await workBoardHarness('write');
     const card = await lonePullRequestCard(harness, board, 'intake');
 
@@ -5522,7 +5521,7 @@ describe('pull request cards on the Work board', () => {
     expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ board, stages: ['intake'] });
   });
 
-  it.each(['work', 'review'] as const)(
+  it.each(['work'] as const)(
     'moves a merged pull request card to Done on %s, and a closed one to Canceled',
     async board => {
       const merged = await workBoardHarness('read');
@@ -5545,7 +5544,7 @@ describe('pull request cards on the Work board', () => {
     },
   );
 
-  it.each(['work', 'review'] as const)(
+  it.each(['work'] as const)(
     "re-enters review when Factory's review command lands on a reviewed %s card",
     async board => {
       const harness = await workBoardHarness('write');

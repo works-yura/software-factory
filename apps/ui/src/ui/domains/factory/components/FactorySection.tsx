@@ -1,5 +1,5 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Brain, GitPullRequest, MessagesSquare, SquareKanban } from 'lucide-react';
+import { Brain, MessagesSquare, SquareKanban } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
@@ -41,7 +41,7 @@ export function FactorySection() {
               <FactoryLink
                 key={board.id}
                 to={rememberedBoardPath(factoryId, board.id)}
-                icon={board.id === 'review' ? GitPullRequest : SquareKanban}
+                icon={SquareKanban}
                 label={boardTitle(board.id, board.title)}
               />
             ))

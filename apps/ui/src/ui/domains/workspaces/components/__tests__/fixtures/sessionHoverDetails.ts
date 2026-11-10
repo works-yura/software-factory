@@ -11,7 +11,7 @@ export const workName = 'Investigate the authentication regression across long-r
 export const reviewName = 'Review the authentication refresh fix before release';
 /** The sidebar rows' accessible names: the context each card files the session under, then the session's name. */
 export const workRowName = `Implementation: ${workName}`;
-export const reviewRowName = `Reviewing: ${reviewName}`;
+export const reviewRowName = `Review: ${reviewName}`;
 
 const HOUR = 3_600_000;
 
@@ -133,7 +133,8 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
       parentWorkItemId: 'issue-42',
       title: 'Fix authentication refresh handling',
       url: 'https://github.com/mastra-ai/mastra/pull/99',
-      stages: ['review'],
+      board: 'work',
+      stages: ['pr-review'],
       stageHistory: [],
       sessions: {
         review: {

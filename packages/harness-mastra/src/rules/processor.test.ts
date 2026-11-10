@@ -1119,7 +1119,7 @@ describe('FactoryPhaseStateProcessor', () => {
 
   it('re-emits phase state when either review runtime field changes', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    await prepare(storage, 'review', 'pull-request', { id: 'review', stage: 'review' });
+    await prepare(storage, 'review', 'pull-request', { id: 'work', stage: 'pr-review' });
     const boards = createBoardRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
     const first = await processor.computeStateSignal(stateArgs(requestContext()));
@@ -1178,7 +1178,7 @@ describe('FactoryPhaseStateProcessor', () => {
 
   it('rejects review phase state without a selected model', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    await prepare(storage, 'review', 'pull-request', { id: 'review', stage: 'review' });
+    await prepare(storage, 'review', 'pull-request', { id: 'work', stage: 'pr-review' });
     const boards = createBoardRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
 

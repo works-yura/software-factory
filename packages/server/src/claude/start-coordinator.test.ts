@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createBoardRegistry, defineBoard } from '@factory/core';
 import type { BoardPhaseDefinition } from '@factory/core';
 import { createInMemorySessionStore } from '@factory/harness-claude-code';
-import { reviewBoard, workBoard } from '@factory/pipelines';
+import { workBoard } from '@factory/pipelines';
 import { createFactoryStorageForTests, FactoryTransitionService } from '@factory/testing';
 
 import { createClaudeFactoryHarness } from './harness.ts';
@@ -22,7 +22,7 @@ function boardsWithAutoApprovedPlanning() {
       planning: { ...workBoard.phases.planning, exitTool: { id: 'submit_plan', autoApprove: true } },
     } as Record<string, BoardPhaseDefinition<string>>,
   });
-  return createBoardRegistry({ boards: [board, reviewBoard] });
+  return createBoardRegistry({ boards: [board] });
 }
 
 async function startPlanning({ boards }: { boards?: ReturnType<typeof boardsWithAutoApprovedPlanning> }) {

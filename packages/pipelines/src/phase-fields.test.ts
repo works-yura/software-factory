@@ -2,7 +2,6 @@ import { defineBoard } from '@factory/core';
 import type { BoardPhaseDefinition, RuleGroup } from '@factory/core';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { reviewBoard } from './review/board.ts';
 import { workBoard } from './work/board.ts';
 import type { WorkBoardPhase } from './work/board.ts';
 
@@ -62,7 +61,6 @@ describe('built-in board phase fields', () => {
       },
     });
     defineBoard({ id: 'work-again', name: 'Work', initialPhase: 'intake', phases: workBoard.phases });
-    defineBoard({ id: 'review-again', name: 'Review', initialPhase: 'intake', phases: reviewBoard.phases });
 
     expect(warn).not.toHaveBeenCalled();
   });
@@ -73,7 +71,6 @@ describe('built-in board phase fields', () => {
     vi.resetModules();
 
     await import('./work/board.ts');
-    await import('./review/board.ts');
 
     expect(warn).not.toHaveBeenCalled();
   });

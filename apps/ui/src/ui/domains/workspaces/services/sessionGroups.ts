@@ -29,7 +29,7 @@ export function isSessionGroupBy(value: unknown): value is SessionGroupBy {
   return SESSION_GROUP_BYS.some(groupBy => groupBy === value);
 }
 
-export type SessionGroupIcon = 'board' | 'review' | 'user' | 'slack' | 'status' | 'owner' | 'all';
+export type SessionGroupIcon = 'board' | 'user' | 'slack' | 'status' | 'owner' | 'all';
 
 export interface SessionGroupHeading {
   key: string;
@@ -97,7 +97,7 @@ const GROUP_KEY_OF_ROW: Record<SessionGroupBy, (row: SessionListRow) => string> 
 };
 
 function boardHeading(boardId: string, label: string): SessionGroupHeading {
-  return { key: boardGroupKey(boardId), label, icon: boardId === 'review' ? 'review' : 'board' };
+  return { key: boardGroupKey(boardId), label, icon: 'board' };
 }
 
 function uncatalogedBoardIds(rows: readonly SessionListRow[], catalogIds: ReadonlySet<string>): string[] {

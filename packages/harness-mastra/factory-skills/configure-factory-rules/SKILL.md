@@ -22,7 +22,7 @@ Installed board definitions exclusively own lifecycle handlers: use `phases.<pha
 
 Remove former global `rules.work` and `rules.review` configuration. There is no board override API. To customize Work or Review, set `includeDefaultBoards: false` and install a same-ID board, preferably using the exported `workBoard` or `reviewBoard` phases as the starting point. Keep the built-in phase names and roles unless the changed runtime and UI behavior is intentional. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares `submit_plan`, Review declares none, and custom boards inherit nothing.
 
-By default, every integration arrival stays in its routed board's initial phase (Intake for Work and Review) without starting or suggesting a run. This applies to GitHub and GitLab; explicit trusted GitHub review requests without an existing card go directly to Reviewing. Do not restore default arrival automation on the built-in boards.
+By default, every integration arrival stays in its routed board's initial phase (Intake on Work) without starting or suggesting a run. This applies to GitHub and GitLab; explicit trusted GitHub review requests without an existing card go directly to Reviewing. Do not restore default arrival automation on the built-in boards.
 
 `authorTrusted` and `autoStartCandidate` remain available as metadata for custom rules. A custom board can add guarded arrival triage on its initial phase by checking both `context.cause === 'linked_item_materialized'` and `context.item.metadata?.autoStartCandidate === true`, then returning an `invokeSkill` decision for `factory-triage`.
 
@@ -38,7 +38,7 @@ The GitHub integration exclusively owns its event handlers; configure them throu
 
 Do not create an `actions` config or execute authoritative policy in React. Each handler returns one typed `FactoryRuleDecision` or `undefined`.
 
-A pull request's own card and the Work card that authored it move independently, whether the pull request card sits on Work or on the legacy Review board. Never mirror their stages or mark Work Done only because a pull request merged.
+A pull request's own card and the Work card that authored it move independently, though both sit on Work. Never mirror their stages or mark Work Done only because a pull request merged.
 
 ## Restrict where cards move
 

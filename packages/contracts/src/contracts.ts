@@ -70,7 +70,7 @@ const storedBoardResponseSchema = z.object({
     source: z.enum(['builtin', 'app', 'stored']),
     /**
      * True for boards the project created, the built-in Work board and app boards; their code
-     * behaviour stays attached. False for the legacy Review board, which is read-only.
+     * behaviour stays attached.
      */
     editable: z.boolean(),
     /**
@@ -820,7 +820,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
           description: z.string().optional(),
           /** Where the board came from: Factory's built-ins, the app's code, or created through the API. */
           source: z.enum(['builtin', 'app', 'stored']).optional(),
-          /** False only for the legacy Review board; built-in Work, app and stored boards can be edited. */
+          /** Whether the board can be edited: built-in Work, app and stored boards all can. */
           editable: z.boolean().optional(),
           /** Problems with the board, such as a runner skill that does not exist. */
           problems: z.array(z.string()).optional(),

@@ -3,7 +3,6 @@ import type { BoardDefinition, BoardRegistry, ProviderWorkItem } from '@factory/
 
 export { createTestBoard } from '@factory/core/testing';
 
-import { reviewBoard } from './review/board.ts';
 import { workBoard } from './work/board.ts';
 
 // Unit tests inject a registry directly to exercise Work-specific runtime policies.
@@ -43,10 +42,7 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
       }),
     ),
   });
-  return new Map<string, BoardDefinition<string, string>>([
-    [board.id, board],
-    [reviewBoard.id, reviewBoard],
-  ]);
+  return new Map<string, BoardDefinition<string, string>>([[board.id, board]]);
 }
 
 /** Work board with its tool-result rules replaced, for exercising the processor's tool ingress. */
@@ -62,10 +58,7 @@ export function createToolRuleTestRegistry(tools: BoardDefinition<string, string
     triageClassification: workBoard.triageClassification,
     tools: { ...tools },
   });
-  return new Map<string, BoardDefinition<string, string>>([
-    [board.id, board],
-    [reviewBoard.id, reviewBoard],
-  ]);
+  return new Map<string, BoardDefinition<string, string>>([[board.id, board]]);
 }
 
 

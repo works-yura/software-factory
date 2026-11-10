@@ -448,13 +448,13 @@ describe('installed board transition policies', () => {
     });
   });
 
-  it('does not give Review a triage-role classification requirement', async () => {
+  it('does not give PR review a triage-role classification requirement', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { board: 'review', source: 'github-pr', metadata: { authorTrusted: true } });
+    const item = await createItem(storage, { board: 'work', source: 'github-pr', metadata: { authorTrusted: true } });
     const service = new FactoryTransitionService({ storage, configVersion: 'policy-test' });
     expect(
       await service.transition({
-        ...request(item, { stage: 'review' }),
+        ...request(item, { stage: 'pr-review' }),
         actor: { type: 'agent', bindingId: 'review-agent', role: 'triage' },
         ingress: { type: 'agent', identity: 'review-transition' },
       }),
@@ -1207,20 +1207,20 @@ describe('FactoryTransitionService', () => {
     expect(await ruleDecisionKeys(storage, 'org-1')).toEqual(['notify-exit', 'message-enter']);
   });
 
-  it('rejects Review board moves outside its declared lifecycle', async () => {
+  it('rejects PR review moves outside its declared lifecycle', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
+    const item = await createItem(storage, { source: 'github-pr', stages: ['pr-review'] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
-    const result = await service.transition(request(item, { board: 'review', stage: 'planning' }));
+    const result = await service.transition(request(item, { board: 'work', stage: 'planning' }));
 
     expect(result).toMatchObject({
       status: 'rejected',
       code: 'invalid_transition',
       reason:
-        'The Review board does not allow moving from review to planning. Next stages declared from review: intake, done, canceled.',
+        'The Work board does not allow moving from pr-review to planning. Next stages declared from pr-review: intake, done, canceled.',
     });
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['pr-review']);
   });
 
   it('names the declared next stages when the requested stage is not a phase', async () => {
@@ -1296,14 +1296,14 @@ describe('FactoryTransitionService', () => {
 
   it('starts nothing when a person parks a card back in Intake', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
+    const item = await createItem(storage, { source: 'github-pr', stages: ['pr-review'] });
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
     });
 
     const result = await service.transition({
-      ...request(item, { board: 'review', stage: 'intake' }),
+      ...request(item, { board: 'work', stage: 'intake' }),
       cause: 'board_drag',
     });
 
@@ -1314,7 +1314,7 @@ describe('FactoryTransitionService', () => {
       {
         type: 'sendMessage',
         idempotencyKey: expect.stringContaining('factory-stage:'),
-        message: 'This work was moved from the review stage to the intake stage.',
+        message: 'This work was moved from the pr-review stage to the intake stage.',
         priority: 'urgent',
         idleBehavior: 'wake',
       },
@@ -1360,22 +1360,22 @@ describe('FactoryTransitionService', () => {
     });
 
     const result = await service.transition({
-      ...request(item, { board: 'review', stage: 'review' }),
+      ...request(item, { board: 'work', stage: 'pr-review' }),
       cause: 'run_start',
     });
 
-    expect(result).toMatchObject({ status: 'accepted', stage: 'review', decisions: [] });
+    expect(result).toMatchObject({ status: 'accepted', stage: 'pr-review', decisions: [] });
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
   });
 
-  it('allows a GitLab merge request to enter Review like a GitHub pull request', async () => {
+  it('allows a GitLab merge request to enter PR review like a GitHub pull request', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { board: 'review', source: 'gitlab-pr', stages: ['intake'] });
+    const item = await createItem(storage, { board: 'work', source: 'gitlab-pr', stages: ['intake'] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     await expect(
-      service.transition({ ...request(item, { board: 'review', stage: 'review' }), cause: 'run_start' }),
-    ).resolves.toMatchObject({ status: 'accepted', stage: 'review' });
+      service.transition({ ...request(item, { board: 'work', stage: 'pr-review' }), cause: 'run_start' }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'pr-review' });
     const updated = await storage.get({ orgId: 'org-1', id: item.id });
     expect(updated).not.toBeNull();
     await expect(
@@ -1396,13 +1396,13 @@ describe('FactoryTransitionService', () => {
     });
 
     const result = await service.transition({
-      ...request(item, { board: 'review', stage: 'review' }),
+      ...request(item, { board: 'work', stage: 'pr-review' }),
       actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
       ingress: { type: 'agent', identity: 'request-1' },
       cause: 'user asked to resume the review',
     });
 
-    expect(result).toMatchObject({ status: 'accepted', stage: 'review', decisions: [] });
+    expect(result).toMatchObject({ status: 'accepted', stage: 'pr-review', decisions: [] });
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
   });
 
@@ -1421,14 +1421,14 @@ describe('FactoryTransitionService', () => {
     });
 
     const result = await service.transition({
-      ...request(item, { board: 'review', stage: 'review' }),
+      ...request(item, { board: 'work', stage: 'pr-review' }),
       actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
       ingress: { type: 'agent', identity: 'self-resume-1' },
       cause: 'user asked to resume the review',
     });
 
     expect(result).toMatchObject({ status: 'accepted' });
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['pr-review']);
   });
 
   it('lets an agent resume a GitHub card missing its trust stamp', async () => {
@@ -1440,7 +1440,7 @@ describe('FactoryTransitionService', () => {
     });
 
     const result = await service.transition({
-      ...request(item, { board: 'review', stage: 'review' }),
+      ...request(item, { board: 'work', stage: 'pr-review' }),
       actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
       ingress: { type: 'agent', identity: 'self-resume-2' },
       cause: 'user asked to resume the review',
@@ -1976,13 +1976,13 @@ describe('phase semantics', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
   });
 
-  it('seats a human kickoff into Review review with the review role', async () => {
+  it('seats a human kickoff into Work PR review with the review role', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const result = await service.transition({
-      ...request(item, { board: 'review', stage: 'review' }),
+      ...request(item, { board: 'work', stage: 'pr-review' }),
       cause: 'board_drag',
     });
 
@@ -2635,7 +2635,7 @@ async function workItemsOn(backend: 'libsql' | 'pg'): Promise<WorkItemsStorage> 
 }
 
 describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))(
-  'Work and Review board rules for agents on %s',
+  'Work board rules for agents on %s',
   backend => {
     // Each test gets its own org, so runs sharing one PostgreSQL database never see each other's cards.
     let org = 'org-1';
@@ -2800,14 +2800,14 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       expect((await storage.get({ orgId: org, id: item.id }))?.stages).toEqual(['intake']);
     });
 
-    it('leaves Done on the Review board to its own flow: the review prompts keep it for the merge', async () => {
+    it('leaves Done on a pull request card to its own flow: the review prompts keep it for the merge', async () => {
       org = `org-${randomUUID()}`;
       const storage = await workItemsOn(backend);
       const service = new FactoryTransitionService({ configVersion: 'review-rules', storage });
-      const reviewCard = (key: string, stage = 'review') =>
+      const reviewCard = (key: string, stage = 'pr-review') =>
         createItem(storage, {
           orgId: org,
-          board: 'review',
+          board: 'work',
           source: 'github-pr',
           sourceKey: `${org}-${key}`,
           stages: [stage],
@@ -2830,10 +2830,10 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
           service.transition({ ...request(reviewed, { orgId: org, stage: 'done', identity: key }), ...mover }),
         ).resolves.toMatchObject({ status: 'accepted', stage: 'done' });
       }
-      // Done reopens only into review; nobody files a finished pull request back into Intake.
+      // Done reopens only into PR review; nobody files a finished pull request back into Intake.
       const finished = await reviewCard('finished', 'done');
       await expect(
-        service.transition(request(finished, { orgId: org, board: 'review', stage: 'intake', identity: 'reopen' })),
+        service.transition(request(finished, { orgId: org, board: 'work', stage: 'intake', identity: 'reopen' })),
       ).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
     });
   },

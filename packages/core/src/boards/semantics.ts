@@ -25,12 +25,12 @@ export interface PhaseSemantics {
 }
 
 /**
- * Board that owns a work item. Rows created before boards were persisted carry no `board`;
- * they belong to Review when they track a pull request and to Work otherwise, matching the
- * legacy assignment the transition service performs on their next move.
+ * Board that owns a work item. Rows created before boards were persisted carry no `board`; they
+ * belong to Work. (Pull request cards among them belonged to the retired Review board; Factory
+ * moves those onto Work at startup, see `moveReviewBoardCardsToWork`.)
  */
-export function boardForWorkItem(item: Pick<PhaseCard, 'board' | 'externalSource'>): string {
-  return item.board ?? (item.externalSource?.type === 'pull-request' ? 'review' : 'work');
+export function boardForWorkItem(item: Pick<PhaseCard, 'board'>): string {
+  return item.board ?? 'work';
 }
 
 /**
@@ -46,18 +46,14 @@ export function reviewsPullRequest(context: {
   readonly board?: string;
   readonly item?: { readonly source: string };
 }): boolean {
-  if (context.board === 'review') return true;
   return context.board === 'work' && context.item !== undefined && isPullRequestCard(context.item);
 }
 
 /**
- * The phase a pull or merge request's own card is reviewed in: Work's `pr-review`, or Review's
- * `review` for cards filed on the Review board before pull requests moved to Work. Work's own
+ * The phase a pull or merge request's own card is reviewed in: Work's `pr-review`. Work's own
  * `review` phase is the builder's self-review, which a pull request card never enters.
  */
-export function pullRequestReviewPhase(board: string | undefined): 'review' | 'pr-review' {
-  return board === 'review' ? 'review' : 'pr-review';
-}
+export const PULL_REQUEST_REVIEW_PHASE = 'pr-review';
 
 /**
  * What the installed board says `phase` means. Returns undefined when the board is not

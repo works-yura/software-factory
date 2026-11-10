@@ -1,6 +1,6 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDashed, GitPullRequest, MessageSquare, SquareKanban, UserRound } from 'lucide-react';
+import { CircleDashed, MessageSquare, SquareKanban, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Fragment, startTransition, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -16,7 +16,6 @@ type ToggleName = 'more' | 'less';
 
 const GROUP_ICONS: Record<SessionGroupIcon, ReactNode> = {
   board: <SquareKanban />,
-  review: <GitPullRequest />,
   user: <MessageSquare />,
   slack: <MessageSquare />,
   status: <CircleDashed />,

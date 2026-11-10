@@ -7,7 +7,7 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import { boardForWorkItem, isPullRequestCard, legacyPlanRoleFor, pullRequestReviewPhase } from '@factory/core';
+import { boardForWorkItem, isPullRequestCard, legacyPlanRoleFor, PULL_REQUEST_REVIEW_PHASE } from '@factory/core';
 import type { BoardRegistry, IntakeRoutesReader } from '@factory/core';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '@factory/integrations';
 import { getGithubFeatureDiagnostics } from '@factory/integration-github';
@@ -285,7 +285,7 @@ function restingExitLane(
   pullRequestCard: boolean,
 ): string | undefined {
   // A pull request's own card is reviewed in PR review; Work's Review lane is the builder's self-review.
-  if (pullRequestCard && role === 'review' && workLaneForRole(board, role)) return pullRequestReviewPhase('work');
+  if (pullRequestCard && role === 'review' && workLaneForRole(board, role)) return PULL_REQUEST_REVIEW_PHASE;
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 

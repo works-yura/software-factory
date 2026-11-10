@@ -10,7 +10,7 @@ import {
   selfReviewWorkItem,
   triageIssueEntry,
 } from './phase-rules.ts';
-import { reviewPullRequest } from '../review/phase-rules.ts';
+import { reviewPullRequest } from './pr-review-rules.ts';
 import { advanceApprovedPlan, openApprovedChangeRequest } from './tool-rules.ts';
 
 /** Rule sources of Work's own work items; pull and merge requests are reviewed in `pr-review` (or on Review). */

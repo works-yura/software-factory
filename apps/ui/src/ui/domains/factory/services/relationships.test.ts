@@ -222,9 +222,9 @@ describe('relationshipPath', () => {
   it('opens the board holding a pull request card, and Work for one not filed yet', () => {
     const pullRequest = workItem({ id: 'pr', source: 'github-pr' });
     expect(relationshipPath({ ...pullRequest, board: 'work' }, 'f1')).toBe('/factories/f1/work');
-    expect(relationshipPath({ ...pullRequest, board: 'review' }, 'f1')).toBe('/factories/f1/review');
-    // Filed before pull requests moved to Work, so it still lives on Review.
-    expect(relationshipPath({ ...pullRequest, board: null }, 'f1')).toBe('/factories/f1/review');
+    expect(relationshipPath({ ...pullRequest, board: 'release' }, 'f1')).toBe('/factories/f1/boards/release');
+    // Filed before boards were recorded: it sits on Work.
+    expect(relationshipPath({ ...pullRequest, board: null }, 'f1')).toBe('/factories/f1/work');
     expect(relationshipPath({ source: 'gitlab-pr' }, 'f1')).toBe('/factories/f1/work');
     expect(relationshipPath(workItem({ id: 'issue', source: 'github-issue' }), 'f1')).toBe('/factories/f1/work');
   });

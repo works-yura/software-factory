@@ -8,18 +8,14 @@ import { translator } from '../../../i18n/t';
 
 const tk = translator('board');
 
-export function ConnectRepositoryEmptyState({ factoryId, review }: { factoryId: string; review: boolean }) {
+export function ConnectRepositoryEmptyState({ factoryId }: { factoryId: string }) {
   return (
     <EmptyState
       variant="fill"
       as="h2"
       iconSlot={<GitBranch />}
-      titleSlot={review ? tk('connectRepository.reviewTitle') : tk('connectRepository.workTitle')}
-      descriptionSlot={
-        review
-          ? tk('connectRepository.reviewDescription')
-          : tk('connectRepository.workDescription')
-      }
+      titleSlot={tk('connectRepository.workTitle')}
+      descriptionSlot={tk('connectRepository.workDescription')}
       actionSlot={
         <Link to={settingsSectionPath(factoryId, 'repositories')} className={buttonVariants({ variant: 'primary' })}>
           {tk('connectRepository.openSettings')}

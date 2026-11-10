@@ -1,15 +1,15 @@
 import { createBoardRegistry } from '@factory/core';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
-import { reviewBoard } from './review/board.ts';
 import { workBoard } from './work/board.ts';
 
 /**
- * The boards v3 installed unless a deployment opted out. Acceptance is a v4
- * addition and stays opt-in, so a copied host keeps v3 behaviour.
+ * The boards Factory installs unless a deployment opts out. The legacy Review board was retired:
+ * pull and merge requests are reviewed in Work › PR review. Acceptance is a v4 addition and
+ * stays opt-in.
  */
-export const defaultBoards = [workBoard, reviewBoard] as const;
+export const defaultBoards = [workBoard] as const;
 
-/** v3 `createBoardRegistry`: Work and Review first, then `boards`, unless `includeDefaultBoards` is false. */
+/** v3 `createBoardRegistry`: Work first, then `boards`, unless `includeDefaultBoards` is false. */
 export function createDefaultBoardRegistry(
   options: { boards?: readonly InstalledBoard[]; includeDefaultBoards?: boolean } = {},
 ): BoardRegistry {

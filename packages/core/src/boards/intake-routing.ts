@@ -78,13 +78,11 @@ export function intakeTargetProblem(
 }
 
 /**
- * The built-in Review board holds only pull requests. On Work a new pull request card lands in
- * Intake or PR review, and nothing else lands in PR review. `FactoryTransitionService` refuses
- * any move that breaks this, so a route can't either.
+ * On Work a new pull request card lands in Intake or PR review, and nothing else lands in PR
+ * review. `FactoryTransitionService` refuses any move that breaks this, so a route can't either.
  */
 function placementTakesCard(boardId: string, phase: string, facts: RuleFacts): boolean {
   const pullRequest = facts['source.kind'] === 'pull_request';
-  if (boardId === 'review') return pullRequest;
   if (boardId === 'work') return pullRequest ? phase === 'intake' || phase === 'pr-review' : phase !== 'pr-review';
   return true;
 }

@@ -11,14 +11,5 @@
       "canceled": "Скасовано",
       "pr-review": "Рев’ю PR"
     }
-  },
-  "review": {
-    "title": "Рев’ю коду",
-    "phases": {
-      "intake": "Вхідні",
-      "review": "На перевірці",
-      "done": "Готово",
-      "canceled": "Скасовано"
-    }
   }
 }

@@ -313,10 +313,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       .intakeRoute as Route;
     expect(route.target).toEqual({ boardKey: 'work', phaseKey: null });
     const patch = await replicaA.send('PATCH', `${base}/${route.id}`, {
-      target: { boardKey: 'review', phaseKey: 'done' },
+      target: { boardKey: 'work', phaseKey: 'done' },
       expectedRevision: 1,
     });
     expect(patch).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
+    // The Review board was retired: a route can't name it.
+    expect(
+      await replicaA.send('PATCH', `${base}/${route.id}`, {
+        target: { boardKey: 'review', phaseKey: 'review' },
+        expectedRevision: 1,
+      }),
+    ).toMatchObject({ status: 422, body: { error: 'unknown_board' } });
     expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ name: 'Ok', revision: 1 })]);
   });
 

@@ -341,6 +341,9 @@ class ConcurrentBoardWrite extends Error {}
  * replaces the project's row in `factory_board_definition_versions`, so caches on other
  * replicas can detect it.
  */
+/** Who the intake routes moved off the retired Review board are attributed to. */
+export const REVIEW_BOARD_RETIREMENT_ACTOR = 'system:review-board-retirement';
+
 export class StoredBoardsStorage extends FactoryStorageDomain {
   constructor() {
     super('boards');
@@ -596,6 +599,27 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         rows.filter(route => route.id !== row.id),
       );
     });
+  }
+
+  /**
+   * The Review board was retired, so a route that files cards on it now files them on Work: its
+   * Reviewing phase becomes Work's PR review, and any other phase (Intake, Done, Canceled, or the
+   * initial phase) keeps its name. Runs across every project, once; returns the routes moved.
+   */
+  async moveReviewBoardRoutesToWork(actor: string): Promise<number> {
+    const rows = await this.ops.findMany<IntakeRouteRow>(INTAKE_ROUTES, { board_key: 'review' });
+    for (const row of rows) {
+      await this.#transact(async ops => {
+        const current = await ops.findOne<IntakeRouteRow>(INTAKE_ROUTES, { id: row.id });
+        if (!current || current.board_key !== 'review') return;
+        await updateIntakeRouteRow(ops, current, {
+          board_key: 'work',
+          phase_key: current.phase_key === 'review' ? 'pr-review' : current.phase_key,
+          updated_by: actor,
+        });
+      });
+    }
+    return rows.length;
   }
 
   /** Puts the project's routes in the order of `ids`, which must name every route exactly once. */

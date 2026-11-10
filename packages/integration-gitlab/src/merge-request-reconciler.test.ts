@@ -100,7 +100,7 @@ async function seedMergeRequestCard({ initialStage, initialState, missingIdentit
     integrationId: 'gitlab',
     sourceId: SOURCE_ID,
     factoryProjectId: project.id,
-    board: 'review',
+    board: 'work',
   });
   const item = await seeded.workItems.upsert({
     orgId: project.orgId,
@@ -188,15 +188,15 @@ function createReconciler(
 
 describe('GitLab merge-request reconciler', () => {
   it.each([
-    { initialStage: 'review', initialState: 'open', merged: true, expectedStage: 'done', missingIdentity: false },
+    { initialStage: 'pr-review', initialState: 'open', merged: true, expectedStage: 'done', missingIdentity: false },
     {
-      initialStage: 'review',
+      initialStage: 'pr-review',
       initialState: 'closed',
       merged: false,
       expectedStage: 'canceled',
       missingIdentity: false,
     },
-    { initialStage: 'review', initialState: 'open', merged: false, expectedStage: 'canceled', missingIdentity: true },
+    { initialStage: 'pr-review', initialState: 'open', merged: false, expectedStage: 'canceled', missingIdentity: true },
   ] as const)(
     'replays a missed terminal outcome from $initialStage through governed rules',
     async ({ initialStage, initialState, merged, expectedStage, missingIdentity }) => {
@@ -217,7 +217,7 @@ describe('GitLab merge-request reconciler', () => {
         }),
       );
       expect(getProjectMemberAccessLevel).toHaveBeenCalledWith('direct', PROJECT_ID, 'maintainer');
-      // A card still in Reviewing keeps being swept until the governed
+      // A card still in PR review keeps being swept until the governed
       // transition lands, exactly as a GitHub card would.
       await expect(reconcile()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
       expect(getPullRequest).toHaveBeenCalledWith({
@@ -228,7 +228,7 @@ describe('GitLab merge-request reconciler', () => {
       const decisions = await seeded.seeded.workItems.listDeferredDecisions(project.orgId, project.id);
       expect(decisions).toHaveLength(1);
       expect(decisions[0]).toMatchObject({
-        decision: { type: 'transition', board: 'review', stage: expectedStage },
+        decision: { type: 'transition', board: 'work', stage: expectedStage },
       });
       const [item] = await seeded.seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
       expect((item)).toMatchObject({ metadata: {authorTrusted: false, [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: merged ? 'merged' : 'closed'}, workItem: { metadata: {author: 'maintainer', state: 'closed', merged} } });
@@ -251,7 +251,7 @@ describe('GitLab merge-request reconciler', () => {
       expect(commitRuleEvaluation).toHaveBeenCalledTimes(1);
       const decisions = await seeded.seeded.workItems.listDeferredDecisions(project.orgId, project.id);
       expect(decisions).toHaveLength(1);
-      expect(decisions[0]).toMatchObject({ decision: { type: 'transition', board: 'review', stage: replayedStage } });
+      expect(decisions[0]).toMatchObject({ decision: { type: 'transition', board: 'work', stage: replayedStage } });
       const [item] = await seeded.seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
       expect(item?.stages).toEqual([initialStage]);
       expect((item)).toMatchObject({ metadata: {[FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: merged ? 'merged' : 'closed'}, workItem: { metadata: {state: 'closed', merged} } });
@@ -291,7 +291,7 @@ describe('GitLab merge-request reconciler', () => {
   });
 
   it('clears a stale settled stamp when the merge request is reopened', async () => {
-    const seeded = await seedMergeRequestCard({ initialStage: 'review', initialState: 'closed' });
+    const seeded = await seedMergeRequestCard({ initialStage: 'pr-review', initialState: 'closed' });
     const { project } = seeded;
     await seeded.seeded.workItems.update({
       orgId: project.orgId,
@@ -314,7 +314,7 @@ describe('GitLab merge-request reconciler', () => {
   });
 
   it("retires the merge request's open thread subscriptions when it replays a missed terminal outcome", async () => {
-    const seeded = await seedMergeRequestCard({ initialStage: 'review', initialState: 'open' });
+    const seeded = await seedMergeRequestCard({ initialStage: 'pr-review', initialState: 'open' });
     const { project } = seeded;
     const storage = seeded.seeded.integrations.forIntegration('gitlab');
     const input = {

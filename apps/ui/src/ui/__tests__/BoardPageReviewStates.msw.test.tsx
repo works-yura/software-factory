@@ -15,6 +15,7 @@ import type { FactoryDecisionPage, FactoryDecisionSummary } from '../domains/fac
 import type { GithubPullRequestDetail } from '../domains/factory/services/factory';
 import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
 import { createAppRoutes } from '../router';
+import { workBoardCatalog } from '../../../e2e/ui/board-catalog';
 import { reviewCandidate, reviewDecision, reviewItem } from './fixtures/reviewCard';
 
 const FACTORY_ID = reviewItem.factoryProjectId;
@@ -29,7 +30,7 @@ function deferred() {
 }
 
 function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
-  const items: Card[] = candidate ? [] : [{ ...reviewItem, stages: decision ? ['review'] : ['intake'] }];
+  const items: Card[] = candidate ? [] : [{ ...reviewItem, stages: decision ? ['pr-review'] : ['intake'] }];
   const decisions: FactoryDecisionSummary[] = decision ? [decision] : [];
   const runningSessionIds: string[] = [];
   const data = { items, decisions, runningSessionIds, transitionCommitted: false, decisionRefreshStarted: false };
@@ -54,6 +55,8 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
         ],
       }),
     ),
+    // Work as the catalog serves it today, PR review included.
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json(workBoardCatalog)),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
         config: { github: { enabled: true, sourceIds: ['acme/app'] } },
@@ -91,7 +94,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
     http.post(`${projectUrl}/work-items/${reviewItem.id}/transition`, async ({ request }) => {
       transitions.push(await request.json());
       await transitionGate.promise;
-      data.items = data.items.map(item => ({ ...item, stages: ['review'], revision: 2 }));
+      data.items = data.items.map(item => ({ ...item, stages: ['pr-review'], revision: 2 }));
       data.decisions = [{ ...reviewDecision }];
       data.transitionCommitted = true;
       const result: FactoryTransitionResult = {
@@ -99,7 +102,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
         transitionId: 'transition-1',
         itemId: reviewItem.id,
         revision: 2,
-        stage: 'review',
+        stage: 'pr-review',
         decisions: [],
       };
       return HttpResponse.json({ result });
@@ -116,7 +119,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
 }
 
 function renderReviewBoard() {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/review`] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
@@ -127,7 +130,7 @@ describe('Review card action lifecycle', () => {
     const { client } = renderReviewBoard();
     await user.click(await screen.findByRole('button', { name: 'Review' }));
 
-    const reviewing = screen.getByRole('region', { name: 'Reviewing' });
+    const reviewing = screen.getByRole('region', { name: 'PR review' });
     await waitFor(() => expect(within(reviewing).getByRole('button', { name: 'Moving…' })).toBeDisabled());
     expect(within(reviewing).queryByRole('button', { name: 'Review' })).toBeNull();
 
@@ -171,7 +174,7 @@ describe('Review card action lifecycle', () => {
     );
     expect(within(panel).queryByRole('button', { name: 'Review' })).toBeNull();
     await waitFor(() => expect(within(panel).queryByText('Starting an automated run…')).toBeNull());
-    expect(transitions).toEqual([expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action' })]);
+    expect(transitions).toEqual([expect.objectContaining({ board: 'work', stage: 'pr-review', cause: 'card_action' })]);
   });
 
   it('keeps automatic and manual retries busy, and offers Retry after a final failure', async () => {

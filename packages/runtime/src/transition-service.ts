@@ -377,8 +377,9 @@ export class FactoryTransitionService {
     }
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
-    const isPullRequest = source === 'pullRequest' || source === 'gitlabPullRequest';
-    const legacyBoard = isPullRequest ? 'review' : 'work';
+    // Cards filed before boards were recorded belong to Work: pull request cards among them were
+    // moved off the retired Review board at startup.
+    const legacyBoard = 'work';
     if (item.board === null && !boards.has(legacyBoard)) {
       return this.#commitRejection(
         request,
@@ -394,15 +395,6 @@ export class FactoryTransitionService {
         transitionId,
         'invalid_transition',
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
-      );
-    }
-    // Review holds only pull requests; Work holds both, and keeps a pull request's card to review.
-    if (itemBoard === 'review' && !isPullRequest) {
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'invalid_transition',
-        'The work item does not belong to the requested board.',
       );
     }
     const board = boards.get(request.board);

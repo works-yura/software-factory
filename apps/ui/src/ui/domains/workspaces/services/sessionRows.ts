@@ -11,7 +11,6 @@ import type { ChangeRequestProvider } from '../../factory/services/githubSubscri
 import type { WorkItem } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import {
-  getFactorySessionKind,
   getFactorySessionSource,
   getSessionOwnerDetails,
   getUserSessionLabel,
@@ -103,8 +102,9 @@ function isOwnedByViewer(session: FactoryUserSession, viewer: SessionViewerProfi
   return !viewer?.userId || session.userId === viewer.userId;
 }
 
-export function sessionBoard(session: FactoryUserSession, item: WorkItem | undefined): string {
-  return item ? itemBoard(item) : getFactorySessionKind(session, undefined);
+/** The board a session's card sits on; a session whose card isn't loaded is on Work, pull request reviews included. */
+export function sessionBoard(_session: FactoryUserSession, item: WorkItem | undefined): string {
+  return item ? itemBoard(item) : 'work';
 }
 
 function reachedTerminalPhase(item: WorkItem, boards: readonly InstalledBoardInfo[] | undefined): boolean {

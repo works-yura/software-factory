@@ -105,7 +105,7 @@ export function WorkItemCard({
   const morph = useCardMorph();
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
-  const custom = boardId !== 'work' && boardId !== 'review';
+  const custom = boardId !== 'work';
   const definition = catalog.data?.find(board => board.id === boardId);
 
   const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? t('menu.starting') : preparing;

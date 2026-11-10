@@ -1,6 +1,6 @@
 export { BoardDefinitionError, createBoardRegistry, DEFAULT_PHASE_CONTEXT, defineBoard, FACTORY_AGENT_ID } from '@factory/core';
-export { reviewBoard, workBoard } from '@factory/pipelines';
-export type { ReviewBoardPhase, WorkBoardPhase } from '@factory/pipelines';
+export { workBoard } from '@factory/pipelines';
+export type { WorkBoardPhase } from '@factory/pipelines';
 export { defaultBoards } from '@factory/pipelines';
 export type {
   BoardDefinition,

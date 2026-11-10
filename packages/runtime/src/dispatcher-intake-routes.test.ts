@@ -366,19 +366,19 @@ describe('intake routes placing linked cards', () => {
     });
 
     // A merge request can't land in Work › Triage, so the GitLab route skips it; a route to
-    // Review places it.
+    // PR review places it.
     await route({
       name: 'GitLab reviews',
       when: { operator: 'AND', conditions: [{ field: 'source.integration', operator: 'equals', value: 'gitlab' }] },
-      target: { boardKey: 'review', phaseKey: 'review' },
+      target: { boardKey: 'work', phaseKey: 'pr-review' },
     });
     const mergeRequest = await deliver({
       sourceKey: 'gitlab-mr:5',
       source: 'gitlab-pr',
-      board: 'review',
+      board: 'work',
       metadata: { authorTrusted: true },
     });
-    expect(placed(mergeRequest)).toEqual({ board: 'review', stages: ['review'] });
+    expect(placed(mergeRequest)).toEqual({ board: 'work', stages: ['pr-review'] });
     expect(placed(await deliver({ sourceKey: 'gitlab-issue:6', source: 'gitlab-issue' }))).toEqual({
       board: 'work',
       stages: ['triage'],
@@ -418,13 +418,13 @@ describe('intake routes placing linked cards', () => {
     const requested = await deliver({
       sourceKey: 'github-pr:7',
       source: 'github-pr',
-      board: 'review',
-      stage: 'review',
+      board: 'work',
+      stage: 'pr-review',
       metadata: { authorTrusted: true },
     });
-    expect(placed(requested)).toEqual({ board: 'review', stages: ['review'] });
+    expect(placed(requested)).toEqual({ board: 'work', stages: ['pr-review'] });
     // The same route does place an arrival.
-    const arrival = await deliver({ sourceKey: 'github-pr:8', source: 'github-pr', board: 'review' });
+    const arrival = await deliver({ sourceKey: 'github-pr:8', source: 'github-pr', board: 'work' });
     expect(placed(arrival)).toEqual({ board: 'docs', stages: ['writing'] });
   });
 
@@ -433,8 +433,8 @@ describe('intake routes placing linked cards', () => {
     await route({ name: 'Everything to triage', target: { boardKey: 'work', phaseKey: 'triage' } });
 
     expect(
-      placed(await deliver({ sourceKey: 'github-issue:1', board: 'review', stage: 'intake', skipRules: true })),
-    ).toEqual({ board: 'review', stages: ['intake'] });
+      placed(await deliver({ sourceKey: 'github-issue:1', board: 'work', stage: 'intake', skipRules: true })),
+    ).toEqual({ board: 'work', stages: ['intake'] });
   });
 
   it('never moves a card that is already on the board when its source is re-emitted', async () => {

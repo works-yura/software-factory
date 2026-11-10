@@ -51,8 +51,6 @@ const releaseNew = session('release-new', 'Release new', 'factory/issue-22', 'ne
 const sessions = [
   session('work-old', 'Work old', 'factory/issue-1', 'old'),
   session('work-new', 'Work new', 'factory/issue-2', 'new'),
-  session('review-old', 'Review old', 'factory/pr-11', 'old'),
-  session('review-new', 'Review new', 'factory/pr-12', 'new'),
   releaseOld,
   releaseNew,
   session('user-old', 'User old', 'user/old', 'old'),
@@ -119,11 +117,11 @@ const rowNamesIn = (groupLabel: string) =>
     .map(row => row.getAttribute('aria-label'));
 
 describe('Sessions sidebar groups', () => {
-  it('groups sessions by board: Work, Review, custom boards, then User', async () => {
+  it('groups sessions by board: Work, custom boards, then User', async () => {
     renderSection();
 
     await screen.findByRole('button', { name: 'Release-old: Release old' });
-    expect(groupRegions()).toEqual(['Work sessions', 'Review sessions', 'Release Preview sessions', 'User sessions']);
+    expect(groupRegions()).toEqual(['Work sessions', 'Release Preview sessions', 'User sessions']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release-old: Release old', 'Release-new: Release new']);
   });
 
@@ -132,14 +130,12 @@ describe('Sessions sidebar groups', () => {
     renderSection();
     await screen.findByRole('button', { name: 'Release-old: Release old' });
     expect(rowNamesIn('Work sessions')).toEqual(['Work old', 'Work new']);
-    expect(rowNamesIn('Review sessions')).toEqual(['Review old', 'Review new']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release-old: Release old', 'Release-new: Release new']);
     expect(rowNamesIn('User sessions')).toEqual(['User old', 'User new']);
 
     await pickSessionProperty(user, 'Sort', 'Last created');
 
     await waitFor(() => expect(rowNamesIn('Work sessions')).toEqual(['Work new', 'Work old']));
-    expect(rowNamesIn('Review sessions')).toEqual(['Review new', 'Review old']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release-new: Release new', 'Release-old: Release old']);
     expect(rowNamesIn('User sessions')).toEqual(['User new', 'User old']);
   });
@@ -156,7 +152,6 @@ describe('Sessions sidebar groups', () => {
     await waitFor(() => expect(groupRegions()).toEqual(['Initializing sessions', 'Idle sessions']));
     expect(rowNamesIn('Idle sessions').toSorted()).toEqual([
       'Release-new: Release new',
-      'Review new',
       'User new',
       'Work new',
     ]);
@@ -188,12 +183,12 @@ describe('Sessions sidebar groups', () => {
     await screen.findByRole('button', { name: 'Release-old: Release old' });
 
     await openSessionProperty(user, 'Group');
-    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Review' }));
-    expect(screen.getByRole('menuitemcheckbox', { name: 'Review' })).not.toBeChecked();
+    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Release Preview' }));
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Release Preview' })).not.toBeChecked();
     await closeSessionProperties(user);
 
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Review sessions' })).toBeNull());
-    expect(groupRegions()).toEqual(['Work sessions', 'Release Preview sessions', 'User sessions']);
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Release Preview sessions' })).toBeNull());
+    expect(groupRegions()).toEqual(['Work sessions', 'User sessions']);
     expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
 
     await openSessionProperties(user);
@@ -256,7 +251,7 @@ describe('Sessions sidebar groups', () => {
     expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus();
     await closeSessionProperties(user);
 
-    expect(groupRegions()).toEqual(['Review sessions', 'Release Preview sessions', 'Work sessions', 'User sessions']);
+    expect(groupRegions()).toEqual(['Release Preview sessions', 'User sessions', 'Work sessions']);
   });
 
   it('forgets the group order once the groups are moved back', async () => {

@@ -714,7 +714,7 @@ describe('GitLabRules', () => {
             externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: reviewKey },
             parentWorkItemId: work.id,
             title: 'MR 17',
-            board: 'review',
+            board: 'work',
             stages: ['done'],
             sessions: {},
             metadata: { authorTrusted: true, ...verdict },
@@ -756,8 +756,8 @@ describe('GitLabRules', () => {
           input: {
             externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: reviewKey },
             title: 'MR 17',
-            board: 'review',
-            stages: ['review'],
+            board: 'work',
+            stages: ['pr-review'],
             sessions: {},
             metadata: {
               authorTrusted: true,
@@ -1119,7 +1119,7 @@ describe('merge request cards on the Work board', () => {
   async function mergeRequestCard(
     seeded: Awaited<ReturnType<typeof setup>>['seeded'],
     projectId: string,
-    board: 'work' | 'review',
+    board: 'work',
     stage: string,
     metadata: Record<string, unknown> = {},
   ) {
@@ -1177,7 +1177,7 @@ describe('merge request cards on the Work board', () => {
     expect((await decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
   });
 
-  it.each(['work', 'review'] as const)(
+  it.each(['work'] as const)(
     'refiles a reopened merge request onto the %s card it already has instead of failing',
     async board => {
       const { seeded, project, service, dispatch, decisions, get } = await harness();
@@ -1193,10 +1193,10 @@ describe('merge request cards on the Work board', () => {
     },
   );
 
-  /** Where a merge request's own card is reviewed: Work's PR review, or Review's Reviewing. */
-  const reviewPhase = (board: 'work' | 'review') => (board === 'work' ? 'pr-review' : 'review');
+  /** Where a merge request's own card is reviewed: Work's PR review. */
+  const reviewPhase = (_board: 'work') => 'pr-review';
 
-  it.each(['work', 'review'] as const)('re-reviews a push to a reviewed merge request card on %s', async board => {
+  it.each(['work'] as const)('re-reviews a push to a reviewed merge request card on %s', async board => {
     const { seeded, project, service, dispatch, decisions, get } = await harness();
     const card = await mergeRequestCard(seeded, project.id, board, reviewPhase(board), { reviewVerdict: 'approve' });
 
@@ -1216,7 +1216,7 @@ describe('merge request cards on the Work board', () => {
     });
   });
 
-  it.each(['work', 'review'] as const)(
+  it.each(['work'] as const)(
     'moves a merged merge request card to Done on %s, and a closed one to Canceled',
     async board => {
       const merged = await harness();
@@ -1233,7 +1233,7 @@ describe('merge request cards on the Work board', () => {
     },
   );
 
-  it.each(['work', 'review'] as const)(
+  it.each(['work'] as const)(
     'does not send a note to a merge request card on %s that has no authoring card',
     async board => {
       const { seeded, project, service, decisions } = await harness();

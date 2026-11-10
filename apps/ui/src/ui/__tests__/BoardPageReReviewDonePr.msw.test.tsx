@@ -1,7 +1,7 @@
 /**
  * A PR that reached Done but is still open on GitHub may have picked up new
  * commits after its review — nothing re-queues it automatically. The Done-lane
- * card offers a manual "Re-review" that moves the card back into Review, where
+ * card offers a manual "Re-review" that moves the card back into PR review, where
  * the lane's rule queues a fresh review run. Merged PRs don't get the action:
  * there's nothing left to review.
  */
@@ -63,7 +63,7 @@ const donePrWorkItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
-/** Stubs the review board's data endpoints and captures what a Re-review writes. */
+/** Stubs the Work board's data endpoints and captures what a Re-review writes. */
 function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
   const transitions: Array<Record<string, unknown>> = [];
 
@@ -123,12 +123,12 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
 }
 
 function renderReviewBoard() {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/review`] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
 describe('Re-review action for open PRs in Done', () => {
-  it('moves a Done-lane open PR back into Review, where its rule queues the run', async () => {
+  it('moves a Done-lane open PR back into PR review, where its rule queues the run', async () => {
     const { transitions } = stubReviewBoard();
     const user = userEvent.setup();
     const { router, client } = renderReviewBoard();
@@ -137,9 +137,9 @@ describe('Re-review action for open PRs in Done', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Re-review' }));
 
     await waitForMutationsIdle(client);
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/review`);
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
     expect(transitions).toEqual([
-      expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action', expectedRevision: 1 }),
+      expect.objectContaining({ board: 'work', stage: 'pr-review', cause: 'card_action', expectedRevision: 1 }),
     ]);
   });
 

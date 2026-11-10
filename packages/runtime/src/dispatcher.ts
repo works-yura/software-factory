@@ -3,8 +3,7 @@ import type { AgentHarness, AgentNotificationResult, AgentRunContext, AgentSessi
 import {
   autoApprovedExitTool,
   boardForWorkItem,
-  isPullRequestCard,
-  pullRequestReviewPhase,
+  PULL_REQUEST_REVIEW_PHASE,
   resolvePhaseSemantics,
   reviewsPullRequest,
   startsInAutoPhase,
@@ -371,7 +370,7 @@ export interface FactoryDecisionDispatcherOptions {
   harness: AgentHarness;
   transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   storage: WorkItemsStorage;
-  /** Installed boards; defaults to the built-in Work and Review boards. */
+  /** Installed boards; defaults to the built-in Work board. */
   boards?: BoardRegistry | ProjectBoardSource;
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
@@ -525,7 +524,7 @@ function reviewsFactoryAuthoredCode(
   if (item.metadata?.factoryAuthored !== true) return false;
   if (decision.type === 'transition') {
     return (
-      decision.stage === pullRequestReviewPhase(decision.board) &&
+      decision.stage === PULL_REQUEST_REVIEW_PHASE &&
       reviewsPullRequest({ board: decision.board, item: { source: workItemSource(item.externalSource) } })
     );
   }
@@ -1563,14 +1562,7 @@ export class FactoryDecisionDispatcher {
       reuseMode: 'preserve',
     });
     const itemBoard = boardForWorkItem(result.item);
-    // New pull request cards are filed on Work, but one filed on Review before
-    // that stays there: filing its pull request again acts on it where it sits.
-    const board =
-      itemBoard === 'review' &&
-      decision.board === 'work' &&
-      isPullRequestCard({ source: workItemSource(result.item.externalSource) })
-        ? itemBoard
-        : decision.board;
+    const board = decision.board;
     if (!skipRules && itemBoard !== board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${board}".`);
     }

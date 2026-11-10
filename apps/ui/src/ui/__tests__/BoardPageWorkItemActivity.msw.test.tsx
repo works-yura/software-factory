@@ -260,7 +260,7 @@ function stubBoardEndpoints() {
   );
 }
 
-function renderBoard(board: 'work' | 'review', search = '') {
+function renderBoard(board: 'work', search = '') {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [`/factories/${FACTORY_ID}/${board}${search}`],
   });
@@ -392,7 +392,7 @@ describe('Board work-item activity', () => {
 
   it('shows the latest human worker, initial fallback, and synthetic created event on review cards', async () => {
     stubBoardEndpoints();
-    renderBoard('review');
+    renderBoard('work');
 
     const createdAt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
       new Date(reviewItem.createdAt),
@@ -419,7 +419,7 @@ describe('Board work-item activity', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    const { client } = renderBoard('work');
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored PR');
@@ -446,22 +446,6 @@ describe('Board work-item activity', () => {
     expect(screen.queryByText('Requested PR')).not.toBeInTheDocument();
   });
 
-  it('shows a filter-specific review empty state', async () => {
-    stubBoardEndpoints();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({ workItems: relevanceReviewItems }),
-      ),
-    );
-
-    const { client } = renderBoard('review', '?teammate=github%3Anobody');
-    await waitForMutationsIdle(client);
-
-    expect(
-      await within(screen.getByTestId('board-column-review')).findByText('No change requests match filters'),
-    ).toBeInTheDocument();
-  });
-
   it('shows distinct draft, open, closed, and merged pull request icons', async () => {
     stubBoardEndpoints();
     server.use(
@@ -469,7 +453,7 @@ describe('Board work-item activity', () => {
         HttpResponse.json({ workItems: pullRequestStatusItems }),
       ),
     );
-    renderBoard('review');
+    renderBoard('work');
 
     expect(await screen.findByLabelText('Draft pull request')).toBeInTheDocument();
     expect(screen.getByLabelText('Open pull request')).toBeInTheDocument();
@@ -488,7 +472,7 @@ describe('Board work-item activity', () => {
         }),
       ),
     );
-    renderBoard('review');
+    renderBoard('work');
 
     const row = await screen.findByRole('article', { name: reviewItem.title });
     expect(within(row).getByText('Changes requested')).toBeVisible();

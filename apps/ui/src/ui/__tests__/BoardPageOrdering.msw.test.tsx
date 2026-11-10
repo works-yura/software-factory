@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { builtinBoardCatalog, releaseBoard } from '../../../e2e/ui/board-catalog';
 import { server } from '../../../e2e/ui/msw-server';
 import {
   openPropertiesMenu,
@@ -87,23 +88,32 @@ describe('Factory board view memory', () => {
     await togglePropertyOption(userEvent.setup(), 'Board properties', 'Label', label);
   };
 
-  const sidebarBoardLink = (name: 'Work' | 'Review') =>
+  const sidebarBoardLink = (name: 'Work' | 'Release Preview') =>
     within(screen.getByRole('region', { name: 'Boards' })).getByRole('link', { name });
 
-  const leaveForReviewBoard = async () => {
-    fireEvent.click(sidebarBoardLink('Review'));
-    await screen.findByTestId('board-column-review');
+  /** A second board to leave Work for: the project's own Release Preview board. */
+  const withReleaseBoard = () =>
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
+        HttpResponse.json({ boards: [...builtinBoardCatalog.boards, releaseBoard] }),
+      ),
+    );
+
+  const leaveForReleaseBoard = async () => {
+    fireEvent.click(await within(await screen.findByRole('region', { name: 'Boards' })).findByRole('link', { name: 'Release Preview' }));
+    await screen.findByTestId('board-column-queued');
   };
 
   it('brings back filters and sort when the board is reopened from the sidebar', async () => {
     stubWorkBoard();
+    withReleaseBoard();
     const { router } = openWorkBoard();
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     await filterByLabel('later');
     const user = userEvent.setup();
     await pickPropertyOption(user, 'Board properties', 'Sort', 'Newest on board');
     await waitFor(() => expect(router.state.location.search).toBe('?label=later&sort=created-newest'));
-    await leaveForReviewBoard();
+    await leaveForReleaseBoard();
 
     const workLink = sidebarBoardLink('Work');
     expect(workLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/work?label=later&sort=created-newest`);
@@ -117,6 +127,7 @@ describe('Factory board view memory', () => {
 
   it('opens a board link exactly as linked', async () => {
     stubWorkBoard();
+    withReleaseBoard();
     const first = openWorkBoard();
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     await filterByLabel('later');
@@ -140,6 +151,7 @@ describe('Factory board view memory', () => {
 
   it('lands on the remembered view when the factory is opened', async () => {
     stubWorkBoard();
+    withReleaseBoard();
     const first = openWorkBoard();
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     await filterByLabel('later');
@@ -156,6 +168,7 @@ describe('Factory board view memory', () => {
 
   it('forgets the filters once they are cleared', async () => {
     stubWorkBoard();
+    withReleaseBoard();
     const { router } = openWorkBoard();
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     await filterByLabel('later');
@@ -165,13 +178,14 @@ describe('Factory board view memory', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
     await waitFor(() => expect(router.state.location.search).toBe(''));
     await user.keyboard('{Escape}');
-    await leaveForReviewBoard();
+    await leaveForReleaseBoard();
 
     expect(sidebarBoardLink('Work')).toHaveAttribute('href', `/factories/${FACTORY_ID}/work`);
   });
 
   it('keeps a separate view for each factory when switching factories', async () => {
     stubWorkBoard();
+    withReleaseBoard();
     const { router } = openWorkBoard();
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     await filterByLabel('later');
@@ -200,12 +214,13 @@ describe('Factory board view memory', () => {
 
   it('keeps a separate view for each board', async () => {
     stubWorkBoard();
+    withReleaseBoard();
     const { router } = openWorkBoard();
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     await filterByLabel('later');
     await waitFor(() => expect(router.state.location.search).toBe('?label=later'));
 
-    await leaveForReviewBoard();
+    await leaveForReleaseBoard();
     expect(router.state.location.search).toBe('');
 
     fireEvent.click(sidebarBoardLink('Work'));

@@ -150,7 +150,7 @@ export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
   return isFactoryRole(role) ? FACTORY_ROLE_STAGES[role] : undefined;
 }
 
-export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
+export const FACTORY_RULE_BOARDS = ['work'] as const;
 export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & {});
 
 export const FACTORY_RULE_SOURCES = [

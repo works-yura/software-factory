@@ -20,10 +20,6 @@
     "manual": "Open link"
   },
   "emptyColumn": {
-    "reviewIntake": {
-      "title": "No change requests waiting",
-      "description": "Open change requests from connected repositories appear here."
-    },
     "noSources": {
       "title": "No intake sources",
       "description": "Create a card or connect an issue source in Work Intake settings."
@@ -44,17 +40,9 @@
       "title": "Nothing being built",
       "description": "Drag planned work here when implementation starts."
     },
-    "reviewActive": {
-      "title": "No active reviews",
-      "description": "Drag a change request here when review starts."
-    },
     "review": {
       "title": "Nothing awaiting review",
       "description": "Drag built work here when it is ready for review."
-    },
-    "reviewDone": {
-      "title": "No completed reviews",
-      "description": "Drag a reviewed pull request here when it is complete."
     },
     "done": {
       "title": "Nothing completed yet",
@@ -68,7 +56,6 @@
       "title": "Nothing in {{stage}}",
       "description": "Drag work here when it reaches this stage."
     },
-    "filteredReview": "No change requests match filters",
     "filteredWork": "No work items match filters",
     "filteredDescription": "Try adjusting or clearing your filters.",
     "alreadyMaterialized_one": "{{count}} item from this source already has a card on another board, so the feed only offers new ones.",
@@ -330,9 +317,7 @@
     "stages": "Board stages"
   },
   "connectRepository": {
-    "reviewTitle": "Connect a repository to start reviewing",
     "workTitle": "Connect a repository to start intake",
-    "reviewDescription": "Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.",
     "workDescription": "Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.",
     "openSettings": "Open Repository settings"
   },

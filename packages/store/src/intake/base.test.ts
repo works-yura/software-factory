@@ -377,4 +377,39 @@ describe('IntakeStorage', () => {
       expect(await storage.listLabelRoutes({ orgId: 'org-1' })).toEqual([]);
     });
   });
+
+  it('moves sources and label routes off the retired Review board onto Work, once', async () => {
+    const storage = await makeStorage(undefined, { org1: ['proj-1'] });
+    await storage.setBinding({
+      orgId: 'org1',
+      integrationId: 'github',
+      sourceId: 'acme/api',
+      factoryProjectId: 'proj-1',
+      board: 'review',
+    });
+    await storage.setBinding({
+      orgId: 'org1',
+      integrationId: 'gitlab',
+      sourceId: 'acme/web',
+      factoryProjectId: 'proj-1',
+      board: 'release',
+    });
+    const route = { orgId: 'org1', factoryProjectId: 'proj-1', integrationId: 'github' };
+    await storage.setLabelRoute({ ...route, label: 'needs-review', board: 'review' });
+    await storage.setLabelRoute({ ...route, label: 'release', board: 'release' });
+
+    expect(await storage.moveReviewBoardSourcesToWork()).toEqual({ bindings: 1, labelRoutes: 1 });
+
+    expect(await storage.listBindings({ orgId: 'org1' })).toEqual(
+      expect.arrayContaining([
+        { integrationId: 'github', sourceId: 'acme/api', factoryProjectId: 'proj-1', board: 'work' },
+        { integrationId: 'gitlab', sourceId: 'acme/web', factoryProjectId: 'proj-1', board: 'release' },
+      ]),
+    );
+    expect(await storage.listLabelRoutes({ orgId: 'org1' })).toEqual([
+      { factoryProjectId: 'proj-1', integrationId: 'github', label: 'needs-review', board: 'work' },
+      { factoryProjectId: 'proj-1', integrationId: 'github', label: 'release', board: 'release' },
+    ]);
+    expect(await storage.moveReviewBoardSourcesToWork()).toEqual({ bindings: 0, labelRoutes: 0 });
+  });
 });

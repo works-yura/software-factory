@@ -1,8 +1,7 @@
 /**
  * Pull requests are reviewed on the Work board: a pull request's card sits in
- * Work Intake and its Review action moves it into Work's Review lane, where the
- * lane's rule queues the reviewer. Cards filed on the Review board before this
- * stay there and keep their own board.
+ * Work Intake and its Review action moves it into Work's PR review lane, where the
+ * lane's rule queues the reviewer.
  */
 import type { WorkItemRow } from '@factory/store/work-items/base';
 import type { Card } from '@factory/store/work-items/base';
@@ -90,7 +89,7 @@ function stubBoards({ items = [] as Card[], candidates = [] as (typeof reviewCan
   return { created, transitions };
 }
 
-function renderBoard(board: 'work' | 'review') {
+function renderBoard(board: 'work') {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/${board}`] });
   return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
@@ -134,21 +133,5 @@ describe('Pull requests on the Work board', () => {
 
     expect(created).toEqual([expect.objectContaining({ board: 'work', title: reviewCandidate.title })]);
     expect(transitions).toEqual([expect.objectContaining({ board: 'work', stage: 'pr-review' })]);
-  });
-
-  it('keeps a card filed on the Review board there, off Work', async () => {
-    stubBoards({ items: [reviewItem] });
-    renderBoard('review');
-    const reviewIntake = await screen.findByRole('region', { name: 'Intake' });
-    expect(await within(reviewIntake).findByText(reviewItem.title)).toBeVisible();
-  });
-
-  it('does not show a Review board card on Work', async () => {
-    stubBoards({ items: [reviewItem] });
-    const { client } = renderBoard('work');
-    await screen.findByRole('region', { name: 'Intake' });
-    await waitForMutationsIdle(client);
-    await waitFor(() => expect(screen.queryByText('Intake is clear')).toBeInTheDocument());
-    expect(screen.queryByText(reviewItem.title)).toBeNull();
   });
 });

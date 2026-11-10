@@ -104,7 +104,7 @@ export class BoardWrites {
 
   /**
    * Code boards can't be created over, and Work can't be deleted while its code handlers run by its
-   * key; the legacy Review board can't be changed at all.
+   * key.
    */
   refuseCodeBoard(key: string, action: 'create' | 'edit' | 'delete'): void {
     const { boards } = this.deps;

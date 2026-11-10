@@ -6,7 +6,7 @@ import {
   boardClassifiesTriage,
   boardForWorkItem,
   isPullRequestCard,
-  pullRequestReviewPhase,
+  PULL_REQUEST_REVIEW_PHASE,
   reviewsPullRequest,
   workItemPhaseSemantics,
   workItemSource,
@@ -220,7 +220,7 @@ const reviewVerdictInputSchema = z.object({
 
 /**
  * A review pass ends by recording its verdict on the card, which stays in
- * Reviewing: Done is reserved for the merge, and a verdict is not a lane. The
+ * PR review: Done is reserved for the merge, and a verdict is not a lane. The
  * next push re-reviews from the recorded verdict.
  */
 function createReviewVerdictTool(
@@ -237,7 +237,7 @@ function createReviewVerdictTool(
     factory_record_review_verdict: createTool({
       id: 'factory_record_review_verdict',
       description:
-        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On the card of a pull request it records the published PR verdict and the card stays in Review. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
+        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On the card of a pull request it records the published PR verdict and the card stays in PR review. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
       inputSchema: reviewVerdictInputSchema,
       requireApproval: false,
       execute: async ({ verdict, reviewedHeadSha, reviewedHeads, findings }, execution) => {
@@ -274,8 +274,8 @@ function createReviewVerdictTool(
             toolCallId: execution.agent?.toolCallId,
           });
         }
-        if (!reviewsPullRequest({ board, item: { source } }) || item.stages[0] !== pullRequestReviewPhase(board)) {
-          throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
+        if (!reviewsPullRequest({ board, item: { source } }) || item.stages[0] !== PULL_REQUEST_REVIEW_PHASE) {
+          throw new Error(`Only a pull request card in PR review records a verdict; this one is in ${item.stages.join(', ')}.`);
         }
         const reviewedAt = new Date().toISOString();
         // Revision-checked, so a merge that moves the card between the stage

@@ -547,6 +547,25 @@ export class IntakeStorage extends FactoryStorageDomain {
   }
 
   /** Every org's label routes for one integration, for moving them into another model. */
+  /**
+   * The Review board was retired: sources and label routes that fed it now feed Work, where pull
+   * and merge requests are reviewed. Runs across every org, once; returns how many rows moved.
+   */
+  async moveReviewBoardSourcesToWork(): Promise<{ bindings: number; labelRoutes: number }> {
+    const now = new Date();
+    const bindings = await this.ops.updateMany(
+      INTAKE_SOURCE_BINDINGS_SCHEMA.name,
+      { board: 'review' },
+      { board: 'work', updated_at: now },
+    );
+    const labelRoutes = await this.ops.updateMany(
+      INTAKE_LABEL_ROUTES_SCHEMA.name,
+      { board: 'review' },
+      { board: 'work', updated_at: now },
+    );
+    return { bindings, labelRoutes };
+  }
+
   async listLabelRoutesForIntegration(integrationId: string): Promise<(IntakeLabelRoute & { orgId: string })[]> {
     const rows = await this.#db.findMany<IntakeLabelRouteRow & { org_id: string }>('intake_label_routes', {
       integration_id: integrationId,

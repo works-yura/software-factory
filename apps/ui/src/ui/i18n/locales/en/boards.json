@@ -11,14 +11,5 @@
       "canceled": "Canceled",
       "pr-review": "PR review"
     }
-  },
-  "review": {
-    "title": "Review",
-    "phases": {
-      "intake": "Intake",
-      "review": "Reviewing",
-      "done": "Done",
-      "canceled": "Canceled"
-    }
   }
 }

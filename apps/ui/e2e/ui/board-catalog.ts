@@ -40,17 +40,6 @@ export const builtinBoardCatalog: BoardCatalogResponse = {
         { id: 'canceled', title: 'Canceled', kind: 'terminal', transitions: [] },
       ],
     },
-    {
-      id: 'review',
-      title: 'Review',
-      initialPhase: 'intake',
-      phases: [
-        { id: 'intake', title: 'Intake', kind: 'resting', transitions: [] },
-        { id: 'review', title: 'Reviewing', kind: 'working', role: 'review', transitions: [] },
-        { id: 'done', title: 'Done', kind: 'terminal', transitions: [] },
-        { id: 'canceled', title: 'Canceled', kind: 'terminal', transitions: [] },
-      ],
-    },
   ],
 };
 
@@ -110,5 +99,5 @@ export const workBoard: InstalledBoardInfo = {
 };
 
 export const workBoardCatalog: BoardCatalogResponse = {
-  boards: [workBoard, builtinBoardCatalog.boards[1]],
+  boards: [workBoard],
 };

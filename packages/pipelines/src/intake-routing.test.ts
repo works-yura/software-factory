@@ -76,6 +76,13 @@ describe('resolveIntakePlacement', () => {
     expect(intakeTargetProblem(stepwise, placing({ boardKey: 'stepwise', phaseKey: 'triaged' }))).toBeUndefined();
   });
 
+  it('refuses a route to the retired Review board', () => {
+    expect(intakeTargetProblem(registry, placing({ boardKey: 'review', phaseKey: 'review' }))).toEqual({
+      code: 'unknown_board',
+      message: 'Board "review" is not installed in this project.',
+    });
+  });
+
   it('places nothing without routes', () => {
     expect(resolveIntakePlacement([], issue(), registry)).toBeUndefined();
   });
@@ -133,12 +140,8 @@ describe('resolveIntakePlacement', () => {
       ),
     ).toEqual({ board: 'work', phase: 'pr-review', routeId: 'next' });
     expect(resolveIntakePlacement(to('work', 'pr-review'), issue(), registry)).toBeUndefined();
-    expect(resolveIntakePlacement(to('review', 'review'), issue(), registry)).toBeUndefined();
-    expect(resolveIntakePlacement(to('review', 'review'), pullRequest, registry)).toEqual({
-      board: 'review',
-      phase: 'review',
-      routeId: 'route',
-    });
+    // The Review board was retired: a route that still names it places nothing.
+    expect(resolveIntakePlacement(to('review', 'review'), pullRequest, registry)).toBeUndefined();
   });
 
   it('places new cards only by routes that handle work_item.created', () => {

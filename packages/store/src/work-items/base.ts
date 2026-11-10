@@ -3223,6 +3223,51 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
+   * The Review board was retired: pull and merge requests are reviewed in Work › PR review. Move
+   * every card still on it, and every pull request card filed before boards were recorded (those
+   * belonged to Review), onto Work, once. Review's `review` phase becomes `pr-review`, in the card's
+   * stages and its stage history; Intake, Done and Canceled keep their names. Sessions and the
+   * recorded verdict stay as they are: Work's PR review runs the same reviewer seat. Returns the
+   * cards moved; a second run finds none.
+   */
+  async moveReviewBoardCardsToWork(): Promise<Card[]> {
+    const isReviewCard = (row: Pick<WorkItemDbRow, 'board' | 'external_source'>) =>
+      row.board === 'review' || (row.board === null && row.external_source?.type === 'pull-request');
+    // Legacy cards not yet copied into the split tables are copied first, so none is left behind
+    // on a board that no longer exists.
+    if (!this.#legacyMode && this.#split.pending) {
+      const legacy = await this.#db.findMany<WorkItemDbRow>(WORK_ITEMS_SCHEMA.name, { board: { in: ['review', null] } });
+      for (const row of legacy.filter(isReviewCard)) {
+        await this.#cards(this.#db, { transaction: false }).findOne({ org_id: row.org_id, id: row.id });
+      }
+    }
+    const candidates = (
+      await this.#cards(this.#db, { transaction: false }).findMany({ board: { in: ['review', null] } })
+    ).filter(isReviewCard);
+    const moved: Card[] = [];
+    for (const candidate of candidates) {
+      const row = await this.#withTransaction(ops =>
+        this.#cards(ops, { transaction: true }).updateAtomic({ org_id: candidate.org_id, id: candidate.id }, current => {
+          if (!isReviewCard(current)) return null;
+          const rename = (stage: string) => (stage === 'review' ? 'pr-review' : stage);
+          return {
+            board: 'work',
+            stages: current.stages.map(rename) as WorkItemDbRow['stages'],
+            stage_history: (current.stage_history ?? []).map(entry => ({
+              ...entry,
+              stage: rename(entry.stage),
+            })) as WorkItemDbRow['stage_history'],
+            revision: current.revision + 1,
+            updated_at: new Date(),
+          };
+        }),
+      );
+      if (row) moved.push(toWorkItem(row));
+    }
+    return moved;
+  }
+
+  /**
    * Factory used to hold a triaged non-bug in Triage until a person accepted it.
    * Triage now sends those cards back to Intake instead, so move the ones still
    * held there, once. A card with a live run, or one that changed under us, is

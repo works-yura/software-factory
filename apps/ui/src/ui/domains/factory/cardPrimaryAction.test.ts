@@ -8,7 +8,7 @@ import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 const investigate: CardMove = { action: 'investigate', label: 'Investigate', role: 'triage', stage: 'triage' };
 const plan: CardMove = { action: 'plan', label: 'Plan', role: 'work', stage: 'planning' };
 const build: CardMove = { action: 'build', label: 'Build', role: 'work', stage: 'execute' };
-const review: CardMove = { action: 'review', label: 'Review', role: 'review', stage: 'review' };
+const review: CardMove = { action: 'review', label: 'Review', role: 'review', stage: 'pr-review' };
 
 function sessionRef(role: string): WorkItemSessionRef {
   return { sessionId: `session-${role}`, branch: 'factory/pr-1', threadId: `thread-${role}`, startedBy: 'user-1' };
@@ -145,13 +145,14 @@ describe('cardMoves', () => {
     },
   );
 
-  it('re-reviews an open pull request sitting in Done, and reviews it in a working lane', () => {
+  it('re-reviews an open pull request with no stored board sitting in Done, and reviews it in PR review', () => {
     const pullRequest = { source: 'github-pr' as const, metadata: { state: 'open' }, stages: ['done'] };
-    expect(cardMoves(pullRequest, 'done')).toEqual([{ action: 'reReview', label: 'Re-review', role: 'review', stage: 'review' }]);
-    expect(cardMoves(pullRequest, 'review')).toEqual([review]);
+    const reReview = { action: 'reReview', label: 'Re-review', role: 'review', stage: 'pr-review' };
+    expect(cardMoves(pullRequest, 'done')).toEqual([reReview]);
+    expect(cardMoves(pullRequest, 'pr-review')).toEqual([review]);
     const mergeRequest = { ...pullRequest, source: 'gitlab-pr' as const };
-    expect(cardMoves(mergeRequest, 'done')).toEqual([{ action: 'reReview', label: 'Re-review', role: 'review', stage: 'review' }]);
-    expect(cardMoves(mergeRequest, 'review')).toEqual([review]);
+    expect(cardMoves(mergeRequest, 'done')).toEqual([reReview]);
+    expect(cardMoves(mergeRequest, 'pr-review')).toEqual([review]);
   });
 
   it.each(['github-pr', 'gitlab-pr'] as const)(
@@ -216,18 +217,6 @@ describe('resumeStage', () => {
         stageHistory: history('pr-review', 'intake'),
       }),
     ).toBe('pr-review');
-  });
-
-  it('resumes a Review-board card set aside in Intake back into Reviewing, which has no Planning', () => {
-    const resume = (card: WorkItem) =>
-      resumeStage('intake', { board: itemBoard(card), sessions: card.sessions, stageHistory: card.stageHistory });
-    const reviewed = {
-      ...item({ review: sessionRef('review') }),
-      stageHistory: [stageEntry('review'), stageEntry('intake')],
-    };
-    expect(resume({ ...reviewed, board: 'review' })).toBe('review');
-    // A pull request card with no board predates persisted boards and sits on Review too.
-    expect(resume({ ...reviewed, board: null })).toBe('review');
   });
 
   it('offers nothing for a fresh arrival or outside Intake', () => {
@@ -334,9 +323,6 @@ describe('cardPrimaryAction', () => {
     };
     expect(cardPrimaryAction({ ...args, item: parked, columnStage: 'intake' })?.label).toBe('Plan');
     expect(cardPrimaryAction({ ...args, item: item({}), columnStage: 'intake' })?.label).toBe('Plan');
-    expect(cardPrimaryAction({ ...args, item: { ...triaged(), board: 'review' }, columnStage: 'intake' })?.label).toBe(
-      'Plan',
-    );
   });
 
   it('still releases a proposed run first: the suggestion beats resuming beside it', () => {
@@ -345,7 +331,7 @@ describe('cardPrimaryAction', () => {
       ...handlers,
       item: item({ review: sessionRef('review') }),
       move: review,
-      resumeStage: 'review',
+      resumeStage: 'pr-review',
       waiting: { label: 'Review', decisionId: 'decision-1' },
       hasSession: true,
       onApproveProposal,
@@ -362,7 +348,7 @@ describe('cardPrimaryAction', () => {
 
     expect(action?.label).toBe('Review');
     action?.start();
-    expect(onMove).toHaveBeenCalledWith('review');
+    expect(onMove).toHaveBeenCalledWith('pr-review');
   });
 
   it('falls back to opening a session on a card with no lane to offer', () => {

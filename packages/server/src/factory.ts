@@ -150,7 +150,7 @@ import { isValidGitRef } from '@factory/sandbox';
 import { peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { backfillUntilDone, WorkItemSplitModeError } from '@factory/store';
-import { migrateLabelRoutesToIntakeRoutes } from '@factory/store';
+import { migrateLabelRoutesToIntakeRoutes, REVIEW_BOARD_RETIREMENT_ACTOR } from '@factory/store';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { Card } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
@@ -383,8 +383,7 @@ export interface MastraFactoryConfig {
    */
   skills?: readonly InlineSkill[];
   /**
-   * Whether projects get the built-in Work board, stored in each project once, and the legacy
-   * read-only Review board. Default: true.
+   * Whether projects get the built-in Work board, stored in each project once. Default: true.
    */
   includeDefaultBoards?: boolean;
 
@@ -614,8 +613,8 @@ export class MastraFactory {
    * so the definition is checked as an edit is; a new key gets none (no handlers, outcomes, tool or
    * event rules). The board is validated once, as the boards API does, and each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
-   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `code_board` for the
-   * legacy Review board, `phase_in_use` when cards sit in a phase it removes, `project_not_found`).
+   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `code_board` when a
+   * code board can't take the write, `phase_in_use` when cards sit in a phase it removes, `project_not_found`).
    * Available after `prepare()`.
    *
    * @example
@@ -648,7 +647,7 @@ export class MastraFactory {
     }
     const { writes, projects, audit } = store;
     const input = writes.validate(board);
-    // Work and app boards are stored per project like any other; the legacy Review board isn't.
+    // Work and app boards are stored per project like any other.
     writes.refuseCodeBoard(input.key, 'edit');
     await projects.ensureReady();
     let scopes: StoredBoardScope[];
@@ -954,6 +953,32 @@ export class MastraFactory {
           boards: storedBoardsStorage,
         });
         if (moved > 0) console.info(`[factory] moved ${moved} ClickUp tag route(s) into intake routes`);
+      });
+    }
+
+    // The Review board was retired: pull and merge requests are reviewed in Work › PR review.
+    // Move its cards, its intake routes and the sources and label routes that fed it onto Work,
+    // once. A failure stops the boot: those cards and routes would point at a board that's gone.
+    if (storage.isDomainReady('work-items')) {
+      await timedPhase('prepare.workItems.retireReviewBoard', async () => {
+        const moved = await workItemsStorage.moveReviewBoardCardsToWork();
+        if (moved.length > 0) console.info(`[factory] moved ${moved.length} Review board card(s) to Work › PR review`);
+      });
+    }
+    if (storage.isDomainReady('boards')) {
+      await timedPhase('prepare.boards.retireReviewBoardRoutes', async () => {
+        const moved = await storedBoardsStorage.moveReviewBoardRoutesToWork(REVIEW_BOARD_RETIREMENT_ACTOR);
+        if (moved > 0) console.info(`[factory] moved ${moved} intake route(s) from the Review board to Work`);
+      });
+    }
+    if (storage.isDomainReady('intake')) {
+      await timedPhase('prepare.intake.retireReviewBoardSources', async () => {
+        const { bindings, labelRoutes } = await intakeStorage.moveReviewBoardSourcesToWork();
+        if (bindings + labelRoutes > 0) {
+          console.info(
+            `[factory] moved ${bindings} intake source(s) and ${labelRoutes} label route(s) from the Review board to Work`,
+          );
+        }
       });
     }
 

@@ -17,7 +17,7 @@ import type { RouteObject } from 'react-router';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { KnowledgePage } from './pages/KnowledgePage';
-import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
+import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -151,7 +151,8 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'new', element: <NewPage /> },
                 { path: 'new-factory', element: <CreateFactoryPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
-                { path: 'review', element: <ReviewBoardPage /> },
+                // The Review board was retired: pull requests are reviewed on Work.
+                { path: 'review', element: <Navigate to="../work" replace /> },
                 { path: 'boards/:boardId', element: <CustomBoardPage /> },
                 { path: 'activity', element: <FactoryHomeRedirect /> },
                 { path: 'overview', element: <FactoryHomeRedirect /> },

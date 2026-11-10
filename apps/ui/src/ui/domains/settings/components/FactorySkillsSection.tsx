@@ -39,21 +39,20 @@ function displayedSkill(name: string, title: () => string): DisplayedSkill {
   };
 }
 
-const BUILT_IN_BOARD_SKILLS: Record<'work' | 'review', DisplayedSkill[]> = {
+const BUILT_IN_BOARD_SKILLS: Record<'work', DisplayedSkill[]> = {
   work: [
     displayedSkill('factory-triage', () => tk('skills.names.triage')),
     displayedSkill('factory-plan', () => tk('skills.names.plan')),
-  ],
-  review: [
+    // Work's PR review runs these on a pull request's own card.
     displayedSkill('factory-review', () => tk('skills.names.review')),
     displayedSkill('factory-rereview', () => tk('skills.names.rereview')),
   ],
 };
 
-const DISPLAYED_SKILLS: DisplayedSkill[] = [...BUILT_IN_BOARD_SKILLS.work, ...BUILT_IN_BOARD_SKILLS.review];
+const DISPLAYED_SKILLS: DisplayedSkill[] = [...BUILT_IN_BOARD_SKILLS.work];
 
-function isBuiltInBoard(id: string): id is 'work' | 'review' {
-  return id === 'work' || id === 'review';
+function isBuiltInBoard(id: string): id is 'work' {
+  return id === 'work';
 }
 
 function SkillContent({ content }: { content: string }) {

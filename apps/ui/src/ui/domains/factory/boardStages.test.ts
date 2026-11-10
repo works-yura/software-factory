@@ -3,13 +3,13 @@ import { FACTORY_RULE_STAGES } from '@factory/core/rules/types';
 import { describe, expect, it } from 'vitest';
 
 import {
-  boardStages,
   currentItemStageLabel,
   itemAppearsInStage,
   itemStageOptions,
   pullRequestMayEnter,
 } from './boardStages';
 import type { WorkItem, WorkItemSource } from './services/workItems';
+import { BOARD_STAGES } from './stages';
 
 function workItem(source: WorkItemSource, stages: string[]): WorkItem {
   return {
@@ -35,18 +35,9 @@ function workItem(source: WorkItemSource, stages: string[]): WorkItem {
   };
 }
 
-describe('boardStages', () => {
+describe('BOARD_STAGES', () => {
   it('uses the canonical stage order for the work board', () => {
-    expect(boardStages('work').map(stage => stage.id)).toEqual(FACTORY_RULE_STAGES);
-  });
-
-  it('selects and labels the review board columns', () => {
-    expect(boardStages('review')).toEqual([
-      { id: 'intake', label: 'Intake' },
-      { id: 'review', label: 'Reviewing' },
-      { id: 'done', label: 'Done' },
-      { id: 'canceled', label: 'Canceled' },
-    ]);
+    expect(BOARD_STAGES.map(stage => stage.id)).toEqual(FACTORY_RULE_STAGES);
   });
 });
 
@@ -57,8 +48,8 @@ describe('currentItemStageLabel', () => {
 
   it('ignores stages absent from the item board, which the board itself does not draw', () => {
     expect(currentItemStageLabel(workItem('manual', ['execute', 'obsolete']))).toBe('Building');
-    expect(currentItemStageLabel(workItem('github-pr', ['execute', 'review']))).toBe('Reviewing');
-    expect(currentItemStageLabel(workItem('gitlab-pr', ['execute', 'review']))).toBe('Reviewing');
+    expect(currentItemStageLabel(workItem('github-pr', ['execute', 'pr-review']))).toBe('PR review');
+    expect(currentItemStageLabel(workItem('gitlab-pr', ['execute', 'pr-review']))).toBe('PR review');
   });
 
   it('falls back to Intake when no stage belongs to the item board', () => {
@@ -70,7 +61,7 @@ describe('currentItemStageLabel', () => {
 
 describe('itemAppearsInStage', () => {
   it('leaves a canceled pull request out of the queue of PRs awaiting review', () => {
-    const stages = boardStages('review');
+    const stages = BOARD_STAGES;
     const canceled = workItem('github-pr', ['canceled']);
     expect(itemAppearsInStage(canceled, 'canceled', stages)).toBe(true);
     expect(itemAppearsInStage(canceled, 'intake', stages)).toBe(false);
@@ -94,8 +85,14 @@ describe('pull request cards on the Work board', () => {
     const issueLanes = itemStageOptions({ ...workItem('github-issue', ['intake']), board: 'work' }).map(
       stage => stage.id,
     );
-    expect(issueLanes).toEqual(boardStages('work').flatMap(stage => (stage.id === 'pr-review' ? [] : [stage.id])));
-    expect(itemStageOptions(workItem('github-pr', ['intake']))).toBe(boardStages('review'));
+    expect(issueLanes).toEqual(BOARD_STAGES.flatMap(stage => (stage.id === 'pr-review' ? [] : [stage.id])));
+    // A pull request card filed before boards were recorded sits on Work.
+    expect(itemStageOptions(workItem('github-pr', ['intake'])).map(stage => stage.id)).toEqual([
+      'intake',
+      'pr-review',
+      'done',
+      'canceled',
+    ]);
     expect(pullRequestMayEnter('work', 'github-issue', 'execute')).toBe(true);
     // PR review is a pull request's own lane: an issue card is self-reviewed in Review instead.
     expect(pullRequestMayEnter('work', 'github-issue', 'pr-review')).toBe(false);

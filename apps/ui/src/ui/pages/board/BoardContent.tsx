@@ -87,8 +87,7 @@ export function BoardContent({
   definition: InstalledBoardInfo;
 }) {
   const factoryProjectId = factory.id;
-  const review = kind === 'review';
-  const builtin = kind === 'work' || review;
+  const builtin = kind === 'work';
   const stages = definition.phases.map(phase => ({ ...phase, label: phaseTitle(definition.id, phase.id, phase.title) }));
   const auth = useFactoryAuth();
   const currentUserId = auth.data?.user?.userId;
@@ -225,7 +224,7 @@ export function BoardContent({
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
     const canCreate =
-      !review && !loading && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
+      !loading && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
     const canConnectSource = isInitialPhase && !hasIntakeSource;
     const showEmptyStateActions = isInitialPhase && (filtersExcludeAll || canCreate || canConnectSource);
     const collapsed =
@@ -261,7 +260,6 @@ export function BoardContent({
           stage={stage}
           isInitialPhase={isInitialPhase}
           layout={layout}
-          kind={kind}
           loading={loading}
           taskCount={taskCount}
           feed={columnFeed}

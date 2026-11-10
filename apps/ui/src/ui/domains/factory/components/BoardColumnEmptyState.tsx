@@ -2,7 +2,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
-import type { BoardKind } from '../boardStages';
 import { translator } from '../../../i18n/t';
 import { stageLabel } from '../stages';
 import type { BoardStageId } from '../stages';
@@ -20,12 +19,10 @@ function emptyCopy(key: string): BoardColumnEmptyCopy {
 
 function boardColumnEmptyCopy(
   stage: BoardStageId,
-  kind: BoardKind,
   hasIntakeSource: boolean,
   isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (isInitialPhase) {
-    if (kind === 'review') return emptyCopy('reviewIntake');
     if (!hasIntakeSource) return emptyCopy('noSources');
     return emptyCopy('intake');
   }
@@ -37,11 +34,11 @@ function boardColumnEmptyCopy(
     case 'execute':
       return emptyCopy('execute');
     case 'review':
-      return emptyCopy(kind === 'review' ? 'reviewActive' : 'review');
+      return emptyCopy('review');
     case 'pr-review':
       return emptyCopy('prReview');
     case 'done':
-      return emptyCopy(kind === 'review' ? 'reviewDone' : 'done');
+      return emptyCopy('done');
     case 'canceled':
       return emptyCopy('canceled');
     default:
@@ -54,7 +51,6 @@ function boardColumnEmptyCopy(
 
 function boardEmptyCopy(
   stage: BoardStageId,
-  kind: BoardKind,
   hasIntakeSource: boolean,
   filtersExcludeAll: boolean,
   alreadyMaterialized: number,
@@ -62,11 +58,11 @@ function boardEmptyCopy(
 ): BoardColumnEmptyCopy {
   if (filtersExcludeAll) {
     return {
-      title: kind === 'review' ? tk('emptyColumn.filteredReview') : tk('emptyColumn.filteredWork'),
+      title: tk('emptyColumn.filteredWork'),
       description: tk('emptyColumn.filteredDescription'),
     };
   }
-  const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource, isInitialPhase);
+  const copy = boardColumnEmptyCopy(stage, hasIntakeSource, isInitialPhase);
   if (alreadyMaterialized <= 0) return copy;
   return {
     title: copy.title,
@@ -77,7 +73,6 @@ function boardEmptyCopy(
 export function BoardColumnEmptyState({
   stage,
   isInitialPhase,
-  kind,
   hasIntakeSource,
   filtersExcludeAll = false,
   alreadyMaterialized = 0,
@@ -86,7 +81,6 @@ export function BoardColumnEmptyState({
 }: {
   stage: BoardStageId;
   isInitialPhase: boolean;
-  kind: BoardKind;
   hasIntakeSource: boolean;
   filtersExcludeAll?: boolean;
   /** Feed items withheld because their card sits on another board in this Factory. */
@@ -94,7 +88,7 @@ export function BoardColumnEmptyState({
   layout: BoardLayout;
   actionSlot?: ReactNode;
 }) {
-  const copy = boardEmptyCopy(stage, kind, hasIntakeSource, filtersExcludeAll, alreadyMaterialized, isInitialPhase);
+  const copy = boardEmptyCopy(stage, hasIntakeSource, filtersExcludeAll, alreadyMaterialized, isInitialPhase);
   if (layout === 'list') {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">

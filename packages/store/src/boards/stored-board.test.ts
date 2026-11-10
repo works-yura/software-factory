@@ -15,7 +15,7 @@ import type {
   FactoryStageRuleContext,
   InstalledBoard,
 } from '@factory/core';
-import { createDefaultBoardRegistry, reviewBoard, workBoard, workLaneForRole, workStageCarries } from '@factory/pipelines';
+import { createDefaultBoardRegistry, workBoard, workLaneForRole, workStageCarries } from '@factory/pipelines';
 import { createProviderWorkItemForTests } from '../testing.ts';
 
 import type { StoredBoardInput, StoredPhaseInput } from './base.ts';
@@ -33,10 +33,7 @@ const GO = {
 };
 
 describe('boardDefinitionOf', () => {
-  it.each([
-    ['Work', workBoard as InstalledBoard],
-    ['Review', reviewBoard as InstalledBoard],
-  ])('describes the built-in %s board as a valid stored definition with the same phases', (_name, board) => {
+  it.each([['Work', workBoard as InstalledBoard]])('describes the built-in %s board as a valid stored definition with the same phases', (_name, board) => {
     const definition = boardDefinitionOf(board);
 
     expect(storedBoardInputSchema.safeParse(definition).error?.issues).toBeUndefined();

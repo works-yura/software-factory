@@ -91,7 +91,7 @@ export function useBoardItems({
     if (!item || movingRef.current.has(id)) return;
     const boardId = itemBoard(item);
     if (!pullRequestMayEnter(boardId, item.source, toStage)) return;
-    if (boardId !== 'work' && boardId !== 'review') {
+    if (boardId !== 'work') {
       const definition = catalog.data?.find(board => board.id === boardId);
       const phase = definition?.phases.find(candidate => item.stages.includes(candidate.id));
       if (!phase || (phase.id !== toStage && !phase.transitions.some(target => target.to === toStage))) return;

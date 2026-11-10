@@ -1,6 +1,6 @@
-import { codeBoardOf, createBoardRegistry } from '@factory/core';
+import { createBoardRegistry } from '@factory/core';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
-import { defaultBoards, reviewBoard } from '@factory/pipelines';
+import { defaultBoards } from '@factory/pipelines';
 import { boardDefinitionOf, compileStoredBoard, mergeCodeBehaviour } from '@factory/store';
 import type { StoredBoardInput, StoredBoardRecord, StoredBoardScope, StoredBoardsStorage } from '@factory/store';
 
@@ -13,20 +13,9 @@ export type BoardSourceKind = 'builtin' | 'app' | 'stored';
 
 export interface StoredBoardDetails {
   source: BoardSourceKind;
-  /**
-   * Stored boards, the built-in Work board and app boards can be edited; the legacy Review board,
-   * which is being retired, stays read-only.
-   */
+  /** Whether the board can be edited: stored boards, the built-in Work board and app boards all can. */
   editable: boolean;
   problems: string[];
-}
-
-/**
- * Code boards Factory stores in each project: every code board except the legacy Review board,
- * which is being retired and is served from code.
- */
-function isEditableCodeBoard(board: InstalledBoard): boolean {
-  return codeBoardOf(board) !== reviewBoard;
 }
 
 /** A project's boards: the code boards plus its stored boards, and what to report about each board. */
@@ -97,8 +86,7 @@ function scopeKey(scope: StoredBoardScope): string {
 /**
  * The per-project board cache. A project's boards are its rows: the Work and app boards Factory
  * stored in it, in code order, then the others. A Work or app board's row runs with the code
- * behaviour of its board and phase keys that still fits it ({@link mergeCodeBehaviour}); only the
- * legacy Review board is served from code. The first load of each project in a process stores the
+ * behaviour of its board and phase keys that still fits it ({@link mergeCodeBehaviour}). The first load of each project in a process stores the
  * boards Factory hasn't stored in it yet, each once ({@link StoredBoardsStorage.seedBoards}); a
  * release never rewrites them. Loads recheck the project's board version at most every
  * `recheckMs` and recompile when it changed, so stored edits on other replicas arrive within that
@@ -134,13 +122,13 @@ export class ProjectBoardCache implements ProjectBoardSource {
         board.id,
         {
           source: (defaultBoards as readonly InstalledBoard[]).includes(board) ? 'builtin' : 'app',
-          editable: isEditableCodeBoard(board),
+          editable: true,
           problems: this.#skillProblems(board),
         },
       ]),
     );
     this.#seeds = new Map(
-      [...this.codeRegistry.values()].filter(isEditableCodeBoard).map(board => [board.id, boardDefinitionOf(board)]),
+      [...this.codeRegistry.values()].map(board => [board.id, boardDefinitionOf(board)]),
     );
   }
 

@@ -53,7 +53,7 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
 function bindingInput(
   factoryProjectId: string,
   stages = ['triage'],
-  { role = 'triage', board }: { role?: string; board?: string } = {},
+  { role = 'triage', board, pullRequest = false }: { role?: string; board?: string; pullRequest?: boolean } = {},
 ): FactoryBindingPreparationInput {
   return {
     record: { id: 'decision-1', orgId: 'org-1', factoryProjectId },
@@ -63,12 +63,12 @@ function bindingInput(
       board: board ?? null,
       stages,
       sessions: [],
-      externalSource: { integrationId: 'github', type: board === 'review' ? 'pull-request' : 'issue' },
+      externalSource: { integrationId: 'github', type: pullRequest ? 'pull-request' : 'issue' },
       metadata: { repository: 'mastra-ai/mastra' },
       workItem: createProviderWorkItemForTests({
         id: 'item-1',
         title: 'Broken login',
-        source: { integrationId: 'github', type: board === 'review' ? 'pull-request' : 'issue', externalId: '49' },
+        source: { integrationId: 'github', type: pullRequest ? 'pull-request' : 'issue', externalId: '49' },
         metadata: { githubIssueNumber: 49 },
       }),
     },
@@ -804,16 +804,16 @@ describe('prepareFactoryRuleBinding', () => {
     const { seeded, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
 
-    // A rule-started review on a Review-board card still sitting in Intake enters
-    // Reviewing, exactly like a manual click on the same action would.
+    // A rule-started review on a pull request card still sitting in Intake enters
+    // PR review, exactly like a manual click on the same action would.
     await prepareFactoryRuleBinding(
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
       boards,
-      bindingInput(project.id, ['intake'], { role: 'review', board: 'review' }),
+      bindingInput(project.id, ['intake'], { role: 'review', board: 'work', pullRequest: true }),
     );
-    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ destinationStage: 'review' }));
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ destinationStage: 'pr-review' }));
 
     // Each Work seat leaves Intake for the lane the board assigns it.
     for (const [role, lane] of [

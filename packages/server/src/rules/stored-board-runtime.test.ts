@@ -266,7 +266,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const boards = await catalog(replica, projectId);
       expect(boards.map(board => [board.id, board.source, board.editable])).toEqual([
         ['work', 'builtin', true],
-        ['review', 'builtin', false],
         ['bugs', 'stored', true],
       ]);
       const work = boards.find(board => board.id === 'work')!;
@@ -310,7 +309,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const fixed = await transition(replica, projectId, { id: card.id, revision: card.revision + 1 }, 'fixed');
       expect(fixed.json.result).toMatchObject({ status: 'accepted', stage: 'fixed' });
 
-      expect((await catalog(replica, otherProjectId)).map(board => board.id)).toEqual(['work', 'review']);
+      expect((await catalog(replica, otherProjectId)).map(board => board.id)).toEqual(['work']);
       const elsewhere = await replica.send('POST', `/web/factory/projects/${otherProjectId}/work-items`, {
         board: 'bugs',
         title: 'Not here',
@@ -904,9 +903,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
               { projects: [{ orgId, factoryProjectId: first }] },
             ),
           ).rejects.toMatchObject({ code: 'phase_in_use' });
-          await expect(
-            replica.factory.upsertBoard({ ...bugsBoard, key: 'review' }, { projects: 'all' }),
-          ).rejects.toMatchObject({ code: 'code_board' });
           // Work's key is checked against Work's code behaviour, as an edit is.
           await expect(
             replica.factory.upsertBoard({ ...bugsBoard, key: 'work' }, { projects: 'all' }),

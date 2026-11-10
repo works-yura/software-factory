@@ -14,15 +14,14 @@ import {
 } from '@factory/core';
 
 import { allowsBuiltInBoardTransition, createPipelines } from './index.ts';
-import { reviewBoard } from './review/board.ts';
 import { workBoard } from './work/board.ts';
 import type { WorkBoardPhase } from './work/board.ts';
 
 describe('factory pipelines', () => {
   const installed = createPipelines();
 
-  it('installs Work and Review', () => {
-    expect([...installed.keys()]).toEqual(['work', 'review']);
+  it('installs Work only: the Review board was retired', () => {
+    expect([...installed.keys()]).toEqual(['work']);
   });
 
   it('rejects a second pipeline with a reserved id', () => {
@@ -33,22 +32,6 @@ describe('factory pipelines', () => {
       phases: { start: { title: 'Start', kind: 'resting' } },
     });
     expect(() => createPipelines([replacement])).toThrow("duplicate board id 'work'");
-  });
-
-  it('defines the Review lifecycle', () => {
-    expect(reviewBoard.initialPhase).toBe('intake');
-    expect(reviewBoard.allowsTransition('intake', 'review')).toBe(true);
-    expect(reviewBoard.allowsTransition('review', 'done')).toBe(true);
-    expect(reviewBoard.allowsTransition('review', 'canceled')).toBe(true);
-    expect(reviewBoard.allowsTransition('review', 'intake')).toBe(true);
-    expect(reviewBoard.allowsTransition('done', 'review')).toBe(true);
-    expect(reviewBoard.allowsTransition('canceled', 'review')).toBe(true);
-    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
-    expect(reviewBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
-    expect(reviewBoard.roleForPhase('review')).toBe('review');
-    expect(reviewBoard.isTerminal('done')).toBe(true);
-    expect(reviewBoard.sourceClosed).toBeUndefined();
-    expect(Object.keys(reviewBoard.tools)).toEqual([]);
   });
 
   it('defines the Work lifecycle', () => {
@@ -81,16 +64,15 @@ describe('factory pipelines', () => {
     expect(workBoard.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
   });
 
-  it('keeps Work and Review in agreement with the stage and role constants', () => {
+  it('keeps Work in agreement with the stage and role constants', () => {
     for (const stage of FACTORY_RULE_STAGES) {
       expect(workBoard.isTerminal(stage), `${stage} terminal`).toBe(isTerminalFactoryRuleStage([stage]));
       expect(workBoard.isWorking(stage), `${stage} working`).toBe(isWorkingFactoryRuleStage(stage));
     }
     for (const [role, stage] of Object.entries(FACTORY_ROLE_STAGES)) {
-      const board = role === 'review' ? reviewBoard : workBoard;
       // Each role's lane is a working phase. Planning runs in the `work` context; `plan` stays
       // as the old role name for Planning's lane, so its phase reports the `work` context.
-      expect(board.isWorking(stage), `lane for ${role}`).toBe(true);
+      expect(workBoard.isWorking(stage), `lane for ${role}`).toBe(true);
     }
     expect(['triage', 'planning', 'execute', 'review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
       'triage',
@@ -98,17 +80,14 @@ describe('factory pipelines', () => {
       'work',
       'work',
     ]);
-    expect(reviewBoard.roleForPhase('review')).toBe('review');
   });
 
-  it('rejects inherited property names as Work and Review phases', () => {
+  it('rejects inherited property names as Work phases', () => {
     expect(allowsBuiltInBoardTransition('work', 'toString', 'done')).toBe(false);
     expect(allowsBuiltInBoardTransition('work', 'intake', 'constructor')).toBe(false);
-    expect(allowsBuiltInBoardTransition('review', 'toString', 'done')).toBe(false);
-    expect(allowsBuiltInBoardTransition('review', 'intake', 'constructor')).toBe(false);
   });
 
-  it('resolves installed Work and Review entry handlers', () => {
+  it('resolves installed Work entry handlers, the pull request review included', () => {
     expect(
       resolveFactoryStageRules(installed, {
         board: 'work',
@@ -119,12 +98,12 @@ describe('factory pipelines', () => {
     ).toEqual([{ phase: 'enter', handler: workBoard.rules.triage?.issue?.onEnter }]);
     expect(
       resolveFactoryStageRules(installed, {
-        board: 'review',
+        board: 'work',
         source: 'pullRequest',
         fromStage: 'intake',
-        toStage: 'review',
+        toStage: 'pr-review',
       }),
-    ).toEqual([{ phase: 'enter', handler: reviewBoard.rules.review?.pullRequest?.onEnter }]);
+    ).toEqual([{ phase: 'enter', handler: workBoard.rules['pr-review']?.pullRequest?.onEnter }]);
   });
 
   it('reads Work phase semantics, tool rules, and closure from the installed registry', () => {
@@ -141,9 +120,9 @@ describe('factory pipelines', () => {
       workItemPhaseSemantics(installed, {
         board: null,
         externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
-        stages: ['review'],
+        stages: ['pr-review'],
       }),
-    ).toEqual({ kind: 'working', role: 'review' });
+    ).toEqual({ kind: 'working', role: 'work' });
     expect(
       rulePhaseContext(installed, { board: null, externalSource: null, stages: ['execute'] }),
     ).toMatchObject({ kind: 'working', role: 'work' });

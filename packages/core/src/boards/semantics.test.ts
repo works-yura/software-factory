@@ -14,23 +14,11 @@ import { createTestBoard } from './test-utils.ts';
 
 describe('boardForWorkItem', () => {
   it('prefers the persisted board', () => {
-    expect(boardForWorkItem({ board: 'release', externalSource: null })).toBe('release');
-    expect(
-      boardForWorkItem({
-        board: 'release',
-        externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
-      }),
-    ).toBe('release');
+    expect(boardForWorkItem({ board: 'release' })).toBe('release');
   });
 
-  it('infers Review for legacy pull-request rows and Work otherwise', () => {
-    expect(
-      boardForWorkItem({
-        board: null,
-        externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
-      }),
-    ).toBe('review');
-    expect(boardForWorkItem({ board: null, externalSource: null })).toBe('work');
+  it('puts legacy rows with no board on Work, pull request cards included', () => {
+    expect(boardForWorkItem({ board: null })).toBe('work');
   });
 });
 

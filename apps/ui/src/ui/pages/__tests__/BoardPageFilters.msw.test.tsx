@@ -18,22 +18,23 @@ import type { WorkItem } from '../../domains/factory/services/workItems';
 import type { GithubIssue, GithubPullRequest } from '../../domains/factory/services/factory';
 import { FactoryLayout } from '../../domains/workspaces/components/FactoryLayout';
 import { OverlaysProvider } from '../../lib/overlays';
-import { ReviewBoardPage, WorkBoardPage } from '../BoardPage';
+import { WorkBoardPage } from '../BoardPage';
 
 const now = '2026-09-01T12:00:00.000Z';
-const workItem = (id: string, board: 'work' | 'review', metadata: Record<string, unknown>): WorkItem => ({
+/** An issue card in Planning, or a pull request's own card (`pr`) in Intake; both sit on Work. */
+const workItem = (id: string, kind: 'issue' | 'pr', metadata: Record<string, unknown>): WorkItem => ({
   id,
   orgId: 'org-1',
   createdBy: 'user-1',
   githubProjectId: 'factory-1',
-  board,
-  source: board === 'review' ? 'github-pr' : 'github-issue',
+  board: 'work',
+  source: kind === 'pr' ? 'github-pr' : 'github-issue',
   sourceKey: `github:${id}`,
   parentWorkItemId: null,
   title: `Card ${id}`,
   url: null,
-  stages: [board === 'work' ? 'planning' : 'intake'],
-  stageHistory: [{ stage: board === 'work' ? 'planning' : 'intake', enteredAt: now, by: 'user-1' }],
+  stages: [kind === 'issue' ? 'planning' : 'intake'],
+  stageHistory: [{ stage: kind === 'issue' ? 'planning' : 'intake', enteredAt: now, by: 'user-1' }],
   sessions: {},
   metadata,
   triageType: null,
@@ -78,7 +79,7 @@ function Location() {
 }
 
 function renderBoard(
-  kind: 'work' | 'review',
+  kind: 'work',
   initialSearch = '',
   issues = [issue(10, ['bug'], 'alice'), issue(11, ['other'], 'bob')],
 ) {
@@ -97,13 +98,13 @@ function renderBoard(
     http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, () =>
       HttpResponse.json({
         workItems: [
-          workItem('bug', 'work', { labels: ['bug'], author: 'alice', assignees: ['bob'] }),
-          workItem('docs', 'work', { labels: ['documentation'], author: 'bob' }),
-          workItem('both', 'work', { labels: ['bug', 'documentation'], author: 'alice' }),
-          workItem('unlabelled', 'work', { labels: ['other'], author: 'bob' }),
-          workItem('authored', 'review', { author: 'alice' }),
-          workItem('requested', 'review', { author: 'bob', requestedReviewers: ['alice'] }),
-          workItem('unrelated', 'review', { author: 'bob' }),
+          workItem('bug', 'issue', { labels: ['bug'], author: 'alice', assignees: ['bob'] }),
+          workItem('docs', 'issue', { labels: ['documentation'], author: 'bob' }),
+          workItem('both', 'issue', { labels: ['bug', 'documentation'], author: 'alice' }),
+          workItem('unlabelled', 'issue', { labels: ['other'], author: 'bob' }),
+          workItem('authored', 'pr', { author: 'alice' }),
+          workItem('requested', 'pr', { author: 'bob', requestedReviewers: ['alice'] }),
+          workItem('unrelated', 'pr', { author: 'bob' }),
         ].map(({ githubProjectId, source, sourceKey, url, ...item }) => ({
           ...item,
           factoryProjectId: githubProjectId,
@@ -145,7 +146,6 @@ function renderBoard(
           <Routes>
             <Route path="/factories/:factoryId" element={<FactoryLayout />}>
               <Route path="work" element={<WorkBoardPage />} />
-              <Route path="review" element={<ReviewBoardPage />} />
             </Route>
           </Routes>
         </OverlaysProvider>
@@ -159,9 +159,9 @@ const candidateTitles = () => screen.queryAllByTestId('candidate-card').map(card
 const MENU = 'Board properties';
 
 describe('BoardPage filters', () => {
-  it('offers pull request labels on the review board and filters candidates by them', async () => {
+  it('offers pull request labels on the Work board and filters candidates by them', async () => {
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    const { client } = renderBoard('work', '', []);
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await waitFor(() => expect(candidateTitles()).toEqual(expect.arrayContaining(['Pull 20', 'Pull 21'])));
@@ -240,9 +240,9 @@ describe('BoardPage filters', () => {
     await closePropertiesMenus(user);
   });
 
-  it('keeps only review cards authored by one person with review requested from another', async () => {
+  it('keeps only pull request cards authored by one person with review requested from another', async () => {
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    const { client } = renderBoard('work', '', []);
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await togglePropertyOption(user, MENU, 'Involves', /alice/i);
@@ -275,7 +275,7 @@ describe('BoardPage filters', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client } = renderBoard('review', '?teammate=github%3Aalice');
+    const { client } = renderBoard('work', '?teammate=github%3Aalice', []);
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await openPropertySubmenu(user, MENU, 'Involves');

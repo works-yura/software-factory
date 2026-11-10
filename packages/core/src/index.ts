@@ -47,7 +47,7 @@ export {
   boardEventHandlers,
   boardForWorkItem,
   isPullRequestCard,
-  pullRequestReviewPhase,
+  PULL_REQUEST_REVIEW_PHASE,
   reviewsPullRequest,
   eventBoardId,
   isTerminalWorkItem,

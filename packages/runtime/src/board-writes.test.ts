@@ -191,7 +191,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
         ),
       ),
       await refusal(() => writes.create(scope, { ...bugs, key: 'work' }, writer)),
-      await refusal(() => writes.replace(scope, 'review', definition, { expectedRevision: 1, writer })),
       await refusal(() => writes.reset(scope, 'bugs', { expectedRevision: 1, writer })),
       await refusal(() =>
         writes.replace(
@@ -217,7 +216,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
       [422, 'invalid_board'],
       [422, 'unknown_skill'],
       [422, 'code_behaviour'],
-      [409, 'code_board'],
       [409, 'code_board'],
       [409, 'not_code_board'],
       [409, 'phase_in_use'],

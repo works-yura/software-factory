@@ -46,7 +46,7 @@ export function FactorySelect({
   );
 }
 
-/** The boards of a Factory (the review board is never an intake target) as a select. */
+/** The boards of a Factory as a select. */
 export function BoardPicker({
   name,
   factoryProjectId,
@@ -63,7 +63,7 @@ export function BoardPicker({
   const { t } = useTranslation('settings');
   const catalog = useBoardCatalog(factoryProjectId);
 
-  const boards = (catalog.data ?? []).filter(candidate => candidate.id !== 'review');
+  const boards = catalog.data ?? [];
   const current = boards.find(candidate => candidate.id === board);
   const label = current?.title ?? (board ? t('linearRouting.notInstalled', { board }) : t('linearRouting.chooseBoard'));
   // A List needs a board: its status rules move cards between that board's columns, so there is no "no board" choice.
