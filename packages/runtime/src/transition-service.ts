@@ -22,7 +22,8 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from '@factory/core';
-import { factoryRuleSourceForWorkItem, isFactoryRuleStage, workItemSource } from '@factory/core';
+import { factoryRuleSourceForWorkItem, isFactoryRuleStage, isPullRequestCard, workItemSource } from '@factory/core';
+import { workPullRequestCardRejection } from '@factory/pipelines';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   assertFactoryDecisionTarget,
@@ -416,6 +417,13 @@ export class FactoryTransitionService {
         'invalid_transition',
         'The work item does not have one canonical phase on the requested board.',
       );
+    }
+    // The Work board's own reason comes first: its phase graph alone only says the move is not
+    // declared, which leaves an agent moving an issue card to PR review guessing why.
+    const pullRequestCardRejection =
+      request.board === 'work' ? workPullRequestCardRejection(isPullRequestCard({ source: itemSource }), request.stage) : undefined;
+    if (pullRequestCardRejection) {
+      return this.#commitRejection(request, transitionId, 'invalid_transition', pullRequestCardRejection);
     }
     if (
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
