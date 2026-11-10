@@ -101,7 +101,6 @@
       "gitlabSignIn": "Увійдіть у GitLab, щоб надати доступ до своїх проєктів.",
       "connectingGitlab": "Підключення до GitLab",
       "repositories": "Репозиторії",
-      "primary": "Основний",
       "selected": "Вибрано",
       "continue_one": "Продовжити з {{count}} репозиторієм",
       "continue_few": "Продовжити з {{count}} репозиторіями",

@@ -27,7 +27,7 @@ export interface CreateFactoryRepositoryRowsProps {
   githubRedirecting: boolean;
   onConnect: () => void;
   onManageConnection: () => void;
-  /** The repositories picked so far, in pick order; the first becomes the primary one. */
+  /** The repositories picked so far, in pick order. */
   selected: readonly SourceControlRepository[];
   /** Picks the repository, or drops it if already picked. */
   onToggleRepository: (repository: SourceControlRepository) => void;
@@ -40,7 +40,8 @@ type RepositoryPicker = Pick<CreateFactoryRepositoryRowsProps, 'selected' | 'onT
 function repositoryRowBadge(picker: RepositoryPicker, repository: SourceControlRepository): string | undefined {
   const index = picker.selected.findIndex(item => repositoryKey(item) === repositoryKey(repository));
   if (index < 0) return undefined;
-  return index === 0 ? tk('createFactory.repos.primary') : tk('createFactory.repos.selected');
+  // No repository is the main one: a card works in the repository it names, or across all of them.
+  return tk('createFactory.repos.selected');
 }
 
 function connectionMessage(status: GithubStatus | undefined): string {

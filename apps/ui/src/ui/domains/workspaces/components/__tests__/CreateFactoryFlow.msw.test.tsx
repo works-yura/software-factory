@@ -992,7 +992,7 @@ describe('several repositories', () => {
     );
   }
 
-  it('keeps picking on the codebase step, marks the first pick primary and drops a repository picked again', async () => {
+  it('keeps picking on the codebase step, marks every pick alike (no main repository) and drops a repository picked again', async () => {
     sessionStorage.setItem(STEP_KEY, 'vcs');
     sessionStorage.setItem(NAME_KEY, 'Mastra');
     serveTwoRepositories();
@@ -1004,7 +1004,7 @@ describe('several repositories', () => {
     await user.click(await screen.findByRole('option', { name: /octo\/web/ }));
 
     expect(await screen.findByRole('option', { name: /^Continue with 2 repositories/ })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /octo\/hello.*Primary/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /octo\/hello.*Selected/ })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /octo\/web.*Selected/ })).toBeInTheDocument();
     expect(screen.getByLabelText('Choose your codebase')).toBeInTheDocument();
     expect(sessionStorage.getItem(STEP_KEY)).toBe('vcs');
@@ -1013,7 +1013,7 @@ describe('several repositories', () => {
     await user.click(screen.getByRole('option', { name: /^octo\/hello/ }));
 
     expect(await screen.findByRole('option', { name: /^Continue with 1 repository/ })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /octo\/web.*Primary/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /octo\/web.*Selected/ })).toBeInTheDocument();
     expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject([{ fullName: 'octo/web' }]);
   });
 
