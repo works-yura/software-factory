@@ -50,6 +50,9 @@ Buyers who order twice a month.
 ## Technology
 Our existing app and server; no new vendor.
 
+## Running costs
+None: no paid third-party service.
+
 ## External dependencies and risks
 None found: no provider review, no new access.
 
@@ -180,6 +183,11 @@ describe('product document checks', () => {
     expect(checkProductDocumentStructure('brief', without).missingSections).toEqual(['External dependencies and risks']);
   });
 
+  it('requires the brief to state its running costs', () => {
+    const without = BRIEF.replace('## Running costs', 'Running costs');
+    expect(checkProductDocumentStructure('brief', without).missingSections).toEqual(['Running costs']);
+  });
+
   it('accepts Ukrainian headings', () => {
     const uk = [
       '# Бриф',
@@ -191,6 +199,7 @@ describe('product document checks', () => {
       '## Не входить',
       '## Обмеження',
       '## Технології',
+      '## Витрати на експлуатацію',
       '## Зовнішні залежності й ризики',
       '## Фази та оцінка',
       '## Рішення, що потребують погодження клієнта',

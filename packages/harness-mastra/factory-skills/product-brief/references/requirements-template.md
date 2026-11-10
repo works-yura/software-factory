@@ -58,6 +58,14 @@ revision: <round> · status: draft | in approval | approved · sources: <blackbo
 ## Technology  (Технології)
 <!-- At the client's level: platforms, which existing systems it builds on, any new vendor or paid service and what it means for them (cost, lock-in). No architecture. -->
 
+## Running costs  (Витрати на експлуатацію)
+<!-- Required. What the client will pay third parties every month once this ships — not our development price. One row per paid service. Every figure comes from the provider's own pricing page, fetched in this session, quoted with its link and the date checked; a figure you could not verify is marked "не перевірено" and is a question, never a number in the brief. "None: no paid third-party service" when that is so. -->
+| Service | What it is for | Plan and what it includes | Next tier, and what triggers it | Expected volume (assumption) | Cost per month | Who pays | Source (checked on) |
+|---|---|---|---|---|---|---|---|
+| <Resend> | <notification emails> | <Free: 3 000/month, 100/day> | <Pro $20/month from 50 000/month> | <~30 emails/day per business × N businesses> | <$0 → $20 at ~N businesses> | <the client (Syncta) / each of his customers> | <https://resend.com/pricing, 2026-11-10> |
+
+**If the client's product is a service for his own customers** (a platform used by many businesses): give the cost **per customer per month** at the expected usage, say whether it is included in his plan to them or passed on, and the point where a tier change makes it jump.
+
 ## External dependencies and risks  (Зовнішні залежності й ризики)
 <!-- Required. Everything outside the team that the work waits on or can be blocked by, found with the checklist in SKILL.md. Work hours and calendar time are different things: 10 hours of work can wait three weeks for a review. "None found" only after the checklist was run, saying so. -->
 | # | What | Who must act | Wait (calendar) | Blocks | Mitigation |
