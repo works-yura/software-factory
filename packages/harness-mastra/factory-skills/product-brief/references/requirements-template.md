@@ -83,10 +83,7 @@ Write it in the person's language: for this team, **the Ukrainian headings in br
 |---|---|---|---|
 | 1 | … | <one committed range, e.g. "30–46 год"> | <e.g. "~1,5–2 тижні; email — не раніше ніж через 1–2 дні після доступу до DNS"> |
 
-**На чому тримається оцінка:**
-- <each assumption in plain words; what would move it>
-
-<!-- The working figures (optimistic / most likely / pessimistic, PERT, P75, team mode) go in research.md or the change request description, never here. -->
+<!-- Only the table. No paragraphs under it: no "Календар: … weeks of one developer at N hours a week", no team size or capacity, no "На чому тримається оцінка" list. The calendar column says it in one short cell. An assumption that is really scope ("no store apps", "one language") goes to Межі оцінки; everything else (working figures — optimistic / most likely / pessimistic, PERT, P75, team mode, capacity, assumptions) goes in research.md or the change request description, never in the brief. -->
 
 ## Decisions that need the client's approval  (Рішення, що потребують погодження клієнта)
 <!-- The gates the team must not pass alone: switching on a paid service, sending real emails or payments, publishing to the stores, touching real customer data, deleting or migrating data, declaring the release final. "None" if none. -->
