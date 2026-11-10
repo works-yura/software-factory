@@ -67,6 +67,9 @@ import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts'
 import { buildFsRoutes } from './fs.ts';
 import type { LocalCheckoutAttacher } from './fs.ts';
 import { IntakeRouteRoutes } from './intake-routes.ts';
+import { IntakeRuleRoutes } from './intake-rules/routes.ts';
+import type { IntakeRuleEngine } from './intake-rules/engine.ts';
+import type { IntakeRulesStorage } from '@factory/store';
 import { IntakeRoutes } from './intake.ts';
 import { KnowledgeRoutes } from './knowledge.ts';
 import { OAuthRoutes } from './oauth.ts';
@@ -101,6 +104,8 @@ export interface FactoryApiRoutesDeps {
   skills?: readonly InlineSkill[];
   /** Card and session attachments; without it their routes answer 503 `attachments_unconfigured`. */
   attachments?: AttachmentService;
+  /** Intake rules (Settings › Intake): their engine and storage; without them the routes are not mounted. */
+  intakeRules?: { engine: IntakeRuleEngine; storage: IntakeRulesStorage };
   controllerId: string;
   controller: AgentController<MastraCodeState>;
   /** Registry of the sessions this process holds, owned by the host so it can watch them too. */
@@ -931,6 +936,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.intakeRules
+      ? new IntakeRuleRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
+          storage: deps.intakeRules.storage,
+          engine: deps.intakeRules.engine,
         }).routes()
       : []),
     ...(deps.factoryReady

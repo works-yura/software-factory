@@ -196,3 +196,15 @@ export type {
   FactoryReviewStatusReporter,
 } from './rules/review-status.ts';
 export * from './boards/board-events.ts';
+export {
+  calendarDay,
+  clockTime,
+  parseScheduleSpec,
+  parseScheduleTime,
+  SCHEDULE_HOUR_STEPS,
+  SCHEDULE_PRESETS,
+  scheduleCron,
+} from './intake/schedule.ts';
+export { INTAKE_TEMPLATE_PLACEHOLDERS, renderIntakeTemplate } from './intake/template.ts';
+export type { IntakeTemplateContext } from './intake/template.ts';
+export type { SchedulePreset, ScheduleSpec } from './intake/schedule.ts';

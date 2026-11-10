@@ -16,3 +16,4 @@ export * from './source-control-settings.ts';
 export * from './surface.ts';
 export * from './telemetry.ts';
 export * from './work-items.ts';
+export * from './intake-rules/index.ts';

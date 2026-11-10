@@ -126,7 +126,7 @@ import {
 } from '@factory/api';
 import { ProjectRoutes } from '@factory/api';
 import { createSessionAccessGuard } from '@factory/session';
-import { assembleFactoryApiRoutes, buildIntegrationContext } from '@factory/api';
+import { assembleFactoryApiRoutes, buildIntegrationContext, setupIntakeRules } from '@factory/api';
 import type { FactoryApiRoutesDeps } from '@factory/api';
 import { TelemetryRoutes } from '@factory/api';
 import {
@@ -197,7 +197,7 @@ import { FilesystemStorage } from '@factory/store';
 import { IntakeStorage } from '@factory/store';
 import { IntegrationStorage } from '@factory/store';
 import { factoryMemorySettingsUserId, MemorySettingsStorage, SkillOverridesStorage, StoredBoardsStorage } from '@factory/store';
-import { AttachmentService, AttachmentsStorage } from '@factory/store';
+import { AttachmentService, AttachmentsStorage, IntakeRulesStorage } from '@factory/store';
 import type { AttachmentBlobStore } from '@factory/store';
 import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
@@ -563,6 +563,8 @@ export class MastraFactory {
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
+  /** Intake rules' engine and the workflow their schedules fire; undefined until work items and their storage are up. */
+  #intakeRules: ReturnType<typeof setupIntakeRules> | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
   #sessionResourceMigration: Promise<boolean> | undefined;
   #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
@@ -837,6 +839,7 @@ export class MastraFactory {
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     const attachmentsStorage = storage.registerDomain(new AttachmentsStorage());
+    const intakeRulesStorage = storage.registerDomain(new IntakeRulesStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -1414,6 +1417,22 @@ export class MastraFactory {
             : {}),
         })
       : undefined;
+    // Intake rules: Factory's own intake source (a schedule now, events later) filing cards through
+    // the same path as "New card". Their schedules live in core `Schedules` and fire a workflow
+    // registered on the host's Mastra below.
+    this.#intakeRules =
+      workItemsReady && storage.isDomainReady('intake-rules')
+        ? setupIntakeRules({
+            rules: intakeRulesStorage,
+            schedule: { schedules: () => this.#prepared?.base.controller.getMastra()?.schedules },
+            cards: {
+              workItems: workItemsStorage,
+              boards: toBoardSource(boards),
+              transitionService: () => transitionService,
+              auditRecorder: auditDomain,
+            },
+          })
+        : undefined;
     // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
     const factoryToolDeps: FactoryToolDependencies = {
       workItems: workItemsStorage,
@@ -2531,6 +2550,7 @@ export class MastraFactory {
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
             ...(attachmentService ? { attachments: attachmentService } : {}),
+            ...(this.#intakeRules ? { intakeRules: { engine: this.#intakeRules.engine, storage: intakeRulesStorage } } : {}),
             controllerId: CONTROLLER_ID,
             controller,
             liveSessions: (liveSessionRegistry = liveSessionsTouchingTheFeed(eventBus, controller, claudeLiveSessions)),
@@ -3057,7 +3077,14 @@ export class MastraFactory {
       // requests (`x-mastra-client-type: studio` routes to `studio.auth`).
       ...(auth ? { studio: { auth } } : {}),
       ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
-      ...(environmentBuilds ? { workflows: { [ENVIRONMENT_BUILD_WORKFLOW_ID]: environmentBuilds.workflow } } : {}),
+      ...(environmentBuilds || this.#intakeRules
+        ? {
+            workflows: {
+              ...(environmentBuilds ? { [ENVIRONMENT_BUILD_WORKFLOW_ID]: environmentBuilds.workflow } : {}),
+              ...(this.#intakeRules?.workflows ?? {}),
+            },
+          }
+        : {}),
     };
   }
 
@@ -3072,6 +3099,10 @@ export class MastraFactory {
     }
     await timedPhase('finalize.controller', () => this.#prepared!.finalize());
     await this.#environmentBuilds?.probeSchedules();
+    if (this.#intakeRules) {
+      await this.#intakeRules.engine.start();
+      await timedPhase('finalize.intakeRules', () => this.#intakeRules!.engine.armAll());
+    }
     await timedPhase(
       'finalize.reconcileBoundThreads',
       () => this.#factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
