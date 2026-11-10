@@ -14,6 +14,7 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { DebugSection } from './DebugSection';
 import { EnvironmentSection } from './EnvironmentSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
@@ -76,6 +77,7 @@ export function SettingsPanel() {
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} />}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
+      {section === 'debug' && <DebugSection />}
       {section === 'behavior' && factoryId && factoryToolRules && (
         <ClaudeBehaviorSettings factoryId={factoryId} />
       )}

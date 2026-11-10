@@ -11,7 +11,8 @@ export type SettingsSection =
   | 'models'
   | 'memory'
   | 'skills'
-  | 'behavior';
+  | 'behavior'
+  | 'debug';
 
 const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'account',
@@ -25,6 +26,7 @@ const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'memory',
   'skills',
   'behavior',
+  'debug',
 ];
 
 /** Section titles in the interface language; each is looked up when read. */

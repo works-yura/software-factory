@@ -93,7 +93,7 @@ mcp/routes.test.ts	mcp/src/routes.test.ts	+26	connector support and factory.acti
 routes/apply-default-model.scenario.test.ts	api/src/apply-default-model.scenario.test.ts
 routes/attention.test.ts	api/src/attention.test.ts
 routes/automation-runs.test.ts	api/src/automation-runs.test.ts
-routes/config.test.ts	api/src/config.test.ts	0	personal default-model routes removed (7 cases), one case checks they are gone (-6); Factory fallback model cases ported from upstream a9f392e60e (+5); harness descriptors in the features
+routes/config.test.ts	api/src/config.test.ts	3	personal default-model routes removed (7 cases), one case checks they are gone (-6); Factory fallback model cases ported from upstream a9f392e60e (+5); harness descriptors in the features; upstream #29647: GET /web/config/versions (+3)
 routes/contracts.test.ts	api/src/contracts.test.ts	+1	upstream #28961: card responses carry the normalized work item (+1)
 routes/custom-provider-source.test.ts	api/src/custom-provider-source.test.ts
 routes/fs.test.ts	api/src/fs.test.ts	-2	upstream 7573972d0c (#28274): /changes/diff and its truncation cases replaced by /changes/patches cases; upstream #28829: the host filesystem routes need a signed-in user (+3)

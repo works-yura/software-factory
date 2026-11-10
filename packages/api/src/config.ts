@@ -31,6 +31,9 @@ import { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, b
 import type { ModelCatalog } from '@factory/credentials';
 import { CLAUDE_CODE_HARNESS, HARNESSES } from '@factory/contracts';
 
+import { readRunningPackages } from './running-packages.ts';
+import type { RunningPackage } from './running-packages.ts';
+
 export { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, resolveDeploymentModelProviders, buildProviderAccess, buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 export type { ProviderCredentialSource, ProviderInfo, OMSession, ModelCatalog, ModelCredentialHolder, ModelCatalogEntry } from '@factory/credentials';
 
@@ -298,6 +301,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * this machine (see `CredentialAccountRoutes`).
    */
   features?: { knowledge: boolean; mcp?: boolean; claudeCode?: boolean; claudeSignIn?: boolean };
+  /** Reads the Mastra packages this server runs; defaults to the build manifest. */
+  readPackages?: () => Promise<RunningPackage[]>;
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -326,6 +331,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
 /**
  * The web config routes as Mastra `apiRoutes`:
  *   - `GET    /web/config/features`               — list server-enabled product features
+ *   - `GET    /web/config/versions`               — list the Mastra packages and Node version this server runs
  *   - `GET    /web/config/providers`              — list providers + key source
  *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
  *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
@@ -403,6 +409,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // What each harness this server runs can do; the UI asks these instead of checking ids.
             harnesses: HARNESSES.filter(harness => harness.id !== CLAUDE_CODE_HARNESS.id || options.features?.claudeCode === true),
           }),
+      }),
+
+      registerApiRoute('/web/config/versions', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          await auth.ensureUser(loose(c));
+          if (!auth.tenant(loose(c)) && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
+          const packages = await (options.readPackages ?? readRunningPackages)();
+          return c.json({ packages, nodeVersion: process.version });
+        },
       }),
 
       registerApiRoute('/web/config/providers', {
