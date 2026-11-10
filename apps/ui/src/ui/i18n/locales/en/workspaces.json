@@ -471,7 +471,8 @@
     "bytes": "{{size}} B",
     "kilobytes": "{{size}} KB",
     "megabytes": "{{size}} MB",
-    "expand": "Open full screen"
+    "expand": "Open full screen",
+    "download": "Download"
   },
   "fileBrowser": {
     "back": "Back to workspace",

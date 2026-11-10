@@ -66,4 +66,25 @@ describe('WorkspaceFileViewer annotations', () => {
     const paragraph = Array.from(dialog.querySelectorAll('p')).find(p => p.textContent?.includes('push for every new booking'));
     expect(paragraph?.closest('[data-slot="message-content"]')).not.toBeNull();
   });
+
+  it('downloads the shown file under its own name', async () => {
+    const created: Blob[] = [];
+    const createObjectURL = URL.createObjectURL;
+    URL.createObjectURL = (blob: Blob) => (created.push(blob), 'blob:test');
+    URL.revokeObjectURL = () => {};
+    const clicked: string[] = [];
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      clicked.push(this.download);
+    };
+    try {
+      renderWithProviders(<Viewer />);
+      await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+      expect(clicked).toEqual(['requirements.md']);
+      expect(await created[0]!.text()).toContain('push for every new booking');
+    } finally {
+      URL.createObjectURL = createObjectURL;
+      HTMLAnchorElement.prototype.click = click;
+    }
+  });
 });

@@ -479,7 +479,8 @@
     "bytes": "{{size}} Б",
     "kilobytes": "{{size}} КБ",
     "megabytes": "{{size}} МБ",
-    "expand": "Відкрити на весь екран"
+    "expand": "Відкрити на весь екран",
+    "download": "Завантажити"
   },
   "fileBrowser": {
     "back": "Назад до робочого простору",

@@ -11,7 +11,7 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft, Maximize2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Download, Maximize2, RefreshCw } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
@@ -22,6 +22,19 @@ import { translator } from '../../../i18n/t';
 import type { WorkspaceFilePreview } from './workspace-file-preview';
 
 const tk = translator('workspaces');
+
+/** Saves the shown text file under its own name, as the person sees it (no round trip to the server). */
+function downloadTextFile(name: string, content: string, language?: string) {
+  const type = language === 'markdown' ? 'text/markdown' : 'text/plain';
+  const url = URL.createObjectURL(new Blob([content], { type: `${type};charset=utf-8` }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 /**
  * Comments on a document, as the chat takes comments on a message: select a passage, Add to chat, write
@@ -113,6 +126,16 @@ export function WorkspaceFileViewer({
           {file?.contentType === 'text' ? (
             <CopyButton content={content} size="icon-sm" variant="ghost" tooltip={t('fileViewer.copy')} />
           ) : null}
+          {canExpand && file ? (
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => downloadTextFile(file.name ?? filePath.split('/').pop() ?? 'file.txt', content, file.language)}
+              aria-label={t('fileViewer.download')}
+            >
+              <Download />
+            </Button>
+          ) : null}
           {canExpand ? (
             <Button size="icon-sm" variant="ghost" onClick={() => setExpanded(true)} aria-label={t('fileViewer.expand')}>
               <Maximize2 />
@@ -162,7 +185,7 @@ export function WorkspaceFileViewer({
         </div>
       ) : null}
       {!isLoading && !error ? (
-        <ScrollArea className="min-h-0 flex-1" orientation="both">
+        <ScrollArea className="min-h-0 flex-1" orientation={isMarkdown ? 'vertical' : 'both'}>
           <div className="p-3">
             {file?.contentType === 'unsupported' ? (
               <Txt tone="muted">{t('fileViewer.unsupported')}</Txt>
