@@ -123,6 +123,7 @@ function setup({
   audit = [],
   comments = [],
   subscriptions = [],
+  sessions,
 }: {
   items?: Card[];
   bindings?: FactoryRunBindingRecord[];
@@ -130,6 +131,7 @@ function setup({
   audit?: AuditEventRow[];
   comments?: WorkItemCommentRow[];
   subscriptions?: WorkItemSubscription[];
+  sessions?: FactoryReadToolDependencies['sessions'];
 }) {
   const deps: FactoryReadToolDependencies = {
     workItems: {
@@ -160,6 +162,7 @@ function setup({
     comments: { listRecent: vi.fn(async () => comments) },
     audit: { list: vi.fn(async () => ({ events: audit })) },
     boards: createBoardRegistry(),
+    ...(sessions ? { sessions } : {}),
   };
   const tools = createFactoryReadTools(scope, deps) as Record<
     string,
@@ -223,6 +226,13 @@ describe('factory_list_work_items', () => {
     expect(await ids({ active: true })).toEqual(['b']);
     expect(await ids({ active: false })).toEqual(['c', 'a']);
     expect(await ids({ requestedBy: 'me' })).toEqual(['b']);
+  });
+
+  it('numbers a card filed by hand and finds it by that #number', async () => {
+    const manual = item({ id: 'm', title: 'Filed by hand', externalSource: null, metadata: { cardNumber: 3 } });
+    const { run } = setup({ items: [...rows, manual] });
+    const result = await run<ListResult>('factory_list_work_items', { query: '#3' });
+    expect(result.items).toMatchObject([{ id: 'm', number: 3 }]);
   });
 
   it('filters by what this session follows', async () => {
@@ -357,6 +367,20 @@ describe('factory_inspect_work_item', () => {
     await expect(run('factory_inspect_work_item', { workItem: '#8' })).rejects.toThrow('in this Factory');
   });
 
+  it('refuses a #number that a card filed by hand shares with an issue card', async () => {
+    const manual = item({ id: 'manual', title: 'Filed by hand', externalSource: null, metadata: { cardNumber: 3 } });
+    const issue = item({ id: 'issue', title: 'From GitHub', metadata: { number: 3 } });
+    for (const items of [
+      [manual, issue],
+      [issue, manual],
+    ]) {
+      const { run } = setup({ items });
+      await expect(run('factory_inspect_work_item', { workItem: '#3' })).rejects.toThrow(
+        '#3 matches more than one work item; use its id instead: ',
+      );
+    }
+  });
+
   it('rejects a ref that is neither a UUID nor a number before it reaches storage', async () => {
     const { run, deps } = setup({ items: [target] });
     await expect(run('factory_inspect_work_item', { workItem: 'not-an-id' })).resolves.toMatchObject({ error: true });
@@ -422,6 +446,49 @@ describe('factory_list_attention', () => {
     expect(result.held.map(row => row.workItemId)).toEqual(['held', 'labeled']);
     expect(result.held[0]).not.toHaveProperty('triageType');
     expect(result.truncated).toBe(false);
+  });
+
+  // v4: a card naming no repository runs across the environment; only with no environment to run in is it stuck.
+  it('flags open cards filed by hand that name no repository while several are linked and none is in the environment', async () => {
+    const linked = [
+      { id: 'link-1', repositoryId: 'repo-1', externalId: '2', slug: 'mastra-ai/mastra' },
+      { id: 'link-2', repositoryId: 'repo-2', externalId: '3', slug: 'mastra-ai/platform' },
+    ];
+    const sourceControl = {
+      integrationId: 'github',
+      connections: { list: async () => [{ id: 'connection-1', integrationId: 'github' }] },
+      projectRepositories: {
+        list: async () => linked.map(({ id, repositoryId }) => ({ id, repositoryId, inEnvironment: false })),
+        listByProject: async () =>
+          linked.map(({ id, repositoryId }, position) => ({
+            id,
+            repositoryId,
+            connectionId: 'connection-1',
+            inEnvironment: false,
+            position,
+            createdAt: new Date(0),
+          })),
+      },
+      repositories: {
+        get: async ({ id }: { id: string }) => {
+          const link = linked.find(candidate => candidate.repositoryId === id);
+          return link ? { id, externalId: link.externalId, slug: link.slug } : null;
+        },
+      },
+    } as unknown as SourceControlStorageHandle;
+    const items = [
+      item({ id: 'unnamed', externalSource: null, metadata: { cardNumber: 1 } }),
+      item({ id: 'named', externalSource: null, metadata: { cardNumber: 2, repository: 'mastra-ai/mastra' } }),
+      item({ id: 'done', externalSource: null, stages: ['done'], metadata: { cardNumber: 3 } }),
+      item({ id: 'synced' }),
+    ];
+    const { run } = setup({ items, sessions: { getSourceControlBySessionId: async () => sourceControl } });
+    const result = await run<{
+      needsRepository: Array<{ workItemId: string; number: number | null }>;
+      linkedRepositories?: string[];
+    }>('factory_list_attention', {});
+    expect(result.needsRepository).toMatchObject([{ workItemId: 'unnamed', number: 1 }]);
+    expect(result.linkedRepositories).toEqual(['mastra-ai/mastra', 'mastra-ai/platform']);
   });
 
   it('lists a run parked on a tool prompt while it is still in flight', async () => {

@@ -168,7 +168,7 @@ tools/approval-tools.test.ts	harness-mastra/src/tools/approval-tools.test.ts	5	a
 tools/deliver.test.ts	harness-mastra/src/tools/deliver.test.ts	+3	notices reach a session another harness runs; notification record and running state for another harness
 tools/messaging-tools.test.ts	harness-mastra/src/tools/messaging-tools.test.ts	1	upstream #29873: a parked run reads as parked in the session list (+1)
 tools/permissions.test.ts	harness-mastra/src/tools/permissions.test.ts
-tools/read-tools.test.ts	harness-mastra/src/tools/read-tools.test.ts	1	upstream #29873: factory_list_attention lists runs parked on a tool prompt (+1)
+tools/read-tools.test.ts	harness-mastra/src/tools/read-tools.test.ts	4	upstream #29873: factory_list_attention lists runs parked on a tool prompt (+1); upstream #29871: hand-filed cards by #number, and stuck ones without a repository (+3)
 tools/reports.test.ts	harness-mastra/src/tools/reports.test.ts	1	upstream #29869: the parked plan is reported as answerable (+1)
 tools/run-watch.test.ts	harness-mastra/src/tools/run-watch.test.ts
 tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
@@ -354,7 +354,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	16	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/factory/activity.test.ts	../apps/ui/src/ui/domains/factory/activity.test.ts	-17	Activity retired as upstream 63d7d5cbd4 (#28257): only the day helpers stay in the app; the full suite is parked in packages/activity/ui
 ../../../apps/ui/src/ui/domains/factory/auditPresentation.test.ts	activity/ui/src/ui/domains/factory/auditPresentation.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardCardState.test.ts	../apps/ui/src/ui/domains/factory/boardCardState.test.ts	+1	a card whose run needs its repository asks for it
-../../../apps/ui/src/ui/domains/factory/boardItems.test.ts	../apps/ui/src/ui/domains/factory/boardItems.test.ts	+7	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28961: session branches and card keys read the normalized work item (its Linear/Jira/incident.io rows dropped) (+2); upstream ee911eb3e5 (#29650): cardContextSessions and cardThreadSession (+7)
+../../../apps/ui/src/ui/domains/factory/boardItems.test.ts	../apps/ui/src/ui/domains/factory/boardItems.test.ts	8	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28961: session branches and card keys read the normalized work item (its Linear/Jira/incident.io rows dropped) (+2); upstream ee911eb3e5 (#29650): cardContextSessions and cardThreadSession (+7); upstream #29871: a hand-filed card is named by its number (+1)
 ../../../apps/ui/src/ui/domains/factory/boardLabels.test.ts	../apps/ui/src/ui/domains/factory/boardLabels.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardOrder.test.ts	../apps/ui/src/ui/domains/factory/boardOrder.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardPeople.test.ts	../apps/ui/src/ui/domains/factory/boardPeople.test.ts

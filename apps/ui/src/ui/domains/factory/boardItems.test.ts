@@ -70,6 +70,12 @@ describe('workItemMeta', () => {
     ).toBe('!5 · Rhys · just now');
     expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
   });
+
+  it('names a card filed by hand by its card number', () => {
+    expect(
+      workItemMeta(workItem({ source: 'manual', sourceKey: null, url: null, metadata: { cardNumber: 12 } })),
+    ).toBe('#12 · just now');
+  });
 });
 
 describe('itemSessionSpec', () => {
