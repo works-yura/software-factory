@@ -1,4 +1,5 @@
 export * from './base.ts';
+export * from './closing-references.ts';
 export * from './issue-reconcile-worker.ts';
 export * from './issue-reconciler.ts';
 export * from './platform-api-client.ts';

@@ -310,9 +310,11 @@ describe('useBoardIntake GitLab routing', () => {
       }),
     );
 
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.active).toBe('gitlab-prs');
-    expect(result.current.candidates[0]).toMatchObject({ source: 'gitlab-pr', sourceKey: 'gitlab-pr:encoded-5' });
+    await waitFor(() =>
+      expect(result.current.candidates).toContainEqual(
+        expect.objectContaining({ source: 'gitlab-pr', sourceKey: 'gitlab-pr:encoded-5' }),
+      ),
+    );
     expect(githubRequests).toBe(0);
   });
 

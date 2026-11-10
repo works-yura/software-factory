@@ -104,7 +104,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('renaming stored
     expect(phase('spec').runner).toMatchObject({ skill: 'product-spec', instructions: 'Docs live in acme/docs, docs/.' });
     expect(phase('enrich').runner?.instructions).toBeUndefined();
     expect(await boards.readVersion(scope)).not.toBe(versionBefore);
-    expect((await boards.getIntakeRoute(scope, route.id))?.target).toEqual({ boardKey: 'product', phaseKey: 'phases' });
+    expect((await boards.getIntakeRoute(scope, route.id))?.target).toEqual({
+      boardKey: 'product',
+      phaseKey: 'phases',
+      joinClosedIssue: false,
+    });
 
     // Once: the board no longer names an old phase.
     expect(await boards.renameStoredBoardPhases('product', NEW, RENAMES, PRODUCT_BOARD_UPGRADE_ACTOR)).toBe(0);

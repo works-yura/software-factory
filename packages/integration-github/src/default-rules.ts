@@ -1,8 +1,25 @@
 import { hasRecordedVerdict } from '@factory/pipelines';
 import { requestsChangesVerdict } from '@factory/session';
 import { closedByRoutes, recordExplicitRuleOverrides } from '@factory/core';
-import { changeRequestFlow, describeChangeRequests, isPullRequestCard, isTerminalFactoryRuleStage, openChangeRequests, PULL_REQUEST_REVIEW_PHASE, reviewsPullRequest } from '@factory/core';
-import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '@factory/core';
+import {
+  changeRequestFlow,
+  describeChangeRequests,
+  isPullRequestCard,
+  isTerminalFactoryRuleStage,
+  newestOpenPullRequestNumber,
+  openChangeRequests,
+  PULL_REQUEST_REVIEW_PHASE,
+  pullRequestSources,
+  reviewedPullRequest,
+  reviewsPullRequest,
+} from '@factory/core';
+import type {
+  FactoryGithubEventName,
+  FactoryGithubRuleContext,
+  FactoryRuleHandler,
+  WorkItemSourceRow,
+} from '@factory/core';
+import { isRepositoryPullRequest } from './pull-request-source.ts';
 import { isFactoryApproveVerdict } from './stale-reviews.ts';
 
 export type GithubRuleOverrides = Partial<
@@ -20,7 +37,6 @@ function githubActorLogin(context: Pick<FactoryGithubRuleContext, 'actor'>): str
   return context.actor.type === 'github' ? context.actor.login : undefined;
 }
 
-/** The Work card whose session authored the pull request, as opposed to the PR's own card. */
 /**
  * The change-request flow of the card whose work opened the request: a card on a board that ships
  * change requests (Work), and not the request's own card, which may sit on Work too.
@@ -28,6 +44,29 @@ function githubActorLogin(context: Pick<FactoryGithubRuleContext, 'actor'>): str
 function authoringFlow(context: FactoryGithubRuleContext) {
   if (!context.item || isPullRequestCard(context.item)) return undefined;
   return changeRequestFlow(context);
+}
+
+/** Whether the rule's card carries the event's pull request as one of its sources, attached to its issue. */
+function attachedPullRequest(context: FactoryGithubRuleContext): boolean {
+  const { item, pullRequest } = context;
+  if (!item || !pullRequest || isPullRequestCard(item)) return false;
+  return pullRequestSources(item).some(source => isEventPullRequest(context, source));
+}
+
+/** Whether a source row is the event's pull request: the same number in the same repository. */
+function isEventPullRequest(context: FactoryGithubRuleContext, source: WorkItemSourceRow): boolean {
+  return (
+    context.pullRequest !== undefined &&
+    isRepositoryPullRequest(source, context.repository.id, context.repository.fullName, context.pullRequest.number)
+  );
+}
+
+/** Whether the card's PR review covers the event's pull request: its own, or the attached one it reviews. */
+function reviewsThisPullRequest(context: FactoryGithubRuleContext): boolean {
+  if (!context.item || !context.pullRequest || !reviewsPullRequest(context)) return false;
+  if (isPullRequestCard(context.item)) return true;
+  const reviewed = reviewedPullRequest(context.item);
+  return reviewed !== undefined && isEventPullRequest(context, reviewed);
 }
 
 function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: string): boolean {
@@ -118,6 +157,7 @@ function materializePullRequestIntake(
   }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'pr-review' },
 ) {
   if (!context.pullRequest) return;
+  const home = context.pullRequestHome;
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey,
@@ -127,6 +167,14 @@ function materializePullRequestIntake(
     title: context.pullRequest.title,
     url: context.pullRequest.url,
     stage,
+    // A pull request for a card already on the board is filed on that card; the authoring card's
+    // own evaluation moves it. For one that closes an issue on the board, the project's intake
+    // routes decide whether it joins that card.
+    ...(home
+      ? home.reason === 'closes'
+        ? { closesIssue: { workItemId: home.workItemId } }
+        : { attachTo: { workItemId: home.workItemId } }
+      : {}),
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
@@ -160,6 +208,8 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     const flow = authoringFlow(context);
     if (!flow || !context.board || context.pullRequest.state !== 'open') return;
     if (!context.item.stages.includes(flow.build.phase)) return;
+    // Someone else's pull request attached to the issue does not mean this card's build is out.
+    if (attachedPullRequest(context) && !context.pullRequest.factoryAuthored) return;
     // Resolution can match a Work item by branch alone, so a fork's pull
     // request must not be able to move it: same bar as auto-starting a review.
     if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
@@ -183,7 +233,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
 
 function pullRequestMerged(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest?.merged) return;
-  if (reviewsPullRequest(context)) {
+  if (isPullRequestCard(context.item) && reviewsPullRequest(context)) {
     // The event is bound to the PR's own card: a merged PR is finished
     // review work, so always move the card to Done. The message only reaches
     // an active session (if any) — cards without one just move, instead of
@@ -208,15 +258,21 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   // is what finishes the work, so it closes the Work card alongside the PR's own card —
   // unless the card has since opened another pull request, which is still out.
   // A card spanning several repositories finishes only when every pull
-  // request it has out is merged.
+  // request it has out is merged. With none recorded, a card carrying several
+  // attached pull requests waits for any still open.
   const merged = { repository: context.repository.fullName, number: context.pullRequest.number };
-  const stillOpen = openChangeRequests(context.item.metadata).filter(
-    entry =>
-      !(
-        entry.number === merged.number &&
-        (entry.repository === '' || entry.repository.toLowerCase() === merged.repository.toLowerCase())
-      ),
-  );
+  const recorded = openChangeRequests(context.item.metadata);
+  const attachedOpen = recorded.length === 0 ? newestOpenPullRequestNumber(context.item, merged.number) : null;
+  const stillOpen =
+    attachedOpen !== null
+      ? [{ repository: merged.repository, number: attachedOpen }]
+      : recorded.filter(
+          entry =>
+            !(
+              entry.number === merged.number &&
+              (entry.repository === '' || entry.repository.toLowerCase() === merged.repository.toLowerCase())
+            ),
+        );
   if (stillOpen.length > 0) {
     const plural = stillOpen.length > 1;
     return {
@@ -248,6 +304,8 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   // on boards that ship change requests (Work).
   const flow = authoringFlow(context);
   if (!flow) return;
+  // Someone else's pull request attached to the issue is not the builder's to fix.
+  if (attachedPullRequest(context) && !context.pullRequest.factoryAuthored) return;
   // A closed or merged pull request has no branch left to push fixes to.
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // `approved` needs no work, and `commented` (a review body with no verdict)
@@ -306,6 +364,7 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
   // on the PR it is reviewing.
   const flow = authoringFlow(context);
   if (!flow) return;
+  if (attachedPullRequest(context) && !context.pullRequest.factoryAuthored) return;
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // `factoryAuthored` is one bit for the whole Factory, so Factory's own
   // comments are indistinguishable between roles — waking on all of them would
@@ -335,6 +394,21 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
 function pullRequestClosed(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest || context.pullRequest.merged) return;
   if (!reviewsPullRequest(context)) return;
+  if (!isPullRequestCard(context.item)) {
+    // An issue card waiting in PR review on its last open pull request goes back to Intake;
+    // the issue is still open, and another pull request keeps the review going.
+    if (!attachedPullRequest(context) || context.item.stages[0] !== PULL_REQUEST_REVIEW_PHASE) return;
+    if (newestOpenPullRequestNumber(context.item, context.pullRequest.number) !== null) return;
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:pull-request-closed`,
+      board: 'work',
+      stage: 'intake',
+      message: {
+        text: `Pull request #${context.pullRequest.number} was closed without merging; this card was moved back to Intake.`,
+      },
+    } as const;
+  }
   // A PR closed without merging is abandoned review work: clear the card off
   // the board instead of leaving it in Reviewing forever.
   return {
@@ -376,6 +450,9 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   // re-enters the stage to start another pass.
   const stage = PULL_REQUEST_REVIEW_PHASE;
   const reviewing = context.item.stages.length === 1 && context.item.stages[0] === stage;
+  // On an issue card the pass reviews one pull request at a time; a request for another
+  // waits until that one is reviewed or settled.
+  if (reviewing && !reviewsThisPullRequest(context)) return;
   if (reviewing && !hasRecordedVerdict(context.item)) return;
   return {
     type: 'transition',
@@ -389,6 +466,10 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
 function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
   if (!context.item || !reviewsPullRequest(context)) return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
+  // An issue card re-reviews only while its PR review covers this pull request: a push to the
+  // builder's own pull request during Building or self-review is the build, not a review cue.
+  if (!isPullRequestCard(context.item) && !(context.item.stages[0] === PULL_REQUEST_REVIEW_PHASE && reviewsThisPullRequest(context)))
+    return;
   // Intake has not started a review pass yet, so a push there is just more of
   // the code the first pass will read. A push to a card sitting in Reviewing is
   // different: it invalidates whatever that pass is reading, so re-enter the

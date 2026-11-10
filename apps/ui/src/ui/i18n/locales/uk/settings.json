@@ -783,6 +783,8 @@
     "customCondition": "умова, задана через API",
     "target": "{{board}} › {{phase}}",
     "targetFirstPhase": "{{board}} › перша фаза",
+    "targetJoin": "Приєднує до картки закритої задачі › {{board}} › {{phase}}",
+    "targetJoinStays": "Приєднує до картки закритої задачі на {{board}}, картка лишається на місці",
     "or": " або ",
     "trusted": "автор з правом запису",
     "untrusted": "сторонній автор",

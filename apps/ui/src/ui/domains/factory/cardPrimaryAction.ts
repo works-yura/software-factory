@@ -1,7 +1,8 @@
 import { FACTORY_ROLE_STAGES, needsApproval } from '@factory/core/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@factory/core/rules/types';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
-import { itemSessionSpec, metadataLabels, pullRequestStatusForItem } from './boardItems';
+import { itemSessionSpec, metadataLabels, pullRequestStatusForItem, pullRequestStatusForSource } from './boardItems';
+import { attachedPullRequestSource, cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { translator } from '../../i18n/t';
 import { isTerminalStage } from './stages';
@@ -75,7 +76,7 @@ const PREPARE_APPROVAL: CardMove = {
   stage: 'triage',
   awaitsHumanDecision: true,
 };
-/** A pull request's own card is reviewed in Work's PR review. */
+/** A card's pull request, its own or one attached to its issue, is reviewed in Work's PR review. */
 const REVIEW: CardMove = {
   action: 'review',
   get label() {
@@ -97,7 +98,9 @@ const RE_REVIEW: CardMove = {
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
   if (item.board != null && item.board !== 'work') return [];
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
-  if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
+  // A card carrying a pull request, its own or one attached to its issue, sends it to PR review.
+  if ((columnStage === 'pr-review' || columnStage === 'review') && cardHasPullRequest(item)) return [REVIEW];
+  if (columnStage === 'review') return [];
   if (item.source === 'github-issue') {
     return needsApproval({ ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } })
       ? [PREPARE_APPROVAL]
@@ -106,15 +109,17 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   if (item.source === 'gitlab-issue') {
     return issueMoves(columnStage);
   }
-  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [REVIEW] : [];
+  return isPullRequestSource(item.source) ? [REVIEW] : [];
 }
 
 function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
-  return (
-    columnStage === 'done' &&
-    (item.source === 'github-pr' || item.source === 'gitlab-pr') &&
-    ['open', 'draft'].includes(pullRequestStatusForItem({ ...item, stages: item.stages ?? [] }))
-  );
+  if (columnStage !== 'done' || !cardHasPullRequest(item)) return false;
+  // An issue card's pull request state lives on the pull request's source, not the issue's.
+  const attached = attachedPullRequestSource(item);
+  const status = attached
+    ? pullRequestStatusForSource(attached)
+    : pullRequestStatusForItem({ ...item, stages: item.stages ?? [] });
+  return status === 'open' || status === 'draft';
 }
 
 // PR review carries a pull request card's reviewer, after the builder's lanes.

@@ -314,6 +314,13 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
    * leaves the flag unset.
    */
   pullRequestIntake?: boolean;
+  /**
+   * Set on both evaluations of a pull request's first sighting when it belongs on an existing
+   * card: the Work card that authored it (`authored`), or the card of the issue a trusted author's
+   * pull request says it closes (`closes`). The pull request is filed on that card as one more
+   * source rather than on a card of its own.
+   */
+  pullRequestHome?: FactoryPullRequestHome;
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };
@@ -447,6 +454,8 @@ export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
   /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
   phase?: FactoryRulePhaseContext;
   intake?: FactoryRuleIntakeTarget;
+  /** Set on a merge request's first sighting when it is filed on an existing card instead of its own. */
+  pullRequestHome?: FactoryPullRequestHome;
   event: FactoryGitLabEventName;
   deliveryId: string;
   factory: { createdAt: string };
@@ -588,6 +597,12 @@ export interface FactorySignalActivityDecision extends FactoryCommitDecisionBase
   idleBehavior?: 'wake' | 'persist';
 }
 
+/** The existing card a pull or merge request is filed on; see `pullRequestHome`. */
+export interface FactoryPullRequestHome {
+  workItemId: string;
+  reason: 'authored' | 'closes';
+}
+
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {
   type: 'upsertLinkedWorkItem';
   board: FactoryRuleBoard;
@@ -608,6 +623,18 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
    * metadata is left alone.
    */
   skipRules?: boolean;
+  /**
+   * File the pull or merge request on this existing card, the one that authored it, as one more
+   * source instead of on a card of its own. Applies only when no card holds the record yet and
+   * the card is still open on Work; otherwise the record is filed as usual.
+   */
+  attachTo?: { workItemId: string };
+  /**
+   * The card of the issue this pull or merge request closes. When no card holds the record yet,
+   * the project's intake routes can test that card and join the record to it (see
+   * `IntakeRouteTarget.joinClosedIssue`); otherwise it is filed as usual.
+   */
+  closesIssue?: { workItemId: string };
   metadata?: Record<string, FactoryRuleJsonValue>;
 }
 

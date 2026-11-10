@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { PULL_REQUEST_REVIEW_PHASE, reviewedPullRequest, sourceExternalId } from '@factory/core';
 import type { IntegrationTools } from '@factory/integrations';
 import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { Card } from '@factory/store';
@@ -160,7 +161,22 @@ function buildSessionUrl(input: {
   return `${origin}/factories/${encodeURIComponent(input.factoryProjectId)}/workspaces/${encodeURIComponent(input.sessionId)}/threads/${encodeURIComponent(input.threadId)}`;
 }
 
+/** The pull request a PR-review pass on an issue card looks at, when one is attached. */
+function attachedReviewedPullRequest(item: Card) {
+  if (item.externalSource?.type === 'pull-request' || item.stages[0] !== PULL_REQUEST_REVIEW_PHASE) return null;
+  return reviewedPullRequest(item);
+}
+
 function readReviewTarget(item: Card): ReviewSourceOutput['reviewTarget'] {
+  const attached = attachedReviewedPullRequest(item);
+  if (attached) {
+    return {
+      integrationId: attached.integrationId,
+      type: attached.sourceType,
+      externalId: sourceExternalId(attached),
+      url: attached.url || null,
+    };
+  }
   const source = item.externalSource;
   if (!source) return null;
   return {
@@ -191,7 +207,9 @@ function readBoundRepository(item: Card): ReviewSourceOutput['boundRepository'] 
 }
 
 function readPullRequestAuthor(item: Card): string | null {
-  const author = item.workItem.author;
+  // An attached pull request's author is its own; the card's issue author never stands in for it.
+  const attached = attachedReviewedPullRequest(item);
+  const author = attached ? attached.author : item.workItem.author;
   if (typeof author === 'string' && author.trim()) return author.trim();
   return null;
 }

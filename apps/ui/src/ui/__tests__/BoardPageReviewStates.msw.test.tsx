@@ -124,7 +124,7 @@ function renderReviewBoard() {
 }
 
 describe('Review card action lifecycle', () => {
-  it.each([true, false])('keeps Review busy from Intake through kickoff (candidate: %s)', async candidate => {
+  it.each([true, false])('keeps PR review busy from Intake through kickoff (candidate: %s)', async candidate => {
     const { data, transitions, transitionGate, decisionsGate } = stubReviewBoard(candidate);
     const user = userEvent.setup();
     const { client } = renderReviewBoard();

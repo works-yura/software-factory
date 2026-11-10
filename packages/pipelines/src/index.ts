@@ -4,9 +4,12 @@ import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { isWorkBoardPhase, workBoard } from './work/board.ts';
 
 export { createDefaultBoardRegistry, defaultBoards } from './defaults.ts';
-export { hasRecordedVerdict, reviewPullRequest } from './work/pr-review-rules.ts';
+export { hasRecordedVerdict, reviewPullRequest, reviewSessionBranch } from './work/pr-review-rules.ts';
 export {
+  cardOwnsBranch,
   isWorkItemBranch,
+  newestOwnedOpenPullRequestNumber,
+  pullRequestBranch,
   legacyGithubWorkItemBranch,
   mergeRequestNumberFromBranch,
   pullRequestNumberFromBranch,

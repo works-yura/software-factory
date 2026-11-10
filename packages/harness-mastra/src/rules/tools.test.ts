@@ -586,7 +586,7 @@ describe('factory_transition_work_item', () => {
     expect(onEnter).toHaveBeenCalledTimes(1);
   });
 
-  it('derives the Work board for PR bindings and ignores linked-card presence for Work authority', async () => {
+  it('moves a PR binding on Work and ignores linked-card presence for Work authority', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const review = await prepareBoundItem(storage, 'github-pr');
     const transition = vi.fn(async () => ({ status: 'accepted' as const }));
@@ -759,7 +759,13 @@ describe('factory_transition_work_item', () => {
         factoryProjectId: PROJECT_ID,
         input: { title: 'Authoring work', stages: ['review'], metadata: { note: 'kept' } },
       });
-      await storage.update({ orgId: 'org-1', id, userId: 'user-1', patch: { parentWorkItemId: parent.item.id } });
+      const reviewing = await storage.get({ orgId: 'org-1', id });
+      await storage.update({
+        orgId: 'org-1',
+        id,
+        userId: 'user-1',
+        patch: { parentWorkItemId: parent.item.id, metadata: { ...reviewing?.metadata, githubPullRequestNumber: 34 } },
+      });
       const context = requestContext();
       const tools = await createFactoryTransitionTools({
         requestContext: context,
@@ -779,6 +785,10 @@ describe('factory_transition_work_item', () => {
         reviewVerdict: 'request changes',
         reviewedHeadSha: 'abc1234def000000000000000000000000000000',
       });
+      const reviewed = await storage.get({ orgId: 'org-1', id });
+      // The mirror names the pull request it covers, so the Work card's next pass is scoped the same way.
+      expect(reviewed?.metadata?.reviewedPullRequestNumber).toBe(34);
+      expect(work?.metadata?.reviewedPullRequestNumber).toBe(34);
     });
 
     it('records the published PR verdict on a pull request card reviewed on the Work board', async () => {
@@ -856,7 +866,7 @@ describe('factory_transition_work_item', () => {
       ).toBeUndefined();
     });
 
-    it('rejects a verdict for a card that is no longer Reviewing', async () => {
+    it('rejects a verdict for a card that is no longer in PR review', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       await reviewingItem(storage, 'done');
       const context = requestContext();
@@ -871,7 +881,7 @@ describe('factory_transition_work_item', () => {
           verdict: 'approve',
           reviewedHeadSha: 'abc1234def000000000000000000000000000000',
         }),
-      ).rejects.toThrow('Only a pull request card in PR review records a verdict');
+      ).rejects.toThrow('Only a card in PR review records a verdict');
     });
 
     it('is offered only to review bindings and bounds its input', async () => {

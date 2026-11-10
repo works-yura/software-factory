@@ -1,7 +1,8 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
-import { Brain, ListChecks, Settings, SquareKanban } from 'lucide-react';
+import { Brain, GitPullRequest, ListChecks, Settings, SquareKanban } from 'lucide-react';
 
+import { PULL_REQUEST_SOURCE_FILTER } from '../../factory/boardSourceFilters';
 import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
@@ -33,6 +34,17 @@ export function GlobalSearchNavigationResults({
         subtitle={t('subtitles.factory')}
         value={searchValue(t('navigation.work'), t('subtitles.factory'), `Work Factory navigation /factories/${factoryId}/work`)}
         onSelect={() => onSelect(rememberedBoardPath(factoryId, 'work'), false)}
+      />
+      <CommandPaletteItem
+        icon={<GitPullRequest />}
+        title={t('navigation.pullRequests')}
+        subtitle={t('subtitles.factory')}
+        value={searchValue(
+          t('navigation.pullRequests'),
+          t('subtitles.factory'),
+          `Pull requests Review Factory navigation /factories/${factoryId}/work`,
+        )}
+        onSelect={() => onSelect(`/factories/${factoryId}/work?source=${PULL_REQUEST_SOURCE_FILTER}`, false)}
       />
       <CommandPaletteItem
         icon={<ListChecks />}

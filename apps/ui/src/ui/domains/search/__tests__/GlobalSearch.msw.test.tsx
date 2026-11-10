@@ -192,8 +192,22 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       state.created.push(body);
+      // Like the server, the filed card carries the source it was filed from.
+      const external = body.externalSource as { integrationId?: string; type?: string } | undefined;
+      const source =
+        external?.type === 'pull-request'
+          ? external.integrationId === 'gitlab'
+            ? ('gitlab-pr' as const)
+            : ('github-pr' as const)
+          : workItems[0].source;
       return HttpResponse.json({
-        workItem: toWireWorkItem({ ...workItems[0], id: 'work-item-filed', title: String(body.title) }),
+        workItem: toWireWorkItem({
+          ...workItems[0],
+          id: 'work-item-filed',
+          title: String(body.title),
+          source,
+          board: typeof body.board === 'string' ? body.board : undefined,
+        }),
       });
     }),
     http.post(
@@ -484,6 +498,7 @@ describe('Global search', () => {
     expect(within(results).getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
       'Development',
+      'Pull requests',
       'Rules',
       'Preferences',
       'Manage Factory',

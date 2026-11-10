@@ -42,8 +42,10 @@ describe('factory pipelines', () => {
       triage: ['intake', 'planning', 'done', 'canceled'],
       planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
       execute: ['review', 'planning', 'done', 'canceled'],
-      review: ['execute', 'intake', 'done', 'canceled'],
-      'pr-review': ['intake', 'done', 'canceled'],
+      // A maintainer's review request takes the card's open pull request to PR review (upstream #29346).
+      review: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
+      // An issue card can go back to its builder for a fix; a pull request's own card can't (Work's policy).
+      'pr-review': ['intake', 'planning', 'execute', 'done', 'canceled'],
       done: ['pr-review'],
       canceled: ['intake', 'pr-review'],
     };

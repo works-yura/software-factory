@@ -415,9 +415,11 @@ describe('stored boards with code behaviour', () => {
         editWork('planning', phase => ({ ...phase, nextPhases: phase.nextPhases?.filter(next => next !== 'execute') })),
       ),
     ).toEqual(['Phase "planning": Factory\'s code moves cards from it to "execute"; keep it in nextPhases.']);
-    expect(conflicts(editWork('pr-review', phase => ({ ...phase, nextPhases: ['intake', 'canceled'] })))).toEqual([
-      'Phase "pr-review": Factory\'s code moves cards from it to "done"; keep it in nextPhases.',
-    ]);
+    expect(
+      conflicts(
+        editWork('pr-review', phase => ({ ...phase, nextPhases: ['intake', 'planning', 'execute', 'canceled'] })),
+      ),
+    ).toEqual(['Phase "pr-review": Factory\'s code moves cards from it to "done"; keep it in nextPhases.']);
     // An exit tool would hold back the moves Building's code makes.
     expect(conflicts(editWork('execute', phase => ({ ...phase, exitTool: { id: 'submit_plan' } })))).toEqual([
       'Phase "execute" code handlers move cards on without an exit tool; leave exitTool unset.',
@@ -467,7 +469,7 @@ describe('stored boards with code behaviour', () => {
                 runner: { context: 'work', instructions: 'Keep plans short.' },
               }
             : phase.key === 'pr-review'
-              ? { ...phase, autoStart: true, nextPhases: ['intake', 'done', 'canceled', 'docs'] }
+              ? { ...phase, autoStart: true, nextPhases: ['intake', 'planning', 'execute', 'done', 'canceled', 'docs'] }
               : phase,
         ),
         {

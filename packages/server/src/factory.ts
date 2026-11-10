@@ -53,7 +53,14 @@ import {
 import { createBoardRegistry, isDefinedBoard, isTerminalWorkItem } from '@factory/core';
 import { createDefaultBoardRegistry, PRODUCT_LEGACY_PHASE_RENAMES, productBoard } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
-import { boardForWorkItem, isPullRequestCard, namesRepository, openChangeRequests, workItemSource } from '@factory/core';
+import {
+  boardForWorkItem,
+  boundChangeRequestNumber,
+  isPullRequestCard,
+  namesRepository,
+  openChangeRequests,
+  workItemSource,
+} from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import { createRoutingHarness } from '@factory/harness';
 import { createFactorySessionTokenSigner } from '@factory/mcp';
@@ -1758,9 +1765,7 @@ export class MastraFactory {
                   resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
                 if (binding?.role !== 'review') return undefined;
                 const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                const source = item?.externalSource;
-                if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
-                return /(\d+)$/.exec(source.externalId)?.[1];
+                return item ? boundChangeRequestNumber(item) : undefined;
               },
             }
           : {}),

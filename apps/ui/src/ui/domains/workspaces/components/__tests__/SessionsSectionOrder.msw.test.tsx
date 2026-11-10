@@ -47,8 +47,8 @@ function reviewCard(session: FactoryUserSession, pullRequestNumber: number, merg
       externalId: `pr-${pullRequestNumber}`,
     },
     parentWorkItemId: null,
-    title: `Review #${pullRequestNumber}`,
     board: 'work',
+    title: `Review #${pullRequestNumber}`,
     stages: ['pr-review'],
     stageHistory: [],
     sessions: {

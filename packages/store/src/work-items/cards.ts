@@ -72,13 +72,23 @@ function externalSourceOf(source: WorkItemSourceDbRecord | undefined): ExternalW
   };
 }
 
+/** A source row written before `role` existed is its work item's only source, so it is the origin. */
+function isOriginSource(source: WorkItemSourceDbRecord): boolean {
+  return source.role !== 'attached';
+}
+
+/** The origin source first, then attached ones, each keeping the order they were read in. */
+function originFirst(sources: WorkItemSourceDbRecord[]): WorkItemSourceDbRecord[] {
+  return [...sources.filter(isOriginSource), ...sources.filter(source => !isOriginSource(source))];
+}
+
 function joinCard(
   board: BoardItemDbRecord,
   work: WorkItemDbRecord | null,
   sources: WorkItemSourceDbRecord[],
 ): WorkItemDbRow {
   if (!work) throw new Error(`Board item ${board.id} has no work item ${board.work_item_id}.`);
-  const source = sources[0];
+  const source = sources.find(isOriginSource) ?? sources[0];
   return {
     work_item: work,
     work_item_sources: sources,
@@ -200,7 +210,9 @@ export class Cards {
     const deletedMidRead = await this.#deletedBoardIds(boards.filter(board => !items.has(board.work_item_id)));
     return boards
       .filter(board => !deletedMidRead.has(board.id))
-      .map(board => joinCard(board, items.get(board.work_item_id) ?? null, sources.get(board.work_item_id) ?? []));
+      .map(board =>
+        joinCard(board, items.get(board.work_item_id) ?? null, originFirst(sources.get(board.work_item_id) ?? [])),
+      );
   }
 
   async #deletedBoardIds(boards: readonly BoardItemDbRecord[]): Promise<Set<string>> {
@@ -353,6 +365,62 @@ export class Cards {
       };
     });
     return board ? ((await this.#join([board]))[0] ?? null) : null;
+  }
+
+  /**
+   * Add one more source to an existing card's work item. The new source is stored
+   * as `attached`, so it sorts after the card's origin source and never becomes the
+   * card's primary source, whatever its timestamp. Only
+   * the source's provider facts are stored; Factory-owned keys in `metadata`
+   * (trust stamps, process state) belong to the card and are ignored here.
+   */
+  async attachSource(
+    where: { org_id: string; id: string },
+    source: { external_source: ExternalWorkItemSource; metadata: Record<string, unknown> | null; now: Date },
+    expectedRevision?: number,
+  ): Promise<{ row: WorkItemDbRow; attached: boolean; ownerWorkItemId?: string; revisionConflict?: true } | null> {
+    if (this.legacyMode) throw new Error('[cards] attaching a source needs the split work item tables.');
+    const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, where);
+    if (!board) return null;
+    const [joined] = await this.#join([board]);
+    if (!joined) return null;
+    const next = splitCardRows(
+      { ...joined, external_source: source.external_source, metadata: source.metadata },
+      { workItemId: board.work_item_id },
+    ).source;
+    if (!next) throw new Error('[cards] an attached source must carry provider facts.');
+    const existing = await this.ops.findOne<WorkItemSourceDbRecord>(SOURCES, {
+      org_id: board.org_id,
+      factory_project_id: board.factory_project_id,
+      provider: next.provider,
+      external_id: next.external_id,
+    });
+    if (existing) {
+      return existing.work_item_id === board.work_item_id
+        ? { row: joined, attached: false }
+        : { row: joined, attached: false, ownerWorkItemId: existing.work_item_id };
+    }
+    // Bump the card first: the row lock makes a concurrent attach against the same revision
+    // wait, then see the new revision and stop.
+    let stale = false;
+    const bumped = await this.ops.updateAtomic<BoardItemDbRecord>(BOARD_ITEMS, { id: board.id }, row => {
+      if (expectedRevision !== undefined && row.revision !== expectedRevision) {
+        stale = true;
+        return null;
+      }
+      return { revision: row.revision + 1, updated_at: source.now };
+    });
+    if (!bumped || stale) return { row: joined, attached: false, revisionConflict: true };
+    await this.ops.insertOne<WorkItemSourceDbRecord>(SOURCES, {
+      ...next,
+      id: randomUUID(),
+      role: 'attached',
+      created_at: source.now,
+      updated_at: source.now,
+      synced_at: source.now,
+    });
+    const [attached] = await this.#join([bumped]);
+    return attached ? { row: attached, attached: true } : null;
   }
 
   async updateMany(where: CollectionWhere, patch: Partial<WorkItemDbRow>): Promise<number> {

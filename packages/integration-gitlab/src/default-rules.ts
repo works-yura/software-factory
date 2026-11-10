@@ -1,6 +1,22 @@
 import { closedByRoutes, recordExplicitRuleOverrides } from '@factory/core';
-import { changeRequestFlow, factoryRuleStage, isPullRequestCard, isTerminalFactoryRuleStage, PULL_REQUEST_REVIEW_PHASE, reviewsPullRequest } from '@factory/core';
-import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '@factory/core';
+import {
+  changeRequestFlow,
+  factoryRuleStage,
+  isPullRequestCard,
+  isTerminalFactoryRuleStage,
+  newestOpenPullRequestNumber,
+  PULL_REQUEST_REVIEW_PHASE,
+  pullRequestSources,
+  reviewedPullRequest,
+  reviewsPullRequest,
+  sourceExternalId,
+} from '@factory/core';
+import type {
+  FactoryGitLabEventName,
+  FactoryGitLabRuleContext,
+  FactoryRuleHandler,
+  WorkItemSourceRow,
+} from '@factory/core';
 
 export type GitLabRuleOverrides = Partial<
   Record<FactoryGitLabEventName, FactoryRuleHandler<FactoryGitLabRuleContext> | null | undefined>
@@ -24,6 +40,15 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
   return Number.isFinite(sourceCreatedAt) && Number.isFinite(projectCreatedAt) && sourceCreatedAt > projectCreatedAt;
 }
 
+/** The board holding the merge request's own card: Work, or Review for a card a project still keeps there. */
+function mergeRequestCardBoard(context: FactoryGitLabRuleContext): 'work' | 'review' {
+  return context.board === 'review' ? 'review' : 'work';
+}
+
+function mergeRequestCardNoun(context: FactoryGitLabRuleContext): string {
+  return context.board === 'review' ? 'Review card' : 'merge request card';
+}
+
 /** The Work card whose session authored the merge request, as opposed to the merge request's own card. */
 /**
  * The change-request flow of the card whose work opened the request: a card on a board that ships
@@ -32,6 +57,31 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
 function authoringFlow(context: FactoryGitLabRuleContext) {
   if (!context.item || isPullRequestCard(context.item)) return undefined;
   return changeRequestFlow(context);
+}
+
+/** Whether the rule's card carries the event's merge request as one of its sources, attached to its issue. */
+function attachedMergeRequest(context: FactoryGitLabRuleContext): boolean {
+  const { item, mergeRequest } = context;
+  if (!item || !mergeRequest || isPullRequestCard(item)) return false;
+  return pullRequestSources(item).some(source => isEventMergeRequest(context, source));
+}
+
+/**
+ * Whether a source row is the event's merge request. Iids repeat across GitLab projects, so
+ * the row's full key (host, project and iid) has to match, not the iid alone.
+ */
+function isEventMergeRequest(context: FactoryGitLabRuleContext, source: WorkItemSourceRow): boolean {
+  return (
+    context.mergeRequest !== undefined &&
+    source.integrationId === 'gitlab' &&
+    sourceExternalId(source) === context.mergeRequest.sourceKey
+  );
+}
+
+/** Whether the merge request the card's PR review covers is the event's merge request. */
+function reviewsThisMergeRequest(context: FactoryGitLabRuleContext): boolean {
+  const reviewed = context.item ? reviewedPullRequest(context.item) : undefined;
+  return reviewed !== undefined && isEventMergeRequest(context, reviewed);
 }
 
 function issueOpened(context: FactoryGitLabRuleContext) {
@@ -95,6 +145,13 @@ function materializeMergeRequest(context: FactoryGitLabRuleContext) {
     title: context.mergeRequest.title,
     url: context.mergeRequest.url,
     stage: 'intake',
+    // A merge request for a card already on the board is filed on that card. For one that closes
+    // an issue on the board, the project's intake routes decide whether it joins that card.
+    ...(context.pullRequestHome
+      ? context.pullRequestHome.reason === 'closes'
+        ? { closesIssue: { workItemId: context.pullRequestHome.workItemId } }
+        : { attachTo: { workItemId: context.pullRequestHome.workItemId } }
+      : {}),
     metadata: {
       gitlabHost: context.repository.host,
       gitlabProjectId: context.repository.id,
@@ -120,8 +177,18 @@ function materializeMergeRequest(context: FactoryGitLabRuleContext) {
 }
 
 function mergeRequestUpdated(context: FactoryGitLabRuleContext) {
-  if (!context.item || context.item.source !== 'gitlab-pr' || !reviewsPullRequest(context)) return;
+  if (!context.item || !reviewsPullRequest(context)) return;
   if (!context.mergeRequest || context.mergeRequest.state !== 'open' || context.mergeRequest.merged) return;
+  // An issue card re-reviews only while its PR review covers this merge request.
+  if (
+    context.item.source !== 'gitlab-pr' &&
+    !(
+      attachedMergeRequest(context) &&
+      context.item.stages[0] === PULL_REQUEST_REVIEW_PHASE &&
+      reviewsThisMergeRequest(context)
+    )
+  )
+    return;
   if (context.item.stages.some(stage => stage === 'intake')) return;
   // An untrusted push must not start review passes on demand.
   if (!trustedGitLabActor(context) && !context.mergeRequest.factoryAuthored) return;
@@ -140,6 +207,8 @@ function mergeRequestCommented(context: FactoryGitLabRuleContext) {
   // The authoring card answers comments; it sits on a board that ships change requests (Work).
   const flow = authoringFlow(context);
   if (!context.item || !context.mergeRequest || !context.note || !flow) return;
+  // Someone else's merge request attached to the issue is not the builder's to fix.
+  if (attachedMergeRequest(context) && !context.mergeRequest.factoryAuthored) return;
   if (context.mergeRequest.state !== 'open' || context.mergeRequest.merged) return;
   if (context.actor.type === 'gitlab' && context.actor.factoryAuthored) return;
   return {
@@ -156,7 +225,7 @@ function mergeRequestCommented(context: FactoryGitLabRuleContext) {
 
 function mergeRequestMerged(context: FactoryGitLabRuleContext) {
   if (!context.item || !context.mergeRequest?.merged) return;
-  if (reviewsPullRequest(context)) {
+  if (isPullRequestCard(context.item) && reviewsPullRequest(context)) {
     return {
       type: 'transition',
       idempotencyKey: `${context.ingress.id}:merge-request-merged`,
@@ -168,7 +237,34 @@ function mergeRequestMerged(context: FactoryGitLabRuleContext) {
     } as const;
   }
   const flow = authoringFlow(context);
-  if (!flow) return;
+  if (!flow || !context.board) return;
+  // A merge request on the card itself finishes the work, unless another one it carries is still out.
+  if (attachedMergeRequest(context)) {
+    const recorded = context.item.metadata?.openPullRequestNumber;
+    const open =
+      typeof recorded === 'number' && recorded !== context.mergeRequest.number
+        ? recorded
+        : newestOpenPullRequestNumber(context.item, context.mergeRequest.number);
+    if (typeof open === 'number' && open !== context.mergeRequest.number) {
+      return {
+        type: 'sendMessage',
+        idempotencyKey: `${context.ingress.id}:work-merged`,
+        role: flow.builderRole,
+        message:
+          `GitLab merge request !${context.mergeRequest.number} merged. Merge request !${open} is still open, ` +
+          `so this ${flow.boardTitle} card stays where it is until it merges.`,
+      } as const;
+    }
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:work-merged`,
+      board: context.board,
+      stage: flow.merged.phase,
+      message: {
+        text: `GitLab merge request !${context.mergeRequest.number} merged; this ${flow.boardTitle} card was moved to ${flow.merged.title}.`,
+      },
+    } as const;
+  }
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:assess-work-completion`,
@@ -181,6 +277,20 @@ function mergeRequestMerged(context: FactoryGitLabRuleContext) {
 
 function mergeRequestClosed(context: FactoryGitLabRuleContext) {
   if (!context.item || !context.mergeRequest || context.mergeRequest.merged || !reviewsPullRequest(context)) return;
+  if (!isPullRequestCard(context.item)) {
+    // An issue card waiting in PR review on its last open merge request goes back to Intake.
+    if (!attachedMergeRequest(context) || context.item.stages[0] !== PULL_REQUEST_REVIEW_PHASE) return;
+    if (newestOpenPullRequestNumber(context.item, context.mergeRequest.number) !== null) return;
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:merge-request-closed`,
+      board: 'work',
+      stage: 'intake',
+      message: {
+        text: `GitLab merge request !${context.mergeRequest.number} was closed without merging; this card was moved back to Intake.`,
+      },
+    } as const;
+  }
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:merge-request-closed`,

@@ -1,4 +1,10 @@
-import type { WorkItemSource } from '@factory/core';
+import {
+  isOpenPullRequestSource,
+  pullRequestSourceNumber,
+  pullRequestSources,
+  workItemSource as workItemBranchSource,
+} from '@factory/core';
+import type { ExternalWorkItemSource, WorkItemSource, WorkItemSourceRow } from '@factory/core';
 
 /**
  * Where a card came from, in the vocabulary branch naming reads: the work-item
@@ -97,6 +103,20 @@ export function isWorkItemBranch(branch: string): boolean {
   );
 }
 
+/**
+ * The branch a card's pull or merge request is reviewed on. A PR's own card gets
+ * the same name {@link workItemBranch} gives it; an issue card reviewing a PR
+ * attached to it gets a branch apart from its builder's issue branch, so the
+ * reviewer and the builder never share a checkout.
+ */
+export function pullRequestBranch(input: { id: string; provider: 'github' | 'gitlab'; number: number }): string {
+  const suffix = idSuffix(input.id);
+  if (input.provider === 'gitlab') {
+    return suffix ? `factory/gitlab-mr-${input.number}-${suffix}` : `factory/item-${input.id}-mr-${input.number}`;
+  }
+  return suffix ? `factory/pr-${input.number}-${suffix}` : `factory/pr-${input.number}`;
+}
+
 /** The pre-suffix GitHub branch, for reusing sessions opened before card names were unique. */
 export function legacyGithubWorkItemBranch(branch: string): string | undefined {
   const match = /^(factory\/(?:issue|pr)-[1-9]\d*)-[a-z0-9]{1,12}$/.exec(branch);
@@ -119,4 +139,41 @@ export function mergeRequestNumberFromBranch(branch: string): number | undefined
   const match = /^factory\/gitlab-mr-([1-9]\d*)-[a-z0-9]{1,12}$/.exec(branch);
   const number = match ? Number(match[1]) : undefined;
   return number !== undefined && Number.isSafeInteger(number) ? number : undefined;
+}
+
+interface SessionedItem {
+  readonly sessions: Readonly<Record<string, { readonly branch?: string | null } | undefined>>;
+}
+
+interface BranchedItem {
+  readonly id: string;
+  readonly externalSource: ExternalWorkItemSource | null;
+  readonly workItem: { readonly metadata?: Record<string, unknown> | null; readonly sources?: readonly WorkItemSourceRow[] };
+}
+
+/**
+ * Whether a pull request from `headBranch` was opened by the card's own sessions: the head is
+ * one of its session branches, or the branch Factory builds the card on (stable even after its
+ * session is deleted).
+ */
+export function cardOwnsBranch(item: SessionedItem & BranchedItem, headBranch: string | undefined): boolean {
+  if (!headBranch) return false;
+  const buildBranch = workItemBranch({
+    id: item.id,
+    source: workItemBranchSource(item.externalSource),
+    metadata: item.workItem.metadata,
+  });
+  return buildBranch === headBranch || Object.values(item.sessions).some(session => session?.branch === headBranch);
+}
+
+/** The newest open pull request the card's own sessions opened, other than `except`. */
+export function newestOwnedOpenPullRequestNumber(item: SessionedItem & BranchedItem, except?: number): number | null {
+  const open = pullRequestSources(item).filter(
+    source =>
+      isOpenPullRequestSource(source) &&
+      pullRequestSourceNumber(source) !== except &&
+      typeof source.metadata?.headBranch === 'string' &&
+      cardOwnsBranch(item, source.metadata.headBranch),
+  );
+  return (open.length ? pullRequestSourceNumber(open.at(-1)!) : undefined) ?? null;
 }

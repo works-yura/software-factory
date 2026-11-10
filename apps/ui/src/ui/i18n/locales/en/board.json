@@ -145,7 +145,8 @@
     "created-oldest": "Oldest on board"
   },
   "sourceFilter": {
-    "manual": "Manual"
+    "manual": "Manual",
+    "pullRequests": "Pull requests"
   },
   "relatedSessions": {
     "issueTitle": "Issue #{{number}}: {{title}}",

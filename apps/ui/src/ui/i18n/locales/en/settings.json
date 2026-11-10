@@ -769,6 +769,8 @@
     "customCondition": "a condition set through the API",
     "target": "{{board}} › {{phase}}",
     "targetFirstPhase": "{{board}} › first phase",
+    "targetJoin": "Joins the closed issue's card › {{board}} › {{phase}}",
+    "targetJoinStays": "Joins the closed issue's card on {{board}}, which stays where it is",
     "or": " or ",
     "trusted": "author with write access",
     "untrusted": "outside author",

@@ -22,7 +22,13 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from '@factory/core';
-import { factoryRuleSourceForWorkItem, isFactoryRuleStage, isPullRequestCard, workItemSource } from '@factory/core';
+import {
+  factoryRuleSourceForWorkItem,
+  hasPullRequest,
+  isFactoryRuleStage,
+  isPullRequestCard,
+  workItemSource,
+} from '@factory/core';
 import { workPullRequestCardRejection } from '@factory/pipelines';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -421,7 +427,15 @@ export class FactoryTransitionService {
     // The Work board's own reason comes first: its phase graph alone only says the move is not
     // declared, which leaves an agent moving an issue card to PR review guessing why.
     const pullRequestCardRejection =
-      request.board === 'work' ? workPullRequestCardRejection(isPullRequestCard({ source: itemSource }), request.stage) : undefined;
+      request.board === 'work'
+        ? workPullRequestCardRejection(
+            {
+              standalonePullRequest: isPullRequestCard({ source: itemSource }),
+              hasPullRequest: hasPullRequest({ workItem: item.workItem, source: itemSource }),
+            },
+            request.stage,
+          )
+        : undefined;
     if (pullRequestCardRejection) {
       return this.#commitRejection(request, transitionId, 'invalid_transition', pullRequestCardRejection);
     }

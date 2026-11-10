@@ -36,16 +36,20 @@ const NON_PULL_REQUEST_PHASES: ReadonlySet<string> = new Set(['triage', 'plannin
 
 /**
  * Why a move breaks the shape of a card on Work, or undefined when it does not: a pull request's
- * card is only reviewed, and PR review holds only pull request cards. `nextPhases` cannot say
- * this: Intake leads to both Triage and PR review, and which one fits depends on the card.
+ * own card is only reviewed, and PR review holds only cards that carry a pull request (their own,
+ * or one attached to their issue). `nextPhases` cannot say this: Intake leads to both Triage and
+ * PR review, and which one fits depends on the card.
  */
-export function workPullRequestCardRejection(isPullRequest: boolean, toStage: string): string | undefined {
-  if (!isPullRequest && toStage === 'pr-review')
+export function workPullRequestCardRejection(
+  card: { readonly standalonePullRequest: boolean; readonly hasPullRequest: boolean },
+  toStage: string,
+): string | undefined {
+  if (!card.hasPullRequest && toStage === 'pr-review')
     return (
-      'PR review holds only pull request cards; this work item goes to Review after Building. ' +
-      'It stays in Review while its pull request is open, and the merge moves it to Done.'
+      'PR review holds only cards with a pull request; this work item goes to Review after Building. ' +
+      'It enters PR review once a pull request is attached to it, and the merge moves it to Done.'
     );
-  if (!isPullRequest || !NON_PULL_REQUEST_PHASES.has(toStage)) return undefined;
+  if (!card.standalonePullRequest || !NON_PULL_REQUEST_PHASES.has(toStage)) return undefined;
   return `A pull request card is reviewed on the Work board; it cannot enter ${toStage}. Move it to pr-review, done, or canceled.`;
 }
 
@@ -54,10 +58,17 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
   name: 'Work',
   initialPhase: 'intake',
   // The one rule `nextPhases` can't say: a pull request's own card is only reviewed, and PR review
-  // holds only pull request cards. (Upstream checks this in the transition service; v4's engine
+  // holds only cards that carry a pull request. (Upstream checks this in the transition service; v4's engine
   // knows no board, so Work states it here.)
   transitionPolicy: ({ item, toStage }) => {
-    const reason = workPullRequestCardRejection(isPullRequestCard(item), toStage);
+    const reason = workPullRequestCardRejection(
+      {
+        standalonePullRequest: isPullRequestCard(item),
+        hasPullRequest:
+          isPullRequestCard(item) || item.workItem.sources.some(source => source.sourceType === 'pull-request'),
+      },
+      toStage,
+    );
     return reason ? { type: 'reject', code: 'invalid_transition', reason } : undefined;
   },
   sourceClosed: { completed: 'done', canceled: 'canceled' },
@@ -113,21 +124,26 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       kind: 'working',
       runner: { context: 'work' },
       // Self-review sends the card back to Building, or parks it in Intake at its round limit.
-      nextPhases: ['execute', 'intake', 'done', 'canceled'],
+      // A maintainer's review request takes its open pull request to PR review.
+      nextPhases: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
       onEnter: onEveryWorkSource(selfReviewWorkItem),
     },
     'pr-review': {
       name: 'PR review',
-      // A pull request's own card is reviewed here by the independent reviewer, in its own
-      // review seat. Kept apart from Review, the builder's self-review, so a card never
-      // reaches the builder's lanes through a pull request's.
+      // A card's pull request is reviewed here by the independent reviewer, in its own
+      // review seat on the pull request's branch. Kept apart from Review, the builder's
+      // self-review of its own branch.
       kind: 'working',
       runner: { context: 'work' },
-      // Merged, closed, or set aside in Intake: it never reaches the builder's lanes.
-      nextPhases: ['intake', 'done', 'canceled'],
+      // Merged, closed, or set aside in Intake. An issue card can go back to its builder for a
+      // fix; a pull request's own card never reaches the builder's lanes (workPullRequestCardRejection).
+      nextPhases: ['intake', 'planning', 'execute', 'done', 'canceled'],
+      // A pull request's own card reviews itself; any other card reviews the pull or merge
+      // request attached to it (and does nothing without one).
       onEnter: {
         pullRequest: reviewPullRequest,
         gitlabPullRequest: reviewPullRequest,
+        ...onEveryWorkSource(reviewPullRequest),
       },
     },
     done: {

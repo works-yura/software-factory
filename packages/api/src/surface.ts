@@ -7,7 +7,13 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import { boardForWorkItem, isPullRequestCard, legacyPlanRoleFor, PULL_REQUEST_REVIEW_PHASE } from '@factory/core';
+import {
+  boardForWorkItem,
+  hasPullRequest,
+  legacyPlanRoleFor,
+  PULL_REQUEST_REVIEW_PHASE,
+  reviewedChangeRequest,
+} from '@factory/core';
 import type { BoardRegistry, IntakeRoutesReader } from '@factory/core';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '@factory/integrations';
 import { getGithubFeatureDiagnostics } from '@factory/integration-github';
@@ -55,10 +61,12 @@ import type { FactoryDispatchFailureCode, WorkItemsStorage } from '@factory/stor
 import { workItemSource } from '@factory/core';
 import {
   legacyGithubWorkItemBranch,
+  pullRequestBranch,
   workItemBranch,
   workItemThreadTitle,
   workLaneForRole,
 } from '@factory/pipelines';
+import type { WorkItemBranchSource } from '@factory/pipelines';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
 import { CredentialAccountRoutes } from './credential-accounts.ts';
@@ -295,6 +303,27 @@ async function legacyPlanSession(
   return undefined;
 }
 
+function sameBranch(held: string, branch: string): boolean {
+  return held === branch || held === legacyGithubWorkItemBranch(branch);
+}
+
+/** The branch a binding's session works on: the reviewed pull request's for PR review of an attached one. */
+function reviewBranch(
+  input: FactoryBindingPreparationInput,
+  boardId: string,
+  stage: string,
+  source: WorkItemBranchSource,
+): string {
+  const metadata = input.item.workItem.metadata;
+  if (input.role === 'review' && boardId === 'work' && stage === PULL_REQUEST_REVIEW_PHASE) {
+    const change = reviewedChangeRequest({ ...input.item, source });
+    if (change && !change.standalone && change.number !== undefined) {
+      return pullRequestBranch({ id: input.item.id, provider: change.provider, number: change.number });
+    }
+  }
+  return workItemBranch({ id: input.item.id, source, metadata });
+}
+
 /**
  * The lane a run started on a resting card moves it to. Work's phases share
  * contexts, so its roles keep their own lanes: `work` builds and the old `plan`
@@ -303,10 +332,10 @@ async function legacyPlanSession(
 function restingExitLane(
   board: { phaseForRole(role: string): string | undefined } | undefined,
   role: string,
-  pullRequestCard: boolean,
+  hasPullRequest: boolean,
 ): string | undefined {
-  // A pull request's own card is reviewed in PR review; Work's Review lane is the builder's self-review.
-  if (pullRequestCard && role === 'review' && workLaneForRole(board, role)) return PULL_REQUEST_REVIEW_PHASE;
+  // A card's pull request is reviewed in PR review; Work's Review lane is the builder's self-review.
+  if (hasPullRequest && role === 'review' && workLaneForRole(board, role)) return PULL_REQUEST_REVIEW_PHASE;
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 
@@ -330,7 +359,6 @@ export async function prepareFactoryRuleBinding(
         ? sourceControlProvider.sourceControlStorage
         : sourceControlProvider;
     const source = workItemSource(input.item.externalSource);
-    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.workItem.metadata });
     // Only leaving a resting phase derives a lane from the role: roles don't own lanes,
     // and the Done close-out running in the triage seat must not drag the card back.
     // Both the current phase and the role's lane come from the installed board; an
@@ -343,7 +371,7 @@ export async function prepareFactoryRuleBinding(
       currentKind === undefined
         ? undefined
         : currentKind === 'resting'
-          ? restingExitLane(board, input.role, isPullRequestCard({ source: workItemSource(input.item.externalSource) }))
+          ? restingExitLane(board, input.role, hasPullRequest({ ...input.item, source }))
           : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
@@ -351,6 +379,9 @@ export async function prepareFactoryRuleBinding(
         `Factory skill invocation has no destination lane (role "${input.role}", stages [${input.item.stages.join(', ')}]).`,
       );
     }
+    // A PR review on an issue card checks the pull request out on its own branch, apart from
+    // the builder's issue branch; every other seat works on the card's own branch.
+    const branch = reviewBranch(input, boardId, destinationStage, source);
     const connections = await sourceControl.connections.list({
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
@@ -367,7 +398,11 @@ export async function prepareFactoryRuleBinding(
     }
     // A retry may already own a role session. Check it before treating a
     // repository-less card as ambiguous, but never override an explicit signal.
-    const boundSession = await reuseBoundSession(sourceControl, input);
+    const reusable = await reuseBoundSession(sourceControl, input);
+    // The review seat moves between branches on one card (self-review on the builder's branch,
+    // PR review on each pull request's), so its session is reused only on the branch it holds.
+    const boundSession =
+      reusable && input.role === 'review' && !sameBranch(reusable.branch, branch) ? undefined : reusable;
     let repository = await resolveWorkItemRepository({
       sourceControl,
       orgId: input.record.orgId,

@@ -11,6 +11,7 @@ export {
 export type { AnyBoardConfig } from './boards/define-board.ts';
 export { cardRuleFacts } from './boards/card-facts.ts';
 export {
+  closedIssueRuleFacts,
   INTAKE_ROUTE_METADATA_KEY,
   intakeTargetProblem,
   landingPhase,
@@ -18,9 +19,15 @@ export {
   placesNewCards,
   resolveEventRoute,
   resolveIntakePlacement,
+  resolveIntakeRoute,
   routesHandleEvent,
 } from './boards/intake-routing.ts';
-export type { IntakeRoute, IntakeRoutesReader, IntakeTargetProblem } from './boards/intake-routing.ts';
+export type {
+  IntakeRoute,
+  IntakeRouteResolution,
+  IntakeRoutesReader,
+  IntakeTargetProblem,
+} from './boards/intake-routing.ts';
 export { holdsLegacyPlanner, LEGACY_PLAN_ROLE, legacyPlanRoleFor } from './boards/legacy-plan-role.ts';
 export { autoApprovedExitTool, startsInAutoPhase } from './boards/phase-automation.ts';
 export type {
@@ -46,8 +53,17 @@ export {
   boardClassifiesTriage,
   boardEventHandlers,
   boardForWorkItem,
+  boundChangeRequestNumber,
+  hasPullRequest,
   isPullRequestCard,
+  newestOpenPullRequestNumber,
+  openSource as isOpenPullRequestSource,
   PULL_REQUEST_REVIEW_PHASE,
+  pullRequestSourceNumber,
+  pullRequestSources,
+  reviewedChangeRequest,
+  reviewedPullRequest,
+  sourceExternalId,
   reviewsPullRequest,
   eventBoardId,
   isTerminalWorkItem,
@@ -61,7 +77,7 @@ export {
   withChangeRequests,
   workItemPhaseSemantics,
 } from './boards/semantics.ts';
-export type { PhaseSemantics } from './boards/semantics.ts';
+export type { PhaseSemantics, ReviewedChangeRequest } from './boards/semantics.ts';
 export { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from './boards/transition-policy.ts';
 export type {
   BoardTransitionPolicy,
@@ -128,6 +144,7 @@ export type {
   FactoryDismissStaleReviewsDecision,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
+  FactoryPullRequestHome,
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
   FactoryInvokeSkillDecision,

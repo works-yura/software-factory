@@ -10,6 +10,7 @@ import {
 } from './boardStages';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 import { BOARD_STAGES } from './stages';
+import type { WorkItemSourceRow } from '@factory/core/card';
 
 function workItem(source: WorkItemSource, stages: string[]): WorkItem {
   return {
@@ -35,6 +36,30 @@ function workItem(source: WorkItemSource, stages: string[]): WorkItem {
   };
 }
 
+function source(sourceType: string, externalId: string, metadata: Record<string, unknown>): WorkItemSourceRow {
+  const at = new Date('2026-07-01T00:00:00.000Z');
+  return {
+    id: externalId,
+    workItemId: 'item-1',
+    provider: 'github',
+    integrationId: 'github',
+    sourceType,
+    workspaceId: null,
+    externalId,
+    sourceKey: null,
+    key: null,
+    url: null,
+    state: 'open',
+    labels: [],
+    author: null,
+    metadata,
+    revision: 1,
+    syncedAt: null,
+    createdAt: at,
+    updatedAt: at,
+  };
+}
+
 describe('BOARD_STAGES', () => {
   it('uses the canonical stage order for the work board', () => {
     expect(BOARD_STAGES.map(stage => stage.id)).toEqual(FACTORY_RULE_STAGES);
@@ -48,6 +73,7 @@ describe('currentItemStageLabel', () => {
 
   it('ignores stages absent from the item board, which the board itself does not draw', () => {
     expect(currentItemStageLabel(workItem('manual', ['execute', 'obsolete']))).toBe('Building');
+    // A pull request's own card never sits in the build lanes, so only PR review counts.
     expect(currentItemStageLabel(workItem('github-pr', ['execute', 'pr-review']))).toBe('PR review');
     expect(currentItemStageLabel(workItem('gitlab-pr', ['execute', 'pr-review']))).toBe('PR review');
   });
@@ -75,9 +101,9 @@ describe('pull request cards on the Work board', () => {
     expect(itemStageOptions(card).find(stage => stage.id === 'pr-review')?.label).toBe('PR review');
     // Review is the builder's self-review: a pull request card never enters it.
     for (const stage of ['triage', 'planning', 'execute', 'review'])
-      expect(pullRequestMayEnter('work', source, stage)).toBe(false);
+      expect(pullRequestMayEnter('work', card, stage)).toBe(false);
     for (const stage of ['intake', 'pr-review', 'done', 'canceled']) {
-      expect(pullRequestMayEnter('work', source, stage)).toBe(true);
+      expect(pullRequestMayEnter('work', card, stage)).toBe(true);
     }
   });
 
@@ -93,9 +119,34 @@ describe('pull request cards on the Work board', () => {
       'done',
       'canceled',
     ]);
-    expect(pullRequestMayEnter('work', 'github-issue', 'execute')).toBe(true);
-    // PR review is a pull request's own lane: an issue card is self-reviewed in Review instead.
-    expect(pullRequestMayEnter('work', 'github-issue', 'pr-review')).toBe(false);
-    expect(pullRequestMayEnter('release', 'github-pr', 'execute')).toBe(true);
+    const issue = workItem('github-issue', ['intake']);
+    expect(pullRequestMayEnter('work', issue, 'execute')).toBe(true);
+    // An issue card with no pull request is self-reviewed in Review instead.
+    expect(pullRequestMayEnter('work', issue, 'pr-review')).toBe(false);
+    expect(pullRequestMayEnter('release', workItem('github-pr', ['intake']), 'execute')).toBe(true);
+  });
+
+  it('opens PR review and the build lanes to an issue card once a pull request is attached to it', () => {
+    const issue: WorkItem = {
+      ...workItem('github-issue', ['execute']),
+      board: 'work',
+      workItem: {
+        provider: 'github',
+        key: null,
+        url: null,
+        title: 'Add universal command search',
+        state: 'open',
+        labels: [],
+        author: null,
+        metadata: {},
+        sources: [
+          source('issue', 'issue:github-issue:12', { number: 12 }),
+          source('pull-request', 'pull-request:github-pr:34', { githubPullRequestNumber: 34 }),
+        ],
+      },
+    };
+    expect(itemStageOptions(issue).map(stage => stage.id)).toEqual(FACTORY_RULE_STAGES);
+    expect(pullRequestMayEnter('work', issue, 'pr-review')).toBe(true);
+    expect(pullRequestMayEnter('work', issue, 'execute')).toBe(true);
   });
 });

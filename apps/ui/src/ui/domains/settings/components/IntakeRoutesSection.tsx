@@ -288,15 +288,19 @@ function describeWhen(route: IntakeRouteInfo, t: T): string {
 }
 
 function describeTarget(
-  target: { boardKey: string; phaseKey: string | null },
+  target: { boardKey: string; phaseKey: string | null; joinClosedIssue?: boolean },
   boards: InstalledBoardInfo[],
   t: T,
 ): string {
   const board = boards.find(candidate => candidate.id === target.boardKey);
   const boardName = boardTitle(target.boardKey, board?.name ?? board?.title ?? target.boardKey);
-  if (!target.phaseKey) return t('intakeRoutes.targetFirstPhase', { board: boardName });
+  if (!target.phaseKey) {
+    return target.joinClosedIssue
+      ? t('intakeRoutes.targetJoinStays', { board: boardName })
+      : t('intakeRoutes.targetFirstPhase', { board: boardName });
+  }
   const phase = board?.phases.find(candidate => candidate.id === target.phaseKey);
-  return t('intakeRoutes.target', {
+  return t(target.joinClosedIssue ? 'intakeRoutes.targetJoin' : 'intakeRoutes.target', {
     board: boardName,
     phase: phaseTitle(target.boardKey, target.phaseKey, phase?.name ?? phase?.title ?? target.phaseKey),
   });
@@ -337,7 +341,8 @@ function RouteEditor({
       enabled: initial?.enabled ?? true,
       // A condition this form can't show is kept exactly as it was.
       when: readable ? writeRouteConditions(conditions.filter(condition => !isBlankCondition(condition))) : initial!.when,
-      target: { boardKey: boardKey!, phaseKey },
+      // The server replaces a route's target whole, so a joining route stays a joining one.
+      target: { boardKey: boardKey!, phaseKey, joinClosedIssue: initial?.target.joinClosedIssue ?? false },
     });
 
   return (

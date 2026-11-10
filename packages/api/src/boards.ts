@@ -101,25 +101,6 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     const project = await this.deps.boards.describe(scope);
     const details = project.details.get(key);
     const code = this.deps.boards.codeRegistry.get(key);
-    const seed = this.deps.boards.seedFor(key);
-    if (code && !seed) {
-      const { description, ...definition } = boardDefinitionOf(code);
-      return c.json(
-        {
-          board: {
-            ...definition,
-            description: description ?? null,
-            revision: null,
-            source: details?.source ?? 'app',
-            editable: false,
-            codeBehaviour: codeBehaviourOf(code),
-            problems: details?.problems ?? [],
-          },
-          canEdit: false,
-        },
-        status,
-      );
-    }
     const row = await this.deps.storage.get(scope, key);
     if (!row) return c.json({ error: 'board_not_found', message: `Board "${key}" does not exist.` }, 404);
     // A board that failed to load, or a stored row its code board hides, is a project problem.

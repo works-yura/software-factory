@@ -848,14 +848,14 @@ describe('activity attention items', () => {
 });
 
 describe('attention links open the board the card is on', () => {
-  async function seedCard(input: Pick<Card, 'board' | 'externalSource'>): Promise<Card> {
+  async function seedCard(input: Pick<Card, 'board' | 'externalSource'> & { stages?: string[] }): Promise<Card> {
     const { item } = await seed.workItems.upsert({
       orgId: 'org1',
       userId: 'u1',
       factoryProjectId: PROJECT_ID,
       input: {
         title: 'Ship it',
-        stages: ['intake'],
+        stages: input.stages ?? ['intake'],
         sessions: {},
         metadata: {},
         ...(input.board ? { board: input.board } : {}),

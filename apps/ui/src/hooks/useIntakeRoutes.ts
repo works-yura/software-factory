@@ -9,7 +9,7 @@ export interface IntakeRouteDraft {
   name: string;
   enabled: boolean;
   when: CardRuleGroup | null;
-  target: { boardKey: string; phaseKey: string | null };
+  target: { boardKey: string; phaseKey: string | null; joinClosedIssue?: boolean };
 }
 
 const base = (factoryProjectId: string) => `/web/factory/projects/${encodeURIComponent(factoryProjectId)}/intake-routes`;

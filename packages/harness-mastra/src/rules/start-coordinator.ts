@@ -2,7 +2,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { boardForWorkItem } from '@factory/core';
+import { boardForWorkItem, hasPullRequest, PULL_REQUEST_REVIEW_PHASE } from '@factory/core';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { hydrateFactorySession, resolveFactorySessionModel } from '@factory/session';
 import { resolveWorkItemRepository } from '@factory/session';
@@ -363,7 +363,16 @@ export class FactoryStartCoordinator {
     // any pull-request-sourced work item) get `untrustedCheckout` so the SDK
     // never ingests the checkout's AGENTS.md/CLAUDE.md into the system prompt
     // or reminders — those files are attacker-writable in a PR branch.
-    const untrustedCheckout = request.workItem.input.externalSource?.type === 'pull-request';
+    // An issue card's PR review checks out the attached pull request's head, so it counts too.
+    // The run's stage is where the card is going: a card started from Intake into PR review
+    // is moved only after the session is ready.
+    const runStage = request.destinationStage ?? storedItem?.stages[0];
+    const untrustedCheckout =
+      request.workItem.input.externalSource?.type === 'pull-request' ||
+      (request.workItem.role === 'review' &&
+        runStage === PULL_REQUEST_REVIEW_PHASE &&
+        storedItem != null &&
+        hasPullRequest({ workItem: storedItem.workItem }));
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's
     // base branch; fall back to the intake metadata captured from the PR.

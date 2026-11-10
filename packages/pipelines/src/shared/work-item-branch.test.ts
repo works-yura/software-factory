@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { workItemSource } from '@factory/core';
 
 import {
+  cardOwnsBranch,
   isWorkItemBranch,
   legacyGithubWorkItemBranch,
   mergeRequestNumberFromBranch,
@@ -165,5 +166,21 @@ describe('isWorkItemBranch', () => {
     for (const branch of [legacy!, 'user/session-1', 'main', 'factory/issue-0-abc', 'factory/item-', 'factory/item-a/b']) {
       expect(isWorkItemBranch(branch), branch).toBe(false);
     }
+  });
+});
+
+describe('branch ownership', () => {
+  const card = {
+    id: 'item-0001',
+    externalSource: { integrationId: 'github', type: 'issue' as const, externalId: '42' },
+    workItem: { metadata: { number: 42 } },
+  };
+  const buildBranch = workItemBranch({ id: 'item-0001', source: 'github-issue', metadata: { number: 42 } });
+
+  it("owns its build branch with no session, plus any session's branch, and nothing else", () => {
+    expect(cardOwnsBranch({ ...card, sessions: {} }, buildBranch)).toBe(true);
+    expect(cardOwnsBranch({ ...card, sessions: { work: { branch: 'legacy/42' } } }, 'legacy/42')).toBe(true);
+    expect(cardOwnsBranch({ ...card, sessions: {} }, 'feature-42')).toBe(false);
+    expect(cardOwnsBranch({ ...card, sessions: {} }, '')).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import type { PullRequestRef, VersionControl } from '@factory/capabilities';
+import { pullRequestSourceNumber, reviewedPullRequest } from '@factory/core';
 import type { FactoryReviewStatusEvent, FactoryReviewStatusReporter } from '@factory/core';
 import type { SourceControlStorageHandle } from '@factory/store';
 import type { Card } from '@factory/store';
@@ -58,11 +59,12 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
   return async event => {
     try {
       const item = await deps.workItems.get({ orgId: event.orgId, id: event.workItemId });
-      if (!item || item.externalSource?.integrationId !== 'github' || item.externalSource.type !== 'pull-request') {
-        return;
-      }
-      const repositoryId = item.workItem.metadata?.githubRepositoryId;
-      const number = item.workItem.metadata?.githubPullRequestNumber;
+      if (!item || item.externalSource?.integrationId !== 'github') return;
+      // An issue card reviews the pull request attached to it.
+      const attached = item.externalSource.type === 'pull-request' ? undefined : reviewedPullRequest(item);
+      if (item.externalSource.type !== 'pull-request' && attached?.integrationId !== 'github') return;
+      const repositoryId = attached?.metadata?.githubRepositoryId ?? item.workItem.metadata?.githubRepositoryId;
+      const number = attached ? pullRequestSourceNumber(attached) : item.workItem.metadata?.githubPullRequestNumber;
       if (typeof repositoryId !== 'number' || typeof number !== 'number' || number < 1) return;
       const target = await resolveRepository(deps.sourceControl, event.orgId, event.factoryProjectId, repositoryId);
       if (!target) return;

@@ -269,7 +269,7 @@ describe('Work board runtime: a bug', () => {
     expect(building).toMatchObject({ stages: ['execute'] });
 
     // The fix seat moves to Review, then opens the pull request. Provenance binds it to the Work
-    // card, and the pull request gets its own card in Work's Intake.
+    // card, and the pull request joins that card as one more source (upstream #29346).
     const work = { type: 'agent' as const, bindingId: 'binding-work', role: 'work' };
     await expect(move('review', work)).resolves.toMatchObject({ status: 'accepted' });
     await drain();
@@ -283,18 +283,16 @@ describe('Work board runtime: a bug', () => {
     await rules.ingest(pullRequest('opened', 'work-pr-opened'));
     await drain();
     expect(await card()).toMatchObject({ stages: ['review'], metadata: expect.objectContaining({ openPullRequestNumber: 17 }) });
-    const reviewCard = (await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).find(
-      item => item.externalSource?.type === 'pull-request',
-    );
-    expect(reviewCard).toMatchObject({ board: 'work', parentWorkItemId: building.id, stages: ['intake'] });
+    const cards = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(cards.map(item => item.id)).toEqual([building.id]);
+    expect((await card())!.workItem.sources.map(source => source.sourceType)).toEqual(['issue', 'pull-request']);
 
     // The merge closes the card (the board no longer refuses an agent's Done; the build prompt tells it when).
     await rules.ingest(pullRequest('closed', 'work-pr-merged', true));
     await drain();
     expect(await card()).toMatchObject({ board: 'work', stages: ['done'] });
-    expect(await workItems.get({ orgId: 'org-1', id: reviewCard!.id })).toMatchObject({
-      board: 'work',
-      stages: ['done'],
+    expect((await card())!.workItem.sources.find(source => source.sourceType === 'pull-request')).toMatchObject({
+      state: 'merged',
     });
     expect(
       (await workItems.listDeferredDecisions('org-1', project.id))

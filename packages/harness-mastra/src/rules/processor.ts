@@ -304,7 +304,10 @@ export async function describeFactoryPhase(input: {
     configVersion: input.configVersion,
   };
   // A pull request's own card (on Review, or on Work's `pr-review`) carries the review runtime.
-  const value: ActivePhaseSnapshotValue = reviewsPullRequest({ board, item: { source: workItemSource(item.externalSource) } })
+  const value: ActivePhaseSnapshotValue = reviewsPullRequest({
+    board,
+    item: { source: workItemSource(item.externalSource), workItem: item.workItem },
+  })
     ? {
         ...baseValue,
         board,

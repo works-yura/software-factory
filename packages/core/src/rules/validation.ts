@@ -82,6 +82,16 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
   return { type, ...(reason ? { reason } : {}) };
 }
 
+function linkedItemReference(value: unknown, field: 'attachTo' | 'closesIssue'): { workItemId: string } | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new FactoryRuleValidationError(`Factory linked work item ${field} must be an object.`);
+  }
+  assertExactKeys(value as Record<string, unknown>, ['workItemId'], `Factory linked work item ${field}`);
+  const { workItemId } = value as Record<string, unknown>;
+  return { workItemId: boundedString(workItemId, `Factory linked work item ${field}.workItemId`, 128) };
+}
+
 export function assertFactoryDecisionTarget(
   decision: FactoryRuleDecision,
   boards: BoardRegistry,
@@ -284,6 +294,8 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'url',
           'stage',
           'skipRules',
+          'attachTo',
+          'closesIssue',
           'metadata',
         ],
         'Factory linked work item decision',
@@ -296,6 +308,8 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         throw new FactoryRuleValidationError('Factory linked work item URL is invalid.');
       }
       const metadata = sanitizeMetadata(value.metadata);
+      const attachTo = linkedItemReference(value.attachTo, 'attachTo');
+      const closesIssue = linkedItemReference(value.closesIssue, 'closesIssue');
       return {
         type,
         ...commonCommitFields(value),
@@ -306,6 +320,8 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
         ...(value.skipRules === true ? { skipRules: true } : {}),
+        ...(attachTo ? { attachTo } : {}),
+        ...(closesIssue ? { closesIssue } : {}),
         ...(metadata ? { metadata } : {}),
       };
     }

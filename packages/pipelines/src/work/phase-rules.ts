@@ -170,8 +170,8 @@ export function buildWorkItem(context: FactoryStageRuleContext) {
 }
 
 export function selfReviewWorkItem(context: FactoryStageRuleContext) {
-  // A card whose change request is already open is past self-review; the Review
-  // board's reviewer covers it on the change request itself.
+  // A card whose change request is already open is past self-review; PR review
+  // covers it on the change request itself.
   if (hasOpenChangeRequest(context.item.metadata)) return;
   if (context.selfReviewEnabled !== true) return;
   return {

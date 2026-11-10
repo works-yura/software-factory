@@ -77,6 +77,11 @@ describe('Factory board ordering', () => {
 
 describe('Factory board view memory', () => {
   const openWorkBoard = (search = '') => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
+        HttpResponse.json({ boards: [...builtinBoardCatalog.boards, releaseBoard] }),
+      ),
+    );
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/work${search}`],
     });

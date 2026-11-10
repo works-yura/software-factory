@@ -20,7 +20,7 @@ import {
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
 import type { BoardFilterState } from '../boardFilters';
 import { hasLabel, isPersistedCandidate } from '../boardItems';
-import { pickedBoardSources } from '../boardSourceFilters';
+import { pickedBoardSources, PULL_REQUEST_SOURCE_FILTER } from '../boardSourceFilters';
 import type { IntakeSourceBinding } from '../services/intake';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { BoardStageId } from '../stages';
@@ -184,7 +184,10 @@ export function useBoardIntake({
     browsesPullRequests && repository ? [...available, pullRequestSource] : available;
   const pickedSources = sourceFilters ? pickedBoardSources(sourceFilters) : new Set<string>();
   const browsedSources = feedSources.filter(
-    source => pickedSources.size === 0 || pickedSources.has(source.split('-')[0]),
+    source =>
+      pickedSources.size === 0 ||
+      pickedSources.has(source.split('-')[0]) ||
+      (source === pullRequestSource && pickedSources.has(PULL_REQUEST_SOURCE_FILTER)),
   );
   const browsesGithub = browsedSources.includes('github');
 

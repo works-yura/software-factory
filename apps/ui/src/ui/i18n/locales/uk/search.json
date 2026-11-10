@@ -24,6 +24,7 @@
   },
   "navigation": {
     "work": "Розробка",
+    "pullRequests": "Пул-реквести",
     "activity": "Активність",
     "rules": "Правила",
     "auditLog": "Журнал аудиту",

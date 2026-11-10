@@ -119,7 +119,7 @@ describe('resolveIntakePlacement', () => {
     ).toEqual({ board: 'work', phase: 'intake', routeId: 'route' });
   });
 
-  it('lands pull requests on Work only in Intake or PR review, keeps everything else out of PR review, and off the Review board', () => {
+  it('lands pull requests on Work only in Intake or PR review, keeps everything else out of PR review, and never on the retired Review board', () => {
     const to = (boardKey: string, phaseKey: string) => [route({ target: { boardKey, phaseKey } })];
     expect(resolveIntakePlacement(to('work', 'pr-review'), pullRequest, registry)).toEqual({
       board: 'work',

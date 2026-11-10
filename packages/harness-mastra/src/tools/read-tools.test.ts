@@ -201,7 +201,7 @@ describe('factory_list_work_items', () => {
       id: 'c',
       title: 'Review: dark mode',
       stages: ['review'],
-      board: 'review',
+      board: 'release',
       sessions: { review: { sessionId: 's-c', branch: 'b', threadId: 't-c', startedBy: 'x' } },
     }),
     item({ id: 'd', title: 'Other factory', factoryProjectId: 'project-2' }),
@@ -220,7 +220,7 @@ describe('factory_list_work_items', () => {
     expect(await ids({ query: 'LOGIN' })).toEqual(['a']);
     expect(await ids({ query: '#12' })).toEqual(['a']);
     expect(await ids({ stage: 'execute' })).toEqual(['b']);
-    expect(await ids({ board: 'review' })).toEqual(['c']);
+    expect(await ids({ board: 'release' })).toEqual(['c']);
     expect(await ids({ board: 'work' })).toEqual(['b', 'a']);
     expect(await ids({ role: 'review' })).toEqual(['c']);
     expect(await ids({ active: true })).toEqual(['b']);

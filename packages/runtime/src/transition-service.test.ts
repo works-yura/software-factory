@@ -2614,16 +2614,34 @@ describe('pull request cards on the Work board', () => {
     });
   });
 
-  it('tells an agent moving a Review card with an open PR to PR review why it stays in Review', async () => {
+  it('tells an agent moving a card with no pull request to PR review why it cannot go there', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { board: 'work', stages: ['review'] });
+    // Building does not lead to PR review, so the board's graph alone would only say the move is undeclared.
+    const item = await createItem(storage, { board: 'work', stages: ['execute'] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const result = await service.transition(request(item, { stage: 'pr-review' }));
     expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
     expect(result.status === 'rejected' && result.reason).toMatch(
-      /^PR review holds only pull request cards.*stays in Review while its pull request is open, and the merge moves it to Done\.$/,
+      /^PR review holds only cards with a pull request.*enters PR review once a pull request is attached to it, and the merge moves it to Done\.$/,
     );
+  });
+
+  it('moves a Review card to PR review once its pull request is attached to it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const created = await createItem(storage, { board: 'work', stages: ['review'] });
+    const item = (await storage.attachSource({
+      orgId: 'org-1',
+      id: created.id,
+      source: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:34' },
+      metadata: { githubPullRequestNumber: 34, state: 'open' },
+    }))!.item;
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    await expect(service.transition(request(item, { stage: 'pr-review' }))).resolves.toMatchObject({
+      status: 'accepted',
+      stage: 'pr-review',
+    });
   });
 
   it('keeps PR review for pull request cards: an issue card cannot enter it, nor a PR card self-review', async () => {
@@ -2776,8 +2794,8 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
         triage: ['intake', 'planning', 'done', 'canceled'],
         planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
         execute: ['review', 'planning', 'done', 'canceled'],
-        review: ['execute', 'intake', 'done', 'canceled'],
-        'pr-review': ['intake', 'done', 'canceled'],
+        review: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
+        'pr-review': ['intake', 'planning', 'execute', 'done', 'canceled'],
         done: ['pr-review'],
         canceled: ['intake', 'pr-review'],
       };
@@ -2787,15 +2805,23 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       const seen: string[] = [];
       for (const [from, allowed] of Object.entries(flow)) {
         for (const to of Object.keys(flow).filter(stage => stage !== from)) {
-          // PR review is a pull request card's lane; every other lane belongs to an issue card.
+          // PR review holds cards carrying a pull request: an issue card with one attached
+          // can move between it and the build lanes.
           const pullRequest = from === 'pr-review' || to === 'pr-review';
-          const item = await createItem(storage, {
+          const created = await createItem(storage, {
             orgId: org,
-            ...(pullRequest ? { source: 'github-pr' as const, board: 'work' } : {}),
             sourceKey: `${org}-${from}-${to}`,
             stages: [from],
             metadata: { authorTrusted: true },
           });
+          const item = pullRequest
+            ? (await storage.attachSource({
+                orgId: org,
+                id: created.id,
+                source: { integrationId: 'github', type: 'pull-request', externalId: `${org}-${from}-${to}-pr` },
+                metadata: { githubPullRequestNumber: 34, state: 'open' },
+              }))!.item
+            : created;
           const byPerson = await service.transition(
             request(item, { orgId: org, stage: to as FactoryRuleStage, identity: `person-${from}-${to}` }),
           );
@@ -2814,6 +2840,30 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
         }
       }
       expect(seen).toHaveLength(Object.values(flow).flat().length);
+    });
+
+    it("keeps a pull request's own card out of the build lanes and an issue card without one out of PR review", async () => {
+      org = `org-${randomUUID()}`;
+      const storage = await workItemsOn(backend);
+      const service = new FactoryTransitionService({ configVersion: 'work-rules', storage });
+      const pullRequest = await createItem(storage, {
+        orgId: org,
+        source: 'github-pr',
+        sourceKey: `${org}-pr`,
+        stages: ['pr-review'],
+        metadata: { authorTrusted: true },
+      });
+      for (const stage of ['planning', 'execute'] as const) {
+        await expect(
+          service.transition(request(pullRequest, { orgId: org, stage, identity: `pr-${stage}` })),
+        ).resolves.toMatchObject({ status: 'rejected' });
+      }
+      const issue = await createItem(storage, { orgId: org, sourceKey: `${org}-issue`, stages: ['intake'] });
+      await expect(
+        service.transition(request(issue, { orgId: org, stage: 'pr-review', identity: 'issue-pr-review' })),
+      ).resolves.toMatchObject({ status: 'rejected' });
+      expect((await storage.get({ orgId: org, id: pullRequest.id }))?.stages).toEqual(['pr-review']);
+      expect((await storage.get({ orgId: org, id: issue.id }))?.stages).toEqual(['intake']);
     });
 
     it('resumes a card self-review parked in Intake through Planning, never straight into Building or Review', async () => {

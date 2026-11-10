@@ -24,6 +24,7 @@
   },
   "navigation": {
     "work": "Development",
+    "pullRequests": "Pull requests",
     "activity": "Activity",
     "rules": "Rules",
     "auditLog": "Audit log",

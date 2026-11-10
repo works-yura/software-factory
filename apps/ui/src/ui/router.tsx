@@ -17,6 +17,7 @@ import type { RouteObject } from 'react-router';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { KnowledgePage } from './pages/KnowledgePage';
+import { PULL_REQUEST_SOURCE_FILTER } from './domains/factory/boardSourceFilters';
 import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { NewPage } from './pages/NewPage';
@@ -59,6 +60,18 @@ function RootLanding() {
   if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
 
   return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
+}
+
+/**
+ * The retired Review board's links (`/review?item=…`) open Work filtered to cards carrying a pull
+ * request, keeping the rest of their query.
+ */
+function RetiredReviewBoardRedirect() {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  // Picked sources widen the filter, so any other source would show cards the Review board never held.
+  params.set('source', PULL_REQUEST_SOURCE_FILTER);
+  return <Navigate to={`../work?${params}`} relative="path" replace />;
 }
 
 function FactoryHomeRedirect() {
@@ -152,7 +165,7 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'new-factory', element: <CreateFactoryPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
                 // The Review board was retired: pull requests are reviewed on Work.
-                { path: 'review', element: <Navigate to="../work" replace /> },
+                { path: 'review', element: <RetiredReviewBoardRedirect /> },
                 { path: 'boards/:boardId', element: <CustomBoardPage /> },
                 { path: 'activity', element: <FactoryHomeRedirect /> },
                 { path: 'overview', element: <FactoryHomeRedirect /> },

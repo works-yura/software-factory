@@ -29,7 +29,7 @@ function route(overrides: Partial<IntakeRouteInfo> & Pick<IntakeRouteInfo, 'id' 
     enabled: true,
     position: 0,
     when: null,
-    target: { boardKey: 'work', phaseKey: null },
+    target: { boardKey: 'work', phaseKey: null, joinClosedIssue: false },
     on: ['work_item.created'],
     allowWorkingPhase: false,
     revision: 1,
@@ -52,14 +52,14 @@ const outsideAuthors = route({
       { field: 'author.trusted', operator: 'equals', value: false },
     ],
   },
-  target: { boardKey: 'work', phaseKey: 'intake' },
+  target: { boardKey: 'work', phaseKey: 'intake', joinClosedIssue: false },
 });
 const clickUpTriage = route({
   id: '00000000-0000-4000-8000-000000000002',
   name: 'ClickUp to Triage',
   position: 1,
   when: { operator: 'AND', conditions: [{ field: 'source.integration', operator: 'equals', value: 'clickup' }] },
-  target: { boardKey: 'work', phaseKey: 'triage' },
+  target: { boardKey: 'work', phaseKey: 'triage', joinClosedIssue: false },
 });
 
 /** A project's routes behind the real API paths; returns what the UI wrote. */
@@ -152,7 +152,7 @@ describe('IntakeRoutesSection', () => {
           { field: 'source.integration', operator: 'equals', value: 'clickup' },
         ],
       },
-      target: { boardKey: 'work', phaseKey: 'triage' },
+      target: { boardKey: 'work', phaseKey: 'triage', joinClosedIssue: false },
     });
     await waitFor(() => expect(routeRows()).toHaveLength(1));
   });
@@ -214,14 +214,14 @@ describe('IntakeRoutesSection', () => {
         name: 'Issues closed as not planned go to Canceled',
         on: ['work_item.closed'],
         when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'canceled' }] },
-        target: { boardKey: 'work', phaseKey: 'done' },
+        target: { boardKey: 'work', phaseKey: 'done', joinClosedIssue: false },
       }),
       route({
         id: '00000000-0000-4000-8000-000000000006',
         name: 'Reopened issues go back to Intake',
         position: 1,
         on: ['work_item.reopened'],
-        target: { boardKey: 'work', phaseKey: 'intake' },
+        target: { boardKey: 'work', phaseKey: 'intake', joinClosedIssue: false },
       }),
     ]);
     renderSection();

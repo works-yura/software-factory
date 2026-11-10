@@ -219,7 +219,7 @@ describe('related work item index', () => {
 });
 
 describe('relationshipPath', () => {
-  it('opens the board holding a pull request card, and Work for one not filed yet', () => {
+  it('opens Work for a pull request card, whether filed there, stored before boards, or not filed yet', () => {
     const pullRequest = workItem({ id: 'pr', source: 'github-pr' });
     expect(relationshipPath({ ...pullRequest, board: 'work' }, 'f1')).toBe('/factories/f1/work');
     expect(relationshipPath({ ...pullRequest, board: 'release' }, 'f1')).toBe('/factories/f1/boards/release');

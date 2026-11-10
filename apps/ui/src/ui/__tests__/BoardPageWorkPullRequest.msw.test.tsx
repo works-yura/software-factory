@@ -1,7 +1,9 @@
 /**
  * Pull requests are reviewed on the Work board: a pull request's card sits in
- * Work Intake and its Review action moves it into Work's PR review lane, where the
- * lane's rule queues the reviewer.
+ * Work Intake and its Review action moves it into Work's PR review lane, where
+ * the lane's rule queues the reviewer. A pull request that fixes an issue on the
+ * board rides on that issue's card, and old Review board links open Work
+ * filtered to cards carrying a pull request.
  */
 import type { WorkItemRow } from '@factory/store/work-items/base';
 import type { Card } from '@factory/store/work-items/base';
@@ -11,6 +13,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { workBoardCatalog } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -21,6 +24,53 @@ import { reviewCandidate, reviewItem } from './fixtures/reviewCard';
 const FACTORY_ID = reviewItem.factoryProjectId;
 const projectUrl = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`;
 const workPullRequest: Card = { ...reviewItem, id: 'work-pr', board: 'work' };
+
+const pullRequestSource = reviewItem.workItem.sources[0];
+const issueSource = {
+  ...pullRequestSource,
+  id: 'source-issue-12',
+  workItemId: 'work-issue-12',
+  sourceType: 'issue',
+  externalId: 'issue:github-issue:12',
+  sourceKey: 'github:issue:github-issue:12',
+  key: 'acme/app#12',
+  url: 'https://github.com/acme/app/issues/12',
+  metadata: { number: 12, state: 'open' },
+};
+/** An issue card a trusted pull request said it fixes: the issue stays its primary source. */
+const issueWithPullRequest: Card = {
+  ...reviewItem,
+  id: 'issue-12',
+  workItemId: 'work-issue-12',
+  board: 'work',
+  title: 'Rate limit the API',
+  stages: ['pr-review'],
+  externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:12', url: issueSource.url },
+  workItem: {
+    ...reviewItem.workItem,
+    id: 'work-issue-12',
+    externalId: issueSource.externalId,
+    key: issueSource.key,
+    url: issueSource.url,
+    title: 'Rate limit the API',
+    metadata: issueSource.metadata,
+    sources: [issueSource, { ...pullRequestSource, workItemId: 'work-issue-12' }],
+  },
+  metadata: { openPullRequestNumber: 42 },
+};
+const plainIssue: Card = {
+  ...issueWithPullRequest,
+  id: 'issue-13',
+  title: 'Document the API',
+  stages: ['planning'],
+  workItem: { ...issueWithPullRequest.workItem, sources: [issueSource] },
+  metadata: {},
+};
+
+/** Work as the server serves it, PR review included. */
+function stubWorkCatalog() {
+  server.use(http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json(workBoardCatalog)));
+}
 
 function stubBoards({ items = [] as Card[], candidates = [] as (typeof reviewCandidate)[] } = {}) {
   const data = { items };
@@ -89,8 +139,10 @@ function stubBoards({ items = [] as Card[], candidates = [] as (typeof reviewCan
   return { created, transitions };
 }
 
-function renderBoard(board: 'work') {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/${board}`] });
+function renderBoard(board: 'work' | 'review', search = '') {
+  const router = createMemoryRouter(createAppRoutes(), {
+    initialEntries: [`/factories/${FACTORY_ID}/${board}${search}`],
+  });
   return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
@@ -133,5 +185,41 @@ describe('Pull requests on the Work board', () => {
 
     expect(created).toEqual([expect.objectContaining({ board: 'work', title: reviewCandidate.title })]);
     expect(transitions).toEqual([expect.objectContaining({ board: 'work', stage: 'pr-review' })]);
+  });
+
+  it("keeps an old Review board link's card on the way to Work", async () => {
+    stubBoards({ items: [issueWithPullRequest] });
+    const { router } = renderBoard('review', `?item=${issueWithPullRequest.id}`);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
+    expect(new URLSearchParams(router.state.location.search).get('item')).toBe(issueWithPullRequest.id);
+    expect(new URLSearchParams(router.state.location.search).getAll('source')).toEqual(['pull-request']);
+  });
+
+  it('shows only pull requests for an old Review board link that picked another source', async () => {
+    stubBoards({ items: [issueWithPullRequest, plainIssue] });
+    stubWorkCatalog();
+    const { router } = renderBoard('review', '?source=github');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
+    expect(new URLSearchParams(router.state.location.search).getAll('source')).toEqual(['pull-request']);
+    const prReview = await screen.findByRole('region', { name: 'PR review' });
+    expect(await within(prReview).findByText(issueWithPullRequest.title)).toBeVisible();
+    expect(screen.queryByText(plainIssue.title)).toBeNull();
+  });
+
+  it("lists an issue card carrying a pull request under the pull request filter, with that PR's status", async () => {
+    stubBoards({ items: [issueWithPullRequest, plainIssue] });
+    stubWorkCatalog();
+    const { router } = renderBoard('review');
+
+    await waitFor(() => expect(router.state.location.search).toBe('?source=pull-request'));
+    const prReview = await screen.findByRole('region', { name: 'PR review' });
+    const card = (await within(prReview).findByText(issueWithPullRequest.title)).closest(
+      '[data-testid="work-item-card"]',
+    );
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByRole('img', { name: 'Open pull request' })).toBeInTheDocument();
+    expect(screen.queryByText(plainIssue.title)).toBeNull();
   });
 });

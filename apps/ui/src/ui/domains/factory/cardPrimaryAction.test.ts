@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { boardCardState } from './boardCardState';
-import { itemBoard } from './boardStages';
 import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
 import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
+import type { WorkItemSourceRow } from '@factory/core/card';
 
 const investigate: CardMove = { action: 'investigate', label: 'Investigate', role: 'triage', stage: 'triage' };
 const plan: CardMove = { action: 'plan', label: 'Plan', role: 'work', stage: 'planning' };
@@ -166,6 +166,68 @@ describe('cardMoves', () => {
       ]);
     },
   );
+
+  describe('an issue card carrying a pull request', () => {
+    function carrying(state: string, metadata: Record<string, unknown> = {}) {
+      const at = new Date('2026-07-01T00:00:00.000Z');
+      const pullRequest: WorkItemSourceRow = {
+        id: 'source-pr',
+        workItemId: 'item-1',
+        provider: 'github',
+        integrationId: 'github',
+        sourceType: 'pull-request',
+        workspaceId: null,
+        externalId: 'pull-request:github-pr:34',
+        sourceKey: null,
+        key: null,
+        url: null,
+        state,
+        labels: [],
+        author: null,
+        metadata: { githubPullRequestNumber: 34, ...metadata },
+        revision: 1,
+        syncedAt: null,
+        createdAt: at,
+        updatedAt: at,
+      };
+      return {
+        source: 'github-issue' as const,
+        board: 'work',
+        // The issue itself is closed; only the pull request's own source says whether it is open.
+        metadata: { state: 'closed' },
+        workItem: {
+          provider: 'github' as const,
+          key: null,
+          url: null,
+          title: 'Fix it',
+          state: 'closed',
+          labels: [],
+          author: null,
+          metadata: {},
+          sources: [
+            {
+              ...pullRequest,
+              id: 'source-issue',
+              sourceType: 'issue',
+              externalId: 'issue:github-issue:12',
+              metadata: {},
+            },
+            pullRequest,
+          ],
+        },
+      };
+    }
+
+    it('offers Review in PR review and self-review, like a pull request card', () => {
+      expect(cardMoves(carrying('open'), 'pr-review')).toEqual([review]);
+      expect(cardMoves(carrying('open'), 'review')).toEqual([review]);
+    });
+
+    it("offers Re-review in Done while the pull request's own source is open, and nothing once it merged", () => {
+      expect(cardMoves(carrying('open'), 'done')).toEqual([{ action: 'reReview', label: 'Re-review', role: 'review', stage: 'pr-review' }]);
+      expect(cardMoves(carrying('merged', { merged: true }), 'done')).toEqual([]);
+    });
+  });
 
   it('offers a Work card in Review no lane, so its session is the action', () => {
     expect(cardMoves({ source: 'github-issue', metadata: {} }, 'review')).toEqual([]);

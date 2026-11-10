@@ -147,7 +147,8 @@
     "created-oldest": "Найстаріші на дошці"
   },
   "sourceFilter": {
-    "manual": "Вручну"
+    "manual": "Вручну",
+    "pullRequests": "Пул-реквести"
   },
   "relatedSessions": {
     "issueTitle": "Задача #{{number}}: {{title}}",

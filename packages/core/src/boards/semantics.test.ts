@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
+import type { WorkItemSourceRow } from '../card.ts';
 import { defineBoard } from './define-board.ts';
 import { createBoardRegistry } from './registry.ts';
 import {
   boardForWorkItem,
   isTerminalWorkItem,
+  pullRequestSourceNumber,
   resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
+  reviewedPullRequest,
   workItemPhaseSemantics,
 } from './semantics.ts';
 import { createTestBoard } from './test-utils.ts';
@@ -68,7 +71,7 @@ describe('workItemPhaseSemantics', () => {
       workItemPhaseSemantics(boards, {
         board: null,
         externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
-        stages: ['review'],
+        stages: ['pr-review'],
       }),
     ).toBeUndefined();
   });
@@ -160,5 +163,44 @@ describe('resolveBoardClosure', () => {
   it('is undefined for boards that declare no mapping or are not installed', () => {
     expect(resolveBoardClosure(boards, { board: 'release', externalSource: null, stages: ['queued'] })).toBeUndefined();
     expect(resolveBoardClosure(boards, { board: 'gone', externalSource: null, stages: ['queued'] })).toBeUndefined();
+  });
+});
+
+function sourceRow(fields: Pick<WorkItemSourceRow, 'sourceType' | 'externalId' | 'metadata'>): WorkItemSourceRow {
+  const now = new Date(0);
+  return {
+    id: `source-${fields.externalId}`,
+    workItemId: 'item-1',
+    provider: 'gitlab',
+    integrationId: 'gitlab',
+    workspaceId: null,
+    sourceKey: null,
+    key: null,
+    url: null,
+    state: null,
+    labels: [],
+    author: null,
+    revision: 1,
+    syncedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    ...fields,
+  };
+}
+
+describe('the number of an attached change request', () => {
+  it("reads a GitLab merge request's iid from its facts, not from digits at the end of its key", () => {
+    // GitLab keys are base64url JSON, so trailing digits are an accident of the encoding.
+    const key = `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host: 'gitlab.com', projectId: 7, mergeRequestIid: 17 })).toString('base64url')}`;
+    const issue = sourceRow({ sourceType: 'issue', externalId: 'gitlab-issue:42', metadata: {} });
+    const mergeRequest = sourceRow({
+      sourceType: 'pull-request',
+      externalId: key,
+      metadata: { gitlabMergeRequestIid: 17, state: 'open' },
+    });
+    const attached = reviewedPullRequest({ workItem: { sources: [issue, mergeRequest] } });
+
+    expect(attached && pullRequestSourceNumber(attached)).toBe(17);
+    expect(/(\d+)$/.exec(key)?.[1]).not.toBe('17');
   });
 });

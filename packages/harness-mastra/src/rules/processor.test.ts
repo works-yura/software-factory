@@ -551,7 +551,7 @@ describe('FactoryPhaseStateProcessor', () => {
       }
     });
 
-    it('gives Review and custom boards none of Work’s submit_plan behaviour', async () => {
+    it('gives PR review and custom boards none of Work’s submit_plan behaviour', async () => {
       const release = defineBoard({
         id: 'release',
         title: 'Release',
@@ -563,7 +563,7 @@ describe('FactoryPhaseStateProcessor', () => {
         },
       });
       for (const board of [
-        { id: 'review', stage: 'review', source: 'pull-request' as const },
+        { id: 'work', stage: 'pr-review', source: 'pull-request' as const },
         { id: 'release', stage: 'planning', source: 'issue' as const },
       ]) {
         const storage = (await createFactoryStorageForTests()).workItems;

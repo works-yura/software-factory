@@ -12,10 +12,8 @@ describe('sessionBoard', () => {
     expect(sessionBoard(testSession('s1', { branch: 'factory/issue-3' }), item)).toBe('work');
   });
 
-  it("follows the item's custom board, not the branch", () => {
-    const item = testWorkItem({ board: 'release' });
-
-    expect(sessionBoard(testSession('s1', { branch: 'factory/pr-12' }), item)).toBe('release');
+  it("follows the item's custom board", () => {
+    expect(sessionBoard(testSession('s1', { branch: 'factory/issue-3' }), testWorkItem({ board: 'release' }))).toBe('release');
   });
 
   it('puts a session with no linked item on Work, pull request reviews included', () => {

@@ -47,6 +47,15 @@ describe('Board empty-state actions', () => {
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
 
+  it('sends an old Review board link to Work, filtered to cards with a pull request', async () => {
+    stubWorkBoard();
+    const router = renderBoard('', 'review');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
+    expect(router.state.location.search).toBe('?source=pull-request');
+    expect(await screen.findByTestId('board-column-intake')).toBeVisible();
+  });
+
   it.each(['list', 'board'])('offers manual creation and intake setup in the %s layout', async layout => {
     stubWorkBoard();
     server.use(

@@ -90,7 +90,7 @@ export function useBoardItems({
     // and otherwise queue the same move twice.
     if (!item || movingRef.current.has(id)) return;
     const boardId = itemBoard(item);
-    if (!pullRequestMayEnter(boardId, item.source, toStage)) return;
+    if (!pullRequestMayEnter(boardId, item, toStage)) return;
     if (boardId !== 'work') {
       const definition = catalog.data?.find(board => board.id === boardId);
       const phase = definition?.phases.find(candidate => item.stages.includes(candidate.id));
@@ -131,7 +131,7 @@ export function useBoardItems({
       if (customPrompt) {
         await createWorkItemComment(baseUrl, item.id, { body: customPrompt, clientToken: crypto.randomUUID() });
       }
-      if (!item.stages.includes(toStage) && pullRequestMayEnter(kind, source, toStage)) {
+      if (!item.stages.includes(toStage) && pullRequestMayEnter(kind, item, toStage)) {
         requestTransition(item, toStage, { cause });
       }
     })().catch(error => {

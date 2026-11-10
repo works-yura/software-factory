@@ -1059,7 +1059,7 @@ describe('built-in board and integration handlers', () => {
       });
     });
 
-    it('does nothing when the PR is still in Intake, is unlinked, or is not on the Review board', async () => {
+    it('does nothing when the PR is still in Intake, is unlinked, or its card is not reviewing it', async () => {
       const rule = defaultGithubRules.pullRequestUpdated;
       for (const context of [
         // Card is still in intake — a review pass has not started yet.
