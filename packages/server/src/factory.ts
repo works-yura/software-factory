@@ -65,6 +65,7 @@ import {
   createClaudeCheckoutResolver,
   createLocalCheckoutAttacher,
   createClaudeCodeCredentials,
+  claudeFactorySkillDirectories,
   createClaudeFactoryHarness,
   createClaudeSignInService,
   createClaudeUserSessions,
@@ -413,6 +414,9 @@ export interface MastraFactoryConfig {
     };
   };
 }
+
+/** Read-only web tools a Product card's Claude Code run may use without asking (Brief: providers' pricing pages). */
+export const PRODUCT_WEB_READ_TOOLS = ['WebFetch', 'WebSearch'] as const;
 
 /** How this server runs Claude Code sessions (see `createClaudeFactoryHarness`). */
 export interface MastraFactoryClaudeCodeConfig
@@ -1852,6 +1856,18 @@ export class MastraFactory {
           // The factory-phase signal a bound Mastra run gets, so the skills read the same stage and revision.
           ...(workItemsReady
             ? {
+                // A Product card's Brief reads providers' pricing pages: reading the web needs no person.
+                allowToolsFor: async ({ orgId, sessionId, threadId, resourceId }) => {
+                  const binding = await workItemsStorage.findActiveRunBindingByThread({
+                    orgId,
+                    threadId,
+                    resourceId,
+                    sessionId,
+                  });
+                  if (!binding) return undefined;
+                  const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                  return item?.board === 'product' ? [...PRODUCT_WEB_READ_TOOLS] : undefined;
+                },
                 phaseFor: async ({ orgId, factoryProjectId, sessionId, threadId, resourceId }) => {
                   const binding = await workItemsStorage.findActiveRunBindingByThread({
                     orgId,
@@ -2372,6 +2388,7 @@ export class MastraFactory {
                             sessionTools: requestContext => sessionExtraTools(requestContext),
                             sandboxFor: claudeSessionSandbox,
                             observe: postToolObserver,
+                            skillDirectories: claudeFactorySkillDirectories(claudeCodeConfig?.skillsDir),
                           }) as Promise<Record<string, Tool<any, any, any, any>>>,
                       }
                     : {}),

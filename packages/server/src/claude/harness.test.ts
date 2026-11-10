@@ -387,6 +387,30 @@ describe('createClaudeFactoryHarness', () => {
     });
   });
 
+  describe('per-card allowed tools', () => {
+    it("lets a card run use the card's extra tools (a Product card's web reads); other runs and chats get none", async () => {
+      const allowToolsFor = vi.fn(async ({ sessionId }: { sessionId: string }) =>
+        sessionId === 'session-product' ? ['WebFetch', 'WebSearch'] : undefined,
+      );
+      const { factory, config } = setup(
+        { permissions: async () => ({}), cardRun: async () => true, allowToolsFor },
+        {
+          'session-product': { orgId: 'org-a', userId: 'user-a', factoryProjectId: 'factory-a' },
+          'session-work': { orgId: 'org-a', userId: 'user-a', factoryProjectId: 'factory-a' },
+        },
+      );
+      const product = await factory.harness.createSession({ sessionId: 'session-product', threadId: 'session-product' });
+      const work = await factory.harness.createSession({ sessionId: 'session-work', threadId: 'session-work' });
+
+      await expect(config.permissions!(product)).resolves.toEqual({
+        unattended: true,
+        parkAsks: true,
+        allowTools: ['WebFetch', 'WebSearch'],
+      });
+      await expect(config.permissions!(work)).resolves.toEqual({ unattended: true, parkAsks: true });
+    });
+  });
+
   describe('the Factory chat (supervisor) on Claude Code', () => {
     const FACTORY = '11111111-1111-4111-8111-111111111111';
     const SUPERVISOR = `factory-supervisor:${FACTORY}`;

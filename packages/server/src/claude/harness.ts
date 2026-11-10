@@ -31,6 +31,18 @@ import {
   createClaudeSupervisorWorkdir,
 } from './supervisor.ts';
 
+/**
+ * Where a Claude Code session's Factory skills live: the configured
+ * directories, or the project's local `factory-skills` (first, so a project
+ * can override a bundled skill) and the bundled ones. The kickoff reads a
+ * skill's SKILL.md from here, and `skill_read` its references.
+ */
+export function claudeFactorySkillDirectories(configured?: string | string[]): string[] {
+  if (configured !== undefined) return [configured].flat();
+  // The dev server bundle ships no copy of its own.
+  return [...[resolveLocalFactorySkillsPath()].filter((dir): dir is string => Boolean(dir)), BUNDLED_FACTORY_SKILLS_PATH];
+}
+
 /** The MCP server name the Factory's tools are mounted under: Claude sees them as `mcp__factory__<tool>`. */
 export const CLAUDE_FACTORY_MCP_SERVER = 'factory';
 
@@ -118,6 +130,19 @@ export interface ClaudeFactoryHarnessOptions {
    * The `factory-phase` signal a bound Mastra run sees (`describeFactoryPhase`),
    * for the work item this session's thread is bound to; `undefined` when none is.
    */
+  /**
+   * Built-in tools a card run may use without asking, beyond the Factory's
+   * settings, for the work item its thread is bound to: read-only `WebFetch`
+   * and `WebSearch` for a Product card, whose Brief reads providers' pricing
+   * pages. A denied category still wins.
+   */
+  allowToolsFor?: (session: {
+    orgId: string;
+    factoryProjectId: string;
+    sessionId: string;
+    threadId: string;
+    resourceId: string;
+  }) => Promise<string[] | undefined>;
   phaseFor?: (session: {
     orgId: string;
     factoryProjectId: string;
@@ -324,7 +349,19 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       const permissions =
         (await options.permissions?.({ orgId: tenant.orgId, factoryProjectId: tenant.factoryProjectId })) ?? {};
       if (tenant.supervisor) return { ...permissions, askEachTime: [...CLAUDE_SUPERVISOR_ASK_TOOLS] };
-      if (await isCardRun(session, tenant)) return { ...permissions, unattended: true, parkAsks: true };
+      if (await isCardRun(session, tenant)) {
+        const allowTools =
+          options.allowToolsFor && session.thread.getId()
+            ? await options.allowToolsFor({
+                orgId: tenant.orgId,
+                factoryProjectId: tenant.factoryProjectId,
+                sessionId: session.id,
+                threadId: session.thread.requireId(),
+                resourceId: session.resourceId ?? tenant.factoryProjectId,
+              })
+            : undefined;
+        return { ...permissions, unattended: true, parkAsks: true, ...(allowTools?.length ? { allowTools } : {}) };
+      }
       return permissions;
     },
     // A pull or merge request checkout reads no settings file: its hooks would run on this host.
@@ -375,11 +412,7 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     planningPrompt: CLAUDE_FACTORY_PLANNING_PROMPT,
     planningDisallowedTools: CLAUDE_FACTORY_PLANNING_DISALLOWED_TOOLS,
     approvedPermissionMode: options.approvedPermissionMode ?? 'acceptEdits',
-    skillsDir: options.skillsDir ?? [
-      // Local first so a project can override a bundled skill; the dev server bundle ships no copy of its own.
-      ...[resolveLocalFactorySkillsPath()].filter((dir): dir is string => Boolean(dir)),
-      BUNDLED_FACTORY_SKILLS_PATH,
-    ],
+    skillsDir: claudeFactorySkillDirectories(options.skillsDir),
     ...(options.turnTimeoutMs ? { turnTimeoutMs: options.turnTimeoutMs } : {}),
     ...(options.command ? { command: options.command } : {}),
     ...(options.spawn ? { spawn: options.spawn } : {}),

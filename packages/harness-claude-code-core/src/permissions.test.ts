@@ -25,6 +25,16 @@ describe('claudePermissionRules', () => {
     expect(rules.deny).toEqual(['Bash', 'BashOutput', 'KillShell', 'Monitor', 'mcp__linear']);
   });
 
+  it('allows the listed tools without asking, but never past a denied category', () => {
+    const rules = claudePermissionRules({ allowTools: ['WebFetch', 'WebSearch'] });
+    expect(rules.allow).toEqual(expect.arrayContaining(['WebFetch', 'WebSearch']));
+    expect(rules.ask).not.toContain('WebFetch');
+    expect(rules.ask).toEqual(expect.arrayContaining(['Task', 'Agent']));
+    const denied = claudePermissionRules({ allowTools: ['WebFetch'], categories: { other: 'deny' } });
+    expect(denied.deny).toContain('WebFetch');
+    expect(denied.allow).not.toContain('WebFetch');
+  });
+
   it('allows everything on auto-approve', () => {
     const rules = claudePermissionRules({ yolo: true, categories: { execute: 'deny' } }, { mcpServers: ['linear'] });
     expect(rules.deny).toEqual([]);

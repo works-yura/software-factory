@@ -14,6 +14,8 @@ import type { FactoryTransitionService } from '@factory/runtime';
 import type { FactorySessionSourceLookup } from '@factory/session';
 import type { WorkItemsStorage } from '@factory/store';
 
+import { createClaudeSkillReadTool } from './skill-read.ts';
+
 type AnyTool = Tool<any, any, any, any>;
 
 /**
@@ -101,6 +103,11 @@ export async function createClaudeSessionTools(
     sandboxFor: (sessionId: string) => Promise<unknown>;
     /** Runs after each call, as the Mastra controller's `postToolObserver`. */
     observe?: ClaudeToolObserver;
+    /**
+     * The Factory skills directories: with them, the session gets `skill_read`, as a Mastra
+     * session has, because its kickoff carries only a skill's SKILL.md, not its references.
+     */
+    skillDirectories?: readonly string[];
   },
 ): Promise<Record<string, AnyTool>> {
   const requestContext = boundRunRequestContext(scope);
@@ -112,6 +119,7 @@ export async function createClaudeSessionTools(
   for (const [name, tool] of Object.entries(await deps.sessionTools(requestContext))) {
     tools[name] = asMcpTool(tool as AnyTool, requestContext, workspace, deps.observe);
   }
+  if (deps.skillDirectories?.length) tools.skill_read ??= createClaudeSkillReadTool(deps.skillDirectories);
   return tools;
 }
 

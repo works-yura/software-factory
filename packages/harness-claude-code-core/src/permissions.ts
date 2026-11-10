@@ -39,6 +39,12 @@ export interface ClaudeToolPermissions {
    * being refused. What an unattended run may do unasked stays allowed.
    */
   parkAsks?: boolean;
+  /**
+   * Built-in tools this session may use without asking unless their category
+   * is denied, e.g. read-only `WebFetch` for a session whose job is to read
+   * providers' pricing pages. Narrower than allowing the whole category.
+   */
+  allowTools?: string[];
 }
 
 /** Shell commands an unattended run may use unless the Execute category is denied. */
@@ -135,7 +141,9 @@ export function claudePermissionRules(
         ? mcpServers.filter(server => !own.has(server)).map(server => `mcp__${server}`)
         : [...CLAUDE_TOOL_CATEGORY_TOOLS[category]];
     for (const tool of tools) {
-      const unattendedAllowed = permissions.unattended && CLAUDE_UNATTENDED_ALLOWED_TOOLS.includes(tool);
+      const unattendedAllowed =
+        (permissions.unattended && CLAUDE_UNATTENDED_ALLOWED_TOOLS.includes(tool)) ||
+        (permissions.allowTools?.includes(tool) ?? false);
       if (policy === 'deny') rules.deny.push(tool);
       else if (policy === 'allow' || grantedSet.has(tool) || unattendedAllowed) rules.allow.push(tool);
       // An ask rule for `Bash` would outrank `Bash(git:*)`: unlisted, the other commands still reach the gate.

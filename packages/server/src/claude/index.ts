@@ -16,3 +16,4 @@ export * from './tool-results.ts';
 export * from './worker-messaging.ts';
 export * from './person-turn.ts';
 export * from './factory-chat-guard.ts';
+export * from './skill-read.ts';
