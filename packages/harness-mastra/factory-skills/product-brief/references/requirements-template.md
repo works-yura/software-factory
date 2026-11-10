@@ -44,10 +44,12 @@ Write it in the person's language: for this team, **the Ukrainian headings in br
 ## What the app remembers  (Що застосунок пам'ятає)
 <!-- Only if the user would notice it; one or two plain sentences, never a data structure. -->
 
-## Edge cases  (Крайові випадки)
-| Situation | What happens |
+## Edge cases  (Особливі випадки)
+<!-- Required, as a TABLE (the check refuses a list). One row per situation the client can run into; the right column says what the user SEES, with the exact on-screen or message text in quotes when there is one. Only situations a client can observe: internal guarantees (no duplicates on retry, idempotency, queues) belong to the spec. A case whose behaviour is a choice (e.g. what happens to an email address that bounces) is decided with the person through the question tool first, then written here as the agreed behaviour. -->
+| Situation (Ситуація) | What the user sees (Що бачить користувач) |
 |---|---|
-| <failure / empty / coming back later / already set up / no permission> | <exactly what the user sees> |
+| <the booking's professional is changed from Ana to María> | <both get "Cita reprogramada" with the line "Profesional: Ana → María"> |
+| <the business is frozen for non-payment> | <no push or email; the bell keeps collecting, so after payment the history is there> |
 
 ## Out of scope  (Межі оцінки)
 - <thing> (<plain reason: needs more design first / a later phase / handled elsewhere>)

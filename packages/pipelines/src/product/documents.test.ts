@@ -37,6 +37,8 @@ Buyers who order twice a month.
 
 ## Edge cases
 | Situation | What happens |
+|---|---|
+| The card is declined | "Payment failed" and no access |
 
 ## Acceptance criteria
 1. A buyer sees their points after checkout.
@@ -148,7 +150,7 @@ const TASKS = `# Loyalty: tasks
 | AC-1 | LY-01, LY-02 |
 `;
 
-const clean = { missingSections: [], missingDiagrams: [], taskProblems: [] };
+const clean = { missingSections: [], missingDiagrams: [], taskProblems: [], formatProblems: [] };
 
 describe('product document checks', () => {
   it('names the team layout files per document type', () => {
@@ -207,6 +209,14 @@ describe('product document checks', () => {
   it('does not require acceptance criteria in the client brief: they live in the spec', () => {
     const without = BRIEF.replace('## Acceptance criteria', 'Acceptance criteria');
     expect(checkProductDocumentStructure('brief', without).missingSections).toEqual([]);
+  });
+
+  it('requires the edge cases as a table of what the user sees', () => {
+    const asList = BRIEF.replace(/## Edge cases[\s\S]*?(?=\n## )/, '## Edge cases\n- The card is declined: "Payment failed".\n');
+    expect(checkProductDocumentStructure('brief', asList).formatProblems).toHaveLength(1);
+    expect(checkProductDocumentStructure('brief', BRIEF).formatProblems).toEqual([]);
+    const ukrainian = BRIEF.replace('## Edge cases', '## Особливі випадки');
+    expect(checkProductDocumentStructure('brief', ukrainian)).toMatchObject({ missingSections: [], formatProblems: [] });
   });
 
   it('accepts Ukrainian headings', () => {

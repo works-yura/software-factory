@@ -74,7 +74,7 @@ export const PRODUCT_DOCUMENT_SECTIONS: Readonly<Record<ProductDocumentType, rea
     section('Goal', /goal/i, /purpose/i, /context/i, /мета/i, /ціль/i, /контекст/i),
     section('Users', /users?\b(?! stor)/i, /roles?/i, /who uses/i, /користувач/i, /ролі/i),
     section('Use cases', /use cases?/i, /user stor/i, /journeys?/i, /scenarios?/i, /сценарі/i, /історі/i),
-    section('Edge cases', /edge cases?/i, /states?/i, /крайов/i, /стан/i),
+    section('Edge cases', /edge cases?/i, /states?/i, /крайов/i, /особлив/i, /стан/i),
     section('Out of scope', /not included/i, /non-goals?/i, /out of scope/i, /не входить/i, /поза межами/i, /межі оцінки/i),
     section('Constraints', /constraint/i, /обмежен/i),
     section('Technology', /technolog/i, /stack/i, /технолог/i, /стек/i),
@@ -148,6 +148,8 @@ export interface ProductDocumentCheck {
   readonly missingDiagrams: readonly string[];
   /** tasks.md only: tasks missing a required field, or depending on a task that does not exist. Absent on older checks. */
   readonly taskProblems?: readonly string[];
+  /** Format rules beyond headings (the brief's edge cases as a table). Absent on older checks. */
+  readonly formatProblems?: readonly string[];
   readonly contradictions: readonly ProductContradiction[];
   readonly checkedAt: string;
 }
@@ -243,10 +245,38 @@ export function productTaskProblems(markdown: string): string[] {
 }
 
 /** Which required sections, diagrams and task fields `markdown` lacks for a document of `type`. */
+const EDGE_CASES_HEADING = [/edge cases?/i, /крайов/i, /особлив/i];
+
+/** The body of the first `##` section whose heading matches, without its heading; undefined when absent. */
+function sectionBody(markdown: string, match: readonly RegExp[]): string | undefined {
+  const lines = markdown.split('\n');
+  const start = lines.findIndex(line => /^##\s/.test(line) && match.some(pattern => pattern.test(line)));
+  if (start === -1) return undefined;
+  const end = lines.findIndex((line, index) => index > start && /^#{1,2}\s/.test(line));
+  return lines.slice(start + 1, end === -1 ? undefined : end).join('\n');
+}
+
+/**
+ * The brief's format rules beyond its headings: the edge cases are a table of the situation and
+ * what the user sees, with at least one row, so every case states what the client will observe.
+ */
+export function briefFormatProblems(markdown: string): string[] {
+  const body = sectionBody(markdown, EDGE_CASES_HEADING);
+  if (body === undefined) return [];
+  const rows = body.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+  const separator = rows.findIndex(line => /^\s*\|(\s*:?-{3,}:?\s*\|)+\s*$/.test(line));
+  const columns = separator > 0 ? rows[separator - 1]!.split('|').length - 2 : 0;
+  const dataRows = separator === -1 ? 0 : rows.length - separator - 1;
+  if (separator <= 0 || columns < 2 || dataRows < 1) {
+    return ['edge cases must be a table: "Ситуація | Що бачить користувач" (situation | what the user sees), one row per case'];
+  }
+  return [];
+}
+
 export function checkProductDocumentStructure(
   type: ProductDocumentType,
   markdown: string,
-): { missingSections: string[]; missingDiagrams: string[]; taskProblems: string[] } {
+): { missingSections: string[]; missingDiagrams: string[]; taskProblems: string[]; formatProblems: string[] } {
   const found = headings(markdown);
   const missingSections = PRODUCT_DOCUMENT_SECTIONS[type]
     .filter(required => !found.some(heading => required.match.some(pattern => pattern.test(heading))))
@@ -259,19 +289,22 @@ export function checkProductDocumentStructure(
         ).map(required => required.label)
       : [];
   const taskProblems = type === 'tasks' ? productTaskProblems(markdown) : [];
-  return { missingSections, missingDiagrams, taskProblems };
+  const formatProblems = type === 'brief' ? briefFormatProblems(markdown) : [];
+  return { missingSections, missingDiagrams, taskProblems, formatProblems };
 }
 
 export function productDocumentPassed(check: {
   missingSections: readonly string[];
   missingDiagrams: readonly string[];
   taskProblems?: readonly string[];
+  formatProblems?: readonly string[];
   contradictions: readonly ProductContradiction[];
 }): boolean {
   return (
     check.missingSections.length === 0 &&
     check.missingDiagrams.length === 0 &&
     (check.taskProblems ?? []).length === 0 &&
+    (check.formatProblems ?? []).length === 0 &&
     check.contradictions.every(contradiction => contradiction.resolved)
   );
 }
@@ -323,6 +356,7 @@ export function productDocumentGateFailure(metadata: Metadata, type: ProductDocu
     ...(check.missingSections.length > 0 ? [`missing sections: ${check.missingSections.join(', ')}`] : []),
     ...(check.missingDiagrams.length > 0 ? [`missing diagrams: ${check.missingDiagrams.join(', ')}`] : []),
     ...(check.taskProblems && check.taskProblems.length > 0 ? [`task problems: ${check.taskProblems.join('; ')}`] : []),
+    ...(check.formatProblems && check.formatProblems.length > 0 ? [`format: ${check.formatProblems.join('; ')}`] : []),
     ...(check.contradictions.some(contradiction => !contradiction.resolved)
       ? [
           `unresolved contradictions: ${check.contradictions
