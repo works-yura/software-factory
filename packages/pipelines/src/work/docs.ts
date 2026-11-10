@@ -1,6 +1,6 @@
 /**
  * What the Development (Work) board asks of its agents about the project's documentation
- * (`docs/architecture/boards-and-docs.md`): read the truth before building, note deviations from a
+ * (`docs/rules/docs-standard.md`, `docs/features/work-board/design.md`): read the truth before building, note deviations from a
  * Product change's design in the change request, keep the bug record, and — once per Product change —
  * merge the change's delta into `features/<area>/design.md` and archive the change.
  *
