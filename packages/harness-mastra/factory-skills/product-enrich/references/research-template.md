@@ -32,6 +32,14 @@ The design tree as it was settled, one line per decision, in the order it was ta
 |---|---|---|---|---|
 | Q1 | <question> | <answer> | <reason> | <proposed DEC-nnn / adr/000N-… / —> |
 
+## Related changes  (Пов'язані зміни)
+<!-- Required, never dropped. From factory_list_product_changes + factory_read_product_change. Decisions taken from these cards are used, not re-asked. -->
+| Card | Status | What it decided that this change relies on | Direction |
+|---|---|---|---|
+| <«Сповіщення #1–9», client-review, changes/2026-11-10-notifications-channels> | рішення в роботі (not approved) | <web push from the admin app, no store apps; email via Resend> | <this change builds on it (#24 is sent through it)> |
+
+Or: `None found — checked <N> cards.`
+
 ## Reuse  (Повторне використання)
 What already exists that this feature reuses or extends, with links. `None` if greenfield.
 

@@ -20,6 +20,8 @@ const RESEARCH = `# Loyalty: research
 ## Constraints
 ## Decisions
 | Q1 | per user | … |
+## Related changes
+None found — checked 4 cards.
 ## Open questions
 - None
 `;
@@ -171,6 +173,15 @@ describe('product document checks', () => {
     expect(checkProductDocumentStructure('enrich', RESEARCH.replace('## Decisions', 'Decisions')).missingSections).toEqual(
       ['Decisions'],
     );
+  });
+
+  it('requires research to record the related changes it checked, and never lets that be waived', () => {
+    const without = RESEARCH.replace('## Related changes', 'Related changes');
+    expect(checkProductDocumentStructure('enrich', without).missingSections).toEqual(['Related changes']);
+    expect(checkProductDocumentStructure('enrich', RESEARCH.replace('## Related changes', "## Пов'язані зміни"))).toEqual(clean);
+    const waived = checkProductDocumentStructure('enrich', without, [{ section: 'Related changes', reason: 'not needed' }]);
+    expect(waived.missingSections).toEqual(['Related changes']);
+    expect(waived.waiverProblems.length).toBeGreaterThan(0);
   });
 
   it('passes a client-facing brief with its use cases, edge cases, gates and done means', () => {

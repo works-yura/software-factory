@@ -26,6 +26,7 @@ The Development agents that build each task have the documentation in their work
 ## Inputs
 
 - **The design**, agreed: its check passed in Spec review. If it is missing, ask the person with the question tool how to proceed.
+- **Related changes.** For every change research.md lists under *Related changes* that this one builds on, read its `tasks.md` (`factory_read_product_change`) and **depend on its tasks** as `<change>/<ID>` in `depends-on` — never file a task that duplicates one of them, and never re-estimate their work.
 - **The acceptance criteria** are the requirement scenarios (GIVEN/WHEN/THEN) in `design.md`: every scenario, and every use case of the brief, must end up owned by a task.
 - **Repositories.** Every card names exactly one repository linked to this Factory, as `owner/name`. *Modules touched* in the design says which; if a component has no repository, ask the person with the question tool which repository it is.
 

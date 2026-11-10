@@ -6,11 +6,13 @@
  */
 
 import { createHash } from 'node:crypto';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
+import { isAbsolute, join, relative, sep } from 'node:path';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem } from '@factory/core';
+import { boardForWorkItem, workItemSource } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import type { AuditRecorder, CommentsDomain } from '@factory/feed';
 import type { IntegrationTools } from '@factory/integrations';
@@ -29,6 +31,7 @@ import {
   recordedProductDocumentCheck,
   withProductChild,
   withProductDocumentCheck,
+  workItemBranch,
 } from '@factory/pipelines';
 import type { ProductDocumentCheck } from '@factory/pipelines';
 import type { FactoryTransitionService } from '@factory/runtime';
@@ -47,6 +50,12 @@ export interface ProductToolDependencies {
   auditRecorder: AuditRecorder;
   /** The session row (whose owner files the cards) and its provider (whose repositories a card can name). */
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'>;
+  /**
+   * The absolute folder another card's sessions work in on this machine (the local sandbox's
+   * `<root>/work-items/<factory>/<card branch>`), so a Product session can read a sibling change
+   * that is not merged yet. Absent when the host's sandbox keeps no shared card folders.
+   */
+  cardFolderPath?: (input: { factoryProjectId: string; branch: string }) => string | undefined;
 }
 
 interface ProductToolOptions {
@@ -117,6 +126,77 @@ async function readDocument(workspace: unknown, path: string): Promise<string> {
     throw new Error(`${path} is larger than ${MAX_DOCUMENT_BYTES} bytes; split it before checking.`);
   }
   return result.stdout;
+}
+
+/** The file of each readable document of a change; a brief may have a client-language copy (`requirements.<lang>.md`). */
+const CHANGE_DOCUMENT_FILES = {
+  research: 'research.md',
+  brief: 'requirements.md',
+  spec: 'design.md',
+  tasks: 'tasks.md',
+} as const;
+type ChangeDocument = keyof typeof CHANGE_DOCUMENT_FILES;
+const CHECK_TYPE_OF: Record<ChangeDocument, (typeof PRODUCT_DOCUMENT_TYPES)[number]> = {
+  research: 'enrich',
+  brief: 'brief',
+  spec: 'spec',
+  tasks: 'tasks',
+};
+
+/** The branch a card's sessions work on, as its folder is named: its Product session's, else derived from the card. */
+function cardBranch(card: Card): string {
+  const sessions = card.sessions as Record<string, { branch?: string } | undefined> | null | undefined;
+  const recorded = sessions?.[PRODUCT_CONTEXT]?.branch;
+  if (recorded) return recorded;
+  return workItemBranch({ id: card.id, source: workItemSource(card.externalSource), metadata: card.workItem?.metadata });
+}
+
+/** The change folder a card's work is in (`changes/<change>`), from its recorded document checks, or undefined. */
+function cardChangeFolder(card: Card): string | undefined {
+  for (const type of ['tasks', 'spec', 'brief', 'enrich'] as const) {
+    const recorded = recordedProductDocumentCheck(card.metadata, type);
+    if (recorded) return changeFolderOf(recorded.path);
+  }
+  const stamped = card.metadata?.[PRODUCT_CHANGE_KEY];
+  return typeof stamped === 'string' ? stamped : undefined;
+}
+
+/** Whether `child` resolves inside `parent` (both real paths). */
+function within(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
+
+/** Every `<repo>/changes/<change>/<file>` (and `<repo>/docs/changes/…`) in a card folder, archive excluded. */
+async function findChangeDocuments(folder: string, file: string): Promise<string[]> {
+  const found: string[] = [];
+  let repos: string[] = [];
+  try {
+    repos = (await readdir(folder, { withFileTypes: true })).filter(entry => entry.isDirectory()).map(entry => entry.name);
+  } catch {
+    return found;
+  }
+  for (const repo of repos) {
+    for (const base of [join(folder, repo, 'changes'), join(folder, repo, 'docs', 'changes')]) {
+      let changes: string[] = [];
+      try {
+        changes = (await readdir(base, { withFileTypes: true }))
+          .filter(entry => entry.isDirectory() && entry.name !== 'archive')
+          .map(entry => entry.name);
+      } catch {
+        continue;
+      }
+      for (const change of changes) {
+        const candidate = join(base, change, file);
+        try {
+          if ((await stat(candidate)).isFile()) found.push(candidate);
+        } catch {
+          // not in this change
+        }
+      }
+    }
+  }
+  return found;
 }
 
 /** The Product session's tools, for the card it is bound to. */
@@ -280,6 +360,133 @@ export function createProductTools(
           throw new Error(`The comment was not posted (${comment.status === 'invalid' ? comment.message : comment.status}).`);
         }
         return { workItem: child.id, title: child.title, posted: true };
+      },
+    }),
+
+    factory_list_product_changes: createTool({
+      id: 'factory_list_product_changes',
+      description:
+        "List the OTHER cards on the Product board of this Factory — changes in flight or done — so you find the ones related to this change before asking anything they already settled or estimating work they already cover. For each: id, title, stage, change folder, docs repository and branch, the draft change request if one was opened, which documents it has and whether their checks passed, and the Development cards filed under it (title, stage). Read a related one's documents with factory_read_product_change.",
+      inputSchema: z.object({}).strict(),
+      execute: async (_input, execution) => {
+        const { binding, item: self } = await currentBinding(execution?.requestContext);
+        const cards = await options.storage.list({ orgId: binding.orgId, factoryProjectId: binding.factoryProjectId });
+        const others = cards.filter(card => card.id !== self.id && boardForWorkItem(card) === productBoard.id);
+        const changes = await Promise.all(
+          others.map(async card => {
+            const documents = PRODUCT_DOCUMENT_TYPES.flatMap(type => {
+              const check = recordedProductDocumentCheck(card.metadata, type);
+              return check ? [{ type, path: check.path, passed: check.passed, checkedAt: check.checkedAt }] : [];
+            });
+            const children = (
+              await Promise.all(
+                productChildWorkItemIds(card.metadata).map(id => options.storage.get({ orgId: binding.orgId, id })),
+              )
+            ).flatMap(child => (child ? [{ id: child.id, title: child.title, stage: child.stages[0] ?? null }] : []));
+            const sessions = card.sessions as Record<string, { sessionId?: string } | undefined> | null | undefined;
+            const sessionId = sessions?.[PRODUCT_CONTEXT]?.sessionId;
+            let changeRequestUrl: string | null = null;
+            if (sessionId) {
+              const sourceControl = await options.product.sessions.getSourceControlBySessionId(sessionId);
+              const rows = sourceControl ? await sourceControl.sessionRepositories.listBySession({ sessionId }) : [];
+              changeRequestUrl = rows.find(row => row.changeRequestUrl)?.changeRequestUrl ?? null;
+            }
+            const repository = card.metadata?.repository;
+            return {
+              id: card.id,
+              title: card.title,
+              stage: card.stages[0] ?? null,
+              change: cardChangeFolder(card) ?? null,
+              docsRepository: typeof repository === 'string' ? repository : null,
+              branch: cardBranch(card),
+              changeRequestUrl,
+              documents,
+              developmentCards: children,
+            };
+          }),
+        );
+        return { count: changes.length, changes };
+      },
+    }),
+
+    factory_read_product_change: createTool({
+      id: 'factory_read_product_change',
+      description:
+        "Read one document of ANOTHER Product card's change, read-only: research (research.md), brief (requirements.md, or its client-language copy with `lang`, e.g. requirements.en.md), spec (design.md) or tasks (tasks.md). It reads that card's working copy on this machine (its unmerged branch). When the card has no working copy here, it fails and names the exact source_control_api_read call that reads the same file from the docs repository at the card's branch.",
+      inputSchema: z
+        .object({
+          card: z.string().trim().min(1).describe('The other card id, as factory_list_product_changes listed it.'),
+          document: z.enum(['research', 'brief', 'spec', 'tasks']),
+          lang: z
+            .string()
+            .trim()
+            .regex(/^[a-z]{2}(-[A-Za-z]{2})?$/, 'A language code such as "en".')
+            .optional()
+            .describe("Only for the brief's client-language copy, e.g. 'en' for requirements.en.md."),
+        })
+        .strict(),
+      execute: async ({ card: cardId, document, lang }, execution) => {
+        const { binding, item: self } = await currentBinding(execution?.requestContext);
+        if (cardId === self.id) throw new Error("That is this session's own card: read its documents from your workspace.");
+        const card = await options.storage.get({ orgId: binding.orgId, id: cardId });
+        if (!card || card.factoryProjectId !== binding.factoryProjectId) {
+          throw new Error('No such card in this Factory: only cards of the same Factory can be read.');
+        }
+        if (boardForWorkItem(card) !== productBoard.id) throw new Error('That card is not on the Product board.');
+        if (lang && document !== 'brief') throw new Error('`lang` applies to the brief only.');
+        const file = lang ? `requirements.${lang}.md` : CHANGE_DOCUMENT_FILES[document];
+        const branch = cardBranch(card);
+        const change = cardChangeFolder(card);
+        const repository = typeof card.metadata?.repository === 'string' ? card.metadata.repository : undefined;
+        const viaBranch =
+          change && repository
+            ? `Read it from the docs repository instead: source_control_api_read with path "repos/${repository}/contents/<docs root>/${change}/${file}" and query { "ref": "${branch}" } (GitHub; on GitLab "projects/<project>/repository/files/<url-encoded path>/raw" with ref=${branch}).`
+            : 'That card has recorded no checked document yet, so its change folder is unknown; ask the person, or read its draft change request.';
+        const folder = options.product.cardFolderPath?.({ factoryProjectId: card.factoryProjectId, branch });
+        if (!folder) {
+          throw new Error(`This host keeps no shared card folders, so that card's working copy cannot be read here. ${viaBranch}`);
+        }
+        let root: string;
+        try {
+          root = await realpath(folder);
+        } catch {
+          throw new Error(
+            `"${card.title}" has no working copy on this machine (it has not run here, or it was cleaned up). ${viaBranch}`,
+          );
+        }
+        // The path its own check recorded first; else the file found in its change folder.
+        const candidates: string[] = [];
+        const recorded = lang ? undefined : recordedProductDocumentCheck(card.metadata, CHECK_TYPE_OF[document]);
+        if (recorded) candidates.push(isAbsolute(recorded.path) ? recorded.path : join(root, recorded.path));
+        const found = await findChangeDocuments(root, file);
+        const inChange = change ? found.filter(path => path.split(sep).join('/').includes(`/${change}/`)) : [];
+        candidates.push(...(inChange.length > 0 ? inChange : found));
+        for (const candidate of candidates) {
+          let real: string;
+          try {
+            real = await realpath(candidate);
+          } catch {
+            continue;
+          }
+          // Never outside that card's folder (a recorded absolute path elsewhere, a symlink).
+          if (!within(root, real)) continue;
+          const content = await readFile(real, 'utf8');
+          if (Buffer.byteLength(content) > MAX_DOCUMENT_BYTES) {
+            throw new Error(`${file} of "${card.title}" is larger than ${MAX_DOCUMENT_BYTES} bytes.`);
+          }
+          return {
+            card: card.id,
+            title: card.title,
+            stage: card.stages[0] ?? null,
+            change: change ?? null,
+            document,
+            path: relative(root, real).split(sep).join('/'),
+            source: 'working copy (unmerged branch)',
+            branch,
+            content,
+          };
+        }
+        throw new Error(`"${card.title}" has no ${file} in its working copy yet. ${viaBranch}`);
       },
     }),
 

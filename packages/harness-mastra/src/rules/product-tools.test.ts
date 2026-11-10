@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -79,7 +82,17 @@ flowchart LR
 ## Open questions
 `;
 
-async function setup({ board = 'product', role = 'product', stage = 'spec' } = {}) {
+async function setup({
+  board = 'product',
+  role = 'product',
+  stage = 'spec',
+  cardFolderPath,
+}: {
+  board?: string;
+  role?: string;
+  stage?: string;
+  cardFolderPath?: ProductToolDependencies['cardFolderPath'];
+} = {}) {
   const storage: WorkItemsStorage = (await createFactoryStorageForTests()).workItems;
   const boards = createBoardRegistry();
   const transitionService = new FactoryTransitionService({ storage, configVersion: 'product-v1', boards });
@@ -107,6 +120,7 @@ async function setup({ board = 'product', role = 'product', stage = 'spec' } = {
       getBySessionId: async () => ({ userId: 'user-1' }) as never,
       getSourceControlBySessionId: async () => null,
     },
+    ...(cardFolderPath ? { cardFolderPath } : {}),
   };
   const context = requestContext();
   const tools = await createFactoryTransitionTools({
@@ -139,6 +153,8 @@ describe('Product session tools', () => {
       'factory_check_product_document',
       'factory_comment_product_task',
       'factory_create_work_item',
+      'factory_list_product_changes',
+      'factory_read_product_change',
       'factory_transition_work_item',
     ]);
     const work = await setup({ board: 'work', role: 'work', stage: 'execute' });
@@ -329,5 +345,176 @@ describe('Product session tools', () => {
       missingSections: ['Test plan'],
       waiverProblems: ['"Test plan" is a core section of the spec and cannot be dropped'],
     });
+  });
+});
+
+describe('Product session: other cards in flight', () => {
+  /** A sibling Product card with its own Product session, a recorded research check, and one filed Work card. */
+  async function sibling(
+    storage: WorkItemsStorage,
+    { factoryProjectId = PROJECT_ID, branch = 'factory/item-sibling' }: { factoryProjectId?: string; branch?: string } = {},
+  ) {
+    const started = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId,
+      workItem: {
+        input: {
+          board: 'product',
+          title: 'Notifications',
+          stages: ['client-review'],
+          sessions: {},
+          metadata: { repository: 'acme/docs' },
+        },
+      },
+      role: 'product',
+      session: { sessionId: 'resource-sib', branch, threadId: 'thread-sib' },
+      resourceId: 'resource-sib',
+      kickoffKey: `kickoff-sib-${factoryProjectId}`,
+      kickoffMessage: null,
+    });
+    const child = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId,
+      workItem: { input: { board: 'work', title: 'NT-01 Push', stages: ['intake'], sessions: {}, metadata: {} } },
+      role: 'work',
+      session: { sessionId: 'resource-child', branch: 'factory/child', threadId: 'thread-child' },
+      resourceId: 'resource-child',
+      kickoffKey: `kickoff-child-${factoryProjectId}`,
+      kickoffMessage: null,
+    });
+    const card = (await storage.get({ orgId: 'org-1', id: started.item.id }))!;
+    await storage.update({
+      orgId: 'org-1',
+      id: card.id,
+      userId: 'user-1',
+      expectedRevision: card.revision,
+      patch: {
+        metadata: {
+          ...withProductDocumentCheck(card.metadata, {
+            type: 'enrich',
+            path: 'docs/changes/2026-11-10-notifications/research.md',
+            sha256: 'x',
+            passed: true,
+            missingSections: [],
+            missingDiagrams: [],
+            contradictions: [],
+            checkedAt: '2026-11-10T10:00:00.000Z',
+          }),
+          [PRODUCT_CHILDREN_KEY]: [child.item.id],
+        },
+      },
+    });
+    return { id: card.id, childId: child.item.id };
+  }
+
+  async function folderWith(files: Record<string, string>) {
+    const root = await mkdtemp(join(tmpdir(), 'product-card-'));
+    for (const [path, content] of Object.entries(files)) {
+      await mkdir(join(root, path, '..'), { recursive: true });
+      await writeFile(join(root, path), content);
+    }
+    return root;
+  }
+
+  it('lists the other Product cards with their change, documents and Development cards, never this one', async () => {
+    const { tools, context, storage, prepared } = await setup({ stage: 'enrich' });
+    const { id, childId } = await sibling(storage);
+    const list = tools.factory_list_product_changes as ExecutableTool;
+    const result = (await list.execute({}, { requestContext: context })) as {
+      count: number;
+      changes: Array<Record<string, unknown>>;
+    };
+    expect(result.count).toBe(1);
+    expect(result.changes[0]).toMatchObject({
+      id,
+      title: 'Notifications',
+      stage: 'client-review',
+      change: 'changes/2026-11-10-notifications',
+      docsRepository: 'acme/docs',
+      branch: 'factory/item-sibling',
+      documents: [{ type: 'enrich', passed: true }],
+      developmentCards: [{ id: childId, title: 'NT-01 Push', stage: 'intake' }],
+    });
+    expect(result.changes.map(change => change.id)).not.toContain(prepared.item.id);
+  });
+
+  it("reads a sibling's document from its working copy on this machine", async () => {
+    const root = await folderWith({ 'docs/changes/2026-11-10-notifications/research.md': '# Notifications\nWeb push, no store apps.' });
+    try {
+      const { tools, context, storage } = await setup({
+        stage: 'enrich',
+        cardFolderPath: ({ branch }) => (branch === 'factory/item-sibling' ? root : undefined),
+      });
+      const { id } = await sibling(storage);
+      const read = tools.factory_read_product_change as ExecutableTool;
+      await expect(read.execute({ card: id, document: 'research' }, { requestContext: context })).resolves.toMatchObject({
+        card: id,
+        path: 'docs/changes/2026-11-10-notifications/research.md',
+        content: '# Notifications\nWeb push, no store apps.',
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reads the brief's client-language copy, found in the change folder", async () => {
+    const root = await folderWith({ 'docs/changes/2026-11-10-notifications/requirements.en.md': '# Brief (EN)' });
+    try {
+      const { tools, context, storage } = await setup({ stage: 'enrich', cardFolderPath: () => root });
+      const { id } = await sibling(storage);
+      const read = tools.factory_read_product_change as ExecutableTool;
+      await expect(
+        read.execute({ card: id, document: 'brief', lang: 'en' }, { requestContext: context }),
+      ).resolves.toMatchObject({ content: '# Brief (EN)' });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fails loudly, naming the branch read, when the card has no working copy here', async () => {
+    const { tools, context, storage } = await setup({ stage: 'enrich', cardFolderPath: () => '/nonexistent/card-folder' });
+    const { id } = await sibling(storage);
+    const read = tools.factory_read_product_change as ExecutableTool;
+    await expect(read.execute({ card: id, document: 'research' }, { requestContext: context })).rejects.toThrow(
+      /no working copy on this machine.*source_control_api_read.*repos\/acme\/docs\/contents\/<docs root>\/changes\/2026-11-10-notifications\/research\.md.*factory\/item-sibling/s,
+    );
+  });
+
+  it('fails loudly when the host keeps no shared card folders', async () => {
+    const { tools, context, storage } = await setup({ stage: 'enrich' });
+    const { id } = await sibling(storage);
+    const read = tools.factory_read_product_change as ExecutableTool;
+    await expect(read.execute({ card: id, document: 'research' }, { requestContext: context })).rejects.toThrow(
+      'keeps no shared card folders',
+    );
+  });
+
+  it("refuses a card of another Factory, its own card, and a file outside the sibling's folder", async () => {
+    const outside = await folderWith({ 'secret.md': 'nope' });
+    const root = await folderWith({});
+    try {
+      // The sibling's research.md is a symlink out of its folder.
+      await mkdir(join(root, 'docs/changes/2026-11-10-notifications'), { recursive: true });
+      await symlink(join(outside, 'secret.md'), join(root, 'docs/changes/2026-11-10-notifications/research.md'));
+      const { tools, context, storage, prepared } = await setup({ stage: 'enrich', cardFolderPath: () => root });
+      const foreign = await sibling(storage, { factoryProjectId: '99999999-2222-4333-8444-555555555555', branch: 'factory/x' });
+      const read = tools.factory_read_product_change as ExecutableTool;
+      await expect(
+        read.execute({ card: foreign.id, document: 'research' }, { requestContext: context }),
+      ).rejects.toThrow('only cards of the same Factory');
+      await expect(
+        read.execute({ card: prepared.item.id, document: 'research' }, { requestContext: context }),
+      ).rejects.toThrow("this session's own card");
+      // A recorded path that leads outside the folder is never followed.
+      const local = await sibling(storage, { branch: 'factory/item-local' });
+      await expect(read.execute({ card: local.id, document: 'research' }, { requestContext: context })).rejects.toThrow(
+        'has no research.md in its working copy',
+      );
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

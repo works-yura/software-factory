@@ -546,6 +546,22 @@ describe('bundled Factory skill assets', () => {
     for (const line of ['reassigned', 'several businesses', 'paused', 'Existing data and settings', 'Language']) {
       expect(checklist).toContain(line);
     }
+    // Every phase finds the other Product cards itself and builds on their decisions instead of re-asking or re-counting.
+    expect(enrich).toContain('factory_list_product_changes');
+    expect(enrich).toContain('factory_read_product_change');
+    expect(enrich).toMatch(/never ask the person again/);
+    expect(enrich).toContain('Related changes');
+    const researchTemplate = await fs.readFile(
+      path.join(assetRoot, 'product-enrich', 'references', 'research-template.md'),
+      'utf8',
+    );
+    expect(researchTemplate).toContain("## Related changes  (Пов'язані зміни)");
+    const brief = await fs.readFile(path.join(assetRoot, 'product-brief', 'SKILL.md'), 'utf8');
+    expect(brief).toMatch(/estimate only this change's own part/);
+    expect(brief).toContain('depends on:');
+    for (const skillName of ['product-spec', 'product-phases']) {
+      expect(await fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8')).toContain('factory_read_product_change');
+    }
     const blackbox = await fs.readFile(
       path.join(assetRoot, 'product-enrich', 'references', 'blackbox-format.md'),
       'utf8',

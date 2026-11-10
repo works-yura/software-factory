@@ -74,6 +74,8 @@ export const PRODUCT_DOCUMENT_SECTIONS: Readonly<Record<ProductDocumentType, rea
     optional('Pitfalls', /pitfall/i, /gotcha/i, /підводн/i),
     optional('Constraints', /constraint/i, /обмежен/i),
     section('Decisions', /decisions?/i, /рішенн/i),
+    // The other Product cards checked (factory_list_product_changes) and what this change takes from them; never waived.
+    section('Related changes', /related changes?/i, /пов['’]язан/i),
     OPEN_QUESTIONS,
   ],
   // The client-facing brief: plain language, nothing a client can't read.

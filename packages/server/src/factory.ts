@@ -147,7 +147,7 @@ import { BoardWriteError, BoardWrites, FactoryTransitionService, ProjectBoardCac
 import type { BoardWriter } from '@factory/runtime';
 import type { ProjectBoardSource } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
-import { CallbackFactorySandbox, LocalFactorySandbox } from '@factory/sandbox';
+import { CallbackFactorySandbox, LocalFactorySandbox, workItemFolderKey } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
 import { peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
@@ -1171,6 +1171,12 @@ export class MastraFactory {
       sandboxConfig instanceof LocalFactorySandbox
         ? createWorkItemFolders(workItemsReady ? { workItems: workItemsStorage } : {})
         : undefined;
+    // A Product session reads a sibling card's unmerged change from that card's folder on this machine.
+    const localSandbox = sandboxConfig instanceof LocalFactorySandbox ? sandboxConfig : undefined;
+    const productCardFolderPath = localSandbox
+      ? ({ factoryProjectId, branch }: { factoryProjectId: string; branch: string }) =>
+          localSandbox.workItemFolderPath(workItemFolderKey(factoryProjectId, branch))
+      : undefined;
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
@@ -2079,6 +2085,7 @@ export class MastraFactory {
                     feed: factoryToolDeps.feed,
                     auditRecorder: factoryToolDeps.auditRecorder,
                     sessions: sourceControlSessions,
+                    ...(productCardFolderPath ? { cardFolderPath: productCardFolderPath } : {}),
                   },
                 }
               : {}),
@@ -2404,6 +2411,7 @@ export class MastraFactory {
                               feed: factoryToolDeps.feed,
                               auditRecorder: factoryToolDeps.auditRecorder,
                               sessions: sourceControlSessions,
+                              ...(productCardFolderPath ? { cardFolderPath: productCardFolderPath } : {}),
                             },
                             sandboxFor: claudeSessionSandbox,
                             observe: postToolObserver,
