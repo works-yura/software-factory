@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { ApprovalPrompt, SubagentEntry, SuspensionPrompt } from '../services/transcript';
 import { AskUserPromptAnswers } from './AskUserPromptAnswers';
+import { AskUserQuestionsCard, askUserQuestions } from './AskUserQuestionsCard';
 import { SubmitPlanCard } from './SubmitPlanCard';
 
 const promptCardSuspension =
@@ -149,6 +150,18 @@ export function SuspensionCard({
           </Button>
         </div>
       </div>
+    );
+  }
+
+  const questions = askUserQuestions(prompt.suspendPayload);
+  if (questions) {
+    return (
+      <AskUserQuestionsCard
+        key={prompt.id}
+        questions={questions}
+        isSubmitting={isSubmitting}
+        onSubmit={answer => onRespond(prompt.toolCallId, answer, prompt.id)}
+      />
     );
   }
 

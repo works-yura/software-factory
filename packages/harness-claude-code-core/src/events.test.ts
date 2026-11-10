@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { fixture } from './__fixtures__/fake-claude.ts';
 import { classifyFailure, ClaudeCodeError, parseResetTime } from './errors.ts';
 import {
+  askUserPrompt,
   PLAN_GATE_TOOL,
   toTokenUsage,
   TurnTranslator,
@@ -798,5 +799,59 @@ describe('TurnTranslator outcome', () => {
       kind: 'failed',
       message: 'Error: something broke',
     });
+  });
+});
+
+describe('askUserPrompt', () => {
+  it('keeps one question with its options, as the single-question card reads it', () => {
+    expect(
+      askUserPrompt({
+        questions: [{ question: 'Which channel?', options: [{ label: 'Push (рекомендовано)' }, { label: 'Email' }] }],
+      }),
+    ).toEqual({
+      question: 'Which channel?',
+      options: [{ label: 'Push (рекомендовано)' }, { label: 'Email' }],
+      selectionMode: 'single_select',
+    });
+  });
+
+  it('keeps every question of a call that asks several, and lists them as text too', () => {
+    const prompt = askUserPrompt({
+      questions: [
+        {
+          question: 'Which channels by default?',
+          header: 'Channels',
+          options: [{ label: 'Push + email (рекомендовано)', description: 'Desktop push off' }, { label: 'Push only' }],
+        },
+        {
+          question: 'Who gets deposit alerts?',
+          options: [{ label: 'Owner and admins' }, { label: 'Everyone' }],
+          multiSelect: true,
+        },
+        { question: 'Anything else?' },
+      ],
+    });
+
+    expect(prompt.questions).toEqual([
+      {
+        question: 'Which channels by default?',
+        header: 'Channels',
+        options: [{ label: 'Push + email (рекомендовано)', description: 'Desktop push off' }, { label: 'Push only' }],
+      },
+      {
+        question: 'Who gets deposit alerts?',
+        options: [{ label: 'Owner and admins' }, { label: 'Everyone' }],
+        multiSelect: true,
+      },
+      { question: 'Anything else?' },
+    ]);
+    expect(prompt.question).toBe(
+      [
+        '1. Which channels by default? (Push + email (рекомендовано) / Push only)',
+        '2. Who gets deposit alerts? (Owner and admins / Everyone)',
+        '3. Anything else?',
+      ].join('\n'),
+    );
+    expect(prompt.options).toBeUndefined();
   });
 });

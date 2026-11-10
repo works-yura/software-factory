@@ -21,12 +21,25 @@ export interface AskUserPrompt {
   question: string;
   options?: Array<{ label: string; description?: string }>;
   selectionMode?: 'single_select' | 'multi_select';
+  /**
+   * Every question of a call that asks several, as asked: the chat draws one block per question and
+   * sends all answers together. `question` still carries them as numbered text for older readers.
+   */
+  questions?: AskUserQuestionItem[];
+}
+
+/** One question of an `AskUserQuestion` call that asks several. */
+export interface AskUserQuestionItem {
+  question: string;
+  header?: string;
+  options?: Array<{ label: string; description?: string }>;
+  multiSelect?: boolean;
 }
 
 /**
  * Reads an `AskUserQuestion` input (`{ questions: [{ question, header?,
- * options?, multiSelect? }] }`). One question keeps its options; several are
- * listed together and answered in words.
+ * options?, multiSelect? }] }`). One question keeps its options; several keep
+ * each question's options in `questions` and are also listed as numbered text.
  */
 export function askUserPrompt(input: unknown): AskUserPrompt {
   const record = input && typeof input === 'object' ? (input as { questions?: unknown }) : {};
@@ -59,6 +72,12 @@ export function askUserPrompt(input: unknown): AskUserPrompt {
         return `${index + 1}. ${entry.question}${choices}`;
       })
       .join('\n'),
+    questions: questions.map(entry => ({
+      question: entry.question,
+      ...(entry.header ? { header: entry.header } : {}),
+      ...(entry.choices.length ? { options: entry.choices } : {}),
+      ...(entry.multi ? { multiSelect: true } : {}),
+    })),
   };
 }
 

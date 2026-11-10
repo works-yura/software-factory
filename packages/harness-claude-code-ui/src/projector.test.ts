@@ -342,6 +342,34 @@ describe('ClaudeTranscriptProjector', () => {
       expect(p.pendingApproval).toBeUndefined();
     });
 
+    it('parks a several-question call as an ask_user card that keeps every question', () => {
+      const input = {
+        questions: [
+          { question: 'Which channels?', header: 'Channels', options: [{ label: 'Push (рекомендовано)' }, { label: 'Email' }] },
+          { question: 'Who gets deposit alerts?', options: [{ label: 'Owner' }, { label: 'Everyone' }], multiSelect: true },
+        ],
+      };
+      const ask = { toolCallId: 'toolu_q', toolName: 'AskUserQuestion', input };
+      const p = projector();
+      const out = play(p, [
+        { kind: 'input', source: 'signal', text: 'Plan notifications', id: 'sig-1' },
+        { kind: 'tool_call', toolCallId: 'toolu_q', toolName: 'AskUserQuestion', input },
+        { kind: 'permission', ...ask },
+      ]);
+      for (const event of [{ type: 'tool_suspended', toolName: 'AskUserQuestion', toolCallId: 'toolu_q' }, { type: 'agent_end', reason: 'suspended' }] as const) {
+        const next = p.event(event, undefined, ask);
+        out.events.push(...next.events);
+        out.writes.push(...next.writes);
+      }
+
+      const suspended = out.events.find(event => event.type === 'tool_suspended') as { toolName: string; suspendPayload: { questions: unknown[] } } | undefined;
+      expect(suspended?.toolName).toBe('ask_user');
+      expect(suspended?.suspendPayload.questions).toEqual([
+        { question: 'Which channels?', header: 'Channels', options: [{ label: 'Push (рекомендовано)' }, { label: 'Email' }] },
+        { question: 'Who gets deposit alerts?', options: [{ label: 'Owner' }, { label: 'Everyone' }], multiSelect: true },
+      ]);
+    });
+
     it('settles a request parked before a restart once the stored message is adopted', () => {
       const holder = stored(parked().out.writes).find(message => message.role === 'assistant')!;
       const restarted = projector();

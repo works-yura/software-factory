@@ -9,6 +9,8 @@ Turn the request on this Product card into the **brief**: `<docs>/changes/<chang
 
 **No code is ever written on the Product board.** You read code; you never change it.
 
+**Asking the person.** When you need the person's decisions (a batch of gaps, a choice between options), ask with the question tool when the session offers one (`AskUserQuestion` / `ask_user`), as `product-enrich` describes: up to 4 self-contained questions per call, 2–4 options each, your recommended answer first with ` (рекомендовано)` at the end of its label, then wait. Write the questions as text only when no question tool is offered.
+
 ## Write for the client, not the developer
 
 This rule makes or breaks the brief. The reader is not a developer: they care about what they and their users will see and be able to do, not how it is built.

@@ -296,7 +296,16 @@
     "subagentShowLess": "Згорнути",
     "subagentResult": "Результат",
     "subagentFailed": "Помилка",
-    "subagentDuration": "{{seconds}} с"
+    "subagentDuration": "{{seconds}} с",
+    "questionsFromAgent": "Питання агента ({{count}})",
+    "recommended": "рекомендовано",
+    "ownAnswer": "Або свій варіант",
+    "answer": "Ваша відповідь",
+    "ownAnswerFor": "Свій варіант для питання {{number}}",
+    "sendAnswers": "Надіслати відповіді",
+    "answerEveryQuestion": "Дайте відповідь на кожне питання",
+    "yourAnswers": "Ваші відповіді",
+    "questionsNotAnswered": "Без відповіді"
   },
   "messages": {
     "steering": "Скерування…",

@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { SubmitPlanCard } from './SubmitPlanCard';
 import { translator } from '../../../i18n/t';
+import { AskUserQuestionsCard, askUserQuestions } from './AskUserQuestionsCard';
 
 const tk = translator('chat');
 
@@ -79,6 +80,19 @@ function ToolFactoryComponent({
   fallback,
 }: ToolFactoryProps) {
   if (toolName === 'ask_user') {
+    const questions = askUserQuestions(input);
+    if (questions) {
+      if (status === 'running' && !onRespond) return null;
+      const content = status !== 'running' ? askUserResultContent(output) : undefined;
+      return (
+        <AskUserQuestionsCard
+          questions={questions}
+          isSubmitting={isSubmitting}
+          {...(content ? { result: { content, isError: status === 'error' } } : {})}
+          {...(onRespond ? { onSubmit: (answer: string) => onRespond(answer) } : {})}
+        />
+      );
+    }
     const payload = askUserPayload(input);
     if (status === 'running' && (!payload || !onRespond)) return null;
 

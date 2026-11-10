@@ -311,6 +311,22 @@ describe('ClaudeCodeSession', () => {
       await expect(session.answerQuestion({ answer: 'again' })).rejects.toThrow('not waiting on a question');
     });
 
+    it('passes the answers of a several-question card to Claude as written, each under its question', async () => {
+      const context = await setup([{ lines: fixture('turn-question.jsonl') }, { lines: fixture('turn-complete.jsonl') }], {
+        permissions: () => ({ categories: { read: 'allow', edit: 'allow', execute: 'allow', other: 'allow' } }),
+      });
+      const { fake, session } = context;
+      const parked = nextEnd(session);
+      await context.signal('ask-2', 'Fix the bug.');
+      expect(await parked).toBe('suspended');
+
+      const answers = '1. Which part?\n   → Backend\n2. What breaks?\n   → the login returns 500';
+      const end = nextEnd(session);
+      await session.answerQuestion({ answer: answers, toolCallId: WRITE_CALL });
+      expect(await end).toBe('complete');
+      expect(fake.calls[1]!.stdin).toContain(`Their answer:\n${answers}`);
+    });
+
     it('takes no answer for a permission, and no empty answer', async () => {
       const { session } = await parkOnPermission();
       await expect(session.answerQuestion({ answer: 'yes' })).rejects.toThrow('not waiting on a question');

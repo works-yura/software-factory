@@ -9,6 +9,8 @@ Turn the approved **brief** (`requirements.md`) on this Product card into **one 
 
 **No code is ever written on the Product board.** No implementation, and nothing beyond contract shapes (DTO fields, error codes, event payloads). You read code; you never change it.
 
+**Asking the person.** When you need the person's decisions (a batch of gaps, a choice between options), ask with the question tool when the session offers one (`AskUserQuestion` / `ask_user`), as `product-enrich` describes: up to 4 self-contained questions per call, 2–4 options each, your recommended answer first with ` (рекомендовано)` at the end of its label, then wait. Write the questions as text only when no question tool is offered.
+
 ## Where the documents live
 
 A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**: this one design covers every component, so the links between server, mobile and web hold in one place. Use the folder this card already used, or the one the phase instructions name; otherwise follow `references/docs-layout.md` in the `product-enrich` skill (`skill_read` with skill `product-enrich`) to find it and confirm it with the person; if there is none or several, **stop and ask**.

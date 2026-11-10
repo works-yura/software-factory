@@ -21,7 +21,17 @@ This phase writes `<docs>/changes/<change>/research.md`, and may add to `<docs>/
 
 Map the request as a **design tree**: every decision branches into the decisions that hang off it ("who can redeem points" hangs off "are points per user or per account").
 
-Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask *now* without guessing at answers you haven't heard. Ask the whole frontier in one round. Number each question and give your recommended answer:
+Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask *now* without guessing at answers you haven't heard. Ask the whole frontier in one round.
+
+**Ask with the question tool, so the person answers in a form, not in prose.** When the session offers a tool for asking the person (`AskUserQuestion` in Claude Code, `ask_user` in Mastra), every round goes through it:
+
+- One round = one call with **up to 4 questions** (`questions: [...]`). A bigger frontier is split into consecutive calls of at most 4, the most fundamental decisions first. Where the tool takes only one question (`ask_user`), ask one question per call.
+- Each question is **self-contained**: the person may see only the card, not your message. Put the context they need to decide in the question itself; a short `header` (2–4 words) names the decision.
+- Give **2–4 options** per question. Your **recommended answer is the FIRST option**, its label ending with ` (рекомендовано)` (or ` (Recommended)` when writing English); a one-line `description` per option says what choosing it means. Don't add an "other" option: the card always has a field for the person's own answer.
+- `multiSelect: true` only when several options can hold at once.
+- Then **stop and wait**: the answers come back as the next message, numbered as asked.
+
+Only when no question tool is offered, write the round as text, numbered, each with your recommended answer:
 
 ```
 ❓ **Q1** - **<question title>**: <question body; may be several paragraphs, may offer options>
@@ -35,7 +45,7 @@ Work the tree in **rounds**. The **frontier** is every decision whose prerequisi
 ➡️ …
 ```
 
-- Word each question so "yes" accepts your recommendation.
+- Word each question so "yes" (or the pre-selected recommended option) accepts your recommendation.
 - A question whose answer depends on another question still open in this round belongs to a *later* round.
 - Each round's answers reshape the tree: settled decisions push the frontier outward. Recompute it and ask the next round.
 - **Facts are your job, never the person's.** When a question needs a fact from the code, the documents or the repository history, look it up yourself before or while you ask; never ask the person something you could read. Ask only for **decisions** and for knowledge that lives in heads (why it was built so, what broke last time, what the client really means).

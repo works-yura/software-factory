@@ -294,7 +294,16 @@
     "subagentShowLess": "Show less",
     "subagentResult": "Result",
     "subagentFailed": "Failed",
-    "subagentDuration": "{{seconds}} s"
+    "subagentDuration": "{{seconds}} s",
+    "questionsFromAgent": "Agent's questions ({{count}})",
+    "recommended": "recommended",
+    "ownAnswer": "Or your own answer",
+    "answer": "Your answer",
+    "ownAnswerFor": "Your own answer to question {{number}}",
+    "sendAnswers": "Send answers",
+    "answerEveryQuestion": "Answer every question to send",
+    "yourAnswers": "Your answers",
+    "questionsNotAnswered": "Not answered"
   },
   "messages": {
     "steering": "Steering…",
