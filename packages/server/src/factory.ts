@@ -1442,6 +1442,8 @@ export class MastraFactory {
       messaging: factoryMessaging,
       // The live-session registry is built with the routes; no session runs before then.
       isSessionRunning: sessionId => liveSessionRegistry?.isRunning(sessionId) ?? false,
+      // Tools and processors read parked runs through it.
+      liveSessions: () => liveSessionRegistry,
     };
     // Proactive environment builds exist only when the sandbox can build
     // templates on its own; the workflow is registered on the host's Mastra
@@ -1818,6 +1820,7 @@ export class MastraFactory {
               const controller = this.#prepared?.base.controller;
               return controller ? isSessionRunning(controller, sessionId) : false;
             },
+            isParked: sessionId => liveSessionRegistry?.parked(sessionId) !== undefined,
             lastActivity: async threadId => {
               const thread = await this.#prepared?.base.controller.queryThreadById({ threadId });
               return thread?.updatedAt ? new Date(thread.updatedAt) : null;

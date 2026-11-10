@@ -166,14 +166,14 @@ supervisor/write-tools.test.ts	supervisor/src/write-tools.test.ts
 timing.test.ts	observability/src/timing.test.ts
 tools/approval-tools.test.ts	harness-mastra/src/tools/approval-tools.test.ts	+2	answering a Claude Code permission
 tools/deliver.test.ts	harness-mastra/src/tools/deliver.test.ts	+3	notices reach a session another harness runs; notification record and running state for another harness
-tools/messaging-tools.test.ts	harness-mastra/src/tools/messaging-tools.test.ts
+tools/messaging-tools.test.ts	harness-mastra/src/tools/messaging-tools.test.ts	1	upstream #29873: a parked run reads as parked in the session list (+1)
 tools/permissions.test.ts	harness-mastra/src/tools/permissions.test.ts
-tools/read-tools.test.ts	harness-mastra/src/tools/read-tools.test.ts
+tools/read-tools.test.ts	harness-mastra/src/tools/read-tools.test.ts	1	upstream #29873: factory_list_attention lists runs parked on a tool prompt (+1)
 tools/reports.test.ts	harness-mastra/src/tools/reports.test.ts
 tools/run-watch.test.ts	harness-mastra/src/tools/run-watch.test.ts
 tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
 tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	+3	hybrid scope cases removed with the personal model scope; upstream #28721: the old plan role still starts (+1); side and role sessions on Claude Code; one sandbox folder per card: role refused while another card session runs (+1)
-tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts	+1	upstream #29519: one batch of queries per step however many cards a session follows (+1)
+tools/sessions-state-processor.test.ts	harness-mastra/src/tools/sessions-state-processor.test.ts	2	upstream #29519: one batch of queries per step however many cards a session follows (+1); upstream #29873: a parked run is parked, never quiet (+1)
 tools/work-item-tools.test.ts	harness-mastra/src/tools/work-item-tools.test.ts	1	upstream #29857: the tool no longer claims plan pre-approval (+1)
 workspace.test.ts	harness-mastra/src/workspace.test.ts	16	upstream #28838: src/mastra/factory-skills (+1); upstream #29042: project skill edits in session workspaces (+6); workosId owner case dropped with the workosId field (-1); one sandbox folder per card: role sessions share the card folder (+1); triage issue-label guard dropped: tasks come from cards, not GitHub issues (-1); upstream #29824: stale minted GitHub tokens are re-minted on reconcile and reconnect (+9); upstream #29859: self-review asks only for blocking findings (+1)
 ../../internal-workspace/src/file-commands.test.ts	internal-workspace/src/file-commands.test.ts

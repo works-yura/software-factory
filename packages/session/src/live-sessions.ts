@@ -139,3 +139,8 @@ export class LiveSessions {
     return () => this.#parkedListeners.delete(listener);
   }
 }
+
+/** What a run parked on a tool prompt waits for, in the words the attention list and the Factory tools use. */
+export function parkedRunLabel(toolName: string): string {
+  return toolName === 'submit_plan' ? 'Plan waiting for review' : 'Agent is waiting for an answer';
+}

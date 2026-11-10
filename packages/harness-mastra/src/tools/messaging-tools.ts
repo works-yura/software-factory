@@ -29,6 +29,7 @@ import { reportNotification, workItemReportAttributes, workItemReportRecipients 
 import { requirePerson } from './scope.ts';
 import type { FactoryToolScope } from './scope.ts';
 import { listSideSessions, sessionModel } from './side-sessions.ts';
+import type { LiveSessions } from '@factory/session';
 
 /** Messages plus replies, per sender session, per target thread, per window. */
 export const SIGNAL_RATE_LIMIT = 10;
@@ -92,6 +93,8 @@ export interface FactoryMessagingToolDependencies {
   auditRecorder: AuditRecorder;
   /** The live controller and notifications store; resolved per call because they exist only once the mount is up. */
   messaging: () => Promise<FactoryMessaging | null>;
+  /** Which live sessions are parked on a tool prompt; absent before the mount is up. */
+  liveSessions?: () => Pick<LiveSessions, 'parked' | 'parkedIn'> | undefined;
 }
 
 const message = z.string().trim().min(1).max(4000);
@@ -573,6 +576,7 @@ export function createFactoryMessagingTools(
           workItems: deps.workItems,
           notifications: messaging?.notifications ?? null,
           isRunning: async sessionId => (await messaging?.controller.getSession(sessionId))?.stream.isActive() ?? false,
+          isParked: sessionId => deps.liveSessions?.()?.parked(sessionId) !== undefined,
           model: messaging
             ? sessionId => sessionModel(messaging.controller, deps.sessions, deps.workItems, sessionId)
             : undefined,

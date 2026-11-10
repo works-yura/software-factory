@@ -1,5 +1,6 @@
 /** Sessions parked on a tool, read live from the registry: the item exists exactly as long as an answer is owed. */
 
+import { parkedRunLabel } from '@factory/session';
 import type { LiveSessions } from '@factory/session';
 import type {
   FactoryAttentionIdentity,
@@ -33,10 +34,6 @@ interface ParkedSession {
 interface ReceiptedParkedSession {
   entry: ParkedSession;
   receipt: FactoryAttentionReceiptRecord | undefined;
-}
-
-function parkedRunLabel(toolName: string): string {
-  return toolName === 'submit_plan' ? 'Plan waiting for review' : 'Agent is waiting for an answer';
 }
 
 function olderThan(entry: ParkedSession, before: AttentionStreamPosition | undefined): boolean {
