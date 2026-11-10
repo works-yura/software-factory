@@ -142,7 +142,7 @@ import { asAgentSession, createMastraHarness } from '@factory/harness-mastra';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from '@factory/harness-mastra';
 import type { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { createTerminalStageCleanup } from '@factory/runtime';
-import { createFactoryTransitionTools } from '@factory/harness-mastra';
+import { createAttachmentTools, createFactoryTransitionTools } from '@factory/harness-mastra';
 import { BoardWriteError, BoardWrites, FactoryTransitionService, ProjectBoardCache, toBoardSource } from '@factory/runtime';
 import type { BoardWriter } from '@factory/runtime';
 import type { ProjectBoardSource } from '@factory/runtime';
@@ -2107,6 +2107,15 @@ export class MastraFactory {
         mergeTools(
           'source-control',
           await sourceControlToolsFor(requestContext),
+        );
+      }
+      if (attachmentService && workItemsStorage) {
+        mergeTools(
+          'factory-attachments',
+          await createAttachmentTools({
+            requestContext,
+            deps: { attachments: attachmentService, workItems: workItemsStorage, sessions: sourceControlSessions },
+          }),
         );
       }
       if (workItemsStorage && transitionService) {

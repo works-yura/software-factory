@@ -42,6 +42,15 @@ Read narrowly: the areas and files the work touches, not the whole folder.
 | `features/<area>/design.md`, `changes/archive/` | **only** the docs-sync task (`factory-docs-sync`) | the merge of a finished change |
 | everything else (`changes/<change>/`, `blackbox/`, `rules/`, `audits/`, `repositories/`, `adr/`) | nobody in Development | report a wrong or missing document in your handoff instead |
 
+## Attached files
+
+When the card or a message lists attachments («Вкладення: …»), call `factory_list_attachments`: it places them in your folder under `.factory/attachments/<id>-<name>`.
+
+- **App assets** (an icon, a logo, an image, a font, a fixture the task names) go into the code repository at the path the task or the design names (or the repository's existing assets folder), committed on the task branch like any other change. Keep the original file name unless the repository's convention says otherwise; never commit a file the task does not use.
+- **Client material** (a PRD, a contract, a spreadsheet) is not Development's to file: read it, and if it belongs in the docs and is not there, say so in your handoff.
+- **Large binaries** stay attachments: refer to them by name instead of committing them.
+- **Never commit `.factory/`.** It is excluded from git in every checkout; files leave it only by being copied to their real path.
+
 A task of a Product change **never edits the docs to describe itself**. Where the implementation differs from the change's design, it says so in its change request body:
 
 ```markdown

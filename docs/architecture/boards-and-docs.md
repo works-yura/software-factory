@@ -137,11 +137,20 @@ docs/
 | Syncta | репозиторій `Eclipt-AI/syncta-docs` (кілька репозиторіїв коду) | переведено 2026-11-10; стандарт записано в його `README.md` |
 | PostAirborne | `docs/` у монорепо `Eclipt-AI/post-airborne` | переведено 2026-11-10 (`868666e5`); журнал рішень — `docs/DECISIONS.md` (D-nnn); стандарт записано в `docs/README.md` |
 
+### Вкладення карток (зроблено, фаза 1)
+
+- **Що це.** Файли з чату, коментарів і розділу «Файли» картки зберігаються як вкладення картки (`factory_attachments`: назва, тип, розмір, sha256, джерело `chat`/`comment`/`upload`/`clickup`/`github`/`gitlab`, `sourceUrl`, хто й коли). Сесія без картки тримає вкладення в себе (видно тому, хто бачить сесію).
+- **Байти — через адаптер.** `AttachmentBlobStore` (`put`/`get`/`head`/`delete`, ключ — sha256, однаковий файл зберігається раз). Зараз `LocalFileBlobStore` у `FACTORY_ATTACHMENTS_DIR` (типово `factory-attachments` поруч із локальною БД), ліміт `FACTORY_ATTACHMENTS_MAX_BYTES` (50 МіБ). Інше сховище (S3) — нова реалізація того самого інтерфейсу, що проходить `describeAttachmentBlobStoreContract`; викликачі не змінюються. Кілька реплік потребують спільного сховища.
+- **Агентові.** `factory_list_attachments` (Mastra і Claude Code) перелічує файли картки й кладе їх у теку сесії `.factory/attachments/<id>-<назва>`. `.factory/` записано в `.git/info/exclude` кожного checkout, у репозиторій не потрапляє. Файли кладуться, коли агент викликає інструмент (повідомлення з вкладеннями й скіли кажуть це зробити), а не під час старту пісочниці.
+- **Куди далі.** Матеріали клієнта → `blackbox/artifacts/` + рядок `MANIFEST.md`, текст PDF/docx → `blackbox/sources/`; ресурси застосунку → шлях у репозиторії коду, який називає задача; великі бінарні файли лишаються вкладеннями.
+
 ## Ще не зроблено
 
 - Дошка «Аудит» і скіли `audit-*` / `qa-round`; розклад (cron) для щоденного аналізу логів.
 - Ворота «MR документів змерджено» в коді: поки що це лише текст у картках «Розробки» й питання людині наприкінці Фаз; дошка злиття не перевіряє.
 - Перевірка документа не помічає змін файлу після перевірки.
+- Вкладення, фаза 2: синхронізація файлів із ClickUp у вкладення картки (`AttachmentService.ingest` з `source: 'clickup'` і `sourceUrl`).
+- Вкладення, фаза 3: файли з GitHub/GitLab (issue, PR/MR) тим самим шляхом; S3-реалізація `AttachmentBlobStore` для кількох реплік.
 
 ## Де в коді
 
@@ -149,3 +158,4 @@ docs/
 - Скіли: `packages/harness-mastra/factory-skills/product-*`, спільна розкладка: `product-enrich/references/docs-layout.md`.
 - Інструменти сесії «Продукту»: `packages/harness-mastra/src/rules/product-tools.ts`.
 - «Розробка» і документація: `packages/pipelines/src/work/docs.ts`, скіл `packages/harness-mastra/factory-skills/factory-docs-sync` (`references/project-docs.md`).
+- Вкладення: `packages/store/src/attachments/` (адаптер, записи, `AttachmentService`), маршрути `packages/api/src/attachments.ts`, розміщення в пісочниці `packages/sandbox/src/attachments.ts`, інструмент `packages/harness-mastra/src/tools/attachment-tools.ts`.

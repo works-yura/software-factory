@@ -14,6 +14,7 @@ export * from './rules/tools.ts';
 export * from './skills/app-skills.ts';
 export * from './skills/catalog.ts';
 export * from './tools/approval-tools.ts';
+export * from './tools/attachment-tools.ts';
 export * from './tools/deliver.ts';
 export * from './tools/index.ts';
 export * from './tools/messaging-tools.ts';

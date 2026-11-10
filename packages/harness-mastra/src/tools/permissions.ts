@@ -27,6 +27,8 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_start_session',
   'factory_answer_approval',
   'factory_switch_session_model',
+  // Reads the card's files and copies them into the session's own .factory/ scratch folder.
+  'factory_list_attachments',
 ];
 
 export interface FactoryToolPermissionsSession {

@@ -441,6 +441,7 @@ describe('approval', () => {
         'factory_list_side_sessions',
         'factory_subscribe_session',
         'factory_unsubscribe_session',
+        'factory_list_attachments',
       ].sort(),
     );
   });

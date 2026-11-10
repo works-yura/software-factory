@@ -17,6 +17,7 @@ const changes: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, o
 export const FACTORY_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   factory_list_work_items: { ...read, title: 'List work items' },
   factory_inspect_work_item: { ...read, title: 'Inspect a work item' },
+  factory_list_attachments: { ...toggle, title: "List the card's attachments and place them in the session folder" },
   factory_list_attention: { ...read, title: 'List items that need attention' },
   factory_create_work_item: { ...additive, title: 'Create a work item' },
   factory_update_work_item: { ...changes, title: 'Update a work item' },
