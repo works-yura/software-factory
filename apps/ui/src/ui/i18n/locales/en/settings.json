@@ -830,7 +830,8 @@
       "descriptionPlaceholder": "What the agent should do, e.g. Audit: security. Focus on secrets and access.",
       "repository": "Repository (optional)",
       "repositoryPlaceholder": "owner/repo — empty: the whole environment",
-      "placeholders": "Placeholders: {{list}}"
+      "placeholders": "Placeholders: {{list}}",
+      "routingHint": "Intake routes place the card first (the Rule condition, or the \"intake-rule card\" type); this board and phase take the cards no route matched."
     }
   },
   "intakeRoutes": {

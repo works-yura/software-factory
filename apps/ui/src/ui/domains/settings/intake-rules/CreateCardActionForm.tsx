@@ -83,6 +83,9 @@ function CreateCardFields({ config, onChange, disabled, context }: IntakeKindFor
           {t('intakeRules.card.placeholders', { list: context.placeholders.join(' ') })}
         </Txt>
       )}
+      <Txt as="p" variant="caption" tone="muted">
+        {t('intakeRules.card.routingHint')}
+      </Txt>
     </div>
   );
 }
