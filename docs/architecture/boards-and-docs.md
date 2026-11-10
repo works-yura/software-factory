@@ -129,7 +129,7 @@ docs/
 | Проєкт | Документація | Стан |
 | --- | --- | --- |
 | Syncta | репозиторій `Eclipt-AI/syncta-docs` (кілька репозиторіїв коду) | переведено 2026-11-10; стандарт записано в його `README.md` |
-| PostAirborne | `docs/` у монорепо `Eclipt-AI/post-airborne` | переводиться |
+| PostAirborne | `docs/` у монорепо `Eclipt-AI/post-airborne` | переведено 2026-11-10 (`868666e5`); журнал рішень — `docs/DECISIONS.md` (D-nnn); стандарт записано в `docs/README.md` |
 
 ## Ще не зроблено
 
