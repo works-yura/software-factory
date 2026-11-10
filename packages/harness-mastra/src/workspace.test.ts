@@ -394,6 +394,7 @@ describe('bundled Factory skill assets', () => {
     const assetNames = (await fs.readdir(assetRoot)).sort();
 
     expect(assetNames).toEqual([
+      'audit-run',
       'configure-factory-rules',
       'factory-docs-sync',
       'factory-gitlab-rereview',
@@ -411,6 +412,19 @@ describe('bundled Factory skill assets', () => {
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
+  });
+
+  it('bundles one audit checklist per audit profile, each listed in the audit skill, and keeps audits read-only', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const skill = await fs.readFile(path.join(assetRoot, 'audit-run', 'SKILL.md'), 'utf8');
+    const { AUDIT_PROFILES } = await import('@factory/pipelines');
+    for (const profile of AUDIT_PROFILES) {
+      await expect(fs.stat(path.join(assetRoot, 'audit-run', profile.reference))).resolves.toBeDefined();
+      expect(skill).toContain(`| \`${profile.kind}\` | \`${profile.reference}\` | ${profile.urgentFrom} |`);
+    }
+    expect(skill).toContain('docs/audits/<date>-<topic>.md');
+    expect(skill).toMatch(/Do not open a pull or merge request/);
+    expect(skill).toMatch(/question tool/);
   });
 
   it('bundles the Development docs skill: reading the truth, the bug record and the change merge', async () => {

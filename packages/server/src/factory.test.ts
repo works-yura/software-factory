@@ -742,14 +742,15 @@ describe('MastraFactory.prepare', () => {
       storage: fakeStorage(),
       sandbox: new PlainSandbox(),
     }).prepare();
-    expect(plain).not.toHaveProperty('workflows');
+    // Intake rules' fire workflow is always there; the build workflow only with a building sandbox.
+    expect(Object.keys(plain.workflows ?? {})).toEqual(['factory-intake-rule-fire']);
 
     const building = await new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
       sandbox: new BuildingSandbox(),
     }).prepare();
-    expect(Object.keys(building.workflows ?? {})).toEqual(['factory-environment-build']);
+    expect(Object.keys(building.workflows ?? {})).toEqual(['factory-environment-build', 'factory-intake-rule-fire']);
     expect(building.workflows?.['factory-environment-build']?.id).toBe('factory-environment-build');
   });
 
@@ -864,6 +865,7 @@ describe('MastraFactory.prepare', () => {
       'work-item-comments',
       'skill-overrides',
       'attachments',
+      'intake-rules',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });

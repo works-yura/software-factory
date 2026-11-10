@@ -26,5 +26,15 @@
       "done": "Готово",
       "canceled": "Скасовано"
     }
+  },
+  "audits": {
+    "title": "Аудити",
+    "phases": {
+      "scheduled": "Заплановано",
+      "analysis": "Аналіз",
+      "report": "Звіт",
+      "done": "Готово",
+      "canceled": "Скасовано"
+    }
   }
 }

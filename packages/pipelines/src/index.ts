@@ -15,6 +15,10 @@ export {
   workItemThreadTitle,
 } from './shared/work-item-branch.ts';
 export type { WorkItemBranchInput, WorkItemBranchSource } from './shared/work-item-branch.ts';
+export { AUDIT_CONTEXT, AUDIT_SKILL, auditsBoard, isAuditsBoardPhase } from './audits/board.ts';
+export type { AuditsBoardPhase } from './audits/board.ts';
+export { AUDIT_PROFILES, AUDIT_SEVERITIES, auditProfile, isUrgentFinding } from './audits/profiles.ts';
+export type { AuditProfile, AuditSeverity } from './audits/profiles.ts';
 export { isProductBoardPhase, PRODUCT_CONTEXT, PRODUCT_LEGACY_PHASE_RENAMES, productBoard } from './product/board.ts';
 export type { ProductBoardPhase } from './product/board.ts';
 export {

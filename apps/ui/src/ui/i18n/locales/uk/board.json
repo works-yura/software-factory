@@ -365,7 +365,8 @@
     "review": "Перевірка",
     "plan": "Планування",
     "chat": "Чат",
-    "product": "Продукт"
+    "product": "Продукт",
+    "audit": "Аудит"
   },
   "cardSessions": {
     "title": "Сесії",

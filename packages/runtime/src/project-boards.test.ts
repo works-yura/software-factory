@@ -153,8 +153,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect((await a.boards.list(scope)).map(row => [row.key, row.revision, row.createdBy])).toEqual([
       ['work', 1, 'factory'],
       ['product', 1, 'factory'],
+      ['audits', 1, 'factory'],
     ]);
-    expect([...described.registry.keys()]).toEqual(['work', 'product']);
+    expect([...described.registry.keys()]).toEqual(['work', 'product', 'audits']);
     expect(described.details.get('product')).toEqual({ source: 'builtin', editable: true, problems: [] });
     expect(described.registry.get('product')!.roleForPhase('spec')).toBe('product');
   });
