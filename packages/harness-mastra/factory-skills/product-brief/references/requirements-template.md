@@ -79,11 +79,13 @@ Write it in the person's language: for this team, **the Ukrainian headings in br
 | D-2 | <e.g. DNS records on syncta.app for email (SPF/DKIM)> | <whoever administers the domain: client> | <same day once access is given> | <email channel> | <ask for access now> |
 
 ## Phases and estimate  (Фази та оцінка)
-| Фаза | Що отримує клієнт | Робота | Календарно, з очікуваннями |
-|---|---|---|---|
-| 1 | … | <one committed range, e.g. "30–46 год"> | <e.g. "~1,5–2 тижні; email — не раніше ніж через 1–2 дні після доступу до DNS"> |
+| Фаза | Що отримує клієнт | Робота |
+|---|---|---|
+| 1 | … | <one committed range of hours, e.g. "30–46 год"> |
+| 2 | … | <"10–14 год" + "очікування: модерація шаблонів Meta, до 24 год на шаблон"> |
 
-<!-- Only the table. No paragraphs under it: no "Календар: … weeks of one developer at N hours a week", no team size or capacity, no "На чому тримається оцінка" list. The calendar column says it in one short cell: our work plus third-party waits only, never the client's review or approval time (dates count from the client's confirmation). An assumption that is really scope ("no store apps", "one language") goes to Межі оцінки; everything else (working figures — optimistic / most likely / pessimistic, PERT, P75, team mode, capacity, assumptions) goes in research.md or the change request description, never in the brief. -->
+<!-- Only the table, in hours. No calendar weeks, no dates, no "Календар: …", no team size or capacity, no "На чому тримається оцінка" list. A third-party wait (a provider review, DNS propagation) is added to that phase's cell as "очікування: <what>, <how long>" — only when there is one; never the client's own review or approval time. -->
+<!-- An assumption that is really scope ("no store apps", "one language") goes to Межі оцінки; everything else (working figures — optimistic / most likely / pessimistic, PERT, P75, team mode, capacity, assumptions) goes in research.md or the change request description, never in the brief. -->
 
 ## Decisions that need the client's approval  (Рішення, що потребують погодження клієнта)
 <!-- The gates the team must not pass alone: switching on a paid service, sending real emails or payments, publishing to the stores, touching real customer data, deleting or migrating data, declaring the release final. "None" if none. -->
