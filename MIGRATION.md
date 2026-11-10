@@ -231,6 +231,7 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | `55a3f259ad` (#29793) | файли сесії (`/web/fs/*` з `sessionId`) читає кожен, хто бачить сесію за тими самими правилами, що й розмову: учасник org — сесію, видиму для org; сесія, що ще на памʼяті власника, лишається його (`canViewSourceControlSession`, `sessionMemoryResourceId`, `canReadSessionResource`) | `api/src/{fs,fs.test,surface}.ts`, `session/src/session-threads.ts` | `threadRunBinding` з того ж конфлікту не повертали: у v4 його прибрали як невикористаний. |
 | `2ac5d8228d` (#29828) | банер про ключ шифрування читається як виправлення конфігурації: «Factory needs its encryption key.», «This deployment doesn't have one set» / «…is using a different one than before», «Set `FACTORY_CREDENTIAL_ENCRYPTION_KEY` and redeploy» | `store/src/secret-encryption{,.test}.ts`, `apps/ui/src/ui/layouts/{ServerProblemBanner.tsx,__tests__/AppLayout.msw.test.tsx}`, переклади `app.json` (en, uk) | — |
 | `2b3e577135` (#29472) | після кількох перевстановлень GitHub App репозиторії не переносяться на мертву інсталяцію: відновлення бере ту, що справді бачить репозиторій | `integration-github/src/platform/integration{,.test}.ts` | — |
+| `b90afb8319` (#29481) | аудит переміщень на власних дошках записує `from` (фазу, з якої картка пішла), а коміт у ту саму фазу не пише подію | `runtime/src/transition-service{,.test}.ts` | У тесті реєстр дошок без `includeDefaultBoards`: `createBoardRegistry` з `@factory/core` не додає вбудованих дошок. |
 
 ### Не перенесено з upstream
 
