@@ -502,7 +502,9 @@ describe('bundled Factory skill assets', () => {
       expect(prose).toContain(`name: ${skillName}`);
       // Unlike the autonomous Factory skills, these ask the person and wait.
       expect(prose).not.toContain('Never wait for or solicit human input');
-      expect(prose).toMatch(/stop and ask/i);
+      // Every question goes through the question tool; nothing is asked as a plain-text list.
+      expect(prose).toMatch(/question tool/i);
+      expect(prose).not.toMatch(/numbered batch/i);
       expect(prose).toContain('phase instructions');
       expect(prose).toContain('factory_transition_work_item');
       expect(prose).toMatch(/Never merge/);
@@ -529,6 +531,14 @@ describe('bundled Factory skill assets', () => {
     expect(layout).toContain('factory-docs-sync');
     expect(layout).toContain('docsSync: true');
     expect(layout).toContain('area-baseline.md');
+    // Research runs the behaviour gap checklist before the frontier is empty; the others re-run it as a self-check.
+    const enrich = await fs.readFile(path.join(assetRoot, 'product-enrich', 'SKILL.md'), 'utf8');
+    expect(enrich).toContain('gap-checklist.md');
+    expect(enrich).toMatch(/Re-read what you wrote, before any confirmation/);
+    const checklist = await fs.readFile(path.join(assetRoot, 'product-enrich', 'references', 'gap-checklist.md'), 'utf8');
+    for (const line of ['reassigned', 'several businesses', 'paused', 'Existing data and settings', 'Language']) {
+      expect(checklist).toContain(line);
+    }
     const blackbox = await fs.readFile(
       path.join(assetRoot, 'product-enrich', 'references', 'blackbox-format.md'),
       'utf8',

@@ -51,7 +51,7 @@ Most projects have one context: one `<docs>/GLOSSARY.md`. When the product has c
 - If only `GLOSSARY.md` exists, there is one context.
 - If neither exists, create `GLOSSARY.md` lazily, when the first term is resolved.
 
-When there are several contexts, infer which one the topic belongs to. If unclear, ask.
+When there are several contexts, infer which one the topic belongs to. If unclear, ask the person once, with the question tool.
 
 ---
 

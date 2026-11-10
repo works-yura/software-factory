@@ -11,7 +11,7 @@ Before a brief or a spec is written, get what is in the engineer's head into the
 
 ## Where the documents live
 
-A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. **Read `references/docs-layout.md` first** (`skill_read` with skill `product-enrich`): how to find the folder (the phase instructions, or find it and confirm with the person; none or several → **stop and ask**), its layout, what to read and what you may write. List the folder and follow what it already has.
+A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. **Read `references/docs-layout.md` first** (`skill_read` with skill `product-enrich`; in Claude Code the tool is `mcp__factory__skill_read`): how to find the folder, its layout, what to read and what you may write. If exactly one documentation folder is found (the phase instructions, this card's earlier documents, a documentation repository in the workspace, or a `docs/` folder), use it without asking and note it in `research.md`; if there is none or more than one, ask once, with the question tool. List the folder and follow what it already has. If `skill_read` is not offered at all, say so in your first message: the references are missing and the documents will not match the checks.
 
 This phase writes `<docs>/changes/<change>/research.md`, and may add to `<docs>/blackbox/` (new sources, artifacts, timeline rows), `<docs>/GLOSSARY.md` and the decision records. **Read `references/blackbox-format.md` too**: the black box is the project's append-only history and your first source of context. It never edits another feature's documents, `rules/`, `bugs/` or `audits/`.
 
@@ -69,9 +69,11 @@ Only when no question tool is offered, write the round as text, numbered, each w
 - Each round's answers reshape the tree: settled decisions push the frontier outward. Recompute it and ask the next round.
 - **Facts are your job, never the person's.** When a question needs a fact from the code, the documents or the repository history, look it up yourself before or while you ask; never ask the person something you could read. Ask only for **decisions** and for knowledge that lives in heads (why it was built so, what broke last time, what the client really means).
 - **Wait** for the answers. Never fill a branch with a guess.
-- You are **done** when the frontier is empty: every branch visited, nothing silently assumed. Then ask the person, with the question tool, to confirm you have reached a shared understanding (options such as: confirmed, go to Brief / go straight to Spec / one more round on …). Do not move on until they do.
+- The frontier is empty only when every branch is visited, the gap checklist was run, and nothing is silently assumed. Then write `research.md` (step 3) and re-read it before you ask for the confirmation (step 4).
 
-Cover at least these branches, skipping what is already clear:
+**Before the frontier is empty, run the behaviour gap checklist** (`references/gap-checklist.md`, `skill_read` with skill `product-enrich`) over every item of the request, against the code and the documents. At least: **who and what** (a booking or chat reassigned to another person, who triggered the event, one person in several businesses or locations with different roles, who may see money), **states and time** (a business paused, unpaid, in trial or deleted; what existing users, data and settings become; the second time, the empty case, failure and retry; quiet hours and time zones), **words and edges** (the language of every message, neighbours that are out of scope, whether the plan still matches the literal request). Every line that applies and is the person's call becomes a question in the next round; one the code settles becomes a fact. A gap the person must decide is **never** parked as a pitfall, an open question or "decide in Spec".
+
+Cover at least these branches too, skipping what is already clear:
 
 - how the part of the system this touches works today: services, data, jobs, the screens users see;
 - pitfalls: caches, duplicated logic, ordering, retries, legacy clients, data that already violates a new assumption;
@@ -98,20 +100,22 @@ Always start from `<docs>/README.md`, `repositories/` and `rules/` (the rules ar
 
 ## Steps
 
-1. **Read the card.** Title, comments, linked issue or files, and `<docs>/blackbox/` if the request came as a document (add any file the person hands you as a new dated file in `blackbox/sources/`, or `blackbox/artifacts/` with its `MANIFEST.md` row, unchanged; append a `TIMELINE.md` row). Restate in 3–5 lines what is asked and what exists today (facts, with where you checked); then the first round, with only the questions that pass the test above.
-2. **Interview** in rounds, as above, sharpening the language and researching as you go, until the frontier is empty and the person confirms.
+1. **Read the card.** Title, comments, linked issue or files, and `<docs>/blackbox/` if the request came as a document (add any file the person hands you as a new dated file in `blackbox/sources/`, or `blackbox/artifacts/` with its `MANIFEST.md` row, unchanged; append a `TIMELINE.md` row). Restate in 3–5 lines what is asked and what exists today (facts, with where you checked); then the first round, with only the questions that pass the test above, through the question tool.
+2. **Interview** in rounds, as above, sharpening the language, researching as you go and running the gap checklist, until the frontier is empty.
 3. **Write** `<docs>/changes/<change>/research.md` from `references/research-template.md`, in the person's language (Ukrainian by default for this team). Keep the template's headings, or their Ukrainian equivalents listed there, so the check recognises them.
-4. **Check** it with `factory_check_product_document` (`type: enrich`, the path, and any contradictions with existing documents and decision records, each with whether it is resolved). Fix what it reports and run it again.
-5. **Publish.** Commit (`docs(research): <change>`), push with `source_control_push_branch`, and open a **draft** change request with `source_control_create_change_request` (`draft: true`) titled `Product: <title>` if this card has none yet. Later documents of this card join the same change request. Pass `repository` to the source-control tools when the documentation lives in a different repository from the card's.
-6. **Hand off.** Summarise what was decided and what is still open. Decisions worth keeping become **proposed** `DEC-nnn` entries (and unanswered client questions proposed `OQ-nnn`) for `blackbox/registers/`: show them, and append them only after the person confirms. Move the card to `brief` (or `spec`, when the person says a brief is not needed) with `factory_transition_work_item`, only after the person agrees.
+4. **Re-read what you wrote, before any confirmation.** Go through *Pitfalls*, *Open questions* and *Deferred to Spec*. Every item that is the person's call (behaviour, scope, who gets what, money, timing) goes back to the person as a question round, through the question tool, now; update `research.md` with the answers. *Deferred to Spec* may hold only **technical** choices (storage shape, a provider API detail), each with one line saying why it is technical. *Open questions* may hold only what neither the person nor the code can answer (for the client), each with who answers it.
+5. **Check** it with `factory_check_product_document` (`type: enrich`, the path, and any contradictions with existing documents and decision records, each with whether it is resolved). Fix what it reports and run it again.
+6. **Publish.** Commit (`docs(research): <change>`), push with `source_control_push_branch`, and open a **draft** change request with `source_control_create_change_request` (`draft: true`) titled `Product: <title>` if this card has none yet. **One change request per change, kept as a draft through Research, Brief, Spec and Phases**: later documents of this card are pushed to the same branch and land in it; the person merges it at the end of Phases. Pass `repository` to the source-control tools when the documentation lives in a different repository from the card's.
+7. **Hand off, with the question tool.** One call: (a) confirm the shared understanding, listing in the question what was deferred to Spec so the person can pull any of it back; (b) the proposed `DEC-nnn` entries (and unanswered client questions as `OQ-nnn`) for `blackbox/registers/`, to record or not; (c) the next step: go to Brief (recommended), go straight to Spec (when the person says a brief is not needed), or one more round on a named topic. Append register entries only after the person confirms them. Move the card with `factory_transition_work_item` to what the person chose.
 
 ## Never
 
 - Never write or change code.
 - Never edit an existing entry in `<docs>/blackbox/` (sources, artifacts, timeline, events, registers); only add. Register entries are written only after the person confirms them. Never edit another feature's documents unasked, or `repositories/`, `rules/`, `bugs/` or `audits/`.
-- Never merge the change request.
+- Never merge the change request: the person merges it at the end of Phases.
 - Never split documentation per component.
 - Never copy content from one private repository into another, or into a public one.
+- Never end a message with a question in plain text when the question tool is offered.
 
 ---
 

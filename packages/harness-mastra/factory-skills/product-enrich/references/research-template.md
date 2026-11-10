@@ -7,6 +7,16 @@ Path: `<docs>/changes/<change>/research.md`. Write it in the person's language. 
 
 Card: <link> · <date> · Interviewed: <who> · Rounds: <n>
 
+## Change and areas  (Зміна й області)
+Change folder `changes/<change>`; areas `features/<area>` it touches (new areas need a baseline in Spec); the documentation folder used and why.
+
+## Intent  (Наміри замовника)
+What happened, why now; what the client expects, quoted from the request (with its source); how the client will know it works.
+
+## Priorities  (Пріоритети)
+| Item | Must / Should / Could / Won't | Why |
+|---|---|---|
+
 ## How the system works today  (Як працює система зараз)
 What this touches today, in the engineer's words, with file paths and the documents that describe it.
 
@@ -31,6 +41,9 @@ What already exists that this feature reuses or extends, with links. `None` if g
 ## Glossary changes  (Зміни в глосарії)
 Terms added or sharpened in GLOSSARY.md during the interview.
 
+## Deferred to Spec  (Відкладено на специфікацію)
+Technical choices only (storage shape, a provider API detail), each with why it is technical. `None` if none. A behaviour, scope or money point never goes here: it is asked.
+
 ## Open questions  (Відкриті питання)
-- <question> — who answers it — what it blocks
+Only what neither the person nor the code can answer (usually the client's), each: <question> — who answers it — what it blocks. `None` if none.
 ````

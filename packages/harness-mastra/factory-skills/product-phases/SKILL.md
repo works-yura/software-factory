@@ -9,15 +9,15 @@ Turn the agreed **design** (`design.md`) on this Product card into the backlog t
 
 **No code is ever written on the Product board.** A task says *what* is delivered and *how it is checked*, never how it is coded. tasks.md is not an implementation document and holds no code.
 
-**Asking the person.** Every question to the person — a batch of gaps, a choice between options, a confirmation, "ready to send?", "move to the next phase?" — goes through the question tool when the session offers one (a question as plain text at the end of a message is a defect) (`AskUserQuestion` / `ask_user`), as `product-enrich` describes: up to 4 self-contained questions per call, 2–4 options each, your recommended answer first with ` (рекомендовано)` at the end of its label, then wait. Write the questions as text only when no question tool is offered.
+**Asking the person.** Every question to the person — a gap in the design, accepting the task list, a confirmation, "is the change request merged?", "move to Phases review?" — goes through the question tool when the session offers one (`AskUserQuestion`, `ask_user`): **calls of up to 4 self-contained questions**, 2–4 options each, your recommended answer first with ` (рекомендовано)` at the end of its label; then wait. A question left as plain text or a list at the end of a message is a defect. Write questions as text only when no question tool is offered.
 
-Ask only what passes `product-enrich`'s test (the person's call, changes what is built or the estimate, not settled by facts); do bookkeeping silently, and put every interpretation or scope point as a question with options, never in a "decided myself" note (`skill_read` skill `product-enrich`, section "What deserves a question").
+**What to ask.** Only what is the person's call, changes what is built or the estimate, and cannot be settled from the brief, the design, the code or live decisions. Do bookkeeping silently (task ids, file layout, the change's index row). Every fact in a question is one you checked in this session.
 
 ## Where the documents live
 
-A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. Use the folder this card already used; otherwise the phase instructions' folder; otherwise **stop and ask**. The layout and what you may write are in `references/docs-layout.md` of the `product-enrich` skill (`skill_read` with skill `product-enrich`).
+A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. Use the folder this card already used; otherwise the phase instructions' folder; otherwise ask once with the question tool. The layout and what you may write are in `references/docs-layout.md` of the `product-enrich` skill (`skill_read` with skill `product-enrich`; in Claude Code `mcp__factory__skill_read`).
 
-This phase reads `<docs>/changes/<change>/requirements.md` (use cases and acceptance criteria) and `design.md` (contract, data, shared resources, test plan, the answers to `<docs>/rules/`), and writes `<docs>/changes/<change>/tasks.md` and the feature's row in `<docs>/features/INDEX.md`. It never edits another feature's documents, `rules/`, `bugs/` or `audits/`.
+This phase reads `<docs>/changes/<change>/requirements.md` (use cases and acceptance criteria) and `design.md` (contract, data, shared resources, test plan, the answers to `<docs>/rules/`), and writes `<docs>/changes/<change>/tasks.md` and this change's own row in `<docs>/features/INDEX.md` (without asking). It never edits another feature's documents, `rules/`, `bugs/` or `audits/`.
 
 `<docs>/changes/<change>/` is the **source of truth for this change's plan** (`features/<area>/design.md` stays the truth of how the system works). Development cards are projections of `tasks.md`, one card per task, each linking back to `tasks.md#<task-id>`. When the plan changes, it changes here first.
 
@@ -25,9 +25,9 @@ The Development agents that build each task have the documentation in their work
 
 ## Inputs
 
-- **The design**, agreed: its check passed in Spec review. If it is missing, **stop and ask**.
+- **The design**, agreed: its check passed in Spec review. If it is missing, ask the person with the question tool how to proceed.
 - **The brief**: every acceptance criterion must end up owned by a task.
-- **Repositories.** Every card names exactly one repository linked to this Factory, as `owner/name`. *Modules touched* in the design says which; if a component has no repository, **stop and ask**.
+- **Repositories.** Every card names exactly one repository linked to this Factory, as `owner/name`. *Modules touched* in the design says which; if a component has no repository, ask the person with the question tool which repository it is.
 
 ## Steps
 
@@ -46,23 +46,23 @@ The Development agents that build each task have the documentation in their work
    - `verify` says how it is proven;
    - the design's consult round and pre-mortem covered what it touches.
 3. **Check** with `factory_check_product_document` (`type: tasks`, the path, and any contradictions with the design or the brief). It verifies the sections and that every task has `role`, `depends-on`, `acceptance` and `verify`, and depends only on tasks that exist. Fix what it reports and run it again. Handing the card to Phases review needs a passing check.
-4. **Agree.** Show the order and the task list in the session, with the open questions and the tasks marked `gate: human`, and **wait** for the person to accept, change or drop tasks. File nothing before they say so.
+4. **Agree, with the question tool.** Post the order and the task list in the session (with the tasks marked `gate: human`), then ask: accept the list as it is (recommended), change named tasks, or drop named tasks; plus one question per open point in the design. **Wait**; file nothing before the person accepts.
 5. **File the cards.** For each accepted task, in dependency order, call `factory_create_work_item` with:
    - `title`: `<ID> — <title>`;
    - `repository`: the task's `owner/name`;
-   - `brief`: what it delivers; its acceptance criteria; `verify`; its dependencies (by id, with the card titles already filed); the links `<docs>/changes/<change>/tasks.md#<id>` and each `design.md#<heading>` it implements; and, at the end, the human gate below, verbatim.
+   - `brief`: what it delivers; its acceptance criteria; `verify`; its dependencies (by id, with the card titles already filed); the links `<docs>/changes/<change>/tasks.md#<id>` and each `design.md#<heading>` it implements; the line **"Start only after the documentation change request <its link> is merged: until then the task and design links do not exist on the default branch."**; and, at the end, the human gate below, verbatim.
 
    The card lands in Development › Intake, its parent is this Product card, and this card lists it. Filing the same title again returns the existing card, so a retry never duplicates. If a call fails, report it and continue with the others; do not retry blindly.
 
-   > **HUMAN-GATE:** if the implementation needs an architectural change, touches modules outside this card's scope, or needs a destructive or irreversible action, stop and hand back to a person with a concrete proposal. Do not expand the scope or loop. The plan lives in `docs/features/`: change it there first.
+   > **HUMAN-GATE:** if the implementation needs an architectural change, touches modules outside this card's scope, or needs a destructive or irreversible action, stop and hand back to a person with a concrete proposal. Do not expand the scope or loop, and never edit the documentation yourself: the plan lives in `<docs>/changes/<change>/tasks.md` and the design in `<docs>/changes/<change>/design.md`; a person changes them through the Product card.
 
    **Last, the docs-sync task** (`<prefix>-DOCS`, depending on every other task): file it with `docsSync: true` and the documentation repository as `repository`, and a brief that lists every filed card in order (title, task id, repository, card link). Development merges the change's delta into `features/<area>/design.md` on it, from what the other cards actually built, and archives the change; a person starts it once the others are merged. The tool records this change's folder on every card from your passing tasks check, so run that check before filing.
-6. **Record.** In `tasks.md` set `status: approved` and add each filed card under its task (`- card: <link>`); update the change's row in `<docs>/features/INDEX.md` (status `phased`, foundation resources). Run the check again, commit (`docs(tasks): <feature>`), and push with `source_control_push_branch`; the card's change request picks it up.
-7. **Hand off.** Post the filed cards in order in the session, then move this card to `phases-review` with `factory_transition_work_item`. Done needs at least one filed card.
+6. **Record.** In `tasks.md` set `status: approved` and add each filed card under its task (`- card: <link>`); update this change's row in `<docs>/features/INDEX.md` (status `phased`, foundation resources). Run the check again, commit (`docs(tasks): <change>`), and push with `source_control_push_branch`; the card's one change request picks it up.
+7. **Hand off, with the question tool.** Post the filed cards in order, then ask: "move to Phases review?" and, as the last step of the whole change, "**merge the documentation change request <link> now**, so the Development cards can start?" (options: I merged it / later). The change request was a draft through every Product phase: say so, and that no Development card should start before it is merged. Move this card to `phases-review` with `factory_transition_work_item` when the person agrees. Done needs at least one filed card.
 
 ## Amend: the plan changed
 
-When the brief or design changes after the cards exist, update only the affected tasks: bump `revision`, add new tasks with the next free id, and retire changed ones as `superseded-by: <id>` (never delete a task that has shipped, and never renumber). File cards for new tasks; comment on existing cards to change them. Never delete cards yourself.
+When the brief or design changes after the cards exist, update only the affected tasks: bump `revision`, add new tasks with the next free id, and retire changed ones as `superseded-by: <id>` (never delete a task that has shipped, and never renumber). File cards for new tasks; tell existing cards what changed with `factory_comment_product_task` (only this card's own tasks), quoting the task id and the new `revision`. Never delete cards yourself; when a card must go, ask the person to close it.
 
 ## Revisions
 
@@ -73,7 +73,7 @@ When the card comes back from Phases review, fix what the person points out the 
 - Never write or change code, and never put code in a card.
 - Never start runs on the filed cards: people start them on the Development board.
 - Never invent tasks that tasks.md does not hold, or file a card for a task that is not in it.
-- Never merge the documents' change request.
+- Never merge the documents' change request: the person merges it at the end of Phases, before Development starts.
 - Never copy content from one private repository into another, or into a public one.
 
 ---

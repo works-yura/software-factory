@@ -2,14 +2,16 @@
 
 Path: `<docs>/changes/<change>/requirements.md`. Audience: **the client**, a non-technical person approving what gets built. Every line readable by a non-developer: no file, framework or widget names, no database or field names, no code, no API details, no design tokens or hex.
 
-Write it in the person's language. Keep these headings, or the Ukrainian ones in brackets, so `factory_check_product_document` (`type: brief`) recognises them. **Required** (the check fails without them; write `None` with a reason rather than dropping one): Goal, Users, Use cases, Edge cases, Acceptance criteria, Not included, Constraints, Technology, Phases and estimate, Decisions that need the client's approval, Done means, Open questions. The rest (Behaviour, Guided flow, What the app remembers, Look and feel) is a menu: keep a section only if it carries weight. Delete the comments.
+Write it in the person's language: for this team, **the Ukrainian headings in brackets and Ukrainian labels** (Хто / Хоче / Кроки / Готово, коли / На екрані); the English names are only what the check also accepts. **Required** (the check fails without them; write `None` with a reason rather than dropping one): Goal, Users, Use cases, Edge cases, Acceptance criteria, Not included, Constraints, Technology, Running costs, External dependencies and risks, Phases and estimate, Decisions that need the client's approval, Done means, Open questions.
+
+**Nothing internal in the client's text:** no file paths, no `blackbox/…` sources, no `DEC-nnn` / `OQ-nnn` ids, no estimation formulas or team mode. Sources and working figures go in the change request description (or `research.md`). The rest (Behaviour, Guided flow, What the app remembers, Look and feel) is a menu: keep a section only if it carries weight. Delete the comments.
 
 ## Feature brief
 
 ````markdown
 # <Feature>: brief
 
-revision: <round> · status: draft | in approval | approved · sources: <blackbox/sources/… and artifacts/… files, DEC-nnn it builds on, the card>
+редакція: <round> · статус: чернетка | на погодженні | погоджено · запит від: <date of the client's request, in words>
 
 ## Goal  (Мета)
 <!-- The problem in plain language: what is true today, why it is a problem, who feels it, and what "done" changes for them. 2–4 sentences. -->
@@ -20,16 +22,16 @@ revision: <round> · status: draft | in approval | approved · sources: <blackbo
 ## Use cases  (Сценарії)
 <!-- One block per scenario, in the user's words. Keep the labels that fit. -->
 ### UC-1 — <name>
-- **Who:** <role>
-- **Wants:** <what, in their words>
-- **Steps:** <what they do and see, screen by screen as they would name it>
-- **Done when:** <something the user can observe, e.g. "the business name and address are filled in and saved">
-- **On screen:** Headline "<exact text>" · Button "<exact label>" (<what happens when pressed>)
+- **Хто:** <role>
+- **Хоче:** <what, in their words>
+- **Кроки:** <what they do and see, screen by screen as they would name it>
+- **Готово, коли:** <something the user can observe, e.g. "назва й адреса бізнесу заповнені й збережені">
+- **На екрані:** Заголовок "<exact text>" · Кнопка "<exact label>" (<what happens when pressed>)
 
 ### UC-2 — …
 
 ## Behaviour  (Поведінка)
-**When it appears:** <what makes it show up> · **Can it be skipped:** <yes/no, what stays behind> · **Coming back later:** <what the user sees next time>
+**Коли з'являється:** <what makes it show up> · **Чи можна пропустити:** <yes/no, what stays behind> · **Повернення пізніше:** <what the user sees next time>
 
 ## Guided flow  (Покроковий сценарій)
 <!-- Only for walkthroughs (tips, a wizard). -->
@@ -74,13 +76,14 @@ revision: <round> · status: draft | in approval | approved · sources: <blackbo
 | D-2 | <e.g. DNS records on syncta.app for email (SPF/DKIM)> | <whoever administers the domain: client> | <same day once access is given> | <email channel> | <ask for access now> |
 
 ## Phases and estimate  (Фази та оцінка)
-| Phase | What the client gets | Optimistic | Most likely | Pessimistic | Expected (PERT) | Commit to | Calendar, incl. waits |
-|---|---|---|---|---|---|---|---|
-| 1 | … | … days | … days | … days | (O+4M+P)/6 | P75 / pessimistic | <work + the longest dependency it waits on, e.g. "~1 week; ≥3 days after DNS access"> |
+| Фаза | Що отримує клієнт | Робота | Календарно, з очікуваннями |
+|---|---|---|---|
+| 1 | … | <one committed range, e.g. "30–46 год"> | <e.g. "~1,5–2 тижні; email — не раніше ніж через 1–2 дні після доступу до DNS"> |
 
-**Team mode:** <people / people with agents (~share) / mostly agents>
-**Estimate assumptions:**
-- <each assumption the numbers rest on; what would move them>
+**На чому тримається оцінка:**
+- <each assumption in plain words; what would move it>
+
+<!-- The working figures (optimistic / most likely / pessimistic, PERT, P75, team mode) go in research.md or the change request description, never here. -->
 
 ## Decisions that need the client's approval  (Рішення, що потребують погодження клієнта)
 <!-- The gates the team must not pass alone: switching on a paid service, sending real emails or payments, publishing to the stores, touching real customer data, deleting or migrating data, declaring the release final. "None" if none. -->
@@ -102,15 +105,18 @@ When the brief is for a whole product or an MVP ("an app that…"), not one feat
 1. **Product goal** — what is built, for whom, what "usable" means for the first release.
 2. **Who uses it** — every role, what they do, what they need.
 3. **Features by area** — grouped; each with its states (empty, loading, error, done) and the things it keeps track of. One paragraph each; each gets its own feature brief later.
+3a. **Edge cases** — across features: failure, empty, second time, paused or unpaid account, one person in several businesses.
 4. **Main journeys** — first-time setup, the primary daily flow, any restricted or portal flow; screen by screen, in the user's words.
 5. **Look and behaviour** — navigation, density, status labels, empty states, validation messages, which screen sizes matter.
 6. **What the app keeps track of** — the minimum set of things it stores, what each holds in plain words, required vs optional. The seed of the data model.
 7. **Acceptance criteria** — numbered, each checkable by the client.
 8. **Not included in the first release** — with the reason.
 9. **Constraints.**
-10. **Technology** (client level), **phases and estimate**.
+10. **Technology** (client level), **running costs**, **external dependencies and risks**, **phases and estimate**.
 11. **Decisions that need the client's approval.**
 12. **Done means.**
 13. **Open questions.**
+
+The check needs the same required headings as a feature brief (see the top of this file): name the sections so (e.g. "Edge cases (Крайові випадки)").
 
 Quality bar: every acceptance criterion is checkable by the client without asking you; every feature names the things it keeps track of and each appears in section 6; non-goals and approval gates are explicit; open questions are listed, not guessed.

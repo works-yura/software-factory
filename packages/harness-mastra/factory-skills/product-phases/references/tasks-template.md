@@ -1,6 +1,6 @@
 # tasks.md template (the phases)
 
-Path: `<docs>/changes/<change>/tasks.md`. Fixed shape, so completeness can be checked **without asking the author**. Write it in the person's language, but keep the section headings (`## Order`, `## Tasks`, `## Coverage check`, or `## Порядок`, `## Задачі`, `## Покриття`) and the **field names** below in English: `factory_check_product_document` (`type: tasks`) reads every `### <ID> — <title>` under `## Tasks` and requires `role`, `depends-on`, `acceptance` and `verify` on each, and every `depends-on` id to be a task in this file (a cross-feature dependency is written `<feature>/<ID>`).
+Path: `<docs>/changes/<change>/tasks.md`. Fixed shape, so completeness can be checked **without asking the author**. Write it in the person's language, but keep the section headings (`## Order`, `## Tasks`, `## Coverage check`, or `## Порядок`, `## Задачі`, `## Покриття`) and the **field names** below in English: `factory_check_product_document` (`type: tasks`) reads every `### <ID> — <title>` under `## Tasks` and requires `role`, `depends-on`, `acceptance` and `verify` on each, and every `depends-on` id to be a task in this file (a cross-feature dependency is written `<change>/<ID>`).
 
 Ids: a short feature prefix and a number (`SB-01`, `SB-02`). Permanent: never renumber; a split becomes `SB-04a` / `SB-04b`.
 

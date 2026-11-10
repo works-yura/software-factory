@@ -1,13 +1,13 @@
 # features/INDEX.md template
 
-Path: `<docs>/features/INDEX.md`. Create it with the first area or change; afterwards only update rows.
+Path: `<docs>/features/INDEX.md`. Create it with the first area or change; afterwards only update rows. A Product phase adds or updates **its own change's row** without asking; it never touches another change's row.
 
 ````markdown
 # <Project>: areas and changes
 
-> **Source of truth:** `docs/features/<area>/design.md` is how each area works now. A change is proposed in
-> `docs/changes/<YYYY-MM-DD>-<change>/` as a delta, and merged into the area when it ships. Board cards (Product and
-> Development) are projections of a change's `tasks.md`, one card per task, linking back to
+> **Source of truth:** `features/<area>/design.md` is how each area works now. A change is proposed in
+> `changes/<YYYY-MM-DD>-<change>/` as a delta, and merged into the area when it ships. One Product card per change;
+> its Development cards are projections of the change's `tasks.md`, one card per task, linking back to
 > `changes/<change>/tasks.md#<task-id>`. Change the plan there first.
 
 ## Areas
