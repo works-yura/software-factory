@@ -5,7 +5,7 @@ description: Cut the agreed design into an INVEST-atomic, dependency-ordered bac
 
 # Product Phases
 
-Turn the agreed **design** (`design.md`) on this Product card into the backlog the Development board builds: `<docs>/specify/<feature>/tasks.md`, every task **INVEST**-atomic, ordered by its dependency graph, foundation first, each carrying its slice of the acceptance criteria and how it is proven. Agree the list **with a person in this session**, then file **one Development (Work) card per task**, under this Product card. The failure this prevents: an engineer re-deciding the architecture per task, two tasks editing the same schema, and "done" being a matter of opinion.
+Turn the agreed **design** (`design.md`) on this Product card into the backlog the Development board builds: `<docs>/changes/<change>/tasks.md`, every task **INVEST**-atomic, ordered by its dependency graph, foundation first, each carrying its slice of the acceptance criteria and how it is proven. Agree the list **with a person in this session**, then file **one Development (Work) card per task**, under this Product card. The failure this prevents: an engineer re-deciding the architecture per task, two tasks editing the same schema, and "done" being a matter of opinion.
 
 **No code is ever written on the Product board.** A task says *what* is delivered and *how it is checked*, never how it is coded. tasks.md is not an implementation document and holds no code.
 
@@ -13,9 +13,9 @@ Turn the agreed **design** (`design.md`) on this Product card into the backlog t
 
 A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. Use the folder this card already used; otherwise the phase instructions' folder; otherwise **stop and ask**. The layout and what you may write are in `references/docs-layout.md` of the `product-enrich` skill (`skill_read` with skill `product-enrich`).
 
-This phase reads `<docs>/specify/<feature>/requirements.md` (use cases and acceptance criteria) and `design.md` (contract, data, shared resources, test plan, the answers to `<docs>/rules/`), and writes `<docs>/specify/<feature>/tasks.md` and the feature's row in `<docs>/specify/INDEX.md`. It never edits `features/`, `rules/`, `bugs/` or `audits/`.
+This phase reads `<docs>/changes/<change>/requirements.md` (use cases and acceptance criteria) and `design.md` (contract, data, shared resources, test plan, the answers to `<docs>/rules/`), and writes `<docs>/changes/<change>/tasks.md` and the feature's row in `<docs>/features/INDEX.md`. It never edits another feature's documents, `rules/`, `bugs/` or `audits/`.
 
-`<docs>/specify/` is the **source of truth**. Development cards are projections of `tasks.md`, one card per task, each linking back to `tasks.md#<task-id>`. When the plan changes, it changes here first.
+`<docs>/changes/<change>/` is the **source of truth for this change's plan** (`features/<area>/design.md` stays the truth of how the system works). Development cards are projections of `tasks.md`, one card per task, each linking back to `tasks.md#<task-id>`. When the plan changes, it changes here first.
 
 The Development agents that build each task have the documentation in their workspace when the documentation repository is part of the Factory's environment ("in environment" in Settings › Repositories). If it is not, say so to the person: the cards' links will not resolve for them.
 
@@ -46,12 +46,12 @@ The Development agents that build each task have the documentation in their work
 5. **File the cards.** For each accepted task, in dependency order, call `factory_create_work_item` with:
    - `title`: `<ID> — <title>`;
    - `repository`: the task's `owner/name`;
-   - `brief`: what it delivers; its acceptance criteria; `verify`; its dependencies (by id, with the card titles already filed); the links `<docs>/specify/<feature>/tasks.md#<id>` and each `design.md#<heading>` it implements; and, at the end, the human gate below, verbatim.
+   - `brief`: what it delivers; its acceptance criteria; `verify`; its dependencies (by id, with the card titles already filed); the links `<docs>/changes/<change>/tasks.md#<id>` and each `design.md#<heading>` it implements; and, at the end, the human gate below, verbatim.
 
    The card lands in Development › Intake, its parent is this Product card, and this card lists it. Filing the same title again returns the existing card, so a retry never duplicates. If a call fails, report it and continue with the others; do not retry blindly.
 
-   > **HUMAN-GATE:** if the implementation needs an architectural change, touches modules outside this card's scope, or needs a destructive or irreversible action, stop and hand back to a person with a concrete proposal. Do not expand the scope or loop. The plan lives in `docs/specify/`: change it there first.
-6. **Record.** In `tasks.md` set `status: approved` and add each filed card under its task (`- card: <link>`); update the feature's row in `<docs>/specify/INDEX.md` (status `phased`, foundation resources). Run the check again, commit (`docs(tasks): <feature>`), and push with `source_control_push_branch`; the card's change request picks it up.
+   > **HUMAN-GATE:** if the implementation needs an architectural change, touches modules outside this card's scope, or needs a destructive or irreversible action, stop and hand back to a person with a concrete proposal. Do not expand the scope or loop. The plan lives in `docs/features/`: change it there first.
+6. **Record.** In `tasks.md` set `status: approved` and add each filed card under its task (`- card: <link>`); update the change's row in `<docs>/features/INDEX.md` (status `phased`, foundation resources). Run the check again, commit (`docs(tasks): <feature>`), and push with `source_control_push_branch`; the card's change request picks it up.
 7. **Hand off.** Post the filed cards in order in the session, then move this card to `phases-review` with `factory_transition_work_item`. Done needs at least one filed card.
 
 ## Amend: the plan changed

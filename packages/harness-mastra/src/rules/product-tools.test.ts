@@ -33,6 +33,19 @@ function requestContext() {
 }
 
 const SPEC = `# Loyalty: specification
+## Affected areas
+| Area | Truth |
+|---|---|
+| loyalty | features/loyalty/design.md |
+
+## ADDED Requirements — loyalty
+### Requirement: Earn points
+The system SHALL credit points for every paid order.
+#### Scenario: Paid order
+- GIVEN a signed-in buyer
+- WHEN an order is paid
+- THEN points are credited
+
 ## Architecture
 \`\`\`mermaid
 C4Context
@@ -151,7 +164,7 @@ describe('Product session tools', () => {
   it('records the spec check on the card, and the gate lets the card on to Phases only once it passed', async () => {
     const { tools, context, storage, prepared, transitionService } = await setup({ stage: 'spec' });
     const check = tools.factory_check_product_document as ExecutableTool;
-    const path = 'docs/specify/loyalty/design.md';
+    const path = 'docs/changes/2026-11-10-loyalty/design.md';
 
     const failed = await check.execute(
       { type: 'spec', path, contradictions: [] },

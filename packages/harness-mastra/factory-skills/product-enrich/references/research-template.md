@@ -1,6 +1,6 @@
 # research.md template
 
-Path: `<docs>/specify/<feature>/research.md`. Write it in the person's language. Keep these headings (or the Ukrainian ones in brackets) so `factory_check_product_document` (`type: enrich`) recognises them. Write `None` rather than leaving a section empty.
+Path: `<docs>/changes/<change>/research.md`. Write it in the person's language. Keep these headings (or the Ukrainian ones in brackets) so `factory_check_product_document` (`type: enrich`) recognises them. Write `None` rather than leaving a section empty.
 
 ````markdown
 # <Feature>: research
@@ -20,7 +20,7 @@ What this touches today, in the engineer's words, with file paths and the docume
 The design tree as it was settled, one line per decision, in the order it was taken.
 | # | Decision | Chosen | Why | Record |
 |---|---|---|---|---|
-| Q1 | <question> | <answer> | <reason> | <adr/000N-… or —> |
+| Q1 | <question> | <answer> | <reason> | <proposed DEC-nnn / adr/000N-… / —> |
 
 ## Reuse  (Повторне використання)
 What already exists that this feature reuses or extends, with links. `None` if greenfield.

@@ -1,6 +1,6 @@
 # requirements.md template (the brief)
 
-Path: `<docs>/specify/<feature>/requirements.md`. Audience: **the client**, a non-technical person approving what gets built. Every line readable by a non-developer: no file, framework or widget names, no database or field names, no code, no API details, no design tokens or hex.
+Path: `<docs>/changes/<change>/requirements.md`. Audience: **the client**, a non-technical person approving what gets built. Every line readable by a non-developer: no file, framework or widget names, no database or field names, no code, no API details, no design tokens or hex.
 
 Write it in the person's language. Keep these headings, or the Ukrainian ones in brackets, so `factory_check_product_document` (`type: brief`) recognises them. **Required** (the check fails without them; write `None` with a reason rather than dropping one): Goal, Users, Use cases, Edge cases, Acceptance criteria, Not included, Constraints, Technology, Phases and estimate, Decisions that need the client's approval, Done means, Open questions. The rest (Behaviour, Guided flow, What the app remembers, Look and feel) is a menu: keep a section only if it carries weight. Delete the comments.
 
@@ -9,7 +9,7 @@ Write it in the person's language. Keep these headings, or the Ukrainian ones in
 ````markdown
 # <Feature>: brief
 
-revision: <round> · status: draft | in approval | approved · source: <docs/raw/… files, the card>
+revision: <round> · status: draft | in approval | approved · sources: <blackbox/sources/… and artifacts/… files, DEC-nnn it builds on, the card>
 
 ## Goal  (Мета)
 <!-- The problem in plain language: what is true today, why it is a problem, who feels it, and what "done" changes for them. 2–4 sentences. -->

@@ -41,7 +41,7 @@ function stageContext(
 
 const passedCheck = (type: string) => ({
   type,
-  path: `docs/specify/loyalty/${type}.md`,
+  path: `docs/changes/2026-11-10-loyalty/${type}.md`,
   sha256: 'a'.repeat(64),
   passed: true,
   missingSections: [],
@@ -160,6 +160,15 @@ describe('Product board', () => {
           stageContext('spec-review', 'phases', { [PRODUCT_DOC_CHECKS_KEY]: { spec: passedCheck('spec') } }),
         ),
       ).resolves.toBeUndefined();
+    });
+
+    it('still honours checks recorded under an older layout, without rewriting them', async () => {
+      // Cards checked before docs moved to features/<feature>/ keep their recorded path.
+      for (const path of ['docs/specify/loyalty/design.md', 'docs/changes/2026-11-10-loyalty/spec.md']) {
+        const metadata = { [PRODUCT_DOC_CHECKS_KEY]: { spec: { ...passedCheck('spec'), path } } };
+        await expect(exit('spec-review')(stageContext('spec-review', 'phases', metadata))).resolves.toBeUndefined();
+        expect(metadata[PRODUCT_DOC_CHECKS_KEY].spec.path).toBe(path);
+      }
     });
 
     it('sends the brief for approval only once its check passed', async () => {

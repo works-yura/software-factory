@@ -1,17 +1,44 @@
-# design.md template (the technical spec)
+# design.md template (the technical spec, as a delta)
 
-Path: `<docs>/specify/<feature>/design.md`. Audience: the team. Prescriptive: what *will be* built; the descriptive "what is" lives in the project's other documents. Fixed shape, so a reviewer can check completeness **without asking the author**: adapt wording, not structure. Fill every section: `None` when it does not apply, `Open question: <what>` when the source does not say.
+Path: `<docs>/changes/<change>/design.md`. Audience: the team. A **delta** against the truth: for each area the change touches, what is ADDED, MODIFIED or REMOVED relative to `features/<area>/design.md`, plus how the change fits the system. It never copies the area's whole truth, and never edits `features/`: when the change ships, its delta is merged into `features/<area>/design.md` and the change is archived. An area with no truth yet gets a baseline first (`area-baseline.md`). Fixed shape, so a reviewer can check completeness **without asking the author**: adapt wording, not structure. Fill every section: `None` when it does not apply, `Open question: <what>` when the source does not say.
 
-Write it in the person's language. Keep these headings or the Ukrainian ones in brackets: `factory_check_product_document` (`type: spec`) requires Architecture, Sequences, Data flow, Modules touched, API contract, Data model, Security, Shared resources, Test plan, Decisions, Consult round, Premortem outcome and Open questions, plus a `C4Context` or `C4Container`, a `sequenceDiagram` and a `flowchart` Mermaid block.
+Write it in the person's language. Keep these headings or the Ukrainian ones in brackets: `factory_check_product_document` (`type: spec`) requires Affected areas, at least one of ADDED / MODIFIED / REMOVED Requirements (ДОДАНО / ЗМІНЕНО / ВИЛУЧЕНО вимоги), Architecture, Sequences, Data flow, Modules touched, API contract, Data model, Security, Shared resources, Test plan, Decisions, Consult round, Premortem outcome and Open questions, plus a `C4Context` or `C4Container`, a `sequenceDiagram` and a `flowchart` Mermaid block for the flows the change adds or changes.
 
 `````markdown
-# <Feature>: design
+# <Change>: design (delta)
 
 revision: 1 · status: draft · brief: requirements.md (revision <n>) · research: research.md
-builds on: <AGENTS.md / CLAUDE.md>, <docs/README.md>, <earlier design.md files>, <adr/…>
+against: features/<area>/design.md @ <commit>, … · builds on: <AGENTS.md / CLAUDE.md>, <docs/README.md>, <DEC-nnn>, <adr/…>
+
+## Affected areas  (Зачеплені області)
+| Area | Truth | Baseline written by this change? |
+|---|---|---|
+| payments | features/payments/design.md | no |
+
+<!-- One delta block per affected area. Requirements: `### Requirement: <name>` stating behaviour with SHALL / MUST,
+each with `#### Scenario: <name>` GIVEN / WHEN / THEN. MODIFIED restates the WHOLE requirement as it will be, with
+"(Previously: …)"; REMOVED gives the reason and what replaces it. Omit a heading the change does not need. -->
+
+## ADDED Requirements — payments  (ДОДАНО вимоги — payments)
+### Requirement: Subscription checkout
+The system SHALL let a signed-in customer subscribe to a plan with a card.
+#### Scenario: Card declined
+- GIVEN a signed-in customer without a subscription
+- WHEN they subscribe and the provider declines the card
+- THEN they see "Payment failed" and no access is granted
+
+## MODIFIED Requirements — payments  (ЗМІНЕНО вимоги — payments)
+### Requirement: <existing requirement name, exactly as in the area's truth>
+<the whole requirement as it will be> (Previously: <what it said>)
+#### Scenario: <name>
+- GIVEN … WHEN … THEN …
+
+## REMOVED Requirements — payments  (ВИЛУЧЕНО вимоги — payments)
+### Requirement: <existing requirement name>
+Reason: <why> · Replaced by: <requirement, or "nothing">
 
 ## Architecture  (Архітектура)
-<!-- C4 context (people and systems) and/or container (apps, services, databases) level; names as earlier documents use them. New elements marked. -->
+<!-- C4 context (people and systems) and/or container (apps, services, databases) level, as it will be after the change; names as the areas' truth uses them. New or changed elements marked. -->
 ```mermaid
 C4Context
   Person(customer, "Customer")
@@ -117,7 +144,7 @@ Every acceptance criterion of the brief appears in *Covers* at least once.
 - Context: <one line>
 - Decision: <one line>
 - Consequences: <one line, including what becomes hard>
-- Record: <adr/000N-… when it outlives the feature, or "local">
+- Record: <proposed DEC-nnn; plus adr/000N-… for a big technical decision that outlives the feature; or "local">
 
 ### Rules  (Правила)
 <!-- Every rule in <docs>/rules/ this feature falls under, answered. A rule that asks questions before a feature (e.g. critical questions) gets each question answered here, pointing at the test scenario or section that covers it; "does not apply, because …" is an answer, silence is not. -->
@@ -144,3 +171,5 @@ Every acceptance criterion of the brief appears in *Covers* at least once.
 ## Open questions  (Відкриті питання)
 - <question> — who answers it — blocks: <sections / tasks, or "none">
 `````
+
+_Delta format adapted from OpenSpec (Fission-AI/OpenSpec, MIT)._

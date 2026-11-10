@@ -71,7 +71,7 @@ const resting = (description: string) => ({ kind: 'resting' as const, descriptio
  * changes in every component, test plan), then phases filed as cards on Development (Work). Each
  * working phase is a conversation with a person, so none starts on its own. A project keeps all
  * its documentation in one folder (a docs repository, or one folder in a monorepo), laid out as
- * `<docs>/specify/<feature>/{research,requirements,design,tasks}.md`; each Factory says where in
+ * `<docs>/changes/<change>/{research,requirements,design,tasks}.md`; each Factory says where in
  * the phase instructions, or the agent finds it and confirms.
  *
  * Sending the brief (requirements.md) for approval needs its document check to have passed, and

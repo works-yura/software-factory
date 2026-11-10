@@ -1,30 +1,37 @@
-# specify/INDEX.md template
+# features/INDEX.md template
 
-Path: `<docs>/specify/INDEX.md`. Create it with the first feature; afterwards only update rows.
+Path: `<docs>/features/INDEX.md`. Create it with the first area or change; afterwards only update rows.
 
 ````markdown
-# <Project>: plan index
+# <Project>: areas and changes
 
-> **Source of truth:** `docs/specify/` is canonical. Board cards (Product and Development) are projections of
-> `tasks.md`, one card per task, linking back to `specify/<feature>/tasks.md#<task-id>`. Change the plan here first.
+> **Source of truth:** `docs/features/<area>/design.md` is how each area works now. A change is proposed in
+> `docs/changes/<YYYY-MM-DD>-<change>/` as a delta, and merged into the area when it ships. Board cards (Product and
+> Development) are projections of a change's `tasks.md`, one card per task, linking back to
+> `changes/<change>/tasks.md#<task-id>`. Change the plan there first.
 
-## Sources
-- `raw/<file>` — <what it is> — read <date>
+## Areas
+| Area | Spans (repositories) | Truth | Status |
+|---|---|---|---|
+| Payments | api, mobile | features/payments/design.md | baseline / current |
 
-## Features
-| Feature | Slug | Status | Revision | Depends on | Product card |
+## Changes in flight
+| Change | Areas | Status | Revision | Depends on | Product card |
 |---|---|---|---|---|---|
-| Sign-in | auth | draft | 1 | — | <link> |
+| 2026-11-10-subscriptions | payments, auth | draft | 1 | — | <link> |
 
-Status: `research` → `draft` → `in-approval` → `approved` (brief) → `designed` → `premortem-done` → `phased` → `in-progress` → `shipped`.
+Status: `research` → `draft` → `in-approval` → `approved` (brief) → `designed` → `premortem-done` → `phased` → `in-progress` → `shipped` → `archived` (delta merged into the areas, folder moved to `changes/archive/`).
 
-## Cross-feature dependencies
-- <feature> depends on <feature> (<why: user identity, an entity, a contract>)
+## Cross-change dependencies
+- <change> depends on <change> (<why: user identity, an entity, a contract>)
 
 ## Foundation resources
 | Resource | Owning task | Used by |
 |---|---|---|
 
-## Open questions (plan-wide)
-- <question> — blocks: <features>
+## Sources
+- `blackbox/sources/<file>` (or `blackbox/artifacts/<file>`) — <what it is> — read <date>
+
+## Open questions (project-wide)
+- <question> — blocks: <changes>
 ````

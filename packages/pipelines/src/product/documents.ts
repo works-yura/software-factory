@@ -7,13 +7,17 @@
  * hold. The layout is the team's spec-driven convention:
  *
  * ```
- * <docs>/raw/                         client sources (PRD, notes, dumps): input, only ever added to
- * <docs>/specify/INDEX.md             feature list, status, cross-feature dependencies
- * <docs>/specify/<feature>/research.md   Research: what the engineer knows, the decisions taken
- * <docs>/specify/<feature>/requirements.md   the client-facing brief
- * <docs>/specify/<feature>/design.md      the technical spec for the team
- * <docs>/specify/<feature>/tasks.md       the phases, as INVEST tasks with a dependency graph
- * <docs>/GLOSSARY.md, <docs>/adr/     domain language and decision records
+ * <docs>/blackbox/                    append-only history: sources/ (verbatim client input), artifacts/,
+ *                                     TIMELINE.md, events/, registers/ (decisions DEC-nnn, commercial, …)
+ * <docs>/features/<area>/design.md    THE truth: how an area of the system works now (one per area)
+ * <docs>/changes/<YYYY-MM-DD>-<change>/   one per Product card, a proposed change:
+ *   research.md                       Research: what the engineer knows, the decisions taken
+ *   requirements.md                   the client-facing brief
+ *   design.md                         the technical spec, as a DELTA against features/<area>/design.md
+ *                                     (ADDED / MODIFIED / REMOVED requirements per area)
+ *   tasks.md                          the phases, as INVEST tasks with a dependency graph
+ * <docs>/changes/archive/             completed changes, once their delta is merged into features/
+ * <docs>/GLOSSARY.md, <docs>/adr/     domain language and big technical decision records
  * ```
  *
  * The structure check is deterministic and costs no tokens: required sections per document type,
@@ -31,7 +35,7 @@
 export const PRODUCT_DOCUMENT_TYPES = ['enrich', 'brief', 'spec', 'tasks'] as const;
 export type ProductDocumentType = (typeof PRODUCT_DOCUMENT_TYPES)[number];
 
-/** Each document's file name inside `<docs>/specify/<feature>/`. */
+/** Each document's file name inside `<docs>/changes/<change>/`. Checks recorded under older layouts keep their path. */
 export const PRODUCT_DOCUMENT_FILES: Readonly<Record<ProductDocumentType, string>> = {
   enrich: 'research.md',
   brief: 'requirements.md',
@@ -81,8 +85,15 @@ export const PRODUCT_DOCUMENT_SECTIONS: Readonly<Record<ProductDocumentType, rea
     section('Done means', /done means/i, /definition of done/i, /готово означає/i),
     OPEN_QUESTIONS,
   ],
-  // The technical spec for the team: how the feature fits the system, every component in one place.
+  // The technical spec for the team, as a delta against the areas' truth: every component in one place.
   spec: [
+    section('Affected areas', /affected areas?/i, /зачеплен/i),
+    // The delta against the areas' truth: at least one of ADDED / MODIFIED / REMOVED requirements.
+    section(
+      'Delta (ADDED / MODIFIED / REMOVED Requirements)',
+      /\b(added|modified|removed) requirements\b/i,
+      /(додано|змінено|вилучено) вимоги/i,
+    ),
     section('Architecture', /architecture/i, /архітектур/i),
     section('Sequences', /sequences?/i, /послідовн/i),
     section('Data flow', /data flow/i, /потік даних/i, /потоки даних/i),

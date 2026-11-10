@@ -470,19 +470,34 @@ describe('bundled Factory skill assets', () => {
       expect(prose).toContain('No code is ever written on the Product board.');
       expect(prose).toMatch(/one folder/);
       // The team's spec-driven layout, and every document is checked before its gate.
-      expect(prose).toContain('<docs>/specify/');
+      expect(prose).toContain('<docs>/changes/<change>/');
       expect(prose).toContain('factory_check_product_document');
       // One shared layout page says what to read and what Product may never edit.
       expect(prose).toContain('docs-layout.md');
       expect(prose).toMatch(/never edits?.*`bugs\/`/i);
     }
     const layout = await fs.readFile(path.join(assetRoot, 'product-enrich', 'references', 'docs-layout.md'), 'utf8');
-    for (const part of ['README.md', 'repositories/', 'features/', 'rules/', 'bugs/', 'audits/', 'raw/']) {
+    for (const part of ['README.md', 'repositories/', 'features/<area>/design.md', 'changes/', 'changes/archive/', 'rules/', 'bugs/', 'audits/', 'blackbox/']) {
       expect(layout).toContain(part);
     }
-    // Bugs and QA rounds share bugs/; all client input lives in raw/.
+    // Bugs and QA rounds share bugs/; all client input lives in the black box, whose
+    // registers are proposed by the agent and written only once the person confirms.
     expect(layout).toContain('qa-round');
-    expect(layout).toContain('raw/<YYYY-MM-DD>-<topic>.md');
+    expect(layout).toContain('blackbox-format.md');
+    // One truth per area in features/; a Product card is a change in changes/ whose design is a delta,
+    // merged into the area and archived at the end of Development (a step not built yet).
+    expect(layout).toMatch(/ADDED.*MODIFIED.*REMOVED/);
+    expect(layout).toMatch(/TODO/);
+    expect(layout).toContain('area-baseline.md');
+    const blackbox = await fs.readFile(
+      path.join(assetRoot, 'product-enrich', 'references', 'blackbox-format.md'),
+      'utf8',
+    );
+    for (const part of ['TIMELINE.md', 'sources/', 'artifacts/', 'MANIFEST.md', 'registers/', 'decisions.md', 'commercial.md', 'scope-history.md', 'open-questions.md', 'DEC-nnn']) {
+      expect(blackbox).toContain(part);
+    }
+    expect(blackbox).toMatch(/append-only/);
+    expect(blackbox).toMatch(/only after the person confirms/);
     const read = (skillName: string, file: string) => fs.readFile(path.join(assetRoot, skillName, file), 'utf8');
     // Each skill's templates and reference pages ship with it.
     for (const [skillName, files] of [
@@ -490,6 +505,7 @@ describe('bundled Factory skill assets', () => {
         'product-enrich',
         [
           'references/docs-layout.md',
+          'references/blackbox-format.md',
           'references/research-template.md',
           'references/GLOSSARY-FORMAT.md',
           'references/ADR-FORMAT.md',
@@ -499,7 +515,7 @@ describe('bundled Factory skill assets', () => {
         'product-brief',
         ['references/requirements-template.md', 'references/feedback-template.md', 'references/index-template.md'],
       ],
-      ['product-spec', ['references/design-template.md', 'references/contract-lenses.md', 'references/premortem.md']],
+      ['product-spec', ['references/design-template.md', 'references/contract-lenses.md', 'references/premortem.md', 'references/area-baseline.md']],
       ['product-phases', ['references/tasks-template.md']],
     ] as const) {
       const prose = await read(skillName, 'SKILL.md');
@@ -513,6 +529,8 @@ describe('bundled Factory skill assets', () => {
     expect(spec).toContain('Pre-mortem');
     expect(spec).toContain('Never split the spec into one document per component.');
     await expect(read('product-spec', 'references/design-template.md')).resolves.toContain('## Test plan');
+    await expect(read('product-spec', 'references/design-template.md')).resolves.toContain('## ADDED Requirements');
+    expect(spec).toContain('features/<area>/design.md');
     const phases = await read('product-phases', 'SKILL.md');
     expect(phases).toContain('HUMAN-GATE');
     expect(phases).toContain('Definition of Ready');

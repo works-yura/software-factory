@@ -65,6 +65,19 @@ None.
 
 const SPEC = `# Loyalty: design
 
+## Affected areas
+| Area | Truth |
+|---|---|
+| loyalty | features/loyalty/design.md |
+
+## ADDED Requirements — loyalty
+### Requirement: Earn points
+The system SHALL credit points for every paid order.
+#### Scenario: Paid order
+- GIVEN a signed-in buyer
+- WHEN an order is paid
+- THEN points are credited
+
 ## Architecture
 \`\`\`mermaid
 C4Context
@@ -193,6 +206,23 @@ describe('product document checks', () => {
     ]);
   });
 
+  it('requires the design to be a delta against the areas: affected areas and at least one ADDED / MODIFIED / REMOVED block', () => {
+    const noDelta = SPEC.replace('## ADDED Requirements — loyalty', '## Notes');
+    expect(checkProductDocumentStructure('spec', noDelta).missingSections).toEqual([
+      'Delta (ADDED / MODIFIED / REMOVED Requirements)',
+    ]);
+    const modifiedOnly = SPEC.replace('## ADDED Requirements — loyalty', '## MODIFIED Requirements — loyalty');
+    expect(checkProductDocumentStructure('spec', modifiedOnly).missingSections).toEqual([]);
+    const ukrainian = SPEC.replace('## ADDED Requirements — loyalty', '## ВИЛУЧЕНО вимоги — loyalty').replace(
+      '## Affected areas',
+      '## Зачеплені області',
+    );
+    expect(checkProductDocumentStructure('spec', ukrainian).missingSections).toEqual([]);
+    expect(checkProductDocumentStructure('spec', SPEC.replace('## Affected areas', '## Areas list')).missingSections).toEqual([
+      'Affected areas',
+    ]);
+  });
+
   it('requires the C4, sequence and data-flow diagrams in the design, and none in the brief', () => {
     const noSequence = SPEC.replace('sequenceDiagram', 'stateDiagram-v2');
     expect(checkProductDocumentStructure('spec', noSequence).missingDiagrams).toEqual(['sequence diagram']);
@@ -248,7 +278,7 @@ describe('product document checks', () => {
   it('records checks and children on the card metadata without dropping other keys', () => {
     const check: ProductDocumentCheck = {
       type: 'spec',
-      path: 'docs/specify/loyalty/design.md',
+      path: 'docs/changes/2026-11-10-loyalty/design.md',
       sha256: 'b'.repeat(64),
       passed: true,
       missingSections: [],
@@ -269,7 +299,7 @@ describe('product document checks', () => {
   it('explains a failed tasks check', () => {
     const metadata = withProductDocumentCheck(undefined, {
       type: 'tasks',
-      path: 'docs/specify/loyalty/tasks.md',
+      path: 'docs/changes/2026-11-10-loyalty/tasks.md',
       sha256: 'c'.repeat(64),
       passed: false,
       missingSections: [],
