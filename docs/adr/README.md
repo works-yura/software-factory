@@ -18,3 +18,4 @@
 | [0012](0012-no-claude-code-attribution.md) | Без атрибуції Claude Code у комітах і PR | 2026-11-10 |
 | [0013](0013-claude-never-bypass-permissions.md) | Claude Code harness ніколи не обходить дозволи | 2026-10-27 |
 | [0014](0014-ui-from-design-system.md) | UI будується з частин дизайн-системи | 2026-11-10 |
+| [0015](0015-intake-rules-and-audits.md) | Правила надходження: тригер → політика → дія; дошка «Аудити» | 2026-11-11 |
