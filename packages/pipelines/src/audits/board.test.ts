@@ -10,12 +10,12 @@ describe('Audits board', () => {
     expect(createDefaultBoardRegistry().get('audits')).toBe(auditsBoard);
   });
 
-  it('runs the audit in one session on its own, then rests for a person on the report', () => {
+  it('starts in Intake like every board and runs the audit in one session on its own', () => {
     const kinds = Object.fromEntries(Object.entries(auditsBoard.phases).map(([id, phase]) => [id, phase.kind]));
+    expect(auditsBoard.initialPhase).toBe('intake');
     expect(kinds).toEqual({
-      scheduled: 'resting',
+      intake: 'resting',
       analysis: 'working',
-      report: 'resting',
       done: 'terminal',
       canceled: 'terminal',
     });
@@ -23,19 +23,18 @@ describe('Audits board', () => {
     if (analysis.kind !== 'working') throw new Error('analysis should be working');
     expect(analysis.runner).toMatchObject({ context: AUDIT_CONTEXT, skill: AUDIT_SKILL });
     expect(auditsBoard.startsAutomatically('analysis')).toBe(true);
-    for (const phase of ['scheduled', 'report', 'done', 'canceled']) {
+    for (const phase of ['intake', 'done', 'canceled']) {
       expect(auditsBoard.startsAutomatically(phase)).toBe(false);
     }
   });
 
-  it('lets an intake rule file a card straight into Analysis and a person run it again from the report', () => {
+  it('lets an intake rule file a card straight into Analysis, which ends in Done with the report', () => {
     const allowed = (from: string, to: string) => auditsBoard.allowsTransition(from as never, to as never);
-    expect(allowed('scheduled', 'analysis')).toBe(true);
-    expect(allowed('analysis', 'report')).toBe(true);
-    expect(allowed('report', 'analysis')).toBe(true);
-    expect(allowed('report', 'done')).toBe(true);
-    expect(allowed('analysis', 'done')).toBe(false);
-    expect(allowed('scheduled', 'report')).toBe(false);
+    expect(allowed('intake', 'analysis')).toBe(true);
+    expect(allowed('analysis', 'done')).toBe(true);
+    expect(allowed('done', 'analysis')).toBe(true);
+    expect(allowed('canceled', 'intake')).toBe(true);
+    expect(allowed('intake', 'done')).toBe(false);
   });
 });
 

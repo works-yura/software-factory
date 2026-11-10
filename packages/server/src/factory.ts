@@ -51,7 +51,14 @@ import {
   getFactoryAuthUserId,
 } from '@factory/auth';
 import { createBoardRegistry, isDefinedBoard, isTerminalWorkItem } from '@factory/core';
-import { createDefaultBoardRegistry, PRODUCT_LEGACY_PHASE_RENAMES, productBoard } from '@factory/pipelines';
+import {
+  AUDITS_LEGACY_PHASE_RENAMES,
+  auditsBoard,
+  createDefaultBoardRegistry,
+  PRODUCT_LEGACY_PHASE_RENAMES,
+  productBoard,
+} from '@factory/pipelines';
+import { AUDITS_BOARD_UPGRADE_ACTOR, renameIntakeRuleTargetPhases } from './intake/migrations.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { boardForWorkItem, isPullRequestCard, namesRepository, openChangeRequests, workItemSource } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
@@ -1047,6 +1054,32 @@ export class MastraFactory {
         if (moved.length > 0) console.info(`[factory] moved ${moved.length} Product card(s) off Breakdown to Phases`);
       });
     }
+    // Audits now starts in Intake like every board, and Done means the report is written: move
+    // stored boards, intake routes, cards and intake rules off Scheduled and Report, once.
+    await timedPhase('prepare.audits.phases', async () => {
+      if (storage.isDomainReady('boards')) {
+        const rewritten = await storedBoardsStorage.renameStoredBoardPhases(
+          auditsBoard.id,
+          boardDefinitionOf(auditsBoard),
+          AUDITS_LEGACY_PHASE_RENAMES,
+          AUDITS_BOARD_UPGRADE_ACTOR,
+        );
+        if (rewritten > 0) console.info(`[factory] rewrote ${rewritten} stored Audits board(s) with the new phases`);
+      }
+      if (storage.isDomainReady('work-items')) {
+        const moved = await workItemsStorage.renameBoardStages(auditsBoard.id, AUDITS_LEGACY_PHASE_RENAMES);
+        if (moved.length > 0) console.info(`[factory] moved ${moved.length} Audits card(s) off Scheduled/Report`);
+      }
+      if (storage.isDomainReady('intake-rules')) {
+        const moved = await renameIntakeRuleTargetPhases(
+          intakeRulesStorage,
+          auditsBoard.id,
+          AUDITS_LEGACY_PHASE_RENAMES,
+          AUDITS_BOARD_UPGRADE_ACTOR,
+        );
+        if (moved > 0) console.info(`[factory] moved ${moved} intake rule target(s) off old Audits phases`);
+      }
+    });
 
     // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
     // back to Intake. Move the cards the old rule left there, once.

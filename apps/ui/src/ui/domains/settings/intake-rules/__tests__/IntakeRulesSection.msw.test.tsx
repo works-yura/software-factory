@@ -19,11 +19,10 @@ const auditsBoard = {
   id: 'audits',
   name: 'Audits',
   title: 'Audits',
-  initialPhase: 'scheduled',
+  initialPhase: 'intake',
   phases: [
-    { id: 'scheduled', name: 'Scheduled', title: 'Scheduled', kind: 'resting' },
+    { id: 'intake', name: 'Intake', title: 'Intake', kind: 'resting' },
     { id: 'analysis', name: 'Analysis', title: 'Analysis', kind: 'working' },
-    { id: 'report', name: 'Report', title: 'Report', kind: 'resting' },
     { id: 'done', name: 'Done', title: 'Done', kind: 'terminal' },
   ],
 };

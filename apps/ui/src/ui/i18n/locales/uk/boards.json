@@ -30,9 +30,8 @@
   "audits": {
     "title": "Аудити",
     "phases": {
-      "scheduled": "Заплановано",
+      "intake": "Вхідні",
       "analysis": "Аналіз",
-      "report": "Звіт",
       "done": "Готово",
       "canceled": "Скасовано"
     }

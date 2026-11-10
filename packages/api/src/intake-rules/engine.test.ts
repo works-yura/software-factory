@@ -140,7 +140,7 @@ describe('intake rules: a schedule files Audits cards', () => {
       description: 'Аудит: security. Rule Security audit, fired 2026-11-17 00:30.',
       [INTAKE_RULE_METADATA_KEY]: { id: rule.id, name: 'Security audit', firedAt: '2026-11-16T22:30:00.000Z' },
     });
-    expect(card!.stageHistory.map(entry => entry.stage)).toEqual(['scheduled', 'analysis']);
+    expect(card!.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'analysis']);
     expect(audits).toContainEqual(
       expect.objectContaining({ action: 'factory.work_item.created', actorType: 'system', actorId: `factory-intake-rule:${rule.id}` }),
     );
@@ -158,7 +158,7 @@ describe('intake rules: a schedule files Audits cards', () => {
     expect(skipped.reason).toMatch(/still open/);
 
     let card = (await seed.workItems.get({ orgId: 'org-1', id: first.workItemId! }))!;
-    for (const stage of ['report', 'done']) {
+    for (const stage of ['done']) {
       const moved = await transitionService.transition({
         ...scope,
         workItemId: card.id,

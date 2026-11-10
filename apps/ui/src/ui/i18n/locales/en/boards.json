@@ -30,9 +30,8 @@
   "audits": {
     "title": "Audits",
     "phases": {
-      "scheduled": "Scheduled",
+      "intake": "Intake",
       "analysis": "Analysis",
-      "report": "Report",
       "done": "Done",
       "canceled": "Canceled"
     }

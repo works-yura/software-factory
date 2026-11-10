@@ -69,6 +69,6 @@ Commit only this file on the card's branch (`docs(audit): <kind> <date>`) and pu
 
 1. Post a summary in chat in plain Markdown (no HTML): the counts by severity, the top findings (at most five, most severe first) and a link to the report — a markdown link whose target is the report's path relative to the session workspace root, so it opens in the Files panel.
 2. **Anything urgent** — a finding at or above the kind's *Urgent from* severity — must reach a person: ask them with the question tool, one question naming the urgent findings and what you recommend (options: e.g. "file a Development card now (recommended)", "I'll handle it", "not urgent"). The open question puts the card in «Потребує вас». Wait for the answer; never file or change anything yourself.
-3. Move the card to **Report** with `factory_transition_work_item` (the revision from the `factory-phase` signal), the rationale naming the report path and the counts.
+3. Move the card to **Done** («Готово») with `factory_transition_work_item` (the revision from the `factory-phase` signal), the rationale naming the report path and the counts. Done means the report is written; urgent findings are raised in step 2 *before* this move.
 
-When the audit cannot run (no docs folder, no repository access, a checklist command missing), say exactly what is missing in chat, write what you could, and still move the card to **Report** with the reason — never leave it in Analysis silently.
+When the audit cannot run (no docs folder, no repository access, a checklist command missing), say exactly what is missing in chat, write what you could, and still move the card to **Done** with the reason — never leave it in Analysis silently.

@@ -3808,6 +3808,7 @@ describe('FactorySkillSource layering', () => {
     const source = new FactorySkillSource(fallbackStub, [], undefined);
     const names = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(names).toEqual([
+      'audit-run',
       'configure-factory-rules',
       'factory-docs-sync',
       'factory-gitlab-rereview',
@@ -3833,6 +3834,7 @@ describe('FactorySkillSource layering', () => {
 
     const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(hiddenNames).toEqual([
+      'audit-run',
       'configure-factory-rules',
       'factory-docs-sync',
       'factory-plan',
