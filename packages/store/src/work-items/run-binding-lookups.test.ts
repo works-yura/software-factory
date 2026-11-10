@@ -47,7 +47,7 @@ function isPgPool(value: unknown): value is PgPool {
 }
 
 function probeLibSQL(storage: FactoryStorage): QueryProbe {
-  const db = storage.authDatabase();
+  const db = storage.authDatabase!();
   if (db.dialect !== 'libsql' || !isLibSQLExecutor(db.client)) throw new Error('expected a libsql client');
   const client = db.client;
   const clientClass: LibSQLExecutor = Object.getPrototypeOf(client);
@@ -69,7 +69,7 @@ function probeLibSQL(storage: FactoryStorage): QueryProbe {
 }
 
 function probePostgres(storage: FactoryStorage): QueryProbe {
-  const db = storage.authDatabase();
+  const db = storage.authDatabase!();
   if (db.dialect !== 'postgres' || !isPgPool(db.pool)) throw new Error('expected a pg pool');
   const pool = db.pool;
   const query = vi.spyOn(pool, 'query');

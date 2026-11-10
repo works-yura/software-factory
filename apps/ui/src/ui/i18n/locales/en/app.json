@@ -53,5 +53,15 @@
       "addToHomeScreen": "Scroll down and tap <em>Add to Home Screen</em>",
       "confirmAdd": "Tap <em>Add</em> to install the app"
     }
+  },
+  "serverProblem": {
+    "copy": "Copy {{value}}",
+    "readDocs": "Read the docs",
+    "secretKey": {
+      "title": "Factory can't unlock your secrets",
+      "missingKey": "No encryption key is set. Your secrets are safe.",
+      "changedKey": "The encryption key changed. Your secrets are safe.",
+      "fix": "Redeploy with your `FACTORY_CREDENTIAL_ENCRYPTION_KEY`."
+    }
   }
 }

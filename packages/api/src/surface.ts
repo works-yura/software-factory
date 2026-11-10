@@ -13,7 +13,8 @@ import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '@
 import { getGithubFeatureDiagnostics } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
 import { MaterializeError } from '@factory/sandbox';
-import { FactoryDispatchError } from '@factory/store';
+import { FactoryDispatchError, secretKeyMismatchHint, secretKeyProblem } from '@factory/store';
+import type { FactorySecretDecryptionError } from '@factory/store';
 import { toBoardSource } from '@factory/runtime';
 import type { FactoryBindingPreparationInput, ProjectBoardCache, ProjectBoardSource } from '@factory/runtime';
 import { createMastraHarness, FactoryStartCoordinator } from '@factory/harness-mastra';
@@ -177,6 +178,8 @@ export interface FactoryApiRoutesDeps {
   }) => void;
 }
 
+const REPEAT_UNAVAILABLE_LOG_MS = 5 * 60_000;
+
 function guardIntegrationRoutes({
   integration,
   ready,
@@ -184,20 +187,37 @@ function guardIntegrationRoutes({
   routes,
 }: IntegrationRegistration & { routes: ApiRoute[] }): ApiRoute[] {
   if (ready) return routes;
+  // Each retry throws a fresh error, so dedupe by message and repeat it periodically.
+  let lastReported: { message: string; at: number } | undefined;
+  const checkReady = async () => {
+    try {
+      await ensureReady();
+      return undefined;
+    } catch (error) {
+      // The response only names a key mismatch, so this log is the only trace of any other cause.
+      const message = String(error);
+      const now = Date.now();
+      if (lastReported?.message !== message || now - lastReported.at >= REPEAT_UNAVAILABLE_LOG_MS) {
+        lastReported = { message, at: now };
+        console.error(
+          `[factory] ${integration.id} integration is unavailable: its storage failed to initialize:`,
+          error,
+        );
+      }
+      const cause =
+        secretKeyMismatchHint(error) ??
+        `Its storage failed to start. The server log line "[factory] ${integration.id} integration is unavailable" has the cause.`;
+      return { error: 'integration_unavailable', message: `${integration.id} integration is unavailable. ${cause}` };
+    }
+  };
   return routes.map(route => {
     if ('handler' in route) {
       const handler = route.handler;
       return {
         ...route,
         handler: async (context: Parameters<typeof handler>[0]) => {
-          try {
-            await ensureReady();
-          } catch {
-            return context.json(
-              { error: 'integration_unavailable', message: `${integration.id} integration is unavailable.` },
-              503,
-            );
-          }
+          const unavailable = await checkReady();
+          if (unavailable) return context.json(unavailable, 503);
           return handler(context, async () => {});
         },
       };
@@ -209,14 +229,8 @@ function guardIntegrationRoutes({
       createHandler: async (args: Parameters<typeof createHandler>[0]) => {
         const handler = await createHandler(args);
         return async (context: Parameters<typeof handler>[0]) => {
-          try {
-            await ensureReady();
-          } catch {
-            return context.json(
-              { error: 'integration_unavailable', message: `${integration.id} integration is unavailable.` },
-              503,
-            );
-          }
+          const unavailable = await checkReady();
+          if (unavailable) return context.json(unavailable, 503);
           return handler(context);
         };
       },
@@ -611,6 +625,51 @@ function absentSlackChannelAccountsRoutes(): ApiRoute[] {
   ];
 }
 
+export interface FactoryStatusProblem {
+  code: 'secret_key_mismatch';
+  /** Whether no key is set at all or a different key than the secrets were written with; the UI words them apart. */
+  reason: 'missing_key' | 'changed_key';
+  title: string;
+  message: string;
+  /** The one step that fixes it. Env var names are wrapped in backticks. */
+  fix: string;
+}
+
+/** Domains that hold encrypted secrets; Factory can't run if they can't be read. */
+const SECRET_DOMAINS = ['integrations', 'model-credentials', 'custom-providers'];
+
+/**
+ * `GET /web/status`: problems that stop the whole Factory from working, so the
+ * UI shows one alert banner instead of every page failing on its own. Only a
+ * key problem counts, since only a redeploy with the right key clears it. Read
+ * from the latest storage init result, so a key failure found by a later init
+ * retry shows up too. Only client-safe copy goes out.
+ */
+function factoryStatusRoutes(storage: FactoryStorage | undefined): ApiRoute[] {
+  return [
+    registerApiRoute('/web/status', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => {
+        const error = SECRET_DOMAINS.map(domain => storage?.domainInitError(domain)).find(
+          domainError => secretKeyProblem(domainError) !== undefined,
+        );
+        const problem = secretKeyProblem(error);
+        const problems: FactoryStatusProblem[] = problem
+          ? [
+              {
+                code: 'secret_key_mismatch',
+                reason: (error as FactorySecretDecryptionError).missingKey ? 'missing_key' : 'changed_key',
+                ...problem,
+              },
+            ]
+          : [];
+        return c.json({ problems });
+      },
+    }),
+  ];
+}
+
 /**
  * Assemble the custom `/web/*` API routes as Mastra `server.apiRoutes`:
  *   - fs browser routes (project picker), confined to `fsRoot`
@@ -751,6 +810,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   }
 
   return [
+    ...factoryStatusRoutes(deps.factoryStorage),
     ...buildFsRoutes({
       root: deps.fsRoot,
       sessionFs: {
