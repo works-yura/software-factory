@@ -94,6 +94,10 @@ export interface SubagentEntry {
   task: string;
   modelId: string;
   done: boolean;
+  /** The subagent's final answer, once it ends; its own steps are not kept. */
+  result?: string;
+  isError?: boolean;
+  durationMs?: number;
 }
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
@@ -121,6 +125,29 @@ export const initialTranscript: TranscriptState = {
 };
 
 let noticeSeq = 0;
+/**
+ * A subagent's result as text: Claude Code hands back its tool result as a JSON list of content
+ * blocks, a Mastra subagent as plain text.
+ */
+export function subagentResultText(result: unknown): string | undefined {
+  if (typeof result !== 'string') return result == null ? undefined : JSON.stringify(result);
+  try {
+    const parsed: unknown = JSON.parse(result);
+    if (Array.isArray(parsed)) {
+      const text = parsed
+        .map(block =>
+          block && typeof block === 'object' && 'text' in block && typeof block.text === 'string' ? block.text : '',
+        )
+        .filter(Boolean)
+        .join('\n\n');
+      if (text) return text;
+    }
+  } catch {
+    // Not JSON: the result is the text itself.
+  }
+  return result;
+}
+
 export function createLocalMessageId(): string {
   return `local-${Date.now()}-${noticeSeq++}`;
 }
@@ -396,7 +423,15 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       };
     case 'subagent_end': {
       const entries = state.entries.map(e =>
-        e.kind === 'subagent' && e.toolCallId === event.toolCallId ? { ...e, done: true } : e,
+        e.kind === 'subagent' && e.toolCallId === event.toolCallId
+          ? {
+              ...e,
+              done: true,
+              result: subagentResultText(event.result),
+              isError: event.isError,
+              durationMs: event.durationMs,
+            }
+          : e,
       );
       return { ...state, entries };
     }

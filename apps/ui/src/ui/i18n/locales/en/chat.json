@@ -289,7 +289,12 @@
     "deny": "Deny",
     "agentQuestion": "The agent has a question",
     "questionFromAgent": "Question from the agent",
-    "subagent": "subagent: {{type}}"
+    "subagent": "subagent: {{type}}",
+    "subagentShowMore": "Show all",
+    "subagentShowLess": "Show less",
+    "subagentResult": "Result",
+    "subagentFailed": "Failed",
+    "subagentDuration": "{{seconds}} s"
   },
   "messages": {
     "steering": "Steering…",

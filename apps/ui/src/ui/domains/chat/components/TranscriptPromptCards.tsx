@@ -5,6 +5,7 @@ import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval'
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { ApprovalPrompt, SubagentEntry, SuspensionPrompt } from '../services/transcript';
@@ -190,19 +191,59 @@ function AskUserCard({
   );
 }
 
+/** Longer than this, a subagent's task or result starts folded. */
+const SUBAGENT_FOLD_CHARS = 280;
+
+/** Text that starts folded to a few lines when long, with a toggle to show it all. */
+function FoldableText({ text, lines, tone }: { text: string; lines: 3 | 6; tone?: 'muted' }) {
+  const { t } = useTranslation('chat');
+  const [open, setOpen] = useState(false);
+  const long = text.length > SUBAGENT_FOLD_CHARS || text.split('\n').length > lines;
+  return (
+    <div>
+      <Txt
+        variant="caption"
+        tone={tone}
+        className={`py-1 whitespace-pre-wrap wrap-anywhere ${long && !open ? (lines === 3 ? 'line-clamp-3' : 'line-clamp-6') : ''}`}
+      >
+        {text}
+      </Txt>
+      {long && (
+        <Button variant="ghost" size="sm" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+          {open ? t('prompts.subagentShowLess') : t('prompts.subagentShowMore')}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function SubagentCard({ entry }: { entry: SubagentEntry }) {
   const { t } = useTranslation('chat');
+  const seconds = entry.durationMs === undefined ? undefined : Math.round(entry.durationMs / 1000);
   return (
     <div className="border-border border-l-info-indicator bg-fill my-2 rounded-lg border border-l-4 px-3 py-2">
       <div className="flex items-center gap-2">
-        <Badge variant={entry.done ? 'success' : 'info'}>{t('prompts.subagent', { type: entry.agentType })}</Badge>
+        <Badge variant={entry.isError ? 'destructive' : entry.done ? 'success' : 'info'}>
+          {t('prompts.subagent', { type: entry.agentType })}
+        </Badge>
         <Txt tone="muted" variant="meta">
           {lastSegment(entry.modelId)}
         </Txt>
+        {seconds !== undefined && (
+          <Txt tone="muted" variant="meta">
+            {t('prompts.subagentDuration', { seconds })}
+          </Txt>
+        )}
       </div>
-      <Txt variant="caption" className="py-1">
-        {entry.task}
-      </Txt>
+      <FoldableText text={entry.task} lines={3} tone="muted" />
+      {entry.result && (
+        <div className="border-border mt-1 border-t pt-1">
+          <Txt variant="meta" tone={entry.isError ? undefined : 'muted'}>
+            {entry.isError ? t('prompts.subagentFailed') : t('prompts.subagentResult')}
+          </Txt>
+          <FoldableText text={entry.result} lines={6} />
+        </div>
+      )}
     </div>
   );
 }

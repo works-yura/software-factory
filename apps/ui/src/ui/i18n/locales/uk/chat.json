@@ -291,7 +291,12 @@
     "deny": "Заборонити",
     "agentQuestion": "Агент має запитання",
     "questionFromAgent": "Запитання від агента",
-    "subagent": "субагент: {{type}}"
+    "subagent": "субагент: {{type}}",
+    "subagentShowMore": "Показати все",
+    "subagentShowLess": "Згорнути",
+    "subagentResult": "Результат",
+    "subagentFailed": "Помилка",
+    "subagentDuration": "{{seconds}} с"
   },
   "messages": {
     "steering": "Скерування…",
