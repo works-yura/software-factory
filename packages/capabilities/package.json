@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Capability contracts integrations implement: connection, intake, version control.",
+  "description": "Capability contracts integrations implement: connection, intake, version control, observability.",
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts"
@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@types/node": "22.20.1",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

@@ -1,0 +1,30 @@
+{
+  "name": "@factory/integration-firebase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Firebase integration: read-only Cloud Logging and Crashlytics behind the observability capability, with a service-account connection per organization.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "check:tests": "tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@factory/capabilities": "workspace:*",
+    "@factory/http": "workspace:*",
+    "@factory/integrations": "workspace:*",
+    "@factory/store": "workspace:*",
+    "@mastra/core": "1.82.0",
+    "hono": "4.13.13",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
