@@ -13,6 +13,7 @@ import {
   inferFactoryResponseShape,
 } from '../scripts/generate-api-cli-route-metadata.ts';
 import { buildAttentionRoutes } from '@factory/activity';
+import { AttachmentRoutes } from './attachments.ts';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { BoardRoutes } from './boards.ts';
 import {
@@ -85,7 +86,18 @@ function registeredFactoryRoutes() {
     storage: {},
     boards: {},
   } as never).routes();
-  return [...projects, ...work, ...attention, ...supervisor, ...automationRuns, ...boards, ...skills, ...intakeRoutes];
+  const attachments = new AttachmentRoutes({ auth: {}, workItems: {}, sessions: {} } as never).routes();
+  return [
+    ...projects,
+    ...work,
+    ...attention,
+    ...supervisor,
+    ...automationRuns,
+    ...boards,
+    ...skills,
+    ...intakeRoutes,
+    ...attachments,
+  ];
 }
 
 describe('Factory route contracts', () => {

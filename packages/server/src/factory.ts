@@ -197,6 +197,8 @@ import { FilesystemStorage } from '@factory/store';
 import { IntakeStorage } from '@factory/store';
 import { IntegrationStorage } from '@factory/store';
 import { factoryMemorySettingsUserId, MemorySettingsStorage, SkillOverridesStorage, StoredBoardsStorage } from '@factory/store';
+import { AttachmentService, AttachmentsStorage } from '@factory/store';
+import type { AttachmentBlobStore } from '@factory/store';
 import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
 import { FactoryProjectsStorage } from '@factory/store';
@@ -385,6 +387,16 @@ export interface MastraFactoryConfig {
    * a bundled skill of the same name. Names must be unique.
    */
   skills?: readonly InlineSkill[];
+  /**
+   * Where card and session attachments keep their bytes (any `AttachmentBlobStore`: the local
+   * `LocalFileBlobStore`, or an object store). The store is initialized at boot and a failure
+   * fails the boot. Without it the attachment routes answer 503 and agents get no attachment tool.
+   */
+  attachments?: {
+    store: AttachmentBlobStore;
+    /** Per-file limit in bytes. Default: 50 MiB. */
+    maxBytes?: number;
+  };
   /**
    * Whether projects get the built-in Work board, stored in each project once. Default: true.
    */
@@ -823,6 +835,7 @@ export class MastraFactory {
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
+    const attachmentsStorage = storage.registerDomain(new AttachmentsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -894,6 +907,20 @@ export class MastraFactory {
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
     await timedPhase('prepare.storage.init', () => storage.init());
+    // A configured attachment store that cannot start fails the boot rather than every upload.
+    const attachmentsConfig = this.#config.attachments;
+    if (attachmentsConfig) {
+      await timedPhase('prepare.attachments.init', () => attachmentsConfig.store.init());
+      const attachmentsInitError = storage.domainInitError('attachments');
+      if (attachmentsInitError) throw attachmentsInitError;
+    }
+    const attachmentService = attachmentsConfig
+      ? new AttachmentService({
+          records: attachmentsStorage,
+          blobs: attachmentsConfig.store,
+          ...(attachmentsConfig.maxBytes !== undefined ? { maxBytes: attachmentsConfig.maxBytes } : {}),
+        })
+      : undefined;
     const workItemsInitError = storage.domainInitError('work-items');
     if (workItemsInitError instanceof WorkItemSplitModeError) throw workItemsInitError;
 
@@ -2466,6 +2493,7 @@ export class MastraFactory {
           ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
+            ...(attachmentService ? { attachments: attachmentService } : {}),
             controllerId: CONTROLLER_ID,
             controller,
             liveSessions: (liveSessionRegistry = liveSessionsTouchingTheFeed(eventBus, controller, claudeLiveSessions)),

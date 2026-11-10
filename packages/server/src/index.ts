@@ -38,6 +38,9 @@ export { LocalFactorySandbox, type LocalFactorySandboxOptions } from '@factory/s
 export type { GithubRuleOverrides } from '@factory/integration-github';
 export type { FactorySandboxContext, SessionSetupGate, SessionSetupRun } from '@factory/sandbox';
 export { ChannelIdentityStorage } from '@factory/store';
+// Attachment byte stores: the local one, and the seam an object store (S3…) implements.
+export { LocalFileBlobStore } from '@factory/store';
+export type { AttachmentBlobStore } from '@factory/store';
 export type {
   ChannelAccountLink,
   ChannelAccountLinkEntry,

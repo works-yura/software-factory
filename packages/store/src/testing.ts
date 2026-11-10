@@ -14,6 +14,7 @@ import { onTestFinished } from 'vitest';
 
 import { createBoardRegistry, workItemPhaseSemantics } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
+import { AttachmentsStorage } from './attachments/base.ts';
 import { AuditStorage } from './audit/base.ts';
 import { StoredBoardsStorage } from './boards/base.ts';
 import { ChannelIdentityStorage } from './channel-identity/base.ts';
@@ -134,6 +135,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   /** The projects' stored boards (named apart from the `boards` registries tests spread beside the seed). */
   storedBoards: StoredBoardsStorage;
   skillOverrides: SkillOverridesStorage;
+  attachments: AttachmentsStorage;
 }
 
 /**
@@ -168,6 +170,7 @@ export async function createFactoryStorageForTests<T extends FactoryStorage = Fa
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
   const storedBoards = storage.registerDomain(new StoredBoardsStorage());
   const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
+  const attachments = storage.registerDomain(new AttachmentsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -187,5 +190,6 @@ export async function createFactoryStorageForTests<T extends FactoryStorage = Fa
     comments,
     storedBoards,
     skillOverrides,
+    attachments,
   };
 }

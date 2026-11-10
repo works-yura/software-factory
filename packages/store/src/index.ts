@@ -1,4 +1,7 @@
+export * from './attachments/base.ts';
 export * from './attachments/blob-store.ts';
+export * from './attachments/mime.ts';
+export * from './attachments/service.ts';
 export * from './audit/actions.ts';
 export * from './audit/actors.ts';
 export * from './audit/base.ts';

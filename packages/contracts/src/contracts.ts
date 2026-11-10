@@ -11,7 +11,13 @@ import {
   STATUS_EVENTS,
 } from '@factory/core';
 import { IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@factory/core';
-import { MAX_INTAKE_ROUTES, storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '@factory/store';
+import {
+  ATTACHMENT_SOURCES,
+  MAX_INTAKE_ROUTES,
+  storedBoardDefinitionSchema,
+  storedBoardInputSchema,
+  storedPhaseInputSchema,
+} from '@factory/store';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
@@ -693,6 +699,35 @@ export const skillOverrideBodySchema = z.object({ content: skillContentSchema })
 
 export { skillPathSchema };
 
+/** An upload's query: the request body is the file itself. */
+export const attachmentQuerySchema = z.object({
+  name: nonEmptyTrimmed(1024),
+  source: z.enum(ATTACHMENT_SOURCES).default('upload'),
+  sourceUrl: z.string().trim().url().max(2048).optional(),
+});
+const attachmentSchema = z.object({
+  id: uuidSchema,
+  workItemId: z.string().nullable(),
+  sessionId: z.string().nullable(),
+  name: z.string(),
+  mime: z.string(),
+  size: z.number().int().nonnegative(),
+  sha256: z.string(),
+  source: z.enum(ATTACHMENT_SOURCES),
+  sourceUrl: z.string().nullable(),
+  addedBy: z.string(),
+  addedAt: z.string(),
+  /** Streams the file; add `?download` to always save it instead of opening it. */
+  contentUrl: z.string(),
+  /** Where the agent finds it, relative to the session's working folder. */
+  sandboxPath: z.string(),
+});
+const attachmentListSchema = z.object({ attachments: z.array(attachmentSchema) });
+const attachmentCreatedSchema = z.object({ attachment: attachmentSchema });
+const workItemAttachmentPathSchema = z.object({ workItemId: uuidSchema });
+const sessionAttachmentPathSchema = z.object({ sessionId: z.string().min(1).max(512) });
+const attachmentPathSchema = z.object({ id: uuidSchema });
+
 export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
@@ -1120,6 +1155,50 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: "Revert a project's edited Factory skill to its original SKILL.md",
     pathSchema: skillPathSchema,
     responseSchema: skillResponseSchema,
+  },
+  workItemAttachmentList: {
+    method: 'GET',
+    path: '/web/factory/work-items/:workItemId/attachments',
+    description: "List a card's attachments",
+    pathSchema: workItemAttachmentPathSchema,
+    responseSchema: attachmentListSchema,
+  },
+  workItemAttachmentUpload: {
+    method: 'POST',
+    path: '/web/factory/work-items/:workItemId/attachments',
+    description: 'Attach a file to a card; the request body is the file, named by `name`',
+    pathSchema: workItemAttachmentPathSchema,
+    querySchema: attachmentQuerySchema,
+    responseSchema: attachmentCreatedSchema,
+  },
+  sessionAttachmentList: {
+    method: 'GET',
+    path: '/web/factory/sessions/:sessionId/attachments',
+    description: 'List the attachments a session that works no card holds',
+    pathSchema: sessionAttachmentPathSchema,
+    responseSchema: attachmentListSchema,
+  },
+  sessionAttachmentUpload: {
+    method: 'POST',
+    path: '/web/factory/sessions/:sessionId/attachments',
+    description: 'Attach a file to a session that works no card; the request body is the file',
+    pathSchema: sessionAttachmentPathSchema,
+    querySchema: attachmentQuerySchema,
+    responseSchema: attachmentCreatedSchema,
+  },
+  attachmentContent: {
+    method: 'GET',
+    path: '/web/factory/attachments/:id/content',
+    description: "Download an attachment's file",
+    pathSchema: attachmentPathSchema,
+    responseSchema: z.unknown(),
+  },
+  attachmentDelete: {
+    method: 'DELETE',
+    path: '/web/factory/attachments/:id',
+    description: 'Delete an attachment',
+    pathSchema: attachmentPathSchema,
+    responseSchema: z.object({ deleted: z.literal(true) }),
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

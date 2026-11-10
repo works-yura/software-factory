@@ -1,3 +1,4 @@
+export * from './attachments.ts';
 export * from './automation-runs.ts';
 export * from './config.ts';
 export * from './credential-accounts.ts';

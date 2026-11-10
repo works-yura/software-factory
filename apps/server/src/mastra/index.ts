@@ -18,7 +18,7 @@
  */
 
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
@@ -26,7 +26,7 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { AgentBrowser } from '@mastra/agent-browser';
-import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } from '@factory/server';
+import { createFactorySecretEncryption, LocalFactorySandbox, LocalFileBlobStore, MastraFactory } from '@factory/server';
 import { GithubIntegration, GithubTokenIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
 import { ClickUpIntegration } from '@factory/integration-clickup';
 import { GitLabIntegration } from '@factory/integration-gitlab';
@@ -350,6 +350,15 @@ export const factory = new MastraFactory({
     ...(process.env.FACTORY_CLAUDE_CODE_COMMAND?.trim() ? { command: process.env.FACTORY_CLAUDE_CODE_COMMAND.trim() } : {}),
   },
   ...(browser ? { browser } : {}),
+  // Card and session attachments (chat/comment uploads, later ClickUp/GitHub files): bytes on this
+  // host's disk, next to the local database unless FACTORY_ATTACHMENTS_DIR names another directory.
+  // A multi-replica deployment needs a shared store here (an S3 `AttachmentBlobStore`).
+  attachments: {
+    store: new LocalFileBlobStore({
+      root: process.env.FACTORY_ATTACHMENTS_DIR?.trim() || join(dirname(getDatabasePath()), 'factory-attachments'),
+    }),
+    maxBytes: positiveInt(process.env.FACTORY_ATTACHMENTS_MAX_BYTES),
+  },
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {

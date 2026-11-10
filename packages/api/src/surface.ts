@@ -33,6 +33,7 @@ import type { StateSigner } from '@factory/auth';
 import type { AuditEmitter, AuditRecorder } from '@factory/feed';
 import type { ChannelIdentityStorage, SkillOverridesStorage, StoredBoardsStorage } from '@factory/store';
 import type { WorkItemCommentsStorage } from '@factory/store';
+import type { AttachmentService } from '@factory/store';
 import type { CommentsDomain } from '@factory/feed';
 import type { ModelCredentialsStorage } from '@factory/store';
 import type { CustomProvidersStorage } from '@factory/store';
@@ -71,6 +72,7 @@ import { OAuthRoutes } from './oauth.ts';
 import type { RouteAuth } from '@factory/http';
 import { BoardRoutes } from './boards.ts';
 import { SkillRoutes } from './skills.ts';
+import { AttachmentRoutes } from './attachments.ts';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.ts';
 import type { ClaudeCodeUserSessions } from './source-control-sessions.ts';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.ts';
@@ -96,6 +98,8 @@ export interface IntegrationRegistration {
 export interface FactoryApiRoutesDeps {
   /** App skills from `MastraFactory({ skills })`. */
   skills?: readonly InlineSkill[];
+  /** Card and session attachments; without it their routes answer 503 `attachments_unconfigured`. */
+  attachments?: AttachmentService;
   controllerId: string;
   controller: AgentController<MastraCodeState>;
   /** Registry of the sessions this process holds, owned by the host so it can watch them too. */
@@ -848,6 +852,14 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           startCoordinator,
           liveSessions: deps.liveSessions,
           ...(deps.releaseWorkItemSandboxes ? { releaseWorkItemSandboxes: deps.releaseWorkItemSandboxes } : {}),
+        }).routes()
+      : []),
+    ...(deps.factoryReady
+      ? new AttachmentRoutes({
+          auth: deps.auth,
+          workItems: deps.domains.workItems,
+          sessions: sourceControlSessions,
+          ...(deps.attachments ? { attachments: deps.attachments } : {}),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards
