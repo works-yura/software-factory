@@ -29,13 +29,24 @@ Map the request as a **design tree**: every decision branches into the decisions
 
 Never ask about bookkeeping or anything you can decide: folder and file names, which areas or documents a change touches, document structure, your own process, or confirmations of what the request already says. Decide those, and list them in one short **"Вирішив сам / Assumed"** note before the questions, so the person can overrule any of them in their reply. Ask in the person's language, plainly: a business question carries no file paths or code names; an engineering question names the code only when that is the decision. Two sharp questions beat six obvious ones; if the frontier holds only obvious items, decide them, note them, and move on.
 
+**Why before how: round 0.** The first round is about intent, never about solutions. Before any option between technologies or designs, establish with the person:
+
+- **What happened**: why this is asked now, and the concrete case behind it (a missed booking, a deposit left waiting) if there is one.
+- **What the client expects**, in the client's own words: quote the request from `blackbox/sources/` and ask what they picture when they say it ("mobile push": a notification on the phone from the browser, or an app from the store?).
+- **How the client will know it works**: what stops happening, what they will check on staging.
+- **Must / should / could / won't** for the items in the request, when it holds several (MoSCoW).
+
+Ask round 0 only where the request and the black box leave intent unclear, and with options too (the plausible readings of the request, your recommended reading first). A technical choice comes later, framed through the answer: not "PWA or native?", but "Alex expects X; the cheapest way to give him X has this limit; is that acceptable?". Technical alternatives with real numbers belong in Spec; here, ask only the intent and the constraints that decide between them.
+
+**Every question carries, in its own text:** what the client asked (a short quote or the item number with its source), what exists today (one line, from your research), and for each option: what the user sees, the effort as an **hour range** (rough is fine, say so), any money (subscriptions, per-message costs, who pays) and the main risk. Say in one line **why** you recommend the first option. A question without these is not ready to ask.
+
 Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask *now* without guessing at answers you haven't heard. Ask the whole frontier in one round.
 
 **Ask with the question tool, so the person answers in a form, not in prose.** When the session offers a tool for asking the person (`AskUserQuestion` in Claude Code, `ask_user` in Mastra), every round goes through it:
 
 - One round = one call with **up to 4 questions** (`questions: [...]`). A bigger frontier is split into consecutive calls of at most 4, the most fundamental decisions first. Where the tool takes only one question (`ask_user`), ask one question per call.
 - Each question is **self-contained**: the person may see only the card, not your message. Put the context they need to decide in the question itself; a short `header` (2–4 words) names the decision.
-- Give **2–4 options** per question. Your **recommended answer is the FIRST option**, its label ending with ` (рекомендовано)` (or ` (Recommended)` when writing English); a one-line `description` per option says what choosing it means. Don't add an "other" option: the card always has a field for the person's own answer.
+- Give **2–4 options** per question. Your **recommended answer is the FIRST option**, its label ending with ` (рекомендовано)` (or ` (Recommended)` when writing English); each option's `description` says what the user sees, the hour range, any cost and the main risk, in one or two short lines; the question text says what the client asked, what exists today and why you recommend the first option. Don't add an "other" option: the card always has a field for the person's own answer.
 - `multiSelect: true` only when several options can hold at once.
 - Then **stop and wait**: the answers come back as the next message, numbered as asked.
 
@@ -105,3 +116,5 @@ Always start from `<docs>/README.md`, `repositories/` and `rules/` (the rules ar
 ---
 
 Adapted from Matt Pocock's skills `grilling` and `domain-modeling` (https://github.com/mattpocock/skills), MIT License, Copyright (c) 2026 Matt Pocock.
+
+The "why before how" round and the MoSCoW split draw on NickCrew's `requirements-discovery` skill (https://github.com/NickCrew/Claude-Cortex), MIT License, Copyright (c) 2025 Nicholas Ferguson.
