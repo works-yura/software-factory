@@ -58,6 +58,27 @@ describe('AskUserQuestionsCard', () => {
     );
   });
 
+  it('makes the own answer one choice among the options, so only it is sent', async () => {
+    const onRespond = vi.fn();
+    renderWithProviders(
+      <SuspensionCard
+        prompt={{ kind: 'suspension', id: 'p-2', toolCallId: 'toolu_q2', toolName: 'ask_user', suspendPayload: payload } as never}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+
+    expect(screen.getByRole('radio', { name: /Push \+ email/ })).toBeChecked();
+    await userEvent.click(screen.getAllByRole('radio', { name: 'Other…' })[0]!);
+    expect(screen.getByRole('radio', { name: /Push \+ email/ })).not.toBeChecked();
+    await userEvent.type(screen.getByRole('textbox', { name: 'Your own answer to question 1' }), 'Only in-app');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Owner' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Your own answer to question 3' }), 'No');
+    await userEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+
+    expect(onRespond.mock.calls[0]![1]).toContain('1. Which channels by default?\n   → Only in-app');
+  });
+
   it('shows an answered card read-only with the reply that was sent', () => {
     renderWithProviders(
       <AskUserQuestionsCard questions={askUserQuestions(payload)!} result={{ content: '1. Which channels by default?\n   → Push only' }} />,

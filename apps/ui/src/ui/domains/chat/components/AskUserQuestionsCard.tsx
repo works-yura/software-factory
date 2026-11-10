@@ -62,12 +62,16 @@ export function optionLabel(label: string): { shown: string; recommended: boolea
 interface QuestionAnswer {
   chosen: string[];
   other: string;
+  /** The own-answer row is selected: in a single-select question it replaces the options, as one choice among them. */
+  custom?: boolean;
 }
 
-/** The value of one answered question: the chosen options and the person's own words, together. */
+/** The value of one answered question: the chosen options and, when the own-answer row is selected, the person's words. */
 function answerValue(answer: QuestionAnswer): string {
-  return [...answer.chosen, answer.other.trim()].filter(Boolean).join('; ');
+  return [...answer.chosen, answer.custom ? answer.other.trim() : ''].filter(Boolean).join('; ');
 }
+
+const CUSTOM = '__own_answer__';
 
 /**
  * All answers as one reply, each under its question, so the agent reads which answer is whose.
@@ -83,6 +87,57 @@ function initialAnswer(item: AskUserQuestionItem): QuestionAnswer {
   const first = item.options?.[0];
   // The agent's recommendation starts chosen; "yes" is one click away.
   return { chosen: first && optionLabel(first.label).recommended ? [optionLabel(first.label).shown] : [], other: '' };
+}
+
+/**
+ * The "own answer" choice, drawn as the single-question card draws it: one more option row whose label
+ * turns into an inline field once it is chosen. Choosing an option instead unselects it, so it is always
+ * clear which answer will be sent.
+ */
+function OwnAnswerRow({
+  selected,
+  disabled,
+  label,
+  inputLabel,
+  value,
+  control,
+  onChange,
+}: {
+  selected: boolean;
+  disabled: boolean;
+  label: string;
+  inputLabel: string;
+  value: string;
+  control: React.ReactNode;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div
+      className={`flex items-start gap-2.5 rounded-lg px-3 py-2 ${selected ? '' : 'state-layer'} ${disabled ? 'opacity-50' : ''}`}
+      onClick={event => {
+        if (disabled || event.target !== event.currentTarget) return;
+        event.currentTarget.querySelector<HTMLElement>('[role="radio"], [role="checkbox"]')?.click();
+      }}
+    >
+      {control}
+      {selected ? (
+        <Input
+          variant="unstyled"
+          aria-label={inputLabel}
+          placeholder={label}
+          className="text-body h-auto min-w-0 flex-1 px-0"
+          value={value}
+          disabled={disabled}
+          autoFocus
+          onChange={event => onChange(event.target.value)}
+        />
+      ) : (
+        <Txt as="span" variant="body" tone="ink" className="flex-1">
+          {label}
+        </Txt>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -157,9 +212,13 @@ export function AskUserQuestionsCard({
                 <RadioGroup
                   aria-labelledby={legendId}
                   disabled={disabled}
-                  value={answer.chosen[0] ?? ''}
+                  value={answer.custom ? CUSTOM : (answer.chosen[0] ?? '')}
                   onValueChange={value =>
-                    update(index, current => ({ ...current, chosen: typeof value === 'string' && value ? [value] : [] }))
+                    update(index, current =>
+                      value === CUSTOM
+                        ? { ...current, chosen: [], custom: true }
+                        : { ...current, chosen: typeof value === 'string' && value ? [value] : [], custom: false },
+                    )
                   }
                   className="grid gap-1"
                 >
@@ -172,6 +231,15 @@ export function AskUserQuestionsCard({
                       control={<RadioGroupItem className="mt-0.5" value={row.shown} disabled={disabled} />}
                     />
                   ))}
+                  <OwnAnswerRow
+                    selected={answer.custom === true}
+                    disabled={disabled}
+                    label={t('prompts.ownAnswer')}
+                    inputLabel={t('prompts.ownAnswerFor', { number: index + 1 })}
+                    value={answer.other}
+                    control={<RadioGroupItem className="mt-0.5" value={CUSTOM} disabled={disabled} aria-label={t('prompts.ownAnswer')} />}
+                    onChange={other => update(index, current => ({ ...current, other }))}
+                  />
                 </RadioGroup>
               )}
               {!answered && rows.length > 0 && item.multiSelect && (
@@ -202,21 +270,32 @@ export function AskUserQuestionsCard({
                       />
                     );
                   })}
+                  <OwnAnswerRow
+                    selected={answer.custom === true}
+                    disabled={disabled}
+                    label={t('prompts.ownAnswer')}
+                    inputLabel={t('prompts.ownAnswerFor', { number: index + 1 })}
+                    value={answer.other}
+                    control={
+                      <Checkbox
+                        className="mt-0.5"
+                        disabled={disabled}
+                        aria-label={t('prompts.ownAnswer')}
+                        checked={answer.custom === true}
+                        onCheckedChange={checked => update(index, current => ({ ...current, custom: checked === true }))}
+                      />
+                    }
+                    onChange={other => update(index, current => ({ ...current, other }))}
+                  />
                 </div>
               )}
-              {!answered && (
+              {!answered && rows.length === 0 && (
                 <Input
                   aria-label={t('prompts.ownAnswerFor', { number: index + 1 })}
-                  placeholder={rows.length ? t('prompts.ownAnswer') : t('prompts.answer')}
+                  placeholder={t('prompts.answer')}
                   value={answer.other}
                   disabled={disabled}
-                  onChange={event =>
-                    update(index, current => ({
-                      // Words in a single-select question replace the chosen option, as the single card's own answer does.
-                      chosen: !item.multiSelect && event.target.value.trim() ? [] : current.chosen,
-                      other: event.target.value,
-                    }))
-                  }
+                  onChange={event => update(index, current => ({ ...current, other: event.target.value, custom: true }))}
                 />
               )}
             </fieldset>

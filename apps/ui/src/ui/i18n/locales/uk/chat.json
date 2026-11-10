@@ -299,7 +299,7 @@
     "subagentDuration": "{{seconds}} с",
     "questionsFromAgent": "Питання агента ({{count}})",
     "recommended": "рекомендовано",
-    "ownAnswer": "Або свій варіант",
+    "ownAnswer": "Свій варіант…",
     "answer": "Ваша відповідь",
     "ownAnswerFor": "Свій варіант для питання {{number}}",
     "sendAnswers": "Надіслати відповіді",
