@@ -1,6 +1,8 @@
+import * as AskUser from '@mastra/playground-ui/components/ai/ask-user';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -84,9 +86,10 @@ function initialAnswer(item: AskUserQuestionItem): QuestionAnswer {
 }
 
 /**
- * A card for several questions at once: one block per question with its options and an own-answer
- * field, and one Send for all of them, enabled once every question has an answer. Answered, it
- * shows the questions and the reply that went back, read-only.
+ * A card for several questions at once, drawn with the design system's ask-user parts so it reads as
+ * the single-question card does: one block per question with its options (radio or checkbox rows)
+ * and an own-answer field, and one Send for all of them, enabled once every question has an answer.
+ * Answered, it shows the questions and the reply that went back, read-only.
  */
 export function AskUserQuestionsCard({
   questions,
@@ -111,106 +114,136 @@ export function AskUserQuestionsCard({
     setAnswers(current => current.map((answer, at) => (at === index ? change(answer) : answer)));
 
   return (
-    <section
+    <AskUser.AskUserContainer
       role="group"
       aria-label={t('prompts.questionsFromAgent', { count: questions.length })}
-      className="border-border bg-surface2 my-2 flex w-full max-w-full flex-col gap-3 rounded-lg border p-3"
+      className="my-2"
     >
-      {questions.map((item, index) => {
-        const answer = answers[index]!;
-        const legendId = `${id}-q${index}`;
-        return (
-          <fieldset key={`${index}-${item.question}`} className="m-0 flex flex-col gap-1.5 border-0 p-0" aria-labelledby={legendId}>
-            <div className="flex flex-wrap items-center gap-2">
-              <Txt as="span" variant="meta" tone="muted">
-                {index + 1}.
+      <AskUser.AskUserLabel>{t('prompts.questionsFromAgent', { count: questions.length })}</AskUser.AskUserLabel>
+      <AskUser.Body className="flex flex-col gap-0 pt-2">
+        {questions.map((item, index) => {
+          const answer = answers[index]!;
+          const legendId = `${id}-q${index}`;
+          const options = item.options ?? [];
+          const rows = options.map(option => {
+            const { shown, recommended } = optionLabel(option.label);
+            return { key: option.label, shown, recommended, description: option.description };
+          });
+          const label = (shown: string, recommended: boolean) => (
+            <span className="inline-flex flex-wrap items-center gap-2">
+              {shown}
+              {recommended && (
+                <Badge size="xs" variant="neutral">
+                  {t('prompts.recommended')}
+                </Badge>
+              )}
+            </span>
+          );
+          return (
+            <fieldset
+              key={`${index}-${item.question}`}
+              aria-labelledby={legendId}
+              className={`m-0 flex flex-col gap-2 border-0 p-0 ${index > 0 ? 'border-border mt-4 border-t pt-4' : ''}`}
+            >
+              {item.header && (
+                <Badge size="xs" variant="neutral" className="self-start">
+                  {item.header}
+                </Badge>
+              )}
+              <Txt id={legendId} as="p" variant="subheading" tone="ink" className="m-0 whitespace-pre-wrap">
+                {item.question}
               </Txt>
-              {item.header && <Badge variant="neutral">{item.header}</Badge>}
-            </div>
-            <Txt id={legendId} as="p" variant="body" tone="ink" className="m-0 whitespace-pre-wrap">
-              {item.question}
-            </Txt>
-            {!answered && item.options && item.options.length > 0 && (
-              <div className="flex flex-col gap-1">
-                {item.options.map(option => {
-                  const { shown, recommended } = optionLabel(option.label);
-                  const selected = answer.chosen.includes(shown);
-                  return (
-                    <Button
-                      key={option.label}
-                      variant={selected ? 'primary' : 'default'}
-                      size="sm"
-                      className="h-auto justify-start py-1.5 text-left whitespace-normal"
-                      aria-pressed={selected}
+              {!answered && rows.length > 0 && !item.multiSelect && (
+                <RadioGroup
+                  aria-labelledby={legendId}
+                  disabled={disabled}
+                  value={answer.chosen[0] ?? ''}
+                  onValueChange={value =>
+                    update(index, current => ({ ...current, chosen: typeof value === 'string' && value ? [value] : [] }))
+                  }
+                  className="grid gap-1"
+                >
+                  {rows.map(row => (
+                    <AskUser.AskUserOptionRow
+                      key={row.key}
                       disabled={disabled}
-                      onClick={() =>
-                        update(index, current => ({
-                          ...current,
-                          chosen: item.multiSelect
-                            ? selected
-                              ? current.chosen.filter(label => label !== shown)
-                              : [...current.chosen, shown]
-                            : selected
-                              ? []
-                              : [shown],
-                        }))
-                      }
-                    >
-                      <span className="flex flex-col items-start gap-0.5">
-                        <span className="flex items-center gap-2">
-                          {shown}
-                          {recommended && <Badge variant="info">{t('prompts.recommended')}</Badge>}
-                        </span>
-                        {option.description && (
-                          <Txt as="span" variant="meta" tone="muted">
-                            {option.description}
-                          </Txt>
-                        )}
-                      </span>
-                    </Button>
-                  );
-                })}
-              </div>
+                      label={label(row.shown, row.recommended)}
+                      description={row.description}
+                      control={<RadioGroupItem className="mt-0.5" value={row.shown} disabled={disabled} />}
+                    />
+                  ))}
+                </RadioGroup>
+              )}
+              {!answered && rows.length > 0 && item.multiSelect && (
+                <div className="grid gap-1">
+                  {rows.map(row => {
+                    const selected = answer.chosen.includes(row.shown);
+                    return (
+                      <AskUser.AskUserOptionRow
+                        key={row.key}
+                        disabled={disabled}
+                        label={label(row.shown, row.recommended)}
+                        description={row.description}
+                        control={
+                          <Checkbox
+                            className="mt-0.5"
+                            disabled={disabled}
+                            checked={selected}
+                            onCheckedChange={() =>
+                              update(index, current => ({
+                                ...current,
+                                chosen: selected
+                                  ? current.chosen.filter(chosen => chosen !== row.shown)
+                                  : [...current.chosen, row.shown],
+                              }))
+                            }
+                          />
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              )}
+              {!answered && (
+                <Input
+                  aria-label={t('prompts.ownAnswerFor', { number: index + 1 })}
+                  placeholder={rows.length ? t('prompts.ownAnswer') : t('prompts.answer')}
+                  value={answer.other}
+                  disabled={disabled}
+                  onChange={event =>
+                    update(index, current => ({
+                      // Words in a single-select question replace the chosen option, as the single card's own answer does.
+                      chosen: !item.multiSelect && event.target.value.trim() ? [] : current.chosen,
+                      other: event.target.value,
+                    }))
+                  }
+                />
+              )}
+            </fieldset>
+          );
+        })}
+        {answered ? (
+          <AskUser.Output className="mt-4" result={{ content: result.content, isError: result.isError }} />
+        ) : (
+          <div className="border-border mt-4 flex items-center gap-3 border-t pt-4">
+            <AskUser.AskUserSubmitButton
+              disabled={disabled || !complete}
+              onClick={() => onSubmit?.(formatQuestionAnswers(questions, answers))}
+            >
+              {t('prompts.sendAnswers')}
+            </AskUser.AskUserSubmitButton>
+            {isSubmitting ? (
+              <AskUser.Pending />
+            ) : (
+              !complete && (
+                <Txt as="span" variant="caption" tone="muted">
+                  {t('prompts.answerEveryQuestion')}
+                </Txt>
+              )
             )}
-            {!answered && (
-            <Input
-              size="sm"
-              aria-label={t('prompts.ownAnswerFor', { number: index + 1 })}
-              placeholder={item.options?.length ? t('prompts.ownAnswer') : t('prompts.answer')}
-              value={answer.other}
-              disabled={disabled}
-              onChange={event => update(index, current => ({ ...current, other: event.target.value }))}
-            />
-            )}
-          </fieldset>
-        );
-      })}
-      {answered ? (
-        <div className="border-border border-t pt-2">
-          <Txt as="p" variant="meta" tone="muted" className="m-0">
-            {result.isError ? t('prompts.questionsNotAnswered') : t('prompts.yourAnswers')}
-          </Txt>
-          <Txt as="p" variant="caption" className="m-0 whitespace-pre-wrap">
-            {result.content}
-          </Txt>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={disabled || !complete}
-            onClick={() => onSubmit?.(formatQuestionAnswers(questions, answers))}
-          >
-            {t('prompts.sendAnswers')}
-          </Button>
-          {!complete && (
-            <Txt as="span" variant="meta" tone="muted">
-              {t('prompts.answerEveryQuestion')}
-            </Txt>
-          )}
-        </div>
-      )}
-    </section>
+          </div>
+        )}
+      </AskUser.Body>
+    </AskUser.AskUserContainer>
   );
 }

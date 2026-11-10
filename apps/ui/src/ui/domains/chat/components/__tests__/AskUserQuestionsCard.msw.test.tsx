@@ -32,16 +32,16 @@ describe('AskUserQuestionsCard', () => {
 
     expect(screen.getByRole('group', { name: "Agent's questions (3)" })).toBeInTheDocument();
     // The recommendation starts chosen, shown without its mark.
-    const recommended = screen.getByRole('button', { name: /Push \+ email/ });
-    expect(recommended).toHaveAttribute('aria-pressed', 'true');
-    expect(recommended).toHaveTextContent('recommended');
+    const recommended = screen.getByRole('radio', { name: /Push \+ email/ });
+    expect(recommended).toBeChecked();
+    expect(screen.getByText('recommended')).toBeInTheDocument();
     expect(screen.queryByText('Push + email (рекомендовано)')).toBeNull();
 
     const send = screen.getByRole('button', { name: 'Send answers' });
     expect(send).toBeDisabled();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Owner' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Admins' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Owner' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Admins' }));
     expect(send).toBeDisabled();
     await userEvent.type(screen.getByRole('textbox', { name: 'Your own answer to question 3' }), 'Rush: due Wednesday');
     expect(send).toBeEnabled();
@@ -63,7 +63,7 @@ describe('AskUserQuestionsCard', () => {
       <AskUserQuestionsCard questions={askUserQuestions(payload)!} result={{ content: '1. Which channels by default?\n   → Push only' }} />,
     );
 
-    expect(screen.getByText('Your answers')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Push only');
     expect(screen.queryByRole('button', { name: 'Send answers' })).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
   });

@@ -32,6 +32,7 @@ export {
   AskUserPending as Pending,
   AskUserQuestion,
   AskUserQuestion as Question,
+  AskUserSubmitButton,
 } from './ask-user-layout';
 export type { AskUserOptionRowProps, AskUserOutputProps } from './ask-user-layout';
 export type {
