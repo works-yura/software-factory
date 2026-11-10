@@ -562,6 +562,13 @@ describe('bundled Factory skill assets', () => {
     for (const skillName of ['product-spec', 'product-phases']) {
       expect(await fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8')).toContain('factory_read_product_change');
     }
+    // A session or card the person dragged into the message is read first, not searched for.
+    for (const skillName of ['product-enrich', 'product-brief', 'product-spec', 'product-phases']) {
+      const skill = await fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
+      expect(skill).toContain('factory-refs');
+      expect(skill).toContain('factory_read_session');
+      expect(skill).toMatch(/Read every reference first/);
+    }
     const blackbox = await fs.readFile(
       path.join(assetRoot, 'product-enrich', 'references', 'blackbox-format.md'),
       'utf8',

@@ -42,6 +42,15 @@ Precision still matters: precision here means **exact on-screen wording in quote
 
 Technology appears only at the client's level: which platforms, which existing systems it builds on, any new vendor or paid service and what it means for them (cost, lock-in). How it fits the system belongs to the spec (`design.md`).
 
+## Sessions and cards the person referenced
+
+The person can drag a session or card from the sidebar into a message. It arrives as a fenced `factory-refs` block at the end of the message, one JSON object per line (`kind`, `sessionId`, `threadId`, `workItemId`, `title`, `board`). When a message carries one:
+
+- Read every reference first with `factory_read_session` (`session`, or `card`, and `thread` when given): it returns the card and the latest messages of its conversation.
+- For a Product card, read its documents with `factory_read_product_change`, as the result names.
+- Work from what you read. Do not search the repository or other sessions for the same context, and never ask the person to repeat what the referenced session already says.
+- A reference you are refused (another Factory, someone's private session) is reported to the person as refused; do not look for its content another way.
+
 ## Where the documents live
 
 A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. Use the folder Research used, or the one the phase instructions name; otherwise follow `references/docs-layout.md` in the `product-enrich` skill (`skill_read` with skill `product-enrich`; in Claude Code `mcp__factory__skill_read`): exactly one found → use it without asking; none or several → ask once with the question tool. That page also lists what to read and what you may write.

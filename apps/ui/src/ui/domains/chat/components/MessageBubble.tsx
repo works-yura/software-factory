@@ -28,6 +28,8 @@ import {
 } from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { RunErrorNotice } from './RunErrorNotice';
+import { MessageFactoryRefs } from './FactoryRefChips';
+import { parseRefs } from '../services/factoryRefs';
 import { useWorkspaceFileLinkComponents, WorkspaceDocumentButtons } from './WorkspaceFileLinks';
 import { ToolCard } from './tool/ToolCard';
 import { ToolFactory } from './ToolFactory';
@@ -201,10 +203,15 @@ export function MessageBubble({
       if (!part.text.trim()) return null;
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? (
-          <SkillMessage activation={activation} appearance="inline" />
-        ) : (
-          <MarkdownRenderer>{part.text}</MarkdownRenderer>
+        if (activation) return <SkillMessage activation={activation} appearance="inline" />;
+        // Sessions and cards the person referenced come back as chips, not as the raw block the agent reads.
+        const { body, refs } = parseRefs(part.text);
+        if (refs.length === 0) return <MarkdownRenderer>{part.text}</MarkdownRenderer>;
+        return (
+          <>
+            {body.trim() ? <MarkdownRenderer>{body}</MarkdownRenderer> : null}
+            <MessageFactoryRefs refs={refs} />
+          </>
         );
       }
 

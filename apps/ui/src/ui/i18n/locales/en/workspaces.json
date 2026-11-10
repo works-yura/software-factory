@@ -397,7 +397,9 @@
     "unpin": "Unpin",
     "regenerateTitle": "Regenerate title",
     "renamed": "Renamed to “{{title}}”",
-    "regenerateFailed": "Failed to regenerate title"
+    "regenerateFailed": "Failed to regenerate title",
+    "addToChat": "Add to chat",
+    "noComposer": "Open a chat to add {{name}} to it"
   },
   "preview": {
     "label": "{{name}} session details",

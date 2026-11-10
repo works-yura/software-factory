@@ -1,14 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Lock, MoreHorizontal, Pin, PinOff, RefreshCw, Trash2, User, Users } from 'lucide-react';
+import { Lock, MessageSquarePlus, MoreHorizontal, Pin, PinOff, RefreshCw, Trash2, User, Users } from 'lucide-react';
 import { useRef } from 'react';
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { addFactoryRef, writeDraggedRef } from '../../chat/services/factoryRefs';
+import type { FactoryRef } from '../../chat/services/factoryRefs';
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionSource } from '../services/sessionPresentation';
@@ -53,6 +56,7 @@ export function SessionNavRow({
   visibility,
   onVisibilityChange,
   changingVisibility,
+  reference,
 }: {
   name: string;
   /** Visible text when it differs from `name`, such as a card session's context under the card's heading. */
@@ -86,6 +90,8 @@ export function SessionNavRow({
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
   /** Disables the visibility item while a change is in flight, so overlapping requests cannot land out of order. */
   changingVisibility?: boolean;
+  /** What the row stands for in a chat: dragging it into the composer, or "Add to chat", references it. */
+  reference?: FactoryRef;
 }) {
   const { t } = useTranslation('workspaces');
   const anchor = useRef<HTMLLIElement>(null);
@@ -104,6 +110,8 @@ export function SessionNavRow({
         onSelect();
       }}
       title={preview ? undefined : title}
+      draggable={reference ? true : undefined}
+      onDragStart={reference ? event => writeDraggedRef(event.dataTransfer, reference) : undefined}
     >
       {source ? <SessionSourceIcon source={source} /> : null}
       <Sidebar.NavLabel>{label ?? name}</Sidebar.NavLabel>
@@ -158,6 +166,7 @@ export function SessionNavRow({
             visibility={visibility}
             onVisibilityChange={onVisibilityChange}
             changingVisibility={changingVisibility}
+            reference={reference}
           />
         )}
       </span>
@@ -222,6 +231,7 @@ function SessionActionsMenu({
   visibility,
   onVisibilityChange,
   changingVisibility,
+  reference,
 }: {
   name: string;
   anchor: RefObject<HTMLElement | null>;
@@ -234,6 +244,7 @@ function SessionActionsMenu({
   visibility?: 'org' | 'private';
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
   changingVisibility?: boolean;
+  reference?: FactoryRef;
 }) {
   const { t } = useTranslation('workspaces');
   return (
@@ -253,6 +264,16 @@ function SessionActionsMenu({
         }
       />
       <DropdownMenu.Content anchor={anchor} align="end">
+        {reference ? (
+          <DropdownMenu.Item
+            onClick={() => {
+              if (!addFactoryRef(reference)) toast.error(t('sessionRow.noComposer', { name }));
+            }}
+          >
+            <MessageSquarePlus />
+            {t('sessionRow.addToChat')}
+          </DropdownMenu.Item>
+        ) : null}
         <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
           {pinned ? <PinOff /> : <Pin />}
           {pinned ? t('sessionRow.unpin') : t('sessionRow.pin')}

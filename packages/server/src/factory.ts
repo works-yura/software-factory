@@ -1177,6 +1177,24 @@ export class MastraFactory {
       ? ({ factoryProjectId, branch }: { factoryProjectId: string; branch: string }) =>
           localSandbox.workItemFolderPath(workItemFolderKey(factoryProjectId, branch))
       : undefined;
+    // `factory_read_session` reads a referenced session's thread, oldest first, a bounded number of pages.
+    const productReadThread = async ({ threadId, resourceId }: { threadId: string; resourceId?: string }) => {
+      const memory = await storage.getMastraStorage().getStore('memory');
+      if (!memory) throw new Error('This Factory keeps no message store, so a session cannot be read.');
+      const messages = [];
+      for (let page = 0; page < 20; page++) {
+        const result = await memory.listMessages({
+          threadId,
+          ...(resourceId ? { resourceId } : {}),
+          page,
+          perPage: 100,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+        });
+        messages.push(...result.messages);
+        if (!result.hasMore) break;
+      }
+      return messages;
+    };
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
@@ -2086,6 +2104,7 @@ export class MastraFactory {
                     auditRecorder: factoryToolDeps.auditRecorder,
                     sessions: sourceControlSessions,
                     ...(productCardFolderPath ? { cardFolderPath: productCardFolderPath } : {}),
+                    readThread: productReadThread,
                   },
                 }
               : {}),
@@ -2412,6 +2431,7 @@ export class MastraFactory {
                               auditRecorder: factoryToolDeps.auditRecorder,
                               sessions: sourceControlSessions,
                               ...(productCardFolderPath ? { cardFolderPath: productCardFolderPath } : {}),
+                              readThread: productReadThread,
                             },
                             sandboxFor: claudeSessionSandbox,
                             observe: postToolObserver,

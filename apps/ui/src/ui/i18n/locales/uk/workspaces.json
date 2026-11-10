@@ -401,7 +401,9 @@
     "unpin": "Відкріпити",
     "regenerateTitle": "Згенерувати назву заново",
     "renamed": "Перейменовано на «{{title}}»",
-    "regenerateFailed": "Не вдалося згенерувати назву"
+    "regenerateFailed": "Не вдалося згенерувати назву",
+    "addToChat": "Додати в чат",
+    "noComposer": "Відкрийте чат, щоб додати в нього {{name}}"
   },
   "preview": {
     "label": "Деталі сесії {{name}}",

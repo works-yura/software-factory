@@ -155,6 +155,7 @@ describe('Product session tools', () => {
       'factory_create_work_item',
       'factory_list_product_changes',
       'factory_read_product_change',
+      'factory_read_session',
       'factory_transition_work_item',
     ]);
     const work = await setup({ board: 'work', role: 'work', stage: 'execute' });
@@ -516,5 +517,155 @@ describe('Product session: other cards in flight', () => {
       await rm(outside, { recursive: true, force: true });
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('Product session: reading a referenced session', () => {
+  const OTHER_PROJECT = '99999999-2222-4333-8444-555555555555';
+
+  /** A Development card with its own session, in `factoryProjectId`. */
+  async function referenced(storage: WorkItemsStorage, factoryProjectId = PROJECT_ID) {
+    const sessionId = `ref-${factoryProjectId}`;
+    const started = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-2',
+      factoryProjectId,
+      workItem: { input: { board: 'work', title: 'NT-02 Inbox', stages: ['execute'], sessions: {}, metadata: {} } },
+      role: 'work',
+      session: { sessionId, branch: `factory/${sessionId}`, threadId: sessionId },
+      resourceId: sessionId,
+      kickoffKey: `kickoff-${sessionId}`,
+      kickoffMessage: null,
+    });
+    return { id: started.item.id, sessionId };
+  }
+
+  function message(role: 'user' | 'assistant' | 'system', text: string, at: string, extra: unknown[] = []) {
+    return {
+      id: `${role}-${at}`,
+      role,
+      createdAt: new Date(at),
+      threadId: 'ref',
+      content: { format: 2, parts: [{ type: 'text', text }, ...extra] },
+    } as never;
+  }
+
+  type KnownSession = { userId: string; visibility: 'org' | 'private'; factoryProjectId?: string };
+
+  async function readSetup(sessions: Record<string, KnownSession>, { store = true }: { store?: boolean } = {}) {
+    const base = await setup({ stage: 'enrich' });
+    const reads: unknown[] = [];
+    const known: Record<string, KnownSession> = { 'resource-1': { userId: 'user-1', visibility: 'org' }, ...sessions };
+    const product: ProductToolDependencies = {
+      feed: { createComment: async () => ({ status: 'created' }) as never },
+      auditRecorder: { record: vi.fn(async () => {}) } as never,
+      sessions: {
+        getBySessionId: async (sessionId: string) => {
+          const session = known[sessionId];
+          return session
+            ? ({
+                orgId: 'org-1',
+                factoryProjectId: session.factoryProjectId ?? PROJECT_ID,
+                userId: session.userId,
+                visibility: session.visibility,
+              } as never)
+            : null;
+        },
+        getSourceControlBySessionId: async () => null,
+      },
+      ...(store
+        ? {
+            readThread: async (input: { threadId: string; resourceId?: string }) => {
+              reads.push(input);
+              return [
+                message('user', 'Can the inbox show unread first?', '2026-11-10T09:00:00.000Z'),
+                message('assistant', 'Yes: sorted by unread, then date.', '2026-11-10T09:01:00.000Z', [
+                  { type: 'tool-invocation', toolInvocation: { toolName: 'secret_tool', args: {} } },
+                ]),
+                message('system', 'internal', '2026-11-10T09:02:00.000Z'),
+                message('assistant', 'Done, pushed to factory/ref.', '2026-11-10T09:03:00.000Z'),
+              ];
+            },
+          }
+        : {}),
+    };
+    const tools = await createFactoryTransitionTools({
+      requestContext: base.context,
+      storage: base.storage,
+      transitionService: base.transitionService,
+      boards: createBoardRegistry(),
+      product,
+    });
+    return { ...base, tools, reads };
+  }
+
+  it('returns the card and the last messages as text, tool calls and system messages left out', async () => {
+    const { tools, context, storage, reads } = await readSetup({
+      [`ref-${PROJECT_ID}`]: { userId: 'user-2', visibility: 'org' },
+    });
+    const ref = await referenced(storage);
+    const read = tools.factory_read_session as ExecutableTool;
+    const result = await read.execute({ session: ref.sessionId, messages: 2 }, { requestContext: context });
+    expect(result).toEqual({
+      card: { id: ref.id, title: 'NT-02 Inbox', board: 'work', stage: 'execute' },
+      session: ref.sessionId,
+      thread: ref.sessionId,
+      totalMessages: 3,
+      messages: [
+        { role: 'assistant', at: '2026-11-10T09:01:00.000Z', text: 'Yes: sorted by unread, then date.' },
+        { role: 'assistant', at: '2026-11-10T09:03:00.000Z', text: 'Done, pushed to factory/ref.' },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain('secret_tool');
+    expect(reads[0]).toEqual({ threadId: ref.sessionId, resourceId: ref.sessionId });
+    // A card reference finds its session the same way.
+    await expect(read.execute({ card: ref.id }, { requestContext: context })).resolves.toMatchObject({
+      card: { id: ref.id },
+      session: ref.sessionId,
+      totalMessages: 3,
+    });
+  });
+
+  it('names the change documents and the tool that reads them for a Product card', async () => {
+    const { tools, context, prepared } = await readSetup({});
+    const read = tools.factory_read_session as ExecutableTool;
+    await expect(
+      read.execute({ card: prepared.item.id, session: 'resource-1' }, { requestContext: context }),
+    ).resolves.toMatchObject({
+      card: { id: prepared.item.id, board: 'product', documents: [], readDocumentsWith: 'factory_read_product_change' },
+    });
+  });
+
+  it("refuses another Factory's card and session, an unknown session, and another person's private session", async () => {
+    const { tools, context, storage } = await readSetup({
+      [`ref-${OTHER_PROJECT}`]: { userId: 'user-2', visibility: 'org', factoryProjectId: OTHER_PROJECT },
+      'private-ref': { userId: 'user-2', visibility: 'private' },
+      'own-private': { userId: 'user-1', visibility: 'private' },
+    });
+    const foreign = await referenced(storage, OTHER_PROJECT);
+    const read = tools.factory_read_session as ExecutableTool;
+    await expect(read.execute({ card: foreign.id }, { requestContext: context })).rejects.toThrow(
+      'only cards of the same Factory',
+    );
+    await expect(read.execute({ session: foreign.sessionId }, { requestContext: context })).rejects.toThrow(
+      'only sessions of the same Factory',
+    );
+    await expect(read.execute({ session: 'unknown' }, { requestContext: context })).rejects.toThrow(
+      'only sessions of the same Factory',
+    );
+    await expect(read.execute({ session: 'private-ref' }, { requestContext: context })).rejects.toThrow(
+      "another person's private session",
+    );
+    await expect(read.execute({ session: 'own-private' }, { requestContext: context })).resolves.toMatchObject({
+      session: 'own-private',
+    });
+  });
+
+  it('fails loudly when the host keeps no message store', async () => {
+    const { tools, context } = await readSetup({}, { store: false });
+    const read = tools.factory_read_session as ExecutableTool;
+    await expect(read.execute({ session: 'resource-1' }, { requestContext: context })).rejects.toThrow(
+      'keeps no message store',
+    );
   });
 });

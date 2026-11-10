@@ -8,6 +8,7 @@
 import { createHash } from 'node:crypto';
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -56,6 +57,36 @@ export interface ProductToolDependencies {
    * that is not merged yet. Absent when the host's sandbox keeps no shared card folders.
    */
   cardFolderPath?: (input: { factoryProjectId: string; branch: string }) => string | undefined;
+  /**
+   * A thread's stored messages, oldest first, so a Product session can read a session the person
+   * referenced. Absent when the host has no message store: `factory_read_session` then fails loudly.
+   */
+  readThread?: (input: { threadId: string; resourceId?: string }) => Promise<MastraDBMessage[]>;
+}
+
+const DEFAULT_SESSION_MESSAGES = 30;
+const MAX_SESSION_MESSAGES = 100;
+const MAX_MESSAGE_TEXT = 2_000;
+
+/** A stored message as plain text: its text parts only, tool calls and results left out. */
+export function messageText(message: MastraDBMessage): string {
+  const content = message.content as { parts?: unknown[]; content?: unknown } | string | undefined;
+  if (typeof content === 'string') return content;
+  const parts = Array.isArray(content?.parts) ? content.parts : [];
+  const text = parts
+    .flatMap(part =>
+      part && typeof part === 'object' && (part as { type?: unknown }).type === 'text'
+        ? [String((part as { text?: unknown }).text ?? '')]
+        : [],
+    )
+    .join('\n')
+    .trim();
+  if (text) return text;
+  return typeof content?.content === 'string' ? content.content.trim() : '';
+}
+
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 interface ProductToolOptions {
@@ -487,6 +518,104 @@ export function createProductTools(
           };
         }
         throw new Error(`"${card.title}" has no ${file} in its working copy yet. ${viaBranch}`);
+      },
+    }),
+
+    factory_read_session: createTool({
+      id: 'factory_read_session',
+      description:
+        "Read, read-only, a session or card of this Factory that the person referenced (a `factory-refs` block in their message, or one they name): the card it belongs to (title, board, stage; for a Product card its change folder and checked documents) and the last messages of its conversation as plain text (tool calls left out). Give `session` (a session id) or `card` (a card id), and `thread` when the reference names one. Only sessions of this Factory that the person may open: another person's private session is refused. Read referenced context with this first instead of searching for it.",
+      inputSchema: z
+        .object({
+          session: z.string().trim().min(1).optional().describe('The referenced session id.'),
+          card: z.string().trim().min(1).optional().describe('The referenced card (work item) id.'),
+          thread: z.string().trim().min(1).optional().describe('The thread id, when the reference names one.'),
+          messages: z
+            .number()
+            .int()
+            .min(1)
+            .max(MAX_SESSION_MESSAGES)
+            .optional()
+            .describe(`How many of the latest messages to return (default ${DEFAULT_SESSION_MESSAGES}).`),
+        })
+        .strict()
+        .refine(input => Boolean(input.session ?? input.card), { message: 'Give `session` or `card`.' }),
+      execute: async ({ session: sessionInput, card: cardInput, thread, messages }, execution) => {
+        const { binding } = await currentBinding(execution?.requestContext);
+        const lookup = options.product.sessions;
+        const caller = await lookup.getBySessionId(binding.sessionId);
+
+        // The card: named directly, or the one the referenced session is bound to.
+        let card: Card | null = null;
+        if (cardInput) {
+          card = await options.storage.get({ orgId: binding.orgId, id: cardInput });
+          if (!card || card.factoryProjectId !== binding.factoryProjectId) {
+            throw new Error('No such card in this Factory: only cards of the same Factory can be read.');
+          }
+        }
+
+        let sessionId = sessionInput;
+        let runBinding: FactoryRunBindingRecord | null = null;
+        if (!sessionId && card) {
+          const entries = Object.values((card.sessions ?? {}) as Record<string, { sessionId?: string } | undefined>);
+          sessionId = entries.find(entry => entry?.sessionId)?.sessionId;
+        }
+        if (sessionId) {
+          const target = await lookup.getBySessionId(sessionId);
+          if (!target || target.orgId !== binding.orgId || target.factoryProjectId !== binding.factoryProjectId) {
+            throw new Error('No such session in this Factory: only sessions of the same Factory can be read.');
+          }
+          if (target.visibility === 'private' && (!caller || target.userId !== caller.userId)) {
+            throw new Error("That is another person's private session: it cannot be read from here.");
+          }
+          runBinding = await options.storage.findActiveRunBindingForSession({
+            orgId: binding.orgId,
+            factoryProjectId: binding.factoryProjectId,
+            sessionId,
+          });
+          if (!card && runBinding) card = await options.storage.get({ orgId: binding.orgId, id: runBinding.workItemId });
+        }
+
+        const cardSummary = card
+          ? {
+              id: card.id,
+              title: card.title,
+              board: boardForWorkItem(card),
+              stage: card.stages[0] ?? null,
+              ...(boardForWorkItem(card) === productBoard.id
+                ? {
+                    change: cardChangeFolder(card) ?? null,
+                    documents: PRODUCT_DOCUMENT_TYPES.flatMap(type => {
+                      const check = recordedProductDocumentCheck(card!.metadata, type);
+                      return check ? [{ type, path: check.path, passed: check.passed }] : [];
+                    }),
+                    readDocumentsWith: 'factory_read_product_change',
+                  }
+                : {}),
+            }
+          : null;
+
+        if (!sessionId) return { card: cardSummary, session: null, messages: [] };
+        const readThread = options.product.readThread;
+        if (!readThread) throw new Error("This host keeps no message store, so a session's conversation cannot be read here.");
+        const threadId = thread ?? runBinding?.threadId ?? sessionId;
+        const stored = await readThread({ threadId, ...(runBinding ? { resourceId: runBinding.resourceId } : {}) });
+        const conversation = stored
+          .filter(message => message.role === 'user' || message.role === 'assistant')
+          .map(message => ({
+            role: message.role,
+            at: new Date(message.createdAt).toISOString(),
+            text: clip(messageText(message), MAX_MESSAGE_TEXT),
+          }))
+          .filter(message => message.text.length > 0);
+        const latest = conversation.slice(-(messages ?? DEFAULT_SESSION_MESSAGES));
+        return {
+          card: cardSummary,
+          session: sessionId,
+          thread: threadId,
+          totalMessages: conversation.length,
+          messages: latest,
+        };
       },
     }),
 

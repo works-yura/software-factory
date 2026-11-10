@@ -22,7 +22,7 @@ import { useOptionalMessageScroller } from '@mastra/playground-ui/components/Mes
 import { useQueryClient } from '@tanstack/react-query';
 import { ImagePlus } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { DragEvent, KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
@@ -45,10 +45,13 @@ import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { commandRequiresReadySession, isSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { FACTORY_REF_EVENT, FACTORY_REF_MIME, readDraggedRef, sameRef, serializeRefs, withRef } from '../services/factoryRefs';
+import type { FactoryRef } from '../services/factoryRefs';
 import { StatusLine } from './StatusLine';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { ComposerPrimaryAction } from './ComposerPrimaryAction';
+import { ComposerFactoryRefs } from './FactoryRefChips';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 
@@ -105,12 +108,45 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
     disabled: chatPreparing || planFeedback.pending || startingDraft,
   });
+  // Sessions and cards dragged in from the sidebar (or added from a row's menu), sent as a `factory-refs` block.
+  const [refs, setRefs] = useState<FactoryRef[]>([]);
+  const addRef = (ref: FactoryRef) => setRefs(current => withRef(current, ref));
+  const removeRef = (ref: FactoryRef) => setRefs(current => current.filter(existing => !sameRef(existing, ref)));
+  const onRefAdded = useEffectEvent((event: Event) => {
+    const ref = (event as CustomEvent<FactoryRef>).detail;
+    if (!ref) return;
+    event.preventDefault();
+    addRef(ref);
+    inputRef.current?.focus();
+  });
+  useEffect(() => {
+    const listener = (event: Event) => onRefAdded(event);
+    window.addEventListener(FACTORY_REF_EVENT, listener);
+    return () => window.removeEventListener(FACTORY_REF_EVENT, listener);
+  }, []);
+  // A dragged row is a reference; anything else (image files) goes to the image drop.
+  const onComposerDrop = (event: DragEvent<HTMLFormElement>) => {
+    const ref = readDraggedRef(event.dataTransfer);
+    if (!ref) {
+      onDrop(event);
+      return;
+    }
+    event.preventDefault();
+    addRef(ref);
+  };
+  const onComposerDragOver = (event: DragEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (event.dataTransfer?.types?.includes(FACTORY_REF_MIME)) event.dataTransfer.dropEffect = 'copy';
+  };
   const composerDisabled = startingDraft || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading;
   // A starter card previews its prompt in the composer; sending sends what is shown.
   const shownText = preview?.text ?? draft;
   const hasSubmittableDraft =
-    shownText.trim().length > 0 || annotations.length > 0 || (images.length > 0 && !planFeedback.pending);
+    shownText.trim().length > 0 ||
+    annotations.length > 0 ||
+    refs.length > 0 ||
+    (images.length > 0 && !planFeedback.pending);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -203,9 +239,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     const runsCommand = !planFeedback.pending && isSlashCommand(text);
     const sentAnnotations = runsCommand ? [] : takeAnnotations();
+    const sentRefs = runsCommand ? [] : refs;
+    if (sentRefs.length > 0) setRefs([]);
     updateDraft('');
-    void handleInput(text, sentAnnotations).catch(error => {
+    void handleInput(text, sentAnnotations, sentRefs).catch(error => {
       restoreAnnotations(sentAnnotations);
+      if (sentRefs.length > 0) setRefs(current => sentRefs.reduce(withRef, current));
       if (planFeedback.pending) updateDraft(text);
       clearPending();
       pushNotice(error instanceof Error ? error.message : t('composer.sendFailed'), 'error');
@@ -260,8 +299,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   };
 
-  async function handleInput(text: string, sentAnnotations: readonly ChatAnnotation[]) {
-    const message = formatAnnotatedMessage(text, sentAnnotations);
+  async function handleInput(text: string, sentAnnotations: readonly ChatAnnotation[], sentRefs: readonly FactoryRef[]) {
+    const message = serializeRefs(formatAnnotatedMessage(text, sentAnnotations), sentRefs);
     if (planFeedback.pending) {
       await planFeedback.submitFeedback(message);
       setImages([]);
@@ -299,7 +338,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   }
 
   return (
-    <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
+    <ComposerRoot onSubmit={onSubmit} onDrop={onComposerDrop} onDragOver={onComposerDragOver}>
       <ComposerHeader open={connectionNotice.open}>
         <ComposerConnectionNotice notice={connectionNotice.notice} />
       </ComposerHeader>
@@ -307,6 +346,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerAnnotations />
+          <ComposerFactoryRefs refs={refs} onRemove={removeRef} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
             {...commandMenu.inputProps}

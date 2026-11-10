@@ -480,5 +480,10 @@
       "spec": "spec",
       "tasks": "phases"
     }
+  },
+  "refs": {
+    "attached": "Referenced sessions",
+    "sent": "Referenced in this message",
+    "remove": "Remove reference to {{title}}"
   }
 }

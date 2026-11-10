@@ -63,6 +63,14 @@ export function SessionListItem({
         ownUserSession && !row.session.branch.startsWith('slack/') ? handleVisibilityChange : undefined
       }
       changingVisibility={changing}
+      reference={{
+        kind: row.itemId ? 'card' : 'session',
+        sessionId: row.session.sessionId,
+        ...(row.threadId ? { threadId: row.threadId } : {}),
+        ...(row.itemId ? { workItemId: row.itemId } : {}),
+        title: row.name,
+        ...(row.board ? { board: row.board } : {}),
+      }}
     />
   );
 }

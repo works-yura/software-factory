@@ -17,6 +17,15 @@ Before a brief or a spec is written, get what is in the engineer's head into the
 
 Make the changes first, then answer. Never skip a note or answer them in one summary; if you disagree with a note, say why instead of quietly not doing it. End with the link to the changed document (workspace-relative path, so it opens in the Files panel) and say the exact changes are in the **Зміни** tab of that panel.
 
+## Sessions and cards the person referenced
+
+The person can drag a session or card from the sidebar into a message. It arrives as a fenced `factory-refs` block at the end of the message, one JSON object per line (`kind`, `sessionId`, `threadId`, `workItemId`, `title`, `board`). When a message carries one:
+
+- Read every reference first with `factory_read_session` (`session`, or `card`, and `thread` when given): it returns the card and the latest messages of its conversation.
+- For a Product card, read its documents with `factory_read_product_change`, as the result names.
+- Work from what you read. Do not search the repository or other sessions for the same context, and never ask the person to repeat what the referenced session already says.
+- A reference you are refused (another Factory, someone's private session) is reported to the person as refused; do not look for its content another way.
+
 ## Where the documents live
 
 A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. **Read `references/docs-layout.md` first** (`skill_read` with skill `product-enrich`; in Claude Code the tool is `mcp__factory__skill_read`): how to find the folder, its layout, what to read and what you may write. If exactly one documentation folder is found (the phase instructions, this card's earlier documents, a documentation repository in the workspace, or a `docs/` folder), use it without asking and note it in `research.md`; if there is none or more than one, ask once, with the question tool. List the folder and follow what it already has. If `skill_read` is not offered at all, say so in your first message: the references are missing and the documents will not match the checks.
