@@ -14,6 +14,7 @@ import type { ClaudeFactoryHarnessOptions } from './harness.ts';
 import { RequestContext } from '@mastra/core/request-context';
 import { FACTORY_INTERACTIVE_KEY } from '@factory/harness-mastra';
 
+import { agentLanguageInstruction } from '../agent-language.ts';
 import { markClaudePersonTurn } from './person-turn.ts';
 import { createFactoryToolPermissions } from './permissions.ts';
 import { CLAUDE_THREAD_SETTINGS } from './start-coordinator.ts';
@@ -332,6 +333,41 @@ describe('createClaudeFactoryHarness', () => {
     });
   });
 
+  describe('agent language', () => {
+    it("closes every session's prompt with its Factory's language, read on every turn", async () => {
+      const languages: Record<string, 'uk' | 'en'> = { 'factory-a': 'uk', 'factory-b': 'en' };
+      const projects = {
+        get: vi.fn(async ({ id }: { orgId: string; id: string }) =>
+          id in languages ? ({ id, agentLanguage: languages[id] } as never) : null,
+        ),
+      };
+      const { factory, config } = setup({ projects });
+      const a = await factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
+      const b = await factory.harness.createSession({ sessionId: 'session-b', threadId: 't' });
+
+      const ukrainian = await config.appendSystemPromptFor!(a);
+      expect(ukrainian?.startsWith(config.appendSystemPrompt!)).toBe(true);
+      expect(ukrainian?.endsWith(agentLanguageInstruction('uk'))).toBe(true);
+      expect(ukrainian).toContain('in Ukrainian');
+      expect(await config.appendSystemPromptFor!(b)).toContain('in English');
+
+      // A card session keeps its target line, then the language.
+      await a.thread.setSetting({ key: 'factoryTargetInstruction', value: 'Target repository: acme/app.' });
+      const card = await config.appendSystemPromptFor!(a);
+      expect(card).toContain('Target repository: acme/app.');
+      expect(card?.endsWith(agentLanguageInstruction('uk'))).toBe(true);
+
+      languages['factory-a'] = 'en';
+      expect(await config.appendSystemPromptFor!(a)).toContain('in English');
+    });
+
+    it('fails the turn when the Factory is gone instead of dropping the language', async () => {
+      const { factory, config } = setup({ projects: { get: vi.fn(async () => null) } });
+      const a = await factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
+      await expect(config.appendSystemPromptFor!(a)).rejects.toThrow(/was not found/);
+    });
+  });
+
   describe('tool permissions', () => {
     it("reads the session Factory's permissions on every turn, in the session's own org", async () => {
       const policies: Record<string, claudeCode.ClaudeToolPermissions | undefined> = {
@@ -424,7 +460,7 @@ describe('createClaudeFactoryHarness', () => {
       workdirRoot = await mkdtemp(join(tmpdir(), 'claude-supervisor-test-'));
       const projects = {
         get: vi.fn(async ({ orgId, id }: { orgId: string; id: string }) =>
-          orgId === 'org-a' && id === FACTORY ? ({ id, orgId, claudeCodeModel: 'haiku' } as never) : null,
+          orgId === 'org-a' && id === FACTORY ? ({ id, orgId, claudeCodeModel: 'haiku', agentLanguage: 'en' } as never) : null,
         ),
         getById: vi.fn(async ({ id }: { id: string }) =>
           id === FACTORY ? ({ id, orgId: 'org-a', createdBy: 'creator', harness: 'claude-code' } as never) : null,
@@ -448,16 +484,21 @@ describe('createClaudeFactoryHarness', () => {
       const prompt = await config.appendSystemPromptFor!(session);
       expect(prompt).toContain('# Factory supervisor');
       expect(prompt).toContain('mcp__factory__<tool>');
-      const other = await setup().factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
-      expect(await config.appendSystemPromptFor!(other)).toBeUndefined();
+      // The Factory chat writes in the Factory's language too.
+      expect(prompt?.endsWith(agentLanguageInstruction('en'))).toBe(true);
+
+      // Without the Factories to read, a session gets the Factory playbook alone.
+      const unread = setup();
+      const other = await unread.factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
+      expect(await unread.config.appendSystemPromptFor!(other)).toBe(unread.config.appendSystemPrompt);
 
       // A card session is told where it works, after the Factory playbook.
       await other.thread.setSetting({
         key: 'factoryTargetInstruction',
         value: 'Workspace repositories: works_yura/ai, works_yura/test.',
       });
-      const cardPrompt = await config.appendSystemPromptFor!(other);
-      expect(cardPrompt).toContain(config.appendSystemPrompt!);
+      const cardPrompt = await unread.config.appendSystemPromptFor!(other);
+      expect(cardPrompt).toContain(unread.config.appendSystemPrompt!);
       expect(cardPrompt?.endsWith('Workspace repositories: works_yura/ai, works_yura/test.')).toBe(true);
     });
 

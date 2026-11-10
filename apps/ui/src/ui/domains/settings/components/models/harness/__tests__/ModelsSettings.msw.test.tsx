@@ -145,3 +145,33 @@ describe('Models settings per harness', () => {
     expect(await screen.findByText('Claude Code isn’t configured on this server.')).toBeInTheDocument();
   });
 });
+
+describe('Agent language', () => {
+  it('shows the Factory’s agent language on either harness and saves a change', async () => {
+    const { patches } = stubFactory({ harness: 'claude-code', agentLanguage: 'uk' });
+    const user = userEvent.setup();
+    const { client } = renderModels();
+
+    expect(await screen.findByText('Agent language')).toBeInTheDocument();
+    expect(await screen.findByRole('combobox', { name: 'Language' })).toHaveTextContent('Українська');
+
+    await pickModel(user, 'Language', 'English');
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByRole('combobox', { name: 'Language' })).toHaveTextContent('English');
+    expect(patches).toEqual([{ agentLanguage: 'en' }]);
+  });
+
+  it('puts the language back when the server refuses it', async () => {
+    stubFactory({ harness: 'mastra', agentLanguage: 'uk' }, { reject: true });
+    const user = userEvent.setup();
+    const { client } = renderModels();
+
+    await pickModel(user, 'Language', 'English');
+    await waitForMutationsIdle(client);
+
+    await waitFor(async () =>
+      expect(await screen.findByRole('combobox', { name: 'Language' })).toHaveTextContent('Українська'),
+    );
+  });
+});

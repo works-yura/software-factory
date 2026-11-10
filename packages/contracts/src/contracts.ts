@@ -240,11 +240,16 @@ export const FACTORY_HARNESS_KINDS = ['mastra', 'claude-code'] as const;
 export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
 const claudeCodeModelSchema = z.enum(CLAUDE_CODE_MODELS).nullable();
 
+/** The language a Factory's agents write to the team in; mirrors `AGENT_LANGUAGES` in @factory/store. */
+export const AGENT_LANGUAGES = ['uk', 'en'] as const;
+const agentLanguageSchema = z.enum(AGENT_LANGUAGES);
+
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
   harness: z.enum(FACTORY_HARNESS_KINDS).optional().default('mastra'),
   claudeCodeModel: claudeCodeModelSchema.optional().default(null),
+  agentLanguage: agentLanguageSchema.optional(),
 });
 
 /** A Factory's tool permissions (Settings → Behavior); a category left out asks. */
@@ -269,6 +274,7 @@ export const updateProjectBodySchema = z
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     harness: z.enum(FACTORY_HARNESS_KINDS).optional(),
     claudeCodeModel: claudeCodeModelSchema.optional(),
+    agentLanguage: agentLanguageSchema.optional(),
     toolPermissions: toolPermissionsSchema.nullable().optional(),
     autoRunEnabled: z.boolean().optional(),
     /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */

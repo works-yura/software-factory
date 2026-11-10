@@ -601,6 +601,17 @@
       "claudeUnavailable": "Claude Code isn’t configured on this server.",
       "changeFailed": "Couldn’t switch the harness"
     },
+    "agentLanguage": {
+      "title": "Agent language",
+      "description": "The language this Factory’s agents write to the team in: messages, plans, handoffs, summaries and team documents. Code and anything meant for the client keep their own language.",
+      "label": "Language",
+      "note": "Applies from each session’s next turn, on both harnesses.",
+      "languages": {
+        "uk": "Українська",
+        "en": "English"
+      },
+      "changeFailed": "Couldn’t change the agent language"
+    },
     "claudeCode": {
       "title": "Claude Code",
       "description": "How this Factory’s Claude Code sessions run.",

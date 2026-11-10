@@ -258,6 +258,15 @@ export function isClaudeCodeModel(value: unknown): value is ClaudeCodeModel {
   return CLAUDE_CODE_MODELS.some(model => model === value);
 }
 
+/** The language a Factory's agents write to the team in; mirrors `AGENT_LANGUAGES` in @factory/contracts. */
+export const AGENT_LANGUAGES = ['uk', 'en'] as const;
+
+export type AgentLanguage = (typeof AGENT_LANGUAGES)[number];
+
+export function isAgentLanguage(value: unknown): value is AgentLanguage {
+  return AGENT_LANGUAGES.some(language => language === value);
+}
+
 /** A Factory project row from `/web/factory/projects`. */
 export type FactoryToolPolicy = 'allow' | 'ask' | 'deny';
 export type FactoryToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
@@ -279,6 +288,8 @@ export interface FactoryProjectPayload {
   harness?: FactoryHarness;
   /** `claude --model` for Claude Code sessions; null or absent = the CLI's own default. */
   claudeCodeModel?: ClaudeCodeModel | null;
+  /** The language every agent of this Factory writes to the team in; absent from servers that predate it. */
+  agentLanguage?: AgentLanguage;
   /** Org-wide default model for factory runs; null when unset. */
   defaultModelId?: string | null;
   /** Thinking level every session and run uses until it picks its own. */
@@ -449,7 +460,7 @@ export async function updateFactoryDefaultModel(
 export async function updateFactoryHarness(
   baseUrl: string,
   factoryProjectId: string,
-  patch: { harness?: FactoryHarness; claudeCodeModel?: ClaudeCodeModel | null },
+  patch: { harness?: FactoryHarness; claudeCodeModel?: ClaudeCodeModel | null; agentLanguage?: AgentLanguage },
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',

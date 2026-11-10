@@ -2,13 +2,14 @@ import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { useTranslation } from 'react-i18next';
 
 import { CustomProvidersSection } from '../CustomProvidersSection';
+import { AgentLanguageSection } from './AgentLanguageSection';
 import { SettingsSubsection } from '../SettingsSubsection';
 import { ClaudeAccountsSection } from './accounts/ClaudeAccountsSection';
 import { ClaudeCodeModelSection, HarnessSwitchSection, useFactoryHarness } from './harness/HarnessSettings';
 import { ModelRoutingSection } from './routing/ModelRoutingSection';
 
 /**
- * The harness on top; below it only the settings of the harness this Factory
+ * The harness on top, then the agents' language (both harnesses follow it); below them only the settings of the harness this Factory
  * runs on: Mastra's model routing, thinking and custom providers, or Claude
  * Code's model and accounts.
  */
@@ -18,6 +19,7 @@ export function ModelsSettings({ factoryId }: { factoryId: string }) {
   return (
     <div className="flex flex-col gap-8">
       <HarnessSwitchSection factoryId={factoryId} />
+      <AgentLanguageSection factoryId={factoryId} />
       {/* Each harness's own model settings: Mastra's providers, or Claude's model and accounts. */}
       {harness !== undefined && descriptor.setup.modelProvider && (
         <>

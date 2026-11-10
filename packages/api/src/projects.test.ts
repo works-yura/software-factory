@@ -109,6 +109,29 @@ describe('ProjectRoutes', () => {
     expect((await send('PATCH', path, { claudeCodeModel: 'gpt-5' })).status).toBe(400);
   });
 
+  it('reads and switches the agent language, refusing languages it does not offer', async () => {
+    const seed = await createFactoryStorageForTests();
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { id: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const send = (method: string, path: string, body: unknown) =>
+      app.request(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+    const created = await send('POST', '/web/factory/projects', { name: 'Lang' });
+    const { project } = (await created.json()) as { project: { id: string; agentLanguage: string } };
+    expect(project.agentLanguage).toBe('uk');
+
+    const path = `/web/factory/projects/${project.id}`;
+    const english = await send('PATCH', path, { agentLanguage: 'en' });
+    expect(english.status).toBe(200);
+    expect(await english.json()).toMatchObject({ project: { agentLanguage: 'en' } });
+    expect((await send('PATCH', path, { agentLanguage: 'de' })).status).toBe(400);
+    expect((await send('POST', '/web/factory/projects', { name: 'Bad', agentLanguage: 'fr' })).status).toBe(400);
+  });
+
   it('treats the removed slackWorkItemsEnabled setting from an old client as an unknown field', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });

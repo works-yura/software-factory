@@ -208,6 +208,7 @@ import { WorkItemsStorage } from '@factory/store';
 import type { FactoryRunBindingRecord, WorkItemRow } from '@factory/store';
 import { FactorySupervisorHealthWorker } from '@factory/supervisor';
 import { SUPERVISOR_INSTRUCTIONS } from '@factory/supervisor';
+import { withAgentLanguage } from './agent-language.ts';
 import { createFactorySupervisorReadTools } from '@factory/supervisor';
 import { messageWorkerSession } from '@factory/supervisor';
 import { persistFactoryToolPermissions, supervisorProjectIdFromContext } from '@factory/session';
@@ -2333,7 +2334,14 @@ export class MastraFactory {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>
             | undefined;
-          if (supervisorProjectIdFromContext(context)) return SUPERVISOR_INSTRUCTIONS;
+          const supervisorProjectId = supervisorProjectIdFromContext(context);
+          if (supervisorProjectId) {
+            return withAgentLanguage(
+              SUPERVISOR_INSTRUCTIONS,
+              supervisorProjectId,
+              await factoryProjectsStorage.getById({ id: supervisorProjectId }),
+            );
+          }
           // The SDK resolves this callback before it loads repository
           // AGENTS.md/CLAUDE.md. A controller recreated after restart has
           // only initialState, and a partially persisted one can keep
@@ -2368,7 +2376,16 @@ export class MastraFactory {
               }
             }
           }
-          return undefined;
+          // The Factory's «Мова агентів», read on every prompt so a changed setting
+          // applies from the session's next turn. A session not filed under a
+          // Factory has no setting to follow.
+          const factoryProjectId = context?.getState().factoryProjectId;
+          if (!factoryProjectId) return undefined;
+          return withAgentLanguage(
+            undefined,
+            factoryProjectId,
+            await factoryProjectsStorage.getById({ id: factoryProjectId }),
+          );
         },
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller

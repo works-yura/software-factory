@@ -70,6 +70,24 @@ describe('FactoryProjectsStorage', () => {
     expect(back).toMatchObject({ harness: 'mastra', claudeCodeModel: null });
   });
 
+  it('stores the agent language: Ukrainian by default, switched later, kept by other updates', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'L' } });
+    expect(project.agentLanguage).toBe('uk');
+
+    const english = await seed.projects.update({ orgId: 'org-1', id: project.id, input: { agentLanguage: 'en' } });
+    expect(english?.agentLanguage).toBe('en');
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { name: 'Renamed' } });
+    expect((await seed.projects.getById({ id: project.id }))?.agentLanguage).toBe('en');
+
+    const created = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'E', agentLanguage: 'en' },
+    });
+    expect(created.agentLanguage).toBe('en');
+  });
+
   it('lists, updates, and deletes projects within their organization', async () => {
     const seed = await createFactoryStorageForTests();
     const first = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'First' } });

@@ -22,6 +22,19 @@ export function isFactoryHarnessKind(value: unknown): value is FactoryHarnessKin
 export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
 export type ClaudeCodeModel = (typeof CLAUDE_CODE_MODELS)[number];
 
+/**
+ * The language a Factory's agents write in to the team: messages, plans,
+ * handoffs, summaries, team documents. Code, identifiers and anything meant for
+ * the client stay in their own language.
+ */
+export const AGENT_LANGUAGES = ['uk', 'en'] as const;
+export type AgentLanguage = (typeof AGENT_LANGUAGES)[number];
+export const DEFAULT_AGENT_LANGUAGE: AgentLanguage = 'uk';
+
+export function isAgentLanguage(value: unknown): value is AgentLanguage {
+  return typeof value === 'string' && (AGENT_LANGUAGES as readonly string[]).includes(value);
+}
+
 /** A Factory's tool permissions (Settings → Behavior → Tool permissions), kept so they survive a restart. */
 export interface FactoryToolPermissions {
   /** Per category (read, edit, execute, mcp, other); a category without one asks. */
@@ -73,6 +86,8 @@ export interface FactoryProject {
   harness: FactoryHarnessKind;
   /** `claude --model` for this Factory's Claude Code sessions; null = the CLI's own default. */
   claudeCodeModel: ClaudeCodeModel | null;
+  /** The language every agent session of this Factory writes to the team in. */
+  agentLanguage: AgentLanguage;
   /** Tool permissions as last set in Settings; null until someone set them (every category asks). */
   toolPermissions: FactoryToolPermissions | null;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
@@ -121,6 +136,8 @@ export interface CreateFactoryProjectInput {
   /** `mastra` when omitted. */
   harness?: FactoryHarnessKind;
   claudeCodeModel?: ClaudeCodeModel | null;
+  /** `uk` when omitted. */
+  agentLanguage?: AgentLanguage;
 }
 
 export interface UpdateFactoryProjectInput {
@@ -131,6 +148,7 @@ export interface UpdateFactoryProjectInput {
   /** Applies to sessions started from now on; running cards keep their harness. */
   harness?: FactoryHarnessKind;
   claudeCodeModel?: ClaudeCodeModel | null;
+  agentLanguage?: AgentLanguage;
   toolPermissions?: FactoryToolPermissions | null;
   autoRunEnabled?: boolean;
   sandboxWorkingDirectory?: string | null;
@@ -163,6 +181,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     default_thinking_level: { type: 'text', default: DEFAULT_FACTORY_THINKING_LEVEL },
     harness: { type: 'text', default: DEFAULT_FACTORY_HARNESS },
     claude_code_model: { type: 'text', nullable: true },
+    agent_language: { type: 'text', default: DEFAULT_AGENT_LANGUAGE },
     tool_permissions: { type: 'json', nullable: true },
     // Deprecated: no longer read or written. Kept so existing databases need no
     // migration. Old rows may still hold `true`, so never read it to bring Slack
@@ -207,6 +226,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   default_thinking_level: string | null;
   harness: string | null;
   claude_code_model: string | null;
+  agent_language: string | null;
   tool_permissions?: unknown;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
@@ -247,6 +267,8 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     harness: isFactoryHarnessKind(row.harness) ? row.harness : DEFAULT_FACTORY_HARNESS,
     // Rows from before the column, or with an alias this build does not know, use the CLI default.
     claudeCodeModel: isClaudeCodeModel(row.claude_code_model) ? row.claude_code_model : null,
+    // Rows from before the column read as the column's default.
+    agentLanguage: isAgentLanguage(row.agent_language) ? row.agent_language : DEFAULT_AGENT_LANGUAGE,
     toolPermissions: parseFactoryToolPermissions(row.tool_permissions),
     autoRunEnabled: row.auto_run_enabled,
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
@@ -304,6 +326,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       default_model_id: input.defaultModelId ?? null,
       harness: input.harness ?? DEFAULT_FACTORY_HARNESS,
       claude_code_model: input.claudeCodeModel ?? null,
+      agent_language: input.agentLanguage ?? DEFAULT_AGENT_LANGUAGE,
       auto_run_enabled: false,
       created_at: now,
       updated_at: now,
@@ -364,6 +387,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
             : {}),
           ...(changes.harness !== undefined ? { harness: changes.harness } : {}),
           ...(changes.claudeCodeModel !== undefined ? { claude_code_model: changes.claudeCodeModel } : {}),
+          ...(changes.agentLanguage !== undefined ? { agent_language: changes.agentLanguage } : {}),
           ...(changes.toolPermissions !== undefined ? { tool_permissions: changes.toolPermissions } : {}),
           ...(changes.autoRunEnabled !== undefined ? { auto_run_enabled: changes.autoRunEnabled } : {}),
           ...(changes.sandboxWorkingDirectory !== undefined

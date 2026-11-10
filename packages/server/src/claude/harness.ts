@@ -21,6 +21,7 @@ import type { FactorySessionTokenSigner } from '@factory/mcp';
 import type { SourceControlSessionLookup } from '@factory/session';
 import type { FactoryProjectsStorage } from '@factory/store';
 
+import { withAgentLanguage } from '../agent-language.ts';
 import { createClaudeSessionConfigDirs } from './config-dir.ts';
 import type { ClaudeCodeCredentialFailureHook, ClaudeCodeCredentialsHook } from './credentials.ts';
 import { CLAUDE_THREAD_SETTINGS } from './start-coordinator.ts';
@@ -225,6 +226,14 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     return { ...row, factoryProjectId: row.factoryProjectId };
   };
 
+  /** A session's own playbook: the card's repository, or every workspace repository, follows it (the skills read it there). */
+  const factorySessionPrompt = async (session: ClaudeCodeSession) => {
+    const target = await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.targetInstruction });
+    return typeof target === 'string' && target
+      ? `${CLAUDE_FACTORY_SYSTEM_PROMPT}\n\n${target}`
+      : CLAUDE_FACTORY_SYSTEM_PROMPT;
+  };
+
   /**
    * Who a session's turn runs for. A session with a row runs as its row; the
    * Factory chat (supervisor) has none: it belongs to its Factory and runs as
@@ -400,10 +409,14 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       return signals.length > 0 ? signals.join('\n') : undefined;
     },
     appendSystemPromptFor: async session => {
-      if (claudeSupervisorProjectId(session.id)) return CLAUDE_SUPERVISOR_SYSTEM_PROMPT;
-      // The card's repository, or every workspace repository: the skills read it from the system prompt.
-      const target = await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.targetInstruction });
-      return typeof target === 'string' && target ? `${CLAUDE_FACTORY_SYSTEM_PROMPT}\n\n${target}` : undefined;
+      const base = claudeSupervisorProjectId(session.id)
+        ? CLAUDE_SUPERVISOR_SYSTEM_PROMPT
+        : await factorySessionPrompt(session);
+      if (!options.projects) return base;
+      // The Factory's «Мова агентів» closes every session's prompt, the Factory chat's included.
+      const tenant = await tenantOf(session);
+      const project = await options.projects.get({ orgId: tenant.orgId, id: tenant.factoryProjectId });
+      return withAgentLanguage(base, tenant.factoryProjectId, project);
     },
     trustedMcpServers: [CLAUDE_FACTORY_MCP_SERVER],
     configDir,
