@@ -358,7 +358,8 @@
     "work": "Work",
     "review": "Review",
     "plan": "Planning",
-    "chat": "Chat"
+    "chat": "Chat",
+    "product": "Product"
   },
   "cardSessions": {
     "title": "Sessions",

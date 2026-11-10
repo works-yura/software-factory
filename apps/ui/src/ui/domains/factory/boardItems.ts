@@ -212,7 +212,7 @@ export interface CardContextSession {
   current: boolean;
 }
 
-const KNOWN_CONTEXTS = ['triage', 'work', 'review', 'plan', 'chat'] as const;
+const KNOWN_CONTEXTS = ['triage', 'work', 'review', 'plan', 'chat', 'product'] as const;
 
 const CONTEXT_LABELS: Readonly<Record<string, string>> = lazyLabels(
   KNOWN_CONTEXTS,
