@@ -4,7 +4,7 @@ Path: `<docs>/changes/<change>/requirements.md`. Audience: **the client**, a non
 
 **Two language versions.** `requirements.md` is in the team's language (Ukrainian for this team); when the client works in another language (find it from how the client writes in `blackbox/sources/`; Alex writes English), also keep `requirements.<lang>.md` (e.g. `requirements.en.md`) — the same brief, translated, section for section, with the English headings. The client gets the client-language file; both are updated in the same round and must say the same thing. Each passes the check.
 
-Write it in the person's language: for this team, **the Ukrainian headings in brackets and Ukrainian labels** (Хто / Хоче / Кроки / Готово, коли / На екрані); the English names are only what the check also accepts. **Core** (always required, cannot be dropped): Goal, Use cases, Out of scope (Межі оцінки), Phases and estimate. **Default** (required unless the person asked to drop one — then it is passed to the check as `waived` with their reason; never dropped on your own): Users, Edge cases, Constraints, Technology, Running costs, External dependencies and risks, Decisions that need the client's approval, Done means. When a default section has nothing in it, write `None` with a reason rather than dropping it. *Open questions* only when the person left a question for the client.
+Write it in the person's language: for this team, **the Ukrainian headings in brackets and Ukrainian labels** (Хто / Хоче / Кроки / Готово, коли / На екрані); the English names are only what the check also accepts. **Core** (always required, cannot be dropped): Goal, Use cases, Out of scope (Межі оцінки), Phases and estimate. **Default** (required unless the person asked to drop one — then it is passed to the check as `waived` with their reason; never dropped on your own): Users, Edge cases, Constraints, Technology, Running costs, External dependencies and risks, Decisions that need the client's approval. When a default section has nothing in it, write `None` with a reason rather than dropping it. *Open questions* only when the person left a question for the client.
 
 **Nothing internal in the client's text:** no file paths, no `blackbox/…` sources, no `DEC-nnn` / `OQ-nnn` ids, no estimation formulas or team mode. Sources and working figures go in the change request description (or `research.md`). The rest (Behaviour, Guided flow, What the app remembers, Look and feel) is a menu: keep a section only if it carries weight. Delete the comments.
 
@@ -90,9 +90,6 @@ Write it in the person's language: for this team, **the Ukrainian headings in br
 ## Decisions that need the client's approval  (Рішення, що потребують погодження клієнта)
 <!-- The gates the team must not pass alone: switching on a paid service, sending real emails or payments, publishing to the stores, touching real customer data, deleting or migrating data, declaring the release final. "None" if none. -->
 
-## Done means  (Готово означає)
-- [ ] <the closing checklist: works from a clean install, demo data present, every use case walked through, every acceptance criterion ticked, hand-over notes delivered>
-
 ## Look and feel  (Вигляд)
 <!-- Optional, plain words only: "matches the app's usual look". -->
 
@@ -116,11 +113,10 @@ When the brief is for a whole product or an MVP ("an app that…"), not one feat
 9. **Constraints.**
 10. **Technology** (client level), **running costs**, **external dependencies and risks**, **phases and estimate**.
 11. **Decisions that need the client's approval.**
-12. **Done means.**
 13. **Open questions** — only those the person left for the client; otherwise no section.
 
 The check needs the same required headings as a feature brief (see the top of this file): name the sections so (e.g. "Edge cases (Крайові випадки)").
 
 Quality bar: every use case says when it is done in terms the client can see; every feature names the things it keeps track of and each appears in section 6; non-goals and approval gates are explicit; open questions are listed, not guessed.
 
-<!-- No acceptance-criteria section in the brief: the client sees "Готово, коли" in each use case and "Done means"; testable acceptance criteria (GIVEN/WHEN/THEN) belong to the spec. -->
+<!-- No acceptance-criteria section and no "Done means" / "Готово означає" checklist in the brief — never, in any form (a closing checklist is acceptance criteria in disguise): the client sees "Готово, коли" in each use case; testable acceptance criteria (GIVEN/WHEN/THEN) belong to the spec. -->

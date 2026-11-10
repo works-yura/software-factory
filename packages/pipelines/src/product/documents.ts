@@ -90,7 +90,7 @@ export const PRODUCT_DOCUMENT_SECTIONS: Readonly<Record<ProductDocumentType, rea
     optional('External dependencies and risks', /dependenc/i, /залежн/i),
     optional('Running costs', /running costs?/i, /operating costs?/i, /витрати на експлуатац/i, /експлуатаційн/i),
     optional('Approval gates', /approv/i, /погодж/i),
-    optional('Done means', /done means/i, /definition of done/i, /готово означає/i),
+    // No 'Done means' in the brief: a closing checklist is acceptance criteria in disguise; the spec owns it.
     // No Open questions: the brief carries that section only when the person left a question for the client.
   ],
   // The technical spec for the team, as a delta against the areas' truth: every component in one place.
@@ -279,7 +279,18 @@ function sectionBody(markdown: string, match: readonly RegExp[]): string | undef
  * The brief's format rules beyond its headings: the edge cases are a table of the situation and
  * what the user sees, with at least one row, so every case states what the client will observe.
  */
+/** Sections the client's brief must never carry: a closing checklist is acceptance criteria, which the spec owns. */
+const FORBIDDEN_BRIEF_HEADING = [/acceptance criteria/i, /критері[їй] приймання/i, /done means/i, /definition of done/i, /готово означає/i];
+
 export function briefFormatProblems(markdown: string): string[] {
+  const forbidden = headings(markdown).filter(heading => FORBIDDEN_BRIEF_HEADING.some(pattern => pattern.test(heading)));
+  const problems = forbidden.map(
+    heading => `remove "${heading}": no acceptance criteria or closing checklist in the brief (they belong to the spec)`,
+  );
+  return [...problems, ...edgeCaseProblems(markdown)];
+}
+
+function edgeCaseProblems(markdown: string): string[] {
   const body = sectionBody(markdown, EDGE_CASES_HEADING);
   if (body === undefined) return [];
   const rows = body.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));

@@ -41,8 +41,6 @@ Buyers who order twice a month.
 |---|---|
 | The card is declined | "Payment failed" and no access |
 
-## Acceptance criteria
-1. A buyer sees their points after checkout.
 
 ## Not included
 - Gift cards (a later phase)
@@ -65,8 +63,6 @@ None found: no provider review, no new access.
 ## Decisions that need the client's approval
 None.
 
-## Done means
-- [ ] every use case walked through
 
 ## Open questions
 - None
@@ -183,9 +179,9 @@ describe('product document checks', () => {
       ['Use cases'],
     );
     expect(
-      checkProductDocumentStructure('brief', BRIEF.replace('## Not included', 'Not included').replace('## Done means', ''))
+      checkProductDocumentStructure('brief', BRIEF.replace('## Not included', 'Not included').replace('## Running costs', 'Running costs'))
         .missingSections,
-    ).toEqual(['Out of scope', 'Done means']);
+    ).toEqual(['Out of scope', 'Running costs']);
   });
 
   it('reads task ids with Cyrillic prefixes and the docs-sync task', () => {
@@ -233,13 +229,13 @@ describe('product document checks', () => {
   });
 
   it('lets the person drop a default section with a reason, never a core one or an unknown name', () => {
-    const noDoneMeans = BRIEF.replace('## Done means', 'Done means');
-    expect(checkProductDocumentStructure('brief', noDoneMeans).missingSections).toEqual(['Done means']);
+    const noUsers = BRIEF.replace('## Users', 'Users');
+    expect(checkProductDocumentStructure('brief', noUsers).missingSections).toEqual(['Users']);
     expect(
-      checkProductDocumentStructure('brief', noDoneMeans, [{ section: 'done means', reason: 'The client asked for a shorter brief' }]),
+      checkProductDocumentStructure('brief', noUsers, [{ section: 'users', reason: 'The client asked for a shorter brief' }]),
     ).toMatchObject({
       missingSections: [],
-      waivedSections: [{ section: 'Done means', reason: 'The client asked for a shorter brief' }],
+      waivedSections: [{ section: 'Users', reason: 'The client asked for a shorter brief' }],
       waiverProblems: [],
     });
 
@@ -261,8 +257,14 @@ describe('product document checks', () => {
       'External dependencies and risks',
       'Running costs',
       'Approval gates',
-      'Done means',
     ]);
+  });
+
+  it('refuses acceptance criteria or a closing checklist in the brief, under any of its names', () => {
+    for (const heading of ['## Acceptance criteria', '## Критерії приймання', '## Готово означає', '## Done means']) {
+      const problems = checkProductDocumentStructure('brief', `${BRIEF}\n${heading}\n- [ ] works\n`).formatProblems;
+      expect(problems.some(problem => problem.includes('closing checklist'))).toBe(true);
+    }
   });
 
   it('accepts Ukrainian headings', () => {
@@ -272,7 +274,6 @@ describe('product document checks', () => {
       '## Користувачі',
       '## Сценарії',
       '## Крайові випадки',
-      '## Критерії приймання',
       '## Межі оцінки',
       '## Обмеження',
       '## Технології',
@@ -280,7 +281,6 @@ describe('product document checks', () => {
       '## Зовнішні залежності й ризики',
       '## Фази та оцінка',
       '## Рішення, що потребують погодження клієнта',
-      '## Готово означає',
       '## Відкриті питання',
     ].join('\n');
     expect(checkProductDocumentStructure('brief', uk).missingSections).toEqual([]);
