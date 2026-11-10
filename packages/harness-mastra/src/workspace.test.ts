@@ -446,6 +446,13 @@ describe('bundled Factory skill assets', () => {
     // Product files the docs-sync task last.
     expect(await read('product-phases', 'SKILL.md')).toContain('docsSync: true');
     expect(await read('product-phases', 'references/tasks-template.md')).toContain('role: docs');
+    // A default section is dropped only when the person asked, and is passed to the check as a waiver.
+    for (const skill of ['product-brief', 'product-spec', 'product-enrich']) {
+      const text = await read(skill, 'SKILL.md');
+      expect(text).toContain('**Dropping a section.**');
+      expect(text).toContain('`waived`');
+      expect(text).toContain('Never waive a section on your own');
+    }
   });
 
   it('bundles GitLab review instructions that use the scoped provider tools', async () => {

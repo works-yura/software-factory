@@ -294,4 +294,40 @@ describe('Product session tools', () => {
     expect(card.metadata?.[PRODUCT_DOC_CHECKS_KEY]).toMatchObject({ spec: { passed: true, path } });
     await expect(move('phases')).resolves.toMatchObject({ status: 'accepted' });
   });
+
+  it('records the sections the person waived, and refuses a waiver of a core section', async () => {
+    const { tools, context, storage, prepared } = await setup({ stage: 'spec' });
+    const check = tools.factory_check_product_document as ExecutableTool;
+    const path = 'docs/changes/2026-11-10-loyalty/design.md';
+    const withoutConsult = SPEC.replace(/## Consult round[\s\S]*?(?=\n## )/, '');
+
+    const waivedOk = await check.execute(
+      {
+        type: 'spec',
+        path,
+        contradictions: [],
+        waived: [{ section: 'Consult round', reason: 'One small endpoint; the person asked to skip it' }],
+      },
+      { requestContext: context, workspace: workspace({ [path]: withoutConsult }) },
+    );
+    expect(waivedOk).toMatchObject({
+      passed: true,
+      missingSections: [],
+      waivedSections: [{ section: 'Consult round', reason: 'One small endpoint; the person asked to skip it' }],
+      waiverProblems: [],
+    });
+    expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))!.metadata?.[PRODUCT_DOC_CHECKS_KEY]).toMatchObject({
+      spec: { passed: true, waivedSections: [{ section: 'Consult round' }] },
+    });
+
+    const coreWaived = await check.execute(
+      { type: 'spec', path, contradictions: [], waived: [{ section: 'Test plan', reason: 'not needed' }] },
+      { requestContext: context, workspace: workspace({ [path]: SPEC.replace('## Test plan', '') }) },
+    );
+    expect(coreWaived).toMatchObject({
+      passed: false,
+      missingSections: ['Test plan'],
+      waiverProblems: ['"Test plan" is a core section of the spec and cannot be dropped'],
+    });
+  });
 });

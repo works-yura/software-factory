@@ -53,37 +53,44 @@ interface RequiredSection {
   readonly label: string;
   /** A heading (`#`…`######`) matching any of these, case-insensitive, satisfies it. */
   readonly match: readonly RegExp[];
+  /**
+   * A default section: required unless the person asked to drop it, recorded as a waiver with
+   * their reason. A core section (not waivable) is what makes the document that document.
+   */
+  readonly waivable?: true;
 }
 
 const section = (label: string, ...match: RegExp[]): RequiredSection => ({ label, match });
+/** A default section the person may drop (see `RequiredSection.waivable`). */
+const optional = (label: string, ...match: RegExp[]): RequiredSection => ({ label, match, waivable: true });
 
-const OPEN_QUESTIONS = section('Open questions', /open questions?/i, /відкрит/i);
+const OPEN_QUESTIONS = optional('Open questions', /open questions?/i, /відкрит/i);
 
 /** The sections each document must have, in the order the templates put them (English or Ukrainian headings). */
 export const PRODUCT_DOCUMENT_SECTIONS: Readonly<Record<ProductDocumentType, readonly RequiredSection[]>> = {
   // What the engineer knows, and the decisions the interview settled.
   enrich: [
     section('How the system works', /how .*works/i, /system/i, /як .*працю/i, /систем/i),
-    section('Pitfalls', /pitfall/i, /gotcha/i, /підводн/i),
-    section('Constraints', /constraint/i, /обмежен/i),
+    optional('Pitfalls', /pitfall/i, /gotcha/i, /підводн/i),
+    optional('Constraints', /constraint/i, /обмежен/i),
     section('Decisions', /decisions?/i, /рішенн/i),
     OPEN_QUESTIONS,
   ],
   // The client-facing brief: plain language, nothing a client can't read.
   brief: [
     section('Goal', /goal/i, /purpose/i, /context/i, /мета/i, /ціль/i, /контекст/i),
-    section('Users', /users?\b(?! stor)/i, /roles?/i, /who uses/i, /користувач/i, /ролі/i),
+    optional('Users', /users?\b(?! stor)/i, /roles?/i, /who uses/i, /користувач/i, /ролі/i),
     section('Use cases', /use cases?/i, /user stor/i, /journeys?/i, /scenarios?/i, /сценарі/i, /історі/i),
-    section('Edge cases', /edge cases?/i, /states?/i, /крайов/i, /особлив/i, /стан/i),
+    optional('Edge cases', /edge cases?/i, /states?/i, /крайов/i, /особлив/i, /стан/i),
     section('Out of scope', /not included/i, /non-goals?/i, /out of scope/i, /не входить/i, /поза межами/i, /межі оцінки/i),
-    section('Constraints', /constraint/i, /обмежен/i),
-    section('Technology', /technolog/i, /stack/i, /технолог/i, /стек/i),
+    optional('Constraints', /constraint/i, /обмежен/i),
+    optional('Technology', /technolog/i, /stack/i, /технолог/i, /стек/i),
     section('Phases', /phases?/i, /delivery/i, /фази/i, /етапи/i),
     section('Estimate', /estimate/i, /оцінк/i),
-    section('External dependencies and risks', /dependenc/i, /залежн/i),
-    section('Running costs', /running costs?/i, /operating costs?/i, /витрати на експлуатац/i, /експлуатаційн/i),
-    section('Approval gates', /approv/i, /погодж/i),
-    section('Done means', /done means/i, /definition of done/i, /готово означає/i),
+    optional('External dependencies and risks', /dependenc/i, /залежн/i),
+    optional('Running costs', /running costs?/i, /operating costs?/i, /витрати на експлуатац/i, /експлуатаційн/i),
+    optional('Approval gates', /approv/i, /погодж/i),
+    optional('Done means', /done means/i, /definition of done/i, /готово означає/i),
     // No Open questions: the brief carries that section only when the person left a question for the client.
   ],
   // The technical spec for the team, as a delta against the areas' truth: every component in one place.
@@ -98,14 +105,14 @@ export const PRODUCT_DOCUMENT_SECTIONS: Readonly<Record<ProductDocumentType, rea
     section('Architecture', /architecture/i, /архітектур/i),
     section('Sequences', /sequences?/i, /послідовн/i),
     section('Data flow', /data flow/i, /потік даних/i, /потоки даних/i),
-    section('Modules touched', /modules?/i, /components?/i, /модул/i, /компонент/i),
-    section('API contract', /contracts?/i, /\bapi\b/i, /контракт/i),
-    section('Data model', /data model/i, /модель даних/i),
+    optional('Modules touched', /modules?/i, /components?/i, /модул/i, /компонент/i),
+    optional('API contract', /contracts?/i, /\bapi\b/i, /контракт/i),
+    optional('Data model', /data model/i, /модель даних/i),
     section('Security', /security/i, /безпек/i),
-    section('Shared resources', /shared/i, /foundation/i, /спільн/i),
+    optional('Shared resources', /shared/i, /foundation/i, /спільн/i),
     section('Test plan', /test plan/i, /testing/i, /план тест/i, /тестуван/i),
-    section('Decisions', /decisions?/i, /\badrs?\b/i, /рішенн/i),
-    section('Consult round', /consult/i, /lens/i, /погодження контракт/i, /консульт/i),
+    optional('Decisions', /decisions?/i, /\badrs?\b/i, /рішенн/i),
+    optional('Consult round', /consult/i, /lens/i, /погодження контракт/i, /консульт/i),
     section('Premortem outcome', /pre-?mortem/i, /премортем/i),
     OPEN_QUESTIONS,
   ],
@@ -138,6 +145,14 @@ export interface ProductContradiction {
   readonly resolution?: string;
 }
 
+/** A default section the person asked to leave out of a document, and why. */
+export interface ProductSectionWaiver {
+  /** The section's label as the check reports it, e.g. "Done means". */
+  readonly section: string;
+  /** The person's reason, in their words. */
+  readonly reason: string;
+}
+
 export interface ProductDocumentCheck {
   readonly type: ProductDocumentType;
   readonly path: string;
@@ -150,6 +165,10 @@ export interface ProductDocumentCheck {
   readonly taskProblems?: readonly string[];
   /** Format rules beyond headings (the brief's edge cases as a table). Absent on older checks. */
   readonly formatProblems?: readonly string[];
+  /** Default sections the person asked to drop, each with their reason. Absent on older checks. */
+  readonly waivedSections?: readonly ProductSectionWaiver[];
+  /** Waivers that could not be honoured: a core section, or a name that is no section of the document. */
+  readonly waiverProblems?: readonly string[];
   readonly contradictions: readonly ProductContradiction[];
   readonly checkedAt: string;
 }
@@ -273,13 +292,58 @@ export function briefFormatProblems(markdown: string): string[] {
   return [];
 }
 
+/** The sections of `type` the person may drop (default sections), by label. */
+export function waivableProductSections(type: ProductDocumentType): string[] {
+  return PRODUCT_DOCUMENT_SECTIONS[type].filter(required => required.waivable).map(required => required.label);
+}
+
+const sameLabel = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * Which waivers can be honoured: a default section of the document with a reason. Waiving a core
+ * section, a name that is no section of the document, or giving no reason is reported, never
+ * silently ignored, and the waiver does not count.
+ */
+function sortWaivers(
+  type: ProductDocumentType,
+  waived: readonly ProductSectionWaiver[],
+): { accepted: ProductSectionWaiver[]; problems: string[] } {
+  const accepted: ProductSectionWaiver[] = [];
+  const problems: string[] = [];
+  for (const waiver of waived) {
+    const required = PRODUCT_DOCUMENT_SECTIONS[type].find(candidate => sameLabel(candidate.label, waiver.section));
+    if (!required) {
+      problems.push(
+        `"${waiver.section}" is not a section of the ${type}; the sections that can be dropped are: ${waivableProductSections(type).join(', ') || 'none'}`,
+      );
+    } else if (!required.waivable) {
+      problems.push(`"${required.label}" is a core section of the ${type} and cannot be dropped`);
+    } else if (!waiver.reason.trim()) {
+      problems.push(`dropping "${required.label}" needs the person's reason`);
+    } else {
+      accepted.push({ section: required.label, reason: waiver.reason.trim() });
+    }
+  }
+  return { accepted, problems };
+}
+
 export function checkProductDocumentStructure(
   type: ProductDocumentType,
   markdown: string,
-): { missingSections: string[]; missingDiagrams: string[]; taskProblems: string[]; formatProblems: string[] } {
+  waived: readonly ProductSectionWaiver[] = [],
+): {
+  missingSections: string[];
+  missingDiagrams: string[];
+  taskProblems: string[];
+  formatProblems: string[];
+  waivedSections: ProductSectionWaiver[];
+  waiverProblems: string[];
+} {
   const found = headings(markdown);
+  const { accepted, problems: waiverProblems } = sortWaivers(type, waived);
   const missingSections = PRODUCT_DOCUMENT_SECTIONS[type]
     .filter(required => !found.some(heading => required.match.some(pattern => pattern.test(heading))))
+    .filter(required => !accepted.some(waiver => waiver.section === required.label))
     .map(required => required.label);
   const kinds = type === 'spec' ? mermaidKinds(markdown) : [];
   const missingDiagrams =
@@ -290,7 +354,7 @@ export function checkProductDocumentStructure(
       : [];
   const taskProblems = type === 'tasks' ? productTaskProblems(markdown) : [];
   const formatProblems = type === 'brief' ? briefFormatProblems(markdown) : [];
-  return { missingSections, missingDiagrams, taskProblems, formatProblems };
+  return { missingSections, missingDiagrams, taskProblems, formatProblems, waivedSections: accepted, waiverProblems };
 }
 
 export function productDocumentPassed(check: {
@@ -298,6 +362,7 @@ export function productDocumentPassed(check: {
   missingDiagrams: readonly string[];
   taskProblems?: readonly string[];
   formatProblems?: readonly string[];
+  waiverProblems?: readonly string[];
   contradictions: readonly ProductContradiction[];
 }): boolean {
   return (
@@ -305,6 +370,7 @@ export function productDocumentPassed(check: {
     check.missingDiagrams.length === 0 &&
     (check.taskProblems ?? []).length === 0 &&
     (check.formatProblems ?? []).length === 0 &&
+    (check.waiverProblems ?? []).length === 0 &&
     check.contradictions.every(contradiction => contradiction.resolved)
   );
 }
@@ -357,6 +423,7 @@ export function productDocumentGateFailure(metadata: Metadata, type: ProductDocu
     ...(check.missingDiagrams.length > 0 ? [`missing diagrams: ${check.missingDiagrams.join(', ')}`] : []),
     ...(check.taskProblems && check.taskProblems.length > 0 ? [`task problems: ${check.taskProblems.join('; ')}`] : []),
     ...(check.formatProblems && check.formatProblems.length > 0 ? [`format: ${check.formatProblems.join('; ')}`] : []),
+    ...(check.waiverProblems && check.waiverProblems.length > 0 ? [`waivers: ${check.waiverProblems.join('; ')}`] : []),
     ...(check.contradictions.some(contradiction => !contradiction.resolved)
       ? [
           `unresolved contradictions: ${check.contradictions

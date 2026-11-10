@@ -45,7 +45,7 @@ The Development agents that build each task have the documentation in their work
    - `depends-on` identified, foundation sequenced before it, no cycles;
    - `verify` says how it is proven;
    - the design's consult round and pre-mortem covered what it touches.
-3. **Check** with `factory_check_product_document` (`type: tasks`, the path, and any contradictions with the design or the brief). It verifies the sections and that every task has `role`, `depends-on`, `acceptance` and `verify`, and depends only on tasks that exist. Fix what it reports and run it again. Handing the card to Phases review needs a passing check.
+3. **Check** with `factory_check_product_document` (`type: tasks`, the path, and any contradictions with the design or the brief). It verifies the sections and that every task has `role`, `depends-on`, `acceptance` and `verify`, and depends only on tasks that exist. Fix what it reports and run it again. Handing the card to Phases review needs a passing check. Every section of `tasks.md` is core: none can be waived.
 4. **Agree, with the question tool.** Post the order and the task list in the session (with the tasks marked `gate: human`), then ask: accept the list as it is (recommended), change named tasks, or drop named tasks; plus one question per open point in the design. **Wait**; file nothing before the person accepts.
 5. **File the cards.** For each accepted task, in dependency order, call `factory_create_work_item` with:
    - `title`: `<ID> — <title>`;

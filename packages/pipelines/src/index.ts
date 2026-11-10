@@ -29,10 +29,16 @@ export {
   productDocumentGateFailure,
   productDocumentPassed,
   recordedProductDocumentCheck,
+  waivableProductSections,
   withProductChild,
   withProductDocumentCheck,
 } from './product/documents.ts';
-export type { ProductContradiction, ProductDocumentCheck, ProductDocumentType } from './product/documents.ts';
+export type {
+  ProductContradiction,
+  ProductDocumentCheck,
+  ProductDocumentType,
+  ProductSectionWaiver,
+} from './product/documents.ts';
 export { isWorkBoardPhase, workBoard, workPullRequestCardRejection } from './work/board.ts';
 export type { WorkBoardPhase } from './work/board.ts';
 export {

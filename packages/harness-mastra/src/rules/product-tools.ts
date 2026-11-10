@@ -286,7 +286,7 @@ export function createProductTools(
     factory_check_product_document: createTool({
       id: 'factory_check_product_document',
       description:
-        "Check a product document in the workspace and record the result on this Product card. Types and their files in <docs>/changes/<change>/: enrich = research.md, brief = requirements.md (client-facing), spec = design.md (technical), tasks = tasks.md (phases). It verifies the type's required sections; for the spec, its Mermaid C4, sequence and data-flow diagrams; for tasks, that every task has role, depends-on, acceptance and verify and depends only on tasks that exist. List every contradiction you found between this document and the project's existing documents and decision records; the check passes only when every one is resolved. Sending the brief to Approval needs a passing brief check, moving the card from Spec review to Phases a passing spec check, and handing the phases to Phases review a passing tasks check.",
+        "Check a product document in the workspace and record the result on this Product card. Types and their files in <docs>/changes/<change>/: enrich = research.md, brief = requirements.md (client-facing), spec = design.md (technical), tasks = tasks.md (phases). It verifies the type's required sections; for the spec, its Mermaid C4, sequence and data-flow diagrams; for tasks, that every task has role, depends-on, acceptance and verify and depends only on tasks that exist. List every contradiction you found between this document and the project's existing documents and decision records; the check passes only when every one is resolved. Sending the brief to Approval needs a passing brief check, moving the card from Spec review to Phases a passing spec check, and handing the phases to Phases review a passing tasks check. A default section the person asked to leave out (e.g. the brief's \"Done means\") goes in `waived` with their reason; core sections (the brief's Goal, Use cases, Out of scope, Phases, Estimate) cannot be waived. Waive only what the person asked to drop, never on your own.",
       inputSchema: z
         .object({
           type: z.enum(PRODUCT_DOCUMENT_TYPES).describe('Which document this is.'),
@@ -301,12 +301,24 @@ export function createProductTools(
             )
             .max(100)
             .describe('Contradictions with existing documents and decision records; empty when you found none.'),
+          waived: z
+            .array(
+              z
+                .object({
+                  section: z.string().trim().min(1).max(200).describe('The section label as the check reports it, e.g. "Done means".'),
+                  reason: z.string().trim().min(1).max(1000).describe("The person's reason for dropping it, in their words."),
+                })
+                .strict(),
+            )
+            .max(30)
+            .optional()
+            .describe('Default sections the person asked to leave out of this document. Only what the person asked for.'),
         })
         .strict(),
-      execute: async ({ type, path, contradictions }, execution) => {
+      execute: async ({ type, path, contradictions, waived }, execution) => {
         const { binding } = await currentBinding(execution?.requestContext);
         const markdown = await readDocument(execution?.workspace, path);
-        const structure = checkProductDocumentStructure(type, markdown);
+        const structure = checkProductDocumentStructure(type, markdown, waived ?? []);
         const check: ProductDocumentCheck = {
           type,
           path,

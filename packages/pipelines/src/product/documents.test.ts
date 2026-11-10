@@ -8,6 +8,7 @@ import {
   productDocumentPassed,
   productTaskProblems,
   recordedProductDocumentCheck,
+  waivableProductSections,
   withProductChild,
   withProductDocumentCheck,
 } from './documents.ts';
@@ -150,7 +151,14 @@ const TASKS = `# Loyalty: tasks
 | AC-1 | LY-01, LY-02 |
 `;
 
-const clean = { missingSections: [], missingDiagrams: [], taskProblems: [], formatProblems: [] };
+const clean = {
+  missingSections: [],
+  missingDiagrams: [],
+  taskProblems: [],
+  formatProblems: [],
+  waivedSections: [],
+  waiverProblems: [],
+};
 
 describe('product document checks', () => {
   it('names the team layout files per document type', () => {
@@ -222,6 +230,39 @@ describe('product document checks', () => {
   it('does not require Open questions in the brief: only questions the person left for the client go there', () => {
     const without = BRIEF.replace('## Open questions', 'Open questions');
     expect(checkProductDocumentStructure('brief', without).missingSections).toEqual([]);
+  });
+
+  it('lets the person drop a default section with a reason, never a core one or an unknown name', () => {
+    const noDoneMeans = BRIEF.replace('## Done means', 'Done means');
+    expect(checkProductDocumentStructure('brief', noDoneMeans).missingSections).toEqual(['Done means']);
+    expect(
+      checkProductDocumentStructure('brief', noDoneMeans, [{ section: 'done means', reason: 'The client asked for a shorter brief' }]),
+    ).toMatchObject({
+      missingSections: [],
+      waivedSections: [{ section: 'Done means', reason: 'The client asked for a shorter brief' }],
+      waiverProblems: [],
+    });
+
+    const noGoal = BRIEF.replace('## Goal', 'Goal');
+    const core = checkProductDocumentStructure('brief', noGoal, [{ section: 'Goal', reason: 'obvious' }]);
+    expect(core.missingSections).toEqual(['Goal']);
+    expect(core.waiverProblems).toEqual(['"Goal" is a core section of the brief and cannot be dropped']);
+
+    const unknown = checkProductDocumentStructure('brief', BRIEF, [{ section: 'Acceptance criteria', reason: 'moved' }]);
+    expect(unknown.waiverProblems).toHaveLength(1);
+    expect(unknown.waiverProblems[0]).toContain('"Acceptance criteria" is not a section of the brief');
+    expect(productDocumentPassed({ ...unknown, contradictions: [] })).toBe(false);
+
+    expect(waivableProductSections('brief')).toEqual([
+      'Users',
+      'Edge cases',
+      'Constraints',
+      'Technology',
+      'External dependencies and risks',
+      'Running costs',
+      'Approval gates',
+      'Done means',
+    ]);
   });
 
   it('accepts Ukrainian headings', () => {
