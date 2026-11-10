@@ -38,7 +38,7 @@ export function SidebarNavShowMore({
       )}
       {...props}
     >
-      {expanded ? libText('Show less') : `Show ${foldedCount} more`}
+      {expanded ? libText('Show less') : libText('Show {count} more').replace('{count}', String(foldedCount))}
     </button>
   );
 }
