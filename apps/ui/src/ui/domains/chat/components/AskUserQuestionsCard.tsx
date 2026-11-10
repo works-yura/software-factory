@@ -30,6 +30,7 @@ export function AskUserQuestionsCard({
       customAnswerLabel={t('prompts.ownAnswer')}
       answerLabel={index => t('prompts.ownAnswerFor', { number: index + 1 })}
       isSubmitting={isSubmitting}
+      disabled={!onSubmit}
       {...(result ? { result } : {})}
       onSubmit={answers => onSubmit?.(formatQuestionAnswers(questions, answers))}
     />

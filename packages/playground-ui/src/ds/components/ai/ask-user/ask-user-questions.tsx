@@ -38,6 +38,8 @@ export interface AskUserQuestionsProps
   /** The reply that was sent: the card is then read-only. */
   result?: AskUserResult;
   isSubmitting?: boolean;
+  /** Nothing can answer it here (e.g. the question isn't the one the session waits on): read the options, send nothing. */
+  disabled?: boolean;
   /** The card's caption, e.g. "Questions (3)". */
   label?: string;
   submitLabel?: string;
@@ -121,6 +123,7 @@ export function AskUserQuestions({
   onSubmit,
   result,
   isSubmitting = false,
+  disabled = false,
   label = libText('Questions'),
   submitLabel = libText('Send answers'),
   customAnswerLabel,
@@ -149,7 +152,7 @@ export function AskUserQuestions({
             ) : (
               <QuestionAnswerControls
                 item={item}
-                disabled={isSubmitting}
+                disabled={disabled || isSubmitting}
                 customAnswerLabel={customAnswerLabel}
                 answerLabel={answerLabel(index)}
                 onAnswerChange={answer => setAnswer(index, answer)}
@@ -162,7 +165,7 @@ export function AskUserQuestions({
         ) : (
           <div className="mt-4 flex items-center gap-3 border-t border-border pt-4">
             <AskUserSubmitButton
-              disabled={isSubmitting || !complete}
+              disabled={disabled || isSubmitting || !complete}
               onClick={() => {
                 if (complete) onSubmit(answers.filter((answer): answer is AskUserAnswer => answer !== undefined));
               }}
