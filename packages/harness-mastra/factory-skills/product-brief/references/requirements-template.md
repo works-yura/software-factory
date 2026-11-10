@@ -2,6 +2,8 @@
 
 Path: `<docs>/changes/<change>/requirements.md`. Audience: **the client**, a non-technical person approving what gets built. Every line readable by a non-developer: no file, framework or widget names, no database or field names, no code, no API details, no design tokens or hex.
 
+**Two language versions.** `requirements.md` is in the team's language (Ukrainian for this team); when the client works in another language (find it from how the client writes in `blackbox/sources/`; Alex writes English), also keep `requirements.<lang>.md` (e.g. `requirements.en.md`) — the same brief, translated, section for section, with the English headings. The client gets the client-language file; both are updated in the same round and must say the same thing. Each passes the check.
+
 Write it in the person's language: for this team, **the Ukrainian headings in brackets and Ukrainian labels** (Хто / Хоче / Кроки / Готово, коли / На екрані); the English names are only what the check also accepts. **Required** (the check fails without them; write `None` with a reason rather than dropping one): Goal, Users, Use cases, Edge cases, Acceptance criteria, Not included, Constraints, Technology, Running costs, External dependencies and risks, Phases and estimate, Decisions that need the client's approval, Done means, Open questions.
 
 **Nothing internal in the client's text:** no file paths, no `blackbox/…` sources, no `DEC-nnn` / `OQ-nnn` ids, no estimation formulas or team mode. Sources and working figures go in the change request description (or `research.md`). The rest (Behaviour, Guided flow, What the app remembers, Look and feel) is a menu: keep a section only if it carries weight. Delete the comments.
