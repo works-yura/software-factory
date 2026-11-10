@@ -6,6 +6,7 @@
     "repositories": "Репозиторії",
     "environment": "Середовище",
     "intake": "Надходження задач",
+    "observability": "Логи і креші",
     "board": "Дошки",
     "models": "Харнес",
     "skills": "Скіли",
@@ -1012,5 +1013,61 @@
     "loadFailed": "Не вдалося завантажити версії.",
     "retry": "Повторити",
     "noPackages": "Збірка цього сервера не має списку пакетів. Збірки новішим CLI <code>mastra</code> його містять."
+  },
+  "observability": {
+    "requestFailed": "Запит не вдався (HTTP {{status}}).",
+    "cancel": "Скасувати",
+    "platforms": {
+      "android": "Android",
+      "ios": "iOS",
+      "web": "Web"
+    },
+    "connection": {
+      "title": "Підключення Firebase",
+      "description": "Ключ сервісного акаунта Google Cloud лише для читання. Агенти читають через нього логи сервера (Cloud Logging) і креші застосунку (Crashlytics). Ключ зберігається зашифрованим і ніколи не потрапляє агенту чи в його робочу папку.",
+      "roles": "Створіть у Google Cloud сервісний акаунт з ролями Logs Viewer (roles/logging.viewer) і Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer), увімкніть Firebase Crashlytics API, створіть JSON-ключ і вставте його сюди. Детально: docs/runbooks/firebase-observability.md.",
+      "keyLabel": "JSON-ключ сервісного акаунта",
+      "keyPlaceholder": "{ \"type\": \"service_account\", … }",
+      "pickFile": "Вибрати файл ключа",
+      "save": "Зберегти ключ",
+      "saved": "Ключ збережено",
+      "replace": "Замінити ключ",
+      "disconnect": "Відключити",
+      "account": "Сервісний акаунт",
+      "accountValue": "{{email}} · проєкт {{project}}"
+    },
+    "mapping": {
+      "title": "Проєкт Firebase цієї Factory",
+      "description": "Звідки агенти цієї Factory читають логи й креші. Без проєкту інструментів логів і крешів у сесіях немає.",
+      "projectId": "ID проєкту",
+      "projectIdHint": "Google Cloud / Firebase project id, напр. syncta-prod. Логи читаються з нього.",
+      "projectNumber": "Номер проєкту",
+      "projectNumberHint": "Firebase › Налаштування проєкту › Номер проєкту. Crashlytics адресує проєкт за ним.",
+      "logs": "Логи сервера",
+      "logsHint": "Cloud Functions, Cloud Run, Hosting та інше з Cloud Logging.",
+      "apps": "Застосунки (креші)",
+      "addApp": "Додати застосунок",
+      "noApps": "Немає застосунків: креші не читаються.",
+      "appId": "Firebase App ID {{number}}",
+      "platform": "Платформа застосунку {{number}}",
+      "appLabel": "Назва застосунку {{number}}",
+      "appLabelPlaceholder": "Назва (необов’язково)",
+      "removeApp": "Прибрати застосунок {{number}}",
+      "remove": "Прибрати",
+      "save": "Зберегти",
+      "saved": "Збережено",
+      "turnOff": "Вимкнути для цієї Factory"
+    },
+    "check": {
+      "run": "Перевірити доступ",
+      "running": "Перевіряю…",
+      "needsKey": "Щоб перевірити доступ, спершу збережіть ключ сервісного акаунта.",
+      "results": "Результат перевірки",
+      "ok": "Є доступ",
+      "failed": "Немає доступу",
+      "logs": "Логи проєкту {{target}}",
+      "crashes": "Креші застосунку {{target}}",
+      "missingRole": "Бракує ролі {{role}}."
+    }
   }
 }

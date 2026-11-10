@@ -1801,8 +1801,17 @@ describe('MastraFactory.prepare', () => {
       expect(
         (session.state.get() as { permissionRules?: { tools: Record<string, string> } }).permissionRules?.tools,
       ).toEqual(
-        // The attachment tool is a session tool (offered with an attachment store), allowed the same way.
-        Object.fromEntries([...ALLOWED_TOOLS, 'factory_list_attachments'].map(name => [name, 'allow'])),
+        // The attachment and observability tools are session tools (offered with an attachment store or a
+        // connected source), allowed the same way.
+        Object.fromEntries(
+          [
+            ...ALLOWED_TOOLS,
+            'factory_list_attachments',
+            'observability_query_logs',
+            'observability_crash_issues',
+            'observability_crash_issue',
+          ].map(name => [name, 'allow']),
+        ),
       );
       // The same policy core consults before parking a tool call for approval.
       for (const name of ALLOWED_TOOLS) expect(session.resolveToolApproval(name)).toBe('allow');
