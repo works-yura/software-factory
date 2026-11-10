@@ -11,6 +11,8 @@ Turn the agreed **design** (`design.md`) on this Product card into the backlog t
 
 **Asking the person.** When you need the person's decisions (a batch of gaps, a choice between options), ask with the question tool when the session offers one (`AskUserQuestion` / `ask_user`), as `product-enrich` describes: up to 4 self-contained questions per call, 2–4 options each, your recommended answer first with ` (рекомендовано)` at the end of its label, then wait. Write the questions as text only when no question tool is offered.
 
+Ask only what passes `product-enrich`'s test (the person's call, changes what is built or the estimate, not settled by facts); decide bookkeeping yourself and list it as "Вирішив сам / Assumed" (`skill_read` skill `product-enrich`, section "What deserves a question").
+
 ## Where the documents live
 
 A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. Use the folder this card already used; otherwise the phase instructions' folder; otherwise **stop and ask**. The layout and what you may write are in `references/docs-layout.md` of the `product-enrich` skill (`skill_read` with skill `product-enrich`).

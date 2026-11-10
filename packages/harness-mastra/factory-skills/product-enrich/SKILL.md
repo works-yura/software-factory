@@ -15,11 +15,19 @@ A project keeps **all** its documentation in **one folder** `<docs>` (a document
 
 This phase writes `<docs>/changes/<change>/research.md`, and may add to `<docs>/blackbox/` (new sources, artifacts, timeline rows), `<docs>/GLOSSARY.md` and the decision records. **Read `references/blackbox-format.md` too**: the black box is the project's append-only history and your first source of context. It never edits another feature's documents, `rules/`, `bugs/` or `audits/`.
 
-`<change>`: this card's change folder, `<YYYY-MM-DD>-<slug>` (the date it starts, a stable kebab-case slug), the same for every document of the card. Agree it with the person in the first round, together with the **areas** it touches (`features/<area>/`).
+`<change>`: this card's change folder, `<YYYY-MM-DD>-<slug>` (the date it starts, a stable kebab-case slug), the same for every document of the card. **Decide it yourself**, together with the **areas** it touches (`features/<area>/`), and state both in your opening summary; the person corrects them if they want. Never spend a question on them.
 
 ## The interview: a design tree, worked in rounds
 
 Map the request as a **design tree**: every decision branches into the decisions that hang off it ("who can redeem points" hangs off "are points per user or per account").
+
+**What deserves a question.** Ask only what meets all three:
+
+1. **It is the person's call**: product, scope, priority, money, timing, the client, or a trade-off between options that are all technically sound.
+2. **The answer changes what gets built or the estimate**: say in the question what changes with each option (effort, cost, what the user sees, risk).
+3. **You cannot settle it from facts**: the code, the documents, `rules/`, live decisions in `blackbox/registers/`, or the request itself.
+
+Never ask about bookkeeping or anything you can decide: folder and file names, which areas or documents a change touches, document structure, your own process, or confirmations of what the request already says. Decide those, and list them in one short **"Вирішив сам / Assumed"** note before the questions, so the person can overrule any of them in their reply. Ask in the person's language, plainly: a business question carries no file paths or code names; an engineering question names the code only when that is the decision. Two sharp questions beat six obvious ones; if the frontier holds only obvious items, decide them, note them, and move on.
 
 Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask *now* without guessing at answers you haven't heard. Ask the whole frontier in one round.
 
@@ -79,7 +87,7 @@ Always start from `<docs>/README.md`, `repositories/` and `rules/` (the rules ar
 
 ## Steps
 
-1. **Read the card.** Title, comments, linked issue or files, and `<docs>/blackbox/` if the request came as a document (add any file the person hands you as a new dated file in `blackbox/sources/`, or `blackbox/artifacts/` with its `MANIFEST.md` row, unchanged; append a `TIMELINE.md` row). Restate in 3–5 lines what is asked, propose the `<feature>` slug, and ask the person to confirm both.
+1. **Read the card.** Title, comments, linked issue or files, and `<docs>/blackbox/` if the request came as a document (add any file the person hands you as a new dated file in `blackbox/sources/`, or `blackbox/artifacts/` with its `MANIFEST.md` row, unchanged; append a `TIMELINE.md` row). Restate in 3–5 lines what is asked and state the change folder and areas you chose; then the first round, with only the questions that pass the test above.
 2. **Interview** in rounds, as above, sharpening the language and researching as you go, until the frontier is empty and the person confirms.
 3. **Write** `<docs>/changes/<change>/research.md` from `references/research-template.md`, in the person's language (Ukrainian by default for this team). Keep the template's headings, or their Ukrainian equivalents listed there, so the check recognises them.
 4. **Check** it with `factory_check_product_document` (`type: enrich`, the path, and any contradictions with existing documents and decision records, each with whether it is resolved). Fix what it reports and run it again.
