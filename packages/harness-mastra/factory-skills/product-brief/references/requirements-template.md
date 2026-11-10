@@ -58,7 +58,7 @@ Write it in the person's language: for this team, **the Ukrainian headings in br
 - <limits on the product itself: platforms, languages, accessibility, offline, data residency, "no paid third-party service without approval", nothing secret stored in the app. Not how we work — that goes to How we deliver.>
 
 ## How we deliver  (Процес роботи)
-<!-- How the work is shown and accepted, not a limit on the product: e.g. "every change goes to staging first, you check it there, and only then to prod"; how often you see progress; who accepts. Omit if nothing beyond the usual. -->
+<!-- How the work is shown and accepted, not a limit on the product. Never a duration for the client's own checks or approvals — we don't estimate the client's time: e.g. "every change goes to staging first, you check it there, and only then to prod"; how often you see progress; who accepts. Omit if nothing beyond the usual. -->
 
 ## Technology  (Технології)
 <!-- At the client's level: platforms, which existing systems it builds on, any new vendor or paid service and what it means for them (cost, lock-in). No architecture. -->
@@ -83,7 +83,7 @@ Write it in the person's language: for this team, **the Ukrainian headings in br
 |---|---|---|---|
 | 1 | … | <one committed range, e.g. "30–46 год"> | <e.g. "~1,5–2 тижні; email — не раніше ніж через 1–2 дні після доступу до DNS"> |
 
-<!-- Only the table. No paragraphs under it: no "Календар: … weeks of one developer at N hours a week", no team size or capacity, no "На чому тримається оцінка" list. The calendar column says it in one short cell. An assumption that is really scope ("no store apps", "one language") goes to Межі оцінки; everything else (working figures — optimistic / most likely / pessimistic, PERT, P75, team mode, capacity, assumptions) goes in research.md or the change request description, never in the brief. -->
+<!-- Only the table. No paragraphs under it: no "Календар: … weeks of one developer at N hours a week", no team size or capacity, no "На чому тримається оцінка" list. The calendar column says it in one short cell: our work plus third-party waits only, never the client's review or approval time (dates count from the client's confirmation). An assumption that is really scope ("no store apps", "one language") goes to Межі оцінки; everything else (working figures — optimistic / most likely / pessimistic, PERT, P75, team mode, capacity, assumptions) goes in research.md or the change request description, never in the brief. -->
 
 ## Decisions that need the client's approval  (Рішення, що потребують погодження клієнта)
 <!-- The gates the team must not pass alone: switching on a paid service, sending real emails or payments, publishing to the stores, touching real customer data, deleting or migrating data, declaring the release final. "None" if none. -->
