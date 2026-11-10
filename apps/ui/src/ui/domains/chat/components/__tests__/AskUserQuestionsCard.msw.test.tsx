@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { askUserQuestions, AskUserQuestionsCard } from '../AskUserQuestionsCard';
+import { askUserQuestions } from '../../services/askUserQuestions';
+import { AskUserQuestionsCard } from '../AskUserQuestionsCard';
 import { SuspensionCard } from '../TranscriptPromptCards';
 
 const payload = {
@@ -34,7 +35,7 @@ describe('AskUserQuestionsCard', () => {
     // The recommendation starts chosen, shown without its mark.
     const recommended = screen.getByRole('radio', { name: /Push \+ email/ });
     expect(recommended).toBeChecked();
-    expect(screen.getByText('recommended')).toBeInTheDocument();
+    expect(screen.getByText('Recommended')).toBeInTheDocument();
     expect(screen.queryByText('Push + email (рекомендовано)')).toBeNull();
 
     const send = screen.getByRole('button', { name: 'Send answers' });

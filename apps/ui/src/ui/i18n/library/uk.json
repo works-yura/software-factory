@@ -376,5 +376,10 @@
   "Unpinned": "Відкріплено",
   "Version": "Версія",
   "View": "Вигляд",
-  "Parent": "Батьківська"
+  "Parent": "Батьківська",
+  "Recommended": "рекомендовано",
+  "Answer every question": "Дайте відповідь на кожне питання",
+  "Questions": "Питання",
+  "Send answers": "Надіслати відповіді",
+  "Your answer": "Ваша відповідь"
 }

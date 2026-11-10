@@ -10,7 +10,8 @@ import { useTranslation } from 'react-i18next';
 
 import type { ApprovalPrompt, SubagentEntry, SuspensionPrompt } from '../services/transcript';
 import { AskUserPromptAnswers } from './AskUserPromptAnswers';
-import { AskUserQuestionsCard, askUserQuestions } from './AskUserQuestionsCard';
+import { askUserQuestions } from '../services/askUserQuestions';
+import { AskUserQuestionsCard } from './AskUserQuestionsCard';
 import { SubmitPlanCard } from './SubmitPlanCard';
 
 const promptCardSuspension =

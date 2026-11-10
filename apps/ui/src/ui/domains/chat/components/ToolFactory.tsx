@@ -8,7 +8,8 @@ import type { ReactNode } from 'react';
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { SubmitPlanCard } from './SubmitPlanCard';
 import { translator } from '../../../i18n/t';
-import { AskUserQuestionsCard, askUserQuestions } from './AskUserQuestionsCard';
+import { askUserQuestions } from '../services/askUserQuestions';
+import { AskUserQuestionsCard } from './AskUserQuestionsCard';
 
 const tk = translator('chat');
 
