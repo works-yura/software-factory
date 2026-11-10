@@ -13,6 +13,14 @@ Turn the agreed **design** (`design.md`) on this Product card into the backlog t
 
 **What to ask.** Only what is the person's call, changes what is built or the estimate, and cannot be settled from the brief, the design, the code or live decisions. Do bookkeeping silently (task ids, file layout, the change's index row). Every fact in a question is one you checked in this session.
 
+**Answering the person's notes.** When a message carries notes on passages (a numbered list of quotes, each with the person's note under it — what they send after selecting text in a document or in the chat), answer **every note by its number**, none skipped, before anything else:
+
+> **1** «<short quote>» → змінив: <what, in which section of which document>.
+> **2** «<short quote>» → не змінював, бо <reason> (or: a question to the person through the question tool, when the note needs their decision).
+> **3** «<short quote>» → прибрав <what>.
+
+Make the changes first, then answer. Never skip a note or answer them in one summary; if you disagree with a note, say why instead of quietly not doing it. End with the link to the changed document (workspace-relative path, so it opens in the Files panel) and say the exact changes are in the **Зміни** tab of that panel.
+
 ## Where the documents live
 
 A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. Use the folder this card already used; otherwise the phase instructions' folder; otherwise ask once with the question tool. The layout and what you may write are in `references/docs-layout.md` of the `product-enrich` skill (`skill_read` with skill `product-enrich`; in Claude Code `mcp__factory__skill_read`).

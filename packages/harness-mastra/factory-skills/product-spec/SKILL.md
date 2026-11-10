@@ -15,6 +15,14 @@ Turn the approved **brief** (`requirements.md`) on this Product card into **one 
 
 **Open questions.** Before the hand-off, re-read *Open questions*: anything the person can decide goes back to them as a question round now; only what nobody here can answer stays, each with who answers it.
 
+**Answering the person's notes.** When a message carries notes on passages (a numbered list of quotes, each with the person's note under it — what they send after selecting text in a document or in the chat), answer **every note by its number**, none skipped, before anything else:
+
+> **1** «<short quote>» → змінив: <what, in which section of which document>.
+> **2** «<short quote>» → не змінював, бо <reason> (or: a question to the person through the question tool, when the note needs their decision).
+> **3** «<short quote>» → прибрав <what>.
+
+Make the changes first, then answer. Never skip a note or answer them in one summary; if you disagree with a note, say why instead of quietly not doing it. End with the link to the changed document (workspace-relative path, so it opens in the Files panel) and say the exact changes are in the **Зміни** tab of that panel.
+
 ## Where the documents live
 
 A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**: this one design covers every component, so the links between server, mobile and web hold in one place. Use the folder this card already used, or the one the phase instructions name; otherwise follow `references/docs-layout.md` in the `product-enrich` skill (`skill_read` with skill `product-enrich`; in Claude Code `mcp__factory__skill_read`): exactly one found → use it without asking; none or several → ask once with the question tool.
