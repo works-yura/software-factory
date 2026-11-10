@@ -13,7 +13,7 @@ Turn the agreed **design** (`design.md`) on this Product card into the backlog t
 
 A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**. Use the folder this card already used; otherwise the phase instructions' folder; otherwise **stop and ask**. The layout and what you may write are in `references/docs-layout.md` of the `product-enrich` skill (`skill_read` with skill `product-enrich`).
 
-This phase reads `<docs>/specify/<feature>/requirements.md` (use cases and acceptance criteria) and `design.md` (contract, data, shared resources, test plan, the answers to `<docs>/rules/`), and writes `<docs>/specify/<feature>/tasks.md` and the feature's row in `<docs>/specify/INDEX.md`. It never edits `features/`, `rules/`, `requests/`, `bugs/` or `audits/`.
+This phase reads `<docs>/specify/<feature>/requirements.md` (use cases and acceptance criteria) and `design.md` (contract, data, shared resources, test plan, the answers to `<docs>/rules/`), and writes `<docs>/specify/<feature>/tasks.md` and the feature's row in `<docs>/specify/INDEX.md`. It never edits `features/`, `rules/`, `bugs/` or `audits/`.
 
 `<docs>/specify/` is the **source of truth**. Development cards are projections of `tasks.md`, one card per task, each linking back to `tasks.md#<task-id>`. When the plan changes, it changes here first.
 

@@ -1,6 +1,6 @@
 # feedback/round-<n>.md template (traced client remarks)
 
-Path: `<docs>/specify/<feature>/feedback/round-<n>.md`. The archived original is `<docs>/raw/feedback-<feature>-round-<n>.md`.
+Path: `<docs>/specify/<feature>/feedback/round-<n>.md`. The archived original is `<docs>/raw/<YYYY-MM-DD>-<feature>-feedback-round-<n>.md`.
 
 Rules:
 
@@ -13,7 +13,7 @@ Rules:
 ````markdown
 # <Feature>: client remarks, round <n>
 
-Source: <docs/raw/feedback-<feature>-round-<n>.md> · received <date> · <OCR'd / transcribed, if so>
+Source: <docs/raw/<YYYY-MM-DD>-<feature>-feedback-round-<n>.md> · received <date> · <OCR'd / transcribed, if so>
 
 ## Ledger
 | Id | Title | Status |

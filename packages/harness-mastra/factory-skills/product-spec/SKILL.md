@@ -13,7 +13,7 @@ Turn the approved **brief** (`requirements.md`) on this Product card into **one 
 
 A project keeps **all** its documentation in **one folder** `<docs>` (a documentation repository, or one folder in a monorepo), **never split per component**: this one design covers every component, so the links between server, mobile and web hold in one place. Use the folder this card already used, or the one the phase instructions name; otherwise follow `references/docs-layout.md` in the `product-enrich` skill (`skill_read` with skill `product-enrich`) to find it and confirm it with the person; if there is none or several, **stop and ask**.
 
-This phase reads `<docs>/specify/<feature>/requirements.md` and `research.md`, writes `<docs>/specify/<feature>/design.md`, and may add decision records (`adr/`, or the project's own decisions file) and glossary terms. It never edits `features/`, `rules/`, `requests/`, `bugs/` or `audits/`.
+This phase reads `<docs>/specify/<feature>/requirements.md` and `research.md`, writes `<docs>/specify/<feature>/design.md`, and may add decision records (`adr/`, or the project's own decisions file) and glossary terms. It never edits `features/`, `rules/`, `bugs/` or `audits/`.
 
 ## Inputs: read all of it before writing
 

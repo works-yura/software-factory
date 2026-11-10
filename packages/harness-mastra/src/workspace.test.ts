@@ -477,10 +477,12 @@ describe('bundled Factory skill assets', () => {
       expect(prose).toMatch(/never edits?.*`bugs\/`/i);
     }
     const layout = await fs.readFile(path.join(assetRoot, 'product-enrich', 'references', 'docs-layout.md'), 'utf8');
-    for (const part of ['README.md', 'repositories/', 'features/', 'rules/', 'requests/', 'bugs/', 'audits/', 'raw/']) {
+    for (const part of ['README.md', 'repositories/', 'features/', 'rules/', 'bugs/', 'audits/', 'raw/']) {
       expect(layout).toContain(part);
     }
+    // Bugs and QA rounds share bugs/; all client input lives in raw/.
     expect(layout).toContain('qa-round');
+    expect(layout).toContain('raw/<YYYY-MM-DD>-<topic>.md');
     const read = (skillName: string, file: string) => fs.readFile(path.join(assetRoot, skillName, file), 'utf8');
     // Each skill's templates and reference pages ship with it.
     for (const [skillName, files] of [
