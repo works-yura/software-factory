@@ -233,6 +233,7 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | `2b3e577135` (#29472) | після кількох перевстановлень GitHub App репозиторії не переносяться на мертву інсталяцію: відновлення бере ту, що справді бачить репозиторій | `integration-github/src/platform/integration{,.test}.ts` | — |
 | `b90afb8319` (#29481) | аудит переміщень на власних дошках записує `from` (фазу, з якої картка пішла), а коміт у ту саму фазу не пише подію | `runtime/src/transition-service{,.test}.ts` | У тесті реєстр дошок без `includeDefaultBoards`: `createBoardRegistry` з `@factory/core` не додає вбудованих дошок. |
 | `81b0b54c1f` (#29824) | токен GitHub у пісочниці оновлюється до того, як спливе: встановлений токен інсталяції старший за 45 хв перевипускається при reconcile і перепідключенні, PAT організації не чіпається | `harness-mastra/src/workspace{,.test}.ts`, `integration-github/src/{session-subscriptions{,.test},token-refresh}.ts` | — |
+| `83199b0695` (#29857) | опис інструмента `factory_update_work_item` більше не обіцяє попередньо схвалити план | `harness-mastra/src/tools/{index,work-item-tools{,.test}}.ts` | — |
 
 ### Не перенесено з upstream
 
