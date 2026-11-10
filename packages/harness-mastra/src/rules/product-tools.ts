@@ -15,14 +15,18 @@ import type { BoardRegistry } from '@factory/core';
 import type { AuditRecorder, CommentsDomain } from '@factory/feed';
 import type { IntegrationTools } from '@factory/integrations';
 import {
+  changeFolderOf,
   checkProductDocumentStructure,
+  PRODUCT_CHANGE_KEY,
   PRODUCT_CHILDREN_KEY,
   PRODUCT_CONTEXT,
   PRODUCT_DOC_CHECKS_KEY,
+  PRODUCT_DOCS_SYNC_KEY,
   PRODUCT_DOCUMENT_TYPES,
   productBoard,
   productChildWorkItemIds,
   productDocumentPassed,
+  recordedProductDocumentCheck,
   withProductChild,
   withProductDocumentCheck,
 } from '@factory/pipelines';
@@ -140,7 +144,7 @@ export function createProductTools(
     factory_create_work_item: createTool({
       id: 'factory_create_work_item',
       description:
-        "File one agreed phase as a card on the Development (Work) board, under this Product card: the new card's parent is this card, and this card lists it. Filing the same title again under this card returns the existing card instead of a duplicate. Name the repository the phase's code lives in.",
+        "File one agreed phase as a card on the Development (Work) board, under this Product card: the new card's parent is this card, this card lists it, and the card records this change's folder. Filing the same title again under this card returns the existing card instead of a duplicate. Name the repository the phase's code lives in. File the change's docs-sync task last, with `docsSync: true` and the documentation repository: Development merges the change's delta into features/ on it once the other cards are merged.",
       inputSchema: z
         .object({
           title: z.string().trim().min(1).max(512).describe('Short title, as it should read on the card.'),
@@ -153,9 +157,15 @@ export function createProductTools(
               'What the phase delivers, its acceptance criteria, dependencies, and links to the exact spec sections it implements; posted as the first comment.',
             ),
           repository: repositorySchema.describe('The repository linked to this Factory the phase changes, as owner/name.'),
+          docsSync: z
+            .boolean()
+            .optional()
+            .describe(
+              "True only for the change's docs-sync task, filed last in the documentation repository: Development runs the docs skill on it to merge the change's delta into features/ and archive the change.",
+            ),
         })
         .strict(),
-      execute: async ({ title, brief, repository }, execution) => {
+      execute: async ({ title, brief, repository, docsSync }, execution) => {
         const { binding, item: parent } = await currentBinding(execution?.requestContext);
         const project = { orgId: binding.orgId, factoryProjectId: binding.factoryProjectId };
         const existingIds = productChildWorkItemIds(parent.metadata);
@@ -164,6 +174,15 @@ export function createProductTools(
           if (child && child.title.trim().toLowerCase() === title.toLowerCase()) {
             return { id: child.id, title: child.title, stages: child.stages, reused: true };
           }
+        }
+        // The change folder, from the change's own recorded documents: the docs-sync task needs it, every task links it.
+        const recorded =
+          recordedProductDocumentCheck(parent.metadata, 'tasks') ?? recordedProductDocumentCheck(parent.metadata, 'spec');
+        const change = recorded ? changeFolderOf(recorded.path) : undefined;
+        if (docsSync === true && change === undefined) {
+          throw new Error(
+            "The docs-sync task needs the change folder: run factory_check_product_document on this change's tasks.md first.",
+          );
         }
         await requireLinkedRepository({
           sessions: options.product.sessions,
@@ -192,7 +211,16 @@ export function createProductTools(
             ...project,
             userId: session.userId,
             // Phases are Development work: the card goes to Work's first phase, not where intake routes send new cards.
-            input: { title, board: 'work', parentWorkItemId: parent.id, metadata: { repository } },
+            input: {
+              title,
+              board: 'work',
+              parentWorkItemId: parent.id,
+              metadata: {
+                repository,
+                ...(change !== undefined ? { [PRODUCT_CHANGE_KEY]: change } : {}),
+                ...(docsSync === true ? { [PRODUCT_DOCS_SYNC_KEY]: true } : {}),
+              },
+            },
           });
         } catch (error) {
           if (error instanceof WorkItemRelationError) throw new Error(`The parent was refused: ${error.message}`);

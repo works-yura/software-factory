@@ -29,6 +29,16 @@ Skip everything tied to a PR or MR: no change-request reads, no waiting for revi
 2. Record the full head SHA (`git rev-parse HEAD`). That is the only head you review and test. Determine the base with `git merge-base HEAD origin/<default branch>` and review `base...HEAD`. When the workspace holds several repositories, do this in every repository whose branch has commits beyond its base: the work is one change across them, so review and test it together.
 3. If the factory-phase arguments say this is a later round, read the previous findings from the work item and confirm each one is fixed on this head before looking for new problems.
 
+## Project documentation
+
+Read `references/project-docs.md` of the `factory-docs-sync` skill (`skill_read`) and check the docs side of the work like code:
+
+- The work keeps `features/<area>/design.md` true, or every difference is a deviation the builder can report; a card filed by a Product change must not edit `features/`, `changes/` or any other docs outside its bug record.
+- A bug fix carries its record `bugs/<id>.md` with its fix and verification sections and a `bugs/README.md` row, on the branch of the docs repository; no other bug's file changed.
+- The work follows the project's `rules/` and `bugs/INVARIANTS.md`.
+
+Missing or wrong docs work is a requested change like any other. If the project has no docs folder, note it in the report.
+
 ## Report
 
 Write the findings argument of the verdict call as Markdown the builder (on request changes) or the change request body (on approve) can use directly:

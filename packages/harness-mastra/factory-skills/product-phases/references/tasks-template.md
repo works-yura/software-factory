@@ -44,12 +44,23 @@ revision: 1 · status: draft | approved | in-progress | shipped · design: desig
 - design: design.md#api-contract, design.md#ui
 - verify: widget test per state (empty, loading, error, declined); golden for the paywall
 
+### SB-DOCS — Merge the change into features/
+- role: docs
+- repository: acme/docs
+- depends-on: SB-01, SB-02, SB-03
+- touches: features/subscriptions/design.md, changes/archive/
+- acceptance: the truth describes what was built: every ADDED and MODIFIED requirement merged (or its deviation), every REMOVED one gone; the change archived
+- design: design.md#affected-areas
+- verify: the docs-sync plan lists every requirement of the delta and the deviations from the tasks' change requests
+
 ## Coverage check
 | AC | Task(s) |
 |---|---|
 | AC-1 | SB-02, SB-03 |
 | AC-2 | SB-01 |
 Every acceptance criterion has at least one task. Every task has at least one criterion, or is a foundation / docs task and says so.
+
+The **last task is always the docs-sync task** (`<prefix>-DOCS`, `role: docs`, in the documentation repository), depending on every other task: Development merges the change's delta into `features/<area>/design.md` on it, from what was actually built, and archives the change. It is filed with `docsSync: true`.
 
 ## Superseded
 <On amend: retired tasks with `superseded-by: <id>`. Never delete a task that has shipped.>

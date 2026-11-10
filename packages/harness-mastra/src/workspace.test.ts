@@ -392,6 +392,7 @@ describe('bundled Factory skill assets', () => {
     expect(assetNames).toEqual([
       'configure-factory-rules',
       'factory-complete-issue',
+      'factory-docs-sync',
       'factory-gitlab-rereview',
       'factory-gitlab-review',
       'factory-plan',
@@ -407,6 +408,44 @@ describe('bundled Factory skill assets', () => {
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
+  });
+
+  it('bundles the Development docs skill: reading the truth, the bug record and the change merge', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const read = (skill: string, file: string) => fs.readFile(path.join(assetRoot, skill, file), 'utf8');
+    const sync = await read('factory-docs-sync', 'SKILL.md');
+    // One merge per change, from what was built, through a reviewed change request.
+    expect(sync).toContain('Mode: plan');
+    expect(sync).toContain('Mode: apply');
+    expect(sync).toMatch(/ADDED.*appended/);
+    expect(sync).toMatch(/MODIFIED.*replaced/);
+    expect(sync).toMatch(/REMOVED.*deleted/);
+    expect(sync).toContain('## Deviations from design');
+    expect(sync).toContain('changes/archive/');
+    expect(sync).toMatch(/Never merge the change request yourself/);
+    const docs = await read('factory-docs-sync', 'references/project-docs.md');
+    for (const heading of [
+      'Симптом',
+      'Причина',
+      'Як знайшли',
+      'Що не встановлено',
+      'Варіанти рішення',
+      'Виправлення',
+      'Перевірка після виправлення',
+    ]) {
+      expect(docs).toContain(heading);
+    }
+    // No silent fallback: a missing docs folder is reported, never assumed.
+    expect(docs).toMatch(/say so in your handoff/i);
+    expect(docs).toMatch(/never edit another bug's file/);
+    // The Work skills point at it; triage starts a confirmed bug's record.
+    for (const skill of ['factory-plan', 'factory-self-review', 'factory-triage']) {
+      expect(await read(skill, 'SKILL.md')).toContain('references/project-docs.md');
+    }
+    expect(await read('factory-triage', 'SKILL.md')).toContain('## Bug Record');
+    // Product files the docs-sync task last.
+    expect(await read('product-phases', 'SKILL.md')).toContain('docsSync: true');
+    expect(await read('product-phases', 'references/tasks-template.md')).toContain('role: docs');
   });
 
   it('bundles GitLab review instructions that use the scoped provider tools', async () => {
@@ -485,9 +524,10 @@ describe('bundled Factory skill assets', () => {
     expect(layout).toContain('qa-round');
     expect(layout).toContain('blackbox-format.md');
     // One truth per area in features/; a Product card is a change in changes/ whose design is a delta,
-    // merged into the area and archived at the end of Development (a step not built yet).
+    // merged into the area and archived at the end of Development by the change's docs-sync task.
     expect(layout).toMatch(/ADDED.*MODIFIED.*REMOVED/);
-    expect(layout).toMatch(/TODO/);
+    expect(layout).toContain('factory-docs-sync');
+    expect(layout).toContain('docsSync: true');
     expect(layout).toContain('area-baseline.md');
     const blackbox = await fs.readFile(
       path.join(assetRoot, 'product-enrich', 'references', 'blackbox-format.md'),
@@ -3554,6 +3594,7 @@ describe('FactorySkillSource layering', () => {
     expect(names).toEqual([
       'configure-factory-rules',
       'factory-complete-issue',
+      'factory-docs-sync',
       'factory-gitlab-rereview',
       'factory-gitlab-review',
       'factory-plan',
@@ -3579,6 +3620,7 @@ describe('FactorySkillSource layering', () => {
     expect(hiddenNames).toEqual([
       'configure-factory-rules',
       'factory-complete-issue',
+      'factory-docs-sync',
       'factory-plan',
       'factory-triage',
       'product-brief',

@@ -1,7 +1,13 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { PRODUCT_CHILDREN_KEY, PRODUCT_DOC_CHECKS_KEY } from '@factory/pipelines';
+import {
+  PRODUCT_CHANGE_KEY,
+  PRODUCT_CHILDREN_KEY,
+  PRODUCT_DOC_CHECKS_KEY,
+  PRODUCT_DOCS_SYNC_KEY,
+  withProductDocumentCheck,
+} from '@factory/pipelines';
 import type { WorkItemsStorage } from '@factory/store';
 import { createBoardRegistry, createFactoryStorageForTests, FactoryTransitionService } from '@factory/testing';
 import type { ProductToolDependencies } from './product-tools.ts';
@@ -159,6 +165,51 @@ describe('Product session tools', () => {
     await expect(
       create.execute({ ...input, title: 'Points screen', repository: 'acme/mobile' }, { requestContext: context }),
     ).rejects.toThrow('acme/mobile is not linked to this Factory');
+  });
+
+  it("files the docs-sync task with the change folder, and refuses it before the change's tasks were checked", async () => {
+    const { tools, context, storage, prepared } = await setup({ stage: 'phases' });
+    const create = tools.factory_create_work_item as ExecutableTool;
+    const docsSync = { title: 'LY-DOCS — Merge into features', brief: 'Cards: LY-01.', repository: 'acme/api', docsSync: true };
+
+    await expect(create.execute(docsSync, { requestContext: context })).rejects.toThrow(
+      'run factory_check_product_document',
+    );
+
+    const card = (await storage.get({ orgId: 'org-1', id: prepared.item.id }))!;
+    await storage.update({
+      orgId: 'org-1',
+      id: card.id,
+      userId: 'user-1',
+      expectedRevision: card.revision,
+      patch: {
+        metadata: withProductDocumentCheck(card.metadata, {
+          type: 'tasks',
+          path: 'docs/changes/2026-11-10-loyalty/tasks.md',
+          passed: true,
+          sha256: 'a'.repeat(64),
+          checkedAt: new Date().toISOString(),
+          missingSections: [],
+          missingDiagrams: [],
+          taskProblems: [],
+          contradictions: [],
+        } as never),
+      },
+    } as never);
+
+    const task = (await create.execute(
+      { title: 'LY-01 — Points API', brief: 'Implements tasks.md#ly-01.', repository: 'acme/api' },
+      { requestContext: context },
+    )) as { id: string };
+    expect((await storage.get({ orgId: 'org-1', id: task.id }))!.metadata).toEqual({
+      repository: 'acme/api',
+      [PRODUCT_CHANGE_KEY]: 'docs/changes/2026-11-10-loyalty',
+    });
+    const sync = (await create.execute(docsSync, { requestContext: context })) as { id: string };
+    expect((await storage.get({ orgId: 'org-1', id: sync.id }))!.metadata).toMatchObject({
+      [PRODUCT_CHANGE_KEY]: 'docs/changes/2026-11-10-loyalty',
+      [PRODUCT_DOCS_SYNC_KEY]: true,
+    });
   });
 
   it('records the spec check on the card, and the gate lets the card on to Phases only once it passed', async () => {

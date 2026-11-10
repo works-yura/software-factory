@@ -35,6 +35,14 @@ export {
 export type { ProductContradiction, ProductDocumentCheck, ProductDocumentType } from './product/documents.ts';
 export { isWorkBoardPhase, workBoard, workPullRequestCardRejection } from './work/board.ts';
 export type { WorkBoardPhase } from './work/board.ts';
+export {
+  changeFolderOf,
+  DOCS_SKILL,
+  isDocsSyncCard,
+  PRODUCT_CHANGE_KEY,
+  PRODUCT_DOCS_SYNC_KEY,
+  productChangeOf,
+} from './work/docs.ts';
 export { workLaneForRole, workStageCarries } from './work/legacy-plan-role.ts';
 export { SELF_REVIEW_ROUND_LIMIT } from './work/phase-rules.ts';
 export { openApprovedChangeRequest } from './work/tool-rules.ts';

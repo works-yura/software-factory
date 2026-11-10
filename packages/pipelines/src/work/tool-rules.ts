@@ -59,6 +59,11 @@ export function openApprovedChangeRequest(context: FactoryToolResultRuleContext)
       `Self-review approved this work${head ? ` at branch head ${head}` : ''}. Open the ${changeRequest} now from that ` +
       `exact head; do not push new commits first (a new head needs another self-review). In the ${changeRequest} ` +
       "body, include a short self-review summary and the self-review's test report." +
+      // A Product change's task reports where it left the change's design; the docs-sync task merges from that.
+      (context.item.parentWorkItemId !== null
+        ? ' Also include a `## Deviations from design` section: each place the implementation differs from the ' +
+          "Product change's design and why, or `None`."
+        : '') +
       (summary ? `\n\nSelf-review report:\n${summary}` : '') +
       `\n\n${untrustedSourceReference(context.item)}`,
   } as const;

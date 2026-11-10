@@ -51,6 +51,8 @@ The Development agents that build each task have the documentation in their work
    The card lands in Development › Intake, its parent is this Product card, and this card lists it. Filing the same title again returns the existing card, so a retry never duplicates. If a call fails, report it and continue with the others; do not retry blindly.
 
    > **HUMAN-GATE:** if the implementation needs an architectural change, touches modules outside this card's scope, or needs a destructive or irreversible action, stop and hand back to a person with a concrete proposal. Do not expand the scope or loop. The plan lives in `docs/features/`: change it there first.
+
+   **Last, the docs-sync task** (`<prefix>-DOCS`, depending on every other task): file it with `docsSync: true` and the documentation repository as `repository`, and a brief that lists every filed card in order (title, task id, repository, card link). Development merges the change's delta into `features/<area>/design.md` on it, from what the other cards actually built, and archives the change; a person starts it once the others are merged. The tool records this change's folder on every card from your passing tasks check, so run that check before filing.
 6. **Record.** In `tasks.md` set `status: approved` and add each filed card under its task (`- card: <link>`); update the change's row in `<docs>/features/INDEX.md` (status `phased`, foundation resources). Run the check again, commit (`docs(tasks): <feature>`), and push with `source_control_push_branch`; the card's change request picks it up.
 7. **Hand off.** Post the filed cards in order in the session, then move this card to `phases-review` with `factory_transition_work_item`. Done needs at least one filed card.
 

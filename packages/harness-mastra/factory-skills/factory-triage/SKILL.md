@@ -179,6 +179,10 @@ Post the same handoff as your final conversation message. Take the current stage
 
 The transition is governed by the server's rules. An `approval_required` rejection means a maintainer must move the card or start the run from the Factory UI; never retry it toward Planning or Execute. For other initial-stage rejections, read the stated reason, address it (re-check the revision from the latest `factory-phase` signal or `factory_bound_work_item`, adjust the verdict if the rejection contests it), and retry once corrected. Once the transition succeeds, report the verdict and stop.
 
+## Bug Record
+
+For a **confirmed bug** (`Route: Plan fix`), before the terminal transition, start its record in the project's documentation as `references/project-docs.md` of the `factory-docs-sync` skill says (`skill_read`): find the docs folder; write `bugs/<id>.md` with the header, Symptom, Cause, How it was found, Not established and Options from this triage, **Status:** `investigating`; commit it on the card's branch in the docs repository (or docs folder) and push it with `source_control_push_branch` (`repository` set to it), so the fixing build completes it. Run the Repository Guard of `factory-plan` on that repository before the first edit and before the push. Write nothing else in the docs, and open no change request: the build opens it with the fix. If the project has no docs folder, say so in the handoff's Assumptions and skip this step. A refresh (`Route: No transition / refresh`) updates the record only if this card's branch already has it.
+
 ## Behavior Rules
 
 - **Trace, don't guess.** Follow actual code paths and git history before concluding anything.

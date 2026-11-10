@@ -28,6 +28,10 @@ When the system prompt lists **Workspace repositories** instead, the working dir
 
 Repeat this check immediately before every push; do not rely on an earlier check because the active directory or checkout may have changed.
 
+## Project Documentation
+
+Before Phase 1, read the project's documentation as `references/project-docs.md` of the `factory-docs-sync` skill says (`skill_read`): find the docs folder, then read `features/<area>/design.md` for every area the work touches, `rules/`, and `bugs/INVARIANTS.md` when they exist. For a card filed by a Product change, also read the change's `design.md` sections and the `tasks.md` task the card links: they are the requirements this plan implements. Plan against that truth: a step that would change an area's behaviour is either what the change asks for, or a deviation the builder will report in its change request — never an edit to `features/` in this card. Plan the bug record (`bugs/<id>.md`) when the item is a bug. If no docs folder exists, say so under **Assumptions**.
+
 ## Phase 1: Verify the Understanding
 
 Whether inherited from this conversation or freshly established:

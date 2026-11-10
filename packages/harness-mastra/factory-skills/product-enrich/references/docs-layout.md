@@ -64,7 +64,7 @@ The model is OpenSpec's: **specs are the current truth, changes are proposals wi
 - **After approval a change's brief and plan are history.** They are not rewritten; a later change supersedes them.
 - **Product writes only inside its own `changes/<change>/`** (plus the black box add-only, `GLOSSARY.md`, `adr/`, and a missing area baseline). It never edits `features/<area>/design.md` once it exists.
 
-**Next step, not built yet (TODO).** At the end of Development the Work board will get a step "merge the change's delta into `features/<area>/design.md`, then move the change to `changes/archive/`": ADDED appended, MODIFIED replaced, REMOVED deleted, the archived proposal, design and tasks kept intact. Until that step exists, a person does it in the change's pull request; Product never merges deltas itself.
+**Merge and archive: the change's docs-sync task.** The last task of every change (`<prefix>-DOCS`, filed with `docsSync: true` in the documentation repository) runs on the Development board with the `factory-docs-sync` skill once the other cards are merged: it merges the delta into `features/<area>/design.md` from what was actually built (ADDED appended, MODIFIED replaced, REMOVED deleted, each task's reported deviations applied) and moves the change to `changes/archive/`, the archived proposal, design and tasks kept intact, through its own change request. Product never merges deltas itself.
 
 **Existing projects.** Detect first, never migrate unasked:
 - a single file `features/<x>.md` ("how it works now", e.g. `syncta-docs`) is read as area `<x>`'s truth; propose turning it into `features/<x>/design.md`;
