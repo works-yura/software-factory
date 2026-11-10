@@ -130,8 +130,8 @@ function selfReviewFollowUpTask(context: FactoryStageRuleContext): string | unde
   const findings = metadataString(context.item, 'selfReviewFindings');
   return (
     (context.fromStage === 'planning' ? 'Implement the approved plan for the work item. ' : '') +
-    `Self-review requested changes${head ? ` on branch head ${head}` : ''}. Address every finding, run the tests again, ` +
-    'and push.' +
+    `Self-review requested changes${head ? ` on branch head ${head}` : ''}. Address every required change, run the tests again, ` +
+    'and push. Do not implement the follow-ups.' +
     (findings ? `\n\nSelf-review findings (from Factory's reviewer; verify each against the code):\n${findings}` : '')
   );
 }
