@@ -37,6 +37,7 @@ const tk = translator('workspaces');
 export function SessionNavRow({
   name,
   label,
+  context,
   title,
   url,
   source,
@@ -61,6 +62,8 @@ export function SessionNavRow({
   name: string;
   /** Visible text when it differs from `name`, such as a card session's context under the card's heading. */
   label?: string;
+  /** What the row is, for assistive tech only, when the visible text is `name` (a card's only session). */
+  context?: string;
   /** Hover tooltip, typically the branch name. */
   title?: string;
   url: string;
@@ -103,7 +106,7 @@ export function SessionNavRow({
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
-      aria-label={label ? `${label}: ${name}` : name}
+      aria-label={label || context ? `${label ?? context}: ${name}` : name}
       disabled={disabled || loading}
       onClick={() => {
         sidebar?.setOpenMobile(false);

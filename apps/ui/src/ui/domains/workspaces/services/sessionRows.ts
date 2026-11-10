@@ -72,6 +72,8 @@ export interface SessionListRow {
   itemId?: string;
   /** The context the card runs this session in, named for the sidebar (`Triage`, `Work`). */
   contextLabel?: string;
+  /** The context of a card's only session: the row shows the card's name, and the context names it for assistive tech. */
+  contextAside?: string;
   threadId?: string;
   pullRequest?: SessionPullRequest;
   pinned: boolean;

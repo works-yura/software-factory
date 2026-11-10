@@ -43,6 +43,7 @@ export function SessionListItem({
     <SessionNavRow
       name={row.name}
       label={row.contextLabel}
+      context={row.contextAside}
       url={row.url}
       source={row.source}
       active={row.active}

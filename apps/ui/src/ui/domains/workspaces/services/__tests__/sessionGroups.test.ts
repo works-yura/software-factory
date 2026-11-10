@@ -229,8 +229,12 @@ describe('nestCardSessions', () => {
     ]);
   });
 
-  it('nests a card with a single session too', () => {
-    expect(summary(nestCardSessions([cardRow('work-1', 'work')]))).toEqual([{ card: 'Fix login', rows: ['Work'] }]);
+  it('keeps a card with a single session as one row under its own name', () => {
+    const entries = nestCardSessions([userRow('user-1'), cardRow('work-1', 'work')]);
+
+    expect(summary(entries)).toEqual(['user-1', 'work-1']);
+    const single = entries[1];
+    expect(single?.kind === 'row' && single.row.contextLabel).toBeUndefined();
   });
 
   it('keeps a factory session without a known context as a flat row', () => {

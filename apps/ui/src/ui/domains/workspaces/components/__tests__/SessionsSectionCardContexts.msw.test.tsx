@@ -123,11 +123,12 @@ describe("Sessions sidebar nests a card's sessions by context", () => {
     expect(within(cardList).getByRole('button', { name: 'Triage: Triage fix login' })).toHaveTextContent('Triage');
   });
 
-  it('still gives a card with one session its heading and a context row', async () => {
+  it('shows a card with one session as one row under the card name, no heading', async () => {
     renderSection();
 
-    const cardList = await screen.findByRole('list', { name: 'Write docs card' });
-    expect(visibleRowLabels(cardList)).toEqual(['Work']);
+    const row = await screen.findByRole('button', { name: /^Work: Write docs/ });
+    expect(row).toHaveTextContent('Write docs');
+    expect(screen.queryByRole('list', { name: 'Write docs card' })).not.toBeInTheDocument();
   });
 
   it('keeps a plain user session as a flat row', async () => {

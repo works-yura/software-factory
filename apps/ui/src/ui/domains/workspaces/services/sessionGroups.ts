@@ -192,24 +192,29 @@ export type SessionListEntry =
 /**
  * Gathers a card's sessions under one entry for the card, at the place of its
  * first row, so each is told apart by its context. A card with one session
- * still gets its entry, so the row reads as that context.
+ * (a Product card runs every phase in one) stays a single row under its own name:
+ * there is nothing to tell apart, and a heading over one row only repeats it.
  */
 export function nestCardSessions(rows: readonly SessionListRow[]): SessionListEntry[] {
   const entries: SessionListEntry[] = [];
-  const cards = new Map<string, SessionListRow[]>();
+  const cards = new Map<string, Extract<SessionListEntry, { kind: 'card' }>>();
   for (const row of rows) {
     if (row.itemId === undefined || row.contextLabel === undefined) {
       entries.push({ kind: 'row', row });
       continue;
     }
-    const cardRows = cards.get(row.itemId);
-    if (cardRows) {
-      cardRows.push(row);
+    const card = cards.get(row.itemId);
+    if (card) {
+      card.rows.push(row);
       continue;
     }
-    const nested = [row];
-    cards.set(row.itemId, nested);
-    entries.push({ kind: 'card', itemId: row.itemId, title: row.item?.title ?? row.name, rows: nested });
+    const entry: SessionListEntry = { kind: 'card', itemId: row.itemId, title: row.item?.title ?? row.name, rows: [row] };
+    cards.set(row.itemId, entry);
+    entries.push(entry);
   }
-  return entries;
+  return entries.map(entry =>
+    entry.kind === 'card' && entry.rows.length === 1
+      ? { kind: 'row', row: { ...entry.rows[0]!, contextLabel: undefined, contextAside: entry.rows[0]!.contextLabel } }
+      : entry,
+  );
 }
