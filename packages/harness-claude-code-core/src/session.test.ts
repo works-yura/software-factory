@@ -423,7 +423,7 @@ describe('ClaudeCodeSession', () => {
       const first = fake.calls[0]!;
       expect(first.args).not.toContain('--disallowedTools');
       expect(flagValue(first.args, '--allowedTools')?.split(',')).toEqual(expect.arrayContaining(['Bash', 'Write', 'WebFetch']));
-      expect(JSON.parse(flagValue(first.args, '--settings')!)).toEqual({ plansDirectory: '.claude/plans' });
+      expect(JSON.parse(flagValue(first.args, '--settings')!)).toEqual({ attribution: { commit: '', pr: '' }, plansDirectory: '.claude/plans' });
 
       yolo = false;
       end = nextEnd(session);
@@ -800,7 +800,7 @@ describe('ClaudeCodeSession', () => {
 
       expect(flagValue(call.args, '--setting-sources')).toBe('project,local');
       expect(call.args).toContain('--strict-mcp-config');
-      expect(JSON.parse(flagValue(call.args, '--settings')!)).toEqual({ plansDirectory: '.claude/plans' });
+      expect(JSON.parse(flagValue(call.args, '--settings')!)).toEqual({ attribution: { commit: '', pr: '' }, plansDirectory: '.claude/plans' });
       expect(call.args).not.toContain('--permission-mode');
       expect(call.args).not.toContain('--disallowedTools');
       // The gate server is written next to the MCP config, so a bundled host (no sibling .mjs) still starts it.
@@ -915,7 +915,7 @@ describe('ClaudeCodeSession', () => {
     });
 
     it('can be opted out of', async () => {
-      const call = await firstCall({ settingSources: false, strictMcpConfig: false, plansDirectory: false });
+      const call = await firstCall({ settingSources: false, strictMcpConfig: false, plansDirectory: false, attribution: false });
 
       expect(call.args).not.toContain('--setting-sources');
       expect(call.args).not.toContain('--strict-mcp-config');

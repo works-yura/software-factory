@@ -103,7 +103,8 @@ export interface FollowUpQueuedEvent {
 /** Settings sources a turn reads by default: the repo's, never the person's own `~/.claude/settings.json`. */
 export const DEFAULT_SETTING_SOURCES: ClaudeSettingSource[] = ['project', 'local'];
 /** Where plan files would go if the CLI's plan mode ever ran (relative to the session cwd), instead of `~/.claude/plans`. */
-export const DEFAULT_PLANS_DIRECTORY = '.claude/plans';
+export const NO_ATTRIBUTION = { commit: '', pr: '' };
+const DEFAULT_PLANS_DIRECTORY = '.claude/plans';
 
 /**
  * Configuration for Claude Code sessions.
@@ -192,6 +193,12 @@ export interface ClaudeCodeSessionConfig
    * out of `~/.claude/plans` should a project's settings turn plan mode on. `false` leaves it unset.
    */
   plansDirectory?: string | false;
+  /**
+   * The CLI's `attribution` setting: the text it adds to commits and pull requests.
+   * Empty by default, so nothing says "Generated with Claude Code" or adds a
+   * Co-Authored-By line. `false` leaves it to the CLI.
+   */
+  attribution?: { commit: string; pr: string } | false;
   /**
    * The tool permissions for this session's next turn (the host's settings),
    * asked before each turn so a change applies from the next one. Each
@@ -1053,6 +1060,7 @@ export class ClaudeCodeSession implements AgentSession {
     const permissionMode: ClaudePermissionMode | undefined = planning ? 'default' : mode === 'planning' ? undefined : mode;
     const settingSources = sessionSettingSources ?? config.settingSources ?? DEFAULT_SETTING_SOURCES;
     const plansDirectory = config.plansDirectory ?? DEFAULT_PLANS_DIRECTORY;
+    const attribution = config.attribution ?? NO_ATTRIBUTION;
     const rules = permissions.rules;
     const disallowedTools = [
       ...(config.disallowedTools ?? []),
@@ -1061,6 +1069,7 @@ export class ClaudeCodeSession implements AgentSession {
     ];
     const granted = thread.grantedTools ?? [];
     const settings: Record<string, unknown> = {
+      ...(attribution ? { attribution } : {}),
       ...(plansDirectory ? { plansDirectory } : {}),
       ...(rules?.ask.length ? { permissions: { ask: rules.ask } } : {}),
     };
