@@ -47,8 +47,8 @@ export const productBoard = compileBoardDefinition<
       nextPhases: ['client-review', 'canceled'],
     },
     'client-review': {
-      name: 'With the client',
-      description: 'The client reads the brief. Back to Brief for revisions, on to Spec once agreed.',
+      name: 'Awaiting approval',
+      description: 'The brief waits for approval (the client, or whoever signs it off). Back to Brief for revisions, on to Spec once agreed.',
       kind: 'resting',
       nextPhases: ['brief', 'spec', 'canceled'],
     },

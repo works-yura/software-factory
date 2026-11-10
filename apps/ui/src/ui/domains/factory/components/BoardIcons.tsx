@@ -125,8 +125,10 @@ function ProgressPieIcon({ progress, className }: { progress: number; className:
   );
 }
 
-// Custom boards pass `kind` and may reuse a built-in id with another meaning, so `kind` wins over the id.
+// Custom boards pass `kind` and may reuse a built-in id with another meaning, so `kind` wins over the id —
+// except a terminal `done` or `canceled`, which mean the same on every board and look the same as on Work.
 function builtinStageFor(stage: string, kind?: BoardPhaseKind): BuiltinStageId | undefined {
+  if (kind === 'terminal' && (stage === 'done' || stage === 'canceled')) return stage;
   return kind ? undefined : boardStage(stage);
 }
 
