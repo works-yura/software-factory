@@ -1,39 +1,46 @@
-import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
-import { CornerDownLeft } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
+import { CornerDownLeft } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 
-import type { NewChatAnnotation } from './chat-annotations';
-import { useAnnotationSelection } from './use-annotation-selection';
-import { Button } from '@/ds/components/Button';
-import { Textarea } from '@/ds/components/Textarea';
-import { Txt } from '@/ds/components/Txt';
-import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
-import { libText } from '@/lib/lib-text';
+import type { NewChatAnnotation } from "./chat-annotations";
+import { useAnnotationSelection } from "./use-annotation-selection";
+import { Button } from "@/ds/components/Button";
+import { Textarea } from "@/ds/components/Textarea";
+import { Txt } from "@/ds/components/Txt";
+import { FLOATING_POSITION_METHOD } from "@/ds/primitives/floating";
+import { usePortalContainer } from "@/ds/primitives/portal-container";
+import { overlaySurfaceStyle } from "@/ds/primitives/raised-surface";
+import { cn } from "@/lib/utils";
+import { libText } from "@/lib/lib-text";
 
 export interface AnnotationSelectionToolbarProps {
   containerRef: RefObject<HTMLElement | null>;
   onAnnotate: (annotation: NewChatAnnotation) => void;
 }
 
-const hasModifier = (event: KeyboardEvent | ReactKeyboardEvent) => event.altKey || event.ctrlKey || event.metaKey;
+const hasModifier = (event: KeyboardEvent | ReactKeyboardEvent) =>
+  event.altKey || event.ctrlKey || event.metaKey;
 
 /**
  * Over a selected passage: a note field and "Add note". The note field takes focus only when the person
  * clicks or tabs into it, so a plain selection can still be copied; from then the passage is pinned, so
  * the collapsed page selection does not close the card. An empty note adds the passage as a quote only.
  */
-export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: AnnotationSelectionToolbarProps) {
+export function AnnotationSelectionToolbar({
+  containerRef,
+  onAnnotate,
+}: AnnotationSelectionToolbarProps) {
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const { open, selection, dismiss, pin } = useAnnotationSelection(containerRef, toolbarRef);
+  const { open, selection, dismiss, pin } = useAnnotationSelection(
+    containerRef,
+    toolbarRef,
+  );
   const portalContainer = usePortalContainer();
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const actionsRef = useRef<PopoverPrimitive.Root.Actions>(null);
   const originRef = useRef<HTMLElement>(undefined);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -43,8 +50,11 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
       const transcript = containerRef.current;
       const { target } = event;
       if (!field || !transcript || hasModifier(event)) return;
-      const holdsTranscript = target instanceof HTMLElement && target !== document.body && target.contains(transcript);
-      if (event.key !== 'Tab' || event.shiftKey || !holdsTranscript) return;
+      const holdsTranscript =
+        target instanceof HTMLElement &&
+        target !== document.body &&
+        target.contains(transcript);
+      if (event.key !== "Tab" || event.shiftKey || !holdsTranscript) return;
       pin();
       field.focus();
       if (document.activeElement !== field) {
@@ -54,15 +64,15 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
       event.preventDefault();
       originRef.current = target;
     };
-    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener("keydown", onKeyDown);
       originRef.current = undefined;
     };
   }, [open, containerRef, pin]);
 
   const close = () => {
-    setNote('');
+    setNote("");
     dismiss();
   };
 
@@ -79,14 +89,18 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
     document.getSelection()?.removeAllRanges();
     const comment = note.trim();
     close();
-    onAnnotate({ text: selection.text, source: selection.source, ...(comment ? { comment } : {}) });
+    onAnnotate({
+      text: selection.text,
+      source: selection.source,
+      ...(comment ? { comment } : {}),
+    });
   };
 
   return (
     <PopoverPrimitive.Root
       actionsRef={actionsRef}
       open={open}
-      onOpenChange={next => {
+      onOpenChange={(next) => {
         if (!next) close();
       }}
     >
@@ -103,54 +117,75 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
           <PopoverPrimitive.Popup
             ref={toolbarRef}
             role="dialog"
-            aria-label={libText('Note on the selected text')}
+            aria-label={libText("Note on the selected text")}
             initialFocus={false}
             finalFocus={false}
             // A press on the card pins the passage before focus moves and the page selection collapses.
             onPointerDown={pin}
             // A press on a button must not collapse the selection it acts on; the note field takes focus normally.
-            onMouseDown={event => {
-              if (!(event.target instanceof HTMLTextAreaElement)) event.preventDefault();
+            onMouseDown={(event) => {
+              if (!(event.target instanceof HTMLTextAreaElement))
+                event.preventDefault();
             }}
             data-slot="annotation-selection-toolbar"
             className={cn(
-              'flex w-80 max-w-[calc(100vw-2rem)] origin-(--transform-origin) flex-col gap-2 rounded-lg p-2.5 focus-visible:outline-hidden',
+              "flex w-80 max-w-[calc(100vw-2rem)] origin-(--transform-origin) flex-col gap-2.5 rounded-lg p-3 focus-visible:outline-hidden",
               overlaySurfaceStyle,
-              'motion-safe:data-[closed]:animate-out motion-safe:data-[closed]:fade-out-0 motion-safe:data-[closed]:zoom-out-95',
-              'motion-safe:data-[open]:animate-in motion-safe:data-[open]:fade-in-0 motion-safe:data-[open]:zoom-in-95',
+              "motion-safe:data-[closed]:animate-out motion-safe:data-[closed]:fade-out-0 motion-safe:data-[closed]:zoom-out-95",
+              "motion-safe:data-[open]:animate-in motion-safe:data-[open]:fade-in-0 motion-safe:data-[open]:zoom-in-95",
             )}
           >
-            <Txt as="span" variant="caption" tone="muted" className="uppercase">
-              {libText('Selected text')}
-            </Txt>
+            {/* The passage the note is about, as the annotation card shows it. */}
+            <blockquote className="line-clamp-3 border-l-2 border-info-indicator ps-2.5 text-body-sm whitespace-pre-line text-muted-foreground">
+              {selection?.text}
+            </blockquote>
             <Textarea
               ref={noteRef}
-              aria-label={libText('Note for the agent')}
-              placeholder={libText('Note for the agent')}
-              rows={3}
-              className="min-h-18 resize-none"
+              aria-label={libText("Note for the agent")}
+              placeholder={libText("Note for the agent")}
+              rows={2}
+              className="min-h-14 resize-none"
               value={note}
               onFocus={pin}
-              onChange={event => setNote(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Escape') {
+              onChange={(event) => setNote(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
                   event.preventDefault();
                   cancel();
                   return;
                 }
-                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
                   event.preventDefault();
                   addNote();
                 }
               }}
             />
-            <div className="flex items-center justify-end gap-2">
-              <Button type="button" variant="ghost" size="sm" onClick={cancel}>
-                {libText('Cancel')}
-              </Button>
-              <Button type="button" variant="primary" size="sm" icon={<CornerDownLeft />} onClick={addNote}>
-                {libText('Add note')}
-              </Button>
+            <div className="flex items-center justify-between gap-2">
+              <Txt as="span" variant="caption" tone="muted">
+                {libText("Sent with your next message")}
+              </Txt>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={cancel}
+                >
+                  {libText("Cancel")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  icon={<CornerDownLeft />}
+                  onClick={addNote}
+                >
+                  {libText("Add note")}
+                </Button>
+              </div>
             </div>
           </PopoverPrimitive.Popup>
         </PopoverPrimitive.Positioner>
