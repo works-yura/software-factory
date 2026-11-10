@@ -167,7 +167,12 @@ describe('Composer while a session prepares its workspace', () => {
 
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(session.posted).toEqual(['what is wrong here']));
+    // The image reaches the model and is kept as the session's attachment, named in the message.
+    await waitFor(() =>
+      expect(session.posted).toEqual([
+        'what is wrong here\n\nВкладення: shot.png (3 B) → .factory/attachments/99999999-shot.png',
+      ]),
+    );
     expect(session.postedFiles).toHaveLength(1);
 
     await releaseSession(session.finishWorkspace, client);

@@ -20,7 +20,7 @@ import {
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { ImagePlus } from 'lucide-react';
+import { Paperclip } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
 import type { DragEvent, KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -40,6 +40,7 @@ import {
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useComposerConnectionNotice } from '../hooks/useComposerConnectionNotice';
+import { useComposerAttachmentUpload, withAttachmentLines } from '../hooks/useComposerAttachmentUpload';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
@@ -49,6 +50,7 @@ import { FACTORY_REF_EVENT, FACTORY_REF_MIME, readDraggedRef, sameRef, serialize
 import type { FactoryRef } from '../services/factoryRefs';
 import { StatusLine } from './StatusLine';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
+import { ComposerFileAttachments } from './ComposerFileAttachments';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { ComposerPrimaryAction } from './ComposerPrimaryAction';
 import { ComposerFactoryRefs } from './FactoryRefChips';
@@ -102,12 +104,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const draftModelFailed = onUserDraft && !claudeCode && modelError !== undefined;
   const [heldDraftText, setHeldDraftText] = useState<string>();
   const startingDraft = heldDraftText !== undefined;
-  // A harness that takes no images (Claude Code here) refuses them on send, so the button is off from the start.
+  // A harness that takes no images (Claude Code here) gets them as attached files instead. A draft has no session
+  // to attach files to yet, so it takes images only, and none on such a harness.
+  const imagesToModel = harness?.supports.imageAttachments !== false;
+  const acceptFiles = !onUserDraft;
   const attachDisabled =
-    blocked || chatPreparing || planFeedback.pending || startingDraft || harness?.supports.imageAttachments === false;
-  const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
-    disabled: chatPreparing || planFeedback.pending || startingDraft,
-  });
+    blocked || chatPreparing || planFeedback.pending || startingDraft || (!acceptFiles && !imagesToModel);
+  const { images, setImages, files, setFiles, fileInputRef, removeImage, removeFile, onPaste, onDrop, onFileInputChange } =
+    useComposerImages({ disabled: chatPreparing || planFeedback.pending || startingDraft, acceptFiles, imagesToModel });
+  const uploadAttachments = useComposerAttachmentUpload(sessionId);
   // Sessions and cards dragged in from the sidebar (or added from a row's menu), sent as a `factory-refs` block.
   const [refs, setRefs] = useState<FactoryRef[]>([]);
   const addRef = (ref: FactoryRef) => setRefs(current => withRef(current, ref));
@@ -146,7 +151,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     shownText.trim().length > 0 ||
     annotations.length > 0 ||
     refs.length > 0 ||
-    (images.length > 0 && !planFeedback.pending);
+    ((images.length > 0 || files.length > 0) && !planFeedback.pending);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -215,6 +220,21 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       await run(files);
     } catch (error) {
       setImages(current => [...files, ...current]);
+      throw error;
+    }
+  };
+
+  // A session's message: its images and files are stored as the card's attachments first and named in the text.
+  const sendWithAttachments = async (message: string) => {
+    const pendingFiles = files;
+    setFiles([]);
+    try {
+      await withPendingImages(async sentImages => {
+        const stored = await uploadAttachments(sentImages, pendingFiles);
+        await send(withAttachmentLines(message, stored), imagesToModel ? sentImages : []);
+      });
+    } catch (error) {
+      setFiles(current => [...pendingFiles, ...current]);
       throw error;
     }
   };
@@ -334,7 +354,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       await steer(message);
       return;
     }
-    await withPendingImages(files => send(message, files));
+    await sendWithAttachments(message);
   }
 
   return (
@@ -348,6 +368,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           <ComposerAnnotations />
           <ComposerFactoryRefs refs={refs} onRemove={removeRef} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
+          <ComposerFileAttachments files={files} onRemove={removeFile} />
           <ComposerInput
             {...commandMenu.inputProps}
             ref={inputRef}
@@ -363,11 +384,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={acceptFiles ? undefined : 'image/*'}
             multiple
             onChange={onFileInputChange}
             className="hidden"
-            aria-label={t('composer.attachImages')}
+            aria-label={acceptFiles ? t('composer.attachFiles') : t('composer.attachImages')}
           />
           <ComposerActions>
             <StatusLine />
@@ -377,10 +398,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 size="icon-sm"
                 disabled={attachDisabled}
                 onClick={() => fileInputRef.current?.click()}
-                aria-label={t('composer.attachImage')}
-                tooltip={t('composer.imagesOnly')}
+                aria-label={acceptFiles ? t('composer.attachFiles') : t('composer.attachImage')}
+                tooltip={acceptFiles ? t('composer.filesHint') : t('composer.imagesOnly')}
               >
-                <ImagePlus size={14} />
+                <Paperclip size={14} />
               </Button>
               <ComposerPrimaryAction
                 showAbort={liveRun && !hasSubmittableDraft}

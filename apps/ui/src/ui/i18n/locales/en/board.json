@@ -365,6 +365,25 @@
     "current": "current",
     "running": "running"
   },
+  "attachments": {
+    "title": "Files",
+    "add": "Attach files",
+    "empty": "No files yet",
+    "loading": "Loading files…",
+    "loadFailed": "Could not load files",
+    "download": "Download {{name}}",
+    "delete": "Delete {{name}}",
+    "uploadFailed": "Could not attach {{name}}: {{reason}}",
+    "deleteFailed": "Could not delete {{name}}: {{reason}}",
+    "source": {
+      "chat": "From chat",
+      "comment": "From a comment",
+      "upload": "Uploaded",
+      "clickup": "From ClickUp",
+      "github": "From GitHub",
+      "gitlab": "From GitLab"
+    }
+  },
   "exitTool": {
     "description": "{{phase}} ends when {{tool}} succeeds. {{approval}}",
     "personApproves": "A person approves it.",

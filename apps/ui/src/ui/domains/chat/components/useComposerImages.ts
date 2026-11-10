@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { ChangeEvent, ClipboardEvent, DragEvent } from 'react';
 
 import type { PendingImage } from '../context/ComposerImagesContext';
@@ -25,14 +25,46 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-export function useComposerImages({ disabled }: { disabled: boolean }) {
+/** A non-image file (or an image the model is not shown) waiting to be attached to the session's card. */
+export interface PendingFile {
+  id: string;
+  file: File;
+}
+
+/**
+ * The composer's pending images (shown to the model) and files (uploaded as attachments on send).
+ * `acceptFiles: false` keeps the old images-only behaviour (a draft has no session to attach to);
+ * `imagesToModel: false` treats images as files too (a harness that takes no images).
+ */
+export function useComposerImages({
+  disabled,
+  acceptFiles = false,
+  imagesToModel = true,
+}: {
+  disabled: boolean;
+  acceptFiles?: boolean;
+  imagesToModel?: boolean;
+}) {
   const { images, setImages } = useComposerImagesState();
+  const [files, setFiles] = useState<PendingFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isModelImage = (file: File) => imagesToModel && file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES;
+  const accepts = (file: File) => acceptFiles || isModelImage(file);
+
+  const addFiles = async (fileList: Iterable<File>) => {
+    const all = Array.from(fileList);
+    if (acceptFiles) {
+      const others = all.filter(file => !isModelImage(file));
+      if (others.length > 0) {
+        setFiles(current => [...current, ...others.map(file => ({ id: `pending-file-${pendingImageSequence++}`, file }))]);
+      }
+    }
+    await addImageFiles(all.filter(isModelImage));
+  };
+
   const addImageFiles = async (fileList: Iterable<File>) => {
-    const imageFiles = Array.from(fileList).filter(
-      file => file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES,
-    );
+    const imageFiles = Array.from(fileList);
     if (imageFiles.length === 0) return;
 
     let budget = MAX_TOTAL_IMAGE_BYTES - images.reduce((sum, image) => sum + Math.floor(image.data.length * 0.75), 0);
@@ -60,26 +92,30 @@ export function useComposerImages({ disabled }: { disabled: boolean }) {
     setImages(current => current.filter(image => image.id !== id));
   };
 
+  const removeFile = (id: string) => {
+    setFiles(current => current.filter(file => file.id !== id));
+  };
+
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = Array.from(event.clipboardData?.files ?? []).filter(file => file.type.startsWith('image/'));
-    if (files.length === 0) return;
+    const pasted = Array.from(event.clipboardData?.files ?? []).filter(accepts);
+    if (pasted.length === 0) return;
     event.preventDefault();
     if (disabled) return;
-    void addImageFiles(files);
+    void addFiles(pasted);
   };
 
   const onDrop = (event: DragEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (disabled) return;
-    const files = Array.from(event.dataTransfer?.files ?? []).filter(file => file.type.startsWith('image/'));
-    if (files.length === 0) return;
-    void addImageFiles(files);
+    const dropped = Array.from(event.dataTransfer?.files ?? []).filter(accepts);
+    if (dropped.length === 0) return;
+    void addFiles(dropped);
   };
 
   const onFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (!disabled) void addImageFiles(event.target.files ?? []);
+    if (!disabled) void addFiles(Array.from(event.target.files ?? []).filter(accepts));
     event.target.value = '';
   };
 
-  return { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange };
+  return { images, setImages, files, setFiles, fileInputRef, removeImage, removeFile, onPaste, onDrop, onFileInputChange };
 }

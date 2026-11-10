@@ -1,6 +1,8 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
+import { File as NodeFile } from 'node:buffer';
+
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -70,6 +72,55 @@ function Harness({ initialQuote }: { initialQuote?: CommentQuoteDraft }) {
 }
 
 describe('CommentComposer', () => {
+  it('attaches picked files to the card and names them in the comment', async () => {
+    const posts: unknown[] = [];
+    const uploads: string[] = [];
+    stubRoster();
+    stubCreate(posts);
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}/attachments`, ({ request }) => {
+        const url = new URL(request.url);
+        uploads.push(`${url.searchParams.get('name')}:${url.searchParams.get('source')}`);
+        return HttpResponse.json(
+          {
+            attachment: {
+              id: 'bbbbbbbb-0000-4000-8000-000000000000',
+              workItemId: ITEM_ID,
+              sessionId: null,
+              name: 'logo.svg',
+              mime: 'image/svg+xml',
+              size: 2048,
+              sha256: 'f'.repeat(64),
+              source: 'comment',
+              sourceUrl: null,
+              addedBy: 'user-1',
+              addedAt: '2026-11-10T10:00:00.000Z',
+              contentUrl: '/web/factory/attachments/bbbbbbbb-0000-4000-8000-000000000000/content',
+              sandboxPath: '.factory/attachments/bbbbbbbb-logo.svg',
+            },
+          },
+          { status: 201 },
+        );
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<Harness />);
+
+    // jsdom's File is not a body Node's fetch sends; a browser's is.
+    const file = new NodeFile(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }) as unknown as File;
+    await user.upload(screen.getByLabelText('Attach files', { selector: 'input' }), file);
+    expect(screen.getByText('logo.svg')).toBeInTheDocument();
+    await user.click(screen.getByRole('textbox', { name: 'Comment' }));
+    await user.keyboard('New logo{Enter}');
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(uploads).toEqual(['logo.svg:comment']);
+    expect(posts[0]).toMatchObject({
+      body: 'New logo\n\nВкладення: logo.svg (2.0 KB) → .factory/attachments/bbbbbbbb-logo.svg',
+    });
+    expect(screen.queryByText('logo.svg')).not.toBeInTheDocument();
+  });
+
   it('sends on Enter, and Shift+Enter inserts a newline instead', async () => {
     const posts: unknown[] = [];
     stubRoster();

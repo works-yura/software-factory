@@ -310,6 +310,10 @@
   },
   "comments": {
     "postError": "Unable to post comment",
+    "attach": "Attach files",
+    "attachments": "Files to attach",
+    "removeAttachment": "Remove {{name}}",
+    "attachFailed": "Unable to attach the files",
     "add": "Add a comment",
     "mentions": "Mentions",
     "placeholder": "Add a comment…",

@@ -318,6 +318,10 @@
   },
   "comments": {
     "postError": "Не вдалося опублікувати коментар",
+    "attach": "Додати файли",
+    "attachments": "Файли до коментаря",
+    "removeAttachment": "Прибрати {{name}}",
+    "attachFailed": "Не вдалося додати файли",
     "add": "Додати коментар",
     "mentions": "Згадки",
     "placeholder": "Додайте коментар…",

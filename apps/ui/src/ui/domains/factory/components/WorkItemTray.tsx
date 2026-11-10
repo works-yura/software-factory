@@ -9,6 +9,7 @@ import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { factoryAttentionTargetPath } from '../services/attention';
 import type { WorkItem } from '../services/workItems';
 import { CardSourceDescription, useSourceDescription } from './BoardCardDetails';
+import { CardAttachments } from './CardAttachments';
 import { CardSessions } from './CardSessions';
 import { CommentComposer } from './feed/CommentComposer';
 import { CommentList } from './feed/CommentList';
@@ -68,6 +69,7 @@ export function WorkItemTray({
             />
             {rework && <WhyItMovedBack rework={rework} />}
             <CardSessions factoryId={factoryId} sessions={contextSessions} />
+            <CardAttachments workItemId={item.id} enabled={enabled} />
           </div>
         }
         commentUrl={commentId =>

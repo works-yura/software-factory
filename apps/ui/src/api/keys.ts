@@ -91,6 +91,8 @@ export const queryKeys = {
   // per anchor: a deep link opens on a different first page than a plain read.
   workItemComments: (workItemId: string | undefined, aroundCommentId?: string) =>
     [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
+  /** A card's files, or a session's own (`session:<id>`). */
+  attachments: (owner: string | undefined) => ['factory', 'attachments', owner ?? null] as const,
   factoryMembers: (factoryProjectId: string | undefined) =>
     ['factory', 'mention-roster', factoryProjectId ?? null] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>

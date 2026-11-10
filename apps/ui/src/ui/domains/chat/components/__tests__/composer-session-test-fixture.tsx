@@ -168,6 +168,32 @@ export function stubPreparingSession({
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
+    // A session that works no card keeps a message's files itself.
+    http.post(`${TEST_BASE_URL}/web/factory/sessions/:sessionId/attachments`, async ({ request, params }) => {
+      const name = new URL(request.url).searchParams.get('name') ?? 'file';
+      const size = (await request.arrayBuffer()).byteLength;
+      const id = '99999999-0000-4000-8000-000000000000';
+      return HttpResponse.json(
+        {
+          attachment: {
+            id,
+            workItemId: null,
+            sessionId: String(params.sessionId),
+            name,
+            mime: request.headers.get('content-type') ?? 'application/octet-stream',
+            size,
+            sha256: 'f'.repeat(64),
+            source: 'chat',
+            sourceUrl: null,
+            addedBy: 'user-1',
+            addedAt: '2026-07-23T00:00:00.000Z',
+            contentUrl: `/web/factory/attachments/${id}/content`,
+            sandboxPath: `.factory/attachments/99999999-${name}`,
+          },
+        },
+        { status: 201 },
+      );
+    }),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.post(`${API}/sessions`, async () => {
       result.controllerCreates += 1;

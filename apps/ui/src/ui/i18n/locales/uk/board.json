@@ -371,6 +371,25 @@
     "current": "поточна",
     "running": "працює"
   },
+  "attachments": {
+    "title": "Файли",
+    "add": "Додати файли",
+    "empty": "Файлів ще немає",
+    "loading": "Завантаження файлів…",
+    "loadFailed": "Не вдалося завантажити файли",
+    "download": "Завантажити {{name}}",
+    "delete": "Видалити {{name}}",
+    "uploadFailed": "Не вдалося додати {{name}}: {{reason}}",
+    "deleteFailed": "Не вдалося видалити {{name}}: {{reason}}",
+    "source": {
+      "chat": "З чату",
+      "comment": "З коментаря",
+      "upload": "Додано вручну",
+      "clickup": "З ClickUp",
+      "github": "З GitHub",
+      "gitlab": "З GitLab"
+    }
+  },
   "exitTool": {
     "description": "Етап «{{phase}}» завершується, коли {{tool}} виконується успішно. {{approval}}",
     "personApproves": "Його схвалює людина.",

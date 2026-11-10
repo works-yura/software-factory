@@ -8,12 +8,14 @@ import {
   ComposerSuggestions,
 } from '@mastra/playground-ui/components/Composer';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, Paperclip, X } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useUploadAttachment } from '../../../../../hooks/useAttachments';
 import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
 import { useCreateWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
+import { attachmentMessageLines, formatAttachmentSize } from '../../services/attachments';
 import { mentionLabel } from './mentions';
 import type { CommentQuoteDraft } from './quoteDraft';
 import { useMentionResolver } from './useMentionResolver';
@@ -39,6 +41,10 @@ export function CommentComposer({
   const [draft, setDraft] = useState('');
   const [focused, setFocused] = useState(false);
   const [sendError, setSendError] = useState<string>();
+  // Files wait here until the comment is sent; they then become the card's attachments.
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadAttachment = useUploadAttachment();
   const createComment = useCreateWorkItemCommentMutation({ workItemId, factoryProjectId });
   const members = useFactoryMembers(factoryProjectId, { enabled: focused });
   const resolveMentions = useMentionResolver(factoryProjectId);
@@ -50,11 +56,28 @@ export function CommentComposer({
   }));
 
   const sendComment = async () => {
-    const body = draft.trim();
-    if (body.length === 0 || createComment.isPending) return;
+    const text = draft.trim();
+    if ((text.length === 0 && files.length === 0) || createComment.isPending || uploadAttachment.isPending) return;
+    setSendError(undefined);
+    const sentFiles = files;
+    let body = text;
+    if (sentFiles.length > 0) {
+      try {
+        const uploaded = [];
+        for (const file of sentFiles) {
+          uploaded.push(
+            await uploadAttachment.mutateAsync({ target: { workItemId }, file, name: file.name, source: 'comment' }),
+          );
+        }
+        body = [text, attachmentMessageLines(uploaded)].filter(Boolean).join('\n\n');
+        setFiles([]);
+      } catch (cause) {
+        setSendError(cause instanceof Error ? cause.message : t('comments.attachFailed'));
+        return;
+      }
+    }
     if (pendingSend.current?.body !== body) pendingSend.current = { body, clientToken: crypto.randomUUID() };
     const { clientToken } = pendingSend.current;
-    setSendError(undefined);
     setDraft('');
     createComment.mutate(
       {
@@ -132,18 +155,66 @@ export function CommentComposer({
           onBlur={() => setFocused(false)}
           onKeyDown={onKeyDown}
         />
+        {files.length > 0 ? (
+          <ul aria-label={t('comments.attachments')} className="m-0 flex list-none flex-wrap gap-1 px-3 pt-1">
+            {files.map((file, index) => (
+              <li key={`${file.name}-${index}`} className="bg-fill flex items-center gap-1 rounded-md pl-2">
+                <Txt as="span" variant="meta" tone="ink" className="max-w-40 truncate">
+                  {file.name}
+                </Txt>
+                <Txt as="span" variant="caption" tone="muted">
+                  {formatAttachmentSize(file.size)}
+                </Txt>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('comments.removeAttachment', { name: file.name })}
+                  onClick={() => setFiles(current => current.filter((_, at) => at !== index))}
+                >
+                  <X aria-hidden />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {sendError ? (
           <Txt variant="meta" role="alert" className="text-destructive-foreground m-0 px-3 pb-1">
             {sendError}
           </Txt>
         ) : null}
-        <ComposerActions className="justify-end">
+        <ComposerActions className="justify-end gap-1">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            aria-label={t('comments.attach')}
+            onChange={event => {
+              const picked = Array.from(event.target.files ?? []);
+              event.target.value = '';
+              setFiles(current => [...current, ...picked]);
+            }}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t('comments.attach')}
+            tooltip={t('comments.attach')}
+            disabled={uploadAttachment.isPending}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip aria-hidden />
+          </Button>
           <Button
             type="submit"
             variant="primary"
             size="icon-sm"
             aria-label={t('comments.send')}
-            disabled={draft.trim().length === 0 || createComment.isPending}
+            disabled={
+              (draft.trim().length === 0 && files.length === 0) || createComment.isPending || uploadAttachment.isPending
+            }
           >
             <ArrowUp aria-hidden />
           </Button>

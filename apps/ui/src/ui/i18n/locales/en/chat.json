@@ -104,6 +104,9 @@
     "actions": "Composer actions",
     "attachImage": "Attach image",
     "imagesOnly": "Images only",
+    "attachFiles": "Attach files",
+    "filesHint": "Attach files: they are saved to the card and the agent gets them in .factory/attachments",
+    "noAttachmentTarget": "This chat has no session to attach files to yet.",
     "abort": "Abort",
     "send": "Send message",
     "readFileFailed": "Failed to read file"
