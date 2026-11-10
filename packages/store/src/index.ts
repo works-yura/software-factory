@@ -1,3 +1,4 @@
+export * from './attachments/blob-store.ts';
 export * from './audit/actions.ts';
 export * from './audit/actors.ts';
 export * from './audit/base.ts';
