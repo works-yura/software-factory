@@ -13,3 +13,26 @@ apps/server/src/mastra/public/factory-skills/
 coverage/
 reports/
 .stryker-tmp/
+
+# Env variants (keep schema/example tracked)
+.env.*
+!.env.schema
+!.env.example
+
+# Agent worktrees
+.claude/worktrees/
+
+# Playwright output
+playwright-report/
+blob-report/
+test-results/
+
+# Tool caches and editor state
+*.tsbuildinfo
+.turbo/
+.vite/
+.idea/
+
+# Private keys
+*.pem
+*.key
