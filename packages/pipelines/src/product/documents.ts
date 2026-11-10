@@ -75,7 +75,7 @@ export const PRODUCT_DOCUMENT_SECTIONS: Readonly<Record<ProductDocumentType, rea
     section('Users', /users?\b(?! stor)/i, /roles?/i, /who uses/i, /користувач/i, /ролі/i),
     section('Use cases', /use cases?/i, /user stor/i, /journeys?/i, /scenarios?/i, /сценарі/i, /історі/i),
     section('Edge cases', /edge cases?/i, /states?/i, /крайов/i, /стан/i),
-    section('Not included', /not included/i, /non-goals?/i, /out of scope/i, /не входить/i, /поза межами/i),
+    section('Out of scope', /not included/i, /non-goals?/i, /out of scope/i, /не входить/i, /поза межами/i, /межі оцінки/i),
     section('Constraints', /constraint/i, /обмежен/i),
     section('Technology', /technolog/i, /stack/i, /технолог/i, /стек/i),
     section('Phases', /phases?/i, /delivery/i, /фази/i, /етапи/i),

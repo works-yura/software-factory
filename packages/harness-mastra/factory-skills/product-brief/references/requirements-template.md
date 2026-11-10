@@ -4,7 +4,7 @@ Path: `<docs>/changes/<change>/requirements.md`. Audience: **the client**, a non
 
 **Two language versions.** `requirements.md` is in the team's language (Ukrainian for this team); when the client works in another language (find it from how the client writes in `blackbox/sources/`; Alex writes English), also keep `requirements.<lang>.md` (e.g. `requirements.en.md`) — the same brief, translated, section for section, with the English headings. The client gets the client-language file; both are updated in the same round and must say the same thing. Each passes the check.
 
-Write it in the person's language: for this team, **the Ukrainian headings in brackets and Ukrainian labels** (Хто / Хоче / Кроки / Готово, коли / На екрані); the English names are only what the check also accepts. **Required** (the check fails without them; write `None` with a reason rather than dropping one): Goal, Users, Use cases, Edge cases, Not included, Constraints, Technology, Running costs, External dependencies and risks, Phases and estimate, Decisions that need the client's approval, Done means, Open questions.
+Write it in the person's language: for this team, **the Ukrainian headings in brackets and Ukrainian labels** (Хто / Хоче / Кроки / Готово, коли / На екрані); the English names are only what the check also accepts. **Required** (the check fails without them; write `None` with a reason rather than dropping one): Goal, Users, Use cases, Edge cases, Out of scope, Constraints, Technology, Running costs, External dependencies and risks, Phases and estimate, Decisions that need the client's approval, Done means, Open questions.
 
 **Nothing internal in the client's text:** no file paths, no `blackbox/…` sources, no `DEC-nnn` / `OQ-nnn` ids, no estimation formulas or team mode. Sources and working figures go in the change request description (or `research.md`). The rest (Behaviour, Guided flow, What the app remembers, Look and feel) is a menu: keep a section only if it carries weight. Delete the comments.
 
@@ -49,11 +49,14 @@ Write it in the person's language: for this team, **the Ukrainian headings in br
 |---|---|
 | <failure / empty / coming back later / already set up / no permission> | <exactly what the user sees> |
 
-## Not included  (Не входить)
+## Out of scope  (Межі оцінки)
 - <thing> (<plain reason: needs more design first / a later phase / handled elsewhere>)
 
 ## Constraints  (Обмеження)
-- <platforms, languages, accessibility, offline, data residency, "no paid third-party service without approval", nothing secret stored in the app>
+- <limits on the product itself: platforms, languages, accessibility, offline, data residency, "no paid third-party service without approval", nothing secret stored in the app. Not how we work — that goes to How we deliver.>
+
+## How we deliver  (Процес роботи)
+<!-- How the work is shown and accepted, not a limit on the product: e.g. "every change goes to staging first, you check it there, and only then to prod"; how often you see progress; who accepts. Omit if nothing beyond the usual. -->
 
 ## Technology  (Технології)
 <!-- At the client's level: platforms, which existing systems it builds on, any new vendor or paid service and what it means for them (cost, lock-in). No architecture. -->
@@ -107,7 +110,7 @@ When the brief is for a whole product or an MVP ("an app that…"), not one feat
 4. **Main journeys** — first-time setup, the primary daily flow, any restricted or portal flow; screen by screen, in the user's words.
 5. **Look and behaviour** — navigation, density, status labels, empty states, validation messages, which screen sizes matter.
 6. **What the app keeps track of** — the minimum set of things it stores, what each holds in plain words, required vs optional. The seed of the data model.
-8. **Not included in the first release** — with the reason.
+8. **Out of scope (Межі оцінки)** — what this estimate does not cover, with the reason.
 9. **Constraints.**
 10. **Technology** (client level), **running costs**, **external dependencies and risks**, **phases and estimate**.
 11. **Decisions that need the client's approval.**

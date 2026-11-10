@@ -69,7 +69,8 @@ This phase writes `<docs>/changes/<change>/requirements.md`, `<docs>/changes/<ch
    - every step and behaviour has a **Done when** the user can observe;
    - all on-screen text is exact and quoted;
    - edge cases cover failure, empty, coming back later and the already-set-up user;
-   - scope is bounded: a *Not included* list, each item with a plain reason;
+   - scope is bounded: an *Out of scope (Межі оцінки)* list, each item with a plain reason;
+   - *Constraints* holds only limits on the product; how the work is shown and accepted (staging first, the client checks, then prod) goes to *How we deliver (Процес роботи)*;
    - every use case says when it is done ("Готово, коли") in terms the client can see; there is no separate acceptance-criteria section (testable criteria belong to the spec);
    - every estimate is one committed range with calendar time and its assumptions in plain words;
    - no file path, document id or English label is left in the client's text.

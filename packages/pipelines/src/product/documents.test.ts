@@ -175,7 +175,7 @@ describe('product document checks', () => {
     expect(
       checkProductDocumentStructure('brief', BRIEF.replace('## Not included', 'Not included').replace('## Done means', ''))
         .missingSections,
-    ).toEqual(['Not included', 'Done means']);
+    ).toEqual(['Out of scope', 'Done means']);
   });
 
   it('reads task ids with Cyrillic prefixes and the docs-sync task', () => {
@@ -217,7 +217,7 @@ describe('product document checks', () => {
       '## Сценарії',
       '## Крайові випадки',
       '## Критерії приймання',
-      '## Не входить',
+      '## Межі оцінки',
       '## Обмеження',
       '## Технології',
       '## Витрати на експлуатацію',
