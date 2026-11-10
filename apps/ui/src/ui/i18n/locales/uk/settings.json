@@ -895,13 +895,18 @@
     "cancel": "Скасувати",
     "save": "Зберегти",
     "tagPlaceholder": "тег",
+    "fromRule": "з правила «{{rule}}»",
+    "fromTrigger": "з правил «{{trigger}}»",
+    "choose": "вибрати",
     "titlePlaceholder": "текст у назві",
     "fields": {
       "source.integration": "Джерело",
       "source.kind": "Тип",
       "author.trusted": "Автор",
       "item.labels": "Тег",
-      "item.title": "Назва"
+      "item.title": "Назва",
+      "intake.rule": "Правило",
+      "intake.trigger": "Тригер правила"
     },
     "integrations": {
       "github": "GitHub",
@@ -911,7 +916,8 @@
     "kinds": {
       "issue": "задача (issue)",
       "pull_request": "pull request",
-      "task": "задача ClickUp"
+      "task": "задача ClickUp",
+      "intake_rule": "картка правила надходження"
     },
     "defaults": {
       "outsideAuthors": "Сторонні автори чекають у Вхідних",

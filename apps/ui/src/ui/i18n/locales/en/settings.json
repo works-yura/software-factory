@@ -879,13 +879,18 @@
     "cancel": "Cancel",
     "save": "Save",
     "tagPlaceholder": "tag",
+    "fromRule": "from rule \"{{rule}}\"",
+    "fromTrigger": "from \"{{trigger}}\" rules",
+    "choose": "choose",
     "titlePlaceholder": "text in the title",
     "fields": {
       "source.integration": "Source",
       "source.kind": "Kind",
       "author.trusted": "Author",
       "item.labels": "Tag",
-      "item.title": "Title"
+      "item.title": "Title",
+      "intake.rule": "Rule",
+      "intake.trigger": "Rule trigger"
     },
     "integrations": {
       "github": "GitHub",
@@ -895,7 +900,8 @@
     "kinds": {
       "issue": "issue",
       "pull_request": "pull request",
-      "task": "ClickUp task"
+      "task": "ClickUp task",
+      "intake_rule": "intake-rule card"
     },
     "defaults": {
       "outsideAuthors": "Outside authors wait in Intake",

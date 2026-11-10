@@ -157,6 +157,40 @@ describe('IntakeRoutesSection', () => {
     await waitFor(() => expect(routeRows()).toHaveLength(1));
   });
 
+  it('adds a route that takes the cards of one intake rule, naming the rule in the list', async () => {
+    const user = userEvent.setup();
+    const written = useRouteHandlers([]);
+    const RULE_ID = '00000000-0000-4000-8000-0000000000aa';
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/intake-rules`, () =>
+        HttpResponse.json({ intakeRules: [{ id: RULE_ID, name: 'Weekly security audit' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/intake-rules/kinds`, () =>
+        HttpResponse.json({ triggers: [{ kind: 'schedule', label: 'On a schedule' }], actions: [], policies: [], placeholders: [] }),
+      ),
+    );
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    const form = screen.getByRole('form', { name: 'New route' });
+    await user.type(within(form).getByRole('textbox', { name: 'Route name' }), 'Audits to Development');
+    await user.click(within(form).getByRole('combobox', { name: 'Add condition' }));
+    await user.click(await screen.findByRole('option', { name: 'Rule' }));
+    await user.click(within(form).getByRole('combobox', { name: 'Rule' }));
+    await user.click(await screen.findByRole('option', { name: 'Weekly security audit' }));
+    await user.click(within(form).getByRole('combobox', { name: 'Route board' }));
+    await user.click(await screen.findByRole('option', { name: 'Development' }));
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(written.created).toHaveLength(1));
+    expect(written.created[0]).toMatchObject({
+      when: { operator: 'AND', conditions: [{ field: 'intake.rule', operator: 'equals', value: RULE_ID }] },
+      target: { boardKey: 'work' },
+    });
+    await waitFor(() => expect(routeRows()).toHaveLength(1));
+    expect(within(routeRows()[0]!).getByText(/from rule "Weekly security audit"/)).toBeTruthy();
+  });
+
   it('turns a route off, moves it, and deletes it only after a second click', async () => {
     const user = userEvent.setup();
     const written = useRouteHandlers([outsideAuthors, clickUpTriage]);
