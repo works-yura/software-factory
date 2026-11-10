@@ -266,6 +266,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const boards = await catalog(replica, projectId);
       expect(boards.map(board => [board.id, board.source, board.editable])).toEqual([
         ['work', 'builtin', true],
+        ['product', 'builtin', true],
         ['bugs', 'stored', true],
       ]);
       const work = boards.find(board => board.id === 'work')!;
@@ -309,7 +310,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const fixed = await transition(replica, projectId, { id: card.id, revision: card.revision + 1 }, 'fixed');
       expect(fixed.json.result).toMatchObject({ status: 'accepted', stage: 'fixed' });
 
-      expect((await catalog(replica, otherProjectId)).map(board => board.id)).toEqual(['work']);
+      expect((await catalog(replica, otherProjectId)).map(board => board.id)).toEqual(['work', 'product']);
       const elsewhere = await replica.send('POST', `/web/factory/projects/${otherProjectId}/work-items`, {
         board: 'bugs',
         title: 'Not here',

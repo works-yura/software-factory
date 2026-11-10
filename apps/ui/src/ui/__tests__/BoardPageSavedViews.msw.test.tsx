@@ -173,7 +173,7 @@ describe('Factory board saved views', () => {
     const boards = screen.getByRole('region', { name: 'Boards' });
     await user.click(within(boards).getByRole('link', { name: 'Release Preview' }));
     await screen.findByTestId('board-column-queued');
-    await user.click(within(boards).getByRole('link', { name: 'Work' }));
+    await user.click(within(boards).getByRole('link', { name: 'Development' }));
     await within(await screen.findByTestId('board-column-triage')).findByText('Created later');
     expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Untitled view', pressed: true })).toBeInTheDocument();

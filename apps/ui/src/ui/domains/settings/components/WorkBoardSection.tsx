@@ -17,9 +17,11 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { StoredBoardInfo, StoredPhaseInfo } from '../../../../api/types';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useBoardQuery, useResetBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
 import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
+import { boardTitle } from '../../../i18n/boardLabels';
 import { SettingsSubsection } from './SettingsSubsection';
 
 const WORK_BOARD = 'work';
@@ -452,11 +454,13 @@ function errorText(error: BoardRequestError): string {
 
 function BoardEditor({
   factoryId,
+  boardKey,
   board,
   canEdit,
   onReload,
 }: {
   factoryId: string;
+  boardKey: string;
   board: StoredBoardInfo;
   canEdit: boolean;
   onReload: () => void;
@@ -464,8 +468,8 @@ function BoardEditor({
   const { t } = useTranslation('settings');
   const [draft, setDraft] = useState<Draft>({ name: board.name, phases: board.phases });
   const [ruleProblems, setRuleProblems] = useState<Record<string, string>>({});
-  const save = useSaveBoardMutation(factoryId, WORK_BOARD);
-  const reset = useResetBoardMutation(factoryId, WORK_BOARD);
+  const save = useSaveBoardMutation(factoryId, boardKey);
+  const reset = useResetBoardMutation(factoryId, boardKey);
   const skills = (useFactorySkillsQuery(factoryId).data?.skills ?? []).map(skill => skill.name);
   const id = useId();
   const readOnly = !canEdit || !board.editable;
@@ -580,19 +584,19 @@ function instructionsTooLong(draft: Draft): boolean {
 }
 
 /**
- * The project's Work board as stored: its phases' names, automation, runner instructions
+ * One of the project's boards as stored: its phases' names, automation, runner instructions
  * and next phases. Organization admins edit it or reset it to Factory's default; what the
  * board's code behaviour depends on stays read-only.
  */
-export function WorkBoardSection({ factoryId }: { factoryId?: string }) {
+function BoardSection({ factoryId, boardKey }: { factoryId?: string; boardKey: string }) {
   const { t } = useTranslation('settings');
-  const query = useBoardQuery(factoryId, WORK_BOARD);
+  const query = useBoardQuery(factoryId, boardKey);
   const data = query.data;
 
   return (
     <SettingsSubsection
       scope="factory"
-      title={t('workBoard.title')}
+      title={boardTitle(boardKey, data?.board.name ?? boardKey)}
       description={t('workBoard.description')}
     >
       {query.isPending && factoryId && (
@@ -607,11 +611,25 @@ export function WorkBoardSection({ factoryId }: { factoryId?: string }) {
           // A new revision (saved, reset or reloaded) starts a fresh draft.
           key={data.board.revision ?? 'code'}
           factoryId={factoryId}
+          boardKey={boardKey}
           board={data.board}
           canEdit={data.canEdit ?? false}
           onReload={() => void query.refetch()}
         />
       )}
     </SettingsSubsection>
+  );
+}
+
+/** Every board of the project, Work first as the catalog serves it, each edited on its own. */
+export function WorkBoardSection({ factoryId }: { factoryId?: string }) {
+  const catalog = useBoardCatalog(factoryId);
+  const boardKeys = catalog.data?.map(board => board.id) ?? [WORK_BOARD];
+  return (
+    <>
+      {boardKeys.map(boardKey => (
+        <BoardSection key={boardKey} factoryId={factoryId} boardKey={boardKey} />
+      ))}
+    </>
   );
 }

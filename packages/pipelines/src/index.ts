@@ -15,6 +15,8 @@ export {
   workItemThreadTitle,
 } from './shared/work-item-branch.ts';
 export type { WorkItemBranchInput, WorkItemBranchSource } from './shared/work-item-branch.ts';
+export { isProductBoardPhase, PRODUCT_CONTEXT, productBoard } from './product/board.ts';
+export type { ProductBoardPhase } from './product/board.ts';
 export { isWorkBoardPhase, workBoard, workPullRequestCardRejection } from './work/board.ts';
 export type { WorkBoardPhase } from './work/board.ts';
 export { workLaneForRole, workStageCarries } from './work/legacy-plan-role.ts';

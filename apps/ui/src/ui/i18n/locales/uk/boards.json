@@ -1,6 +1,6 @@
 {
   "work": {
-    "title": "Робота",
+    "title": "Розробка",
     "phases": {
       "intake": "Вхідні",
       "triage": "Розбір",
@@ -10,6 +10,20 @@
       "done": "Готово",
       "canceled": "Скасовано",
       "pr-review": "Рев’ю PR"
+    }
+  },
+  "product": {
+    "title": "Продукт",
+    "phases": {
+      "intake": "Вхідні",
+      "brief": "Бриф",
+      "client-review": "У замовника",
+      "spec": "Специфікація",
+      "spec-review": "Рев’ю специфікації",
+      "breakdown": "Розбиття",
+      "breakdown-review": "Перевірка розбиття",
+      "done": "Готово",
+      "canceled": "Скасовано"
     }
   }
 }

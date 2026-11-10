@@ -28,7 +28,8 @@ function serve(board: StoredBoardResponse | (() => StoredBoardResponse)) {
       return HttpResponse.json(typeof board === 'function' ? board() : board);
     }),
     http.get(SKILLS_URL, () => HttpResponse.json(skills)),
-    http.get(CATALOG_URL, () => HttpResponse.json({ boards: [] })),
+    // The catalog lists the project's boards; each gets its own editor.
+    http.get(CATALOG_URL, () => HttpResponse.json({ boards: [{ id: 'work', title: 'Work', phases: [] }] })),
   );
   return read;
 }
@@ -219,7 +220,7 @@ describe('WorkBoardSection', () => {
     );
     renderWithProviders(<WorkBoardSection factoryId="fp-1" />);
 
-    expect(await screen.findByText('Only organization admins can edit the Work board.')).toBeInTheDocument();
+    expect(await screen.findByText('Only organization admins can edit boards.')).toBeInTheDocument();
     expect(screen.getByLabelText('Board name')).toBeDisabled();
     expect(phase('Planning').getByLabelText('Instructions')).toBeDisabled();
     expect(phase('Planning').getByRole('switch', { name: 'Planning: start on its own' })).toBeDisabled();

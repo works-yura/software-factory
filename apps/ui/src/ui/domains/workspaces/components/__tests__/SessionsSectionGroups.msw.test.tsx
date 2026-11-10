@@ -121,7 +121,7 @@ describe('Sessions sidebar groups', () => {
     renderSection();
 
     await screen.findByRole('button', { name: 'Release-old: Release old' });
-    expect(groupRegions()).toEqual(['Work sessions', 'Release Preview sessions', 'User sessions']);
+    expect(groupRegions()).toEqual(['Development sessions', 'Release Preview sessions', 'User sessions']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release-old: Release old', 'Release-new: Release new']);
   });
 
@@ -129,13 +129,13 @@ describe('Sessions sidebar groups', () => {
     const user = userEvent.setup();
     renderSection();
     await screen.findByRole('button', { name: 'Release-old: Release old' });
-    expect(rowNamesIn('Work sessions')).toEqual(['Work old', 'Work new']);
+    expect(rowNamesIn('Development sessions')).toEqual(['Work old', 'Work new']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release-old: Release old', 'Release-new: Release new']);
     expect(rowNamesIn('User sessions')).toEqual(['User old', 'User new']);
 
     await pickSessionProperty(user, 'Sort', 'Last created');
 
-    await waitFor(() => expect(rowNamesIn('Work sessions')).toEqual(['Work new', 'Work old']));
+    await waitFor(() => expect(rowNamesIn('Development sessions')).toEqual(['Work new', 'Work old']));
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release-new: Release new', 'Release-old: Release old']);
     expect(rowNamesIn('User sessions')).toEqual(['User new', 'User old']);
   });
@@ -174,7 +174,7 @@ describe('Sessions sidebar groups', () => {
     await closeSessionProperties(user);
 
     await waitFor(() => expect(groupRegions()).toEqual(['All sessions']));
-    expect(screen.queryByText('Work')).toBeNull();
+    expect(screen.queryByText('Development')).toBeNull();
   });
 
   it('hides a group from the menu until reset', async () => {
@@ -188,7 +188,7 @@ describe('Sessions sidebar groups', () => {
     await closeSessionProperties(user);
 
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Release Preview sessions' })).toBeNull());
-    expect(groupRegions()).toEqual(['Work sessions', 'User sessions']);
+    expect(groupRegions()).toEqual(['Development sessions', 'User sessions']);
     expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
 
     await openSessionProperties(user);
@@ -244,14 +244,14 @@ describe('Sessions sidebar groups', () => {
 
     await openSessionProperty(user, 'Group');
     await user.keyboard('{ArrowDown}');
-    expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus();
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Development' })).toHaveFocus();
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
-    expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus();
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Development' })).toHaveFocus();
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
-    expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus();
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Development' })).toHaveFocus();
     await closeSessionProperties(user);
 
-    expect(groupRegions()).toEqual(['Release Preview sessions', 'User sessions', 'Work sessions']);
+    expect(groupRegions()).toEqual(['Release Preview sessions', 'User sessions', 'Development sessions']);
   });
 
   it('forgets the group order once the groups are moved back', async () => {

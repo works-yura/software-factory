@@ -193,7 +193,7 @@ describe('installed board catalog', () => {
     expect(response.status).toBe(200);
     const { boards } = await response.json();
     expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
-      includeDefaultBoards ? ['work', 'release'] : ['release'],
+      includeDefaultBoards ? ['work', 'product', 'release'] : ['release'],
     );
     // Deprecated `title`/`role` stay beside their replacements for older clients.
     expect(boards.at(-1)).toEqual({

@@ -116,8 +116,8 @@ describe('IntakeRoutesSection', () => {
     await waitFor(() => expect(routeRows()).toHaveLength(2));
     const [first, second] = routeRows();
     expect(within(first!).getByText('Outside authors wait in Intake')).toBeTruthy();
-    expect(within(first!).getByText('When: GitHub or GitLab · outside author → Work › Intake')).toBeTruthy();
-    expect(within(second!).getByText('When: ClickUp → Work › Triage')).toBeTruthy();
+    expect(within(first!).getByText('When: GitHub or GitLab · outside author → Development › Intake')).toBeTruthy();
+    expect(within(second!).getByText('When: ClickUp → Development › Triage')).toBeTruthy();
   });
 
   it('adds a route for ClickUp tasks with a tag, landing in a chosen phase', async () => {
@@ -134,7 +134,7 @@ describe('IntakeRoutesSection', () => {
     await user.click(within(form).getByRole('combobox', { name: 'Add condition' }));
     await user.click(await screen.findByRole('option', { name: 'Source' }));
     await user.click(within(form).getByRole('combobox', { name: 'Route board' }));
-    await user.click(await screen.findByRole('option', { name: 'Work' }));
+    await user.click(await screen.findByRole('option', { name: 'Development' }));
     await user.click(within(form).getByRole('combobox', { name: 'Route phase' }));
     // A new card can't land in a terminal phase.
     expect(screen.queryByRole('option', { name: 'Done' })).toBeNull();
@@ -194,7 +194,7 @@ describe('IntakeRoutesSection', () => {
     const written = useRouteHandlers([either]);
     renderSection();
 
-    expect(await screen.findByText('When: a condition set through the API → Work › first phase')).toBeTruthy();
+    expect(await screen.findByText('When: a condition set through the API → Development › first phase')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Edit' }));
     const form = screen.getByRole('form', { name: 'Edit route "Docs or release"' });
     expect(within(form).getByText(/set through the API and can't be changed here/)).toBeTruthy();
@@ -228,8 +228,8 @@ describe('IntakeRoutesSection', () => {
 
     await waitFor(() => expect(routeRows()).toHaveLength(2));
     const [closed, reopened] = routeRows();
-    expect(within(closed!).getByText('When: issue closed · as not planned → Work › Done')).toBeTruthy();
-    expect(within(reopened!).getByText('When: issue reopened → Work › Intake')).toBeTruthy();
+    expect(within(closed!).getByText('When: issue closed · as not planned → Development › Done')).toBeTruthy();
+    expect(within(reopened!).getByText('When: issue reopened → Development › Intake')).toBeTruthy();
   });
 
   it('shows why a route is skipped', async () => {

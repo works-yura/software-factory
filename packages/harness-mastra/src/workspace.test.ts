@@ -399,6 +399,9 @@ describe('bundled Factory skill assets', () => {
       'factory-review',
       'factory-self-review',
       'factory-triage',
+      'product-breakdown',
+      'product-brief',
+      'product-spec',
     ]);
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
@@ -450,6 +453,20 @@ describe('bundled Factory skill assets', () => {
     expect(phase1).toContain('`source_control_update_issue` with `{ issue: <number>, addLabels: ["status: needs triage"] }`');
     expect(phase1).toContain('For GitLab issues, skip this GitHub-only label mutation.');
     expect(triage).toContain('`removeLabels: ["status: needs triage"]`');
+  });
+
+  it('keeps the Product skills interactive, with the documents location taken from the phase instructions', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    for (const skillName of ['product-brief', 'product-spec', 'product-breakdown']) {
+      const prose = await fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
+      expect(prose).toContain(`name: ${skillName}`);
+      // Unlike the autonomous Factory skills, these ask the person and wait.
+      expect(prose).not.toContain('Never wait for or solicit human input');
+      expect(prose).toMatch(/stop and ask/i);
+      expect(prose).toContain('phase instructions');
+      expect(prose).toContain('factory_transition_work_item');
+      expect(prose).toMatch(/Never merge/);
+    }
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
@@ -3477,6 +3494,9 @@ describe('FactorySkillSource layering', () => {
       'factory-review',
       'factory-self-review',
       'factory-triage',
+      'product-breakdown',
+      'product-brief',
+      'product-spec',
     ]);
     expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);
     await expect(source.readdir(path.join(mount, 'missing-skill'))).rejects.toThrow('ENOENT');
@@ -3493,6 +3513,9 @@ describe('FactorySkillSource layering', () => {
       'factory-complete-issue',
       'factory-plan',
       'factory-triage',
+      'product-breakdown',
+      'product-brief',
+      'product-spec',
     ]);
     for (const name of REVIEW_ONLY_FACTORY_SKILLS) {
       expect(await source.exists(path.join(mount, name, 'SKILL.md'))).toBe(false);

@@ -88,7 +88,7 @@ describe('Factory board view memory', () => {
     await togglePropertyOption(userEvent.setup(), 'Board properties', 'Label', label);
   };
 
-  const sidebarBoardLink = (name: 'Work' | 'Release Preview') =>
+  const sidebarBoardLink = (name: 'Development' | 'Release Preview') =>
     within(screen.getByRole('region', { name: 'Boards' })).getByRole('link', { name });
 
   /** A second board to leave Work for: the project's own Release Preview board. */
@@ -115,7 +115,7 @@ describe('Factory board view memory', () => {
     await waitFor(() => expect(router.state.location.search).toBe('?label=later&sort=created-newest'));
     await leaveForReleaseBoard();
 
-    const workLink = sidebarBoardLink('Work');
+    const workLink = sidebarBoardLink('Development');
     expect(workLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/work?label=later&sort=created-newest`);
     fireEvent.click(workLink);
 
@@ -180,7 +180,7 @@ describe('Factory board view memory', () => {
     await user.keyboard('{Escape}');
     await leaveForReleaseBoard();
 
-    expect(sidebarBoardLink('Work')).toHaveAttribute('href', `/factories/${FACTORY_ID}/work`);
+    expect(sidebarBoardLink('Development')).toHaveAttribute('href', `/factories/${FACTORY_ID}/work`);
   });
 
   it('keeps a separate view for each factory when switching factories', async () => {
@@ -223,7 +223,7 @@ describe('Factory board view memory', () => {
     await leaveForReleaseBoard();
     expect(router.state.location.search).toBe('');
 
-    fireEvent.click(sidebarBoardLink('Work'));
+    fireEvent.click(sidebarBoardLink('Development'));
     await waitFor(() => expect(router.state.location.search).toBe('?label=later'));
   });
 });

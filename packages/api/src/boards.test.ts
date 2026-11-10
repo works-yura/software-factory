@@ -105,8 +105,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
   ) {
     const clock = options.clock ?? { now: 0 };
     const cache = new ProjectBoardCache({
+      // Work and the app's board tell the routes' story; Product is seeded like Work (runtime's cache tests).
       codeRegistry: createBoardRegistry({
-        boards: options.release === null ? [] : [options.release ?? releaseBoard()],
+        includeDefaultBoards: false,
+        boards: [workBoard, ...(options.release === null ? [] : [options.release ?? releaseBoard()])],
       }),
       storage: domains.boards,
       projects: domains.projects,

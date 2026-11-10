@@ -202,7 +202,7 @@ describe('ThreadPage header', () => {
     expect(screen.getByRole('button', { name: 'Toggle sidebar' }).closest('header')).toBe(header);
     expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();
     expect(within(header!).getByText('Issue #42: Fix the flaky login test')).toBeInTheDocument();
-    expect(within(header!).getByRole('link', { name: 'Work' })).toBeInTheDocument();
+    expect(within(header!).getByRole('link', { name: 'Development' })).toBeInTheDocument();
   });
 
   it('shows the user session title in the breadcrumb', async () => {

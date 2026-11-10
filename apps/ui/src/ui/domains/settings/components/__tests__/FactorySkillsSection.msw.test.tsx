@@ -145,7 +145,7 @@ describe('FactorySkillsSection', () => {
 
     renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
 
-    const work = await screen.findByRole('region', { name: 'Work board' });
+    const work = await screen.findByRole('region', { name: 'Development board' });
     expect(within(work).getByText('factory-triage')).toBeInTheDocument();
     expect(within(work).getByText('factory-plan')).toBeInTheDocument();
     // Work's PR review runs the review skills.
@@ -160,7 +160,7 @@ describe('FactorySkillsSection', () => {
 
     // Built-ins come first regardless of registry order.
     const regions = screen.getAllByRole('region', { name: / board$/ }).map(region => region.getAttribute('aria-label'));
-    expect(regions).toEqual(['Work board', 'Release Preview board']);
+    expect(regions).toEqual(['Development board', 'Release Preview board']);
   });
 
   it('shows the app skill each custom phase runs, flags a missing one, and lists unused app skills', async () => {
@@ -238,7 +238,7 @@ describe('FactorySkillsSection', () => {
     // The phase without a skill still lists its role.
     expect(within(notes).getByText('lint')).toBeInTheDocument();
 
-    const work = screen.getByRole('region', { name: 'Work board' });
+    const work = screen.getByRole('region', { name: 'Development board' });
     expect(within(work).getByRole('button', { name: /Planning/ })).toHaveTextContent('Overridden by app');
     expect(within(work).getByRole('button', { name: /Triage/ })).not.toHaveTextContent('Overridden by app');
 
@@ -257,7 +257,7 @@ describe('FactorySkillsSection', () => {
 
     expect(await screen.findByRole('region', { name: 'Release Preview board' })).toBeInTheDocument();
     expect(screen.queryByText('factory-triage')).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Work board' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Development board' })).not.toBeInTheDocument();
   });
 
   it('reports an empty catalog instead of pretending built-in boards exist, and still lists app skills', async () => {

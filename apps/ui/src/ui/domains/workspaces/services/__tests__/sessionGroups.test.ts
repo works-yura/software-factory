@@ -47,7 +47,7 @@ describe('groupSessionRows by board', () => {
     );
 
     expect(groupSummary(groups)).toEqual([
-      { label: 'Work', sessionIds: ['work-1'] },
+      { label: 'Development', sessionIds: ['work-1'] },
       { label: 'Release Preview', sessionIds: ['release-1'] },
       { label: 'User', sessionIds: ['user-1'] },
     ]);
@@ -67,7 +67,7 @@ describe('groupSessionRows by board', () => {
     );
 
     expect(groupSummary(groups)).toEqual([
-      { label: 'Work', sessionIds: ['work-1'] },
+      { label: 'Development', sessionIds: ['work-1'] },
       { label: 'User', sessionIds: ['web-1'] },
       { label: 'Slack', sessionIds: ['slack-1', 'slack-2'] },
     ]);
@@ -89,7 +89,7 @@ describe('groupSessionRows by board', () => {
 
     const groups = groupRows([secondWorkRow, workRow], 'board', builtinContext, []);
 
-    expect(groupSummary(groups)).toEqual([{ label: 'Work', sessionIds: ['work-2', 'work-1'] }]);
+    expect(groupSummary(groups)).toEqual([{ label: 'Development', sessionIds: ['work-2', 'work-1'] }]);
   });
 
   it('leaves out hidden groups and ignores hidden keys no group has', () => {
@@ -98,7 +98,7 @@ describe('groupSessionRows by board', () => {
       'board:gone',
     ]);
 
-    expect(groupSummary(groups).map(group => group.label)).toEqual(['Work', 'User']);
+    expect(groupSummary(groups).map(group => group.label)).toEqual(['Development', 'User']);
   });
 
   it('puts stored groups first in stored order, appends unseen groups in default order, and skips stale keys', () => {
@@ -110,7 +110,7 @@ describe('groupSessionRows by board', () => {
 
     const ordered = orderGroupHeadings(defaults, ['user', 'board:gone', 'board:release']);
 
-    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Release Preview', 'Work', 'Slack']);
+    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Release Preview', 'Development', 'Slack']);
   });
 });
 

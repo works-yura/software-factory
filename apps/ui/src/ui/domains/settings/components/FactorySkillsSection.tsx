@@ -14,6 +14,7 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
+import { boardTitle } from '../../../i18n/boardLabels';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { FactorySkillEditorDialog } from './FactorySkillEditorDialog';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -262,9 +263,9 @@ function BoardGroup({
 }) {
   const { t } = useTranslation('settings');
   return (
-    <section aria-label={t('skills.boardAria', { title: board.title })} className="flex flex-col gap-2">
+    <section aria-label={t('skills.boardAria', { title: boardTitle(board.id, board.title) })} className="flex flex-col gap-2">
       <Txt tone="ink" as="h4" variant="body" className="m-0">
-        {board.title}
+        {boardTitle(board.id, board.title)}
       </Txt>
       {isBuiltInBoard(board.id) ? (
         <SkillCards displayed={BUILT_IN_BOARD_SKILLS[board.id]} skills={skills} />

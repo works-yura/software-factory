@@ -3,6 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTranslation } from 'react-i18next';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { boardTitle } from '../../../i18n/boardLabels';
 
 const UNROUTED = '__unrouted__';
 const NO_BOARD = '__no_board__';
@@ -65,7 +66,7 @@ export function BoardPicker({
 
   const boards = catalog.data ?? [];
   const current = boards.find(candidate => candidate.id === board);
-  const label = current?.title ?? (board ? t('linearRouting.notInstalled', { board }) : t('linearRouting.chooseBoard'));
+  const label = current ? boardTitle(current.id, current.title) : (board ? t('linearRouting.notInstalled', { board }) : t('linearRouting.chooseBoard'));
   // A List needs a board: its status rules move cards between that board's columns, so there is no "no board" choice.
   return (
     <Select value={current?.id ?? ''} disabled={disabled || catalog.isPending} onValueChange={value => onChange(value)}>
@@ -77,7 +78,7 @@ export function BoardPicker({
       <SelectContent>
         {boards.map(candidate => (
           <SelectItem key={candidate.id} value={candidate.id}>
-            {candidate.title}
+            {boardTitle(candidate.id, candidate.title)}
           </SelectItem>
         ))}
       </SelectContent>
@@ -111,14 +112,14 @@ export function BoardSelect({
     >
       <SelectTrigger size="sm" aria-label={ariaLabel} className="w-auto">
         <Txt as="span" variant="caption">
-          {current?.title ?? placeholder}
+          {current ? boardTitle(current.id, current.title) : placeholder}
         </Txt>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={NO_BOARD}>{t('linearRouting.noBoard')}</SelectItem>
         {boards.map(board => (
           <SelectItem key={board.id} value={board.id}>
-            {board.title}
+            {boardTitle(board.id, board.title)}
           </SelectItem>
         ))}
       </SelectContent>

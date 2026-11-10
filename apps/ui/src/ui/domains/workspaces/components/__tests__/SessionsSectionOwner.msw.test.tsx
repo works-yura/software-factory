@@ -101,7 +101,7 @@ describe('Sessions sidebar owner filter', () => {
     await pickSessionProperty(user, 'Owner', 'Mine');
 
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Review sessions' })).not.toBeInTheDocument());
-    const work = screen.getByRole('region', { name: 'Work sessions' });
+    const work = screen.getByRole('region', { name: 'Development sessions' });
     const userGroup = screen.getByRole('region', { name: 'User sessions' });
     expect(within(work).getByRole('button', { name: 'factory/issue-20001' })).toBeInTheDocument();
     expect(within(userGroup).getByRole('button', { name: 'task-20002' })).toBeInTheDocument();

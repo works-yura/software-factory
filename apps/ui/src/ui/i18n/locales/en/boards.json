@@ -1,6 +1,6 @@
 {
   "work": {
-    "title": "Work",
+    "title": "Development",
     "phases": {
       "intake": "Intake",
       "triage": "Triage",
@@ -10,6 +10,20 @@
       "done": "Done",
       "canceled": "Canceled",
       "pr-review": "PR review"
+    }
+  },
+  "product": {
+    "title": "Product",
+    "phases": {
+      "intake": "Intake",
+      "brief": "Brief",
+      "client-review": "With the client",
+      "spec": "Spec",
+      "spec-review": "Spec review",
+      "breakdown": "Breakdown",
+      "breakdown-review": "Breakdown review",
+      "done": "Done",
+      "canceled": "Canceled"
     }
   }
 }

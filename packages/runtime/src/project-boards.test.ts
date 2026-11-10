@@ -9,11 +9,19 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { codeBoardOf, compileBoardDefinition } from '@factory/core';
 import type { BoardPhase, BoardPhaseDefinition, BoardRegistry, InstalledBoard, RuleGroup } from '@factory/core';
-import { createDefaultBoardRegistry as createBoardRegistry, workBoard } from '@factory/pipelines';
+import { createDefaultBoardRegistry, workBoard } from '@factory/pipelines';
 import { boardDefinitionOf, StoredBoardsStorage } from '@factory/store';
 import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
 import { ProjectBoardCache, toBoardSource } from './project-boards.ts';
 import type { ProjectBoardCacheOptions } from './project-boards.ts';
+
+/**
+ * Work plus the given app boards. The cache's mechanics are told with Work alone; the other
+ * built-in boards are seeded the same way (see the test of the default boards).
+ */
+function createBoardRegistry({ boards = [] }: { boards?: readonly InstalledBoard[] } = {}): BoardRegistry {
+  return createDefaultBoardRegistry({ includeDefaultBoards: false, boards: [workBoard, ...boards] });
+}
 
 /** A phase's `autoStartWhen`; only working phases carry one. */
 function autoStartWhenOf(phase: BoardPhase<string> | undefined): RuleGroup | undefined {
@@ -137,6 +145,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     await storage.ops.updateMany(table, { ...project, ...where }, set);
     await storage.ops.updateMany('factory_board_definition_versions', project, { version: randomUUID() });
   }
+
+  it("stores every default board, Product included, as a built-in on a project's first load", async () => {
+    const { a, scope } = await setup();
+    const described = await cache(a.boards, createDefaultBoardRegistry()).describe(scope);
+
+    expect((await a.boards.list(scope)).map(row => [row.key, row.revision, row.createdBy])).toEqual([
+      ['work', 1, 'factory'],
+      ['product', 1, 'factory'],
+    ]);
+    expect([...described.registry.keys()]).toEqual(['work', 'product']);
+    expect(described.details.get('product')).toEqual({ source: 'builtin', editable: true, problems: [] });
+    expect(described.registry.get('product')!.roleForPhase('spec')).toBe('product');
+  });
 
   it("stores a project's Work and app boards on its first load and serves each from its row", async () => {
     const { a, scope } = await setup();
@@ -404,7 +425,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     const { a, scope } = await setup();
     const registry = await cache(
       a.boards,
-      createBoardRegistry({ boards: [appBoard('release')], includeDefaultBoards: false }),
+      createDefaultBoardRegistry({ boards: [appBoard('release')], includeDefaultBoards: false }),
     ).load(scope);
 
     expect([...registry.keys()]).toEqual(['release']);

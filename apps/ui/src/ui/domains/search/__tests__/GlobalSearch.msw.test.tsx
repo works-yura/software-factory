@@ -483,7 +483,7 @@ describe('Global search', () => {
     expect(within(results).getByText('Mastra Factory')).toBeInTheDocument();
     expect(within(results).getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
-      'Work',
+      'Development',
       'Rules',
       'Preferences',
       'Manage Factory',
@@ -1091,7 +1091,7 @@ describe('Global search', () => {
     await waitForTheChatFrameToSettleOnALiveRun();
 
     const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
-    const focusedBeforeSearch = await within(sidebar).findByRole('link', { name: /^Work/ });
+    const focusedBeforeSearch = await within(sidebar).findByRole('link', { name: /^Development/ });
     act(() => focusedBeforeSearch.focus());
     await user.keyboard('{Control>}k{/Control}');
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
