@@ -480,7 +480,8 @@
     "kilobytes": "{{size}} КБ",
     "megabytes": "{{size}} МБ",
     "expand": "Відкрити на весь екран",
-    "download": "Завантажити"
+    "download": "Завантажити",
+    "sendNotes": "Надіслати все ({{count}})"
   },
   "fileBrowser": {
     "back": "Назад до робочого простору",

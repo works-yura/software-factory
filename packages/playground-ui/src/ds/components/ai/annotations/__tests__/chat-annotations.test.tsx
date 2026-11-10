@@ -46,4 +46,17 @@ describe('ChatAnnotationsProvider', () => {
       expect(hook.result.current.annotations).toEqual([]);
     });
   });
+
+  describe('when a passage is added with its note', () => {
+    it('keeps the trimmed note as its comment, and counts a request to send from outside the composer', () => {
+      const { result } = renderHook(() => useChatAnnotations(), { wrapper: ChatAnnotationsProvider });
+      const source = { element: document.createElement('p'), start: 0, end: 9, text: 'Openrows', textBefore: '', textAfter: '' };
+      act(() => result.current.addAnnotation({ text: 'Open rows', source, comment: '  Too dense  ' }));
+      expect(result.current.annotations[0]?.comment).toBe('Too dense');
+
+      expect(result.current.sendRequests).toBe(0);
+      act(() => result.current.requestSend());
+      expect(result.current.sendRequests).toBe(1);
+    });
+  });
 });

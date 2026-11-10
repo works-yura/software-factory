@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import type { QueryClient } from '@tanstack/react-query';
@@ -258,7 +259,8 @@ function ThreadSurface() {
   );
 }
 
-export function renderThread() {
+/** `extra` renders beside the thread, inside the same chat session (e.g. a document viewer). */
+export function renderThread(extra?: ReactNode) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`]}>
       <Routes>
@@ -269,6 +271,7 @@ export function renderThread() {
               <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
                 <OverlaysProvider>
                   <ThreadSurface />
+                  {extra}
                 </OverlaysProvider>
               </ChatSessionTestProvider>
             </SidebarProvider>

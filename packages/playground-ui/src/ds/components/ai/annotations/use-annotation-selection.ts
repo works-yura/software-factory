@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
 import { clampSelection, findAnnotatablePart, selectionAnchor, annotationSource } from './annotatable-selection';
@@ -30,14 +30,26 @@ function singleRange(selection: Selection | null): Range | undefined {
 
 export function useAnnotationSelection(containerRef: RefObject<Element | null>, toolbarRef: RefObject<Element | null>) {
   const [state, setState] = useState<AnnotationSelectionState>(CLOSED);
-  const dismiss = () => setState(closing);
+  // Pinned while the person writes a note: focusing the note field collapses the page selection, and the
+  // passage must survive that, so selection changes are ignored until the note is added or cancelled.
+  const pinnedRef = useRef(false);
+  const dismiss = () => {
+    pinnedRef.current = false;
+    setState(closing);
+  };
+  const pin = useCallback(() => {
+    pinnedRef.current = true;
+  }, []);
 
   useEffect(() => {
     let pressing = false;
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
-    const close = () => setState(closing);
+    const close = () => {
+      if (!pinnedRef.current) setState(closing);
+    };
 
     const reportSelection = (pointerReleased: boolean) => {
+      if (pinnedRef.current) return;
       const container = containerRef.current;
       const selection = document.getSelection();
       const range = singleRange(selection);
@@ -50,14 +62,21 @@ export function useAnnotationSelection(containerRef: RefObject<Element | null>, 
       setState({ open: true, selection: { text, source: annotationSource(part), anchor: selectionAnchor(part) } });
     };
 
-    const onPointerDown = () => {
+    const insideCard = (target: EventTarget | null) => target instanceof Node && Boolean(toolbarRef.current?.contains(target));
+    // A press on the card itself pins the passage first, before focus moves and the page selection collapses.
+    const onPointerDown = (event: PointerEvent) => {
+      if (insideCard(event.target)) {
+        pinnedRef.current = true;
+        return;
+      }
       pressing = true;
     };
     const endPress = () => {
       pressing = false;
     };
     // Read after the browser finishes the gesture: a click inside a selection collapses it only after release.
-    const onPointerUp = () => {
+    const onPointerUp = (event: PointerEvent) => {
+      if (insideCard(event.target)) return;
       pressing = false;
       clearTimeout(settleTimer);
       settleTimer = setTimeout(() => reportSelection(true));
@@ -85,5 +104,5 @@ export function useAnnotationSelection(containerRef: RefObject<Element | null>, 
     };
   }, [containerRef, toolbarRef]);
 
-  return { open: state.open, selection: state.selection, dismiss };
+  return { open: state.open, selection: state.selection, dismiss, pin };
 }

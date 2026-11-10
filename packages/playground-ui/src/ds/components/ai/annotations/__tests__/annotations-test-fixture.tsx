@@ -74,8 +74,8 @@ export const dragSelect = (start: [Node, number], end: [Node, number]) => {
 
 export const annotate = async (paragraph: string, end: number, start = 0) => {
   dragSelect([textNode(paragraph), start], [textNode(paragraph), end]);
-  fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull());
+  fireEvent.click(await screen.findByRole('button', { name: 'Add note' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull());
 };
 
 export const markers = () =>

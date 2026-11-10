@@ -5,8 +5,10 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { SESSION_ID, releaseSession, renderThread, stubPreparingSession } from './composer-session-test-fixture';
+import { WorkspaceFileViewer } from '../../../workspace-viewer/components/WorkspaceFileViewer';
+import type { WorkspaceFilePreview } from '../../../workspace-viewer/components/workspace-file-preview';
 import type { PreparingSession, StubPreparingSessionOptions } from './composer-session-test-fixture';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -53,8 +55,8 @@ async function selectFrom(paragraphText: string, length: number) {
 
 async function annotate(user: UserEvent, paragraphText: string, length: number) {
   await selectFrom(paragraphText, length);
-  await user.click(await screen.findByRole('button', { name: 'Add to chat' }));
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument());
+  await user.click(await screen.findByRole('button', { name: 'Add note' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Add note' })).not.toBeInTheDocument());
 }
 
 async function renderSessionWithReply(options: StubPreparingSessionOptions = {}): Promise<PreparingSession> {
@@ -246,6 +248,88 @@ describe('Composer annotations', () => {
 
     it('clears the annotation from the composer', async () => {
       await waitFor(() => expect(screen.queryByRole('button', { name: /annotation/ })).not.toBeInTheDocument());
+    });
+  });
+
+  describe('when the person writes a note on the selected passage', () => {
+    it('sends the passage with the note under it', async () => {
+      const user = userEvent.setup();
+      const session = await renderSessionWithReply();
+      await selectFrom(REPLY, 'Open rows'.length);
+      await user.click(await screen.findByRole('textbox', { name: 'Note for the agent' }));
+      await user.keyboard('Too dense{Enter}');
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add note' })).not.toBeInTheDocument());
+      expect(markers()).toEqual(['1']);
+
+      await user.click(screen.getByRole('button', { name: 'Send message' }));
+
+      await waitFor(() => expect(session.delivered).toEqual(['1. > Open rows\n\n   Too dense']));
+    });
+  });
+
+  describe('when the person reviews a document full screen', () => {
+    const DOC = 'The owner gets a push for every new booking.';
+    const file = {
+      name: 'requirements.md',
+      path: 'docs/changes/2026-11-10-notifications/requirements.md',
+      language: 'markdown',
+      contentType: 'text',
+      content: `# Brief\n\n${DOC}`,
+      size: 48,
+      updatedAt: '2026-11-10T10:00:00.000Z',
+    } as unknown as WorkspaceFilePreview;
+
+    // jsdom runs the dialog's and the note card's open animations on fake frames; under a loaded run the
+    // card can still be settling when the click lands, so this one interaction-heavy test may retry.
+    it('notes passages in the dialog and sends them all from its header, closing it', { retry: 2 }, async () => {
+      // The dialog and the note card animate in; their entry styles briefly disable pointer events.
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      const session = stubPreparingSession();
+      stubReply();
+      const { client } = renderThread(
+        <WorkspaceFileViewer
+          filePath={file.path}
+          file={file}
+          isLoading={false}
+          isRefreshing={false}
+          onRefresh={() => {}}
+          onBack={() => {}}
+        />,
+      );
+      await releaseSession(session.finishWorkspace, client);
+      // The thread remounts its chat once its messages arrive; open the document only after every fetch settled.
+      await screen.findByText(REPLY);
+      await waitFor(() => expect(client.isFetching()).toBe(0));
+      await waitForMutationsIdle(client);
+
+      await user.click(screen.getByRole('button', { name: 'Open full screen' }));
+      const dialog = await screen.findByRole('dialog', { name: 'requirements.md' });
+      const send = within(dialog).getByRole('button', { name: 'Send all (0)' });
+      expect(send).toBeDisabled();
+
+      const inDialog = Array.from(dialog.querySelectorAll('p')).find(p => p.textContent === DOC);
+      if (!inDialog) throw new Error('No paragraph in the dialog');
+      const text = inDialog.firstChild as Text;
+      fireEvent.pointerDown(inDialog);
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, 'The owner'.length);
+      document.getSelection()?.removeAllRanges();
+      document.getSelection()?.addRange(range);
+      fireEvent.pointerUp(inDialog);
+
+      const note = await screen.findByRole('textbox', { name: 'Note for the agent' });
+      await user.click(note);
+      await user.keyboard('Which owner');
+      expect(note).toHaveValue('Which owner');
+      await user.keyboard('{Enter}');
+      await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Note for the agent' })).not.toBeInTheDocument());
+      await user.click(await within(dialog).findByRole('button', { name: 'Send all (1)' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'requirements.md' })).not.toBeInTheDocument());
+      await waitFor(() =>
+        expect(session.delivered).toEqual([`1. > \`${file.path}\`\n   > The owner\n\n   Which owner`]),
+      );
     });
   });
 });

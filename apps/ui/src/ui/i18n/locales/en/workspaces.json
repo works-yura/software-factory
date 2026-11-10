@@ -472,7 +472,8 @@
     "kilobytes": "{{size}} KB",
     "megabytes": "{{size}} MB",
     "expand": "Open full screen",
-    "download": "Download"
+    "download": "Download",
+    "sendNotes": "Send all ({{count}})"
   },
   "fileBrowser": {
     "back": "Back to workspace",

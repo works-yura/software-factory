@@ -15,7 +15,7 @@ export interface ChatAnnotation {
 
 export const visibleComment = (annotation: ChatAnnotation) => annotation.comment?.trim() || undefined;
 
-export type NewChatAnnotation = Pick<ChatAnnotation, 'text' | 'source'>;
+export type NewChatAnnotation = Pick<ChatAnnotation, 'text' | 'source' | 'comment'>;
 
 export interface ChatAnnotationsApi {
   /** In the order they were added: an annotation's number is its position. */
@@ -28,6 +28,12 @@ export interface ChatAnnotationsApi {
   takeAnnotations: () => ChatAnnotation[];
   /** Puts the annotations of a message that failed to send back, ahead of any added since. */
   restoreAnnotations: (annotations: readonly ChatAnnotation[]) => void;
+  /**
+   * How many times a surface outside the composer (a full-screen document) asked to send the waiting
+   * annotations now; the composer sends on each new request, as if its Send was pressed.
+   */
+  sendRequests: number;
+  requestSend: () => void;
 }
 
 const ChatAnnotationsContext = createContext<ChatAnnotationsApi | undefined>(undefined);
@@ -38,11 +44,13 @@ const samePassage = (a: AnnotationSource, b: AnnotationSource) =>
 /** Mount it below whatever remounts when the thread changes, so annotations stay with their thread. */
 export function ChatAnnotationsProvider({ children }: { children: ReactNode }) {
   const [annotations, setAnnotations] = useState<ChatAnnotation[]>([]);
+  const [sendRequests, setSendRequests] = useState(0);
 
   const value: ChatAnnotationsApi = {
     annotations,
-    addAnnotation: ({ text, source }) => {
-      const annotation = { text: normalizeAnnotationText(text), source };
+    addAnnotation: ({ text, source, comment }) => {
+      const note = comment?.trim();
+      const annotation = { text: normalizeAnnotationText(text), source, ...(note ? { comment: note } : {}) };
       if (!annotation.text) return;
       setAnnotations(current =>
         current.some(waiting => samePassage(waiting.source, source))
@@ -65,6 +73,8 @@ export function ChatAnnotationsProvider({ children }: { children: ReactNode }) {
         const kept = new Set(current.map(annotation => annotation.id));
         return [...restored.filter(annotation => !kept.has(annotation.id)), ...current];
       }),
+    sendRequests,
+    requestSend: () => setSendRequests(count => count + 1),
   };
 
   return <ChatAnnotationsContext.Provider value={value}>{children}</ChatAnnotationsContext.Provider>;

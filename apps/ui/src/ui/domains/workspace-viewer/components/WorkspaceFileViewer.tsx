@@ -11,6 +11,7 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { PortalContainerProvider } from '@mastra/playground-ui/primitives/portal-container';
 import { ArrowLeft, Download, Maximize2, RefreshCw } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { RefObject } from 'react';
@@ -63,6 +64,31 @@ function FileAnnotations({ containerRef, filePath }: { containerRef: RefObject<H
   );
 }
 
+/**
+ * "Send all (N)" in the full-screen document: the chat composer is behind the dialog, so the notes made
+ * here are sent from here, through the composer's own send, and the dialog closes.
+ */
+function SendNotesButton({ onSent }: { onSent: () => void }) {
+  const { t } = useTranslation('workspaces');
+  const chat = useOptionalChatAnnotations();
+  if (!chat) return null;
+  const count = chat.annotations.length;
+  return (
+    <Button
+      type="button"
+      variant="primary"
+      size="sm"
+      disabled={count === 0}
+      onClick={() => {
+        chat.requestSend();
+        onSent();
+      }}
+    >
+      {t('fileViewer.sendNotes', { count })}
+    </Button>
+  );
+}
+
 function formatBytes(size: number) {
   if (size < 1024) return tk('fileViewer.bytes', { size });
   if (size < 1024 * 1024) return tk('fileViewer.kilobytes', { size: Math.round(size / 1024) });
@@ -94,6 +120,7 @@ export function WorkspaceFileViewer({
   const documentRef = useRef<HTMLDivElement>(null);
   const expandedRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
+  const [dialogPortalHost, setDialogPortalHost] = useState<HTMLDivElement | null>(null);
   const canExpand = file?.contentType === 'text';
 
   /** The markdown document, annotatable; long lines wrap instead of running off the panel. */
@@ -204,12 +231,18 @@ export function WorkspaceFileViewer({
       {expanded && file?.contentType === 'text' ? (
         <Dialog open onOpenChange={open => !open && setExpanded(false)}>
           <DialogContent size="full" aria-label={file.name ?? filePath}>
+            {/* Popups opened inside the dialog (the note card, a marker's comment) mount here, inside its focus trap. */}
+            <div ref={setDialogPortalHost} className="absolute" />
             <DialogHeader>
-              <DialogTitle>{file.name ?? filePath}</DialogTitle>
+              <div className="flex min-w-0 items-center gap-3">
+                <DialogTitle className="min-w-0 flex-1 truncate">{file.name ?? filePath}</DialogTitle>
+                <SendNotesButton onSent={() => setExpanded(false)} />
+              </div>
               <Txt tone="muted" as="span" variant="caption" className="truncate">
                 {file.path}
               </Txt>
             </DialogHeader>
+            <PortalContainerProvider container={dialogPortalHost}>
             <DialogBody>
               <div className="mx-auto w-full max-w-[52rem]">
                 {isMarkdown ? (
@@ -223,6 +256,7 @@ export function WorkspaceFileViewer({
                 )}
               </div>
             </DialogBody>
+            </PortalContainerProvider>
           </DialogContent>
         </Dialog>
       ) : null}

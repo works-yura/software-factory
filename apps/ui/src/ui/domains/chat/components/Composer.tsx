@@ -84,7 +84,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     baseUrl,
     enabled: sessionEnabled,
   };
-  const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
+  const { annotations, takeAnnotations, restoreAnnotations, sendRequests } = useChatAnnotations();
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
@@ -226,6 +226,19 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     if (sendDisabled || !hasSubmittableDraft) return;
     submitInput(shownText.trim());
   };
+
+  // A full-screen document sends its notes from its own "Send all": the same send as this button, with the draft.
+  const sendRequested = useEffectEvent(() => {
+    if (annotations.length === 0) return;
+    if (sendDisabled) {
+      pushNotice(t('composer.sendFailed'), 'error');
+      return;
+    }
+    submitInput(shownText.trim());
+  });
+  useEffect(() => {
+    if (sendRequests > 0) sendRequested();
+  }, [sendRequests]);
 
   const commandMenu = useComposerCommands({
     commands,

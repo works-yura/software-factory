@@ -17,6 +17,8 @@ import type { RenderedChat } from './annotations-test-fixture';
 
 afterEach(cleanUpAnnotationTests);
 
+const noteField = () => screen.getByRole('textbox', { name: 'Note for the agent' });
+
 describe('AnnotationSelectionToolbar', () => {
   let chat: RenderedChat;
   let user: UserEvent;
@@ -26,10 +28,60 @@ describe('AnnotationSelectionToolbar', () => {
       chat = renderChat();
       dragSelect([textNode(SECOND), 'Soft rows add '.length], [textNode('Model reply footer'), 'Model'.length]);
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Add note' }));
       typeAndSend('More?');
 
       expect(chat.sent).toEqual(['1. > faint backgrounds.\n\nMore?']);
+    });
+  });
+
+  describe('when the person writes a note on the selected passage', () => {
+    beforeEach(async () => {
+      user = userEvent.setup();
+      chat = renderChat();
+      dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
+      await screen.findByRole('button', { name: 'Add note' });
+    });
+
+    it('keeps the passage while the note field has focus, though the page selection collapses', async () => {
+      await user.click(noteField());
+      document.getSelection()?.removeAllRanges();
+      fireEvent(document, new Event('selectionchange'));
+      await user.keyboard('Too dense');
+
+      expect(screen.getByRole('button', { name: 'Add note' })).toBeTruthy();
+      expect(noteField()).toHaveProperty('value', 'Too dense');
+    });
+
+    it('adds the passage with its note on Enter, and sends both with the next message', async () => {
+      await user.click(noteField());
+      await user.keyboard('Too dense{Enter}');
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull());
+      typeAndSend('Thoughts?');
+
+      expect(chat.sent).toEqual(['1. > Open rows\n\n   Too dense\n\nThoughts?']);
+    });
+
+    it('keeps Shift+Enter as a new line in the note', async () => {
+      await user.click(noteField());
+      await user.keyboard('one{Shift>}{Enter}{/Shift}two');
+
+      expect(noteField()).toHaveProperty('value', 'one\ntwo');
+    });
+
+    it('cancels on Escape without adding anything', async () => {
+      await user.click(noteField());
+      await user.keyboard('never mind{Escape}');
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull());
+      typeAndSend('Plain');
+
+      expect(chat.sent).toEqual(['Plain']);
+    });
+
+    it('cancels from the Cancel button', async () => {
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull());
     });
   });
 
@@ -41,7 +93,7 @@ describe('AnnotationSelectionToolbar', () => {
 
       await settleSelection();
 
-      expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull();
     });
   });
 
@@ -54,7 +106,7 @@ describe('AnnotationSelectionToolbar', () => {
 
       await settleSelection();
 
-      expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull();
     });
   });
 
@@ -66,12 +118,12 @@ describe('AnnotationSelectionToolbar', () => {
 
       await settleSelection();
 
-      expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull();
     });
   });
 
   describe('when the person selects with the keyboard after a context menu swallowed the pointer release', () => {
-    it('offers Add to chat', async () => {
+    it('offers the note card', async () => {
       renderChat();
       const paragraph = screen.getByText(REPLY);
       fireEvent.pointerDown(paragraph, { button: 2 });
@@ -83,29 +135,28 @@ describe('AnnotationSelectionToolbar', () => {
       document.getSelection()?.addRange(range);
       fireEvent(document, new Event('selectionchange'));
 
-      expect(await screen.findByRole('button', { name: 'Add to chat' })).toBeTruthy();
+      expect(await screen.findByRole('button', { name: 'Add note' })).toBeTruthy();
     });
   });
 
-  describe('when the person presses Escape while Add to chat shows', () => {
+  describe('when the person presses Escape before writing anything', () => {
     beforeEach(async () => {
       renderChat();
       dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
-      await screen.findByRole('button', { name: 'Add to chat' });
+      await screen.findByRole('button', { name: 'Add note' });
       fireEvent.keyDown(document.body, { key: 'Escape' });
     });
 
-    it('hides Add to chat', async () => {
-      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull());
+    it('hides the card', async () => {
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull());
     });
 
-    it('leaves the selection alone', () => {
+    it('leaves the selection alone, so it can still be copied', () => {
       expect(document.getSelection()?.toString()).toBe('Open rows');
     });
   });
 
-  describe('when the person presses Tab while Add to chat shows', () => {
-    let add: HTMLElement;
+  describe('when the person presses Tab from the conversation while the card shows', () => {
     let conversation: HTMLElement;
 
     beforeEach(async () => {
@@ -114,56 +165,40 @@ describe('AnnotationSelectionToolbar', () => {
       conversation = screen.getByRole('region', { name: 'Conversation' });
       conversation.focus();
       dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
-      add = await screen.findByRole('button', { name: 'Add to chat' });
+      await screen.findByRole('button', { name: 'Add note' });
       await user.tab();
     });
 
-    it('moves focus to Add to chat', () => {
-      expect(document.activeElement).toBe(add);
+    it('moves focus to the note field', () => {
+      expect(document.activeElement).toBe(noteField());
     });
 
-    it('adds the passage on Enter', async () => {
+    it('adds the passage as a quote on Enter with an empty note', async () => {
       await user.keyboard('{Enter}');
       typeAndSend('Why?');
 
       expect(chat.sent).toEqual(['1. > Open rows\n\nWhy?']);
     });
 
-    describe('when the person presses Tab again', () => {
-      beforeEach(async () => {
-        await user.tab();
-      });
+    it('hands focus back to the conversation on Escape', async () => {
+      await user.keyboard('{Escape}');
 
-      it('hands focus back to the conversation', () => {
-        expect(document.activeElement).toBe(conversation);
-      });
-
-      it('hides Add to chat', async () => {
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull());
-      });
-    });
-
-    describe('when the person presses Escape', () => {
-      it('hands focus back to the conversation', async () => {
-        await user.keyboard('{Escape}');
-
-        expect(document.activeElement).toBe(conversation);
-      });
+      expect(document.activeElement).toBe(conversation);
     });
   });
 
-  describe('when Add to chat is scrolled out of sight and the person presses Tab', () => {
-    it('closes it, so Tab moves on without stopping there', async () => {
+  describe('when the note field is scrolled out of sight and the person presses Tab', () => {
+    it('closes the card, so Tab moves on without stopping there', async () => {
       renderChat();
       const conversation = screen.getByRole('region', { name: 'Conversation' });
       conversation.focus();
       dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
-      const add = await screen.findByRole('button', { name: 'Add to chat' });
-      vi.spyOn(add, 'focus').mockImplementation(() => {});
+      await screen.findByRole('button', { name: 'Add note' });
+      vi.spyOn(noteField(), 'focus').mockImplementation(() => {});
 
       fireEvent.keyDown(conversation, { key: 'Tab' });
 
-      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add note' })).toBeNull());
     });
   });
 
@@ -171,7 +206,7 @@ describe('AnnotationSelectionToolbar', () => {
     it('leaves Tab to the browser', async () => {
       renderChat();
       dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
-      await screen.findByRole('button', { name: 'Add to chat' });
+      await screen.findByRole('button', { name: 'Add note' });
 
       const tabbedOn = fireEvent.keyDown(document.body, { key: 'Tab' });
 
