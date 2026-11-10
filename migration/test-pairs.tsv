@@ -164,12 +164,12 @@ supervisor/session-messaging.test.ts	supervisor/src/session-messaging.test.ts
 supervisor/session.test.ts	supervisor/src/session.test.ts
 supervisor/write-tools.test.ts	supervisor/src/write-tools.test.ts
 timing.test.ts	observability/src/timing.test.ts
-tools/approval-tools.test.ts	harness-mastra/src/tools/approval-tools.test.ts	+2	answering a Claude Code permission
+tools/approval-tools.test.ts	harness-mastra/src/tools/approval-tools.test.ts	5	answering a Claude Code permission; upstream #29869: followers answer a session parked on submit_plan (+3)
 tools/deliver.test.ts	harness-mastra/src/tools/deliver.test.ts	+3	notices reach a session another harness runs; notification record and running state for another harness
 tools/messaging-tools.test.ts	harness-mastra/src/tools/messaging-tools.test.ts	1	upstream #29873: a parked run reads as parked in the session list (+1)
 tools/permissions.test.ts	harness-mastra/src/tools/permissions.test.ts
 tools/read-tools.test.ts	harness-mastra/src/tools/read-tools.test.ts	1	upstream #29873: factory_list_attention lists runs parked on a tool prompt (+1)
-tools/reports.test.ts	harness-mastra/src/tools/reports.test.ts
+tools/reports.test.ts	harness-mastra/src/tools/reports.test.ts	1	upstream #29869: the parked plan is reported as answerable (+1)
 tools/run-watch.test.ts	harness-mastra/src/tools/run-watch.test.ts
 tools/scope.test.ts	harness-mastra/src/tools/scope.test.ts
 tools/session-tools.test.ts	harness-mastra/src/tools/session-tools.test.ts	+3	hybrid scope cases removed with the personal model scope; upstream #28721: the old plan role still starts (+1); side and role sessions on Claude Code; one sandbox folder per card: role refused while another card session runs (+1)
