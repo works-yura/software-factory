@@ -272,9 +272,9 @@ describe('product document checks', () => {
   });
 
   it('refuses acceptance criteria or a closing checklist in the brief, under any of its names', () => {
-    for (const heading of ['## Acceptance criteria', '## Критерії приймання', '## Готово означає', '## Done means']) {
+    for (const heading of ['## Acceptance criteria', '## Критерії приймання', '## Готово означає', '## Done means', '## Процес роботи', '## How we deliver']) {
       const problems = checkProductDocumentStructure('brief', `${BRIEF}\n${heading}\n- [ ] works\n`).formatProblems;
-      expect(problems.some(problem => problem.includes('closing checklist'))).toBe(true);
+      expect(problems.some(problem => problem.includes(heading.slice(3)))).toBe(true);
     }
   });
 

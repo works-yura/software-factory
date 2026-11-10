@@ -81,7 +81,7 @@ This phase writes `<docs>/changes/<change>/requirements.md`, `<docs>/changes/<ch
    - all on-screen text is exact and quoted;
    - edge cases cover failure, empty, coming back later and the already-set-up user;
    - scope is bounded: an *Out of scope (Межі оцінки)* list, each item with a plain reason;
-   - *Constraints* holds only limits on the product; how the work is shown and accepted (staging first, the client checks, then prod) goes to *How we deliver (Процес роботи)*;
+   - *Constraints* holds only limits on the product; **our working process never goes in the brief** — no "Процес роботи" / "How we deliver" section, no "each phase goes to staging first, you check it, then prod", no preview schedule: the client already agreed how we work, and repeating it reads as filler;
    - *Edge cases* is a table "Ситуація | Що бачить користувач": every row says what the user sees (exact text in quotes where there is one); no internal guarantees (retries, duplicates, queues — those go to the spec); no behaviour that is really an open choice (ask it first with the question tool);
    - every use case says when it is done ("Готово, коли") in terms the client can see; there is no separate acceptance-criteria section (testable criteria belong to the spec);
    - the estimate is only the table: per phase one committed range of hours, plus a third-party wait only when there is one; no paragraph about weeks of one developer, hours per week or team capacity, no list of assumptions — scope assumptions go to *Межі оцінки*, the rest to `research.md` or the change request description;

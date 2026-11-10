@@ -282,12 +282,20 @@ function sectionBody(markdown: string, match: readonly RegExp[]): string | undef
  * what the user sees, with at least one row, so every case states what the client will observe.
  */
 /** Sections the client's brief must never carry: a closing checklist is acceptance criteria, which the spec owns. */
-const FORBIDDEN_BRIEF_HEADING = [/acceptance criteria/i, /критері[їй] приймання/i, /done means/i, /definition of done/i, /готово означає/i];
+const FORBIDDEN_BRIEF_HEADING = [
+  /acceptance criteria/i,
+  /критері[їй] приймання/i,
+  /done means/i,
+  /definition of done/i,
+  /готово означає/i,
+  /how we deliver/i,
+  /процес (роботи|розробки)/i,
+];
 
 export function briefFormatProblems(markdown: string): string[] {
   const forbidden = headings(markdown).filter(heading => FORBIDDEN_BRIEF_HEADING.some(pattern => pattern.test(heading)));
   const problems = forbidden.map(
-    heading => `remove "${heading}": no acceptance criteria or closing checklist in the brief (they belong to the spec)`,
+    heading => `remove "${heading}": the brief carries no acceptance criteria, closing checklist or description of our working process`,
   );
   return [...problems, ...edgeCaseProblems(markdown)];
 }

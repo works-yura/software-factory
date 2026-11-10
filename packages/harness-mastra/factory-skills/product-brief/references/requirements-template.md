@@ -55,10 +55,7 @@ Write it in the person's language: for this team, **the Ukrainian headings in br
 - <thing> (<plain reason: needs more design first / a later phase / handled elsewhere>)
 
 ## Constraints  (Обмеження)
-- <limits on the product itself: platforms, languages, accessibility, offline, data residency, "no paid third-party service without approval", nothing secret stored in the app. Not how we work — that goes to How we deliver.>
-
-## How we deliver  (Процес роботи)
-<!-- How the work is shown and accepted, not a limit on the product. Never a duration for the client's own checks or approvals — we don't estimate the client's time: e.g. "every change goes to staging first, you check it there, and only then to prod"; how often you see progress; who accepts. Omit if nothing beyond the usual. -->
+- <limits on the product itself: platforms, languages, accessibility, offline, data residency, "no paid third-party service without approval", nothing secret stored in the app. Not how we work: our process (staging, previews, who accepts) is never written in the brief.>
 
 ## Technology  (Технології)
 <!-- At the client's level: platforms, which existing systems it builds on, any new vendor or paid service and what it means for them (cost, lock-in). No architecture. -->
