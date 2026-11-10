@@ -17,7 +17,7 @@
     "phases": {
       "intake": "Вхідні",
       "brief": "Бриф",
-      "client-review": "На погодженні",
+      "client-review": "Погодження",
       "spec": "Специфікація",
       "spec-review": "Рев’ю специфікації",
       "breakdown": "Розбиття",

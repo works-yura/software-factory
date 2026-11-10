@@ -17,7 +17,7 @@
     "phases": {
       "intake": "Intake",
       "brief": "Brief",
-      "client-review": "Awaiting approval",
+      "client-review": "Approval",
       "spec": "Spec",
       "spec-review": "Spec review",
       "breakdown": "Breakdown",
