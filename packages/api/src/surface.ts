@@ -817,6 +817,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         auth: deps.auth,
         sessions: sourceControlSessions,
         ...(deps.attachLocalCheckout ? { attachLocalCheckout: deps.attachLocalCheckout } : {}),
+        controller: deps.controller,
+        ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
       },
     }),
     ...new ConfigRoutes({

@@ -16,6 +16,8 @@ import type { SessionLayout, SessionLayoutRepository } from '@factory/sandbox';
 import { peekSessionEnvironment } from '@factory/sandbox';
 import type { SourceControlSession } from '@factory/store';
 import type { RouteAuth } from '@factory/http';
+import { canReadSessionResource, canViewSourceControlSession, sessionMemoryResourceId } from '@factory/session';
+import type { SessionRunBindings, SessionThreadLookup } from '@factory/session';
 
 /**
  * Server-side directory browser for the web project picker.
@@ -470,6 +472,9 @@ export interface SessionFsDeps {
   sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
   /** Present with a local sandbox: see {@link LocalCheckoutAttacher}. */
   attachLocalCheckout?: LocalCheckoutAttacher;
+  /** Resolves the memory resource a session runs on, so a session still on its owner's memory stays the owner's. */
+  controller?: SessionThreadLookup;
+  workItems?: SessionRunBindings;
 }
 
 /**
@@ -481,9 +486,9 @@ export type LocalCheckoutAttacher = (session: SourceControlSession) => Promise<b
 
 /**
  * Resolve a `workspacePath` query param as a Factory session id. Returns the
- * session when one exists and the caller owns it, `null` when no session
- * matches (the caller should fall back to local-path handling), and throws
- * when a session exists but belongs to another tenant.
+ * session when one exists and the caller may read it (the same rule as the
+ * session conversation routes), `null` when no session matches (the caller
+ * should fall back to local-path handling), and throws otherwise.
  */
 async function resolveAuthorizedSession(
   c: Context,
@@ -496,7 +501,11 @@ async function resolveAuthorizedSession(
   if (deps.auth.enabled()) {
     await deps.auth.ensureUser(c);
     const tenant = deps.auth.tenant(c);
-    if (!tenant || tenant.orgId !== session.orgId || tenant.userId !== session.userId) {
+    if (!tenant || !canViewSourceControlSession(session, tenant)) {
+      throw new Error('Session is not available to the current user');
+    }
+    const resourceId = await sessionMemoryResourceId(deps.controller, session, deps.workItems);
+    if (!canReadSessionResource(session, resourceId, tenant)) {
       throw new Error('Session is not available to the current user');
     }
   }
