@@ -29,6 +29,7 @@ import { AgentBrowser } from '@mastra/agent-browser';
 import { createFactorySecretEncryption, LocalFactorySandbox, LocalFileBlobStore, MastraFactory } from '@factory/server';
 import { GithubIntegration, GithubTokenIntegration, parseAuthorizedBotsEnv } from '@factory/integration-github';
 import { ClickUpIntegration } from '@factory/integration-clickup';
+import { FirebaseIntegration } from '@factory/integration-firebase';
 import { GitLabIntegration } from '@factory/integration-gitlab';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 // Local development: loopback sign-in, credential key, and vector store.
@@ -287,10 +288,15 @@ const vector = databaseUrl
 // Unset → per-process random secret (single-process local dev only).
 const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || undefined;
 
+// Firebase logs and crashes for agents: nothing in env; each organization uploads its own read-only
+// service account key in Settings › Logs and crashes, stored encrypted.
+const firebase = new FirebaseIntegration();
+
 const integrations = [
   ...(github ? [github] : []),
   ...(gitlab ? [gitlab] : []),
   ...(clickup ? [clickup] : []),
+  firebase,
 ];
 
 export const factoryConfigVersion = 'mastracode-web-v1';

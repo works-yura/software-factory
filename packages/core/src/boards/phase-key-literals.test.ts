@@ -27,6 +27,10 @@ const NOT_PHASES: readonly [file: string, line: string, why: string][] = [
   ['integration-github/src/routes.ts', "GithubIntegration['intake']", 'the intake API of the integration'],
   ['pipelines/src/product/board.ts', "initialPhase: 'intake'", "the Product board's own Intake phase"],
   ['pipelines/src/product/board.ts', "nextPhases: ['intake']", "the Product board's own Intake phase"],
+  ['pipelines/src/audits/board.ts', "initialPhase: 'intake'", "the Audits board's own Intake phase"],
+  ['pipelines/src/audits/board.ts', "nextPhases: ['done', 'canceled']", "the Audits board's own phases"],
+  ['pipelines/src/audits/board.ts', "nextPhases: ['intake']", "the Audits board's own Intake phase"],
+  ['core/src/intake/rule.ts', "INTAKE_RULE_FIRE_OUTCOMES = ['done'", "an intake rule run's outcome"],
   // v4 retired the Review board itself (2fa2fed): these migrations rewrite its rows onto Work.
   ['store/src/boards/base.ts', "board_key: 'review'", 'Review board retirement migration'],
   ['store/src/boards/base.ts', "board_key !== 'review'", 'Review board retirement migration'],

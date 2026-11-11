@@ -52,7 +52,7 @@ const passedCheck = (type: string) => ({
 
 describe('Product board', () => {
   it('is installed by default next to Work', () => {
-    expect(defaultBoards.map(board => board.id)).toEqual(['work', 'product']);
+    expect(defaultBoards.map(board => board.id)).toEqual(['work', 'product', 'audits']);
     expect(createDefaultBoardRegistry().get('product')).toBe(productBoard);
     expect(createDefaultBoardRegistry({ includeDefaultBoards: false }).get('product')).toBeUndefined();
   });

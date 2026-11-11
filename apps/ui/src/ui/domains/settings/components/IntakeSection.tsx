@@ -9,6 +9,7 @@ import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { ClickUpIntakeSection } from './ClickUpIntakeSection';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
+import { IntakeRulesSection } from '../intake-rules/IntakeRulesSection';
 
 /**
  * Settings › Intake: where work comes from and where it lands. The current Factory's intake routes
@@ -46,6 +47,7 @@ export function IntakeSection() {
   return (
     <div className="flex flex-col gap-8">
       {factory && <IntakeRoutesSection factoryProjectId={factory.id} factoryName={factory.name} />}
+      {factory && <IntakeRulesSection factoryProjectId={factory.id} factoryName={factory.name} />}
       <ClickUpIntakeSection config={config} busy={saveMutation.isPending} update={update} factories={factoriesQuery.data ?? []} />
     </div>
   );

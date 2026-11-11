@@ -44,7 +44,15 @@ describe('SettingsNavigation', () => {
         .map(link => link.textContent);
     expect(linksIn('Account')).toEqual(['My account', 'Preferences']);
     expect(linksIn('Agent')).toEqual(['Harness', 'Memory', 'Skills', 'Behavior']);
-    expect(linksIn('Factory')).toEqual(['Repositories', 'Environment', 'Work Intake', 'Boards', 'Manage Factory', 'Debug']);
+    expect(linksIn('Factory')).toEqual([
+      'Repositories',
+      'Environment',
+      'Work Intake',
+      'Logs and crashes',
+      'Boards',
+      'Manage Factory',
+      'Debug',
+    ]);
     expect(screen.getByRole('link', { name: 'Harness' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');
   });

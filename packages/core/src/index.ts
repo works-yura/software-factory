@@ -230,3 +230,23 @@ export type {
   FactoryReviewStatusReporter,
 } from './rules/review-status.ts';
 export * from './boards/board-events.ts';
+export {
+  calendarDay,
+  clockTime,
+  describeScheduleSpec,
+  parseScheduleSpec,
+  parseScheduleTime,
+  SCHEDULE_HOUR_STEPS,
+  SCHEDULE_PRESETS,
+  scheduleCron,
+} from './intake/schedule.ts';
+export { INTAKE_TEMPLATE_PLACEHOLDERS, renderIntakeTemplate } from './intake/template.ts';
+export type { IntakeTemplateContext } from './intake/template.ts';
+export type { SchedulePreset, ScheduleSpec } from './intake/schedule.ts';
+// Intake rules: domain, ports (Strategy kinds + Registry, repository, event source), errors.
+export * from './intake/rule.ts';
+export * from './intake/errors.ts';
+export * from './intake/kinds.ts';
+export * from './intake/events.ts';
+export * from './intake/configs.ts';
+export * from './intake/card-origin.ts';

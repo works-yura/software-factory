@@ -361,7 +361,8 @@
     "review": "Review",
     "plan": "Planning",
     "chat": "Chat",
-    "product": "Product"
+    "product": "Product",
+    "audit": "Audit"
   },
   "cardSessions": {
     "title": "Sessions",

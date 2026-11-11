@@ -4,7 +4,13 @@
  */
 
 import type { BoardRegistry, IntakeRoutesReader } from '@factory/core';
-import { cardRuleFacts, DEFAULT_BOARD_ID, INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from '@factory/core';
+import {
+  cardRuleFacts,
+  DEFAULT_BOARD_ID,
+  INTAKE_ROUTE_METADATA_KEY,
+  landingPhase,
+  resolveIntakePlacement,
+} from '@factory/core';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '@factory/runtime';
 import type { EmitAuditInput } from '@factory/feed';
 import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
@@ -61,6 +67,12 @@ export interface CreateFactoryWorkItemArgs {
   input: CreateWorkItemInput;
   /** The project's intake routes; they place a card filed without a board or stages. */
   intakeRoutes?: IntakeRoutesReader;
+  /**
+   * Where a card filed without a board or stages lands when no intake route takes it (an intake
+   * rule's own target, like a ClickUp List's board); `actorId` names the system that moves it on.
+   * Without it, such a card lands on Work.
+   */
+  defaultPlacement?: { board: string; phase?: string | null; actorId: string };
   /** Where a browser request came from; a session's tool call carries none. */
   origin?: Pick<FactoryTransitionRequest, 'actorProfile' | 'context'>;
 }
@@ -80,12 +92,15 @@ export async function createFactoryWorkItem({
   factoryProjectId,
   input,
   intakeRoutes,
+  defaultPlacement,
   origin,
 }: CreateFactoryWorkItemArgs): Promise<CreateFactoryWorkItemResult> {
   // A card filed without a board or stages goes where the project's intake routes say; one
   // that names either went where the person chose.
-  const placement =
-    intakeRoutes && input.board === undefined && input.stages === undefined
+  // Precedence: a matching route, then the caller's default target, then Work.
+  const unplaced = input.board === undefined && input.stages === undefined;
+  const routed =
+    intakeRoutes && unplaced
       ? resolveIntakePlacement(
           await intakeRoutes.listIntakeRoutes({ orgId, factoryProjectId }),
           cardRuleFacts({
@@ -95,6 +110,16 @@ export async function createFactoryWorkItem({
           }),
           boards,
         )
+      : undefined;
+  const defaultBoard = !routed && unplaced && defaultPlacement ? boards.get(defaultPlacement.board) : undefined;
+  const placement: { board: string; phase: string; routeId?: string; actorId: string } | undefined = routed
+    ? { ...routed, actorId: 'factory-intake-route' }
+    : defaultBoard
+      ? {
+          board: defaultBoard.id,
+          phase: landingPhase(defaultBoard, defaultPlacement!.phase),
+          actorId: defaultPlacement!.actorId,
+        }
       : undefined;
   const boardId = placement?.board ?? input.board ?? DEFAULT_BOARD_ID;
   const board = boards.get(boardId);
@@ -150,14 +175,14 @@ export async function createFactoryWorkItem({
   };
   const notFound = { status: 'rejected', code: 'invalid_transition', reason: 'Work item not found.' } as const;
 
-  if (placement) {
+  if (placement?.routeId) {
     for (let attempt = 1; revision !== undefined; attempt++) {
       try {
         const stamped = await workItems.update({
           orgId,
           id,
           userId,
-          patch: { metadata: { [INTAKE_ROUTE_METADATA_KEY]: placement.routeId } },
+          patch: { metadata: { [INTAKE_ROUTE_METADATA_KEY]: placement.routeId! } },
           expectedRevision: revision,
         });
         revision = stamped?.item.revision;
@@ -219,8 +244,9 @@ export async function createFactoryWorkItem({
       workItemId: id,
       board: boardId,
       stage: placement.phase,
-      // The route moves the card, not the person: a run it starts still needs their consent.
-      actor: { type: 'system', id: 'factory-intake-route' },
+      // The route (or the caller's default target) moves the card, not the person: a run it starts
+      // still needs their consent.
+      actor: { type: 'system', id: placement.actorId },
       ingress: { type: 'rule', identity: `work-item:${id}:intake-route` },
       cause: 'work_item_created',
     });

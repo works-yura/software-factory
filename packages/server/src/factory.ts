@@ -52,7 +52,15 @@ import {
   getFactoryAuthUserId,
 } from '@factory/auth';
 import { createBoardRegistry, isDefinedBoard, isTerminalWorkItem, REVIEW_CONTEXT } from '@factory/core';
-import { createDefaultBoardRegistry, PRODUCT_LEGACY_PHASE_RENAMES, productBoard } from '@factory/pipelines';
+import {
+  AUDITS_LEGACY_PHASE_RENAMES,
+  auditsBoard,
+  createDefaultBoardRegistry,
+  PRODUCT_LEGACY_PHASE_RENAMES,
+  productBoard,
+} from '@factory/pipelines';
+import { AUDITS_BOARD_UPGRADE_ACTOR, renameIntakeRuleTargetPhases } from './intake/migrations.ts';
+import { setupIntakeRules } from './intake/setup.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import {
   boardForWorkItem,
@@ -207,7 +215,7 @@ import { FilesystemStorage } from '@factory/store';
 import { IntakeStorage } from '@factory/store';
 import { IntegrationStorage } from '@factory/store';
 import { factoryMemorySettingsUserId, MemorySettingsStorage, SkillOverridesStorage, StoredBoardsStorage } from '@factory/store';
-import { AttachmentService, AttachmentsStorage } from '@factory/store';
+import { AttachmentService, AttachmentsStorage, IntakeRulesStorage } from '@factory/store';
 import type { AttachmentBlobStore } from '@factory/store';
 import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
@@ -573,6 +581,8 @@ export class MastraFactory {
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
+  /** Intake rules' engine and the workflow their schedules fire; undefined until work items and their storage are up. */
+  #intakeRules: ReturnType<typeof setupIntakeRules> | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
   #sessionResourceMigration: Promise<boolean> | undefined;
   #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
@@ -847,6 +857,7 @@ export class MastraFactory {
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     const attachmentsStorage = storage.registerDomain(new AttachmentsStorage());
+    const intakeRulesStorage = storage.registerDomain(new IntakeRulesStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -1054,6 +1065,32 @@ export class MastraFactory {
         if (moved.length > 0) console.info(`[factory] moved ${moved.length} Product card(s) off Breakdown to Phases`);
       });
     }
+    // Audits now starts in Intake like every board, and Done means the report is written: move
+    // stored boards, intake routes, cards and intake rules off Scheduled and Report, once.
+    await timedPhase('prepare.audits.phases', async () => {
+      if (storage.isDomainReady('boards')) {
+        const rewritten = await storedBoardsStorage.renameStoredBoardPhases(
+          auditsBoard.id,
+          boardDefinitionOf(auditsBoard),
+          AUDITS_LEGACY_PHASE_RENAMES,
+          AUDITS_BOARD_UPGRADE_ACTOR,
+        );
+        if (rewritten > 0) console.info(`[factory] rewrote ${rewritten} stored Audits board(s) with the new phases`);
+      }
+      if (storage.isDomainReady('work-items')) {
+        const moved = await workItemsStorage.renameBoardStages(auditsBoard.id, AUDITS_LEGACY_PHASE_RENAMES);
+        if (moved.length > 0) console.info(`[factory] moved ${moved.length} Audits card(s) off Scheduled/Report`);
+      }
+      if (storage.isDomainReady('intake-rules')) {
+        const moved = await renameIntakeRuleTargetPhases(
+          intakeRulesStorage,
+          auditsBoard.id,
+          AUDITS_LEGACY_PHASE_RENAMES,
+          AUDITS_BOARD_UPGRADE_ACTOR,
+        );
+        if (moved > 0) console.info(`[factory] moved ${moved} intake rule target(s) off old Audits phases`);
+      }
+    });
 
     // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
     // back to Intake. Move the cards the old rule left there, once.
@@ -1439,6 +1476,24 @@ export class MastraFactory {
             : {}),
         })
       : undefined;
+    // Intake rules: Factory's own intake source (a schedule now, events later) filing cards through
+    // the same path as "New card", placed by the project's intake routes. Their schedules live in
+    // core `Schedules` and fire a workflow registered on the host's Mastra below. This is the only
+    // place that names the concrete kinds (`./intake/setup.ts`).
+    this.#intakeRules =
+      workItemsReady && storage.isDomainReady('intake-rules')
+        ? setupIntakeRules({
+            rules: intakeRulesStorage,
+            schedule: { schedules: () => this.#prepared?.base.controller.getMastra()?.schedules },
+            cards: {
+              workItems: workItemsStorage,
+              boards: toBoardSource(boards),
+              ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
+              transitionService: () => transitionService,
+              auditRecorder: auditDomain,
+            },
+          })
+        : undefined;
     // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
     const factoryToolDeps: FactoryToolDependencies = {
       workItems: workItemsStorage,
@@ -2580,6 +2635,7 @@ export class MastraFactory {
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
             ...(attachmentService ? { attachments: attachmentService } : {}),
+            ...(this.#intakeRules ? { intakeRules: { engine: this.#intakeRules.engine, storage: intakeRulesStorage } } : {}),
             controllerId: CONTROLLER_ID,
             controller,
             liveSessions: (liveSessionRegistry = liveSessionsTouchingTheFeed(eventBus, controller, claudeLiveSessions)),
@@ -3106,7 +3162,14 @@ export class MastraFactory {
       // requests (`x-mastra-client-type: studio` routes to `studio.auth`).
       ...(auth ? { studio: { auth } } : {}),
       ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
-      ...(environmentBuilds ? { workflows: { [ENVIRONMENT_BUILD_WORKFLOW_ID]: environmentBuilds.workflow } } : {}),
+      ...(environmentBuilds || this.#intakeRules
+        ? {
+            workflows: {
+              ...(environmentBuilds ? { [ENVIRONMENT_BUILD_WORKFLOW_ID]: environmentBuilds.workflow } : {}),
+              ...(this.#intakeRules?.workflows ?? {}),
+            },
+          }
+        : {}),
     };
   }
 
@@ -3121,6 +3184,10 @@ export class MastraFactory {
     }
     await timedPhase('finalize.controller', () => this.#prepared!.finalize());
     await this.#environmentBuilds?.probeSchedules();
+    if (this.#intakeRules) {
+      await this.#intakeRules.engine.start();
+      await timedPhase('finalize.intakeRules', () => this.#intakeRules!.engine.armAll());
+    }
     await timedPhase(
       'finalize.reconcileBoundThreads',
       () => this.#factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),

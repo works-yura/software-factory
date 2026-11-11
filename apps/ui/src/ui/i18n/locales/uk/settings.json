@@ -6,6 +6,7 @@
     "repositories": "Репозиторії",
     "environment": "Середовище",
     "intake": "Надходження задач",
+    "observability": "Логи і креші",
     "board": "Дошки",
     "models": "Харнес",
     "skills": "Скіли",
@@ -759,6 +760,97 @@
       "failed": "Не вдалося увійти в Claude."
     }
   },
+  "intakeRules": {
+    "title": "Правила надходження",
+    "description": "Власні джерела задач {{name}}: за розкладом створюють картку на дошці, далі її беруть агенти дошки.",
+    "add": "Додати правило",
+    "loading": "Завантаження правил",
+    "unavailable": "Правила надходження недоступні.",
+    "empty": "Правил ще немає. Наприклад: щопонеділка картка «Аудит безпеки» на дошці «Аудити».",
+    "listLabel": "Правила надходження",
+    "newTitle": "Нове правило",
+    "editTitle": "Змінити правило {{name}}",
+    "name": "Назва правила",
+    "namePlaceholder": "Напр. Щотижневий аудит безпеки",
+    "when": "Коли",
+    "then": "Що зробити",
+    "triggerKind": "Тригер",
+    "actionKind": "Дія",
+    "ifOpen": "Якщо попередня ще відкрита",
+    "policy": "Поведінка при перекритті",
+    "preview": "Розклад словами",
+    "nextFires": "Наступні запуски: {{list}}",
+    "kindNotEditable": "Тип «{{kind}}» не редагується в цьому інтерфейсі.",
+    "cancel": "Скасувати",
+    "save": "Зберегти",
+    "saved": "Правило збережено",
+    "saveFailed": "Не вдалося зберегти правило",
+    "deleted": "Правило видалено",
+    "enabledFor": "Увімкнено: {{name}}",
+    "history": "Історія",
+    "historyFor": "Історія правила {{name}}",
+    "loadingHistory": "Завантаження історії",
+    "noFires": "Правило ще не спрацьовувало.",
+    "openCard": "картка",
+    "edit": "Змінити",
+    "delete": "Видалити",
+    "confirmDelete": "Так, видалити",
+    "deleteRule": "Видалити {{name}}",
+    "summary": "{{trigger}} → {{action}}",
+    "nextRun": "Наступний запуск: {{at}}",
+    "noClock": "Спрацьовує на подію",
+    "paused": "На паузі",
+    "lastRun": "останній: {{at}}, {{outcome}}",
+    "problem": "Не працює: {{problem}}",
+    "outcomes": {
+      "done": "виконано",
+      "skipped": "пропущено",
+      "failed": "помилка"
+    },
+    "schedule": {
+      "preset": "Як часто",
+      "presets": {
+        "daily": "Щодня",
+        "weekdays": "У будні",
+        "weekly": "Щотижня",
+        "hourly": "Кожні N годин",
+        "cron": "Власний cron"
+      },
+      "weekday": "День тижня",
+      "weekdays": {
+        "0": "неділя",
+        "1": "понеділок",
+        "2": "вівторок",
+        "3": "середа",
+        "4": "четвер",
+        "5": "п'ятниця",
+        "6": "субота"
+      },
+      "time": "Час",
+      "everyHours": "Кожні",
+      "hours_one": "{{count}} год",
+      "hours_few": "{{count}} год",
+      "hours_many": "{{count}} год",
+      "hours_other": "{{count}} год",
+      "minute": "Хвилина",
+      "cron": "Вираз cron",
+      "timezone": "Часовий пояс"
+    },
+    "card": {
+      "board": "Дошка картки",
+      "chooseBoard": "Оберіть дошку",
+      "phase": "Фаза картки",
+      "firstPhase": "Перша фаза",
+      "title": "Назва картки",
+      "titlePlaceholder": "Напр. Аудит безпеки — {date}",
+      "description": "Опис картки",
+      "descriptionPlaceholder": "Що зробити агенту. Напр. Аудит: security. Особливо — секрети й доступи.",
+      "repository": "Репозиторій (необов'язково)",
+      "repositoryPlaceholder": "owner/repo — порожньо: усе середовище",
+      "placeholders": "Підстановки: {{list}}",
+      "routingHint": "Картку спершу ставлять маршрути надходження (умова «Правило» чи тип «картка правила надходження»); ця дошка й фаза — для карток, яким жоден маршрут не підійшов."
+    }
+  },
   "intakeRoutes": {
     "title": "Маршрути надходження",
     "description": "Куди потрапляють нові картки фабрики «{{name}}». Картку ставить перший увімкнений маршрут, що їй підходить; без збігу задача ClickUp потрапляє на дошку свого List. Маршрут ставить картку лише раз, коли вона з’являється.",
@@ -807,13 +899,18 @@
     "cancel": "Скасувати",
     "save": "Зберегти",
     "tagPlaceholder": "тег",
+    "fromRule": "з правила «{{rule}}»",
+    "fromTrigger": "з правил «{{trigger}}»",
+    "choose": "вибрати",
     "titlePlaceholder": "текст у назві",
     "fields": {
       "source.integration": "Джерело",
       "source.kind": "Тип",
       "author.trusted": "Автор",
       "item.labels": "Тег",
-      "item.title": "Назва"
+      "item.title": "Назва",
+      "intake.rule": "Правило",
+      "intake.trigger": "Тригер правила"
     },
     "integrations": {
       "github": "GitHub",
@@ -823,7 +920,8 @@
     "kinds": {
       "issue": "задача (issue)",
       "pull_request": "pull request",
-      "task": "задача ClickUp"
+      "task": "задача ClickUp",
+      "intake_rule": "картка правила надходження"
     },
     "defaults": {
       "outsideAuthors": "Сторонні автори чекають у Вхідних",
@@ -934,5 +1032,61 @@
     "loadFailed": "Не вдалося завантажити версії.",
     "retry": "Повторити",
     "noPackages": "Збірка цього сервера не має списку пакетів. Збірки новішим CLI <code>mastra</code> його містять."
+  },
+  "observability": {
+    "requestFailed": "Запит не вдався (HTTP {{status}}).",
+    "cancel": "Скасувати",
+    "platforms": {
+      "android": "Android",
+      "ios": "iOS",
+      "web": "Web"
+    },
+    "connection": {
+      "title": "Підключення Firebase",
+      "description": "Ключ сервісного акаунта Google Cloud лише для читання. Агенти читають через нього логи сервера (Cloud Logging) і креші застосунку (Crashlytics). Ключ зберігається зашифрованим і ніколи не потрапляє агенту чи в його робочу папку.",
+      "roles": "Створіть у Google Cloud сервісний акаунт з ролями Logs Viewer (roles/logging.viewer) і Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer), увімкніть Firebase Crashlytics API, створіть JSON-ключ і вставте його сюди. Детально: docs/runbooks/firebase-observability.md.",
+      "keyLabel": "JSON-ключ сервісного акаунта",
+      "keyPlaceholder": "{ \"type\": \"service_account\", … }",
+      "pickFile": "Вибрати файл ключа",
+      "save": "Зберегти ключ",
+      "saved": "Ключ збережено",
+      "replace": "Замінити ключ",
+      "disconnect": "Відключити",
+      "account": "Сервісний акаунт",
+      "accountValue": "{{email}} · проєкт {{project}}"
+    },
+    "mapping": {
+      "title": "Проєкт Firebase цієї Factory",
+      "description": "Звідки агенти цієї Factory читають логи й креші. Без проєкту інструментів логів і крешів у сесіях немає.",
+      "projectId": "ID проєкту",
+      "projectIdHint": "Google Cloud / Firebase project id, напр. syncta-prod. Логи читаються з нього.",
+      "projectNumber": "Номер проєкту",
+      "projectNumberHint": "Firebase › Налаштування проєкту › Номер проєкту. Crashlytics адресує проєкт за ним.",
+      "logs": "Логи сервера",
+      "logsHint": "Cloud Functions, Cloud Run, Hosting та інше з Cloud Logging.",
+      "apps": "Застосунки (креші)",
+      "addApp": "Додати застосунок",
+      "noApps": "Немає застосунків: креші не читаються.",
+      "appId": "Firebase App ID {{number}}",
+      "platform": "Платформа застосунку {{number}}",
+      "appLabel": "Назва застосунку {{number}}",
+      "appLabelPlaceholder": "Назва (необов’язково)",
+      "removeApp": "Прибрати застосунок {{number}}",
+      "remove": "Прибрати",
+      "save": "Зберегти",
+      "saved": "Збережено",
+      "turnOff": "Вимкнути для цієї Factory"
+    },
+    "check": {
+      "run": "Перевірити доступ",
+      "running": "Перевіряю…",
+      "needsKey": "Щоб перевірити доступ, спершу збережіть ключ сервісного акаунта.",
+      "results": "Результат перевірки",
+      "ok": "Є доступ",
+      "failed": "Немає доступу",
+      "logs": "Логи проєкту {{target}}",
+      "crashes": "Креші застосунку {{target}}",
+      "missingRole": "Бракує ролі {{role}}."
+    }
   }
 }

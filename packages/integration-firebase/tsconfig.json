@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.node.json",
+  "include": ["src/**/*.ts", "vitest.config.ts"],
+  // v3 never typechecked these suites; scripts/test-type-debt.sh counts what is left.
+  "exclude": ["src/**/*.test.ts"]
+}

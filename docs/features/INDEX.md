@@ -12,3 +12,6 @@
 | [workspace-files](workspace-files/design.md) | Перегляд файлів сесії: повний екран, завантаження, нотатки на тексті |
 | [attachments](attachments/design.md) | Вкладення карток і сесій: сховище, API, файли для агента |
 | [settings](settings/design.md) | Налаштування Factory, які змінюють поведінку агентів (мова агентів) |
+| [intake](intake/design.md) | Надходження задач: ClickUp, нова картка, правила надходження (тригер → політика → дія) |
+| [audits-board](audits-board/design.md) | Дошка «Аудити»: аналіз лише на читання, звіт у docs/audits, типи аудитів як дані |
+| [observability](observability/design.md) | Логи й креші для агентів: порт, адаптер Firebase, інструменти, налаштування, маскування |

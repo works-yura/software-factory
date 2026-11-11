@@ -6,6 +6,7 @@
     "repositories": "Repositories",
     "environment": "Environment",
     "intake": "Work Intake",
+    "observability": "Logs and crashes",
     "board": "Boards",
     "models": "Harness",
     "skills": "Skills",
@@ -745,6 +746,95 @@
       "failed": "Claude sign-in failed."
     }
   },
+  "intakeRules": {
+    "title": "Intake rules",
+    "description": "{{name}}'s own task sources: on a schedule they file a card on a board, and the board's agents take it from there.",
+    "add": "Add rule",
+    "loading": "Loading rules",
+    "unavailable": "Intake rules are unavailable.",
+    "empty": "No rules yet. For example: every Monday a “Security audit” card on Audits.",
+    "listLabel": "Intake rules",
+    "newTitle": "New rule",
+    "editTitle": "Edit rule {{name}}",
+    "name": "Rule name",
+    "namePlaceholder": "e.g. Weekly security audit",
+    "when": "When",
+    "then": "Then",
+    "triggerKind": "Trigger",
+    "actionKind": "Action",
+    "ifOpen": "If the last one is still open",
+    "policy": "Overlap policy",
+    "preview": "Schedule in words",
+    "nextFires": "Next runs: {{list}}",
+    "kindNotEditable": "“{{kind}}” can't be edited in this interface.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saved": "Rule saved",
+    "saveFailed": "Couldn't save the rule",
+    "deleted": "Rule deleted",
+    "enabledFor": "Enabled: {{name}}",
+    "history": "History",
+    "historyFor": "History of {{name}}",
+    "loadingHistory": "Loading history",
+    "noFires": "The rule hasn't run yet.",
+    "openCard": "card",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Yes, delete",
+    "deleteRule": "Delete {{name}}",
+    "summary": "{{trigger}} → {{action}}",
+    "nextRun": "Next run: {{at}}",
+    "noClock": "Runs on an event",
+    "paused": "Paused",
+    "lastRun": "last: {{at}}, {{outcome}}",
+    "problem": "Not working: {{problem}}",
+    "outcomes": {
+      "done": "done",
+      "skipped": "skipped",
+      "failed": "failed"
+    },
+    "schedule": {
+      "preset": "How often",
+      "presets": {
+        "daily": "Every day",
+        "weekdays": "Weekdays",
+        "weekly": "Every week",
+        "hourly": "Every N hours",
+        "cron": "Custom cron"
+      },
+      "weekday": "Weekday",
+      "weekdays": {
+        "0": "Sunday",
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday"
+      },
+      "time": "Time",
+      "everyHours": "Every",
+      "hours_one": "{{count}} hour",
+      "hours_other": "{{count}} hours",
+      "minute": "Minute",
+      "cron": "Cron expression",
+      "timezone": "Timezone"
+    },
+    "card": {
+      "board": "Card board",
+      "chooseBoard": "Choose a board",
+      "phase": "Card phase",
+      "firstPhase": "First phase",
+      "title": "Card title",
+      "titlePlaceholder": "e.g. Security audit — {date}",
+      "description": "Card description",
+      "descriptionPlaceholder": "What the agent should do, e.g. Audit: security. Focus on secrets and access.",
+      "repository": "Repository (optional)",
+      "repositoryPlaceholder": "owner/repo — empty: the whole environment",
+      "placeholders": "Placeholders: {{list}}",
+      "routingHint": "Intake routes place the card first (the Rule condition, or the \"intake-rule card\" type); this board and phase take the cards no route matched."
+    }
+  },
   "intakeRoutes": {
     "title": "Intake routes",
     "description": "Where new cards of the Factory \"{{name}}\" land. The first enabled route that matches a card places it; with no match, a ClickUp task lands on its List’s board. A route places a card once, when it arrives.",
@@ -793,13 +883,18 @@
     "cancel": "Cancel",
     "save": "Save",
     "tagPlaceholder": "tag",
+    "fromRule": "from rule \"{{rule}}\"",
+    "fromTrigger": "from \"{{trigger}}\" rules",
+    "choose": "choose",
     "titlePlaceholder": "text in the title",
     "fields": {
       "source.integration": "Source",
       "source.kind": "Kind",
       "author.trusted": "Author",
       "item.labels": "Tag",
-      "item.title": "Title"
+      "item.title": "Title",
+      "intake.rule": "Rule",
+      "intake.trigger": "Rule trigger"
     },
     "integrations": {
       "github": "GitHub",
@@ -809,7 +904,8 @@
     "kinds": {
       "issue": "issue",
       "pull_request": "pull request",
-      "task": "ClickUp task"
+      "task": "ClickUp task",
+      "intake_rule": "intake-rule card"
     },
     "defaults": {
       "outsideAuthors": "Outside authors wait in Intake",
@@ -920,5 +1016,61 @@
     "loadFailed": "Couldn't load versions.",
     "retry": "Retry",
     "noPackages": "This server's build has no package list. Builds from a newer <code>mastra</code> CLI include one."
+  },
+  "observability": {
+    "requestFailed": "Request failed (HTTP {{status}}).",
+    "cancel": "Cancel",
+    "platforms": {
+      "android": "Android",
+      "ios": "iOS",
+      "web": "Web"
+    },
+    "connection": {
+      "title": "Firebase connection",
+      "description": "A read-only Google Cloud service account key. Agents read the server logs (Cloud Logging) and app crashes (Crashlytics) through it. The key is stored encrypted and never reaches an agent or its working folder.",
+      "roles": "In Google Cloud, create a service account with the roles Logs Viewer (roles/logging.viewer) and Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer), enable the Firebase Crashlytics API, create a JSON key and paste it here. Details: docs/runbooks/firebase-observability.md.",
+      "keyLabel": "Service account key JSON",
+      "keyPlaceholder": "{ \"type\": \"service_account\", … }",
+      "pickFile": "Choose the key file",
+      "save": "Save key",
+      "saved": "Key saved",
+      "replace": "Replace key",
+      "disconnect": "Disconnect",
+      "account": "Service account",
+      "accountValue": "{{email}} · project {{project}}"
+    },
+    "mapping": {
+      "title": "This Factory's Firebase project",
+      "description": "Where this Factory's agents read logs and crashes from. Without a project, sessions have no log or crash tools.",
+      "projectId": "Project ID",
+      "projectIdHint": "Google Cloud / Firebase project id, e.g. syncta-prod. Logs are read from it.",
+      "projectNumber": "Project number",
+      "projectNumberHint": "Firebase › Project settings › Project number. Crashlytics addresses the project by it.",
+      "logs": "Server logs",
+      "logsHint": "Cloud Functions, Cloud Run, Hosting and the rest of Cloud Logging.",
+      "apps": "Apps (crashes)",
+      "addApp": "Add app",
+      "noApps": "No apps: crashes are not read.",
+      "appId": "Firebase App ID {{number}}",
+      "platform": "Platform of app {{number}}",
+      "appLabel": "Name of app {{number}}",
+      "appLabelPlaceholder": "Name (optional)",
+      "removeApp": "Remove app {{number}}",
+      "remove": "Remove",
+      "save": "Save",
+      "saved": "Saved",
+      "turnOff": "Turn off for this Factory"
+    },
+    "check": {
+      "run": "Check access",
+      "running": "Checking…",
+      "needsKey": "Save the service account key first to check access.",
+      "results": "Check results",
+      "ok": "Access",
+      "failed": "No access",
+      "logs": "Logs of project {{target}}",
+      "crashes": "Crashes of app {{target}}",
+      "missingRole": "Missing role {{role}}."
+    }
   }
 }

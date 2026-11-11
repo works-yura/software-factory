@@ -11,7 +11,7 @@ Factory — фабрика агентів для розробки клієнтс
 | [features/](features/INDEX.md) | правда: як працює кожна область зараз |
 | [adr/](adr/README.md) | рішення і чому їх прийняли |
 | [rules/](rules/) | обов'язкові правила: [стандарт документації](rules/docs-standard.md), [робота з кодом](rules/engineering.md) |
-| [runbooks/](runbooks/) | як робити: [дев-сервер](runbooks/dev-server.md) |
+| [runbooks/](runbooks/) | як робити: [дев-сервер](runbooks/dev-server.md), [логи й креші Firebase](runbooks/firebase-observability.md) |
 | [repositories/](repositories/factory-v4.md) | огляд репозиторію й пакетів |
 | [changes/backlog.md](changes/backlog.md) | відкрите й відкладене |
 | [GLOSSARY.md](GLOSSARY.md) | терміни |

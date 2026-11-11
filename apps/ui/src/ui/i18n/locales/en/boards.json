@@ -26,5 +26,14 @@
       "done": "Done",
       "canceled": "Canceled"
     }
+  },
+  "audits": {
+    "title": "Audits",
+    "phases": {
+      "intake": "Intake",
+      "analysis": "Analysis",
+      "done": "Done",
+      "canceled": "Canceled"
+    }
   }
 }

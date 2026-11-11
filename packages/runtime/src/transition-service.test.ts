@@ -580,7 +580,11 @@ describe('FactoryTransitionService', () => {
       ).resolves.toMatchObject({ status: 'accepted' });
       expect(
         (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(row => row.decision.type === 'invokeSkill'),
-      ).toEqual([expect.objectContaining({ decision: expect.objectContaining({ skillName: 'factory-triage' }) })]);
+      ).toEqual(
+        // An explicit move to Triage triages any imported card (a GitHub issue by its own rule,
+        // any other tracker's task — Slack thread included — by the imported-task rule, c9d87ce).
+        [expect.objectContaining({ decision: expect.objectContaining({ skillName: 'factory-triage' }) })],
+      );
     },
   );
 

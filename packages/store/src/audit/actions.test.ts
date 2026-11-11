@@ -9,7 +9,18 @@ describe('audit action registry', () => {
       'factory.git.push',
       'factory.git.pr_opened',
     ]);
-    expect(auditNamespaces()).toEqual(['work_item', 'run', 'git', 'agent', 'intake', 'board', 'skill', 'intake_route']);
+    expect(auditNamespaces()).toEqual([
+      'work_item',
+      'run',
+      'git',
+      'agent',
+      'intake',
+      'board',
+      'skill',
+      'intake_route',
+      'intake_rule',
+      'observability',
+    ]);
   });
 
   it('reads an action back into its namespace and leaf, and knows what it never registered', () => {

@@ -2,6 +2,7 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
+  Activity,
   ArrowLeft,
   BookOpen,
   Bot,
@@ -138,6 +139,14 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: Inbox,
         searchText: 'work intake sources tasks issues pull requests github feed sync',
+      },
+      {
+        id: 'observability',
+        get label() {
+          return SETTINGS_SECTION_LABELS.observability;
+        },
+        icon: Activity,
+        searchText: 'observability logs crashes crashlytics firebase cloud logging errors stability service account',
       },
       {
         id: 'board',

@@ -35,6 +35,9 @@ export const CARD_RULE_FIELDS = [
   'source.kind',
   'source.integration',
   'item.pullRequest',
+  /** The intake rule a card came from (its id), and that rule's trigger kind. */
+  'intake.rule',
+  'intake.trigger',
 ] as const;
 
 export type RuleValue = string | number | boolean | Array<string | number | boolean>;

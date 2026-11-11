@@ -4,8 +4,8 @@ import type { CardRuleGroup } from '../../../../api/types';
 export const ROUTE_INTEGRATIONS = ['github', 'gitlab', 'clickup'] as const;
 export type RouteIntegration = (typeof ROUTE_INTEGRATIONS)[number];
 
-/** What kind of record a card came from (`source.kind`). */
-export const ROUTE_SOURCE_KINDS = ['issue', 'pull_request', 'task'] as const;
+/** What kind of record a card came from (`source.kind`); `intake_rule` is a card an intake rule filed. */
+export const ROUTE_SOURCE_KINDS = ['issue', 'pull_request', 'task', 'intake_rule'] as const;
 export type RouteSourceKind = (typeof ROUTE_SOURCE_KINDS)[number];
 
 /**
@@ -17,7 +17,11 @@ export type RouteCondition =
   | { field: 'source.kind'; value: RouteSourceKind }
   | { field: 'author.trusted'; value: boolean }
   | { field: 'item.labels'; value: string }
-  | { field: 'item.title'; value: string };
+  | { field: 'item.title'; value: string }
+  /** The intake rule a card came from (its id). */
+  | { field: 'intake.rule'; value: string }
+  /** The trigger kind of the rule a card came from, e.g. `schedule`. */
+  | { field: 'intake.trigger'; value: string };
 
 export type RouteConditionField = RouteCondition['field'];
 
@@ -27,6 +31,8 @@ export const ROUTE_CONDITION_FIELDS: readonly RouteConditionField[] = [
   'author.trusted',
   'item.labels',
   'item.title',
+  'intake.rule',
+  'intake.trigger',
 ];
 
 const isIntegration = (value: unknown): value is RouteIntegration =>
@@ -46,6 +52,9 @@ function readCondition(condition: CardRuleGroup['conditions'][number]): RouteCon
   if (field === 'source.kind' && operator === 'equals' && isSourceKind(value)) return { field, value };
   if (field === 'author.trusted' && operator === 'equals' && typeof value === 'boolean') return { field, value };
   if ((field === 'item.labels' || field === 'item.title') && operator === 'contains' && typeof value === 'string') {
+    return { field, value };
+  }
+  if ((field === 'intake.rule' || field === 'intake.trigger') && operator === 'equals' && typeof value === 'string') {
     return { field, value };
   }
   return undefined;
@@ -81,6 +90,9 @@ export function writeRouteConditions(conditions: readonly RouteCondition[]): Car
         const value = condition.value.trim();
         return value ? [{ field: condition.field, operator: 'contains', value }] : [];
       }
+      case 'intake.rule':
+      case 'intake.trigger':
+        return condition.value ? [{ field: condition.field, operator: 'equals', value: condition.value }] : [];
       default:
         return [{ field: condition.field, operator: 'equals', value: condition.value }];
     }
@@ -97,6 +109,8 @@ export function defaultCondition(field: RouteConditionField): RouteCondition {
       return { field, value: 'issue' };
     case 'author.trusted':
       return { field, value: true };
+    case 'intake.trigger':
+      return { field, value: 'schedule' };
     default:
       return { field, value: '' };
   }
@@ -106,5 +120,6 @@ export function defaultCondition(field: RouteConditionField): RouteCondition {
 export function isBlankCondition(condition: RouteCondition): boolean {
   if (condition.field === 'source.integration') return condition.value.length === 0;
   if (condition.field === 'item.labels' || condition.field === 'item.title') return !condition.value.trim();
+  if (condition.field === 'intake.rule' || condition.field === 'intake.trigger') return !condition.value;
   return false;
 }

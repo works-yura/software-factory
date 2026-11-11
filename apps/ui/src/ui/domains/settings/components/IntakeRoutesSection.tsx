@@ -12,6 +12,7 @@ import type { TFunction } from 'i18next';
 
 import type { CardRuleGroup, InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { useIntakeRuleKindsQuery, useIntakeRulesQuery } from '../../../../hooks/useIntakeRules';
 import {
   useCreateIntakeRouteMutation,
   useDeleteIntakeRouteMutation,
@@ -57,6 +58,12 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
 
   const routes = routesQuery.data ?? [];
   const boards = catalog.data ?? [];
+  const rulesQuery = useIntakeRulesQuery(factoryProjectId);
+  const kindsQuery = useIntakeRuleKindsQuery(factoryProjectId);
+  const origins: IntakeOrigins = {
+    rules: (rulesQuery.data ?? []).map(rule => ({ value: rule.id, label: rule.name })),
+    triggers: (kindsQuery.data?.triggers ?? []).map(trigger => ({ value: trigger.kind, label: trigger.label })),
+  };
   const busy = create.isPending || update.isPending || remove.isPending || reorder.isPending;
 
   const move = (index: number, offset: -1 | 1) => {
@@ -130,6 +137,7 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                   <RouteEditor
                     initial={route}
                     boards={boards}
+                    origins={origins}
                     busy={busy}
                     onCancel={() => setEditing(null)}
                     onSave={draft => saveEdit(route, draft, () => setEditing(null))}
@@ -202,7 +210,7 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                   </div>
                   <Txt as="p" variant="caption" tone="muted">
                     {t('intakeRoutes.summary', {
-                      when: describeWhen(route, t),
+                      when: describeWhen(route, origins, t),
                       target: describeTarget(route.target, boards, t),
                     })}
                   </Txt>
@@ -216,7 +224,7 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
             )}
           </ol>
           {editing === 'new' && (
-            <RouteEditor boards={boards} busy={busy} onCancel={() => setEditing(null)} onSave={saveNew} />
+            <RouteEditor boards={boards} origins={origins} busy={busy} onCancel={() => setEditing(null)} onSave={saveNew} />
           )}
         </div>
       )}
@@ -226,8 +234,21 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
 
 type T = TFunction<'settings'>;
 
-function describeCondition(condition: RouteCondition, t: T): string {
+/** What an intake-rule condition can name: the project's rules and the trigger kinds, labelled. */
+interface IntakeOrigins {
+  rules: { value: string; label: string }[];
+  triggers: { value: string; label: string }[];
+}
+
+const originLabel = (options: IntakeOrigins['rules'], value: string) =>
+  options.find(option => option.value === value)?.label ?? value;
+
+function describeCondition(condition: RouteCondition, origins: IntakeOrigins, t: T): string {
   switch (condition.field) {
+    case 'intake.rule':
+      return t('intakeRoutes.fromRule', { rule: originLabel(origins.rules, condition.value) });
+    case 'intake.trigger':
+      return t('intakeRoutes.fromTrigger', { trigger: originLabel(origins.triggers, condition.value) });
     case 'source.integration':
       return condition.value.map(integration => t(`intakeRoutes.integrations.${integration}`)).join(t('intakeRoutes.or'));
     case 'source.kind':
@@ -285,7 +306,7 @@ function describeEventCondition(condition: CardRuleGroup['conditions'][number], 
   return undefined;
 }
 
-function describeWhen(route: IntakeRouteInfo, t: T): string {
+function describeWhen(route: IntakeRouteInfo, origins: IntakeOrigins, t: T): string {
   const events = route.on.filter(event => event !== 'work_item.created').map(event => t(`intakeRoutes.events.${event}`));
   const eventConditions: string[] = [];
   let cardConditions = route.when;
@@ -300,7 +321,7 @@ function describeWhen(route: IntakeRouteInfo, t: T): string {
   const conditions = readRouteConditions(cardConditions);
   const card = !conditions
     ? [t('intakeRoutes.customCondition')]
-    : conditions.map(condition => describeCondition(condition, t));
+    : conditions.map(condition => describeCondition(condition, origins, t));
   if (events.length === 0) return card.length > 0 ? card.join(' · ') : t('intakeRoutes.everyCard');
   return [events.join(t('intakeRoutes.or')), ...eventConditions, ...card].join(' · ');
 }
@@ -327,12 +348,14 @@ function describeTarget(
 function RouteEditor({
   initial,
   boards,
+  origins,
   busy,
   onSave,
   onCancel,
 }: {
   initial?: IntakeRouteInfo;
   boards: InstalledBoardInfo[];
+  origins: IntakeOrigins;
   busy: boolean;
   onSave: (draft: IntakeRouteDraft) => void;
   onCancel: () => void;
@@ -398,6 +421,7 @@ function RouteEditor({
               <ConditionRow
                 key={condition.field}
                 condition={condition}
+                origins={origins}
                 busy={busy}
                 onChange={next => setCondition(index, next)}
                 onRemove={() => setConditions(current => current.filter((_, at) => at !== index))}
@@ -504,11 +528,13 @@ function FieldPicker({
 
 function ConditionRow({
   condition,
+  origins,
   busy,
   onChange,
   onRemove,
 }: {
   condition: RouteCondition;
+  origins: IntakeOrigins;
   busy: boolean;
   onChange: (next: RouteCondition) => void;
   onRemove: () => void;
@@ -581,6 +607,28 @@ function ConditionRow({
           <SelectContent>
             <SelectItem value="yes">{t('intakeRoutes.trusted')}</SelectItem>
             <SelectItem value="no">{t('intakeRoutes.untrusted')}</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+      {(condition.field === 'intake.rule' || condition.field === 'intake.trigger') && (
+        <Select
+          value={condition.value}
+          disabled={busy}
+          onValueChange={next => onChange({ field: condition.field, value: next })}
+        >
+          <SelectTrigger size="sm" aria-label={fieldLabel} className="w-auto">
+            <Txt as="span" variant="caption">
+              {condition.value
+                ? originLabel(condition.field === 'intake.rule' ? origins.rules : origins.triggers, condition.value)
+                : t('intakeRoutes.choose')}
+            </Txt>
+          </SelectTrigger>
+          <SelectContent>
+            {(condition.field === 'intake.rule' ? origins.rules : origins.triggers).map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       )}

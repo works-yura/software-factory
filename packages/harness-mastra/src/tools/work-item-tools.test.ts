@@ -448,6 +448,9 @@ describe('approval', () => {
         'factory_subscribe_session',
         'factory_unsubscribe_session',
         'factory_list_attachments',
+        'observability_query_logs',
+        'observability_crash_issues',
+        'observability_crash_issue',
       ].sort(),
     );
   });

@@ -27,6 +27,7 @@ import {
 } from '@factory/contracts';
 import { IntakeRouteRoutes } from './intake-routes.ts';
 import { ProjectRoutes } from './projects.ts';
+import { IntakeRuleRoutes } from './intake-rules/routes.ts';
 import { SkillRoutes } from './skills.ts';
 import { buildSupervisorRoutes } from '@factory/supervisor';
 import { WorkItemRoutes } from './work-items.ts';
@@ -87,7 +88,9 @@ function registeredFactoryRoutes() {
     boards: {},
   } as never).routes();
   const attachments = new AttachmentRoutes({ auth: {}, workItems: {}, sessions: {} } as never).routes();
+  const intakeRules = new IntakeRuleRoutes({ auth: {}, audit: {}, projects: {}, storage: {}, engine: {} } as never).routes();
   return [
+    ...intakeRules,
     ...projects,
     ...work,
     ...attention,

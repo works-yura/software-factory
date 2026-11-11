@@ -18,6 +18,7 @@ import {
   storedPhaseInputSchema,
 } from '@factory/store';
 
+import { INTAKE_RULE_ROUTE_CONTRACTS } from './intake-rules.ts';
 const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
@@ -732,6 +733,7 @@ const sessionAttachmentPathSchema = z.object({ sessionId: z.string().min(1).max(
 const attachmentPathSchema = z.object({ id: uuidSchema });
 
 export const FACTORY_ROUTE_CONTRACTS = {
+  ...INTAKE_RULE_ROUTE_CONTRACTS,
   projectList: {
     method: 'GET',
     path: '/web/factory/projects',

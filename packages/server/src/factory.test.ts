@@ -744,14 +744,15 @@ describe('MastraFactory.prepare', () => {
       storage: fakeStorage(),
       sandbox: new PlainSandbox(),
     }).prepare();
-    expect(plain).not.toHaveProperty('workflows');
+    // Intake rules' fire workflow is always there; the build workflow only with a building sandbox.
+    expect(Object.keys(plain.workflows ?? {})).toEqual(['factory-intake-rule-fire']);
 
     const building = await new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
       sandbox: new BuildingSandbox(),
     }).prepare();
-    expect(Object.keys(building.workflows ?? {})).toEqual(['factory-environment-build']);
+    expect(Object.keys(building.workflows ?? {})).toEqual(['factory-environment-build', 'factory-intake-rule-fire']);
     expect(building.workflows?.['factory-environment-build']?.id).toBe('factory-environment-build');
   });
 
@@ -866,6 +867,7 @@ describe('MastraFactory.prepare', () => {
       'work-item-comments',
       'skill-overrides',
       'attachments',
+      'intake-rules',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
@@ -1801,8 +1803,17 @@ describe('MastraFactory.prepare', () => {
       expect(
         (session.state.get() as { permissionRules?: { tools: Record<string, string> } }).permissionRules?.tools,
       ).toEqual(
-        // The attachment tool is a session tool (offered with an attachment store), allowed the same way.
-        Object.fromEntries([...ALLOWED_TOOLS, 'factory_list_attachments'].map(name => [name, 'allow'])),
+        // The attachment and observability tools are session tools (offered with an attachment store or a
+        // connected source), allowed the same way.
+        Object.fromEntries(
+          [
+            ...ALLOWED_TOOLS,
+            'factory_list_attachments',
+            'observability_query_logs',
+            'observability_crash_issues',
+            'observability_crash_issue',
+          ].map(name => [name, 'allow']),
+        ),
       );
       // The same policy core consults before parking a tool call for approval.
       for (const name of ALLOWED_TOOLS) expect(session.resolveToolApproval(name)).toBe('allow');

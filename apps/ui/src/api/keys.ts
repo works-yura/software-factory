@@ -61,6 +61,8 @@ export const queryKeys = {
   clickupLists: (baseUrl: string) => ['clickup', 'lists', baseUrl] as const,
   clickupSettings: (baseUrl: string) => ['clickup', 'settings', baseUrl] as const,
   clickupListStatuses: (baseUrl: string, listId: string) => ['clickup', 'statuses', baseUrl, listId] as const,
+  firebaseStatus: (baseUrl: string) => ['firebase', 'status', baseUrl] as const,
+  firebaseMapping: (baseUrl: string, factoryId: string) => ['firebase', 'mapping', baseUrl, factoryId] as const,
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
   gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
   gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,
@@ -82,6 +84,14 @@ export const queryKeys = {
   intakeLabelRoutes: (factoryProjectId: string | undefined) =>
     ['intake', 'label-routes', factoryProjectId ?? null] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
+  intakeRules: (factoryProjectId: string | undefined, locale?: string) =>
+    ['intake', 'rules', factoryProjectId ?? null, ...(locale ? [locale] : [])] as const,
+  intakeRuleKinds: (factoryProjectId: string | undefined, locale: string) =>
+    ['intake', 'rule-kinds', factoryProjectId ?? null, locale] as const,
+  intakeRuleFires: (factoryProjectId: string | undefined, ruleId: string) =>
+    ['intake', 'rules', factoryProjectId ?? null, 'fires', ruleId] as const,
+  intakeTriggerPreview: (factoryProjectId: string | undefined, trigger: string, locale: string) =>
+    ['intake', 'trigger-preview', factoryProjectId ?? null, trigger, locale] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
