@@ -29,6 +29,13 @@
   --chart-share-5: oklch(0.66 0.12 265);
   --chart-share-rest: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
 
+  /* Queue age, fresh → critical: sequential, not categorical — lightness carries the escalation,
+     hue drifts sand → red. The ramp brightens on near-black and darkens on white. */
+  --queue-fresh: oklch(0.55 0.055 70);
+  --queue-aging: oklch(0.66 0.105 62);
+  --queue-stale: oklch(0.75 0.145 52);
+  --queue-critical: oklch(0.71 0.18 32);
+
   --span-agent: oklch(0.75 0.133 250);
   --span-workflow: oklch(0.75 0.127 200);
   --span-model: oklch(0.75 0.15 320);
@@ -59,6 +66,11 @@ html.light {
   --chart-share-4: oklch(0.64 0.11 190);
   --chart-share-5: oklch(0.5 0.15 265);
   --chart-share-rest: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
+
+  --queue-fresh: oklch(0.89 0.045 70);
+  --queue-aging: oklch(0.81 0.095 62);
+  --queue-stale: oklch(0.71 0.14 52);
+  --queue-critical: oklch(0.6 0.175 32);
 
   --span-agent: oklch(0.55 0.15 250);
   --span-workflow: oklch(0.55 0.093 200);
@@ -93,6 +105,10 @@ html.light {
   --color-chart-sequential-4: var(--chart-sequential-4);
   --color-chart-sequential-5: var(--chart-sequential-5);
   --color-chart-sequential-pale: var(--chart-sequential-pale);
+  --color-queue-fresh: var(--queue-fresh);
+  --color-queue-aging: var(--queue-aging);
+  --color-queue-stale: var(--queue-stale);
+  --color-queue-critical: var(--queue-critical);
   --color-chart-share-1: var(--chart-share-1);
   --color-chart-share-2: var(--chart-share-2);
   --color-chart-share-3: var(--chart-share-3);
