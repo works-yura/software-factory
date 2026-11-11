@@ -24,6 +24,7 @@ import { BoardConfigPage } from './pages/BoardConfigPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { FactorySkillsPage } from './pages/FactorySkillsPage';
 import { NewBoardPage } from './pages/NewBoardPage';
+import { ConnectAccountPage } from './pages/ConnectAccountPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -219,6 +220,8 @@ export function createAppRoutes(): RouteObject[] {
         // Server-built thread deep links without a factory id (Slack cards).
         { path: 'threads/:threadId', element: <ChannelThreadRedirect /> },
         { path: 'settings/connections', element: <ConnectionsRedirect /> },
+        // Where a conversation channel's connect reply points (no identity in the link).
+        { path: 'connect/:platform', element: <ConnectAccountPage /> },
         // Legacy deep links (the app used to serve everything at any path).
         { path: '*', element: <Navigate to="/" replace /> },
       ],
