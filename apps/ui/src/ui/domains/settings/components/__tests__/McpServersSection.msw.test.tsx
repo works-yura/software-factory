@@ -1,33 +1,33 @@
+import { mcpCatalogEntry } from '@factory/core';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
+// The real catalog files the server ships, so the form under test is the one people get.
+import toolboxOverlay from '../../../../../../../../packages/server/src/mcp-servers/catalog/mcp-toolbox.factory.json';
+import toolboxManifest from '../../../../../../../../packages/server/src/mcp-servers/catalog/mcp-toolbox.server.json';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type { McpServer, McpServerPreset } from '../../services/mcpServers';
+import type { McpServer } from '../../services/mcpServers';
 import { McpServersSection } from '../McpServersSection';
 
 const BASE = `${TEST_BASE_URL}/web/mcp-servers`;
-
-const firestorePreset: McpServerPreset = {
-  id: 'toolbox-firestore',
-  label: 'MCP Toolbox for Databases · Firestore',
-  description: 'Google’s MCP Toolbox with its Firestore tools.',
-  args: ['--prebuilt', 'firestore', '--stdio'],
-  env: [{ name: 'FIRESTORE_PROJECT', label: 'Google Cloud project ID', required: true }],
-  secretFiles: [{ name: 'GOOGLE_APPLICATION_CREDENTIALS', label: 'Service account key (JSON)', required: true }],
-  writeTools: ['add_documents', 'update_document', 'delete_documents'],
-  docsUrl: 'https://mcp-toolbox.dev',
-};
+const toolbox = mcpCatalogEntry(toolboxManifest, toolboxOverlay);
 
 const stored: McpServer = {
   id: 'srv-1',
-  name: 'syncta-db',
+  name: 'syncta-firestore',
   label: 'Syncta Firestore',
-  launch: { transport: 'stdio', preset: 'toolbox-firestore', args: [], env: { FIRESTORE_PROJECT: 'syncta-57c6a' } },
-  secretNames: { env: [], headers: [], files: ['GOOGLE_APPLICATION_CREDENTIALS'] },
+  launch: {
+    transport: 'catalog',
+    entry: 'mcp-toolbox',
+    variant: 'firestore',
+    inputs: { FIRESTORE_PROJECT: 'syncta-57c6a' },
+    credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } },
+  },
+  secretNames: { env: [], headers: [], files: [] },
   assignments: [{ factoryProjectId: 'factory-1', boards: ['audits'] }],
   toolPolicies: { default: 'allow', tools: {} },
   maskPersonalData: true,
@@ -39,7 +39,19 @@ const stored: McpServer = {
 function useHandlers(servers: McpServer[] = [], canEdit = true) {
   const writes: Array<{ method: string; url: string; body: any }> = [];
   server.use(
-    http.get(BASE, () => HttpResponse.json({ servers, presets: [firestorePreset], canEdit })),
+    http.get(BASE, () =>
+      HttpResponse.json({
+        servers,
+        catalog: [toolbox],
+        credentials: { 'google-cloud-account': [{ id: 'acc-1', name: 'Syncta', detail: 'factory@syncta-57c6a.iam.gserviceaccount.com' }] },
+        canEdit,
+      }),
+    ),
+    http.get(`${BASE}/suggestions`, ({ request }) =>
+      HttpResponse.json({
+        suggestions: new URL(request.url).searchParams.get('factoryProjectId') === 'factory-1' ? { 'google-cloud-project': 'syncta-57c6a' } : {},
+      }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: 'factory-1', name: 'syncts', repositories: [] }] }),
     ),
@@ -87,36 +99,102 @@ function render() {
   );
 }
 
+async function pick(combobox: string, option: string) {
+  await userEvent.click(screen.getByRole('combobox', { name: combobox }));
+  await userEvent.click(await screen.findByRole('option', { name: option }));
+}
+
 describe('McpServersSection', () => {
-  it('adds a Firestore server through the Toolbox preset; the key goes in once and nobody gets the server yet', async () => {
+  it('adds Firestore from the catalog: picks the Google Cloud account, takes the project from the Factory, no raw variable names', async () => {
     const writes = useHandlers();
     render();
     expect(await screen.findByText(/No servers yet/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Add server' }));
+    const catalog = screen.getByRole('group', { name: 'Which server?' });
+    await userEvent.type(within(catalog).getByRole('textbox', { name: 'Search servers' }), 'firestore');
+    expect(within(catalog).queryByRole('button', { name: /Own server/ })).not.toBeInTheDocument();
+    await userEvent.click(within(catalog).getByRole('button', { name: /Database \(MCP Toolbox\)/ }));
+
+    await pick('What to connect', 'Firestore');
+    // The form is the manifest's inputs in the person's language, never env names.
+    expect(screen.queryByText('FIRESTORE_PROJECT')).not.toBeInTheDocument();
+    expect(screen.queryByText('GOOGLE_APPLICATION_CREDENTIALS')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /Service account key/ })).not.toBeInTheDocument();
+    await pick('Google Cloud account', 'Syncta · factory@syncta-57c6a.iam.gserviceaccount.com');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add Factory' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Use «syncta-57c6a» from the Factory\'s binding' }));
+    expect(screen.getByRole('textbox', { name: 'Google Cloud project' })).toHaveValue('syncta-57c6a');
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Name' }));
     await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Syncta Firestore');
-    await userEvent.type(screen.getByRole('textbox', { name: 'Identifier' }), 'syncta-db');
-    await userEvent.type(screen.getByRole('textbox', { name: 'FIRESTORE_PROJECT' }), 'syncta-57c6a');
-    await userEvent.type(screen.getByRole('textbox', { name: 'Service account key (JSON)' }), 'KEY');
+    await userEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+    expect(screen.getByLabelText('Identifier')).toHaveTextContent('syncta-firestore');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]!.body).toEqual({
+      name: 'syncta-firestore',
+      label: 'Syncta Firestore',
+      launch: {
+        transport: 'catalog',
+        entry: 'mcp-toolbox',
+        variant: 'firestore',
+        inputs: { FIRESTORE_PROJECT: 'syncta-57c6a' },
+        credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } },
+      },
+      assignments: [{ factoryProjectId: 'factory-1' }],
+      toolPolicies: { default: 'allow', tools: {} },
+      maskPersonalData: true,
+      enabled: true,
+    });
+  });
+
+  it('sends a secret input once, as a secret, for PostgreSQL', async () => {
+    const writes = useHandlers();
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add server' }));
+    await userEvent.click(screen.getByRole('button', { name: /Database \(MCP Toolbox\)/ }));
+    await pick('What to connect', 'PostgreSQL');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Database' }), 'reports');
+    await userEvent.type(screen.getByRole('textbox', { name: 'User' }), 'reader');
+    await userEvent.type(screen.getByLabelText('Password'), 'hunter2');
+    expect(screen.getByRole('textbox', { name: 'Host' })).toHaveAttribute('placeholder', 'Empty means localhost');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]!.body).toMatchObject({
-      name: 'syncta-db',
-      label: 'Syncta Firestore',
-      launch: { transport: 'stdio', preset: 'toolbox-firestore', env: { FIRESTORE_PROJECT: 'syncta-57c6a' } },
-      secrets: { files: { GOOGLE_APPLICATION_CREDENTIALS: 'KEY' } },
-      assignments: [],
-      toolPolicies: { default: 'allow', tools: {} },
-      maskPersonalData: true,
+      launch: { transport: 'catalog', variant: 'postgres', inputs: { POSTGRES_DATABASE: 'reports', POSTGRES_USER: 'reader' } },
+      secrets: { env: { POSTGRES_PASSWORD: 'hunter2' } },
+    });
+    expect(writes[0]!.body.launch.inputs.POSTGRES_PASSWORD).toBeUndefined();
+  });
+
+  it('adds an own server as a local command, with no stdio/HTTP wording', async () => {
+    const writes = useHandlers();
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add server' }));
+    await userEvent.click(screen.getByRole('button', { name: /Own server/ }));
+    expect(screen.queryByText(/stdio|HTTP\)/)).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Notes');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Command' }), '/usr/local/bin/notes-mcp');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Secret variables' }), 'NOTES_TOKEN=t0k');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]!.body).toMatchObject({
+      name: 'notes',
+      launch: { transport: 'stdio', command: '/usr/local/bin/notes-mcp', args: [], env: {} },
+      secrets: { env: { NOTES_TOKEN: 't0k' } },
     });
   });
 
-  it('assigns a stored server to a Factory board and sets one tool to forbidden after a check; the key is kept', async () => {
+  it('assigns a stored server to a Factory board and sets one tool to forbidden after a check', async () => {
     const writes = useHandlers([stored]);
     render();
     await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
-    expect(screen.getByText(/syncta-db · MCP Toolbox for Databases · Firestore · 1 Factory/)).toBeInTheDocument();
+    expect(screen.getByText(/Firestore · 1 Factory/)).toBeInTheDocument();
 
     const access = await screen.findByRole('group', { name: 'Access for syncts' });
     expect(within(access).getByRole('button', { name: 'Аудити', pressed: true })).toBeInTheDocument();
@@ -125,19 +203,19 @@ describe('McpServersSection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Check' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Running: 2 tools.');
     expect(screen.getByText('changes data')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('combobox', { name: 'Policy for delete_documents' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Forbidden' }));
+    await pick('Policy for delete_documents', 'Forbidden');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toMatchObject({
       method: 'PUT',
       body: {
+        name: 'syncta-firestore',
+        launch: { credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } } },
         assignments: [{ factoryProjectId: 'factory-1', boards: ['audits'], phases: ['analysis'] }],
         toolPolicies: { default: 'allow', tools: { delete_documents: 'deny' } },
       },
     });
-    // Nothing typed into the key field: the stored key stays.
     expect(writes[0]!.body.secrets).toBeUndefined();
   });
 

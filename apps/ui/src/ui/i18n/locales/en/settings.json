@@ -1045,50 +1045,63 @@
   },
   "mcpServers": {
     "title": "MCP servers",
-    "description": "External MCP servers the agents use: a database through MCP Toolbox, a log service and so on. For each: which cards get it and what each of its tools may do. Secrets are stored encrypted and never shown again.",
+    "description": "External MCP servers agents use: a database, a log service and so on. For each: which cards get it and what each of its tools may do. Secrets are stored encrypted and never shown again.",
     "add": "Add server",
-    "newServer": "New server",
     "loading": "Loading servers…",
-    "empty": "No servers yet. For example: a Firestore database through MCP Toolbox, read-only, for Audits cards.",
+    "empty": "No servers yet. For example: a read-only Firestore database for Audits cards.",
     "requestFailed": "The server answered {{status}}.",
     "saved": "Server saved.",
     "deleted": "Server deleted.",
+    "catalog": {
+      "title": "Which server?",
+      "search": "Search servers",
+      "nothing": "Nothing found.",
+      "custom": "Own server",
+      "customSummary": "Any MCP server not in the catalog: a local command or an address.",
+      "back": "Another server"
+    },
     "label": "Name",
-    "labelHint": "How people see the server.",
-    "name": "Identifier",
-    "nameHint": "Lowercase letters, digits and dashes; the agent sees its tools as “identifier_tool”.",
-    "kind": "Server",
-    "kinds": {
-      "stdio": "Own command (stdio)",
-      "http": "At a URL (HTTP)"
+    "labelHint": "How people and the session history see the server.",
+    "variant": "What to connect",
+    "field": {
+      "required": "required",
+      "default": "Empty means {{value}}",
+      "noAccounts": "No Google Cloud account yet. Add one in «Logs and crashes» and it shows up here.",
+      "pickAccount": "Pick an account",
+      "suggest": "Use «{{value}}» from the Factory's binding",
+      "pickChoice": "Pick one",
+      "secretStored": "Saved. A new value replaces it; leave empty to keep it.",
+      "secretKeep": "Saved — leave empty to keep",
+      "pastedKey": "A key pasted earlier is in use. Pick an account to take the key from there."
     },
-    "kindHint": {
-      "stdio": "A command the Factory starts with the session.",
-      "http": "A server already running at a URL."
-    },
-    "command": "Command",
-    "commandHint": "An installed program, no npx: what is installed is what runs.",
-    "args": "Arguments",
-    "argsHint": "One per line; ${VAR} is filled from this server's variables.",
-    "urlHint": "The MCP server's URL (Streamable HTTP).",
-    "plain": {
+    "custom": {
+      "how": "How it runs",
+      "local": "Local command",
+      "localHint": "A program on this machine the Factory starts with the session.",
+      "address": "Address",
+      "addressHint": "A server already running at an address.",
+      "command": "Command",
+      "commandHint": "An installed program; what is installed is what runs.",
+      "args": "Arguments",
+      "argsHint": "One per line; ${VARIABLE} is filled from this server's variables.",
+      "url": "Address",
+      "urlHint": "The MCP server's address (Streamable HTTP).",
       "env": "Environment variables",
-      "headers": "Headers"
+      "headers": "Headers",
+      "plainHint": "NAME=value lines, not secret.",
+      "secretEnv": "Secret variables",
+      "secretHeaders": "Secret headers",
+      "secretHint": "NAME=value lines; stored encrypted and never shown again.",
+      "secretNames": "Saved: {{names}}. A new line replaces a value; the rest stay."
     },
-    "plainHint": "NAME=value lines, not secret.",
-    "secret": {
-      "env": "Secret variables",
-      "headers": "Secret headers"
-    },
-    "secretLinesHint": "NAME=value lines; stored encrypted and never shown again.",
-    "secretNames": "Stored: {{names}}. A new line replaces a value; the rest stay.",
-    "secretStored": "Stored. Paste a new value to replace it, or leave empty.",
-    "secretKeep": "Stored — leave empty to keep",
-    "secretFileHint": "Written to a private temp file while the server runs; its path goes into {{name}}.",
+    "advanced": "Advanced",
+    "name": "Identifier",
+    "nameHint": "Made from the name; agents see tools as «identifier_tool».",
+    "editName": "Change",
     "access": {
       "title": "Access",
-      "hint": "Which cards get this server. With no boards or phases: every session of the Factory, its chat included.",
-      "none": "No Factory yet: nobody gets the server.",
+      "hint": "Which cards get this server. No boards or phases means every session of the Factory, chat included.",
+      "none": "No Factory yet: nobody gets this server.",
       "add": "Add Factory",
       "remove": "Remove",
       "factory": "Factory",
@@ -1101,9 +1114,9 @@
     },
     "tools": {
       "default": "Tools by default",
-      "defaultHint": "What a tool not listed below may do.",
+      "defaultHint": "What a tool may do when nothing below says otherwise.",
       "title": "Tools",
-      "hint": "“Check” starts the server and lists its tools; change what each may do.",
+      "hint": "«Check» starts the server and lists its tools; change what each one may do.",
       "saveFirst": "Save the server to see its tools.",
       "writes": "changes data",
       "policyFor": "Policy for {{tool}}"
@@ -1120,19 +1133,21 @@
       "failed": "Does not start: {{error}}"
     },
     "mask": "Mask personal data",
-    "maskHint": "Emails, phone numbers, IPs and tokens in the server's results are replaced before the agent sees them.",
+    "maskHint": "Emails, phone numbers, IPs and tokens in the server's answers are replaced before the agent sees them.",
     "enabled": "On",
     "enabledHint": "No session gets a server that is off.",
     "save": "Save",
     "delete": "Delete",
     "cancel": "Cancel",
-    "deleteTitle": "Delete “{{label}}”?",
-    "deleteBody": "Sessions will no longer get this server, and its secrets are deleted.",
+    "deleteTitle": "Delete «{{label}}»?",
+    "deleteBody": "Sessions stop getting this server and its secrets are deleted.",
     "summary": {
       "factories_one": "{{count}} Factory",
       "factories_other": "{{count}} Factories",
       "unassigned": "assigned to nobody",
-      "off": "off"
+      "off": "off",
+      "local": "local command",
+      "address": "address"
     }
   },
   "observability": {

@@ -100,6 +100,14 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: SlidersHorizontal,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
       },
+      {
+        id: 'mcp-servers',
+        get label() {
+          return SETTINGS_SECTION_LABELS['mcp-servers'];
+        },
+        icon: Plug,
+        searchText: 'mcp servers tools database firestore toolbox postgres connectors external access policy',
+      },
     ],
   },
   {
@@ -148,14 +156,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: Activity,
         searchText: 'observability logs crashes crashlytics firebase cloud logging errors stability service account',
-      },
-      {
-        id: 'mcp-servers',
-        get label() {
-          return SETTINGS_SECTION_LABELS['mcp-servers'];
-        },
-        icon: Plug,
-        searchText: 'mcp servers tools database firestore toolbox postgres connectors external access policy',
       },
       {
         id: 'factory',

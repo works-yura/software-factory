@@ -3,6 +3,8 @@
  * values are sent on save and never come back — only their names.
  */
 
+import type { McpCatalogEntry } from '@factory/core';
+
 import { translator } from '../../../i18n/t';
 
 const tk = translator('settings');
@@ -20,7 +22,19 @@ export interface McpServerAssignment {
   phases?: string[];
 }
 
+export interface McpCredentialRef {
+  kind: 'google-cloud-account';
+  id: string;
+}
+
 export type McpServerLaunch =
+  | {
+      transport: 'catalog';
+      entry: string;
+      variant?: string;
+      inputs: Record<string, string>;
+      credentials: Record<string, McpCredentialRef>;
+    }
   | { transport: 'stdio'; preset?: string; command?: string; args: string[]; env: Record<string, string> }
   | { transport: 'http'; url: string; headers: Record<string, string> };
 
@@ -38,20 +52,18 @@ export interface McpServer {
   updatedBy: string;
 }
 
-export interface McpServerPreset {
+export interface McpCredentialOption {
   id: string;
-  label: string;
-  description: string;
-  args: string[];
-  env: Array<{ name: string; label: string; required: boolean }>;
-  secretFiles: Array<{ name: string; label: string; required: boolean }>;
-  writeTools: string[];
-  docsUrl: string;
+  name: string;
+  detail?: string;
 }
 
 export interface McpServersState {
   servers: McpServer[];
-  presets: McpServerPreset[];
+  /** MCP Registry `server.json` entries with the Factory overlay. */
+  catalog: McpCatalogEntry[];
+  /** The organization's accounts an input can be filled from, by kind. */
+  credentials: Partial<Record<McpCredentialRef['kind'], McpCredentialOption[]>>;
   canEdit: boolean;
 }
 
@@ -111,6 +123,15 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
 const json = (method: string, body?: unknown): RequestInit => ({ method, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
 
 export const fetchMcpServers = (baseUrl: string) => request<McpServersState>(baseUrl, '/web/mcp-servers');
+
+/** Values a Factory's own bindings suggest for a catalog input (its Google Cloud project). */
+export const fetchMcpSuggestions = async (baseUrl: string, factoryProjectId: string) =>
+  (
+    await request<{ suggestions: Partial<Record<'google-cloud-project', string>> }>(
+      baseUrl,
+      `/web/mcp-servers/suggestions?factoryProjectId=${encodeURIComponent(factoryProjectId)}`,
+    )
+  ).suggestions;
 
 export const saveMcpServer = async (baseUrl: string, input: McpServerInput & { id?: string }): Promise<McpServer> => {
   const { id, ...body } = input;
