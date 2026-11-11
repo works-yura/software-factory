@@ -1,3 +1,6 @@
+import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { boardOf } from '../../factory/boardFlow';
 import { CommandEmpty } from '@mastra/playground-ui/components/Command';
 import {
   CommandPaletteBody,
@@ -12,7 +15,7 @@ import { useState } from 'react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { boardCardState, busyCardMoveRefusal, canStartRun } from '../../factory/boardCardState';
-import { itemStageLabel } from '../../factory/boardStages';
+import { currentItemStage, itemStageLabel } from '../../factory/boardStages';
 import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
@@ -50,9 +53,12 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const workItems = useGlobalSearchWorkItems(searchableFactoryId);
   const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
   const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
+  const catalog = useBoardCatalog(searchableFactoryId);
+  const defaultBoard = catalog.data?.find(board => board.id === DEFAULT_BOARD_ID);
+  // Unfiled candidates come from the intake feed, which files onto the default board.
   const workBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
-    kind: 'work',
+    kind: DEFAULT_BOARD_ID,
     currentUserId,
     onFailure: toastFailureAfterPaletteCloses,
   });
@@ -70,6 +76,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     factoryId,
     workItems: workItems.items,
     candidates: intake.candidates,
+    boards: catalog.data,
   });
   const counts = createGlobalSearchScopeCounts({
     work: sessionGroups.work.length,
@@ -111,18 +118,31 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
               onSelect={result => {
                 const target = result.target;
                 if (target.kind === 'candidate') {
+                  // Until the default board's catalog entry loads there is nowhere to file it: stay open.
+                  if (!defaultBoard) {
+                    toast.error(t('boardStillLoading'));
+                    return;
+                  }
+                  // A board with no move for it still takes it, filed in its initial phase.
+                  const [move] = cardMoves(target.candidate, target.candidate.column, defaultBoard);
                   closeSearch();
-                  const [move] = cardMoves(target.candidate, target.candidate.column);
-                  if (move) workBoard.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
+                  workBoard.handleDrop(
+                    candidatePayload(target.candidate),
+                    move?.stage ?? defaultBoard.initialPhase,
+                    'card_action',
+                  );
                   return;
                 }
                 const item = target.item;
                 const board = workBoard;
+                const definition = boardOf(catalog.data, item);
                 const movingTo = board.evaluatingStages.get(item.id);
                 const { owner } = boardCardState({
                   decision: effectByItem.get(item.id),
                   moving:
-                    movingTo === undefined ? undefined : { stage: movingTo, label: itemStageLabel(item, movingTo) },
+                    movingTo === undefined
+                      ? undefined
+                      : { stage: movingTo, label: itemStageLabel(item, movingTo, definition) },
                   preparing: runs.preparingFor(item.id),
                 });
                 if (!canStartRun(owner.kind)) {
@@ -130,7 +150,9 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                   toast.error(busyCardMoveRefusal());
                   return;
                 }
-                const [move] = cardMoves(item, 'intake');
+                // Moves read from the phase the card sits in (its furthest, as its label shows), not its board's first.
+                const stage = currentItemStage(item, definition);
+                const [move] = definition && stage !== undefined ? cardMoves(item, stage, definition) : [];
                 if (move) {
                   closeSearch();
                   board.move(item.id, move.stage);

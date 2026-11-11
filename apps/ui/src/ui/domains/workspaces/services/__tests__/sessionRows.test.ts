@@ -9,16 +9,15 @@ describe('sessionBoard', () => {
   it('puts a pull request item from before boards existed on Work', () => {
     const item = testWorkItem({ board: null, source: 'github-pr' });
 
-    expect(sessionBoard(testSession('s1', { branch: 'factory/issue-3' }), item)).toBe('work');
+    expect(sessionBoard(item)).toBe('work');
   });
 
   it("follows the item's custom board", () => {
-    expect(sessionBoard(testSession('s1', { branch: 'factory/issue-3' }), testWorkItem({ board: 'release' }))).toBe('release');
+    expect(sessionBoard(testWorkItem({ board: 'release' }))).toBe('release');
   });
 
   it('puts a session with no linked item on Work, pull request reviews included', () => {
-    expect(sessionBoard(testSession('s1', { branch: 'factory/pr-12' }), undefined)).toBe('work');
-    expect(sessionBoard(testSession('s1', { branch: 'factory/issue-3' }), undefined)).toBe('work');
+    expect(sessionBoard(undefined)).toBe('work');
   });
 });
 

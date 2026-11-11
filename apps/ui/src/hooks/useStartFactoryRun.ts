@@ -80,7 +80,6 @@ export function useStartFactoryRun() {
             parentWorkItemId: workItem.parentWorkItemId,
             title: workItem.title,
             url: workItem.url ?? null,
-            stages: ['intake'],
             metadata,
           },
         },

@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestMerges';
 import {
@@ -9,7 +10,6 @@ import {
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import type { WorkItem } from '../../factory/services/workItems';
-import { isTerminalStage } from '../../factory/stages';
 import {
   getFactorySessionSource,
   getSessionOwnerDetails,
@@ -104,16 +104,20 @@ function isOwnedByViewer(session: FactoryUserSession, viewer: SessionViewerProfi
   return !viewer?.userId || session.userId === viewer.userId;
 }
 
-/** The board a session's card sits on; a session whose card isn't loaded is on Work, pull request reviews included. */
-export function sessionBoard(_session: FactoryUserSession, item: WorkItem | undefined): string {
-  return item ? itemBoard(item) : 'work';
+/** The board a session's card sits on; a session with no card (a pull request's review included) belongs to the default board. */
+export function sessionBoard(item: WorkItem | undefined): string {
+  return item ? itemBoard(item) : DEFAULT_BOARD_ID;
 }
 
+/**
+ * Whether the card sits in a phase its board marks terminal. Only the catalog says which phases those
+ * are (any board may name them anything), so until it loads, or while it fails and retries, no card
+ * counts as finished here and its session reads as active; a card with a pull request still settles
+ * on that pull request's state.
+ */
 function reachedTerminalPhase(item: WorkItem, boards: readonly InstalledBoardInfo[] | undefined): boolean {
   const board = boards?.find(candidate => candidate.id === itemBoard(item));
-  return item.stages.some(
-    stage => isTerminalStage(stage) || board?.phases.find(phase => phase.id === stage)?.kind === 'terminal',
-  );
+  return item.stages.some(stage => board?.phases.find(phase => phase.id === stage)?.kind === 'terminal');
 }
 
 function factorySessionName(session: FactoryUserSession, item: WorkItem | undefined): string {
@@ -179,7 +183,7 @@ export function buildFactorySessionRow({
   return {
     session,
     origin: 'factory',
-    board: sessionBoard(session, item),
+    board: sessionBoard(item),
     source: getFactorySessionSource(session, item),
     name: factorySessionName(session, item),
     url,

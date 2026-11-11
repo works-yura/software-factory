@@ -77,6 +77,7 @@
   },
   "triageDecisions": {
     "acceptAndPlan": "Прийняти й спланувати",
+    "acceptAndBuild": "Прийняти й реалізувати",
     "close": "Закрити"
   },
   "primaryAction": {
@@ -91,7 +92,7 @@
   },
   "cardState": {
     "busyMoveRefusal": "Поки картка зайнята, інший запуск неможливий.",
-    "markingDone": "Позначаємо як готове…",
+    "markingStage": "Позначаємо: {{stage}}…",
     "movingTo": "Переміщуємо: {{stage}}…",
     "moving": "Переміщуємо…",
     "starting": "Запускаємо…",
@@ -243,7 +244,7 @@
     "startSuggestedRun": "Запустити запропоноване",
     "dismissSuggestedRun": "Відхилити пропозицію запуску",
     "askSupervisor": "Запитати в чаті",
-    "markDone": "Позначити як готове",
+    "markStage": "Позначити: {{stage}}",
     "moveTo": "Перемістити: {{stage}}",
     "remove": "Видалити"
   },

@@ -58,5 +58,6 @@ export function movingCardStatus(
 ) {
   if (stage === undefined) return undefined;
   const phase = definition?.phases.find(phase => phase.id === stage);
-  return { stage, label: phase && definition ? phaseTitle(definition.id, phase.id, phase.title) : itemStageLabel(item, stage) };
+  const label = phase && definition ? phaseTitle(definition.id, phase.id, phase.title) : itemStageLabel(item, stage, definition);
+  return { stage, label, completes: definition?.flow?.completed === stage };
 }

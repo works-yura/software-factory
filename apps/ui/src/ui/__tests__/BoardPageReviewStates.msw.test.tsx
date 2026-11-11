@@ -15,7 +15,7 @@ import type { FactoryDecisionPage, FactoryDecisionSummary } from '../domains/fac
 import type { GithubPullRequestDetail } from '../domains/factory/services/factory';
 import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
 import { createAppRoutes } from '../router';
-import { workBoardCatalog } from '../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog } from '../../../e2e/ui/board-catalog';
 import { reviewCandidate, reviewDecision, reviewItem } from './fixtures/reviewCard';
 
 const FACTORY_ID = reviewItem.factoryProjectId;
@@ -56,7 +56,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
       }),
     ),
     // Work as the catalog serves it today, PR review included.
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json(workBoardCatalog)),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json(builtinBoardCatalog)),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
         config: { github: { enabled: true, sourceIds: ['acme/app'] } },

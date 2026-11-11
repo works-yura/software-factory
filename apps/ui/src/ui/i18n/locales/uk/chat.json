@@ -426,7 +426,7 @@
       "action": "Допоможи вирішити"
     },
     "triage": {
-      "label": "Без тріажу в Intake",
+      "label": "Без тріажу в {{phase}}",
       "actionOne": "Провести тріаж",
       "actionMany": "Тріаж {{count}} найновіших"
     },

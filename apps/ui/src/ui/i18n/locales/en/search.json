@@ -11,6 +11,7 @@
   "results": "Search results",
   "footer": "Factory search",
   "empty": "No matching results.",
+  "boardStillLoading": "The board is still loading. Try again in a moment.",
   "sessionStartFailed": "The session could not be started.",
   "categories": "Search categories",
   "scopes": {

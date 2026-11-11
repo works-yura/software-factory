@@ -422,7 +422,7 @@
       "action": "Help me decide"
     },
     "triage": {
-      "label": "Untriaged in Intake",
+      "label": "Untriaged in {{phase}}",
       "actionOne": "Triage it",
       "actionMany": "Triage the {{count}} newest"
     },

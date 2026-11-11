@@ -5,10 +5,11 @@ import { Link, useParams } from 'react-router';
 
 import { externalLinkLabel, githubNumberForItem } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { boardLoop } from '../boardFlow';
 import { itemBoard, itemStageOptions } from '../boardStages';
 import { canMoveTo, canStartRun } from '../boardCardState';
 import type { BoardCardOwner } from '../boardCardState';
-import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
+import { awaitsTriageDecision, triageDecisions } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
 import { supervisorChatEnabled, workItemPrompt } from '../../supervisor/services/supervisor';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -72,24 +73,27 @@ export function WorkItemMenuItems({
   const { factoryId } = useParams<{ factoryId: string }>();
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
-  const custom = boardId !== 'work';
   const board = catalog.data?.find(candidate => candidate.id === boardId);
+  // A board without a pull request loop moves cards only where the current phase declares.
+  const loop = boardLoop(board);
+  const custom = loop === undefined;
   const targets = board?.phases.find(phase => phase.id === columnStage)?.transitions ?? [];
   const stages = custom
     ? (board?.phases
         .filter(phase => targets.some(target => target.to === phase.id))
         .map(phase => ({ id: phase.id, label: phaseTitle(board.id, phase.id, phase.title), kind: phase.kind })) ?? [])
-    : itemStageOptions(item).map(stage => ({ ...stage, kind: undefined }));
+    : itemStageOptions(item, board).map(stage => ({ ...stage, kind: undefined }));
   const suggestionForThisBoard = custom && proposedRunLabel === undefined ? undefined : proposal;
+  const decisions = triageDecisions(board);
   // Every run-starting action would accept a held card as a side effect, so triage choices replace them.
-  const awaitsTriage = !custom && awaitsTriageDecision(item, columnStage);
+  const awaitsTriage = decisions.length > 0 && awaitsTriageDecision(item, columnStage, board);
   const runsBlocked = !canStartRun(owner.kind);
   const yourRequestInFlight = owner.kind === 'you';
   const phaseKind = (stage: string) => board?.phases.find(phase => phase.id === stage)?.kind;
   return (
     <>
       {awaitsTriage &&
-        TRIAGE_DECISIONS.map(choice => (
+        decisions.map(choice => (
           <DropdownMenu.Item
             key={choice.stage}
             disabled={!canMoveTo(owner.kind, phaseKind(choice.stage))}
@@ -128,7 +132,7 @@ export function WorkItemMenuItems({
       )}
       {stages
         .filter(stage => stage.id !== columnStage)
-        .filter(stage => !awaitsTriage || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
+        .filter(stage => !awaitsTriage || !decisions.some(choice => choice.stage === stage.id))
         .map(stage => (
           <DropdownMenu.Item
             key={stage.id}
@@ -136,7 +140,11 @@ export function WorkItemMenuItems({
             onClick={() => onMove(stage.id)}
           >
             <BoardStageIcon stage={stage.id} kind={stage.kind} decorative />
-            <span>{stage.id === 'done' ? t('menu.markDone') : t('menu.moveTo', { stage: stage.label })}</span>
+            <span>
+              {stage.id === board?.flow?.completed
+                ? t('menu.markStage', { stage: stage.label.toLowerCase() })
+                : t('menu.moveTo', { stage: stage.label })}
+            </span>
           </DropdownMenu.Item>
         ))}
       <DropdownMenu.Item disabled={yourRequestInFlight} onClick={onRemove}>

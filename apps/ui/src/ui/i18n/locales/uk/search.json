@@ -11,6 +11,7 @@
   "results": "Результати пошуку",
   "footer": "Пошук у Factory",
   "empty": "Нічого не знайдено.",
+  "boardStillLoading": "Дошка ще завантажується. Спробуйте за мить.",
   "sessionStartFailed": "Не вдалося почати сесію.",
   "categories": "Категорії пошуку",
   "scopes": {

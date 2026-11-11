@@ -1,12 +1,13 @@
 import { needsApproval } from '@factory/core/rules/types';
-import type { FactoryRuleStage } from '@factory/core/rules/types';
+
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
+import { allowsMove, boardLoop, phaseKindOf } from './boardFlow';
+import type { BoardInfo, BoardLoop } from './boardFlow';
 import { itemSessionSpec, metadataLabels, pullRequestStatusForItem, pullRequestStatusForSource } from './boardItems';
 import { attachedPullRequestSource, cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
-import { translator } from '../../i18n/t';
-import { isTerminalStage } from './stages';
 import type { BoardStageId } from './stages';
+import { translator } from '../../i18n/t';
 
 type FactoryRole = 'triage' | 'plan' | 'work' | 'review';
 
@@ -25,9 +26,9 @@ export interface CardMove {
   action: CardMoveAction;
   /** Translated when read: the lane's verb, e.g. "Investigate" or "Build". */
   readonly label: string;
-  /** Session slot the lane's run fills on the card, e.g. `plan` or `work`. */
-  role: FactoryRole;
-  stage: FactoryRuleStage;
+  /** Session slot the lane's run fills on the card: the phase's context, e.g. `work`. */
+  role: string;
+  stage: string;
   /** The run's outcome is a maintainer decision, so hands-off has nothing to remove. */
   awaitsHumanDecision?: true;
 }
@@ -38,87 +39,77 @@ export type MovableCard = Pick<WorkItem, 'source' | 'metadata' | 'workItem'> &
 
 const tk = translator('board');
 
-const INVESTIGATE: CardMove = {
-  action: 'investigate',
-  get label() {
-    return tk('moves.investigate');
-  },
-  role: 'triage',
-  stage: 'triage',
-};
-const BUILD: CardMove = {
-  action: 'build',
-  get label() {
-    return tk('moves.build');
-  },
-  role: 'work',
-  stage: 'execute',
-};
-const PLAN: CardMove = {
-  action: 'plan',
-  get label() {
-    return tk('moves.plan');
-  },
-  role: 'work',
-  stage: 'planning',
-};
-
-/** An issue card's moves from each column, following the Work board's `nextPhases`: Building comes only after Planning. */
-function issueMoves(columnStage: BoardStageId): CardMove[] {
-  if (columnStage === 'planning') return [PLAN, BUILD];
-  if (columnStage === 'execute') return [BUILD, PLAN];
-  return [INVESTIGATE, PLAN];
+/** A move whose label is read in the reader's language each time it is shown. */
+function laneMove(action: CardMoveAction, role: string, stage: string, extra?: { awaitsHumanDecision: true }): CardMove {
+  return {
+    action,
+    get label() {
+      return tk(`moves.${action}`);
+    },
+    role,
+    stage,
+    ...extra,
+  };
 }
-const PREPARE_APPROVAL: CardMove = {
-  action: 'prepareApproval',
-  get label() {
-    return tk('moves.prepareApproval');
-  },
-  role: 'triage',
-  stage: 'triage',
-  awaitsHumanDecision: true,
-};
-/** A card's pull request, its own or one attached to its issue, is reviewed in Work's PR review. */
-const REVIEW: CardMove = {
-  action: 'review',
-  get label() {
-    return tk('moves.review');
-  },
-  role: 'review',
-  stage: 'pr-review',
-};
-const RE_REVIEW: CardMove = {
-  action: 'reReview',
-  get label() {
-    return tk('moves.reReview');
-  },
-  role: 'review',
-  stage: 'pr-review',
-};
+
+const seatMove = (action: CardMoveAction, seat: { phase: string; context: string } | undefined) =>
+  seat && laneMove(action, seat.context, seat.phase);
+
+/** An issue card's moves from each column: building comes only after planning, when the board plans. */
+function issueMoves(loop: BoardLoop, columnStage: BoardStageId): CardMove[] {
+  const investigate = seatMove('investigate', loop.triage);
+  const plan = seatMove('plan', loop.plan);
+  const build = seatMove('build', loop.build);
+  const moves =
+    columnStage === loop.plan?.phase
+      ? [plan, build]
+      : columnStage === loop.build?.phase
+        ? [build, plan]
+        : [investigate, plan ?? build];
+  return moves.filter(move => move !== undefined);
+}
+
+function reviewMove(loop: BoardLoop, action: 'review' | 'reReview'): CardMove[] {
+  return loop.pullRequestReview === undefined ? [] : [laneMove(action, REVIEW_CONTEXT, loop.pullRequestReview)];
+}
+
+/** The session context every review phase runs in. */
+const REVIEW_CONTEXT = 'review';
+
+/** Whether a card in `stage` still waits for someone to accept it: it rests, or the board is triaging it. */
+function awaitsAcceptance(board: BoardInfo, loop: BoardLoop, stage: string): boolean {
+  return phaseKindOf(board, stage) === 'resting' || stage === loop.triage?.phase;
+}
 
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
-export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
-  if (item.board != null && item.board !== 'work') return [];
-  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
+export function cardMoves(item: MovableCard, columnStage: BoardStageId, board: BoardInfo | undefined): CardMove[] {
+  const loop = boardLoop(board);
+  const kind = phaseKindOf(board, columnStage);
+  if (!board || !loop || kind === undefined) return [];
+  if (kind === 'terminal') {
+    return openPullRequestInCompleted(item, columnStage, loop) ? reviewMove(loop, 'reReview') : [];
+  }
   // A card carrying a pull request, its own or one attached to its issue, sends it to PR review.
-  if ((columnStage === 'pr-review' || columnStage === 'review') && cardHasPullRequest(item)) return [REVIEW];
-  if (columnStage === 'review') return [];
-  if (item.source === 'github-issue') {
-    return needsApproval(
-      { ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } },
-      stage => stage === 'intake' || stage === 'triage',
+  const reviewing = columnStage === loop.pullRequestReview || columnStage === loop.selfReview;
+  if (reviewing && cardHasPullRequest(item)) return reviewMove(loop, 'review');
+  if (columnStage === loop.selfReview) return [];
+  if (
+    item.source === 'github-issue' &&
+    loop.triage &&
+    needsApproval({ ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } }, stage =>
+      awaitsAcceptance(board, loop, stage),
     )
-      ? [PREPARE_APPROVAL]
-      : issueMoves(columnStage);
+  ) {
+    return [laneMove('prepareApproval', loop.triage.context, loop.triage.phase, { awaitsHumanDecision: true })];
   }
-  if (item.source === 'gitlab-issue') {
-    return issueMoves(columnStage);
+  if (item.source === 'github-issue' || item.source === 'gitlab-issue') {
+    return issueMoves(loop, columnStage);
   }
-  return isPullRequestSource(item.source) ? [REVIEW] : [];
+  return isPullRequestSource(item.source) ? reviewMove(loop, 'review') : [];
 }
 
-function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
-  if (columnStage !== 'done' || !cardHasPullRequest(item)) return false;
+function openPullRequestInCompleted(item: MovableCard, columnStage: BoardStageId, loop: BoardLoop): boolean {
+  if (columnStage !== loop.completed || !cardHasPullRequest(item)) return false;
   // An issue card's pull request state lives on the pull request's source, not the issue's.
   const attached = attachedPullRequestSource(item);
   const status = attached
@@ -127,69 +118,69 @@ function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): bo
   return status === 'open' || status === 'draft';
 }
 
-// PR review carries a pull request card's reviewer, after the builder's lanes.
-const WORKING_LANES: readonly FactoryRuleStage[] = ['triage', 'planning', 'execute', 'review', 'pr-review'];
-
 /**
- * Resume re-enters the deepest working lane a card parked in Intake has been in, and lets
- * that lane's rule dispatch. Phases can share a session, so the lane comes from the card's
- * stage history; a card that never had a session is a fresh arrival with nothing to resume.
+ * Resume re-enters the deepest working phase a card parked in a resting phase has been in, and
+ * lets that phase's rule dispatch. Phases can share a session, so the phase comes from the
+ * card's stage history; a card that never had a session is a fresh arrival with nothing to resume.
  */
 export function resumeStage(
   columnStage: BoardStageId,
   item: {
-    /** The card's resolved board (`itemBoard`): a legacy card with no board sits on Work. */
-    board: string;
     sessions: Record<string, WorkItemSessionRef>;
     stageHistory?: readonly { stage: string }[];
   },
-): FactoryRuleStage | undefined {
-  if (columnStage !== 'intake' || Object.keys(item.sessions).length === 0) return undefined;
+  board: BoardInfo | undefined,
+): string | undefined {
+  const loop = boardLoop(board);
+  if (!board || !loop || phaseKindOf(board, columnStage) !== 'resting') return undefined;
+  if (Object.keys(item.sessions).length === 0) return undefined;
   const visited = new Set((item.stageHistory ?? []).map(entry => entry.stage));
-  const lane = WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
-  // On Work, Intake leads to neither Building nor its self-review: a card that got that far
-  // resumes in Planning. A pull request card resumes in PR review.
-  return item.board === 'work' && (lane === 'execute' || lane === 'review') ? 'planning' : lane;
+  const lane = loop.working.filter(lane => visited.has(lane)).at(-1);
+  if (lane === undefined || allowsMove(board, columnStage, lane)) return lane;
+  // A rest that leads to neither building nor its self-review (Work's Intake) resumes in planning.
+  return loop.plan?.phase ?? lane;
 }
 
 /**
- * Triage looked at the card and left it in Intake, so the next move is a
- * person's decision. The card then asks for that decision instead of offering
- * a run that would only advance it as a side effect. A card that has been past
- * Triage since (a parked build, say) resumes instead.
+ * Triage looked at the card and left it resting, so the next move is a person's decision. The
+ * card then asks for that decision instead of offering a run that would only advance it as a side
+ * effect. A card that has been past triage since (a parked build, say) resumes instead.
  */
 export function awaitsTriageDecision(
-  item: Pick<WorkItem, 'sessions'> & Partial<Pick<WorkItem, 'board' | 'stageHistory'>>,
+  item: Pick<WorkItem, 'sessions'> & Partial<Pick<WorkItem, 'stageHistory'>>,
   columnStage: BoardStageId,
+  board: BoardInfo | undefined,
 ) {
+  const triage = boardLoop(board)?.triage;
   return (
-    (item.board == null || item.board === 'work') &&
-    columnStage === 'intake' &&
-    item.sessions.triage !== undefined &&
-    (resumeStage(columnStage, { ...item, board: 'work' }) ?? 'triage') === 'triage'
+    triage !== undefined &&
+    phaseKindOf(board, columnStage) === 'resting' &&
+    item.sessions[triage.context] !== undefined &&
+    (resumeStage(columnStage, item, board) ?? triage.phase) === triage.phase
   );
 }
 
 export interface TriageDecision {
   readonly label: string;
-  stage: 'planning' | 'canceled';
+  stage: string;
 }
 
 /** The maintainer's choices for a held card, the likeliest first. */
-export const TRIAGE_DECISIONS: readonly TriageDecision[] = [
-  {
+export function triageDecisions(board: BoardInfo | undefined): TriageDecision[] {
+  const loop = boardLoop(board);
+  if (!loop) return [];
+  const decision = (key: 'acceptAndPlan' | 'acceptAndBuild' | 'close', stage: string): TriageDecision => ({
     get label() {
-      return tk('triageDecisions.acceptAndPlan');
+      return tk(`triageDecisions.${key}`);
     },
-    stage: 'planning',
-  },
-  {
-    get label() {
-      return tk('triageDecisions.close');
-    },
-    stage: 'canceled',
-  },
-];
+    stage,
+  });
+  const accept = loop.plan
+    ? decision('acceptAndPlan', loop.plan.phase)
+    : loop.build && decision('acceptAndBuild', loop.build.phase);
+  const close = loop.canceled === undefined ? undefined : decision('close', loop.canceled);
+  return [accept, close].filter(choice => choice !== undefined);
+}
 
 /**
  * A held card's primary action is the maintainer's decision, ahead of
@@ -200,6 +191,7 @@ export const TRIAGE_DECISIONS: readonly TriageDecision[] = [
  */
 export function cardPrimaryAction({
   item,
+  board,
   columnStage,
   move,
   resumeStage,
@@ -211,12 +203,14 @@ export function cardPrimaryAction({
   onMove,
 }: {
   item: WorkItem;
+  /** The card's board, once the catalog has loaded. */
+  board?: BoardInfo;
   columnStage?: BoardStageId;
   /** The lane the button sends the card to; undefined when the card has none to offer. */
   move?: CardMove;
   /** Lane a parked card goes back to, ahead of any move it also offers. */
-  resumeStage?: FactoryRuleStage;
-  /** On a custom board, the first phase this one declares a transition to. */
+  resumeStage?: string;
+  /** On a board with no pull request loop, the first phase this one declares a transition to. */
   nextPhase?: { id: string; label: string };
   /** The card's own parked run, read from its status so the button says what the badge says. */
   waiting?: { label: string; decisionId: string };
@@ -225,9 +219,9 @@ export function cardPrimaryAction({
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
 }): CardPrimaryAction | undefined {
-  if (columnStage !== undefined && awaitsTriageDecision(item, columnStage)) {
+  const [accept] = triageDecisions(board);
+  if (columnStage !== undefined && accept !== undefined && awaitsTriageDecision(item, columnStage, board)) {
     // One word on the pill so it sits beside "Open session"; the menu spells out the alternatives.
-    const [accept] = TRIAGE_DECISIONS;
     return { label: tk('primaryAction.accept'), ariaLabel: accept.label, start: () => onMove(accept.stage) };
   }
   if (waiting !== undefined) {
@@ -239,7 +233,7 @@ export function cardPrimaryAction({
   if (move !== undefined) {
     return { label: move.label, start: () => onMove(move.stage) };
   }
-  // A custom board's phases carry their own runs, so the button advances the card rather than starting one.
+  // A board without a loop runs its phases' own steps, so the button advances the card rather than starting one.
   if (nextPhase !== undefined) {
     return { label: tk('primaryAction.moveTo', { phase: nextPhase.label }), start: () => onMove(nextPhase.id) };
   }

@@ -75,6 +75,7 @@
   },
   "triageDecisions": {
     "acceptAndPlan": "Accept and plan",
+    "acceptAndBuild": "Accept and build",
     "close": "Close"
   },
   "primaryAction": {
@@ -89,7 +90,7 @@
   },
   "cardState": {
     "busyMoveRefusal": "Another run can't start while this card is busy.",
-    "markingDone": "Marking done…",
+    "markingStage": "Marking {{stage}}…",
     "movingTo": "Moving to {{stage}}…",
     "moving": "Moving…",
     "starting": "Starting…",
@@ -239,7 +240,7 @@
     "startSuggestedRun": "Start suggested run",
     "dismissSuggestedRun": "Dismiss suggested run",
     "askSupervisor": "Ask in chat",
-    "markDone": "Mark done",
+    "markStage": "Mark {{stage}}",
     "moveTo": "Move to {{stage}}",
     "remove": "Remove"
   },

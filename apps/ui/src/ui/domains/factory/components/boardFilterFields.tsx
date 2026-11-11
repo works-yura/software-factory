@@ -15,7 +15,6 @@ import { boardFilterFieldIds } from '../boardFilters';
 import type { BoardFilterFieldId, BoardFilterState } from '../boardFilters';
 import { factoryParticipantId } from '../boardPeople';
 import type { BoardParticipant } from '../boardPeople';
-import type { BoardKind } from '../boardStages';
 import { BOARD_SOURCE_OPTIONS, PULL_REQUEST_SOURCE_FILTER } from '../boardSourceFilters';
 import { translator } from '../../../i18n/t';
 
@@ -82,7 +81,7 @@ function peopleOptions(
 }
 
 interface BoardFilterFieldsOptions {
-  kind: BoardKind;
+  reviewsPullRequests: boolean;
   filters: BoardFilterState;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
@@ -91,7 +90,7 @@ interface BoardFilterFieldsOptions {
 }
 
 export function boardFilterFields({
-  kind,
+  reviewsPullRequests,
   filters,
   participants,
   availableLabels,
@@ -117,7 +116,7 @@ export function boardFilterFields({
     label: availableLabels.map(label => ({ value: label })),
   };
 
-  return boardFilterFieldIds(kind).map(fieldId => ({
+  return boardFilterFieldIds(reviewsPullRequests).map(fieldId => ({
     id: fieldId,
     label: fieldLabel(fieldId),
     icon: FIELD_ICONS[fieldId],

@@ -7,8 +7,8 @@ describe('Board source filters', () => {
     const params = new URLSearchParams(
       'source=github&source=gitlab&author=github%3Aalice&assignee=github%3Abob&label=needs%2Creview&label=p0&sort=created-newest',
     );
-    const state = boardFiltersFromParams(params, 'work');
-    const restored = boardFilterStateFromItems(boardFilterItems(state), 'work');
+    const state = boardFiltersFromParams(params, true);
+    const restored = boardFilterStateFromItems(boardFilterItems(state), true);
     const url = boardFilterParams(params, restored);
     expect(url.getAll('source')).toEqual(['github', 'gitlab']);
     expect(url.getAll('author')).toEqual(['github:alice']);

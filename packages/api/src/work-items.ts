@@ -11,7 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { boardPhaseOutcomes, createBoardRegistry } from '@factory/core';
+import { boardFlow, boardPhaseOutcomes, createBoardRegistry } from '@factory/core';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry } from '@factory/core';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '@factory/integrations';
@@ -24,7 +24,7 @@ import type {
 } from '@factory/harness-mastra';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '@factory/harness-mastra';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '@factory/runtime';
-import type { IntakeRoutesReader, WorkItemSource } from '@factory/core';
+import type { FactoryRuleBoardFlow, IntakeRoutesReader, WorkItemSource } from '@factory/core';
 import type { LiveSessions } from '@factory/session';
 import { CardSessionRunningError, runningCardSession } from '@factory/session';
 import { auditRequestOrigin } from '@factory/feed';
@@ -349,6 +349,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               title: board.name,
               ...(board.description !== undefined ? { description: board.description } : {}),
               initialPhase: board.initialPhase,
+              flow: catalogFlow(boardFlow(board)),
               phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
                 id: phaseId,
                 name: phase.name,
@@ -785,4 +786,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       }),
     ];
   }
+}
+
+/** A board's loop parts, by phase key, as the catalog reports them. */
+function catalogFlow(flow: FactoryRuleBoardFlow) {
+  return {
+    ...(flow.triage ? { triage: flow.triage } : {}),
+    ...(flow.build ? { build: flow.build } : {}),
+    ...(flow.selfReview ? { selfReview: flow.selfReview } : {}),
+    ...(flow.pullRequestReview ? { pullRequestReview: flow.pullRequestReview } : {}),
+    ...(flow.completed ? { completed: flow.completed.phase } : {}),
+    ...(flow.canceled ? { canceled: flow.canceled.phase } : {}),
+  };
 }

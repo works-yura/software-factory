@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Code } from '@mastra/playground-ui/components/Code';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -40,21 +41,13 @@ function displayedSkill(name: string, title: () => string): DisplayedSkill {
   };
 }
 
-const BUILT_IN_BOARD_SKILLS: Record<'work', DisplayedSkill[]> = {
-  work: [
-    displayedSkill('factory-triage', () => tk('skills.names.triage')),
-    displayedSkill('factory-plan', () => tk('skills.names.plan')),
-    // Work's PR review runs these on a pull request's own card.
-    displayedSkill('factory-review', () => tk('skills.names.review')),
-    displayedSkill('factory-rereview', () => tk('skills.names.rereview')),
-  ],
-};
-
-const DISPLAYED_SKILLS: DisplayedSkill[] = [...BUILT_IN_BOARD_SKILLS.work];
-
-function isBuiltInBoard(id: string): id is 'work' {
-  return id === 'work';
-}
+// The default board runs every built-in skill: its PR review lane took over from the retired Review board.
+const DISPLAYED_SKILLS: DisplayedSkill[] = [
+  displayedSkill('factory-triage', () => tk('skills.names.triage')),
+  displayedSkill('factory-plan', () => tk('skills.names.plan')),
+  displayedSkill('factory-review', () => tk('skills.names.review')),
+  displayedSkill('factory-rereview', () => tk('skills.names.rereview')),
+];
 
 function SkillContent({ content }: { content: string }) {
   const { t } = useTranslation('settings');
@@ -267,8 +260,8 @@ function BoardGroup({
       <Txt tone="ink" as="h4" variant="body" className="m-0">
         {boardTitle(board.id, board.title)}
       </Txt>
-      {isBuiltInBoard(board.id) ? (
-        <SkillCards displayed={BUILT_IN_BOARD_SKILLS[board.id]} skills={skills} />
+      {board.id === DEFAULT_BOARD_ID ? (
+        <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
       ) : (
         <CustomBoardPhases board={board} skills={skills} skillsLoaded={skillsLoaded} />
       )}
