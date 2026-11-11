@@ -241,6 +241,8 @@ export type {
   AccountsUsageResponse,
   AccountUsageView,
   SessionUsageResponse,
+  UsageLimitsAccount,
+  UsageLimitsResponse,
   UsageSummaryResponse,
   WorkItemsUsageResponse,
 } from '@factory/api/usage';

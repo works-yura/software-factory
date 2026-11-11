@@ -2,7 +2,13 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { AccountsUsageResponse, SessionUsageResponse, UsageSummaryResponse, WorkItemsUsageResponse } from '../api/types';
+import type {
+  AccountsUsageResponse,
+  SessionUsageResponse,
+  UsageLimitsResponse,
+  UsageSummaryResponse,
+  WorkItemsUsageResponse,
+} from '../api/types';
 
 /**
  * Each account's allowance windows (5-hour, weekly, model). Opening the view asks the server to read
@@ -16,6 +22,27 @@ export function useAccountUsageQuery(provider: string, options: { enabled?: bool
       client.get<AccountsUsageResponse>(`/web/config/providers/${encodeURIComponent(provider)}/accounts/usage?refresh=1`),
     enabled: options.enabled ?? true,
     refetchOnMount: 'always',
+    retry: false,
+  });
+}
+
+/** How often a view that shows limits reads them again while it stays open (the stored reading; cheap). */
+export const USAGE_LIMITS_POLL_MS = 60_000;
+
+/**
+ * Every harness's sign-ins with their allowance windows, in one list. `refresh` asks the server to
+ * read them from the providers again (at most once a minute per account); without it the stored
+ * reading comes back, which running turns keep current.
+ */
+export function useUsageLimitsQuery(options: { refresh?: boolean; enabled?: boolean } = {}) {
+  const { client } = useApiConfig();
+  const refresh = options.refresh ?? false;
+  return useQuery({
+    queryKey: queryKeys.usageLimits(refresh),
+    queryFn: () => client.get<UsageLimitsResponse>(`/web/usage/limits${refresh ? '?refresh=1' : ''}`),
+    enabled: options.enabled ?? true,
+    refetchOnMount: refresh ? 'always' : true,
+    refetchInterval: refresh ? false : USAGE_LIMITS_POLL_MS,
     retry: false,
   });
 }

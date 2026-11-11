@@ -14,6 +14,7 @@ import { ModelCredential } from './ModelCredential';
 import { QueuedFollowUps } from './QueuedFollowUps';
 import { RuntimeActivity } from './RuntimeActivity';
 import { SessionUsageStatus } from '../../../usage/components/SessionUsageStatus';
+import { UsageLimitsStatus } from '../../../usage/components/UsageLimitsStatus';
 
 /**
  * Session status strip below the composer. Pure composition root: each child
@@ -43,6 +44,7 @@ export function StatusLine() {
       <ModelCredential />
       <OperationalMemoryStatus />
       <SessionUsageStatus />
+      <UsageLimitsStatus />
       <RuntimeActivity />
       <ConnectionActivity />
       <QueuedFollowUps />

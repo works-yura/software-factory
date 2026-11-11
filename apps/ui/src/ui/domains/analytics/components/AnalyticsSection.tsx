@@ -14,6 +14,7 @@ import { useRunningSessions, useWorkItemsQuery } from '../../../../hooks/useWork
 import { AnalyticsEmptyState } from './AnalyticsEmptyState';
 import type { KpiExpansion, KpiId } from './AnalyticsKpis';
 import { UsageKpis, WorkKpis } from './AnalyticsKpis';
+import { LimitsOverview } from './LimitsOverview';
 import { RangePicker } from './RangePicker';
 import { UsageBreakdowns } from './UsageBreakdowns';
 import { WorkBreakdowns } from './WorkBreakdowns';
@@ -152,6 +153,10 @@ function AnalyticsContent({
         ) : (
           <KpiLoading />
         )}
+      </Section>
+
+      <Section title={tk('sections.limits')} note={tk('limits.note')}>
+        <LimitsOverview />
       </Section>
     </div>
   );

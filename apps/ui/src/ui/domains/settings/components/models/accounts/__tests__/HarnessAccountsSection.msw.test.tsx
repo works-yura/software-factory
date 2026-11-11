@@ -361,8 +361,9 @@ describe('HarnessAccountsSection for Codex', () => {
 });
 
 describe('HarnessAccountsSection usage windows', () => {
-  it("asks for each sign-in's windows as the section opens and shows a bar per window with its use and reset", async () => {
-    const resetsAt = '2026-11-11T20:00:00.000Z';
+  it("asks for each sign-in's windows as the section opens and shows a bar per window with its use, level and reset", async () => {
+    // Half a minute over three hours, so the countdown reads 3h 0m however long the render takes.
+    const resetsAt = new Date(Date.now() + 3 * 3_600_000 + 30_000).toISOString();
     const checkedAt = '2026-11-11T18:00:00.000Z';
     const refreshes: string[] = [];
     stubAccounts([
@@ -379,7 +380,7 @@ describe('HarnessAccountsSection usage windows', () => {
               checkedAt,
               source: 'probe',
               windows: [
-                { id: 'seven_day', kind: 'weekly', usedPercent: 12.4 },
+                { id: 'seven_day', kind: 'weekly', usedPercent: 84.4 },
                 { id: 'five_hour', kind: 'session', usedPercent: 61, resetsAt },
                 { id: 'seven_day_opus', kind: 'model', label: 'Opus', usedPercent: 100 },
               ],
@@ -397,8 +398,11 @@ describe('HarnessAccountsSection usage windows', () => {
     expect(meters.map(meter => meter.getAttribute('aria-label'))).toEqual(['5-hour', 'Weekly', 'Weekly · Opus']);
     expect(meters[0]).toHaveAttribute('aria-valuenow', '61');
     expect(meters[0]).toHaveAttribute('aria-valuetext', '5-hour: 61% used');
-    expect(within(alice).getByText(`61% · resets ${formatUsageTime(resetsAt)}`)).toBeInTheDocument();
-    expect(within(alice).getByText('12%')).toBeInTheDocument();
+    expect(within(alice).getByText('61%')).toBeInTheDocument();
+    expect(within(alice).getByText(`resets in 3h 0m · ${formatUsageTime(resetsAt)}`)).toBeInTheDocument();
+    expect(within(alice).getByText('84%')).toBeInTheDocument();
+    // Amber from 80 % used, red from 95 %.
+    expect(meters.map(meter => meter.dataset.level)).toEqual(['ok', 'warning', 'critical']);
     expect(within(alice).getByText(`Updated ${formatUsageTime(checkedAt)}`)).toBeInTheDocument();
 
     const bob = await screen.findByRole('group', { name: 'Usage of bob@example.com' });

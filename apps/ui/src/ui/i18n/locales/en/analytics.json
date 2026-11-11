@@ -22,7 +22,15 @@
     "work": "Work",
     "usage": "Usage",
     "workBreakdowns": "Work breakdowns",
-    "usageBreakdowns": "Usage breakdowns"
+    "usageBreakdowns": "Usage breakdowns",
+    "limits": "Limits"
+  },
+  "limits": {
+    "note": "Each sign-in’s 5-hour, weekly, model and extra-usage limits, as its provider reports them. API keys have none.",
+    "empty": "No sign-in reports limits yet. Claude Code and Codex sign-ins show theirs here once read; API keys (Mastra) have no subscription limits.",
+    "error": "Couldn’t load limits.",
+    "loading": "Loading limits",
+    "harnessOff": "{{harness}} · turned off"
   },
   "kpi": {
     "completed": "Completed",

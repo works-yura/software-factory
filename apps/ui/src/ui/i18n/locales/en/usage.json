@@ -5,11 +5,21 @@
     "weekly": "Weekly",
     "monthly": "Monthly",
     "model": "Weekly · {{label}}",
-    "modelUnnamed": "Weekly · model"
+    "modelUnnamed": "Weekly · model",
+    "spend": "Extra usage"
   },
   "windowUsed": "{{window}}: {{percent}}% used",
   "percentUsed": "{{percent}}%",
-  "resetsAt": "resets {{time}}",
+  "resetsIn": "resets in {{duration}}",
+  "resetsNow": "resets now",
+  "duration": {
+    "days": "{{days}}d {{hours}}h",
+    "hours": "{{hours}}h {{minutes}}m",
+    "minutes": "{{minutes}}m"
+  },
+  "pace": {
+    "ahead": "ahead of pace"
+  },
   "accounts": {
     "label": "Usage of {{label}}",
     "updated": "Updated {{time}}",
@@ -20,6 +30,12 @@
       "signed_out": "Sign in again to read usage."
     },
     "stale": "Last reading; the provider didn’t answer now."
+  },
+  "limits": {
+    "title": "Usage limits",
+    "account": "{{harness}} · {{account}}",
+    "trigger": "Usage limits of {{account}}: {{window}} {{percent}}% used, {{resets}}",
+    "noReset": "no reset time"
   },
   "harness": {
     "claude-code": "Claude Code",

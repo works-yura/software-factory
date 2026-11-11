@@ -5,11 +5,21 @@
     "weekly": "Тиждень",
     "monthly": "Місяць",
     "model": "Тиждень · {{label}}",
-    "modelUnnamed": "Тиждень · модель"
+    "modelUnnamed": "Тиждень · модель",
+    "spend": "Додаткове використання"
   },
   "windowUsed": "{{window}}: використано {{percent}}%",
   "percentUsed": "{{percent}}%",
-  "resetsAt": "оновиться {{time}}",
+  "resetsIn": "оновиться через {{duration}}",
+  "resetsNow": "оновлюється зараз",
+  "duration": {
+    "days": "{{days}} д {{hours}} год",
+    "hours": "{{hours}} год {{minutes}} хв",
+    "minutes": "{{minutes}} хв"
+  },
+  "pace": {
+    "ahead": "швидше за темп"
+  },
   "accounts": {
     "label": "Використання {{label}}",
     "updated": "Оновлено {{time}}",
@@ -20,6 +30,12 @@
       "signed_out": "Увійдіть знову, щоб бачити використання."
     },
     "stale": "Останні відомі дані; провайдер зараз не відповів."
+  },
+  "limits": {
+    "title": "Ліміти використання",
+    "account": "{{harness}} · {{account}}",
+    "trigger": "Ліміти {{account}}: {{window}} використано {{percent}}%, {{resets}}",
+    "noReset": "час оновлення невідомий"
   },
   "harness": {
     "claude-code": "Claude Code",

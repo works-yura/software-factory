@@ -10,7 +10,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import type { UsageSummaryResponse } from '../../../../api/types';
+import type { UsageLimitsResponse, UsageSummaryResponse } from '../../../../api/types';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import { rangeWindow } from '../ranges';
@@ -338,6 +338,75 @@ describe('Analytics settings section', () => {
       expect(await screen.findByRole('button', { name: 'Date range: Last 7 days' })).toBeInTheDocument();
     },
   );
+
+  it('summarizes every harness’s sign-ins in a Limits card each, closest to a limit first', async () => {
+    stub();
+    const refreshes: string[] = [];
+    const inHours = (hours: number) => new Date(Date.now() + hours * 3_600_000 + 30_000).toISOString();
+    const checkedAt = new Date().toISOString();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/usage/limits`, ({ request }) => {
+        refreshes.push(new URL(request.url).searchParams.get('refresh') ?? '');
+        return HttpResponse.json({
+          accounts: [
+            {
+              accountId: 'acc-1',
+              label: 'alice@example.com',
+              harnessId: 'claude-code',
+              harnessName: 'Claude Code',
+              provider: 'anthropic',
+              disabled: false,
+              usage: {
+                checkedAt,
+                source: 'probe',
+                windows: [
+                  { id: 'five_hour', kind: 'session', usedPercent: 22, resetsAt: inHours(4) },
+                  { id: 'seven_day_opus', kind: 'model', label: 'Opus', usedPercent: 50 },
+                ],
+              },
+            },
+            {
+              accountId: 'acc-2',
+              label: 'codex@example.com',
+              harnessId: 'codex',
+              harnessName: 'Codex',
+              provider: 'openai-codex',
+              disabled: true,
+              usage: {
+                checkedAt,
+                source: 'stream',
+                windows: [
+                  { id: 'primary', kind: 'session', usedPercent: 88, resetsAt: inHours(1) },
+                  { id: 'secondary', kind: 'weekly', usedPercent: 40, resetsAt: inHours(100) },
+                ],
+              },
+            },
+          ],
+        } satisfies UsageLimitsResponse);
+      }),
+    );
+    renderRoute();
+
+    expect(await screen.findByRole('heading', { name: 'Limits' })).toBeInTheDocument();
+    const groups = await screen.findAllByRole('group', { name: /^Usage of / });
+    // Codex is at 88 % of its 5-hour window, Claude at most at 50 %: Codex first.
+    expect(groups.map(group => group.getAttribute('aria-label'))).toEqual(['Usage of codex@example.com', 'Usage of alice@example.com']);
+    const codex = within(groups[0]!).getAllByRole('meter');
+    expect(codex.map(meter => [meter.getAttribute('aria-label'), meter.getAttribute('data-level')])).toEqual([
+      ['5-hour', 'warning'],
+      ['Weekly', 'ok'],
+    ]);
+    expect(within(groups[0]!).getByText(/^resets in 1h 0m · /)).toBeInTheDocument();
+    expect(screen.getByText('Codex · turned off')).toBeInTheDocument();
+    expect(within(groups[1]!).getAllByRole('meter').map(meter => meter.getAttribute('aria-label'))).toEqual(['5-hour', 'Weekly · Opus']);
+    expect(refreshes).toEqual(['1']);
+  });
+
+  it('says when no sign-in reports limits', async () => {
+    stub();
+    renderRoute();
+    expect(await screen.findByText(/No sign-in reports limits yet/)).toBeInTheDocument();
+  });
 
   it('is a Settings section, not a Factory sidebar entry', async () => {
     stub();

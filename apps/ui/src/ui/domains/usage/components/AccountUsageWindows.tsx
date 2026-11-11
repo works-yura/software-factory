@@ -1,51 +1,65 @@
-import { Meter } from '@mastra/playground-ui/components/Meter';
+import type { UsageWindow } from '@factory/harness/usage';
+import { effectiveUsedPercent } from '@factory/harness/usage';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { UsageLimitRow } from '@mastra/playground-ui/components/UsageLimit';
 import { useTranslation } from 'react-i18next';
 
 import type { AccountUsageView } from '../../../../api/types';
-import { formatUsageTime, orderedWindows, windowLabel } from '../format';
+import { translator } from '../../../i18n/t';
+import { formatUsageTime, orderedWindows, windowDetail, windowLabel } from '../format';
+import { useMinuteClock } from '../useMinuteClock';
+
+const tu = translator('usage');
 
 /**
- * An account's allowance as bars: one per window its provider reports (5-hour, weekly, a model's
- * weekly cap), how much is used and when it resets, and when it was last read. Every harness's
+ * Windows as rows: name, a bar that turns amber from 80 % used and red from 95 %, the share used,
+ * and beneath it when the window resets. A window whose reset has passed reads as empty. The
+ * accounts section, the status line's popover and the Analytics limits card all draw them so.
+ */
+export function UsageWindowRows({ windows, now }: { windows: ReadonlyArray<UsageWindow>; now: number }) {
+  const { t } = useTranslation('usage');
+  return (
+    <div className="flex flex-col gap-2">
+      {orderedWindows(windows).map(window => {
+        const name = windowLabel(window);
+        const percent = Math.round(effectiveUsedPercent(window, now));
+        return (
+          <UsageLimitRow
+            key={window.id}
+            label={name}
+            percent={percent}
+            valueText={t('windowUsed', { window: name, percent })}
+            value={t('percentUsed', { percent })}
+            detail={windowDetail(window, now)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/** Why there is nothing newer to show, or nothing at all. */
+export function usageProblemText(usage: AccountUsageView): string | undefined {
+  const problem = usage.unavailable;
+  if (!problem) return undefined;
+  if (problem.reason !== 'failed') return tu(`accounts.unavailable.${problem.reason}`);
+  return problem.message ? tu('accounts.unavailable.failed', { message: problem.message }) : tu('accounts.unavailable.failedPlain');
+}
+
+/**
+ * An account's allowance: one row per window its provider reports (5-hour, weekly, a model's weekly
+ * cap, extra usage), how much is used and when it resets, and when it was last read. Every harness's
  * accounts read the same way.
  */
 export function AccountUsageWindows({ label, usage }: { label: string; usage: AccountUsageView }) {
   const { t } = useTranslation('usage');
-  const windows = orderedWindows(usage.windows);
-  const problem = usage.unavailable;
-  const problemText = problem
-    ? problem.reason === 'failed'
-      ? problem.message
-        ? t('accounts.unavailable.failed', { message: problem.message })
-        : t('accounts.unavailable.failedPlain')
-      : t(`accounts.unavailable.${problem.reason}`)
-    : undefined;
+  const now = useMinuteClock();
+  const windows = usage.windows;
+  const problemText = usageProblemText(usage);
 
   return (
     <div role="group" aria-label={t('accounts.label', { label })} className="flex flex-col gap-1.5 pt-1">
-      {windows.map(window => {
-        const name = windowLabel(window);
-        const percent = Math.round(window.usedPercent);
-        return (
-          <div key={window.id} className="grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-center gap-2">
-            <Txt as="span" variant="meta" tone="muted" className="truncate">
-              {name}
-            </Txt>
-            <Meter
-              value={percent}
-              max={100}
-              aria-label={name}
-              aria-valuetext={t('windowUsed', { window: name, percent })}
-              className={percent >= 100 ? 'text-destructive-foreground' : undefined}
-            />
-            <Txt as="span" variant="meta" tone="muted" className="text-right tabular-nums">
-              {t('percentUsed', { percent })}
-              {window.resetsAt ? ` · ${t('resetsAt', { time: formatUsageTime(window.resetsAt) })}` : ''}
-            </Txt>
-          </div>
-        );
-      })}
+      {windows.length > 0 ? <UsageWindowRows windows={windows} now={now} /> : null}
       {problemText && windows.length > 0 ? (
         <Txt as="p" variant="meta" tone="muted">
           {t('accounts.stale')}

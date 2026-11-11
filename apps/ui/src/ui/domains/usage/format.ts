@@ -1,4 +1,5 @@
 import type { UsageAggregate, UsageWindow } from '@factory/harness/usage';
+import { orderUsageWindows, usageResetsInMs, usageWindowPace } from '@factory/harness/usage';
 
 import { currentLanguage } from '../../i18n';
 import { translator } from '../../i18n/t';
@@ -31,16 +32,50 @@ export function formatUsageTime(iso: string): string {
   return new Intl.DateTimeFormat(currentLanguage(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
 }
 
-/** The window's name: 5-hour, weekly, monthly, or a model's weekly cap. */
+/** The window's name: 5-hour, weekly, monthly, a model's weekly cap, or extra usage. */
 export function windowLabel(window: Pick<UsageWindow, 'kind' | 'label'>): string {
   if (window.kind === 'model') return window.label ? tu('window.model', { label: window.label }) : tu('window.modelUnnamed');
   return tu(`window.${window.kind}`);
 }
 
-/** Windows in reading order: the 5-hour session, the week, the models, the month. */
+/** Windows in reading order: the 5-hour session, the week, the models, the month, extra usage. */
 export function orderedWindows(windows: ReadonlyArray<UsageWindow>): UsageWindow[] {
-  const rank: Record<UsageWindow['kind'], number> = { session: 0, weekly: 1, model: 2, monthly: 3 };
-  return [...windows].sort((a, b) => rank[a.kind] - rank[b.kind] || (a.label ?? a.id).localeCompare(b.label ?? b.id));
+  return orderUsageWindows(windows);
+}
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+/** A span as the two largest units: `2d 4h`, `3h 12m`, `8m`. */
+export function formatDuration(ms: number): string {
+  const left = Math.max(0, ms);
+  const days = Math.floor(left / DAY_MS);
+  const hours = Math.floor((left % DAY_MS) / HOUR_MS);
+  const minutes = Math.floor((left % HOUR_MS) / MINUTE_MS);
+  if (days > 0) return tu('duration.days', { days, hours });
+  if (hours > 0) return tu('duration.hours', { hours, minutes });
+  return tu('duration.minutes', { minutes: Math.max(1, minutes) });
+}
+
+/** When the window resets, counted down (`resets in 2h 10m`); `undefined` without a reset time. */
+export function formatResetsIn(window: UsageWindow, now: number): string | undefined {
+  const left = usageResetsInMs(window, now);
+  if (left === null) return undefined;
+  return left === 0 ? tu('resetsNow') : tu('resetsIn', { duration: formatDuration(left) });
+}
+
+/**
+ * A window's second line: its countdown, the reset time itself, and a word when spending runs ahead
+ * of the clock.
+ */
+export function windowDetail(window: UsageWindow, now: number): string | undefined {
+  const parts: string[] = [];
+  const resetsIn = formatResetsIn(window, now);
+  if (resetsIn) parts.push(resetsIn);
+  if (window.resetsAt && usageResetsInMs(window, now)) parts.push(formatUsageTime(window.resetsAt));
+  if (usageWindowPace(window, now) === 'ahead') parts.push(tu('pace.ahead'));
+  return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
 export function harnessName(harnessId: string): string {
