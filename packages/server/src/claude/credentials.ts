@@ -1,7 +1,8 @@
-import { getTenantCredentialsStorage, pickCredentialAccount } from '@factory/credentials';
 import { ClaudeCodeError } from '@factory/harness-claude-code';
 import type { ClaudeCredentialFailure, ClaudeCredentialRequest, ClaudeTurnCredentials } from '@factory/harness-claude-code';
-import type { CredentialAccount, ModelCredentialsStorage } from '@factory/store';
+import type { ModelCredentialsStorage } from '@factory/store';
+
+import { createSignInAccountPool, DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS } from '../accounts/pool.ts';
 
 import { claudeOAuthIsFresh, ClaudeSignInExpiredError, refreshClaudeOAuth } from './oauth.ts';
 
@@ -26,8 +27,8 @@ export type ClaudeCodeCredentialFailureHook = (
 /** The provider whose accounts Claude Code turns use. */
 export const CLAUDE_CODE_ACCOUNT_PROVIDER = 'anthropic';
 
-/** How long an account sits out when the provider gave no reset time. */
-export const DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS = 60 * 60_000;
+/** How long an account sits out when the provider gave no reset time (shared by every harness's pool). */
+export { DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS };
 
 export class ClaudeCodeCredentialMissingError extends Error {
   constructor(orgId: string) {
@@ -44,7 +45,8 @@ export interface ClaudeCodeCredentials {
 }
 
 /**
- * The credentials every Claude Code turn asks for, harness-agnostic on purpose.
+ * The credentials every Claude Code turn asks for, on the shared sign-in pool
+ * (`createSignInAccountPool`, which Codex turns use too).
  *
  * - Only Claude sign-ins (`claude_login`, Settings → Models) run Claude Code:
  *   the turn gets one of its owner's (see `pickCredentialAccount` for which),
@@ -72,85 +74,34 @@ export function createClaudeCodeCredentials({
   /** The OAuth refresh's transport; the global `fetch` by default. */
   fetch?: typeof fetch;
 }): ClaudeCodeCredentials {
-  /** A sign-in's access token, refreshed first when it is about to run out; `undefined` when the sign-in was refused. */
-  const signInToken = async (storage: ModelCredentialsStorage, orgId: string, account: CredentialAccount) => {
-    try {
-      const oauth = await storage.refreshAccountOAuth(orgId, account.id, {
-        isFresh: current => claudeOAuthIsFresh(current, now().getTime()),
-        refresh: current => refreshClaudeOAuth(current, { ...(fetchImpl ? { fetch: fetchImpl } : {}), now: () => now().getTime() }),
-      });
-      return oauth?.accessToken;
-    } catch (error) {
-      if (!(error instanceof ClaudeSignInExpiredError)) throw error;
-      await storage.markAccountFailed(orgId, account.id, error.message);
-      console.warn('[factory] Claude sign-in refused by the token endpoint; it needs a new sign-in', { orgId, accountId: account.id });
-      return undefined;
-    }
-  };
+  const pool = createSignInAccountPool({
+    credentials,
+    provider: CLAUDE_CODE_ACCOUNT_PROVIDER,
+    kind: 'claude_login',
+    name: 'Claude',
+    now,
+    isFresh: (oauth, at) => claudeOAuthIsFresh(oauth, at),
+    refresh: (oauth, clock) => refreshClaudeOAuth(oauth, { ...(fetchImpl ? { fetch: fetchImpl } : {}), now: clock }),
+    isRefusal: (error): error is Error => error instanceof ClaudeSignInExpiredError,
+    errors: {
+      limited: (resetsAt, at) =>
+        new ClaudeCodeError(
+          'rate_limit',
+          `Every Claude account this run may use is out of usage; the first comes back at ${resetsAt.toISOString()}.`,
+          { resetsAt, now: at },
+        ),
+      noOther: () => new ClaudeCodeError('auth', 'No other Claude account is available for this run.'),
+      missing: orgId => new ClaudeCodeCredentialMissingError(orgId),
+    },
+  });
 
   return {
     async credentials(tenant, request = { exclude: [] }) {
-      const storage = await getTenantCredentialsStorage(credentials);
-      // Sign-ins refused while picking: skipped like accounts the turn already tried, but not counted as tried.
-      const refused: string[] = [];
-      for (;;) {
-        const listed = storage ? await storage.listAccounts(tenant.orgId, CLAUDE_CODE_ACCOUNT_PROVIDER) : [];
-        // Only sign-ins run Claude Code: a pasted setup token or API key from before is never used.
-        const accounts = listed.filter(account => account.kind === 'claude_login');
-        const at = now();
-        const picked = pickCredentialAccount(accounts, {
-          userId: tenant.userId,
-          ...(request.preferredAccountId ? { preferredId: request.preferredAccountId } : {}),
-          exclude: [...request.exclude, ...refused],
-          now: at,
-        });
-        if (!picked.account) {
-          if (picked.resetsAt) {
-            throw new ClaudeCodeError(
-              'rate_limit',
-              `Every Claude account this run may use is out of usage; the first comes back at ${picked.resetsAt.toISOString()}.`,
-              { resetsAt: picked.resetsAt, now: at },
-            );
-          }
-          if (request.exclude.length > 0 || refused.length > 0) {
-            throw new ClaudeCodeError('auth', 'No other Claude account is available for this run.');
-          }
-          throw new ClaudeCodeCredentialMissingError(tenant.orgId);
-        }
-        const { account } = picked;
-        // A sign-in was picked from the storage's own listing, so the storage is there.
-        const accessToken = await signInToken(storage!, tenant.orgId, account);
-        if (accessToken === undefined) {
-          refused.push(account.id);
-          continue;
-        }
-        await storage!.markAccountUsed(tenant.orgId, account.id, at).catch(() => {});
-        return {
-          env: { CLAUDE_CODE_OAUTH_TOKEN: accessToken },
-          accountId: account.id,
-          credential: { label: account.label, ...(account.ownerUserId ? { ownerId: account.ownerUserId } : {}) },
-        };
-      }
+      const picked = await pool.pick(tenant, request);
+      return { env: { CLAUDE_CODE_OAUTH_TOKEN: picked.oauth.accessToken }, accountId: picked.accountId, credential: picked.credential };
     },
-
-    async onCredentialFailure(tenant, { accountId, error }) {
-      const storage = await getTenantCredentialsStorage(credentials);
-      if (!storage) return;
-      if (error.kind === 'rate_limit') {
-        const until = error.resetsAt ?? new Date(now().getTime() + DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS);
-        await storage.markAccountLimited(tenant.orgId, accountId, { until, error: error.message });
-      } else if (error.kind === 'auth') {
-        await storage.markAccountFailed(tenant.orgId, accountId, error.message);
-      } else {
-        return;
-      }
-      console.warn('[factory] Claude account taken out of rotation', {
-        orgId: tenant.orgId,
-        accountId,
-        kind: error.kind,
-        ...(error.resetsAt ? { resetsAt: error.resetsAt.toISOString() } : {}),
-      });
-    },
+    onCredentialFailure: (tenant, { accountId, error }) =>
+      pool.onFailure(tenant, { accountId, error: { kind: error.kind, message: error.message, ...(error.resetsAt ? { resetsAt: error.resetsAt } : {}) } }),
   };
 }
 

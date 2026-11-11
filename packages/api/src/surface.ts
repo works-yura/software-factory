@@ -72,8 +72,8 @@ import type { WorkItemBranchSource } from '@factory/pipelines';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
 import type { HarnessModelRegistry } from '@factory/harness/models/registry';
-import { CredentialAccountRoutes } from './credential-accounts.ts';
-import type { ClaudeSignInFlows } from './credential-accounts.ts';
+import { CODEX_ACCOUNT_PROVIDER, CredentialAccountRoutes } from './credential-accounts.ts';
+import type { AccountSignInFlows } from './credential-accounts.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
 import { buildFsRoutes } from './fs.ts';
 import type { LocalCheckoutAttacher } from './fs.ts';
@@ -167,7 +167,9 @@ export interface FactoryApiRoutesDeps {
   /** Device preview (`/web/device`) is mounted: simulators and emulators on this server's machine. */
   deviceEnabled?: boolean;
   /** Claude sign-in on this host (local development): `claude auth login`, kept as the person's account. */
-  claudeSignIn?: ClaudeSignInFlows;
+  claudeSignIn?: AccountSignInFlows;
+  /** Codex sign-in (a ChatGPT device sign-in run by the server), kept as the person's account. */
+  codexSignIn?: AccountSignInFlows;
   /** Personal sessions of Claude Code Factories start in the Claude Code harness (see the session routes). */
   claudeCodeUserSessions?: ClaudeCodeUserSessions;
   /** With a local sandbox: attaches a session's checkout on disk without starting it (file panels, sandbox start). */
@@ -887,6 +889,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         codex: deps.codexEnabled ?? false,
         device: deps.deviceEnabled ?? false,
         claudeSignIn: deps.claudeSignIn !== undefined,
+        codexSignIn: deps.codexSignIn !== undefined,
       },
       deploymentProviders: deps.deploymentModelProviders,
       ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
@@ -897,6 +900,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       modelCredentials: deps.domains.modelCredentials,
       ...(deps.claudeSignIn ? { claudeSignIn: deps.claudeSignIn } : {}),
+      ...(deps.codexSignIn ? { accountSignIn: { [CODEX_ACCOUNT_PROVIDER]: deps.codexSignIn } } : {}),
     }).routes(),
     ...new OAuthRoutes({
       auth: deps.auth,

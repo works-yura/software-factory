@@ -125,7 +125,7 @@ export const queryKeys = {
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
   credentialAccounts: (provider: string) => ['credential-accounts', provider] as const,
-  claudeSignIn: (id: string | null) => ['claude-sign-in', id] as const,
+  accountSignIn: (provider: string, id: string | null) => ['account-sign-in', provider, id] as const,
   availableModels: (filter?: AvailableModelsFilter) =>
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,

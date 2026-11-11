@@ -688,14 +688,8 @@
     "model": "Model",
     "providers": "Providers"
   },
-  "claudeAccounts": {
-    "title": "Claude Code accounts",
-    "description": "Claude Code sessions run on Claude sign-ins. When one runs out of usage (5-hour or weekly limit), the session continues on the next; a limited sign-in comes back after its reset, and a refused one stays off until its owner signs in again.",
-    "loading": "Loading Claude Code accounts",
-    "empty": "No Claude sign-ins yet. Sign in with Claude so Claude Code sessions can run.",
+  "accounts": {
     "kind": {
-      "mySignIn": "Your Claude sign-in",
-      "memberSignIn": "Member’s Claude sign-in",
       "legacy": "Old token: remove it"
     },
     "status": {
@@ -718,21 +712,63 @@
     "dialog": {
       "renameTitle": "Rename {{label}}",
       "label": "Name",
-      "labelPlaceholder": "e.g. My Max plan",
       "cancel": "Cancel",
       "save": "Save",
       "saving": "Saving…"
     },
     "errors": {
       "forbidden": "You can’t change this account.",
-      "needSignIn": "Sign in to an organization to use Claude Code accounts.",
       "failed": "Something went wrong. Try again."
     },
     "signIn": {
-      "button": "Sign in with Claude",
-      "pending": "Finish signing in on the Claude page that opened in your browser…",
       "done": "Signed in as {{label}}.",
-      "failed": "Claude sign-in failed."
+      "codePrompt": "Open the sign-in page, sign in, and enter this one-time code:",
+      "openPage": "Open sign-in page",
+      "waiting": "Waiting for you to finish signing in…"
+    },
+    "harness": {
+      "claudeCode": {
+        "title": "Claude Code accounts",
+        "description": "Claude Code sessions run on Claude sign-ins. When one runs out of usage (5-hour or weekly limit), the session continues on the next; a limited sign-in comes back after its reset, and a refused one stays off until its owner signs in again.",
+        "loading": "Loading Claude Code accounts",
+        "empty": "No Claude sign-ins yet. Sign in with Claude so Claude Code sessions can run.",
+        "kind": {
+          "mySignIn": "Your Claude sign-in",
+          "memberSignIn": "Member’s Claude sign-in"
+        },
+        "errors": {
+          "needSignIn": "Sign in to an organization to use Claude Code accounts."
+        },
+        "signIn": {
+          "button": "Sign in with Claude",
+          "pending": "Finish signing in on the Claude page that opened in your browser…",
+          "failed": "Claude sign-in failed."
+        },
+        "dialog": {
+          "labelPlaceholder": "e.g. My Max plan"
+        }
+      },
+      "codex": {
+        "title": "Codex accounts",
+        "description": "Codex sessions run on ChatGPT sign-ins. When one runs out of usage (5-hour or weekly limit), the session continues on the next; a limited sign-in comes back after its reset, and a refused one stays off until its owner signs in again. The server’s own codex login is never used.",
+        "loading": "Loading Codex accounts",
+        "empty": "No ChatGPT sign-ins yet. Sign in with ChatGPT so Codex sessions can run.",
+        "kind": {
+          "mySignIn": "Your ChatGPT sign-in",
+          "memberSignIn": "Member’s ChatGPT sign-in"
+        },
+        "errors": {
+          "needSignIn": "Sign in to an organization to use Codex accounts."
+        },
+        "signIn": {
+          "button": "Sign in with ChatGPT",
+          "pending": "Starting the ChatGPT sign-in…",
+          "failed": "ChatGPT sign-in failed."
+        },
+        "dialog": {
+          "labelPlaceholder": "e.g. My Plus plan"
+        }
+      }
     }
   },
   "intakeRules": {

@@ -6,11 +6,22 @@ import { z } from 'zod';
 import { resolveCredentialContext } from '@factory/credentials';
 import { Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
-import { isPersonalCredentialKind } from '@factory/store';
-import type { CredentialAccount, CredentialAccountKind, ModelCredentialsStorage } from '@factory/store';
+import { isPersonalCredentialKind, isSignInCredentialKind } from '@factory/store';
+import type { CredentialAccount, CredentialAccountKind, ModelCredentialsStorage, SignInCredentialKind } from '@factory/store';
 
-/** Providers whose runs rotate through several accounts; Claude Code turns read `anthropic`. */
-export const CREDENTIAL_ACCOUNT_PROVIDERS: ReadonlySet<string> = new Set(['anthropic']);
+/** The provider Claude Code turns read their sign-ins from. */
+export const CLAUDE_CODE_ACCOUNT_PROVIDER = 'anthropic';
+/** The provider Codex turns read their ChatGPT sign-ins from. */
+export const CODEX_ACCOUNT_PROVIDER = 'openai-codex';
+
+/** Each turn-based harness's accounts: the provider they are filed under, the sign-in kind its turns run on, and its name. */
+export const SIGN_IN_ACCOUNT_PROVIDERS: Readonly<Record<string, { kind: SignInCredentialKind; name: string; harness: string }>> = {
+  [CLAUDE_CODE_ACCOUNT_PROVIDER]: { kind: 'claude_login', name: 'Claude', harness: 'Claude Code' },
+  [CODEX_ACCOUNT_PROVIDER]: { kind: 'codex_login', name: 'ChatGPT', harness: 'Codex' },
+};
+
+/** Providers whose runs rotate through several accounts: one per turn-based harness. */
+export const CREDENTIAL_ACCOUNT_PROVIDERS: ReadonlySet<string> = new Set(Object.keys(SIGN_IN_ACCOUNT_PROVIDERS));
 
 const MAX_LABEL_LENGTH = 100;
 
@@ -47,33 +58,42 @@ export interface CredentialAccountView {
    * more, and it is listed only so it can be removed.
    */
   legacy: boolean;
-  /** A Claude sign-in the token endpoint refused: its owner must sign in again. */
+  /** A sign-in the token endpoint refused: its owner must sign in again. */
   needsSignIn: boolean;
   createdAt: string;
 }
 
-/** One Claude sign-in a person started (see the server's `createClaudeSignInService`). */
-export interface ClaudeSignInFlowView {
+/** One sign-in a person started (see the server's `createAccountSignInService`). */
+export interface AccountSignInFlowView {
   id: string;
   orgId: string;
   userId: string;
   status: 'pending' | 'done' | 'error';
+  /** The page (and device code) the person finishes signing in with, once the provider gave it. */
+  prompt?: { url: string; code?: string };
   error?: string;
   accountId?: string;
 }
 
-/** Runs `claude auth login` on this host for a person; offered only where this host is the person's own machine. */
-export interface ClaudeSignInFlows {
-  start(owner: { orgId: string; userId: string }): ClaudeSignInFlowView;
-  get(id: string): ClaudeSignInFlowView | undefined;
+/** Runs a provider's sign-in for a person (`claude auth login`, Codex's device sign-in). */
+export interface AccountSignInFlows {
+  start(owner: { orgId: string; userId: string }): AccountSignInFlowView;
+  get(id: string): AccountSignInFlowView | undefined;
   cancel(id: string): boolean;
 }
+
+/** @deprecated Claude's alone; see {@link AccountSignInFlowView}. */
+export type ClaudeSignInFlowView = AccountSignInFlowView;
+/** @deprecated Claude's alone; see {@link AccountSignInFlows}. */
+export type ClaudeSignInFlows = AccountSignInFlows;
 
 export interface CredentialAccountRoutesDeps extends RouteDependencies {
   auth: RouteAuth;
   modelCredentials?: ModelCredentialsStorage;
   /** Claude sign-in on this host; unset where the CLI's browser would open on a machine nobody sits at. */
-  claudeSignIn?: ClaudeSignInFlows;
+  claudeSignIn?: AccountSignInFlows;
+  /** Sign-in per provider (`openai-codex`: Codex's device sign-in); `claudeSignIn` is `anthropic`'s. */
+  accountSignIn?: Readonly<Record<string, AccountSignInFlows | undefined>>;
   now?: () => Date;
 }
 
@@ -84,24 +104,24 @@ function statusOf(account: CredentialAccount, now: Date): CredentialAccountStatu
 }
 
 /**
- * Claude Code accounts: the members' own Claude sign-ins, which Claude Code
- * turns rotate through when one runs out of usage. A sign-in is the only way
- * to add one; a pasted setup token or API key is refused (410), and such
- * accounts left from before are listed as `legacy` only so they can be
- * removed: no turn uses them.
+ * The turn-based harnesses' accounts (Claude Code's `anthropic`, Codex's
+ * `openai-codex`): the members' own sign-ins, which turns rotate through when
+ * one runs out of usage. A sign-in is the only way to add one; a pasted token
+ * or API key is refused (410), and such accounts left from before are listed
+ * as `legacy` only so they can be removed: no turn uses them.
  *
  *   - `GET    /web/config/providers/:provider/accounts`
  *   - `POST   /web/config/providers/:provider/accounts`      refused: sign in instead
  *   - `PATCH  /web/config/providers/:provider/accounts/:id`  `{ label?, priority?, disabled? }`
  *   - `DELETE /web/config/providers/:provider/accounts/:id`
  *
- *   - `POST   /web/config/providers/anthropic/accounts/sign-in`      start a Claude sign-in
- *   - `GET    /web/config/providers/anthropic/accounts/sign-in/:id`  its status
- *   - `DELETE /web/config/providers/anthropic/accounts/sign-in/:id`  cancel it
+ *   - `POST   /web/config/providers/:provider/accounts/sign-in`      start a sign-in
+ *   - `GET    /web/config/providers/:provider/accounts/sign-in/:id`  its status (and device code)
+ *   - `DELETE /web/config/providers/:provider/accounts/sign-in/:id`  cancel it
  *
- * Who may do what: any member signs in to Claude and manages their own
- * sign-in; switching off or removing anyone's account takes an organization
- * admin. A sign-in is renewed by signing in again.
+ * Who may do what: any member signs in and manages their own sign-in;
+ * switching off or removing anyone's account takes an organization admin. A
+ * sign-in is renewed by signing in again.
  */
 export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> {
   routes(): ApiRoute[] {
@@ -128,6 +148,7 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
     };
 
     const view = (account: CredentialAccount, caller: { userId: string; admin: boolean }): CredentialAccountView => {
+      const signInKind = SIGN_IN_ACCOUNT_PROVIDERS[account.provider]?.kind;
       const mine = isPersonalCredentialKind(account.kind) && account.ownerUserId === caller.userId;
       return {
         id: account.id,
@@ -141,8 +162,8 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
         ...(account.lastUsedAt ? { lastUsedAt: account.lastUsedAt.toISOString() } : {}),
         hint: account.hint,
         canManage: mine || caller.admin,
-        legacy: account.kind !== 'claude_login',
-        needsSignIn: account.kind === 'claude_login' && account.disabled && account.lastError !== undefined,
+        legacy: account.kind !== signInKind,
+        needsSignIn: isSignInCredentialKind(account.kind) && account.disabled && account.lastError !== undefined,
         createdAt: account.createdAt.toISOString(),
       };
     };
@@ -162,13 +183,18 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
     const signInFlow = async (c: Context) => {
       const ctx = await context(c);
       if ('response' in ctx) return ctx;
-      const flows = this.deps.claudeSignIn;
-      if (!flows || ctx.provider !== 'anthropic') {
+      const flows =
+        this.deps.accountSignIn?.[ctx.provider] ?? (ctx.provider === CLAUDE_CODE_ACCOUNT_PROVIDER ? this.deps.claudeSignIn : undefined);
+      if (!flows) {
+        const name = SIGN_IN_ACCOUNT_PROVIDERS[ctx.provider]?.name ?? ctx.provider;
         return {
           response: c.json(
             {
               error: 'sign_in_unavailable',
-              message: 'Signing in to Claude here works only where the Factory server runs on your own machine.',
+              message:
+                ctx.provider === CLAUDE_CODE_ACCOUNT_PROVIDER
+                  ? 'Signing in to Claude here works only where the Factory server runs on your own machine.'
+                  : `Signing in to ${name} is not available on this server.`,
             },
             404,
           ),
@@ -178,13 +204,14 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
     };
 
     const flowView = async (
-      flow: ClaudeSignInFlowView,
+      flow: AccountSignInFlowView,
       ctx: { storage: ModelCredentialsStorage; orgId: string; userId: string; admin: boolean },
     ) => {
       const account = flow.accountId ? await ctx.storage.getAccount(ctx.orgId, flow.accountId) : undefined;
       return {
         id: flow.id,
         status: flow.status,
+        ...(flow.prompt ? { prompt: flow.prompt } : {}),
         ...(flow.error ? { error: flow.error } : {}),
         ...(account ? { account: view(account, ctx) } : {}),
       };
@@ -239,17 +266,18 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
         },
       }),
 
-      // Claude Code runs only on Claude sign-ins: a pasted setup token or API key is refused.
+      // Turns run only on sign-ins: a pasted setup token or API key is refused.
       registerApiRoute('/web/config/providers/:provider/accounts', {
         method: 'POST',
         requiresAuth: false,
         handler: async c => {
           const ctx = await context(c);
           if ('response' in ctx) return ctx.response;
+          const provider = SIGN_IN_ACCOUNT_PROVIDERS[ctx.provider]!;
           return c.json(
             {
-              error: 'claude_sign_in_required',
-              message: 'Claude Code accounts are added by signing in to Claude; tokens and API keys are not accepted.',
+              error: ctx.provider === CLAUDE_CODE_ACCOUNT_PROVIDER ? 'claude_sign_in_required' : 'sign_in_required',
+              message: `${provider.harness} accounts are added by signing in to ${provider.name}; tokens and API keys are not accepted.`,
             },
             410,
           );

@@ -82,8 +82,8 @@ export interface ProvidersResponse {
 export interface CredentialAccountInfo {
   id: string;
   label: string;
-  kind: 'api_key' | 'subscription' | 'claude_login';
-  /** The caller's own Claude sign-in. */
+  kind: 'api_key' | 'subscription' | 'claude_login' | 'codex_login';
+  /** The caller's own sign-in. */
   mine: boolean;
   priority: number;
   status: 'active' | 'limited' | 'disabled';
@@ -95,22 +95,24 @@ export interface CredentialAccountInfo {
   canManage: boolean;
   /** A pasted setup token or API key from before sign-ins: no session uses it, it is listed to be removed. */
   legacy?: boolean;
-  /** A Claude sign-in that stopped working: its owner signs in again. Absent from older servers. */
+  /** A sign-in that stopped working: its owner signs in again. Absent from older servers. */
   needsSignIn?: boolean;
   createdAt: string;
 }
 
-/** A Claude sign-in a person started on this server (`claude auth login`). */
-export interface ClaudeSignInInfo {
+/** A sign-in a person started on this server (`claude auth login`, Codex's device sign-in). */
+export interface AccountSignInInfo {
   id: string;
   status: 'pending' | 'done' | 'error';
+  /** Where the person finishes signing in, and the one-time code they enter there (a device sign-in). */
+  prompt?: { url: string; code?: string };
   error?: string;
   /** The account the sign-in was filed as, once done. */
   account?: CredentialAccountInfo;
 }
 
-export interface ClaudeSignInResponse {
-  signIn: ClaudeSignInInfo;
+export interface AccountSignInResponse {
+  signIn: AccountSignInInfo;
 }
 
 export interface CredentialAccountsResponse {

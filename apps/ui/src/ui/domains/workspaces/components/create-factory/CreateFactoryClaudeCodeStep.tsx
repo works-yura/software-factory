@@ -6,11 +6,11 @@ import { LogIn, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { ApiRequestError } from '../../../../../api/client';
-import { useClaudeSignIn, useCredentialAccountsQuery } from '../../../../../hooks/useCredentialAccounts';
+import { useAccountSignIn, useCredentialAccountsQuery } from '../../../../../hooks/useCredentialAccounts';
 import { useServerFeatures } from '../../../../../hooks/useServerFeatures';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
-import { CLAUDE_ACCOUNTS_PROVIDER } from '../../../settings/components/models/accounts/accountErrors';
-import { ClaudeSignInStatus } from '../../../settings/components/models/accounts/ClaudeSignIn';
+import { AccountSignInStatus } from '../../../settings/components/models/accounts/AccountSignIn';
+import { CLAUDE_CODE_ACCOUNTS } from '../../../settings/components/models/accounts/harnessAccounts';
 import { CLAUDE_CODE_MODELS } from '@factory/harness-claude-code/models/aliases';
 import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
@@ -81,8 +81,8 @@ export function CreateFactoryClaudeCodeStep({ query, saving, error, onPick }: Cr
 function ClaudeCodeSignIn({ disabled }: { disabled: boolean }) {
   const { t } = useTranslation('workspaces');
   const features = useServerFeatures();
-  const accountsQuery = useCredentialAccountsQuery(CLAUDE_ACCOUNTS_PROVIDER);
-  const signIn = useClaudeSignIn(CLAUDE_ACCOUNTS_PROVIDER);
+  const accountsQuery = useCredentialAccountsQuery(CLAUDE_CODE_ACCOUNTS.provider);
+  const signIn = useAccountSignIn(CLAUDE_CODE_ACCOUNTS.provider);
   // A pasted token or key from before sign-ins runs nothing, so it does not count.
   const accounts = (accountsQuery.data?.accounts ?? []).filter(account => account.legacy !== true);
   // With no account yet, signing in to Claude is the quickest way to give the Factory its own.
@@ -132,7 +132,7 @@ function ClaudeCodeSignIn({ disabled }: { disabled: boolean }) {
         )}
         {offerSignIn && (
           <div className="px-2">
-            <ClaudeSignInStatus signIn={signIn} />
+            <AccountSignInStatus accounts={CLAUDE_CODE_ACCOUNTS} signIn={signIn} />
           </div>
         )}
       </CommandGroup>

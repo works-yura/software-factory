@@ -45,37 +45,46 @@ describe('GET /web/config/features', () => {
   it.each([
     {
       features: undefined,
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
     },
     {
       features: { knowledge: true },
-      expected: { knowledge: true, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, device: false },
+      expected: { knowledge: true, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
     },
     {
       features: { knowledge: false, mcp: true },
-      expected: { knowledge: false, mcp: true, claudeCode: false, claudeSignIn: false, codex: false, device: false },
+      expected: { knowledge: false, mcp: true, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
     },
     {
       features: { knowledge: false, claudeCode: true },
-      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: false, codex: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
     },
     {
       features: { knowledge: false, claudeCode: true, claudeSignIn: true },
-      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: true, codex: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: true, codex: false, codexSignIn: false, device: false },
     },
     {
       features: { knowledge: false, device: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, device: true },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: true },
     },
     // Codex where its CLI is installed.
     {
       features: { knowledge: false, codex: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: true, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: true, codexSignIn: false, device: false },
+    },
+    // Codex sign-in where Codex runs.
+    {
+      features: { knowledge: false, codex: true, codexSignIn: true },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: true, codexSignIn: true, device: false },
+    },
+    {
+      features: { knowledge: false, codexSignIn: true },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
     },
     // No Claude Code, no sign-in to speak of.
     {
       features: { knowledge: false, claudeSignIn: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, codexSignIn: false, device: false },
     },
   ])('reports the server-side feature gates as $expected', async ({ features, expected }) => {
     const app = new Hono();

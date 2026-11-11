@@ -23,9 +23,10 @@ import { currentLanguage } from '../../../../../i18n';
 import { translator } from '../../../../../i18n/t';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import { SettingsSubsection } from '../../SettingsSubsection';
-import { accountErrorMessage, CLAUDE_ACCOUNTS_PROVIDER } from './accountErrors';
-import { ClaudeAccountDialog } from './ClaudeAccountDialog';
-import { ClaudeSignInButton } from './ClaudeSignIn';
+import { accountErrorMessage } from './accountErrors';
+import { AccountRenameDialog } from './AccountRenameDialog';
+import { AccountSignInButton } from './AccountSignIn';
+import type { HarnessAccounts } from './harnessAccounts';
 
 const tk = translator('settings');
 
@@ -34,18 +35,20 @@ export function formatAccountTime(iso: string): string {
 }
 
 /**
- * The Claude sign-ins Claude Code sessions run on: when one runs out of usage
- * the session continues on the next, a limited one returns after its reset, a
- * refused one stays off until its owner signs in again. A sign-in serves only
- * its owner's runs. Signing in is the only way to add one; a pasted token or
- * key left from before is marked old and can only be removed.
+ * The sign-ins a turn-based harness's sessions run on (Claude Code's Claude
+ * sign-ins, Codex's ChatGPT sign-ins; see `harnessAccounts`): when one runs
+ * out of usage the session continues on the next, a limited one returns after
+ * its reset, a refused one stays off until its owner signs in again. A sign-in
+ * serves only its owner's runs. Signing in is the only way to add one; a
+ * pasted token or key left from before is marked old and can only be removed.
  */
-export function ClaudeAccountsSection() {
+export function HarnessAccountsSection({ accounts: harness }: { accounts: HarnessAccounts }) {
   const { t } = useTranslation('settings');
-  const accountsQuery = useCredentialAccountsQuery(CLAUDE_ACCOUNTS_PROVIDER);
+  const accountsQuery = useCredentialAccountsQuery(harness.provider);
   const features = useServerFeatures();
-  const updateMutation = useUpdateCredentialAccount(CLAUDE_ACCOUNTS_PROVIDER);
-  const removeMutation = useRemoveCredentialAccount(CLAUDE_ACCOUNTS_PROVIDER);
+  const updateMutation = useUpdateCredentialAccount(harness.provider);
+  const removeMutation = useRemoveCredentialAccount(harness.provider);
+  const texts = `accounts.harness.${harness.i18nKey}` as const;
   const [renaming, setRenaming] = useState<CredentialAccountInfo | null>(null);
   const [removing, setRemoving] = useState<CredentialAccountInfo | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -57,28 +60,29 @@ export function ClaudeAccountsSection() {
 
   const run = (action: Promise<unknown>) => {
     setActionError(null);
-    action.catch(error => setActionError(accountErrorMessage(error)));
+    action.catch(error => setActionError(accountErrorMessage(error, harness)));
   };
 
   return (
-    <SettingsSubsection scope="org" title={t('claudeAccounts.title')} description={t('claudeAccounts.description')}>
+    <SettingsSubsection scope="org" title={t(`${texts}.title`)} description={t(`${texts}.description`)}>
       <SettingsContainer className="flex flex-col gap-3 p-4">
-        {features.data?.claudeSignIn === true && data && <ClaudeSignInButton disabled={busy} />}
-        {accountsQuery.isPending && <SkeletonRows label={t('claudeAccounts.loading')} rows={2} />}
-        {needsSignIn && <Notice variant="info">{t('claudeAccounts.errors.needSignIn')}</Notice>}
+        {features.data?.[harness.signInFeature] === true && data && <AccountSignInButton accounts={harness} disabled={busy} />}
+        {accountsQuery.isPending && <SkeletonRows label={t(`${texts}.loading`)} rows={2} />}
+        {needsSignIn && <Notice variant="info">{t(`${texts}.errors.needSignIn`)}</Notice>}
         {accountsQuery.isError && !needsSignIn && (
-          <Notice variant="destructive">{accountErrorMessage(accountsQuery.error)}</Notice>
+          <Notice variant="destructive">{accountErrorMessage(accountsQuery.error, harness)}</Notice>
         )}
         {data && data.accounts.every(account => account.legacy === true) && (
           <Txt as="p" variant="caption" tone="muted">
-            {t('claudeAccounts.empty')}
+            {t(`${texts}.empty`)}
           </Txt>
         )}
         {data && data.accounts.length > 0 && (
-          <ul aria-label={t('claudeAccounts.title')} className="divide-border flex flex-col divide-y">
+          <ul aria-label={t(`${texts}.title`)} className="divide-border flex flex-col divide-y">
             {data.accounts.map(account => (
               <AccountRow
                 key={account.id}
+                accounts={harness}
                 account={account}
                 disabled={busy}
                 onToggle={() =>
@@ -97,18 +101,18 @@ export function ClaudeAccountsSection() {
         )}
       </SettingsContainer>
 
-      {renaming && <ClaudeAccountDialog account={renaming} onClose={() => setRenaming(null)} />}
+      {renaming && <AccountRenameDialog accounts={harness} account={renaming} onClose={() => setRenaming(null)} />}
 
       <AlertDialog open={removing !== null} onOpenChange={open => !open && setRemoving(null)}>
         <AlertDialog.Content>
           <AlertDialog.Header>
-            <AlertDialog.Title>{t('claudeAccounts.removeTitle', { label: removing?.label ?? '' })}</AlertDialog.Title>
-            <AlertDialog.Description>{t('claudeAccounts.removeDescription')}</AlertDialog.Description>
+            <AlertDialog.Title>{t('accounts.removeTitle', { label: removing?.label ?? '' })}</AlertDialog.Title>
+            <AlertDialog.Description>{t('accounts.removeDescription')}</AlertDialog.Description>
           </AlertDialog.Header>
           <AlertDialog.Footer>
-            <AlertDialog.Cancel>{t('claudeAccounts.cancel')}</AlertDialog.Cancel>
+            <AlertDialog.Cancel>{t('accounts.cancel')}</AlertDialog.Cancel>
             <AlertDialog.Action onClick={() => removing && run(removeMutation.mutateAsync(removing.id))}>
-              {t('claudeAccounts.remove')}
+              {t('accounts.remove')}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>
@@ -119,27 +123,29 @@ export function ClaudeAccountsSection() {
 
 function statusPresentation(account: CredentialAccountInfo): StatusPresentation {
   if (account.needsSignIn) {
-    return { label: tk('claudeAccounts.status.needsSignIn'), tone: 'neutral', description: '' } satisfies StatusPresentation;
+    return { label: tk('accounts.status.needsSignIn'), tone: 'neutral', description: '' } satisfies StatusPresentation;
   }
   if (account.status === 'disabled') {
-    return { label: tk('claudeAccounts.status.off'), tone: 'neutral', description: '' } satisfies StatusPresentation;
+    return { label: tk('accounts.status.off'), tone: 'neutral', description: '' } satisfies StatusPresentation;
   }
   if (account.status === 'limited') {
     const label = account.limitedUntil
-      ? tk('claudeAccounts.status.limitedUntil', { time: formatAccountTime(account.limitedUntil) })
-      : tk('claudeAccounts.status.limited');
+      ? tk('accounts.status.limitedUntil', { time: formatAccountTime(account.limitedUntil) })
+      : tk('accounts.status.limited');
     return { label, tone: 'progress', description: '' } satisfies StatusPresentation;
   }
-  return { label: tk('claudeAccounts.status.active'), tone: 'success', description: '' } satisfies StatusPresentation;
+  return { label: tk('accounts.status.active'), tone: 'success', description: '' } satisfies StatusPresentation;
 }
 
 function AccountRow({
+  accounts: harness,
   account,
   disabled,
   onToggle,
   onRename,
   onRemove,
 }: {
+  accounts: HarnessAccounts;
   account: CredentialAccountInfo;
   disabled: boolean;
   onToggle: () => void;
@@ -150,10 +156,10 @@ function AccountRow({
   // A pasted token or key from before sign-ins: no session uses it, so it is only there to be removed.
   const legacy = account.legacy === true;
   const kindLabel = legacy
-    ? t('claudeAccounts.kind.legacy')
+    ? t('accounts.kind.legacy')
     : account.mine
-      ? t('claudeAccounts.kind.mySignIn')
-      : t('claudeAccounts.kind.memberSignIn');
+      ? t(`accounts.harness.${harness.i18nKey}.kind.mySignIn`)
+      : t(`accounts.harness.${harness.i18nKey}.kind.memberSignIn`);
 
   return (
     <li aria-label={account.label} className="flex items-start gap-2.5 py-2">
@@ -178,8 +184,8 @@ function AccountRow({
         )}
         <Txt as="p" variant="meta" tone="muted">
           {account.lastUsedAt
-            ? t('claudeAccounts.lastUsed', { time: formatAccountTime(account.lastUsedAt) })
-            : t('claudeAccounts.neverUsed')}
+            ? t('accounts.lastUsed', { time: formatAccountTime(account.lastUsedAt) })
+            : t('accounts.neverUsed')}
         </Txt>
       </div>
       {!legacy && (
@@ -194,7 +200,7 @@ function AccountRow({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={t('claudeAccounts.actionsFor', { label: account.label })}
+                aria-label={t('accounts.actionsFor', { label: account.label })}
                 disabled={disabled}
               >
                 <MoreHorizontal />
@@ -204,12 +210,12 @@ function AccountRow({
           <DropdownMenu.Content align="end">
             {!legacy && (
               <DropdownMenu.Item onClick={onToggle}>
-                {account.status === 'disabled' ? t('claudeAccounts.turnOn') : t('claudeAccounts.turnOff')}
+                {account.status === 'disabled' ? t('accounts.turnOn') : t('accounts.turnOff')}
               </DropdownMenu.Item>
             )}
-            {!legacy && <DropdownMenu.Item onClick={onRename}>{t('claudeAccounts.rename')}</DropdownMenu.Item>}
+            {!legacy && <DropdownMenu.Item onClick={onRename}>{t('accounts.rename')}</DropdownMenu.Item>}
             <DropdownMenu.Item variant="destructive" onClick={onRemove}>
-              {t('claudeAccounts.remove')}
+              {t('accounts.remove')}
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu>

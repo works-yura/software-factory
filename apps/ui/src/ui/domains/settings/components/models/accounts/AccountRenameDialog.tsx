@@ -16,16 +16,25 @@ import { useTranslation } from 'react-i18next';
 
 import type { CredentialAccountInfo } from '../../../../../../api/types';
 import { useUpdateCredentialAccount } from '../../../../../../hooks/useCredentialAccounts';
-import { accountErrorMessage, CLAUDE_ACCOUNTS_PROVIDER } from './accountErrors';
+import { accountErrorMessage } from './accountErrors';
+import type { HarnessAccounts } from './harnessAccounts';
 
-/** Rename a Claude Code account; accounts are added only by signing in to Claude. */
-export function ClaudeAccountDialog({ account, onClose }: { account: CredentialAccountInfo; onClose: () => void }) {
+/** Rename a harness's account; accounts are added only by signing in. */
+export function AccountRenameDialog({
+  accounts,
+  account,
+  onClose,
+}: {
+  accounts: HarnessAccounts;
+  account: CredentialAccountInfo;
+  onClose: () => void;
+}) {
   const { t } = useTranslation('settings');
-  const mutation = useUpdateCredentialAccount(CLAUDE_ACCOUNTS_PROVIDER);
+  const mutation = useUpdateCredentialAccount(accounts.provider);
   const [label, setLabel] = useState(account.label);
 
   const ready = label.trim() !== '';
-  const error = mutation.error ? accountErrorMessage(mutation.error) : undefined;
+  const error = mutation.error ? accountErrorMessage(mutation.error, accounts) : undefined;
 
   const save = async () => {
     if (!ready || mutation.isPending) return;
@@ -43,7 +52,7 @@ export function ClaudeAccountDialog({ account, onClose }: { account: CredentialA
     <Dialog open onOpenChange={open => !open && close()} pending={mutation.isPending}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('claudeAccounts.dialog.renameTitle', { label: account.label })}</DialogTitle>
+          <DialogTitle>{t('accounts.dialog.renameTitle', { label: account.label })}</DialogTitle>
         </DialogHeader>
         <DialogBody>
           <form
@@ -54,12 +63,12 @@ export function ClaudeAccountDialog({ account, onClose }: { account: CredentialA
             }}
           >
             <Field className="gap-1">
-              <FieldLabel>{t('claudeAccounts.dialog.label')}</FieldLabel>
+              <FieldLabel>{t('accounts.dialog.label')}</FieldLabel>
               <Input
                 autoFocus
                 size="sm"
                 maxLength={100}
-                placeholder={t('claudeAccounts.dialog.labelPlaceholder')}
+                placeholder={t(`accounts.harness.${accounts.i18nKey}.dialog.labelPlaceholder`)}
                 value={label}
                 disabled={mutation.isPending}
                 onChange={event => setLabel(event.target.value)}
@@ -75,9 +84,9 @@ export function ClaudeAccountDialog({ account, onClose }: { account: CredentialA
           </form>
         </DialogBody>
         <DialogFooter>
-          <DialogCancel>{t('claudeAccounts.dialog.cancel')}</DialogCancel>
+          <DialogCancel>{t('accounts.dialog.cancel')}</DialogCancel>
           <DialogAction disabled={!ready} onConfirm={() => void save()}>
-            {mutation.isPending ? t('claudeAccounts.dialog.saving') : t('claudeAccounts.dialog.save')}
+            {mutation.isPending ? t('accounts.dialog.saving') : t('accounts.dialog.save')}
           </DialogAction>
         </DialogFooter>
       </DialogContent>

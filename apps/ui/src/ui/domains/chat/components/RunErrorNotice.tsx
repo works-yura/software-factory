@@ -125,7 +125,7 @@ function describeHarnessError(
 
 /**
  * The one fix a harness whose model and credentials are the Factory's
- * (Claude Code) offers: its Models settings, where its accounts and model live.
+ * (Claude Code, Codex) offers: its Models settings, where its accounts and model live.
  * The session's own model picker and the provider defaults don't apply there.
  */
 function FactoryModelSettingsAction({ harness }: { harness: HarnessDescriptor }) {
@@ -142,7 +142,7 @@ function FactoryModelSettingsAction({ harness }: { harness: HarnessDescriptor })
       render={<Link to={settingsSectionPath(factoryId, 'models')} state={{ from: location }} />}
       iconEnd={<ArrowRight aria-hidden="true" />}
     >
-      {harness.setup.claudeSignIn ? t('runError.reviewClaudeAccounts') : t('runError.openModelSettings')}
+      {harness.setup.accounts ? t('runError.reviewAccounts', { harness: harness.label }) : t('runError.openModelSettings')}
     </Button>
   );
 }

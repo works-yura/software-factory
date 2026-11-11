@@ -302,8 +302,17 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server).
    * `claudeSignIn`: a person can sign in to Claude from the settings, the CLI's browser page opening on
    * this machine (see `CredentialAccountRoutes`).
+   * `codexSignIn`: a person can sign in to ChatGPT for Codex from the settings (a device sign-in).
    */
-  features?: { knowledge: boolean; mcp?: boolean; claudeCode?: boolean; claudeSignIn?: boolean; codex?: boolean; device?: boolean };
+  features?: {
+    knowledge: boolean;
+    mcp?: boolean;
+    claudeCode?: boolean;
+    claudeSignIn?: boolean;
+    codex?: boolean;
+    codexSignIn?: boolean;
+    device?: boolean;
+  };
   /** Reads the Mastra packages this server runs; defaults to the build manifest. */
   readPackages?: () => Promise<RunningPackage[]>;
   authStorage?: AuthStorage;
@@ -451,6 +460,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             claudeCode: options.features?.claudeCode ?? false,
             claudeSignIn: (options.features?.claudeCode ?? false) && (options.features?.claudeSignIn ?? false),
             codex: options.features?.codex ?? false,
+            codexSignIn: (options.features?.codex ?? false) && (options.features?.codexSignIn ?? false),
             device: options.features?.device ?? false,
             // What each harness this server runs can do; the UI asks these instead of checking ids.
             harnesses: HARNESSES.filter(

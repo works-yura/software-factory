@@ -1,5 +1,5 @@
 /**
- * The Claude Code accounts section lists the Claude sign-ins Claude Code
+ * The accounts section (one for every turn-based harness; Claude Code's here, Codex's below) lists the Claude sign-ins Claude Code
  * sessions rotate through and lets members switch off, rename and remove them.
  * Signing in is the only way to add one: there is no token or key to paste,
  * and a pasted one left from before shows as old, only to be removed.
@@ -13,7 +13,10 @@ import { describe, expect, it } from 'vitest';
 import type { CredentialAccountInfo, CredentialAccountsResponse } from '../../../../../../../api/types';
 import { server } from '../../../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../../e2e/ui/render';
-import { ClaudeAccountsSection, formatAccountTime } from '../ClaudeAccountsSection';
+import { CLAUDE_CODE_ACCOUNTS, CODEX_ACCOUNTS } from '../harnessAccounts';
+import { formatAccountTime, HarnessAccountsSection } from '../HarnessAccountsSection';
+
+const ClaudeAccountsSection = () => <HarnessAccountsSection accounts={CLAUDE_CODE_ACCOUNTS} />;
 
 const ACCOUNTS_URL = `${TEST_BASE_URL}/web/config/providers/anthropic/accounts`;
 
@@ -66,7 +69,7 @@ async function openMenu(user: ReturnType<typeof userEvent.setup>, label: string)
   await user.click(await screen.findByRole('button', { name: `Actions for ${label}` }));
 }
 
-describe('ClaudeAccountsSection', () => {
+describe('HarnessAccountsSection for Claude Code', () => {
   it('lists each sign-in with whose it is, its status, last error and last use', async () => {
     const limitedUntil = '2026-10-28T18:30:00.000Z';
     const lastUsedAt = '2026-10-28T12:00:00.000Z';
@@ -245,7 +248,7 @@ describe('ClaudeAccountsSection', () => {
   });
 });
 
-describe('ClaudeAccountsSection sign-in with Claude', () => {
+describe('HarnessAccountsSection sign-in with Claude', () => {
   const SIGN_IN_URL = `${ACCOUNTS_URL}/sign-in`;
   const signedIn = account({ id: 'login-1', label: 'alice@example.com' });
 
@@ -319,5 +322,39 @@ describe('ClaudeAccountsSection sign-in with Claude', () => {
     expect(await screen.findByRole('listitem', { name: 'alice@example.com' })).toBeInTheDocument();
     expect(within(row('alice@example.com')).getByText('Sign in again')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Sign in with Claude' })).not.toBeInTheDocument();
+  });
+});
+
+describe('HarnessAccountsSection for Codex', () => {
+  const CODEX_URL = `${TEST_BASE_URL}/web/config/providers/openai-codex/accounts`;
+  const signedIn = account({ id: 'codex-1', label: 'alice@example.com', kind: 'codex_login' });
+
+  it('lists ChatGPT sign-ins, shows the device code and page while signing in, then the new sign-in', async () => {
+    let listed = 0;
+    let polls = 0;
+    server.use(
+      http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false, codex: true, codexSignIn: true })),
+      http.get(CODEX_URL, () => HttpResponse.json({ accounts: listed++ === 0 ? [] : [signedIn] } satisfies CredentialAccountsResponse)),
+      http.post(`${CODEX_URL}/sign-in`, () => HttpResponse.json({ signIn: { id: 'flow-1', status: 'pending' } }, { status: 202 })),
+      http.get(`${CODEX_URL}/sign-in/:id`, () => {
+        polls += 1;
+        return polls < 3
+          ? HttpResponse.json({
+              signIn: { id: 'flow-1', status: 'pending', prompt: { url: 'https://auth.openai.com/codex/device', code: 'ABCD-EFGHI' } },
+            })
+          : HttpResponse.json({ signIn: { id: 'flow-1', status: 'done', account: signedIn } });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<HarnessAccountsSection accounts={CODEX_ACCOUNTS} />);
+
+    expect(await screen.findByText('Codex accounts')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Sign in with ChatGPT' }));
+    expect(await screen.findByText('ABCD-EFGHI', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open sign-in page/ })).toHaveAttribute('href', 'https://auth.openai.com/codex/device');
+
+    expect(await screen.findByText('Signed in as alice@example.com.', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByRole('listitem', { name: 'alice@example.com' })).toBeInTheDocument();
+    expect(within(row('alice@example.com')).getByText('Your ChatGPT sign-in')).toBeInTheDocument();
   });
 });

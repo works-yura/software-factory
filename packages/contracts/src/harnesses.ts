@@ -38,8 +38,11 @@ export interface HarnessDescriptor {
   setup: {
     /** A model provider and model (Mastra's providers). */
     modelProvider: boolean;
-    /** A Claude sign-in and a Claude model. */
-    claudeSignIn: boolean;
+    /**
+     * The members' sign-ins its turns run on (Settings → Models → accounts): the
+     * credential-account provider they are filed under. Absent: no accounts.
+     */
+    accounts?: { provider: string };
   };
 }
 
@@ -57,7 +60,7 @@ export const MASTRA_HARNESS: HarnessDescriptor = {
     sandboxRecreate: true,
     sessionlessChat: true,
   },
-  setup: { modelProvider: true, claudeSignIn: false },
+  setup: { modelProvider: true },
 };
 
 export const CLAUDE_CODE_HARNESS: HarnessDescriptor = {
@@ -74,10 +77,10 @@ export const CLAUDE_CODE_HARNESS: HarnessDescriptor = {
     sandboxRecreate: false,
     sessionlessChat: false,
   },
-  setup: { modelProvider: false, claudeSignIn: true },
+  setup: { modelProvider: false, accounts: { provider: 'anthropic' } },
 };
 
-/** OpenAI's Codex: the `codex` CLI's app-server on the server host, signed in with `codex login`. */
+/** OpenAI's Codex: the `codex` CLI's app-server on the server host, signed in with the members' ChatGPT sign-ins. */
 export const CODEX_HARNESS: HarnessDescriptor = {
   id: 'codex',
   label: 'Codex',
@@ -92,7 +95,7 @@ export const CODEX_HARNESS: HarnessDescriptor = {
     sandboxRecreate: false,
     sessionlessChat: false,
   },
-  setup: { modelProvider: false, claudeSignIn: false },
+  setup: { modelProvider: false, accounts: { provider: 'openai-codex' } },
 };
 
 export const HARNESSES: readonly HarnessDescriptor[] = [MASTRA_HARNESS, CLAUDE_CODE_HARNESS, CODEX_HARNESS];

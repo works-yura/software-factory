@@ -3,11 +3,11 @@ import { useEffect, useState } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { ClaudeSignInResponse, CredentialAccountResponse, CredentialAccountsResponse } from '../api/types';
+import type { AccountSignInResponse, CredentialAccountResponse, CredentialAccountsResponse } from '../api/types';
 
 /**
- * Accounts a provider's runs rotate through (today only `anthropic`, for
- * Claude Code): the organization's API keys and members' own subscriptions.
+ * Accounts a provider's runs rotate through (`anthropic` for Claude Code,
+ * `openai-codex` for Codex): the members' own sign-ins.
  */
 function accountsPath(provider: string, id?: string): string {
   const base = `/web/config/providers/${encodeURIComponent(provider)}/accounts`;
@@ -53,27 +53,29 @@ export function useRemoveCredentialAccount(provider: string) {
   });
 }
 
-/** How often a pending Claude sign-in is asked about while the person finishes it in the browser. */
-export const CLAUDE_SIGN_IN_POLL_MS = 1_500;
+/** How often a pending sign-in is asked about while the person finishes it in the browser. */
+export const ACCOUNT_SIGN_IN_POLL_MS = 1_500;
 
 /**
- * A Claude sign-in: `start` asks the server to run `claude auth login`, whose
- * page opens in the browser on the server's machine; the flow is then polled
- * until it is done (the accounts list refreshes) or failed. `cancel` stops it.
+ * A sign-in: `start` asks the server to run the provider's sign-in (`claude
+ * auth login`, whose page opens on the server's machine; Codex's device
+ * sign-in, whose page and code the flow carries as `prompt`); the flow is then
+ * polled until it is done (the accounts list refreshes) or failed. `cancel`
+ * stops it.
  */
-export function useClaudeSignIn(provider: string) {
+export function useAccountSignIn(provider: string) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   const [id, setId] = useState<string | null>(null);
   const start = useMutation({
-    mutationFn: () => client.post<ClaudeSignInResponse>(`${accountsPath(provider)}/sign-in`, {}),
+    mutationFn: () => client.post<AccountSignInResponse>(`${accountsPath(provider)}/sign-in`, {}),
     onSuccess: response => setId(response.signIn.id),
   });
   const flow = useQuery({
-    queryKey: queryKeys.claudeSignIn(id),
-    queryFn: () => client.get<ClaudeSignInResponse>(`${accountsPath(provider)}/sign-in/${encodeURIComponent(id!)}`),
+    queryKey: queryKeys.accountSignIn(provider, id),
+    queryFn: () => client.get<AccountSignInResponse>(`${accountsPath(provider)}/sign-in/${encodeURIComponent(id!)}`),
     enabled: id !== null,
-    refetchInterval: query => (query.state.data?.signIn.status === 'pending' ? CLAUDE_SIGN_IN_POLL_MS : false),
+    refetchInterval: query => (query.state.data?.signIn.status === 'pending' ? ACCOUNT_SIGN_IN_POLL_MS : false),
     retry: false,
   });
   const cancel = useMutation({
