@@ -22,6 +22,7 @@ import { FactoryManagementSection } from './FactoryManagementSection';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
 import { IntakeSection } from './IntakeSection';
 import { IntegrationsSection } from './IntegrationsSection';
+import { OrganizationSection } from './OrganizationSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
@@ -69,6 +70,7 @@ export function SettingsPanel() {
   return (
     <section aria-label={t('panel.label')} className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
       {section === 'account' && <AccountSettingsSection />}
+      {section === 'organization' && <OrganizationSection />}
       {section === 'preferences' && <GeneralSettings />}
       {section === 'analytics' && <AnalyticsSection />}
       {section === 'factory' && <FactoryManagementSection />}

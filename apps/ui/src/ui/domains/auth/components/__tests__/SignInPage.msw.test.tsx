@@ -2,9 +2,9 @@
  * BDD coverage for the provider-aware /signin page.
  *
  * Drives the real route table (SignInGate → SignInPage) through a memory
- * router with MSW stubbing `/auth/me` and the better-auth credential
- * endpoints. Hosted-login (SSO) deploys keep the redirect button; better-auth
- * deploys get the email/password form posting to `/auth/api/*`.
+ * router with MSW stubbing `/auth/me` and better-auth's social sign-in
+ * endpoint. Hosted-login (SSO) deploys keep the redirect button; better-auth
+ * deploys get only "Sign in with Google", which leaves for Google.
  */
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -24,29 +24,11 @@ import { signedIn, signedOut } from './fixtures/auth';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
 // service-level navigation helpers are stubbed instead; `fetchAuthState` and
-// the credential POST helpers stay real so MSW sees the actual requests.
+// `signInWithGoogle` stay real so MSW sees the actual requests.
 vi.mock('../../services/auth', async importOriginal => {
   const actual = await importOriginal<typeof AuthService>();
   return { ...actual, redirectToLogin: vi.fn(), navigateAfterSignIn: vi.fn() };
 });
-
-// Firebase's popup needs a real browser; the SDK is the boundary, the server calls stay real (MSW).
-const firebasePopup = vi.hoisted(() => ({
-  signInWithPopup: vi.fn(),
-  signOut: vi.fn(async () => undefined),
-  initializeApp: vi.fn((config: unknown, name: string) => ({ name, options: config })),
-}));
-vi.mock('firebase/app', () => ({ getApps: () => [], initializeApp: firebasePopup.initializeApp }));
-vi.mock('firebase/auth', () => ({
-  getAuth: () => ({}),
-  setPersistence: async () => undefined,
-  inMemoryPersistence: {},
-  GoogleAuthProvider: class {
-    setCustomParameters() {}
-  },
-  signInWithPopup: firebasePopup.signInWithPopup,
-  signOut: firebasePopup.signOut,
-}));
 
 const AUTH_ME_URL = `${TEST_BASE_URL}/auth/me`;
 
@@ -156,144 +138,67 @@ describe('SignInPage', () => {
     });
   });
 
-  describe('given a better-auth (self-hosted) deploy', () => {
-    it('renders the email/password form instead of the hosted button', async () => {
+  describe('given a better-auth (Google) deploy', () => {
+    it('offers only the Google button, no email or password form', async () => {
       stubAuthMe({ provider: 'better-auth' });
       renderSignIn();
 
-      expect(await screen.findByLabelText('Email')).toBeInTheDocument();
-      expect(screen.getByLabelText('Password')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'New here? Sign up' })).toBeInTheDocument();
-    });
-
-    it('signs in with credentials and navigates to returnTo', async () => {
-      stubAuthMe({ provider: 'better-auth' });
-      const posted = vi.fn();
-      server.use(
-        http.post(`${TEST_BASE_URL}/auth/api/sign-in/email`, async ({ request }) => {
-          posted(await request.json());
-          return HttpResponse.json({ user: { id: 'user_1' } });
-        }),
-      );
-      renderSignIn('/signin?returnTo=%2Ffactory%2Fboard');
-
-      await userEvent.type(await screen.findByLabelText('Email'), 'ada@example.com');
-      await userEvent.type(screen.getByLabelText('Password'), 'hunter22!');
-      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-
-      await waitFor(() => expect(navigateAfterSignIn).toHaveBeenCalledWith('/factory/board'));
-      expect(posted).toHaveBeenCalledWith({ email: 'ada@example.com', password: 'hunter22!' });
-    });
-
-    it('surfaces the server error message on failed sign-in', async () => {
-      stubAuthMe({ provider: 'better-auth' });
-      server.use(
-        http.post(`${TEST_BASE_URL}/auth/api/sign-in/email`, () =>
-          HttpResponse.json({ message: 'Invalid email or password' }, { status: 401 }),
-        ),
-      );
-      renderSignIn();
-
-      await userEvent.type(await screen.findByLabelText('Email'), 'ada@example.com');
-      await userEvent.type(screen.getByLabelText('Password'), 'wrong');
-      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-
-      expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password');
-      expect(navigateAfterSignIn).not.toHaveBeenCalled();
-    });
-
-    it('signs up with name + credentials through the sign-up endpoint', async () => {
-      stubAuthMe({ provider: 'better-auth' });
-      const posted = vi.fn();
-      server.use(
-        http.post(`${TEST_BASE_URL}/auth/api/sign-up/email`, async ({ request }) => {
-          posted(await request.json());
-          return HttpResponse.json({ user: { id: 'user_2' } });
-        }),
-      );
-      renderSignIn();
-
-      await userEvent.click(await screen.findByRole('button', { name: 'New here? Sign up' }));
-      await userEvent.type(screen.getByLabelText('Name'), 'Ada Lovelace');
-      await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com');
-      await userEvent.type(screen.getByLabelText('Password'), 'hunter22!');
-      await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
-
-      await waitFor(() => expect(navigateAfterSignIn).toHaveBeenCalledWith('/'));
-      expect(posted).toHaveBeenCalledWith({ name: 'Ada Lovelace', email: 'ada@example.com', password: 'hunter22!' });
-    });
-
-    it('hides the sign-up affordance when the server disables sign-up', async () => {
-      stubAuthMe({ provider: 'better-auth', signUpDisabled: true });
-      renderSignIn();
-
-      expect(await screen.findByLabelText('Email')).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'New here? Sign up' })).not.toBeInTheDocument();
-    });
-  });
-
-  describe('given a Firebase (Google) deploy', () => {
-    function stubFirebase(sessionResponse: () => Response) {
-      stubAuthMe({ provider: 'firebase' });
-      const posted = vi.fn();
-      server.use(
-        http.get(`${TEST_BASE_URL}/auth/api/config`, () =>
-          HttpResponse.json({ apiKey: 'web-key', authDomain: 'demo.firebaseapp.com', projectId: 'demo' }),
-        ),
-        http.post(`${TEST_BASE_URL}/auth/api/session`, async ({ request }) => {
-          posted(await request.json());
-          return sessionResponse();
-        }),
-      );
-      return posted;
-    }
-
-    afterEach(() => {
-      firebasePopup.signInWithPopup.mockReset();
-      firebasePopup.signOut.mockClear();
-      firebasePopup.initializeApp.mockClear();
-    });
-
-    it('offers only the Google button and hands the Google ID token to the server', async () => {
-      const posted = stubFirebase(() => HttpResponse.json({ ok: true }));
-      firebasePopup.signInWithPopup.mockResolvedValue({ user: { getIdToken: async () => 'google-id-token' } });
-      renderSignIn('/signin?returnTo=%2Ffactory%2Fboard');
-
-      await userEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' }));
-
-      await waitFor(() => expect(navigateAfterSignIn).toHaveBeenCalledWith('/factory/board'));
-      expect(posted).toHaveBeenCalledWith({ idToken: 'google-id-token' });
-      expect(firebasePopup.initializeApp).toHaveBeenCalledWith(
-        { apiKey: 'web-key', authDomain: 'demo.firebaseapp.com', projectId: 'demo' },
-        'factory',
-      );
-      expect(firebasePopup.signOut).toHaveBeenCalled();
+      expect(await screen.findByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
+      expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Sign up/ })).not.toBeInTheDocument();
+    });
+
+    it("asks the server for Google's sign-in URL with the return path and leaves for it", async () => {
+      stubAuthMe({ provider: 'better-auth' });
+      const posted = vi.fn();
+      server.use(
+        http.post(`${TEST_BASE_URL}/auth/api/sign-in/social`, async ({ request }) => {
+          posted(await request.json());
+          return HttpResponse.json({ url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=x', redirect: false });
+        }),
+      );
+      renderSignIn('/signin?returnTo=%2Finvite%2Finv-1');
+
+      const button = await screen.findByRole('button', { name: 'Sign in with Google' });
+      await userEvent.click(button);
+
+      await waitFor(() =>
+        expect(navigateAfterSignIn).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?client_id=x'),
+      );
+      expect(posted).toHaveBeenCalledWith({
+        provider: 'google',
+        callbackURL: '/invite/inv-1',
+        errorCallbackURL: '/signin?returnTo=%2Finvite%2Finv-1',
+        disableRedirect: true,
+      });
+      expect(button).toHaveTextContent('Redirecting to Google…');
       expect(redirectToLogin).not.toHaveBeenCalled();
     });
 
-    it('says why the server refused the account and stays on sign-in', async () => {
-      stubFirebase(() => HttpResponse.json({ message: 'eve@example.com is not allowed to use this Factory.' }, { status: 403 }));
-      firebasePopup.signInWithPopup.mockResolvedValue({ user: { getIdToken: async () => 'google-id-token' } });
+    it('says why the server refused and lets the person try again', async () => {
+      stubAuthMe({ provider: 'better-auth' });
+      server.use(
+        http.post(`${TEST_BASE_URL}/auth/api/sign-in/social`, () =>
+          HttpResponse.json({ message: 'Provider not found', code: 'PROVIDER_NOT_FOUND' }, { status: 404 }),
+        ),
+      );
       renderSignIn();
 
       await userEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' }));
 
-      expect(await screen.findByRole('alert')).toHaveTextContent('eve@example.com is not allowed to use this Factory.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Provider not found');
       expect(navigateAfterSignIn).not.toHaveBeenCalled();
       expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
     });
 
-    it('lets the person try again after closing the Google popup', async () => {
-      const posted = stubFirebase(() => HttpResponse.json({ ok: true }));
-      firebasePopup.signInWithPopup.mockRejectedValue(Object.assign(new Error('closed'), { code: 'auth/popup-closed-by-user' }));
-      renderSignIn();
+    it('shows the error Google sign-in came back with', async () => {
+      stubAuthMe({ provider: 'better-auth' });
+      renderSignIn('/signin?returnTo=%2F&error=unable_to_link_account');
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' }));
-
-      expect(await screen.findByRole('alert')).toHaveTextContent('Google sign-in was closed before it finished.');
-      expect(posted).not.toHaveBeenCalled();
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Sign-in failed');
+      expect(alert).toHaveTextContent('Error code: unable_to_link_account');
       expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
     });
   });

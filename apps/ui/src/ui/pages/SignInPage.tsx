@@ -1,22 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Form } from '@mastra/playground-ui/components/Form';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
-import type { FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
-import {
-  navigateAfterSignIn,
-  redirectToLogin,
-  SignInCancelledError,
-  signInWithGoogle,
-  signInWithPassword,
-  signUpWithPassword,
-} from '../domains/auth/services/auth';
+import { navigateAfterSignIn, redirectToLogin, signInWithGoogle } from '../domains/auth/services/auth';
 import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
 import { AuthPendingSkeleton } from '../domains/auth/components/RootGuards';
 import '../domains/auth/components/sign-in-page.css';
@@ -34,106 +23,7 @@ export function safeReturnTo(raw?: string): string {
   }
 }
 
-function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; signUpDisabled: boolean }) {
-  const { t } = useTranslation('auth');
-  const { baseUrl } = useApiConfig();
-  const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    setPending(true);
-    try {
-      if (mode === 'sign-up') {
-        await signUpWithPassword(baseUrl, { name, email, password });
-      } else {
-        await signInWithPassword(baseUrl, { email, password });
-      }
-      navigateAfterSignIn(returnTo);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errors.authenticationFailed'));
-      setPending(false);
-    }
-  };
-
-  return (
-    <Form onSubmit={handleSubmit} className="w-full gap-5">
-      {mode === 'sign-up' ? (
-        <Field>
-          <FieldLabel>{t('form.name')}</FieldLabel>
-          <Input
-            type="text"
-            size="lg"
-            placeholder="Ada Lovelace"
-            autoComplete="name"
-            required
-            value={name}
-            onChange={e => setName(e.target.value)}
-          />
-          <FieldError />
-        </Field>
-      ) : null}
-      <Field>
-        <FieldLabel>{t('form.email')}</FieldLabel>
-        <Input
-          type="email"
-          size="lg"
-          placeholder="you@company.com"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-        />
-        <FieldError />
-      </Field>
-      <Field>
-        <FieldLabel>{t('form.password')}</FieldLabel>
-        <Input
-          type="password"
-          size="lg"
-          placeholder={t('form.passwordPlaceholder')}
-          autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'}
-          required
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-        />
-        <FieldError />
-      </Field>
-      {error ? (
-        <Txt as="p" variant="caption" role="alert" className="text-destructive-foreground">
-          {error}
-        </Txt>
-      ) : null}
-      <Button type="submit" variant="primary" size="lg" className="w-full" disabled={pending}>
-        {pending ? t('form.pending') : mode === 'sign-up' ? t('form.createAccount') : t('form.signIn')}
-      </Button>
-      {!signUpDisabled ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="self-center"
-          onClick={() => {
-            setError(null);
-            setMode(mode === 'sign-up' ? 'sign-in' : 'sign-up');
-          }}
-        >
-          {mode === 'sign-up' ? t('form.haveAccount') : t('form.newHere')}
-        </Button>
-      ) : (
-        <Txt as="p" variant="caption" tone="muted" className="text-center">
-          {t('form.signUpDisabled')}
-        </Txt>
-      )}
-    </Form>
-  );
-}
-
+/** better-auth deploys sign in only with Google: the button leaves for Google and comes back signed in. */
 function GoogleSignInButton({ returnTo }: { returnTo: string }) {
   const { t } = useTranslation('auth');
   const { baseUrl } = useApiConfig();
@@ -144,16 +34,9 @@ function GoogleSignInButton({ returnTo }: { returnTo: string }) {
     setError(null);
     setPending(true);
     try {
-      await signInWithGoogle(baseUrl);
-      navigateAfterSignIn(returnTo);
+      navigateAfterSignIn(await signInWithGoogle(baseUrl, returnTo));
     } catch (err) {
-      setError(
-        err instanceof SignInCancelledError
-          ? t('google.cancelled')
-          : err instanceof Error
-            ? err.message
-            : t('errors.authenticationFailed'),
-      );
+      setError(err instanceof Error ? err.message : t('errors.authenticationFailed'));
       setPending(false);
     }
   };
@@ -182,8 +65,7 @@ export function SignInPage() {
   const authError = searchParams.get('error');
   const authErrorDescription = searchParams.get('error_description');
   const accessDenied = authError === 'access_denied';
-  const credentialForm = auth.data?.provider === 'better-auth';
-  const googleSignIn = auth.data?.provider === 'firebase';
+  const googleSignIn = auth.data?.provider === 'better-auth';
 
   // A cached signed-in result may predate the redirect here. Check the cookie
   // again before sending the user back into the protected app.
@@ -211,9 +93,9 @@ export function SignInPage() {
                 <Txt as="p" variant="subheading" className="text-destructive-foreground">
                   {accessDenied ? t('failure.accessDenied') : t('failure.signInFailed')}
                 </Txt>
-                {authErrorDescription ? (
+                {authErrorDescription || !accessDenied ? (
                   <Txt as="p" variant="caption" tone="muted" className="mt-1">
-                    {authErrorDescription}
+                    {authErrorDescription ?? t('failure.code', { code: authError })}
                   </Txt>
                 ) : null}
                 {accessDenied ? (
@@ -232,7 +114,7 @@ export function SignInPage() {
                   {t('failure.tryAgain')}
                 </Button>
               </div>
-            ) : credentialForm ? (
+            ) : googleSignIn ? (
               <>
                 <div className="mb-6">
                   <Txt font="display" as="h2" variant="title">
@@ -242,10 +124,8 @@ export function SignInPage() {
                     {t('welcome.description')}
                   </Txt>
                 </div>
-                <CredentialSignInForm returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
+                <GoogleSignInButton returnTo={returnTo} />
               </>
-            ) : googleSignIn ? (
-              <GoogleSignInButton returnTo={returnTo} />
             ) : (
               <Button
                 variant="primary"

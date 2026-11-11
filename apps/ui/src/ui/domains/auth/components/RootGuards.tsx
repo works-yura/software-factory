@@ -20,7 +20,20 @@ export const RootGuards = () => {
   );
 };
 
-const AuthGuard = () => {
+/**
+ * For pages a signed-in person opens before they have a Factory of their own, such as an
+ * invitation link: the same sign-in check, without sending them to onboarding.
+ */
+export const SignedInOnly = () => {
+  return (
+    <>
+      <ScrollRestoration />
+      <AuthGuard onboarding={false} />
+    </>
+  );
+};
+
+const AuthGuard = ({ onboarding = true }: { onboarding?: boolean }) => {
   const { isPending, isError, data } = useFactoryAuth({ monitorSession: true });
   const { t } = useTranslation('auth');
   const location = useLocation();
@@ -39,7 +52,7 @@ const AuthGuard = () => {
 
   return (
     <>
-      <OnboardingGuard />
+      {onboarding ? <OnboardingGuard /> : <Outlet />}
       {!data.authenticated && <SessionExpiredDialog returnTo={returnTo} />}
     </>
   );

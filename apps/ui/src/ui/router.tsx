@@ -16,7 +16,7 @@ import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
-import { RootGuards } from './domains/auth/components/RootGuards';
+import { RootGuards, SignedInOnly } from './domains/auth/components/RootGuards';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { PULL_REQUEST_SOURCE_FILTER } from './domains/factory/boardSourceFilters';
 import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
@@ -25,6 +25,7 @@ import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { FactorySkillsPage } from './pages/FactorySkillsPage';
 import { NewBoardPage } from './pages/NewBoardPage';
 import { ConnectAccountPage } from './pages/ConnectAccountPage';
+import { InvitePage } from './pages/InvitePage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -234,6 +235,8 @@ export function createAppRoutes(): RouteObject[] {
         { path: '*', element: <Navigate to="/" replace /> },
       ],
     },
+    // An invitation link: sign-in required, onboarding not (the invited person may have no Factory yet).
+    { path: '/invite/:invitationId', element: <SignedInOnly />, children: [{ index: true, element: <InvitePage /> }] },
     { path: '/signin', element: <SignInPage /> },
   ];
 }

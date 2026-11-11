@@ -15,6 +15,7 @@ import {
   Palette,
   Plug,
   SlidersHorizontal,
+  Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -53,6 +54,14 @@ const ACCOUNT_SETTINGS_GROUP = {
       },
       icon: CircleUserRound,
       searchText: 'my account profile identity email authentication session log out sign out user',
+    },
+    {
+      id: 'organization',
+      get label() {
+        return SETTINGS_SECTION_LABELS.organization;
+      },
+      icon: Users,
+      searchText: 'organization team members invite invitation link roles owner admin remove switch organizations',
     },
     {
       id: 'preferences',

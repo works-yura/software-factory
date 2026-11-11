@@ -42,7 +42,8 @@ describe('SettingsNavigation', () => {
       within(screen.getByRole('region', { name: group }))
         .getAllByRole('link')
         .map(link => link.textContent);
-    expect(linksIn('Account')).toEqual(['My account', 'Preferences']);
+    expect(linksIn('Account')).toEqual(['My account', 'Organization', 'Preferences']);
+    expect(screen.getByRole('link', { name: 'Organization' })).toHaveAttribute('href', '/factories/fp-1/settings/organization');
     expect(linksIn('Agent')).toEqual(['Harness', 'Memory', 'Behavior']);
     expect(linksIn('Factory')).toEqual([
       'Analytics',

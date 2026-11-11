@@ -2,6 +2,7 @@ import { i18n } from '../../i18n';
 
 export type SettingsSection =
   | 'account'
+  | 'organization'
   | 'preferences'
   | 'factory'
   | 'analytics'
@@ -16,6 +17,7 @@ export type SettingsSection =
 
 const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'account',
+  'organization',
   'preferences',
   'factory',
   'analytics',

@@ -6,8 +6,7 @@ export {
   logoutUrl,
   redirectToLogin,
   redirectToLogout,
-  signInWithPassword,
-  signUpWithPassword,
+  signInWithGoogle,
   userSessionResourceId,
 } from './services/auth';
 export type { FactoryAuthState } from './services/auth';

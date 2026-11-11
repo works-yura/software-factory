@@ -25,10 +25,8 @@ export interface FactoryAuthState {
   /** Explicit server capability; absent on older servers. */
   telemetryEnabled?: boolean;
   user?: { userId?: string; email?: string; name?: string; avatarUrl?: string; organizationId?: string };
-  /** Active identity provider: 'better-auth' | 'firebase' | 'factory-local-dev' | custom adapter kind. */
+  /** Active identity provider: 'better-auth' (Google) | 'factory-local-dev' | custom adapter kind. */
   provider?: string;
-  /** True when the provider hosts credential forms and sign-up is disabled. */
-  signUpDisabled?: boolean;
 }
 
 /** The resourceId under which a user's personal (non-factory) sessions live. */
@@ -71,105 +69,36 @@ export function redirectToLogout(baseUrl: string): void {
 }
 
 /**
- * POST credentials to a better-auth endpoint (`basePath: /auth/api`). The
- * session cookie is set by the response; the caller navigates afterwards.
- * Throws with the server's message so the sign-in form can display it.
+ * Full-page navigation (to Google, or into the app after sign-in). Service-level
+ * (like `redirectToLogin`) because jsdom's `window.location.assign` is
+ * unforgeable in tests.
  */
-async function postBetterAuthCredentials(baseUrl: string, path: string, body: Record<string, string>): Promise<void> {
-  const res = await fetch(`${baseUrl}/auth/api/${path}`, {
+export function navigateAfterSignIn(url: string): void {
+  window.location.assign(url);
+}
+
+/**
+ * "Sign in with Google" on better-auth: asks the server for Google's sign-in URL, which the page
+ * then leaves for (`navigateAfterSignIn`). Google returns to the server's callback, which sets the
+ * session cookie and sends the browser to `returnTo`; a failure lands back on `/signin` with
+ * `?error=<code>`.
+ */
+export async function signInWithGoogle(baseUrl: string, returnTo: string): Promise<string> {
+  const errorCallbackURL = `/signin?returnTo=${encodeURIComponent(returnTo)}`;
+  const res = await fetch(`${baseUrl}/auth/api/sign-in/social`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     credentials: 'include',
-    body: JSON.stringify(body),
+    body: JSON.stringify({ provider: 'google', callbackURL: returnTo, errorCallbackURL, disableRedirect: true }),
   });
-  if (!res.ok) {
-    let message = tk('errors.authenticationFailed');
-    try {
-      const data = (await res.json()) as { message?: string };
-      if (data?.message) message = data.message;
-    } catch {
-      // Non-JSON error body — keep the generic message.
-    }
-    throw new Error(message);
-  }
-}
-
-/**
- * Full-page navigation after a successful credential sign-in, so the app boots
- * with the fresh session cookie. Service-level (like `redirectToLogin`) because
- * jsdom's `window.location.assign` is unforgeable in tests.
- */
-export function navigateAfterSignIn(returnTo: string): void {
-  window.location.assign(returnTo);
-}
-
-/** Email/password sign-in against the self-hosted better-auth provider. */
-export function signInWithPassword(baseUrl: string, input: { email: string; password: string }): Promise<void> {
-  return postBetterAuthCredentials(baseUrl, 'sign-in/email', input);
-}
-
-/** Email/password sign-up against the self-hosted better-auth provider. */
-export function signUpWithPassword(
-  baseUrl: string,
-  input: { name: string; email: string; password: string },
-): Promise<void> {
-  return postBetterAuthCredentials(baseUrl, 'sign-up/email', input);
-}
-
-/** Thrown when the person closes the Google popup; the page just lets them try again. */
-export class SignInCancelledError extends Error {
-  constructor() {
-    super('Sign-in cancelled');
-    this.name = 'SignInCancelledError';
-  }
-}
-
-const CANCELLED_POPUP_CODES = new Set(['auth/popup-closed-by-user', 'auth/cancelled-popup-request']);
-
-/**
- * Google sign-in through Firebase: a popup signs in, the server checks the account against its
- * allow-list and sets the session cookie. Firebase keeps nothing in the browser afterwards; the
- * cookie is the only session. The SDK loads only here, so the app bundle does not carry it.
- */
-export async function signInWithGoogle(baseUrl: string): Promise<void> {
-  const configResponse = await fetch(`${baseUrl}/auth/api/config`, { credentials: 'include' });
-  if (!configResponse.ok) throw new Error(tk('errors.authenticationFailed'));
-  const config = (await configResponse.json()) as { apiKey: string; authDomain: string; projectId: string };
-
-  const [{ getApps, initializeApp }, firebaseAuth] = await Promise.all([import('firebase/app'), import('firebase/auth')]);
-  const app = getApps().find(existing => existing.name === 'factory') ?? initializeApp(config, 'factory');
-  const auth = firebaseAuth.getAuth(app);
-  await firebaseAuth.setPersistence(auth, firebaseAuth.inMemoryPersistence);
-  const google = new firebaseAuth.GoogleAuthProvider();
-  google.setCustomParameters({ prompt: 'select_account' });
-
-  let idToken: string;
+  let data: { url?: string; message?: string } = {};
   try {
-    const result = await firebaseAuth.signInWithPopup(auth, google);
-    idToken = await result.user.getIdToken();
-  } catch (error) {
-    if (CANCELLED_POPUP_CODES.has((error as { code?: string }).code ?? '')) throw new SignInCancelledError();
-    throw error;
-  } finally {
-    await firebaseAuth.signOut(auth).catch(() => undefined);
+    data = (await res.json()) as typeof data;
+  } catch {
+    // Non-JSON body — handled below.
   }
-
-  const res = await fetch(`${baseUrl}/auth/api/session`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ idToken }),
-  });
-  if (!res.ok) {
-    let message = tk('errors.authenticationFailed');
-    try {
-      const data = (await res.json()) as { message?: string };
-      if (data?.message) message = data.message;
-    } catch {
-      // Non-JSON error body — keep the generic message.
-    }
-    throw new Error(message);
-  }
+  if (!res.ok || !data.url) throw new Error(data.message || tk('errors.authenticationFailed'));
+  return data.url;
 }
 
 /**
@@ -192,7 +121,6 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
     telemetryEnabled?: boolean;
     user?: FactoryAuthState['user'] | null;
     provider?: string;
-    signUpDisabled?: boolean;
   };
   return {
     authEnabled: true,
@@ -200,6 +128,5 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
     ...(typeof data.telemetryEnabled === 'boolean' ? { telemetryEnabled: data.telemetryEnabled } : {}),
     user: data.user ?? undefined,
     provider: data.provider,
-    signUpDisabled: data.signUpDisabled,
   };
 }

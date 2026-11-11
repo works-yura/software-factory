@@ -40,6 +40,22 @@ describe('AccountSettingsSection', () => {
       expect(screen.getByRole('button', { name: 'Copy organization ID' })).toBeInTheDocument();
     });
 
+    it('names Google as the sign-in on better-auth deploys', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/auth/me`, () =>
+          HttpResponse.json({
+            authenticated: true,
+            user: { userId: 'user-1', email: 'dev@mastra.ai', name: 'Dev', organizationId: 'org-1' },
+            provider: 'better-auth',
+          }),
+        ),
+      );
+
+      renderWithProviders(<AccountSettingsSection />);
+
+      expect(await screen.findByText('Google')).toBeInTheDocument();
+    });
+
     it('logs out by clearing MastraCode storage', async () => {
       stubAuthenticatedAccount();
       localStorage.setItem('mastracode.theme', 'dark');

@@ -9,6 +9,7 @@
   },
   "sections": {
     "account": "My account",
+    "organization": "Organization",
     "preferences": "Preferences",
     "factory": "Manage Factory",
     "analytics": "Analytics",
@@ -400,7 +401,7 @@
   },
   "account": {
     "authProviders": {
-      "betterAuth": "Email and password",
+      "betterAuth": "Google",
       "unknown": "Unknown"
     },
     "name": "Name",
@@ -1511,6 +1512,57 @@
     "gitlab": {
       "connected": "GitLab is connected for the organization.",
       "notConnected": "GitLab is not connected yet."
+    }
+  },
+  "organization": {
+    "unavailable": "Organizations, members and invitations come with Google sign-in. This server signs in another way.",
+    "loadFailed": "Could not load the organization: {{message}}",
+    "actionFailed": "That did not work: {{message}}",
+    "details": {
+      "title": "Organization",
+      "description": "Factories, boards and connections belong to the organization you are working in.",
+      "name": "Name",
+      "yourRole": "Your role"
+    },
+    "roles": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Member"
+    },
+    "members": {
+      "title": "Members",
+      "description": "Owners and admins invite and remove people; members cannot.",
+      "you": "{{name}} (you)",
+      "remove": "Remove",
+      "removeNamed": "Remove {{name}}",
+      "confirmTitle": "Remove {{name}} from {{organization}}?",
+      "confirmDescription": "They lose access to this organization’s factories at once. You can invite them again later.",
+      "cancel": "Cancel"
+    },
+    "invite": {
+      "title": "Invite by link",
+      "description": "Enter the person’s Google email and send them the link yourself. They join as a member; the link works for 7 days and only for that email.",
+      "email": "Email to invite",
+      "emailPlaceholder": "name@company.com",
+      "create": "Create invitation link",
+      "creating": "Creating…",
+      "created": "Invitation link for {{email}}",
+      "copy": "Copy invitation link"
+    },
+    "pending": {
+      "title": "Pending invitations",
+      "empty": "No pending invitations.",
+      "expires": "Expires {{date}}",
+      "copy": "Copy link for {{email}}",
+      "cancel": "Cancel",
+      "cancelNamed": "Cancel invitation for {{email}}"
+    },
+    "switcher": {
+      "title": "Your organizations",
+      "description": "Switch to work in another organization you belong to.",
+      "current": "Current",
+      "switch": "Switch",
+      "switchNamed": "Switch to {{name}}"
     }
   }
 }

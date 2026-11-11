@@ -26,7 +26,6 @@ allowBuilds:
   edgedriver: false
   geckodriver: false
   msw: false
-  '@firebase/util': false
 
 # Transitive copies (e.g. through @mastra/playground-ui) follow the snapshot too,
 # so React and its companions resolve to one version across the tree.
