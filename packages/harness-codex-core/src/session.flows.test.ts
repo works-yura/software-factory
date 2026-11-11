@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { AgentEvent } from '@factory/harness';
 import type { TranscriptEntry } from '@factory/harness/transcript';
 
+import { CodexError } from './errors.ts';
 import { createCodexHarness } from './harness.ts';
 import { CODEX_ACCOUNT_SWITCH_PROMPT, CODEX_THREAD_CONFIG, codexMcpToolApproval, type CodexSessionConfig } from './session.ts';
 import { createInMemoryCodexSessionStore } from './store.ts';
@@ -301,5 +302,73 @@ describe('Codex session flows', () => {
     expect(turns).toHaveLength(2);
     expect(turns[1]).toBe(CODEX_ACCOUNT_SWITCH_PROMPT);
     expect(events.find(event => event.type === 'error')).toBeUndefined();
+  });
+});
+
+describe('Codex session usage-limit park', () => {
+  const tokens = (id: string) => ({ accessToken: `at-${id}`, chatgptAccountId: `ws-${id}` });
+  const resetsAt = new Date(Date.now() + 90 * 60_000);
+  const pool = (limited: { at: Date | undefined }) => async () => {
+    if (limited.at) throw new CodexError('rate_limit', 'Every ChatGPT account this run may use is out of usage.', { resetsAt: limited.at });
+    return { tokens: tokens('a'), accountId: 'acc-a' };
+  };
+  const turnTexts = (spawn: ReturnType<typeof scripted>) =>
+    spawn.servers.flatMap(server => server.requests('turn/start').map(message => (message.params as { input: Array<{ text: string }> }).input[0]!.text));
+
+  it('parks until the reset with the request pending, and the resume sends it', async () => {
+    const limited = { at: resetsAt as Date | undefined };
+    const spawn = scripted([reply('Done.')]);
+    const { session, events, store } = await harnessWith(spawn, { credentials: pool(limited), parkOnUsageLimit: () => true });
+    await session.sendChatMessage({ content: 'build it' });
+    await until(() => ended(events).at(-1)?.reason === 'error', 'limited run');
+    expect(events.some(event => event.type === 'error')).toBe(false);
+    expect(session.usageLimitPark).toMatchObject({ until: resetsAt.toISOString(), attempts: 1, resetKnown: true });
+    expect(events).toContainEqual({ type: 'usage_limit_parked', park: session.usageLimitPark });
+    expect((await store.get('s1'))!.threads.s1!.pendingInputs.map(input => input.text)).toEqual(['build it']);
+
+    // Still limited: parks anew, until the new reset.
+    const later = new Date(resetsAt.getTime() + 30 * 60_000);
+    limited.at = later;
+    expect(await session.resumeFromUsageLimit()).toMatchObject({ action: 'parked', park: { until: later.toISOString(), attempts: 2 } });
+
+    limited.at = undefined;
+    expect(await session.resumeFromUsageLimit()).toMatchObject({ action: 'resumed' });
+    await until(() => ended(events).at(-1)?.reason === 'complete', 'resumed run');
+    expect(turnTexts(spawn)).toEqual([expect.stringContaining('build it')]);
+    expect(session.usageLimitPark).toBeUndefined();
+  });
+
+  it('goes on with the turn the limit cut off once Codex had it', async () => {
+    const limited = { at: undefined as Date | undefined };
+    const spawn = scripted([
+      (server, { threadId, turnId }) => {
+        // The only account runs out mid-turn; the pool has no other.
+        limited.at = resetsAt;
+        server.notify('error', { threadId, turnId, willRetry: false, error: { message: 'You hit your usage limit.', codexErrorInfo: 'usageLimitExceeded' } });
+        server.notify('turn/completed', { threadId, turn: { id: turnId, status: 'failed', error: { message: 'usage limit' } } });
+      },
+      reply('Built.'),
+    ]);
+    const { session, events } = await harnessWith(spawn, { credentials: pool(limited), parkOnUsageLimit: () => true });
+    await session.sendChatMessage({ content: 'build it' });
+    await until(() => ended(events).at(-1)?.reason === 'error', 'limited run');
+    expect(session.usageLimitPark?.continueTurn).toBe(true);
+
+    limited.at = undefined;
+    await session.resumeFromUsageLimit();
+    await until(() => ended(events).at(-1)?.reason === 'complete', 'resumed run');
+    const texts = turnTexts(spawn);
+    expect(texts).toHaveLength(2);
+    expect(texts[1]).toContain('Continue where you stopped');
+    expect(texts[1]).not.toContain('build it');
+  });
+
+  it('fails as before when the host does not park the session', async () => {
+    const spawn = scripted([reply('Done.')]);
+    const { session, events } = await harnessWith(spawn, { credentials: pool({ at: resetsAt }), parkOnUsageLimit: () => false });
+    await session.sendChatMessage({ content: 'build it' });
+    await until(() => ended(events).at(-1)?.reason === 'error', 'limited run');
+    expect(events.some(event => event.type === 'error')).toBe(true);
+    expect(session.usageLimitPark).toBeUndefined();
   });
 });

@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { join } from 'node:path';
 
 import type { PlanDecision } from '@factory/harness';
+import type { UsageLimitPark } from '@factory/harness/usage-limit-park';
 import type { MessageAuthor, NotificationRecord, PermissionRequest, PlanGate } from '@factory/harness/transcript';
 
 /** How a thread's turns run: planning (read-only, Codex's plan mode, ends with a plan to approve) or not. */
@@ -41,6 +42,8 @@ export interface CodexThreadState {
   deliveredIds: string[];
   /** Recent notification dedupe keys, newest last. */
   dedupeKeys: string[];
+  /** The thread's last run stopped on a usage limit on every account: it resumes on its own at `until`. */
+  usageLimitPark?: UsageLimitPark;
 }
 
 export interface CodexSessionRecord {

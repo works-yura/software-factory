@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { join } from 'node:path';
 
 import type { PlanDecision } from '@factory/harness';
+import type { UsageLimitPark } from '@factory/harness/usage-limit-park';
 
 import type { ClaudeMessageAuthor, ClaudeNotificationRecord, PermissionRequest, PlanGate } from './events.ts';
 import type { ClaudeSessionMode } from './cli.ts';
@@ -48,6 +49,11 @@ export interface ClaudeThreadState {
   deliveredIds: string[];
   /** Recent notification dedupe keys, newest last. */
   dedupeKeys: string[];
+  /**
+   * The thread's last run stopped because every account was out of usage: it resumes on its own at
+   * `until` (the host's scheduler), with its pending inputs. Absent when it is not parked.
+   */
+  usageLimitPark?: UsageLimitPark;
 }
 
 export interface ClaudeSessionRecord {

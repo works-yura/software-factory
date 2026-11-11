@@ -23,6 +23,16 @@ import type {
   TurnHandoffHook,
 } from '@factory/harness';
 import { promptWithTurnHandoff } from '@factory/harness/turn-handoff';
+import {
+  isUsageLimitFailure,
+  nextUsageLimitPark,
+  USAGE_LIMIT_RESUME_PROMPT,
+  usageLimitExpiredMessage,
+  usageLimitResumeOutcome,
+  type UsageLimitPark,
+  type UsageLimitParkEvent,
+  type UsageLimitResumeResult,
+} from '@factory/harness/usage-limit-park';
 
 import {
   buildClaudeArgs,
@@ -177,6 +187,13 @@ export interface ClaudeCodeSessionConfig
     session: ClaudeCodeSession,
     request: ClaudeCredentialRequest,
   ) => Promise<Record<string, string> | ClaudeTurnCredentials>;
+  /**
+   * Whether a run that stopped because every account is out of usage parks the session until the
+   * limit resets (`usageLimitPark`, `usage_limit_parked`) instead of failing. Unset, a limited run
+   * fails as any other. A host whose own scheduler resumes some sessions (a card's run) answers
+   * `false` for those; whoever parks sessions resumes them (`resumeFromUsageLimit` at `until`).
+   */
+  parkOnUsageLimit?: (session: ClaudeCodeSession) => boolean | Promise<boolean>;
   /** Told when a turn's account hit a usage limit or was refused, before the turn asks for another. */
   onCredentialFailure?: (session: ClaudeCodeSession, failure: ClaudeCredentialFailure) => void | Promise<void>;
   /** The session's working directory; asked once, before its first turn. */
@@ -378,6 +395,8 @@ interface ActiveRun {
   askEachTime?: string[];
   /** Nobody attends the current turn and it may not park: an MCP server's question is dismissed. */
   unattended?: boolean;
+  /** The usage-limit park this run took up (its first park's time counts toward the cap). */
+  priorPark?: UsageLimitPark;
   /** Resolves once the first turn's process was spawned, rejects when it never was. */
   started: Promise<void>;
   markStarted(error?: unknown): void;
@@ -592,6 +611,25 @@ export class ClaudeCodeSession implements AgentSession {
   /** A person's follow-ups waiting for the run in flight to end (Mastra's `queuedFollowUps`). */
   get queuedFollowUps(): number {
     return (this.#threadState().followUps ?? []).filter(input => input.kind === 'signal').length;
+  }
+
+  /** Set while the current thread waits for a usage limit to reset (see `@factory/harness/usage-limit-park`). */
+  get usageLimitPark(): UsageLimitPark | undefined {
+    const park = this.#threadState().usageLimitPark;
+    return park ? { ...park } : undefined;
+  }
+
+  /**
+   * Takes a session parked on a usage limit up again now: a run with its pending inputs (and, when
+   * the limit cut a turn off, a note to go on with it). Still limited, the session parks anew and
+   * the result says until when. A person's message resumes a parked session the same way.
+   */
+  async resumeFromUsageLimit(): Promise<UsageLimitResumeResult> {
+    if (this.run.isRunning()) return { action: 'running' };
+    if (!this.#threadState().usageLimitPark) return { action: 'not_parked' };
+    const accepted = this.#accept([], true);
+    if (accepted.action !== 'wake') return { action: 'running' };
+    return usageLimitResumeOutcome(accepted.run, () => this.usageLimitPark);
   }
 
   readonly thread = {
@@ -1108,6 +1146,14 @@ export class ClaudeCodeSession implements AgentSession {
     const thread = this.#threadState();
     const first = [...thread.pendingInputs, ...this.#fresh(inputs, thread.pendingInputs)];
     thread.pendingInputs = [];
+    const park = thread.usageLimitPark;
+    if (park) {
+      // The run takes the park up: a limit it runs into again parks anew, counted from the first park.
+      run.priorPark = park;
+      thread.usageLimitPark = undefined;
+      if (park.continueTurn) first.unshift({ kind: 'signal', text: USAGE_LIMIT_RESUME_PROMPT, gate: true });
+      this.#emitPark({ type: 'usage_limit_cleared', reason: 'resumed' });
+    }
     const previous = this.#barrier;
     run.loopDone = this.#loop(run, first, previous);
     this.#barrier = run.loopDone;
@@ -1117,6 +1163,7 @@ export class ClaudeCodeSession implements AgentSession {
   async #loop(run: ActiveRun, first: ClaudePendingInput[], previous: Promise<void>): Promise<void> {
     let next = first;
     let reason: AgentRunEndReason = 'complete';
+    let failure: unknown;
     try {
       await previous;
       while (true) {
@@ -1127,7 +1174,7 @@ export class ClaudeCodeSession implements AgentSession {
           break;
         }
         if (outcome.kind === 'error') {
-          this.#emit({ type: 'error', error: outcome.error });
+          failure = outcome.error;
           reason = 'error';
           break;
         }
@@ -1159,18 +1206,60 @@ export class ClaudeCodeSession implements AgentSession {
     } catch (error) {
       if (run.settled) return;
       run.markStarted(error);
-      this.#emit({ type: 'error', error });
+      failure = error;
       reason = 'error';
     }
-    this.#settle(run, reason);
+    let park: UsageLimitPark | undefined;
+    if (reason === 'error') {
+      const parked = await this.#usageLimitPark(run, failure);
+      if (run.settled) return;
+      if (parked === 'expired' && isUsageLimitFailure(failure)) {
+        failure = new ClaudeCodeError('rate_limit', usageLimitExpiredMessage(run.priorPark, failure.message));
+        this.#emitPark({ type: 'usage_limit_cleared', reason: 'expired' });
+      } else if (parked && parked !== 'expired') {
+        park = parked;
+      }
+      // A parked run says so instead of failing: the chat shows when it resumes, not an error.
+      if (!park) this.#emit({ type: 'error', error: failure });
+    }
+    this.#settle(run, reason, { ...(park ? { park } : {}) });
   }
 
-  #settle(run: ActiveRun, reason: AgentRunEndReason, { drainFollowUps = true } = {}) {
+  /**
+   * The park a run's failure leads to: a usage limit parks the session (unless the host resumes
+   * this session itself), `expired` once it waited past the cap; `undefined` for any other failure.
+   */
+  async #usageLimitPark(run: ActiveRun, failure: unknown): Promise<Omit<UsageLimitPark, 'continueTurn'> | 'expired' | undefined> {
+    if (!isUsageLimitFailure(failure) || run.abortRequested) return undefined;
+    try {
+      if (!this.#config.parkOnUsageLimit || !(await this.#config.parkOnUsageLimit(this))) return undefined;
+    } catch (error) {
+      console.warn('[claude-code harness] Unable to tell whether a limited run may park.', error);
+      return undefined;
+    }
+    return nextUsageLimitPark(failure, { ...(run.priorPark ? { previous: run.priorPark } : {}) });
+  }
+
+  #emitPark(event: UsageLimitParkEvent) {
+    this.#emit(event as unknown as AgentEvent);
+  }
+
+  #settle(
+    run: ActiveRun,
+    reason: AgentRunEndReason,
+    { drainFollowUps = true, park }: { drainFollowUps?: boolean; park?: Omit<UsageLimitPark, 'continueTurn'> } = {},
+  ) {
     if (run.settled) return;
     run.settled = true;
     if (this.#run === run) this.#run = undefined;
     if (reason === 'aborted' || reason === 'error') {
       const thread = this.#threadState(run.threadId);
+      if (park && run.threadId === this.#record.threadId) {
+        // The cut-off turn's request reached Claude (it is in the conversation): the resume goes on with it.
+        // (A resume's own note that was never sent waits with the pending inputs instead.)
+        const continueTurn = run.unsent === undefined && run.begun === true;
+        thread.usageLimitPark = { ...park, ...(continueTurn ? { continueTurn: true as const } : {}) };
+      }
       // Input that never reached Claude waits for the next turn: notifications, gate answers and
       // a person's messages. A signal with an id stays undelivered instead, so its sender (the
       // dispatcher's replay guard) sends it again.
@@ -1185,8 +1274,11 @@ export class ClaudeCodeSession implements AgentSession {
     run.markStarted();
     void this.#save().catch(() => {});
     run.resolveEnded(reason);
+    const parked = this.#threadState(run.threadId).usageLimitPark;
+    if (park && parked) this.#emitPark({ type: 'usage_limit_parked', park: { ...parked } });
     this.#emit({ type: 'agent_end', reason });
-    if (drainFollowUps && reason !== 'suspended') this.#drainFollowUps(run.threadId);
+    // A parked session waits for the limit: its follow-ups go with the resume, not into another limited run.
+    if (drainFollowUps && reason !== 'suspended' && !park) this.#drainFollowUps(run.threadId);
   }
 
   /** Starts a run with what waited for the last one to end (follow-ups, a high notice that came mid-run). */

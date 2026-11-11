@@ -2717,3 +2717,159 @@ describe('ClaudeCodeSession MCP elicitations', () => {
     expect(session.pendingPermission?.toolCallId).toBe(CARD_CALL);
   });
 });
+
+describe('ClaudeCodeSession usage-limit park', () => {
+  const resetsAt = new Date(Date.now() + 2 * 60 * 60_000);
+
+  /** A pool whose accounts are all out of usage until `limitedUntil` is cleared. */
+  function limitedPool(limitedUntil: { at: Date | undefined }) {
+    return async () => {
+      if (limitedUntil.at) {
+        throw new ClaudeCodeError('rate_limit', 'Every Claude account this run may use is out of usage.', { resetsAt: limitedUntil.at });
+      }
+      return { env: { CLAUDE_CODE_OAUTH_TOKEN: 'token-a' }, accountId: 'a' };
+    };
+  }
+
+  it('parks until the reset, keeps the request pending and says so instead of failing', async () => {
+    const limited = { at: resetsAt as Date | undefined };
+    const { fake, session, events, store, transcript } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
+      credentials: limitedPool(limited),
+      parkOnUsageLimit: () => true,
+    });
+    const end = nextEnd(session);
+    await session.sendChatMessage({ content: 'Update the README.' });
+    expect(await end).toBe('error');
+
+    expect(fake.calls).toHaveLength(0);
+    expect(events.some(event => event.type === 'error')).toBe(false);
+    const parked = events.find(event => (event.type as string) === 'usage_limit_parked') as unknown as { park: { until: string } };
+    expect(parked.park.until).toBe(resetsAt.toISOString());
+    expect(session.usageLimitPark).toMatchObject({ reason: 'usage_limit', until: resetsAt.toISOString(), resetKnown: true, attempts: 1 });
+    expect(session.usageLimitPark?.continueTurn).toBeUndefined();
+    const thread = (await store.get('card-1'))!.threads['thread-1']!;
+    expect(thread.usageLimitPark?.until).toBe(resetsAt.toISOString());
+    expect(thread.pendingInputs.map(input => input.text)).toEqual(['Update the README.']);
+
+    // The limit reset: the resume sends the request that never reached Claude, once.
+    limited.at = undefined;
+    const resumed = nextEnd(session);
+    expect(await session.resumeFromUsageLimit()).toMatchObject({ action: 'resumed' });
+    expect(await resumed).toBe('complete');
+    expect(fake.calls[0]!.stdin).toBe('Update the README.');
+    expect(session.usageLimitPark).toBeUndefined();
+    expect(events.some(event => (event.type as string) === 'usage_limit_cleared')).toBe(true);
+    expect(transcript.filter(entry => entry.kind === 'input')).toHaveLength(1);
+  });
+
+  it('parks anew when the accounts are still limited, counting from the first park', async () => {
+    const limited = { at: resetsAt as Date | undefined };
+    const { session } = await setup([], { credentials: limitedPool(limited), parkOnUsageLimit: () => true });
+    const end = nextEnd(session);
+    await session.sendChatMessage({ content: 'go' });
+    await end;
+    const first = session.usageLimitPark!;
+
+    const later = new Date(resetsAt.getTime() + 60 * 60_000);
+    limited.at = later;
+    const result = await session.resumeFromUsageLimit();
+    expect(result).toMatchObject({ action: 'parked', park: { until: later.toISOString(), attempts: 2, since: first.since } });
+    expect(session.usageLimitPark?.until).toBe(later.toISOString());
+  });
+
+  it('goes on with the turn the limit cut off once it had reached Claude', async () => {
+    const limited = { at: undefined as Date | undefined };
+    let calls = 0;
+    const { fake, session } = await setup(
+      [{ lines: fixture('turn-rate-limit.jsonl'), exitCode: 1 }, { lines: fixture('turn-complete.jsonl') }],
+      {
+        credentials: async (_session, request) => {
+          calls += 1;
+          // The only account runs out mid-turn; the pool then has none left.
+          if (request.exclude.length > 0) throw new ClaudeCodeError('rate_limit', 'Every account is out of usage.', { resetsAt });
+          return limitedPool(limited)();
+        },
+        parkOnUsageLimit: () => true,
+      },
+    );
+    const end = nextEnd(session);
+    await session.sendChatMessage({ content: 'Update the README.' });
+    expect(await end).toBe('error');
+    expect(calls).toBe(2);
+    expect(session.usageLimitPark?.continueTurn).toBe(true);
+
+    const resumed = nextEnd(session);
+    await session.resumeFromUsageLimit();
+    expect(await resumed).toBe('complete');
+    expect(fake.calls[1]!.stdin).toContain('Continue where you stopped');
+    expect(fake.calls[1]!.stdin).not.toContain('Update the README.');
+  });
+
+  it('a person’s message resumes a parked session at once, with what waited', async () => {
+    const limited = { at: resetsAt as Date | undefined };
+    const { fake, session } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
+      credentials: limitedPool(limited),
+      parkOnUsageLimit: () => true,
+    });
+    let end = nextEnd(session);
+    await session.sendChatMessage({ content: 'first' });
+    await end;
+    limited.at = undefined;
+    end = nextEnd(session);
+    await session.sendChatMessage({ content: 'second' });
+    expect(await end).toBe('complete');
+    expect(fake.calls[0]!.stdin).toBe('first\n\nsecond');
+    expect(session.usageLimitPark).toBeUndefined();
+  });
+
+  it('stops waiting with a clear error past the cap, after a restart too', async () => {
+    const store = createInMemorySessionStore();
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60_000).toISOString();
+    await store.put({
+      sessionId: 'card-1',
+      threadId: 'thread-1',
+      threads: {
+        'thread-1': {
+          ...emptyThreadState(),
+          pendingInputs: [{ kind: 'signal', text: 'go' }],
+          usageLimitPark: { reason: 'usage_limit', until: new Date().toISOString(), resetKnown: true, since: eightDaysAgo, attempts: 5, message: 'out' },
+        },
+      },
+      updatedAt: eightDaysAgo,
+    });
+    const fake = fakeClaude([]);
+    const harness = createClaudeCodeHarness({
+      store,
+      spawn: fake.spawn,
+      credentials: limitedPool({ at: resetsAt }),
+      cwdFor: () => '/work/card-1',
+      parkOnUsageLimit: () => true,
+    });
+    const session = (await harness.getSession('card-1'))!;
+    expect(session.usageLimitPark?.attempts).toBe(5);
+    const events: AgentEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    expect(await session.resumeFromUsageLimit()).toEqual({ action: 'ended' });
+    expect(session.usageLimitPark).toBeUndefined();
+    const error = events.find(event => event.type === 'error') as Extract<AgentEvent, { type: 'error' }>;
+    expect((error.error as ClaudeCodeError).kind).toBe('rate_limit');
+    expect((error.error as Error).message).toContain('stopped waiting');
+    expect(events).toContainEqual({ type: 'usage_limit_cleared', reason: 'expired' });
+    // What waited still waits for the person's next message.
+    expect((await store.get('card-1'))!.threads['thread-1']!.pendingInputs.map(input => input.text)).toEqual(['go']);
+  });
+
+  it('fails as before when the host does not park the session (a card run)', async () => {
+    const { session, events } = await setup([], {
+      credentials: limitedPool({ at: resetsAt }),
+      parkOnUsageLimit: () => false,
+    });
+    const end = nextEnd(session);
+    await session.sendChatMessage({ content: 'go' });
+    expect(await end).toBe('error');
+    expect(events.find(event => event.type === 'error')).toBeDefined();
+    expect(session.usageLimitPark).toBeUndefined();
+    expect(await session.resumeFromUsageLimit()).toEqual({ action: 'not_parked' });
+  });
+});

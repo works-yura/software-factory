@@ -19,6 +19,16 @@ import type {
 } from '@factory/harness';
 import { promptWithTurnHandoff } from '@factory/harness/turn-handoff';
 import {
+  isUsageLimitFailure,
+  nextUsageLimitPark,
+  USAGE_LIMIT_RESUME_PROMPT,
+  usageLimitExpiredMessage,
+  usageLimitResumeOutcome,
+  type UsageLimitPark,
+  type UsageLimitParkEvent,
+  type UsageLimitResumeResult,
+} from '@factory/harness/usage-limit-park';
+import {
   ASK_USER_QUESTION_TOOL,
   askUserPrompt,
   type MessageAuthor,
@@ -252,6 +262,12 @@ export interface CodexSessionConfig {
   ) => Promise<CodexChatGptTokens | undefined>;
   /** Told when a turn's account hit a usage limit or was refused, before the turn asks for another. */
   onCredentialFailure?: (session: CodexSession, failure: { accountId: string; error: CodexError }) => void | Promise<void>;
+  /**
+   * Whether a run that stopped because every account is out of usage parks the session until the
+   * limit resets (`usageLimitPark`, `usage_limit_parked`) instead of failing. Unset, a limited run
+   * fails as any other; whoever parks sessions resumes them (`resumeFromUsageLimit` at `until`).
+   */
+  parkOnUsageLimit?: (session: CodexSession) => boolean | Promise<boolean>;
   /** The model fields of the session's next turn (the harness's model facet), asked before each turn. */
   turnSelectionFor?: (session: CodexSession) => CodexTurnModelSelection | undefined | Promise<CodexTurnModelSelection | undefined>;
   /**
@@ -312,6 +328,8 @@ interface ActiveRun {
   adopted?: ParkedTurn;
   /** The `turn/start` of the turn in flight, so it can go on under another account. */
   turnParams?: TurnStartParams;
+  /** The usage-limit park this run took up (its first park's time counts toward the cap). */
+  priorPark?: UsageLimitPark;
   started: Promise<void>;
   markStarted(error?: unknown): void;
   ended: Promise<AgentRunEndReason>;
@@ -555,6 +573,25 @@ export class CodexSession implements AgentSession {
 
   get queuedFollowUps(): number {
     return (this.#threadState().followUps ?? []).filter(input => input.kind === 'signal').length;
+  }
+
+  /** Set while the current thread waits for a usage limit to reset (see `@factory/harness/usage-limit-park`). */
+  get usageLimitPark(): UsageLimitPark | undefined {
+    const park = this.#threadState().usageLimitPark;
+    return park ? { ...park } : undefined;
+  }
+
+  /**
+   * Takes a session parked on a usage limit up again now: a run with its pending inputs (and, when
+   * the limit cut a turn off, a note to go on with it). Still limited, the session parks anew and
+   * the result says until when. A person's message resumes a parked session the same way.
+   */
+  async resumeFromUsageLimit(): Promise<UsageLimitResumeResult> {
+    if (this.run.isRunning()) return { action: 'running' };
+    if (!this.#threadState().usageLimitPark) return { action: 'not_parked' };
+    const accepted = this.#accept([], true);
+    if (accepted.action !== 'wake') return { action: 'running' };
+    return usageLimitResumeOutcome(accepted.run, () => this.usageLimitPark);
   }
 
   /** The account the session's last turn ran on, when its credentials named one. */
@@ -987,6 +1024,14 @@ export class CodexSession implements AgentSession {
     const thread = this.#threadState();
     const first = [...thread.pendingInputs, ...this.#fresh(inputs, thread.pendingInputs)];
     thread.pendingInputs = [];
+    const park = thread.usageLimitPark;
+    if (park) {
+      // The run takes the park up: a limit it runs into again parks anew, counted from the first park.
+      run.priorPark = park;
+      thread.usageLimitPark = undefined;
+      if (park.continueTurn) first.unshift({ kind: 'signal', text: USAGE_LIMIT_RESUME_PROMPT, gate: true });
+      this.#emitPark({ type: 'usage_limit_cleared', reason: 'resumed' });
+    }
     const previous = this.#barrier;
     run.loopDone = this.#loop(run, previous, { inputs: first });
     this.#barrier = run.loopDone;
@@ -1016,6 +1061,7 @@ export class CodexSession implements AgentSession {
   ): Promise<void> {
     let reason: AgentRunEndReason = 'complete';
     let keepServer = false;
+    let failure: unknown;
     try {
       await previous;
       let result: TurnResult;
@@ -1037,7 +1083,7 @@ export class CodexSession implements AgentSession {
           break;
         }
         if (result.kind === 'error') {
-          this.#emit({ type: 'error', error: result.error });
+          failure = result.error;
           reason = 'error';
           break;
         }
@@ -1069,21 +1115,64 @@ export class CodexSession implements AgentSession {
     } catch (error) {
       if (run.settled) return;
       run.markStarted(error);
-      this.#emit({ type: 'error', error });
+      failure = error;
       reason = 'error';
     } finally {
       if (!keepServer && !run.abortRequested) run.server?.terminate();
       if (!keepServer) await this.#clearSignIn();
     }
-    this.#settle(run, reason);
+    if (run.settled) return;
+    let park: Omit<UsageLimitPark, 'continueTurn'> | undefined;
+    if (reason === 'error') {
+      const parked = await this.#usageLimitPark(run, failure);
+      if (run.settled) return;
+      if (parked === 'expired' && isUsageLimitFailure(failure)) {
+        failure = new CodexError('rate_limit', usageLimitExpiredMessage(run.priorPark, failure.message));
+        this.#emitPark({ type: 'usage_limit_cleared', reason: 'expired' });
+      } else if (parked && parked !== 'expired') {
+        park = parked;
+      }
+      // A parked run says so instead of failing: the chat shows when it resumes, not an error.
+      if (!park) this.#emit({ type: 'error', error: failure });
+    }
+    this.#settle(run, reason, { ...(park ? { park } : {}) });
   }
 
-  #settle(run: ActiveRun, reason: AgentRunEndReason, { drainFollowUps = true } = {}) {
+  /**
+   * The park a run's failure leads to: a usage limit parks the session when the host says so,
+   * `expired` once it waited past the cap; `undefined` for any other failure.
+   */
+  async #usageLimitPark(run: ActiveRun, failure: unknown): Promise<Omit<UsageLimitPark, 'continueTurn'> | 'expired' | undefined> {
+    if (!isUsageLimitFailure(failure) || run.abortRequested) return undefined;
+    try {
+      if (!this.#config.parkOnUsageLimit || !(await this.#config.parkOnUsageLimit(this))) return undefined;
+    } catch (error) {
+      console.warn('[codex harness] Unable to tell whether a limited run may park.', error);
+      return undefined;
+    }
+    return nextUsageLimitPark(failure, { ...(run.priorPark ? { previous: run.priorPark } : {}) });
+  }
+
+  #emitPark(event: UsageLimitParkEvent) {
+    this.#emit(event as unknown as AgentEvent);
+  }
+
+  #settle(
+    run: ActiveRun,
+    reason: AgentRunEndReason,
+    { drainFollowUps = true, park }: { drainFollowUps?: boolean; park?: Omit<UsageLimitPark, 'continueTurn'> } = {},
+  ) {
     if (run.settled) return;
     run.settled = true;
     if (this.#run === run) this.#run = undefined;
     if (reason === 'aborted' || reason === 'error') {
       const thread = this.#threadState(run.threadId);
+      if (park && run.threadId === this.#record.threadId) {
+        // The cut-off turn's request reached Codex (it is in the thread): the resume goes on with it.
+        // (A resume's own note that was never sent waits with the pending inputs instead.)
+        const continueTurn = run.unsent === undefined && run.begun === true;
+        thread.usageLimitPark = { ...park, ...(continueTurn ? { continueTurn: true as const } : {}) };
+      }
       const kept = (input: CodexPendingInput) => input.kind === 'notification' || input.gate || !input.id;
       if (run.unsent) {
         thread.pendingInputs.unshift(...run.unsent.filter(kept));
@@ -1095,8 +1184,11 @@ export class CodexSession implements AgentSession {
     run.markStarted();
     void this.#save().catch(() => {});
     run.resolveEnded(reason);
+    const parked = this.#threadState(run.threadId).usageLimitPark;
+    if (park && parked) this.#emitPark({ type: 'usage_limit_parked', park: { ...parked } });
     this.#emit({ type: 'agent_end', reason });
-    if (drainFollowUps && reason !== 'suspended') this.#drainFollowUps(run.threadId);
+    // A parked session waits for the limit: its follow-ups go with the resume, not into another limited run.
+    if (drainFollowUps && reason !== 'suspended' && !park) this.#drainFollowUps(run.threadId);
   }
 
   #drainFollowUps(threadId: string) {
