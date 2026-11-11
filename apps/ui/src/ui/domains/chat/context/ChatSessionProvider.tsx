@@ -20,6 +20,7 @@ import { isSessionNotFound } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { opensWithPrompt } from '../hooks/useHandoffPrompt';
 import { readFailedDraft } from '../services/handoffFiles';
+import { composerDraftKey } from '../services/composerDrafts';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
@@ -307,7 +308,10 @@ export function ChatSessionBoundary({
       >
         <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
           <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
-            <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
+            <ChatCommandsProvider
+              initialDraft={failedDraft?.prompt}
+              draftKey={sessionId || threadId ? composerDraftKey(sessionId ?? 'user', threadId) : undefined}
+            >
               <ComposerImagesProvider initialImages={failedDraft?.files}>
                 {/* Below the keyed transcript, so each thread starts with no annotations. */}
                 <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>

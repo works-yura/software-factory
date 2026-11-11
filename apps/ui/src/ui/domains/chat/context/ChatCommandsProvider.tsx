@@ -1,8 +1,9 @@
-import { createContext, useContext, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
 
 import type { SlashCommand } from '../services/commands';
+import { loadComposerDraft, saveComposerDraft } from '../services/composerDrafts';
 import { useChatCommandRegistry } from './useChatCommandRegistry';
 
 export interface ComposerPreview {
@@ -26,8 +27,23 @@ export interface ChatCommandsApi {
 
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
-export function ChatCommandsProvider({ children, initialDraft = '' }: { children: ReactNode; initialDraft?: string }) {
-  const [composerDraft, setComposerDraft] = useState(initialDraft);
+export function ChatCommandsProvider({
+  children,
+  initialDraft = '',
+  draftKey,
+}: {
+  children: ReactNode;
+  initialDraft?: string;
+  /** Where this thread's unsent text is kept across session switches; none keeps it in memory only. */
+  draftKey?: string;
+}) {
+  // A message that failed to send wins over a kept draft: it is what the person last sent.
+  const [composerDraft, setComposerDraft] = useState(() =>
+    initialDraft || (draftKey ? loadComposerDraft(draftKey) : ''),
+  );
+  useEffect(() => {
+    if (draftKey) saveComposerDraft(draftKey, composerDraft);
+  }, [draftKey, composerDraft]);
   const [composerPreview, setPreview] = useState<ComposerPreview>();
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   // Measured before the preview lands: a composer that grew to fit it would move what the pointer is on.
