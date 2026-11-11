@@ -147,72 +147,24 @@ describe('platform entry (src/mastra/index.ts)', () => {
     await expect(import('./index.js')).rejects.toThrow('FACTORY_BROWSER must be unset or agent-browser');
   });
 
-  it('uses the installed GitHub rules to retriage linked issue updates without moving their stage', async () => {
+  it('installs GitHub rules that no longer re-triage a linked issue on its edits or comments', async () => {
     vi.stubEnv('GITHUB_APP_ID', '123');
     vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
     vi.stubEnv('GITHUB_APP_CLIENT_ID', 'client-id');
     vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
     vi.stubEnv('GITHUB_APP_SLUG', 'factory-app');
     vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'test-webhook-secret');
-    const { factoryConfigVersion } = await import('./index.js');
+    await import('./index.js');
     const { GithubIntegration } = await import('@factory/integration-github');
     const github = factoryConfigs[0]?.integrations?.find(
       (integration): integration is InstanceType<typeof GithubIntegration> => integration instanceof GithubIntegration,
     );
     expect(github).toBeDefined();
     if (!github) throw new Error('Expected the configured GitHub integration');
-    const item = {
-      id: 'issue-42',
-      source: 'github-issue' as const,
-      sourceKey: 'github-issue:42',
-      parentWorkItemId: null,
-      title: 'Issue 42',
-      url: 'https://github.com/acme/repo/issues/42',
-      stages: ['planning'],
-    };
-    const base = {
-      tenant: { orgId: 'org-1', projectId: 'project-1' },
-      actor: { type: 'github' as const, login: 'contributor', trusted: true, factoryAuthored: false },
-      causalChain: [],
-      configVersion: factoryConfigVersion,
-      factory: { createdAt: '2030-01-01T00:00:00.000Z' },
-      repository: { id: 10, fullName: 'acme/repo' },
-      item,
-      board: 'work' as const,
-      itemRevision: 3,
-    };
-
-    const { issueEdited, issueCommentCreated } = github.rules;
-
-    expect(
-      issueEdited?.({
-        ...base,
-        ingress: { type: 'github', id: '7:issue-update' },
-        cause: 'github.issueEdited',
-        event: 'issueEdited',
-        deliveryId: 'issue-update',
-        issue: { number: 42, title: 'Issue 42', url: item.url },
-        issueChange: { title: false, body: true },
-      }),
-    ).toMatchObject({
-      type: 'invokeSkill',
-      idempotencyKey: '7:issue-update:factory-triage',
-    });
-    expect(
-      issueCommentCreated?.({
-        ...base,
-        ingress: { type: 'github', id: '7:comment-created' },
-        cause: 'github.issueCommentCreated',
-        event: 'issueCommentCreated',
-        deliveryId: 'comment-created',
-        issue: { number: 42, title: 'Issue 42', url: item.url },
-        issueComment: { id: 100, author: 'contributor', body: 'New lead' },
-      }),
-    ).toMatchObject({
-      type: 'invokeSkill',
-      idempotencyKey: '7:comment-created:factory-triage',
-    });
-    expect(item.stages).toEqual(['planning']);
+    // Triage runs once, when a person moves the card into Triage (port of 3a769810f4): edits and
+    // comments on the issue run no rule of their own; they only point the card's session at them.
+    expect(github.rules.issueEdited).toBeNull();
+    expect(github.rules.issueCommentCreated).toBeNull();
   });
 
   it('installs no GitHub rule overrides on whichever integration is installed', { timeout: 60_000 }, async () => {
