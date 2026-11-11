@@ -712,20 +712,23 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       /**
        * A fixed id, for a route Factory writes itself (a migration): when a route with this id
        * already exists the call returns it and writes nothing, so a rerun, or a second replica
-       * running the same migration, never adds it twice (the id is the table's primary key).
+       * running the same migration, never adds it twice. The check runs inside the write's
+       * transaction, and a replica that loses the insert race to the primary key retries
+       * (`#transact`) and then finds the winner's row.
        */
       id?: string;
     } = {},
   ): Promise<StoredIntakeRouteRecord> {
-    if (options.id) {
-      const existing = await this.ops.findOne<IntakeRouteRow>(INTAKE_ROUTES, { id: options.id });
-      if (existing) return toIntakeRouteRecord(existing);
-    }
     const id = options.id ?? randomUUID();
     const triggered = Boolean(input.triggered);
     checkRouteEvents(input.on ?? (triggered ? [] : DEFAULT_ROUTE_EVENTS), input.when ?? null, triggered);
     await this.#ensureIntakeRoutes(scope);
+    let existing: IntakeRouteRow | null = null;
     await this.#transact(async ops => {
+      if (options.id) {
+        existing = await ops.findOne<IntakeRouteRow>(INTAKE_ROUTES, { id: options.id });
+        if (existing) return;
+      }
       const rows = await lockIntakeRoutes(ops, scope);
       if (rows.length >= MAX_INTAKE_ROUTES) {
         throw new StoredBoardError(
@@ -744,6 +747,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         await placeIntakeRoutes(ops, rows.toSpliced(ahead, 0, added), actor);
       }
     });
+    if (existing) return toIntakeRouteRecord(existing);
     return (await this.getIntakeRoute(scope, id))!;
   }
 

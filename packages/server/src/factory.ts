@@ -1241,6 +1241,9 @@ export class MastraFactory {
     }
     // Integration-owned data migrations (ClickUp's retired List status rules → intake routes), once
     // per boot, before any worker reads: the poller only reads routes. Idempotent on every replica.
+    // An integration whose migration fails is disabled for this boot (no workers, routes or
+    // channels) rather than running on half-migrated data; it retries at the next boot.
+    const failedMigrations = new Set<string>();
     if (this.#projectBoards && storage.isDomainReady('integrations') && storage.isDomainReady('intake')) {
       for (const integration of integrations.filter(candidate => candidate.migrate)) {
         await timedPhase(`prepare.integration.${integration.id}.migrate`, async () => {
@@ -1253,8 +1256,9 @@ export class MastraFactory {
               projectBoards: this.#projectBoards!,
             });
           } catch (error) {
+            failedMigrations.add(integration.id);
             console.error(
-              `[factory] integration "${integration.id}" migration failed; it runs again at the next boot: ${error instanceof Error ? error.message : error}`,
+              `[factory] integration "${integration.id}" is disabled: its migration failed (it runs again at the next boot): ${error instanceof Error ? error.message : error}`,
             );
           }
         });
@@ -1298,7 +1302,7 @@ export class MastraFactory {
       }
       return {
         integration,
-        ready: missing.length === 0,
+        ready: missing.length === 0 && !failedMigrations.has(integration.id),
         ensureReady: async () => {
           for (const domain of requiredDomains) await storage.ensureDomainReady(domain);
         },

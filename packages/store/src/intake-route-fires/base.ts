@@ -1,4 +1,4 @@
-import { FactoryStorageDomain } from '@mastra/core/storage';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema } from '@mastra/core/storage';
 
 import type { IntakeFireOutcome, IntakeRouteFire, IntakeScope } from '@factory/core';
@@ -251,18 +251,25 @@ export class IntakeRouteFiresStorage extends FactoryStorageDomain {
     let copied = 0;
     for (const row of rows) {
       if (await this.ops.findOne<FireRow>(INTAKE_ROUTE_FIRES_SCHEMA.name, { id: row.id })) continue;
-      await this.ops.insertOne<FireRow>(INTAKE_ROUTE_FIRES_SCHEMA.name, {
-        id: row.id,
-        org_id: row.org_id,
-        factory_project_id: row.factory_project_id,
-        route_id: ruleId,
-        fired_at: row.fired_at,
-        trigger_kind: row.trigger_kind,
-        outcome: row.outcome,
-        work_item_id: row.work_item_id,
-        reason: row.reason,
-        fire_key: row.fire_key ?? null,
-      });
+      // Another replica may copy the same fire between the check and the insert: the fire's id is
+      // the primary key, so the loser's insert is refused and the fire is already there.
+      try {
+        await this.ops.insertOne<FireRow>(INTAKE_ROUTE_FIRES_SCHEMA.name, {
+          id: row.id,
+          org_id: row.org_id,
+          factory_project_id: row.factory_project_id,
+          route_id: ruleId,
+          fired_at: row.fired_at,
+          trigger_kind: row.trigger_kind,
+          outcome: row.outcome,
+          work_item_id: row.work_item_id,
+          reason: row.reason,
+          fire_key: row.fire_key ?? null,
+        });
+      } catch (error) {
+        if (error instanceof UniqueViolationError) continue;
+        throw error;
+      }
       copied += 1;
     }
     return copied;
