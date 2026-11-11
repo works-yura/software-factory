@@ -12,6 +12,7 @@ import {
 } from '@factory/harness-claude-code';
 
 import type { ModelSelection } from '@factory/harness/models/contracts';
+import type { UsageLimitPark } from '@factory/harness/usage-limit-park';
 
 import { ClaudeSessionUiChannel, type ClaudeUiStorage } from './channel.ts';
 import { runErrorIdentity } from './projector.ts';
@@ -99,6 +100,30 @@ export function toWireEvent(event: AgentControllerEvent | { type: 'display_state
     return { ...event, error: runErrorIdentity(event.error) };
   }
   return event;
+}
+
+/** A session parked on a usage limit, as the state route and `POST …/resume` show it. */
+export interface WireUsageLimit {
+  reason: UsageLimitPark['reason'];
+  /** When the session resumes on its own (ISO). */
+  parkedUntil: string;
+  /** Whether that is the provider's reset time rather than a cooldown. */
+  resetKnown: boolean;
+  since: string;
+  attempts: number;
+  message: string;
+}
+
+export function wireUsageLimit(park: UsageLimitPark | undefined): WireUsageLimit | null {
+  if (!park) return null;
+  return {
+    reason: park.reason,
+    parkedUntil: park.until,
+    resetKnown: park.resetKnown,
+    since: park.since,
+    attempts: park.attempts,
+    message: park.message,
+  };
 }
 
 /** The chat route a message came in on, and how the session takes it. */
@@ -322,6 +347,27 @@ export class ClaudeSessionUi {
       case 'POST /abort':
         session.abort();
         return c.json({ ok: true });
+      // "Resume now" on a session parked on a usage limit: tried at once; still limited, it stays
+      // parked and the answer says until when.
+      case 'POST /resume': {
+        if (!session.resumeFromUsageLimit) {
+          return c.json({ error: `${harnessLabel(session)} sessions do not park on usage limits.` }, 409);
+        }
+        if (!session.usageLimitPark) return c.json({ ok: false, reason: 'not_parked', usageLimit: null });
+        if (session.run.isRunning()) return c.json({ ok: false, reason: 'running', usageLimit: null });
+        await this.#onPersonInput?.(c, session);
+        const result = await session.resumeFromUsageLimit();
+        switch (result.action) {
+          case 'resumed':
+            return c.json({ ok: true, action: 'resumed', runId: result.runId, usageLimit: null });
+          case 'parked':
+            return c.json({ ok: true, action: 'parked', usageLimit: wireUsageLimit(result.park) });
+          case 'ended':
+            return c.json({ ok: true, action: 'ended', usageLimit: null });
+          default:
+            return c.json({ ok: false, reason: result.action, usageLimit: wireUsageLimit(session.usageLimitPark) });
+        }
+      }
       case 'POST /tool-suspension': {
         const body = await jsonBody(c);
         const question = session.pendingPermission;
@@ -409,6 +455,8 @@ export class ClaudeSessionUi {
       modelId: channel.modelId ?? '',
       ...(this.#modelSelection ? { modelSelection: await this.#modelSelection(channel.session) } : {}),
       running: channel.running,
+      // Waiting for a usage limit to reset: the chat's banner says until when and offers "Resume now".
+      usageLimit: wireUsageLimit(channel.session.usageLimitPark),
       tasks: own ? display.tasks : [],
       omProgress: {
         status: om.status,

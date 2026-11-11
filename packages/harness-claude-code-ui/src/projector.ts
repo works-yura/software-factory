@@ -496,6 +496,11 @@ export class ClaudeTranscriptProjector {
         out.events.push({ type: 'follow_up_queued', count });
         break;
       }
+      case 'usage_limit_parked':
+      case 'usage_limit_cleared':
+        // The session parked on (or left) a usage limit: the chat's banner reads the session state again.
+        out.events.push(structuredClone(event) as unknown as AgentControllerEvent);
+        break;
       case 'agent_end': {
         const { reason } = event as Extract<AgentEvent, { type: 'agent_end' }>;
         this.#closeCurrent(out);

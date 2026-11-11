@@ -6,8 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentRunEndReason } from '@factory/harness';
 import {
   createClaudeCodeHarness,
+  ClaudeCodeError,
   createInMemorySessionStore,
   type ClaudeCodeHarness,
+  type ClaudeCodeHarnessConfig,
   type ClaudeCodeSession,
 } from '@factory/harness-claude-code';
 import { deferred, fakeClaude, fixture, type FakeTurn } from '@factory/harness-claude-code/__fixtures__/fake-claude';
@@ -38,7 +40,13 @@ afterEach(() => {
 
 async function setup(
   turns: FakeTurn[],
-  options: { user?: TestAuthUser; mode?: 'planning'; visibility?: 'private' | 'org'; author?: { id: string; name?: string } } = {},
+  options: {
+    user?: TestAuthUser;
+    mode?: 'planning';
+    visibility?: 'private' | 'org';
+    author?: { id: string; name?: string };
+    harness?: Partial<ClaudeCodeHarnessConfig>;
+  } = {},
 ): Promise<Setup> {
   const fake = fakeClaude(turns);
   const storage = new InMemoryStore();
@@ -50,6 +58,7 @@ async function setup(
     cwdFor: () => '/work/card-1',
     env: { PATH: '/usr/bin' },
     ...(options.mode ? { mode: options.mode } : {}),
+    ...options.harness,
     onSession: session => ui.attach(session),
   });
   ui.setSessionResolver(id => harness.getSession(id));
@@ -666,5 +675,56 @@ describe('Claude Code session routes: Mastra parity', () => {
     const parked = seen.filter(event => event.type === 'tool_suspended' || event.type === 'tool_approval_required');
     expect(parked).toEqual([expect.objectContaining({ type: 'tool_suspended', toolName: 'ask_user' })]);
     expect(seen.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'suspended' }]);
+  });
+});
+
+describe('Claude Code session routes: usage-limit park', () => {
+  const resetsAt = new Date(Date.now() + 2 * 60 * 60_000);
+  const limitedSetup = (limited: { at: Date | undefined }) =>
+    setup([{ lines: fixture('turn-complete.jsonl') }], {
+      harness: {
+        parkOnUsageLimit: () => true,
+        credentials: async () => {
+          if (limited.at) throw new ClaudeCodeError('rate_limit', 'Every Claude account is out of usage.', { resetsAt: limited.at });
+          return { ANTHROPIC_API_KEY: 'sk-test' };
+        },
+      },
+    });
+
+  it('shows the park in the session state, and "Resume now" keeps it with the new time while still limited', async () => {
+    const limited = { at: resetsAt as Date | undefined };
+    const { app, session } = await limitedSetup(limited);
+    const end = nextEnd(session);
+    await app.request(`${BASE}/card-1/messages`, { method: 'POST', body: JSON.stringify({ message: 'go' }), headers: { 'content-type': 'application/json' } });
+    expect(await end).toBe('error');
+
+    const state = (await (await app.request(`${BASE}/card-1`)).json()) as { running: boolean; usageLimit: unknown };
+    expect(state.running).toBe(false);
+    expect(state.usageLimit).toMatchObject({ reason: 'usage_limit', parkedUntil: resetsAt.toISOString(), resetKnown: true, attempts: 1 });
+
+    const later = new Date(resetsAt.getTime() + 60 * 60_000);
+    limited.at = later;
+    const still = await (await app.request(`${BASE}/card-1/resume`, { method: 'POST' })).json();
+    expect(still).toMatchObject({ ok: true, action: 'parked', usageLimit: { parkedUntil: later.toISOString(), attempts: 2 } });
+
+    limited.at = undefined;
+    const done = nextEnd(session);
+    const resumed = await (await app.request(`${BASE}/card-1/resume`, { method: 'POST' })).json();
+    expect(resumed).toMatchObject({ ok: true, action: 'resumed', usageLimit: null });
+    expect(await done).toBe('complete');
+    const after = (await (await app.request(`${BASE}/card-1`)).json()) as { usageLimit: unknown };
+    expect(after.usageLimit).toBeNull();
+    expect(await (await app.request(`${BASE}/card-1/resume`, { method: 'POST' })).json()).toMatchObject({ ok: false, reason: 'not_parked' });
+  });
+
+  it('records no error on the thread while the session waits for the limit', async () => {
+    const { app, session } = await limitedSetup({ at: resetsAt });
+    const end = nextEnd(session);
+    await app.request(`${BASE}/card-1/messages`, { method: 'POST', body: JSON.stringify({ message: 'go' }), headers: { 'content-type': 'application/json' } });
+    await end;
+    const history = (await (await app.request(`${BASE}/card-1/threads/card-1/messages?limit=20`)).json()) as {
+      messages: Array<{ content: { parts: Array<{ type: string }> } }>;
+    };
+    expect(history.messages.flatMap(message => message.content.parts).some(part => part.type === 'error')).toBe(false);
   });
 });

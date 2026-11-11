@@ -3,6 +3,7 @@
 // Claude Code and Codex sessions both are one; the type is structural, so neither imports the other.
 import type { AgentRunContext, AgentSession, PlanDecision } from '@factory/harness';
 import type { PermissionRequest, PlanGate, TranscriptEntry } from '@factory/harness/transcript';
+import type { UsageLimitPark, UsageLimitResumeResult } from '@factory/harness/usage-limit-park';
 
 export type ChatDelivery = 'message' | 'follow-up' | 'steer';
 
@@ -24,6 +25,10 @@ export interface ChatTranscriptSession
   sendChatMessage(input: { content: string; requestContext?: AgentRunContext; delivery?: ChatDelivery }): Promise<{ action: 'wake' | 'deliver' | 'queued' }>;
   respondToToolApproval(input: { approved: boolean; toolCallId?: string }): Promise<void>;
   answerQuestion(input: { answer: string | string[]; toolCallId?: string }): Promise<void>;
+  /** Set while the session waits for a usage limit to reset; absent on a harness that never parks. */
+  readonly usageLimitPark?: UsageLimitPark | undefined;
+  /** Takes a session parked on a usage limit up again now ("Resume now"). */
+  resumeFromUsageLimit?(): Promise<UsageLimitResumeResult>;
   /** Answers the plan gate without starting a run (a host's plan hook: the next stage starts the session). */
   queuePlanAnswer(input: { resumeData: PlanDecision; toolCallId?: string }): Promise<void>;
 }
