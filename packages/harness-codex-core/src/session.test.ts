@@ -8,6 +8,8 @@ import type { CodexSession, CodexSessionConfig } from './session.ts';
 import { createInMemoryCodexSessionStore } from './store.ts';
 import { FakeCodexAppServer, fakeCodexSpawn } from './testkit.ts';
 import { CodexRunContext } from './harness.ts';
+import { CodexError } from './errors.ts';
+import { CODEX_ACCOUNT_SWITCH_PROMPT } from './session.ts';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 async function until(check: () => boolean, label = 'condition') {
@@ -407,5 +409,93 @@ describe('createCodexHarness', () => {
     expect(a!.run.isRunning()).toBe(false);
     const context = harness.runContext(a!, { userId: 'u', orgId: 'o', threadId: 't1', resourceId: 'r1' });
     expect(context.get('controller')).toMatchObject({ session: { id: 's1' } });
+  });
+
+  describe('accounts', () => {
+    const tokens = (id: string) => ({ accessToken: `at-${id}`, chatgptAccountId: `ws-${id}`, planType: 'plus' });
+    const limited: Script = (server, { threadId, turnId }) => {
+      server.notify('error', { threadId, turnId, willRetry: false, error: { message: 'You hit your usage limit.', codexErrorInfo: 'usageLimitExceeded' } });
+      server.notify('turn/completed', { threadId, turn: { id: turnId, status: 'failed', error: { message: 'usage limit' } } });
+    };
+
+    it('signs the run in with the host’s tokens alone, in the session’s own home, and refreshes them when Codex asks', async () => {
+      const spawn = scripted([
+        async (server, turn) => {
+          const answer = await server.request('account/chatgptAuthTokens/refresh', { reason: 'unauthorized', previousAccountId: 'ws-a' });
+          expect(answer.result).toEqual({ accessToken: 'at-a2', chatgptAccountId: 'ws-a', chatgptPlanType: 'plus' });
+          reply('Done.')(server, turn);
+        },
+      ]);
+      const requests: unknown[] = [];
+      const refreshed: unknown[] = [];
+      const { session, transcript, store } = await harnessWith(spawn, {
+        codexHomeFor: () => '/homes/s1',
+        credentials: async (_session, request) => {
+          requests.push(request);
+          return { tokens: tokens('a'), accountId: 'acc-a', credential: { label: 'alice@example.com', ownerId: 'u1' } };
+        },
+        refreshCredentials: async (_session, input) => {
+          refreshed.push(input);
+          return { ...tokens('a'), accessToken: 'at-a2' };
+        },
+      });
+
+      expect(await session.sendMessage({ content: 'Fix it' })).toEqual({ reason: 'complete' });
+      expect(spawn.calls[0]!.env).toMatchObject({ CODEX_HOME: '/homes/s1' });
+      expect(spawn.servers[0]!.requests('account/login/start')[0]!.params).toEqual({
+        type: 'chatgptAuthTokens',
+        accessToken: 'at-a',
+        chatgptAccountId: 'ws-a',
+        chatgptPlanType: 'plus',
+      });
+      expect(requests).toEqual([{ exclude: [] }]);
+      expect(refreshed).toEqual([{ accountId: 'acc-a', accessToken: 'at-a' }]);
+      expect(transcript).toContainEqual({ kind: 'credential', label: 'alice@example.com', ownerId: 'u1' });
+      expect((await store.get('s1'))?.accountId).toBe('acc-a');
+
+      // The next run prefers the account the session ran on.
+      await session.sendMessage({ content: 'Again' });
+      expect(requests[1]).toEqual({ preferredAccountId: 'acc-a', exclude: [] });
+    });
+
+    it('moves a turn that ran out of usage to the next account, in the same thread, and tells Codex to go on', async () => {
+      const spawn = scripted([limited, reply('Done.')]);
+      const failures: Array<{ accountId: string; kind: string }> = [];
+      const { session, transcript } = await harnessWith(spawn, {
+        credentials: async (_session, request) =>
+          request.exclude.includes('acc-a')
+            ? { tokens: tokens('b'), accountId: 'acc-b', credential: { label: 'b' } }
+            : { tokens: tokens('a'), accountId: 'acc-a', credential: { label: 'a' } },
+        onCredentialFailure: async (_session, failure) => {
+          failures.push({ accountId: failure.accountId, kind: failure.error.kind });
+        },
+      });
+
+      expect(await session.sendMessage({ content: 'Fix it' })).toEqual({ reason: 'complete' });
+      const server = spawn.servers[0]!;
+      expect(spawn.servers).toHaveLength(1);
+      expect(failures).toEqual([{ accountId: 'acc-a', kind: 'rate_limit' }]);
+      expect(server.requests('account/login/start').map(message => (message.params as { accessToken: string }).accessToken)).toEqual(['at-a', 'at-b']);
+      const turns = server.requests('turn/start').map(message => (message.params as { input: Array<{ text: string }> }).input[0]!.text);
+      expect(turns[0]).toContain('Fix it');
+      expect(turns[1]).toBe(CODEX_ACCOUNT_SWITCH_PROMPT);
+      expect(transcript.filter(entry => entry.kind === 'credential')).toEqual([
+        { kind: 'credential', label: 'a' },
+        { kind: 'credential', label: 'b' },
+      ]);
+    });
+
+    it('ends the turn with the hook’s error when no other account is left', async () => {
+      const spawn = scripted([limited]);
+      const { session, events } = await harnessWith(spawn, {
+        credentials: async (_session, request) => {
+          if (request.exclude.length) throw new CodexError('rate_limit', 'Every ChatGPT account is out of usage.');
+          return { tokens: tokens('a'), accountId: 'acc-a' };
+        },
+      });
+      expect(await session.sendMessage({ content: 'Fix it' })).toEqual({ reason: 'error' });
+      const error = events.find(event => event.type === 'error') as { error: CodexError } | undefined;
+      expect(error?.error).toMatchObject({ kind: 'rate_limit', message: 'Every ChatGPT account is out of usage.' });
+    });
   });
 });

@@ -24,18 +24,24 @@ export type CodexCatalogSource = () => Promise<CodexCatalogState>;
 
 export const CODEX_NOT_INSTALLED_REASON = 'The codex CLI is not installed on this server.';
 export const CODEX_NEEDS_LOGIN_REASON = 'Codex is not signed in on this server: run `codex login` there.';
+/** Why Codex cannot run for a person without a ChatGPT sign-in of their own (the host's accounts hook says it). */
+export const CODEX_NEEDS_ACCOUNT_REASON =
+  'No ChatGPT sign-in is set for Codex. Sign in with ChatGPT under Settings → Models → Codex accounts to run Codex sessions.';
 
 const DEFAULT_CATALOG_TTL_MS = 5 * 60_000;
 const FAILED_PROBE_TTL_MS = 30_000;
 
 /**
- * The CLI's catalog, probed once and kept for `ttlMs`: `model/list` when the CLI runs and is signed
- * in; the bundled models when it runs but could not list them; unavailable (with why) when it is
- * missing or not signed in.
+ * The CLI's catalog, probed once and kept for `ttlMs`: `model/list` when the CLI runs; the bundled
+ * models when it runs but could not list them; unavailable (with why) when it is missing, or, with
+ * `requireLogin`, when the probed home holds no login. A Factory probes an empty home of its own
+ * (its runs sign in with the members' accounts), so it leaves `requireLogin` off.
  */
 export function createCodexCatalogSource(options: {
   /** Whether the `codex` binary is there at all; asked before each probe. */
   installed: () => boolean | Promise<boolean>;
+  /** A probed home without a login makes Codex unavailable (a CLI that signs in with its own `codex login`). */
+  requireLogin?: boolean;
   probe?: (input: CodexProbeInput) => Promise<CodexProbeResult>;
   probeInput: () => CodexProbeInput | Promise<CodexProbeInput>;
   ttlMs?: number;
@@ -52,7 +58,7 @@ export function createCodexCatalogSource(options: {
     }
     try {
       const result = await probe(await options.probeInput());
-      if (result.needsLogin) {
+      if (result.needsLogin && options.requireLogin) {
         return {
           state: { available: false, needsSetup: true, reason: CODEX_NEEDS_LOGIN_REASON, models: [], ...(result.version ? { version: result.version } : {}) },
           ttl: FAILED_PROBE_TTL_MS,
@@ -110,6 +116,11 @@ export interface CodexHarnessModelsOptions<Session extends { thread: SelectionSe
   /** Thread-setting keys: the session's own pick, and the selection its last turn ran. */
   settingKeys: { selection: string; lastSelection: string };
   catalog: CodexCatalogSource;
+  /**
+   * Why the viewer cannot run Codex although the CLI is there (no ChatGPT sign-in they may use),
+   * or `undefined`; Codex is then unavailable and needs setup, with that reason.
+   */
+  accounts?(ctx: HarnessModelContext): Promise<string | undefined>;
 }
 
 /** What one turn sends, from the facet: `turn/start`'s model fields and the switch marker. */
@@ -164,8 +175,12 @@ export function createCodexHarnessModels<Session extends { thread: SelectionSett
     harnessId: options.harnessId ?? CODEX_HARNESS_ID,
     displayName: options.displayName ?? 'Codex',
     owns: sessionId => options.owns(sessionId),
-    async availability() {
+    async availability(ctx) {
       const { available, needsSetup, reason } = await options.catalog();
+      if (available && options.accounts) {
+        const missing = await options.accounts(ctx);
+        if (missing) return { available: false, needsSetup: true, reason: missing };
+      }
       return { available, ...(needsSetup ? { needsSetup } : {}), ...(reason ? { reason } : {}) };
     },
     list: async () => (await options.catalog()).models,

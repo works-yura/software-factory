@@ -87,6 +87,7 @@ export class FakeCodexAppServer extends EventEmitter {
     this.handle('thread/resume', params => ({ thread: { id: params.threadId, cwd: params.cwd ?? '/' }, model: params.model ?? 'gpt-test-sol', cwd: params.cwd ?? '/' }));
     this.handle('turn/start', () => ({ turn: { id: `turn-${++this.#turns}`, status: 'inProgress', items: [] } }));
     this.handle('turn/interrupt', () => ({}));
+    this.handle('account/login/start', params => ({ type: params.type }));
   }
 
   /** Answers `method` (a client request) with what `handler` returns; a thrown error goes back as a JSON-RPC error. */

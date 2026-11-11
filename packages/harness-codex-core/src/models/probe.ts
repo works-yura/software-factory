@@ -1,5 +1,6 @@
-// Asks the installed CLI what it offers: its version, whether it is signed in (`codex login`), and
-// its models (`model/list`, every page). Spawns `codex app-server` for the questions and stops it.
+// Asks the installed CLI what it offers: its version, whether its home holds a login, and its models
+// (`model/list`, every page; the CLI lists them signed in or not). Spawns `codex app-server` for the
+// questions and stops it.
 import type { ServerProviderModel } from '@factory/harness/models/contracts';
 
 import { spawnCodexAppServer, type CodexSpawn } from '../protocol/client.ts';
@@ -21,9 +22,8 @@ export interface CodexProbeInput {
 export interface CodexProbeResult {
   readonly version: string | undefined;
   readonly account: CodexAccount | null;
-  /** No account and the CLI needs one: `codex login` first. */
+  /** The probed home holds no login (expected: the Factory's runs sign in with the members' accounts). */
   readonly needsLogin: boolean;
-  /** Empty when the CLI needs a login. */
   readonly models: ServerProviderModel[];
 }
 
@@ -105,8 +105,8 @@ export async function probeCodex(input: CodexProbeInput): Promise<CodexProbeResu
     return await Promise.race([
       (async (): Promise<CodexProbeResult> => {
         const account = await server.client.request('account/read', {});
-        if (codexNeedsLogin(account)) return { version: server.version, account: null, needsLogin: true, models: [] };
         const models = await requestAllCodexModels(server.client);
+        if (codexNeedsLogin(account)) return { version: server.version, account: null, needsLogin: true, models };
         return { version: server.version, account: account.account, needsLogin: false, models };
       })(),
       timeout,

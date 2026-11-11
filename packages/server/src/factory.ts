@@ -114,8 +114,14 @@ import type { ModelSelection } from '@factory/harness/models/contracts';
 import { chainSessionResolvers, codexAwareModelSelectionReader } from '@factory/harness-codex-ui';
 import { findCodexBinary } from '@factory/harness-codex';
 import type { CodexSession, CodexSessionMode } from '@factory/harness-codex';
-import { combineTurnHarnessUserSessions, createCodexFactoryHarness, createCodexUserSessions } from './codex/index.ts';
-import type { CodexFactoryHarness, CodexFactoryHarnessOptions } from './codex/index.ts';
+import {
+  combineTurnHarnessUserSessions,
+  createCodexCredentials,
+  createCodexFactoryHarness,
+  createCodexSignInService,
+  createCodexUserSessions,
+} from './codex/index.ts';
+import type { CodexCredentials, CodexFactoryHarness, CodexFactoryHarnessOptions } from './codex/index.ts';
 import { EnvironmentBuildRunner } from '@factory/harness-mastra';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID, selfReviewedHeadFor } from '@factory/harness-mastra';
 import { touchFeed } from '@factory/feed';
@@ -372,7 +378,7 @@ export interface MastraFactoryConfig {
   claudeCode?: MastraFactoryClaudeCodeConfig;
   /**
    * The Codex harness, for factories created with `harness: 'codex'`: sessions run on this host's
-   * `codex` CLI (its app-server), signed in with `codex login`. Omitted → no Codex harness; given
+   * `codex` CLI (its app-server), signed in with the members' ChatGPT sign-ins (never this host's `codex login`). Omitted → no Codex harness; given
    * without the CLI installed, Settings lists Codex as needing setup and new Codex sessions are refused.
    */
   codex?: MastraFactoryCodexConfig;
@@ -509,9 +515,14 @@ export interface MastraFactoryClaudeCodeConfig
 
 /** How this server runs Codex sessions (see `createCodexFactoryHarness`). */
 export interface MastraFactoryCodexConfig
-  extends Pick<CodexFactoryHarnessOptions, 'store' | 'command' | 'launchArgs' | 'codexHome' | 'spawn' | 'env' | 'skillsDir' | 'turnTimeoutMs' | 'catalog'> {
-  /** Where session records live; required unless `store` is given. */
+  extends Pick<
+    CodexFactoryHarnessOptions,
+    'store' | 'command' | 'launchArgs' | 'sessionHomeRoot' | 'spawn' | 'env' | 'skillsDir' | 'turnTimeoutMs' | 'catalog'
+  > {
+  /** Where session records live (and, beside them, each session's own `CODEX_HOME`); required unless `store` is given. */
   storeDir?: string;
+  /** Replaces the default credentials (`createCodexCredentials`: the members' ChatGPT sign-ins). */
+  credentials?: CodexCredentials;
   /** Replaces the default checkout (`createClaudeCheckoutResolver`). */
   cwdFor?: (sessionId: string) => string | Promise<string>;
   /** The origin Codex reaches this server's MCP endpoint at; `publicUrl` by default. */
@@ -1286,7 +1297,12 @@ export class MastraFactory {
     );
     const workItemsReady = storage.isDomainReady('work-items');
     // Set once the Claude Code harness exists (below): a deleted session's CLI config dir goes with it.
+    // A deleted session's own CLI state (Claude Code's config dir, Codex's home), whichever harness ran it.
     let removeClaudeSessionConfig: ((sessionId: string) => Promise<void>) | undefined;
+    let removeCodexSessionHome: ((sessionId: string) => Promise<void>) | undefined;
+    const removeTurnSessionFiles = async (sessionId: string) => {
+      await Promise.all([removeClaudeSessionConfig?.(sessionId), removeCodexSessionHome?.(sessionId)]);
+    };
     // Set with it too: a side session of a Claude Code Factory is a Claude Code session.
     let createClaudeSideSession: FactoryToolDependencies['createHarnessSession'];
     // And of a Codex Factory, a Codex session.
@@ -1335,7 +1351,7 @@ export class MastraFactory {
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
-            onSessionDeleted: sessionId => removeClaudeSessionConfig?.(sessionId),
+            onSessionDeleted: sessionId => removeTurnSessionFiles(sessionId),
             sandbox: sandboxConfig,
             ...(workItemFolders ? { workItemFolders } : {}),
           })
@@ -2248,7 +2264,9 @@ export class MastraFactory {
 
     // Codex factories: their sessions live in the Codex harness (the `codex` CLI's app-server on this host),
     // reach the Factory's tools over MCP with a token minted per run, and show in the chat through the
-    // same session UI as Claude Code's. Without the CLI the facet lists Codex as needing setup.
+    // same session UI as Claude Code's. Each run signs in with its owner's ChatGPT sign-in (the members'
+    // `openai-codex` accounts), never with this host's `codex login`. Without the CLI, or without a
+    // sign-in the person may use, the facet lists Codex as needing setup.
     const codexInstalled = codexConfig
       ? findCodexBinary(codexConfig.command ?? 'codex', codexConfig.env ?? process.env) !== undefined
       : false;
@@ -2258,7 +2276,8 @@ export class MastraFactory {
           ...(codexConfig.storeDir ? { storeDir: codexConfig.storeDir } : {}),
           ...(codexConfig.command ? { command: codexConfig.command } : {}),
           ...(codexConfig.launchArgs ? { launchArgs: codexConfig.launchArgs } : {}),
-          ...(codexConfig.codexHome ? { codexHome: codexConfig.codexHome } : {}),
+          ...(codexConfig.sessionHomeRoot ? { sessionHomeRoot: codexConfig.sessionHomeRoot } : {}),
+          credentials: codexConfig.credentials ?? createCodexCredentials({ credentials: modelCredentialsStorage }),
           ...(codexConfig.spawn ? { spawn: codexConfig.spawn } : {}),
           ...(codexConfig.env ? { env: codexConfig.env } : {}),
           ...(codexConfig.skillsDir ? { skillsDir: codexConfig.skillsDir } : {}),
@@ -2322,6 +2341,7 @@ export class MastraFactory {
         })
       : undefined;
     if (codex) {
+      removeCodexSessionHome = sessionId => codex.removeSessionHome(sessionId);
       // Its models in the picker, Settings and `factory_switch_session_model`, through its facet: `model/list`
       // of the installed CLI, its next turn's `turn/start` carrying the pick (model, effort, service tier).
       harnessModels.register(codex.models);
@@ -2820,7 +2840,7 @@ export class MastraFactory {
             ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
             sessionRetirement,
             // Without a retirement coordinator, the delete route removes a session's CLI config dir itself.
-            onSessionDeleted: sessionId => removeClaudeSessionConfig?.(sessionId),
+            onSessionDeleted: sessionId => removeTurnSessionFiles(sessionId),
             moveThread: async ({ threadId, resourceId }) => {
               // The sessions' own Memory, so a moved thread takes its observation vectors along.
               const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector);
@@ -2883,6 +2903,18 @@ export class MastraFactory {
             // Signing in opens the CLI's browser page on this machine: only where it is the person's own.
             ...(claudeCode !== undefined && claudeCodeConfig?.localDevelopment === true && modelCredentialsStorage
               ? { claudeSignIn: createClaudeSignInService({ credentials: modelCredentialsStorage }) }
+              : {}),
+            // A ChatGPT device sign-in shows its page and code in the browser: it works wherever the CLI runs.
+            ...(codex !== undefined && codexInstalled && modelCredentialsStorage
+              ? {
+                  codexSignIn: createCodexSignInService({
+                    credentials: modelCredentialsStorage,
+                    ...(codexConfig?.command ? { command: codexConfig.command } : {}),
+                    ...(codexConfig?.launchArgs ? { launchArgs: codexConfig.launchArgs } : {}),
+                    ...(codexConfig?.spawn ? { spawn: codexConfig.spawn } : {}),
+                    ...(codexConfig?.env ? { env: codexConfig.env } : {}),
+                  }),
+                }
               : {}),
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,

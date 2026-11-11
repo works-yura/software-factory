@@ -1,10 +1,13 @@
-import { homedir } from 'node:os';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import type { HarnessRoute } from '@factory/harness';
 import type { ModelSelection } from '@factory/harness/models/contracts';
 import type { ClaudeToolPermissions } from '@factory/harness-claude-code';
 import {
+  CodexError,
   CODEX_INSTANCE_ID,
+  CODEX_NEEDS_ACCOUNT_REASON,
   createCodexCatalogSource,
   createCodexHarness,
   createCodexHarnessModels,
@@ -27,7 +30,9 @@ import type { FactoryProject, FactoryProjectsStorage } from '@factory/store';
 
 import { withAgentLanguage } from '../agent-language.ts';
 import { claudeFactorySkillDirectories, type ClaudeFactoryPermissionsHook } from '../claude/harness.ts';
+import { createSessionDirs } from '../claude/config-dir.ts';
 import { CLAUDE_THREAD_SETTINGS } from '../claude/start-coordinator.ts';
+import type { CodexCredentials } from './credentials.ts';
 
 /** The MCP server name the Factory's tools are mounted under in a Codex thread. */
 export const CODEX_FACTORY_MCP_SERVER = 'factory';
@@ -94,8 +99,16 @@ export interface CodexFactoryHarnessOptions {
   command?: string;
   /** Extra `codex` launch arguments; `FACTORY_CODEX_LAUNCH_ARGS` wins. */
   launchArgs?: string;
-  /** `CODEX_HOME`; the CLI's default (where `codex login` signs in) when unset. */
-  codexHome?: string;
+  /**
+   * The members' ChatGPT sign-ins every run signs in with (`createCodexCredentials`); without it a
+   * run fails asking for one. This host's own `codex login` is never used.
+   */
+  credentials?: CodexCredentials;
+  /**
+   * Where sessions' own `CODEX_HOME`s live (their thread history, no login); `<storeDir>-home` by
+   * default. Each session gets its own dir, removed with the session.
+   */
+  sessionHomeRoot?: string;
   env?: Record<string, string | undefined>;
   spawn?: CodexSpawn;
   /** Factory skills; the bundled ones plus the project's local `factory-skills` by default. */
@@ -110,6 +123,8 @@ export interface CodexFactoryHarnessOptions {
 export interface CodexFactoryHarness {
   harness: CodexHarness;
   store: CodexSessionStore;
+  /** Remove a deleted session's own `CODEX_HOME` (its thread history); a missing dir is fine. */
+  removeSessionHome(sessionId: string): Promise<void>;
   /** For the routing harness: a session is Codex's when its store has it. */
   route: HarnessRoute;
   models: CodexHarnessModels<CodexSession>;
@@ -121,12 +136,20 @@ export interface CodexFactoryHarness {
  * The Codex harness as a Factory runs it: sessions recorded in their own store, checked out per
  * session, given the Factory's tools over MCP with a token minted for the run, the Factory's
  * signals ahead of each turn, and its tool permissions as Codex's sandbox and approval policy.
- * Codex signs in with its own `codex login` on this host.
+ * Each session runs in its own `CODEX_HOME` and signs in with its owner's ChatGPT sign-in (the
+ * access token alone, from `credentials`), never with a `codex login` on this host.
  */
 export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): CodexFactoryHarness {
   const store = options.store ?? (options.storeDir ? createJsonFileCodexSessionStore(options.storeDir) : undefined);
   if (!store) throw new Error('The Codex harness needs a session store or a store directory.');
   const env = options.env ?? process.env;
+
+  // Every session gets its own home: never the person's `~/.codex`, and nothing of a login in it.
+  const homeRoot = options.sessionHomeRoot ?? (options.storeDir ? `${options.storeDir.replace(/\/+$/, '')}-home` : undefined);
+  if (!homeRoot) throw new Error('The Codex harness needs a store directory or a session home root for its homes.');
+  const homes = createSessionDirs(homeRoot);
+  // The catalog probe runs in an empty home of its own: the CLI lists its models without a login.
+  const probeHome = join(homeRoot, '.catalog-probe');
 
   const tenantOf = async (session: CodexSession) => {
     const row = await options.sessions.getBySessionId(session.id);
@@ -160,13 +183,16 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
     options.catalog ??
     createCodexCatalogSource({
       installed: () => findCodexBinary(options.command ?? 'codex', env) !== undefined,
-      probeInput: () => ({
-        ...(options.command ? { command: options.command } : {}),
-        args: codexAppServerArgs(resolveCodexLaunchArgs(options.launchArgs, env)),
-        cwd: homedir(),
-        env: { ...env, ...(options.codexHome ? { CODEX_HOME: options.codexHome } : {}) },
-        ...(options.spawn ? { spawn: options.spawn } : {}),
-      }),
+      probeInput: () => {
+        mkdirSync(probeHome, { recursive: true, mode: 0o700 });
+        return {
+          ...(options.command ? { command: options.command } : {}),
+          args: codexAppServerArgs(resolveCodexLaunchArgs(options.launchArgs, env)),
+          cwd: probeHome,
+          env: { ...env, CODEX_HOME: probeHome },
+          ...(options.spawn ? { spawn: options.spawn } : {}),
+        };
+      },
     });
 
   const models = createCodexHarnessModels<CodexSession>({
@@ -181,6 +207,11 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
       : {}),
     settingKeys: { selection: CLAUDE_THREAD_SETTINGS.modelSelection, lastSelection: CLAUDE_THREAD_SETTINGS.lastModelSelection },
     catalog,
+    // Codex runs for a person only on a ChatGPT sign-in they may use, as Claude Code runs on a Claude one.
+    accounts: async ctx => {
+      if (!options.credentials) return CODEX_NEEDS_ACCOUNT_REASON;
+      return (await options.credentials.usable({ orgId: ctx.viewer.orgId, userId: ctx.viewer.userId })) ? undefined : CODEX_NEEDS_ACCOUNT_REASON;
+    },
   });
 
   const harness = createCodexHarness({
@@ -190,7 +221,21 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
     env,
     ...(options.command ? { command: options.command } : {}),
     ...(options.launchArgs ? { launchArgs: options.launchArgs } : {}),
-    ...(options.codexHome ? { codexHome: options.codexHome } : {}),
+    codexHomeFor: session => homes.dirFor(session),
+    // Asked when a run opens its process: the run owner's ChatGPT sign-in, its access token alone.
+    credentials: async (session, request) => {
+      if (!options.credentials) throw new CodexError('auth', CODEX_NEEDS_ACCOUNT_REASON);
+      const tenant = await tenantOf(session);
+      return options.credentials.credentials({ orgId: tenant.orgId, userId: tenant.userId }, request);
+    },
+    refreshCredentials: async (session, input) => {
+      const tenant = await tenantOf(session);
+      return options.credentials?.refresh({ orgId: tenant.orgId, userId: tenant.userId }, input);
+    },
+    onCredentialFailure: async (session, failure) => {
+      const tenant = await tenantOf(session);
+      await options.credentials?.onCredentialFailure({ orgId: tenant.orgId, userId: tenant.userId }, failure);
+    },
     ...(options.spawn ? { spawn: options.spawn } : {}),
     ...(options.turnTimeoutMs ? { turnTimeoutMs: options.turnTimeoutMs } : {}),
     skillsDir: claudeFactorySkillDirectories(options.skillsDir),
@@ -255,6 +300,7 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
   return {
     harness,
     store,
+    removeSessionHome: sessionId => homes.remove(sessionId),
     models,
     catalog,
     route: { harness, owns: async sessionId => (await store.get(sessionId)) !== undefined },

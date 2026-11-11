@@ -31,6 +31,44 @@ export interface GetAccountResponse {
   readonly requiresOpenaiAuth: boolean;
 }
 
+/**
+ * `account/login/start`: a device sign-in (a page and a one-time code the person enters there),
+ * or tokens the host holds and refreshes (`chatgptAuthTokens`: Codex keeps them in memory only and
+ * asks the host again with `account/chatgptAuthTokens/refresh` when the backend refuses them).
+ */
+export type LoginAccountParams =
+  | { readonly type: 'chatgptDeviceCode' }
+  | {
+      readonly type: 'chatgptAuthTokens';
+      readonly accessToken: string;
+      readonly chatgptAccountId: string;
+      readonly chatgptPlanType?: string | null;
+    };
+
+export type LoginAccountResponse =
+  | { readonly type: 'chatgptDeviceCode'; readonly loginId: string; readonly verificationUrl: string; readonly userCode: string }
+  | { readonly type: 'chatgptAuthTokens' }
+  | { readonly type: 'chatgpt'; readonly loginId: string; readonly authUrl: string }
+  | { readonly type: 'apiKey' };
+
+export interface AccountLoginCompletedNotification {
+  readonly loginId: string | null;
+  readonly success: boolean;
+  readonly error: string | null;
+}
+
+export interface ChatgptAuthTokensRefreshParams {
+  readonly reason: 'unauthorized' | (string & {});
+  /** The workspace Codex was using, a hint for a host with several. */
+  readonly previousAccountId?: string | null;
+}
+
+export interface ChatgptAuthTokensRefreshResponse {
+  readonly accessToken: string;
+  readonly chatgptAccountId: string;
+  readonly chatgptPlanType: string | null;
+}
+
 export interface ModelListParams {
   readonly cursor?: string | null;
 }
@@ -405,7 +443,9 @@ export interface ToolRequestUserInputResponse {
 
 export interface ClientRequests {
   initialize: { params: InitializeParams; result: InitializeResponse };
-  'account/read': { params: Record<string, never>; result: GetAccountResponse };
+  'account/read': { params: { readonly refreshToken?: boolean }; result: GetAccountResponse };
+  'account/login/start': { params: LoginAccountParams; result: LoginAccountResponse };
+  'account/login/cancel': { params: { readonly loginId: string }; result: Record<string, unknown> };
   'account/rateLimits/read': { params: null; result: { rateLimits: RateLimitSnapshot; rateLimitsByLimitId?: Record<string, RateLimitSnapshot> | null } };
   'model/list': { params: ModelListParams; result: ModelListResponse };
   'thread/start': { params: ThreadStartParams; result: ThreadStartResponse };
@@ -427,6 +467,7 @@ export interface ServerNotifications {
   'turn/plan/updated': TurnPlanUpdatedNotification;
   'thread/tokenUsage/updated': ThreadTokenUsageUpdatedNotification;
   'account/rateLimits/updated': AccountRateLimitsUpdatedNotification;
+  'account/login/completed': AccountLoginCompletedNotification;
   error: ErrorNotification;
 }
 
@@ -435,6 +476,7 @@ export interface ServerRequests {
   'item/fileChange/requestApproval': { params: FileChangeRequestApprovalParams; result: { decision: ApprovalDecision } };
   'item/permissions/requestApproval': { params: PermissionsRequestApprovalParams; result: PermissionsRequestApprovalResponse };
   'item/tool/requestUserInput': { params: ToolRequestUserInputParams; result: ToolRequestUserInputResponse };
+  'account/chatgptAuthTokens/refresh': { params: ChatgptAuthTokensRefreshParams; result: ChatgptAuthTokensRefreshResponse };
   'mcpServer/elicitation/request': { params: { threadId?: string; turnId?: string | null; serverName?: string; message?: string }; result: { action: 'accept' | 'decline' | 'cancel'; content?: JsonValue } };
 }
 

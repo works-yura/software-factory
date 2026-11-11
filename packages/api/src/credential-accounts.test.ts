@@ -12,7 +12,7 @@ const aliceToken = 'sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb2222';
 const now = new Date('2026-10-28T12:00:00Z');
 const BASE = '/web/config/providers/anthropic/accounts';
 
-async function setup(claudeSignIn?: ClaudeSignInFlows) {
+async function setup(claudeSignIn?: ClaudeSignInFlows, accountSignIn?: Record<string, ClaudeSignInFlows>) {
   const seed = await createFactoryStorageForTests();
   const admins = new Set(['admin']);
   const app = (userId: string | null, orgId = 'org1') => {
@@ -27,6 +27,7 @@ async function setup(claudeSignIn?: ClaudeSignInFlows) {
         auth: fakeRouteAuth({ isOrganizationAdmin: async (_org, user) => admins.has(user) }),
         modelCredentials: seed.credentials,
         ...(claudeSignIn ? { claudeSignIn } : {}),
+        ...(accountSignIn ? { accountSignIn } : {}),
         now: () => now,
       }).routes(),
     );
@@ -264,5 +265,51 @@ describe('Claude sign-in routes', () => {
     expect(listed.body.accounts[0]).toMatchObject({ status: 'disabled', needsSignIn: true, lastError: 'sign in to Claude again' });
     // A sign-in has no secret to paste over: it is renewed by signing in again.
     expect((await send('alice', 'PATCH', `${BASE}/${account.id}`, { secret: 'sk-ant-oat01-cccccccccccccccccccc3333' })).status).toBe(400);
+  });
+});
+
+describe('Codex accounts', () => {
+  const CODEX = '/web/config/providers/openai-codex/accounts';
+
+  it('lists ChatGPT sign-ins as Codex accounts, a Claude sign-in never among them, and refuses a pasted key', async () => {
+    const { seed, send } = await setup();
+    await addSignIn(seed, 'alice');
+    await seed.credentials.addAccount({
+      orgId: 'org1',
+      provider: 'openai-codex',
+      label: 'alice@example.com',
+      kind: 'codex_login',
+      ownerUserId: 'alice',
+      secret: 'fake-access',
+      oauth: { accessToken: 'fake-access', refreshToken: 'fake-refresh', expiresAt: 0, scopes: [], workspaceId: 'ws-1' },
+      createdBy: 'alice',
+    });
+    const listed = await send('alice', 'GET', CODEX);
+    expect(listed.body.accounts).toEqual([
+      expect.objectContaining({ kind: 'codex_login', mine: true, canManage: true, legacy: false, needsSignIn: false, hint: '' }),
+    ]);
+    expect(JSON.stringify(listed.body)).not.toContain('fake-');
+    const refused = await send('alice', 'POST', CODEX, { label: 'Pasted', secret: 'sk-proj-x' });
+    expect(refused.status).toBe(410);
+    expect(refused.body).toMatchObject({ error: 'sign_in_required', message: expect.stringContaining('signing in to ChatGPT') });
+  });
+
+  it('shows a device sign-in’s page and code while it waits, and refuses where the server offers none', async () => {
+    const flow: ClaudeSignInFlowView = {
+      id: 'flow-1',
+      orgId: 'org1',
+      userId: 'alice',
+      status: 'pending',
+      prompt: { url: 'https://auth.openai.com/codex/device', code: 'ABCD-EFGHI' },
+    };
+    const signIn: ClaudeSignInFlows = { start: () => flow, get: id => (id === flow.id ? flow : undefined), cancel: () => true };
+    const { send } = await setup(undefined, { 'openai-codex': signIn });
+    const started = await send('alice', 'POST', `${CODEX}/sign-in`);
+    expect(started.status).toBe(202);
+    expect(started.body.signIn).toEqual({ id: 'flow-1', status: 'pending', prompt: { url: 'https://auth.openai.com/codex/device', code: 'ABCD-EFGHI' } });
+    // The Claude sign-in stays Claude's: none is offered here.
+    expect((await send('alice', 'POST', `${BASE}/sign-in`)).status).toBe(404);
+    const { send: without } = await setup();
+    expect((await without('alice', 'POST', `${CODEX}/sign-in`)).body).toMatchObject({ error: 'sign_in_unavailable' });
   });
 });

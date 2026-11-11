@@ -49,6 +49,8 @@ export interface CodexSessionRecord {
   resourceId?: string;
   /** Where Codex runs. Fixed after the first turn. */
   cwd?: string;
+  /** The account (credential pool id) the session's latest turn ran on; the next turn prefers it. */
+  accountId?: string;
   threads: Record<string, CodexThreadState>;
   updatedAt: string;
 }

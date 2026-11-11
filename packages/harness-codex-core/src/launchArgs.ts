@@ -92,3 +92,9 @@ export const codexExecLaunchArgs = (launchArgs?: string): string[] => {
 
   return execArgs;
 };
+
+/**
+ * A Codex home's sign-in is a file in that home, never the OS keyring: a Factory's homes are
+ * throwaway or per session, and a keyring item would outlive them (and could reach the person's own).
+ */
+export const CODEX_FILE_CREDENTIALS_ARGS: readonly string[] = ['-c', 'cli_auth_credentials_store="file"'];

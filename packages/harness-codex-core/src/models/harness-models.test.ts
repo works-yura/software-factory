@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createHarnessModelRegistry } from '@factory/harness/models/registry';
 
-import { CODEX_NEEDS_LOGIN_REASON, CODEX_NOT_INSTALLED_REASON, createCodexCatalogSource, createCodexHarnessModels } from './harness-models.ts';
+import { CODEX_NEEDS_ACCOUNT_REASON, CODEX_NEEDS_LOGIN_REASON, CODEX_NOT_INSTALLED_REASON, createCodexCatalogSource, createCodexHarnessModels } from './harness-models.ts';
 import { probeCodex } from './probe.ts';
 import { parseCodexModelListResponse } from './codexModelCatalog.ts';
 import { FAKE_CODEX_MODELS, fakeCodexSpawn } from '../testkit.ts';
@@ -20,7 +20,13 @@ class FakeSession {
 const listed = parseCodexModelListResponse(FAKE_CODEX_MODELS);
 const viewer = { viewer: { userId: 'u', orgId: 'o' } };
 
-function facet(options: { factoryDefault?: { instanceId: string; model: string } | null; catalog?: Parameters<typeof createCodexHarnessModels>[0]['catalog'] } = {}) {
+function facet(
+  options: {
+    factoryDefault?: { instanceId: string; model: string } | null;
+    catalog?: Parameters<typeof createCodexHarnessModels>[0]['catalog'];
+    accounts?: Parameters<typeof createCodexHarnessModels>[0]['accounts'];
+  } = {},
+) {
   const sessions = new Map([['s1', new FakeSession()]]);
   const models = createCodexHarnessModels<FakeSession>({
     owns: async id => sessions.has(id),
@@ -29,6 +35,7 @@ function facet(options: { factoryDefault?: { instanceId: string; model: string }
     factoryDefaults: async () => options.factoryDefault ?? null,
     settingKeys: { selection: 'codexModelSelection', lastSelection: 'codexLastSelection' },
     catalog: options.catalog ?? (async () => ({ available: true, models: listed })),
+    ...(options.accounts ? { accounts: options.accounts } : {}),
   });
   return { models, session: sessions.get('s1')! };
 }
@@ -88,15 +95,36 @@ describe('createCodexHarnessModels', () => {
     const missing = createCodexCatalogSource({ installed: () => false, probeInput: () => ({ cwd: '/', env: {} }) });
     const signedOut = createCodexCatalogSource({
       installed: () => true,
+      requireLogin: true,
       probe: async () => ({ version: '0.166.0', account: null, needsLogin: true, models: [] }),
       probeInput: () => ({ cwd: '/', env: {} }),
     });
+    // A Factory's probe home holds no login: its runs sign in with the members' accounts.
+    const factoryHome = createCodexCatalogSource({
+      installed: () => true,
+      probe: async () => ({ version: '0.166.0', account: null, needsLogin: true, models: listed }),
+      probeInput: () => ({ cwd: '/', env: {} }),
+    });
+    expect(await factoryHome()).toMatchObject({ available: true });
     const registry = createHarnessModelRegistry([facet({ catalog: missing }).models]);
     expect((await registry.describe(viewer))[0]).toMatchObject({ available: false, needsSetup: true, reason: CODEX_NOT_INSTALLED_REASON, models: [] });
     expect(await signedOut()).toMatchObject({ available: false, needsSetup: true, reason: CODEX_NEEDS_LOGIN_REASON });
     // A Factory default can still be checked against the bundled catalog.
     const bundledCheck = await facet({ catalog: missing }).models.check({ model: 'gpt-6.1-sol' }, viewer);
     expect(bundledCheck).toMatchObject({ ok: true });
+  });
+
+  it('is available to a person only with a ChatGPT sign-in they may use, pointing to the accounts otherwise', async () => {
+    const seen: unknown[] = [];
+    const { models } = facet({
+      accounts: async ctx => {
+        seen.push(ctx.viewer);
+        return ctx.viewer.userId === 'u' ? CODEX_NEEDS_ACCOUNT_REASON : undefined;
+      },
+    });
+    expect(await models.availability!(viewer)).toEqual({ available: false, needsSetup: true, reason: CODEX_NEEDS_ACCOUNT_REASON });
+    expect(await models.availability!({ viewer: { userId: 'signed-in', orgId: 'o' } })).toEqual({ available: true });
+    expect(seen).toEqual([viewer.viewer, { userId: 'signed-in', orgId: 'o' }]);
   });
 
   it('probes the CLI once per TTL and falls back to the bundled list when listing fails', async () => {
@@ -137,9 +165,10 @@ describe('probeCodex', () => {
     expect(spawn.servers[0]!.closed).toBe(true);
   });
 
-  it('stops at the account when the CLI is not signed in', async () => {
+  it('lists the models of a CLI that is not signed in, and says so', async () => {
     const spawn = fakeCodexSpawn(server => server.handle('account/read', () => ({ account: null, requiresOpenaiAuth: true })));
-    expect(await probeCodex({ cwd: '/', env: {}, spawn })).toEqual({ version: '0.166.0', account: null, needsLogin: true, models: [] });
-    expect(spawn.servers[0]!.requests('model/list')).toEqual([]);
+    const result = await probeCodex({ cwd: '/', env: {}, spawn });
+    expect(result).toMatchObject({ version: '0.166.0', account: null, needsLogin: true });
+    expect(result.models.length).toBeGreaterThan(0);
   });
 });

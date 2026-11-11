@@ -1,6 +1,6 @@
 // The environment a `codex app-server` runs with: what a shell and Codex itself need (paths, locale,
-// proxies, Codex's own settings), never the server's credentials. Codex signs in with its own
-// `codex login` (in `CODEX_HOME`).
+// proxies, Codex's own settings), never the server's credentials. A host signs a run in with the
+// tokens it holds (see `CodexSessionConfig.credentials`), in the session's own `CODEX_HOME`.
 
 export const DEFAULT_CODEX_ENV_ALLOWLIST: readonly string[] = [
   'PATH',

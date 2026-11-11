@@ -36,17 +36,24 @@ export function claudeSessionConfigName(sessionId: string): string {
 }
 
 export function createClaudeSessionConfigDirs(root: string): ClaudeSessionConfigDirs {
+  return createSessionDirs(root, { file: '.claude.json', contents: `${JSON.stringify(CLAUDE_SESSION_CONFIG_SEED, null, 2)}\n` });
+}
+
+/**
+ * A private dir per session under `root` (0700), for a turn-based harness's CLI state: Claude Code's
+ * `CLAUDE_CONFIG_DIR`, Codex's `CODEX_HOME`. Fixed per session (a resume finds the session's files
+ * there), seeded with `seed` (0600) when given, and removed with the session. Never a login.
+ */
+export function createSessionDirs(root: string, seed?: { file: string; contents: string }): ClaudeSessionConfigDirs {
   const pathOf = (sessionId: string) => join(root, claudeSessionConfigName(sessionId));
   return {
     dirFor(session) {
       const dir = pathOf(session.id);
       if (existsSync(dir)) return dir;
       mkdirSync(dir, { recursive: true, mode: 0o700 });
+      if (!seed) return dir;
       try {
-        writeFileSync(join(dir, '.claude.json'), `${JSON.stringify(CLAUDE_SESSION_CONFIG_SEED, null, 2)}\n`, {
-          mode: 0o600,
-          flag: 'wx',
-        });
+        writeFileSync(join(dir, seed.file), seed.contents, { mode: 0o600, flag: 'wx' });
       } catch (error) {
         // Seeded by a turn that got here first.
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;

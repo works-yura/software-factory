@@ -362,11 +362,14 @@ export const factory = new MastraFactory({
     ...(process.env.FACTORY_CLAUDE_CODE_COMMAND?.trim() ? { command: process.env.FACTORY_CLAUDE_CODE_COMMAND.trim() } : {}),
   },
   // Factories created with `harness: 'codex'` run their agents on this machine's `codex` CLI (its
-  // app-server), signed in with `codex login`. Without the CLI, Settings lists Codex as needing setup.
+  // app-server), each session in its own CODEX_HOME beside the store, signed in only with the
+  // members' ChatGPT sign-ins (Settings → Models → Codex accounts). The machine's own `codex login`
+  // (`~/.codex`) is never read: there is no setting for a shared home any more (FACTORY_CODEX_HOME
+  // is gone), so no deployment runs every Factory on one person's login. Without the CLI, Settings
+  // lists Codex as needing setup.
   codex: {
     storeDir: process.env.FACTORY_CODEX_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'codex-sessions'),
     ...(process.env.FACTORY_CODEX_COMMAND?.trim() ? { command: process.env.FACTORY_CODEX_COMMAND.trim() } : {}),
-    ...(process.env.FACTORY_CODEX_HOME?.trim() ? { codexHome: process.env.FACTORY_CODEX_HOME.trim() } : {}),
   },
   ...(browser ? { browser } : {}),
   // Device preview drives simulators and emulators on this machine, so only a local development

@@ -27,13 +27,14 @@ import {
 import { buildCodexEnv } from './env.ts';
 import { CodexError } from './errors.ts';
 import { CodexTurnTranslator, type CodexTurnOutcome } from './events.ts';
-import { codexAppServerArgs, resolveCodexLaunchArgs } from './launchArgs.ts';
+import { CODEX_FILE_CREDENTIALS_ARGS, codexAppServerArgs, resolveCodexLaunchArgs } from './launchArgs.ts';
 import type { CodexTurnModelSelection } from './models/harness-models.ts';
 import { codexNotificationDecision } from './notifications.ts';
 import { spawnCodexAppServer, type CodexAppServerProcess, type CodexSpawn } from './protocol/client.ts';
 import type {
   ApprovalDecision,
   AskForApproval,
+  ChatgptAuthTokensRefreshResponse,
   JsonValue,
   RateLimitSnapshot,
   SandboxMode,
@@ -42,6 +43,9 @@ import type {
   ToolRequestUserInputParams,
   TurnStartParams,
 } from './protocol/schema.ts';
+import { rm } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import { emptyCodexThreadState, type CodexPendingInput, type CodexSessionMode, type CodexSessionRecord, type CodexSessionStore, type CodexThreadState } from './store.ts';
 import { makeCodexTurnTokenUsageState } from './tokenUsage.ts';
 import { codexUsageLimitResetAt, mergeCodexRateLimits } from './usageLimits.ts';
@@ -121,6 +125,46 @@ export const CODEX_MCP_TOOL_TIMEOUT_SEC = 65 * 60;
 export const CODEX_PLANNING_PROMPT =
   'You are planning. Investigate read-only and write the plan; make no changes. A person approves the plan before you implement it.';
 
+/** What a run asks the credentials hook (as a Claude Code turn does). */
+export interface CodexCredentialRequest {
+  /** The account the session used last; staying on it keeps the provider's prompt cache. */
+  preferredAccountId?: string;
+  /** Accounts this turn already tried and lost to a limit or a refusal. */
+  exclude: string[];
+}
+
+/** The tokens Codex runs a ChatGPT sign-in on: the access token and its workspace, never the refresh token. */
+export interface CodexChatGptTokens {
+  accessToken: string;
+  chatgptAccountId: string;
+  planType?: string;
+}
+
+/** One account's credentials for a run. */
+export interface CodexTurnCredentials {
+  tokens: CodexChatGptTokens;
+  /** Names the account, so the turn can move off it when it runs out. */
+  accountId?: string;
+  /** How the chat names the account the turn runs on, and whose sign-in it is. */
+  credential?: { label: string; ownerId?: string };
+}
+
+/** How many times one turn moves to another account before it gives up. */
+export const CODEX_MAX_ACCOUNT_SWITCHES = 10;
+
+/**
+ * Sent instead of the turn's prompt when it goes on under another account after Codex had the
+ * prompt: it is already in the thread, so sending it again would repeat it.
+ */
+export const CODEX_ACCOUNT_SWITCH_PROMPT =
+  'Your previous attempt at this request stopped because the account ran out of usage. The session now runs on another account. Continue where you stopped.';
+
+/** What a process signed in with: the account's tokens, and the accounts the current turn already left. */
+interface ProcessCredentials {
+  current: CodexTurnCredentials;
+  tried: string[];
+}
+
 export type CodexTranscriptListener = (entry: TranscriptEntry, meta: { runId: string; threadId: string }) => void;
 
 /** How a person's chat message joins the session (the chat's message, follow-up and steer routes). */
@@ -158,8 +202,32 @@ export interface CodexSessionConfig {
   env?: Record<string, string | undefined>;
   /** More variable names the CLI may inherit. */
   passEnv?: string[];
-  /** `CODEX_HOME` for every session; the CLI's default (`~/.codex`, where `codex login` signs in) when unset. */
+  /**
+   * `CODEX_HOME` for every session; prefer {@link codexHomeFor}. Unset with neither, the CLI's
+   * default (`~/.codex`, the person's own `codex login`) — tests and local tools only.
+   */
   codexHome?: string;
+  /**
+   * The session's own `CODEX_HOME` (its thread history, nothing of a login), stable per session so
+   * a later run resumes its thread; wins over {@link codexHome}.
+   */
+  codexHomeFor?: (session: CodexSession) => string | undefined;
+  /**
+   * The ChatGPT sign-in a run uses, asked when the run opens its process: Codex gets the access
+   * token alone (`account/login/start` with `chatgptAuthTokens`, kept in its memory only) and asks
+   * {@link refreshCredentials} when the backend refuses it. When the account hits a usage limit or
+   * is refused, the turn asks again with the accounts it tried in `request.exclude` and goes on, in
+   * the same Codex thread, with the next one; a hook with no account left throws (a `rate_limit`
+   * {@link CodexError} with `resetsAt`, say). Unset, Codex uses whatever login its home holds.
+   */
+  credentials?: (session: CodexSession, request: CodexCredentialRequest) => Promise<CodexTurnCredentials>;
+  /** A fresh access token for the account after Codex said the current one was refused; `undefined` when it is gone. */
+  refreshCredentials?: (
+    session: CodexSession,
+    input: { accountId: string | undefined; accessToken: string },
+  ) => Promise<CodexChatGptTokens | undefined>;
+  /** Told when a turn's account hit a usage limit or was refused, before the turn asks for another. */
+  onCredentialFailure?: (session: CodexSession, failure: { accountId: string; error: CodexError }) => void | Promise<void>;
   /** The model fields of the session's next turn (the harness's model facet), asked before each turn. */
   turnSelectionFor?: (session: CodexSession) => CodexTurnModelSelection | undefined | Promise<CodexTurnModelSelection | undefined>;
   /** The thread's developer instructions (the Factory's playbook); asked when the run opens its thread. */
@@ -300,6 +368,10 @@ function questionAnswers(params: ToolRequestUserInputParams | undefined, answer:
   return Object.fromEntries(questions.map(question => [question.id, { answers: [values.join('\n')] }]));
 }
 
+function codexTokensResponse(tokens: CodexChatGptTokens): ChatgptAuthTokensRefreshResponse {
+  return { accessToken: tokens.accessToken, chatgptAccountId: tokens.chatgptAccountId, chatgptPlanType: tokens.planType ?? null };
+}
+
 function newTurnWatch(translator: CodexTurnTranslator): TurnWatch {
   let finish!: (outcome: TurnResult) => void;
   let settled = false;
@@ -331,6 +403,8 @@ export class CodexSession implements AgentSession {
   #saving: Promise<void> = Promise.resolve();
   #rateLimits: RateLimitSnapshot | undefined;
   readonly #usage = makeCodexTurnTokenUsageState();
+  /** The sign-in each live process runs on (a parked turn keeps its process, and so its sign-in). */
+  readonly #processCredentials = new WeakMap<CodexAppServerProcess, ProcessCredentials>();
 
   constructor(record: CodexSessionRecord, config: CodexSessionConfig) {
     this.id = record.sessionId;
@@ -874,6 +948,7 @@ export class CodexSession implements AgentSession {
       reason = 'error';
     } finally {
       if (!keepServer && !run.abortRequested) run.server?.terminate();
+      if (!keepServer) await this.#clearSignIn();
     }
     this.#settle(run, reason);
   }
@@ -987,14 +1062,78 @@ export class CodexSession implements AgentSession {
     return this.#record.cwd;
   }
 
+  #codexHome(): string | undefined {
+    return this.#config.codexHomeFor?.(this) ?? this.#config.codexHome;
+  }
+
+  /** Signs the process in with the account's tokens (Codex keeps them in memory) and marks the replies that follow as its. */
+  async #signIn(server: CodexAppServerProcess, run: ActiveRun, held: ProcessCredentials): Promise<void> {
+    const { tokens, accountId, credential } = held.current;
+    await server.client.request('account/login/start', {
+      type: 'chatgptAuthTokens',
+      accessToken: tokens.accessToken,
+      chatgptAccountId: tokens.chatgptAccountId,
+      chatgptPlanType: tokens.planType ?? null,
+    });
+    this.#processCredentials.set(server, held);
+    if (accountId && accountId !== this.#record.accountId) {
+      this.#record.accountId = accountId;
+      void this.#save().catch(() => {});
+    }
+    // The replies that follow ran on this account, as a Claude Code turn's do.
+    if (credential && !run.settled) this.#emitTranscript({ kind: 'credential', ...credential }, run);
+  }
+
+  /**
+   * The account a turn goes on with after `error`, signed in on the run's process; `undefined`
+   * when it must stop: the error is not the account's fault, the turn switched too often, or the
+   * hook has no other account (its error then ends the turn).
+   */
+  async #nextAccount(run: ActiveRun, error: CodexError): Promise<boolean> {
+    const server = run.server;
+    const held = server ? this.#processCredentials.get(server) : undefined;
+    const accountId = held?.current.accountId;
+    if (!server || !held || !accountId || !this.#config.credentials) return false;
+    if (error.kind !== 'rate_limit' && error.kind !== 'auth') return false;
+    if (run.abortRequested || run.settled || held.tried.length >= CODEX_MAX_ACCOUNT_SWITCHES) return false;
+    held.tried.push(accountId);
+    try {
+      await this.#config.onCredentialFailure?.(this, { accountId, error });
+    } catch (failure) {
+      console.warn('[codex harness] Credential failure hook failed.', failure);
+    }
+    const next = await this.#config.credentials(this, { exclude: [...held.tried] });
+    if (!next.accountId || held.tried.includes(next.accountId)) return false;
+    await this.#signIn(server, run, { current: next, tried: held.tried });
+    return true;
+  }
+
+  /** What a run left in the session's home besides its thread: a sign-in file, should the CLI ever write one. */
+  async #clearSignIn(): Promise<void> {
+    const home = this.#config.credentials ? this.#codexHome() : undefined;
+    if (home) await rm(join(home, 'auth.json'), { force: true }).catch(() => {});
+  }
+
   /** The run's process with the session's Codex thread open: started, or resumed after a restart. */
   async #openThread(run: ActiveRun, policy: CodexTurnPolicy, selection: CodexTurnModelSelection | undefined): Promise<CodexAppServerProcess> {
     if (run.server?.isAlive() && run.codexThreadId) return run.server;
     const cwd = await this.#cwd();
-    const env = buildCodexEnv(this.#config.env ?? process.env, this.#config.codexHome ? { CODEX_HOME: this.#config.codexHome } : {}, this.#config.passEnv);
+    const codexHome = this.#codexHome();
+    const env = buildCodexEnv(this.#config.env ?? process.env, codexHome ? { CODEX_HOME: codexHome } : {}, this.#config.passEnv);
+    // Asked before the process starts, so a run with no account to use fails without one.
+    const credentials = this.#config.credentials
+      ? await this.#config.credentials(this, {
+          ...(this.#record.accountId ? { preferredAccountId: this.#record.accountId } : {}),
+          exclude: [],
+        })
+      : undefined;
     const server = await spawnCodexAppServer({
       ...(this.#config.command ? { command: this.#config.command } : {}),
-      args: codexAppServerArgs(resolveCodexLaunchArgs(this.#config.launchArgs, this.#config.env ?? process.env)),
+      args: [
+        // A run signed in by the host keeps nothing of it in a keyring.
+        ...(credentials ? CODEX_FILE_CREDENTIALS_ARGS : []),
+        ...codexAppServerArgs(resolveCodexLaunchArgs(this.#config.launchArgs, this.#config.env ?? process.env)),
+      ],
       cwd,
       env,
       ...(this.#config.spawn ? { spawn: this.#config.spawn } : {}),
@@ -1005,6 +1144,7 @@ export class CodexSession implements AgentSession {
       throw new CodexError('process', 'The run was stopped.');
     }
     this.#wire(server);
+    if (credentials) await this.#signIn(server, run, { current: credentials, tried: [] });
     const mcpServers = (await this.#config.mcpServersFor?.(this)) ?? {};
     const developerInstructions = (await this.#config.developerInstructionsFor?.(this)) ?? this.#config.developerInstructions;
     const defaults = codexRuntimeModeTurnDefaults(policy.runtimeMode ?? 'auto-accept-edits', policy.networkAccess);
@@ -1144,6 +1284,18 @@ export class CodexSession implements AgentSession {
       const answer = await park(params, translator => translator.question(params), params);
       return { answers: 'answers' in answer ? answer.answers : {} };
     });
+    // The backend refused the access token: the host refreshes the account (under its lock) and hands the new one over.
+    client.handleServerRequest('account/chatgptAuthTokens/refresh', async () => {
+      const held = this.#processCredentials.get(server);
+      if (!held || !this.#config.refreshCredentials) throw new Error('No ChatGPT sign-in to refresh.');
+      const tokens = await this.#config.refreshCredentials(this, {
+        accountId: held.current.accountId,
+        accessToken: held.current.tokens.accessToken,
+      });
+      if (!tokens) throw new Error('The ChatGPT sign-in was refused; it needs a new sign-in.');
+      held.current = { ...held.current, tokens };
+      return codexTokensResponse(tokens);
+    });
     // MCP servers asking for input: the Factory's tools never do, and a person cannot answer one here.
     client.handleServerRequest('mcpServer/elicitation/request', async () => ({ action: 'decline' }));
   }
@@ -1229,18 +1381,33 @@ export class CodexSession implements AgentSession {
         ? { collaborationMode: { mode: planning ? 'plan' : 'default', settings: { model, ...(selection?.effort ? { reasoning_effort: selection.effort } : {}) } } }
         : {}),
     };
-    try {
-      const started = await server.client.request('turn/start', params);
-      if (!translator.turnId) translator.begin(started.turn.id);
-    } catch (error) {
-      return { kind: 'error', error: error instanceof CodexError ? error : new CodexError('process', `Codex refused the turn: ${error instanceof Error ? error.message : String(error)}`, { cause: error }) };
+    // A new account picks up in the same thread: the prompt is already there, so it is told to go on instead.
+    const held = this.#processCredentials.get(server);
+    if (held) held.tried = [];
+    let attempt = { params, translator, watch };
+    for (;;) {
+      try {
+        const started = await server.client.request('turn/start', attempt.params);
+        if (!attempt.translator.turnId) attempt.translator.begin(started.turn.id);
+      } catch (error) {
+        return { kind: 'error', error: error instanceof CodexError ? error : new CodexError('process', `Codex refused the turn: ${error instanceof Error ? error.message : String(error)}`, { cause: error }) };
+      }
+      // Codex has the prompt: from here on the input counts as delivered.
+      if (run.unsent) {
+        this.#markDelivered(run.unsent);
+        run.unsent = undefined;
+        void this.#save().catch(() => {});
+      }
+      const result = await this.#awaitTurn(run, attempt.watch);
+      if (result.kind !== 'error' || !(await this.#nextAccount(run, result.error))) return result;
+      const nextTranslator = new CodexTurnTranslator({ threadId: codexThreadId, usage: this.#usage });
+      const nextWatch = newTurnWatch(nextTranslator);
+      run.watch = nextWatch;
+      attempt = {
+        params: { ...attempt.params, input: [{ type: 'text', text: CODEX_ACCOUNT_SWITCH_PROMPT }] },
+        translator: nextTranslator,
+        watch: nextWatch,
+      };
     }
-    // Codex has the prompt: from here on the input counts as delivered.
-    if (run.unsent) {
-      this.#markDelivered(run.unsent);
-      run.unsent = undefined;
-      void this.#save().catch(() => {});
-    }
-    return this.#awaitTurn(run, watch);
   }
 }

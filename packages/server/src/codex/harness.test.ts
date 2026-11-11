@@ -1,3 +1,7 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { createHarnessModelRegistry } from '@factory/harness';
@@ -11,10 +15,22 @@ import { agentLanguageInstruction } from '../agent-language.ts';
 import { CLAUDE_THREAD_SETTINGS } from '../claude/start-coordinator.ts';
 import { CODEX_FACTORY_INSTRUCTIONS, codexPolicyFromPermissions, createCodexFactoryHarness } from './harness.ts';
 import { combineTurnHarnessUserSessions, createCodexUserSessions } from './user-sessions.ts';
+import type { CodexCredentials } from './credentials.ts';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-function setup(options: { cardRun?: boolean; permissions?: Parameters<typeof codexPolicyFromPermissions>[0] } = {}) {
+const credentials = (usable = true): CodexCredentials => ({
+  credentials: async () => ({
+    tokens: { accessToken: 'at-1', chatgptAccountId: 'ws-1', planType: 'plus' },
+    accountId: 'acc-1',
+    credential: { label: 'alice@example.com', ownerId: 'user-a' },
+  }),
+  refresh: async () => undefined,
+  onCredentialFailure: async () => {},
+  usable: async () => usable,
+});
+
+function setup(options: { cardRun?: boolean; permissions?: Parameters<typeof codexPolicyFromPermissions>[0]; credentials?: CodexCredentials } = {}) {
   const spawn = fakeCodexSpawn(server => {
     server.handle('turn/start', params => {
       setImmediate(() => {
@@ -32,8 +48,11 @@ function setup(options: { cardRun?: boolean; permissions?: Parameters<typeof cod
     agentLanguage: 'en',
     harnessModelDefaults: { codex: { instanceId: 'codex', model: 'gpt-test-luna', options: [{ id: 'effort', value: 'medium' }] } },
   };
+  const homeRoot = mkdtempSync(join(tmpdir(), 'codex-homes-'));
   const factory = createCodexFactoryHarness({
     store: createInMemoryCodexSessionStore(),
+    sessionHomeRoot: homeRoot,
+    credentials: options.credentials ?? credentials(),
     spawn,
     env: { PATH: '/bin' },
     sessions: { getBySessionId: async id => (id === 'session-a' ? ({ orgId: 'org-a', userId: 'user-a', factoryProjectId: 'factory-a' } as never) : null) },
@@ -53,7 +72,7 @@ function setup(options: { cardRun?: boolean; permissions?: Parameters<typeof cod
     phaseFor: async () => 'stage: building',
     catalog: async () => ({ available: true, models: parseCodexModelListResponse(FAKE_CODEX_MODELS) }),
   });
-  return { factory, spawn, signed };
+  return { factory, spawn, signed, homeRoot };
 }
 
 describe('createCodexFactoryHarness', () => {
@@ -83,6 +102,36 @@ describe('createCodexFactoryHarness', () => {
     const turn = server.requests('turn/start')[0]!.params as any;
     expect(turn).toMatchObject({ model: 'gpt-test-luna', effort: 'medium', approvalPolicy: 'untrusted', sandboxPolicy: { type: 'readOnly' } });
     expect(turn.input[0].text).toBe('<factory-phase>\nstage: building\n</factory-phase>\n\nFix it');
+  });
+
+  it("signs each run in with its owner's ChatGPT sign-in alone, in the session's own home", async () => {
+    const { factory, spawn, homeRoot } = setup();
+    const session = await factory.harness.createSession({ sessionId: 'session-a', threadId: 'session-a', resourceId: 'factory-a' });
+    expect(await session.sendMessage({ content: 'Fix it' })).toEqual({ reason: 'complete' });
+    const home = spawn.calls[0]!.env.CODEX_HOME!;
+    expect(home.startsWith(homeRoot)).toBe(true);
+    expect(home).not.toContain('.codex');
+    expect(spawn.calls[0]!.args).toEqual(['app-server', '-c', 'cli_auth_credentials_store="file"']);
+    expect(spawn.servers[0]!.requests('account/login/start')[0]!.params).toEqual({
+      type: 'chatgptAuthTokens',
+      accessToken: 'at-1',
+      chatgptAccountId: 'ws-1',
+      chatgptPlanType: 'plus',
+    });
+    await factory.removeSessionHome('session-a');
+    const { existsSync } = await import('node:fs');
+    expect(existsSync(home)).toBe(false);
+  });
+
+  it('is available to a person only with a ChatGPT sign-in, and says where to add one', async () => {
+    const registry = createHarnessModelRegistry([setup({ credentials: credentials(false) }).factory.models]);
+    expect((await registry.describe({ viewer: { userId: 'user-a', orgId: 'org-a' } }))[0]).toMatchObject({
+      available: false,
+      needsSetup: true,
+      reason: expect.stringContaining('Settings → Models → Codex accounts'),
+    });
+    const ready = createHarnessModelRegistry([setup().factory.models]);
+    expect((await ready.describe({ viewer: { userId: 'user-a', orgId: 'org-a' } }))[0]).toMatchObject({ available: true });
   });
 
   it('reads the Factory default and switches a session through the registry', async () => {

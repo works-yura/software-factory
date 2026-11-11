@@ -5,8 +5,13 @@ The Codex harness: a Factory session runs as a thread of the `codex app-server` 
 (`@factory/harness`) at the same level as Claude Code (`@factory/harness-claude-code`) and shows in
 the chat, the model picker and Settings only through the generic layers.
 
-The `codex` CLI is an external binary on the host, like `claude`; it signs in with its own
-`codex login` (ChatGPT or an API key). Nothing here stores OpenAI credentials.
+The `codex` CLI is an external binary on the host, like `claude`. A host signs each run in with
+tokens it holds (`credentials`: `account/login/start` with `chatgptAuthTokens`, which Codex keeps in
+memory and asks the host to refresh with `account/chatgptAuthTokens/refresh`), in a `CODEX_HOME` of
+the session's own (`codexHomeFor`), so a host's own `codex login` is never read. A turn that runs out
+of usage or is refused moves to the host's next account in the same thread, as a Claude Code turn
+does. Nothing here stores OpenAI credentials: the Factory server keeps the members' ChatGPT sign-ins
+(`openai-codex` accounts) and refreshes them.
 
 ## Layout
 
