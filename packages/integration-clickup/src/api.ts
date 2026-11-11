@@ -27,6 +27,8 @@ export interface ClickUpTask {
   assignees: string[];
   priority: string | null;
   listId: string | null;
+  /** The workspace (ClickUp "team") the task lives in. */
+  teamId?: string;
   /** ISO timestamps; ClickUp sends epoch milliseconds as strings. */
   createdAt: string;
   updatedAt: string;
@@ -36,6 +38,24 @@ export interface ClickUpComment {
   author: string | null;
   body: string;
   createdAt: string;
+}
+
+/** A comment with what a conversation needs: who wrote it, whom it mentions, what it carries. */
+export interface ClickUpThreadComment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  text: string;
+  /** User ids tagged in the comment. */
+  mentions: string[];
+  attachments: Array<{ id: string; name: string; mimeType: string; url: string }>;
+  replyCount: number;
+  createdAt: string;
+}
+
+export interface ClickUpUser {
+  id: string;
+  username: string;
 }
 
 export interface ClickUpWorkspace {
@@ -125,9 +145,41 @@ export function parseClickUpTask(raw: unknown): ClickUpTask | null {
     assignees: names(task.assignees, 'username'),
     priority: priority || null,
     listId: listId || null,
+    ...(task.team_id !== undefined && task.team_id !== null ? { teamId: String(task.team_id) } : {}),
     createdAt: isoFromEpoch(task.date_created),
     updatedAt: isoFromEpoch(task.date_updated),
   };
+}
+
+function parseThreadComment(raw: unknown): ClickUpThreadComment[] {
+  const comment = record(raw);
+  const id = comment.id === undefined || comment.id === null ? '' : String(comment.id);
+  if (!id) return [];
+  const user = record(comment.user);
+  const parts = array(comment.comment).map(record);
+  const mentions = parts.flatMap(part => {
+    const tagged = record(part.user).id;
+    return part.type === 'tag' && tagged !== undefined && tagged !== null ? [String(tagged)] : [];
+  });
+  const attachments = parts.flatMap(part => {
+    const attachment = record(part.attachment);
+    const url = text(attachment.url);
+    if (part.type !== 'attachment' || !url) return [];
+    const name = text(attachment.title) || text(attachment.name) || url.split('/').pop() || 'attachment';
+    return [{ id: String(attachment.id ?? url), name, mimeType: text(attachment.mimetype) || text(attachment.type), url }];
+  });
+  return [
+    {
+      id,
+      authorId: user.id === undefined || user.id === null ? '' : String(user.id),
+      authorName: text(user.username) || text(user.email) || 'someone',
+      text: text(comment.comment_text),
+      mentions,
+      attachments,
+      replyCount: Number(comment.reply_count) || 0,
+      createdAt: isoFromEpoch(comment.date),
+    },
+  ];
 }
 
 /** ClickUp v2 client authenticated with a personal API token (`pk_...`). */
@@ -190,6 +242,38 @@ export class ClickUpClient implements ClickUpTaskSource {
         createdAt: isoFromEpoch(comment.date),
       };
     });
+  }
+
+  /** Top-level comments of a task, newest first, with mentions and attachments. */
+  async listThreadComments(taskId: string): Promise<ClickUpThreadComment[]> {
+    const body = await this.#request('GET', `/task/${encodeURIComponent(taskId)}/comment`);
+    return array(body.comments).flatMap(raw => parseThreadComment(raw));
+  }
+
+  /** The replies in a comment's thread. */
+  async listReplies(commentId: string): Promise<ClickUpThreadComment[]> {
+    const body = await this.#request('GET', `/comment/${encodeURIComponent(commentId)}/reply`);
+    return array(body.comments).flatMap(raw => parseThreadComment(raw));
+  }
+
+  async replyToComment(commentId: string, body: string): Promise<void> {
+    await this.#request('POST', `/comment/${encodeURIComponent(commentId)}/reply`, { comment_text: body });
+  }
+
+  /** The account the token belongs to: Factory's identity in ClickUp. */
+  async authorizedUser(): Promise<ClickUpUser> {
+    const user = record((await this.#request('GET', '/user')).user);
+    const id = user.id === undefined || user.id === null ? '' : String(user.id);
+    if (!id) throw new ClickUpApiError('ClickUp did not say which user the token belongs to.', 500);
+    return { id, username: text(user.username) };
+  }
+
+  /** Bytes of an attachment ClickUp serves; the token authorizes private files. */
+  async download(url: string): Promise<Uint8Array> {
+    if (!/^https:\/\/[^/]*clickup[^/]*\//i.test(url)) throw new ClickUpApiError(`Refusing to download a non-ClickUp URL: ${url}`, 400);
+    const response = await this.#fetch(url, { headers: { Authorization: this.#token } });
+    if (!response.ok) throw new ClickUpApiError(`ClickUp attachment download failed with ${response.status}.`, response.status);
+    return new Uint8Array(await response.arrayBuffer());
   }
 
   async createComment(taskId: string, body: string): Promise<{ id: string }> {
