@@ -30,6 +30,8 @@ export const firebaseFactoryMappingSchema = z.object({
   /** Project number, shown in Firebase › Project settings; Crashlytics addresses projects by it. */
   projectNumber: z.string().regex(/^\d{6,20}$/).optional(),
   logs: z.boolean(),
+  /** Crashes of the mapped apps; absent reads as on, so mappings saved before the switch keep working. */
+  crashes: z.boolean().optional(),
   apps: z.array(firebaseAppSchema).max(20),
 });
 export type FirebaseFactoryMapping = z.infer<typeof firebaseFactoryMappingSchema>;
@@ -97,4 +99,9 @@ export async function readConnectionSummary(storage: Pick<IntegrationStorageHand
   const { clientEmail, projectId, keyId } = connection.metadata as Partial<ServiceAccountSummary>;
   if (!clientEmail || !projectId || !keyId) throw new Error(`Stored Firebase connection for org ${orgId} has no key summary.`);
   return { clientEmail, projectId, keyId };
+}
+
+/** Whether a mapping reads crashes: switched on (or saved before the switch) and with an app to read. */
+export function readsCrashes(mapping: FirebaseFactoryMapping): boolean {
+  return mapping.crashes !== false && mapping.apps.length > 0;
 }

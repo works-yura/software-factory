@@ -30,6 +30,8 @@ export interface FirebaseMapping {
   projectId: string;
   projectNumber?: string;
   logs: boolean;
+  /** Crashes of the mapped apps; absent reads as on. */
+  crashes?: boolean;
   apps: FirebaseApp[];
 }
 
@@ -74,8 +76,9 @@ export const uploadFirebaseKey = (baseUrl: string, serviceAccountJson: string) =
 export const disconnectFirebase = (baseUrl: string) =>
   request<FirebaseStatus>(baseUrl, '/web/firebase/connection', { method: 'DELETE' });
 
-export async function fetchFirebaseMapping(baseUrl: string, factoryId: string): Promise<FirebaseMapping | null> {
-  return (await request<{ mapping: FirebaseMapping | null }>(baseUrl, `/web/firebase/factories/${encodeURIComponent(factoryId)}`)).mapping;
+/** Every Factory of the org that has a Firebase project, by Factory id. */
+export async function fetchFirebaseMappings(baseUrl: string): Promise<Record<string, FirebaseMapping>> {
+  return (await request<{ mappings: Record<string, FirebaseMapping> }>(baseUrl, '/web/firebase/factories')).mappings;
 }
 
 export async function saveFirebaseMapping(baseUrl: string, factoryId: string, mapping: FirebaseMapping | null): Promise<FirebaseMapping | null> {

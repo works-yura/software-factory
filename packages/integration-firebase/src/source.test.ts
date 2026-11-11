@@ -38,6 +38,19 @@ describeObservabilitySourceContract('FirebaseObservabilitySource', async seed =>
 describeObservabilitySourceContract('FirebaseObservabilitySource without apps', async seed => source(seed, {}, true, false).source, {
   features: { logs: true, crashes: false },
 });
+describe('FirebaseObservabilitySource with crashes switched off', () => {
+  it('reads no crashes though apps are mapped', async () => {
+    const seed = observabilityContractSeed();
+    const firebase = new FirebaseObservabilitySource({
+      key: fakeServiceAccountKey(),
+      mapping: { projectId: 'syncta-prod', logs: true, crashes: false, apps: seed.apps.map(app => ({ ...app })) },
+      fetch: fakeGoogle(seed).fetch,
+      now,
+    });
+    expect(firebase.features).toEqual({ logs: true, crashes: false });
+    await expect(firebase.listCrashIssues({ ...window, limit: 1 })).rejects.toThrow(/No app is mapped for crashes/);
+  });
+});
 describeObservabilitySourceContract('FirebaseObservabilitySource crashes only', async seed => source(seed, {}, false, true).source, {
   features: { logs: false, crashes: true },
 });

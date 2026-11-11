@@ -21,7 +21,7 @@ import { GoogleApiClient } from './google-api.ts';
 import { CloudLoggingReader } from './logging.ts';
 import { ServiceAccountTokens } from './service-account.ts';
 import type { FetchLike, ServiceAccountKey } from './service-account.ts';
-import { readFactoryMapping, readServiceAccount } from './settings.ts';
+import { readFactoryMapping, readServiceAccount, readsCrashes } from './settings.ts';
 import type { FirebaseFactoryMapping } from './settings.ts';
 
 export interface FirebaseSourceOptions {
@@ -47,7 +47,7 @@ export class FirebaseObservabilitySource implements ObservabilitySource {
       ...(fetch ? { fetch } : {}),
     });
     this.apps = mapping.apps.map(app => ({ appId: app.appId, platform: app.platform, ...(app.label ? { label: app.label } : {}) }));
-    this.features = { logs: mapping.logs, crashes: mapping.apps.length > 0 };
+    this.features = { logs: mapping.logs, crashes: readsCrashes(mapping) };
     this.#logging = new CloudLoggingReader(client, mapping.projectId, now);
     this.#crashlytics = new CrashlyticsReader(client, mapping.projectNumber ?? mapping.projectId, this.apps, now);
   }
@@ -58,12 +58,12 @@ export class FirebaseObservabilitySource implements ObservabilitySource {
   }
 
   listCrashIssues(input: ListCrashIssuesInput) {
-    if (!this.features.crashes) return Promise.reject(new ObservabilityUnsupportedError('No app is mapped for crashes in this Factory.'));
+    if (!this.features.crashes) return Promise.reject(new ObservabilityUnsupportedError('No app is mapped for crashes in this Factory, or crashes are switched off.'));
     return this.#crashlytics.listIssues(input);
   }
 
   getCrashIssue(input: GetCrashIssueInput) {
-    if (!this.features.crashes) return Promise.reject(new ObservabilityUnsupportedError('No app is mapped for crashes in this Factory.'));
+    if (!this.features.crashes) return Promise.reject(new ObservabilityUnsupportedError('No app is mapped for crashes in this Factory, or crashes are switched off.'));
     return this.#crashlytics.getIssue(input);
   }
 }
@@ -82,7 +82,7 @@ export class FirebaseObservabilityProvider implements ObservabilityProvider {
 
   async sourceFor(scope: ObservabilityScope): Promise<ObservabilitySource | null> {
     const mapping = await readFactoryMapping(this.#storage, scope.orgId, scope.factoryProjectId);
-    if (!mapping || (!mapping.logs && mapping.apps.length === 0)) return null;
+    if (!mapping || (!mapping.logs && !readsCrashes(mapping))) return null;
     const key = await readServiceAccount(this.#storage, scope.orgId);
     if (!key) return null;
     // One token cache per key, so a session's several calls share a token.

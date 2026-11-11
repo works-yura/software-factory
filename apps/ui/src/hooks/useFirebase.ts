@@ -5,7 +5,7 @@ import { queryKeys } from '../api/keys';
 import {
   checkFirebase,
   disconnectFirebase,
-  fetchFirebaseMapping,
+  fetchFirebaseMappings,
   fetchFirebaseStatus,
   saveFirebaseMapping,
   uploadFirebaseKey,
@@ -28,12 +28,9 @@ export function useFirebaseConnectionMutations() {
   };
 }
 
-export function useFirebaseMappingQuery(factoryId: string) {
+export function useFirebaseMappingsQuery() {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.firebaseMapping(baseUrl, factoryId),
-    queryFn: () => fetchFirebaseMapping(baseUrl, factoryId),
-  });
+  return useQuery({ queryKey: queryKeys.firebaseMappings(baseUrl), queryFn: () => fetchFirebaseMappings(baseUrl) });
 }
 
 export function useFirebaseMappingMutations(factoryId: string) {
@@ -42,7 +39,14 @@ export function useFirebaseMappingMutations(factoryId: string) {
   return {
     save: useMutation({
       mutationFn: (mapping: FirebaseMapping | null) => saveFirebaseMapping(baseUrl, factoryId, mapping),
-      onSuccess: mapping => queryClient.setQueryData(queryKeys.firebaseMapping(baseUrl, factoryId), mapping),
+      onSuccess: mapping => {
+        queryClient.setQueryData<Record<string, FirebaseMapping>>(queryKeys.firebaseMappings(baseUrl), current => {
+          const next = { ...current };
+          if (mapping) next[factoryId] = mapping;
+          else delete next[factoryId];
+          return next;
+        });
+      },
     }),
     check: useMutation({ mutationFn: (mapping: FirebaseMapping) => checkFirebase(baseUrl, factoryId, mapping) }),
   };

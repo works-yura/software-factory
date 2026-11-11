@@ -20,7 +20,9 @@ import {
   firebaseFactoryMappingSchema,
   readConnectionSummary,
   readFactoryMapping,
+  readFirebaseSettings,
   readServiceAccount,
+  readsCrashes,
   saveFactoryMapping,
   saveServiceAccount,
 } from './settings.ts';
@@ -119,7 +121,7 @@ export async function checkFirebaseAccess(source: FirebaseObservabilitySource, m
   };
   const from = new Date(now.getTime() - 86_400_000);
   if (mapping.logs) await run('logs', mapping.projectId, () => source.queryLogs({ from, to: now, limit: 1 }));
-  for (const app of mapping.apps) {
+  for (const app of readsCrashes(mapping) ? mapping.apps : []) {
     await run('crashes', app.appId, () => source.listCrashIssues({ appId: app.appId, from, to: now, limit: 1 }));
   }
   return checks;
@@ -181,6 +183,14 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
         await storage.connections.delete(orgId);
         await audit(c, 'disconnected');
         return c.json({ connected: false });
+      }),
+    }),
+    registerApiRoute('/web/firebase/factories', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: handle(async c => {
+        const { orgId } = await caller(c, auth, false);
+        return c.json({ mappings: (await readFirebaseSettings(storage, orgId)).factories });
       }),
     }),
     registerApiRoute('/web/firebase/factories/:factoryProjectId', {

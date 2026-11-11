@@ -98,6 +98,20 @@ describe('Firebase routes', () => {
     expect(((await bad.json()) as { message: string }).message).toMatch(/apps\.0\.appId/);
   });
 
+  it('lists every mapped Factory of the org', async () => {
+    const { call } = setup();
+    expect(await (await call('GET', '/web/firebase/factories')).json()).toEqual({ mappings: {} });
+    await call('PUT', '/web/firebase/factories/factory-1', mapping);
+    expect(await (await call('GET', '/web/firebase/factories')).json()).toEqual({ mappings: { 'factory-1': mapping } });
+  });
+
+  it('checks no app when crashes are switched off', async () => {
+    const { call } = setup();
+    await call('PUT', '/web/firebase/connection', { serviceAccountJson: keyJson() });
+    const response = await call('POST', '/web/firebase/factories/factory-1/check', { mapping: { ...mapping, crashes: false } });
+    expect(await response.json()).toEqual({ ok: true, checks: [{ check: 'logs', target: 'syncta-prod', ok: true }] });
+  });
+
   it('checks the connection, read by read, and names the missing role', async () => {
     const { call } = setup({
       google: { fail: { crashlytics: { status: 403, body: { error: { code: 403, message: 'The caller does not have permission' } } } } },
