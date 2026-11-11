@@ -140,7 +140,7 @@ session/factory-session.test.ts	session/src/factory-session.test.ts	-3	owner-def
 session/filesystem-capture.test.ts	session/src/filesystem-capture.test.ts
 session/first-exec-capture.test.ts	session/src/first-exec-capture.test.ts
 session/first-message-capture.test.ts	session/src/first-message-capture.test.ts
-session/live-sessions.test.ts	session/src/live-sessions.test.ts	+5	sessions of other harnesses: several notifiers, a session created again, unsubscribing (+3); upstream #29777: a run deleted mid-flight, a session found by its row (+2)
+session/live-sessions.test.ts	session/src/live-sessions.test.ts	+8	sessions of other harnesses: several notifiers, a session created again, unsubscribing (+3); upstream #29777: a run deleted mid-flight, a session found by its row (+2); upstream #30077: a session that leaves its thread mid-run is announced (+3)
 session/memory-settings-hydration.test.ts	session/src/memory-settings-hydration.test.ts	-2	layerPersonalMemorySettings removed with personal memory settings
 session/org-seed-fail-open.test.ts	server/src/session/org-seed-fail-open.test.ts
 session/reply-credential-processor.test.ts	session/src/reply-credential-processor.test.ts
