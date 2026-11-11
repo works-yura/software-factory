@@ -48,7 +48,7 @@ import { join } from 'node:path';
 
 import { emptyCodexThreadState, type CodexPendingInput, type CodexSessionMode, type CodexSessionRecord, type CodexSessionStore, type CodexThreadState } from './store.ts';
 import { makeCodexTurnTokenUsageState } from './tokenUsage.ts';
-import { codexUsageLimitResetAt, mergeCodexRateLimits } from './usageLimits.ts';
+import { codexUsageLimitResetAt, codexUsageLimitsUpdate, mergeCodexRateLimits } from './usageLimits.ts';
 
 /** How many delivered signal ids and dedupe keys a thread remembers. */
 const RECENT_LIMIT = 200;
@@ -496,6 +496,11 @@ export class CodexSession implements AgentSession {
 
   get queuedFollowUps(): number {
     return (this.#threadState().followUps ?? []).filter(input => input.kind === 'signal').length;
+  }
+
+  /** The account the session's last turn ran on, when its credentials named one. */
+  get accountId(): string | undefined {
+    return this.#record.accountId;
   }
 
   /** Codex's latest allowance snapshot this session saw (`account/rateLimits/updated`). */
@@ -1266,6 +1271,8 @@ export class CodexSession implements AgentSession {
     });
     client.handleServerNotification('account/rateLimits/updated', payload => {
       this.#rateLimits = mergeCodexRateLimits(this.#rateLimits, payload.rateLimits);
+      const limits = codexUsageLimitsUpdate(payload.rateLimits, this.#processCredentials.get(server)?.current.accountId);
+      if (limits) this.#emit(limits as unknown as AgentEvent);
     });
     client.handleServerNotification('error', payload => {
       watchFor(payload)?.translator.error(payload);

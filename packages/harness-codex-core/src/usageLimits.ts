@@ -1,6 +1,8 @@
 // Codex's allowance as usage windows: the session (5 hours), weekly and monthly limits its
 // rate-limit snapshots report, and when an exhausted allowance resets (a usage-limit error's
 // `resetsAt`, as a Claude Code limit carries one).
+import type { UsageLimitsUpdateEvent } from '@factory/harness/usage';
+
 import type { RateLimitSnapshot } from './protocol/schema.ts';
 
 export interface CodexUsageWindow {
@@ -137,4 +139,21 @@ export function codexUsageLimitResetAt(snapshot: RateLimitSnapshot | undefined):
     (latest, window) => (latest === null || Date.parse(window.resetsAt!) > Date.parse(latest) ? window.resetsAt! : latest),
     null,
   );
+}
+
+/**
+ * A rate-limit notification as the Factory's `usage_limits_update`: the windows it names, for the
+ * account the turn runs on. `undefined` when it names none (a model-specific snapshot).
+ */
+export function codexUsageLimitsUpdate(
+  snapshot: RateLimitSnapshot,
+  accountId: string | undefined,
+  now: Date = new Date(),
+): UsageLimitsUpdateEvent | undefined {
+  const windows = codexRateLimitsToWindows(snapshot).map(({ label, ...window }) => {
+    void label;
+    return window;
+  });
+  if (windows.length === 0) return undefined;
+  return { type: 'usage_limits_update', ...(accountId ? { accountId } : {}), windows, checkedAt: now.toISOString() };
 }
