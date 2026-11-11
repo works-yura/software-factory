@@ -52,7 +52,7 @@ function renderModels() {
 const harnessSwitch = () => screen.findByRole('radiogroup', { name: 'Agents run on' });
 
 describe('Models settings per harness', () => {
-  it('shows the default models, Mastra routing and custom providers for a Mastra Factory, no Claude Code', async () => {
+  it('shows the default models, Mastra providers for a Mastra Factory, no Claude Code', async () => {
     stubFactory({ harness: 'mastra' });
     renderModels();
 
@@ -61,13 +61,13 @@ describe('Models settings per harness', () => {
     expect(
       screen.getByText('Applies to new sessions; cards already running finish on their harness.'),
     ).toBeInTheDocument();
-    expect(await screen.findByText('Model routing')).toBeInTheDocument();
+    expect(await screen.findByText('Providers')).toBeInTheDocument();
     expect(screen.getByText('Default model')).toBeInTheDocument();
     expect(screen.getByText('Custom providers')).toBeInTheDocument();
     expect(screen.queryByText('Claude Code accounts')).not.toBeInTheDocument();
   });
 
-  it('shows the default models and Claude Code accounts for a Claude Code Factory, and no Mastra routing', async () => {
+  it('shows the default models and Claude Code accounts for a Claude Code Factory, and no Mastra providers', async () => {
     stubFactory({ harness: 'claude-code' });
     renderModels();
 
@@ -75,7 +75,7 @@ describe('Models settings per harness', () => {
     expect(within(control).getByRole('radio', { name: 'Claude Code' })).toBeChecked();
     expect(await screen.findByText('Claude Code accounts')).toBeInTheDocument();
     expect(screen.getByText('Default model')).toBeInTheDocument();
-    expect(screen.queryByText('Model routing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Providers')).not.toBeInTheDocument();
     expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();
   });
 
@@ -89,7 +89,7 @@ describe('Models settings per harness', () => {
 
     expect(patches).toEqual([{ harness: 'claude-code' }]);
     expect(await screen.findByText('Claude Code accounts')).toBeInTheDocument();
-    expect(screen.queryByText('Model routing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Providers')).not.toBeInTheDocument();
   });
 
   it('switches Claude Code → Mastra', async () => {
@@ -101,7 +101,7 @@ describe('Models settings per harness', () => {
     await waitForMutationsIdle(client);
 
     expect(patches).toEqual([{ harness: 'mastra' }]);
-    expect(await screen.findByText('Model routing')).toBeInTheDocument();
+    expect(await screen.findByText('Providers')).toBeInTheDocument();
     expect(screen.queryByText('Claude Code accounts')).not.toBeInTheDocument();
   });
 
@@ -119,7 +119,7 @@ describe('Models settings per harness', () => {
     expect(screen.queryByText('Claude Code accounts')).not.toBeInTheDocument();
   });
 
-  it('switches Mastra → Codex where the server runs it, with no Claude accounts or Mastra routing below', async () => {
+  it('switches Mastra → Codex where the server runs it, with no Claude accounts or Mastra providers below', async () => {
     const { patches } = stubFactory({ harness: 'mastra' }, { codex: true });
     const user = userEvent.setup();
     const { client } = renderModels();

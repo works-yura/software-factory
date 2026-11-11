@@ -586,6 +586,10 @@
       "change": "Change",
       "reasoning": "Reasoning",
       "harnessUnavailable": "This harness isn’t running on this server, so it has no models to choose from."
+    },
+    "providers": {
+      "title": "Providers",
+      "description": "Where Mastra's chats and card runs get their models: the organization's provider keys and its own OpenAI-compatible providers. Shared by every Factory of the organization."
     }
   },
   "memory": {
@@ -643,20 +647,6 @@
     "searchLabel": "Search settings",
     "searchPlaceholder": "Search settings…",
     "noResults": "No settings found."
-  },
-  "routing": {
-    "title": "Model routing",
-    "description": "Chats and work-item runs both use the Factory defaults. Running threads keep the model they already picked.",
-    "lanes": {
-      "chats": "Chats",
-      "runs": "Work-item runs"
-    },
-    "uses": "Uses {{defaults}}",
-    "sources": {
-      "webApp": "Web app"
-    },
-    "model": "Model",
-    "providers": "Providers"
   },
   "accounts": {
     "kind": {
@@ -1196,5 +1186,11 @@
     "pickOne": "Pick at least one.",
     "saving": "Saving…",
     "save": "Save"
+  },
+  "routing": {
+    "lanes": {
+      "chats": "Chats",
+      "runs": "Work-item runs"
+    }
   }
 }
