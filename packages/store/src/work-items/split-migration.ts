@@ -275,7 +275,7 @@ async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy
     }
     await ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, card.workItem);
     if (card.source) await ops.insertOne<WorkItemSourceDbRecord>(SOURCES, card.source);
-    await ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, card.boardItem);
+    await ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, { ...card.boardItem, changed_at: new Date() });
     return true;
   }
   // updateAtomic locks the board row until this transaction commits, so a new
@@ -300,6 +300,7 @@ async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy
         ? { comment_count: current.comment_count, feed_activity_at: current.feed_activity_at }
         : {}),
       revision: Math.max(current.revision, card.boardItem.revision) + 1,
+      changed_at: new Date(Math.max(Date.now(), time(current.changed_at ?? null) + 1)),
     };
   });
   if (unchanged) return false;

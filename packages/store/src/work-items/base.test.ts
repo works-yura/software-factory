@@ -5,6 +5,7 @@
 
 import { randomUUID } from 'node:crypto';
 
+import type { FactoryStorageOps } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -520,6 +521,53 @@ describe('WorkItemsStorage', () => {
     const [again] = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
     expect(again?.title).toBe('Fix login');
     expect(again?.stages).toEqual(['intake']);
+  });
+
+  it('rereads only the changed and deleted cards after a write, not the whole board', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    // `ops` is protected on the domain; the test reads it to count rows and to read the board uncached.
+    const ops = (storage as unknown as { ops: FactoryStorageOps }).ops;
+    const cards: Awaited<ReturnType<typeof storage.upsert>>[] = [];
+    for (let i = 0; i < 6; i++) {
+      cards.push(
+        await storage.upsert({
+          ...scope,
+          userId: 'u',
+          input: { ...input, externalSource: { ...input.externalSource, externalId: `e${i}` } },
+        }),
+      );
+    }
+    // Step past the window a delta rereads to tolerate clock skew between writers.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(Date.now() + 10_000);
+    const full = await storage.list(scope);
+    expect(full).toHaveLength(6);
+    vi.setSystemTime(Date.now() + 10_000);
+    await storage.update({ orgId: 'org1', id: cards[2]!.item.id, userId: 'mover', patch: { stages: ['build'] } });
+    await storage.delete({ orgId: 'org1', id: cards[4]!.item.id });
+
+    const findMany = vi.spyOn(ops, 'findMany');
+    const after = await storage.list(scope);
+    const boardRowsRead = (
+      await Promise.all(
+        findMany.mock.calls
+          .map((call, i) => [call[0], findMany.mock.results[i]!.value] as const)
+          .filter(([table]) => table === 'factory_board_items')
+          .map(([, rows]) => rows),
+      )
+    ).reduce((sum, rows: unknown[]) => sum + rows.length, 0);
+    findMany.mockRestore();
+    vi.useRealTimers();
+
+    expect(boardRowsRead).toBeLessThanOrEqual(1);
+    expect(after.map(card => card.id)).toEqual(full.map(card => card.id).filter(id => id !== cards[4]!.item.id));
+    expect(after.find(card => card.id === cards[2]!.item.id)?.stages).toEqual(['build']);
+    expect(after).toEqual(
+      (await storage.listWith(ops, scope)).map(card =>
+        expect.objectContaining({ id: card.id, stages: card.stages }),
+      ),
+    );
   });
 
   it('holds list order when a later write touches an older card', async () => {
