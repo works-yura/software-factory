@@ -34,38 +34,12 @@
       "organizationRequired": "Select an organization to manage ClickUp syncing.",
       "statusUnavailable": "ClickUp status could not be loaded.",
       "rejected": "ClickUp rejected the configured API token. Ask the operator to check it.",
-      "ready": "Tasks from the connected Lists are checked every {{seconds}} s. A task is imported only when an intake route names its List; where its card goes and what a status change does is decided by the routes below.",
-      "sync": "Import ClickUp tasks",
-      "lists": "ClickUp Lists",
-      "listsFailed": "ClickUp Lists could not be loaded. Try again in a minute.",
-      "connectedLists": "Connected Lists",
-      "addLists": "Add Lists",
-      "noLists": "No Lists connected yet. Add one to start importing tasks.",
-      "card": {
-        "notRouted": "Not routed",
-        "routing": "Where tasks go",
-        "routingHint": "Choose a factory — until then this List’s tasks are not picked up.",
-        "disconnect": "Disconnect",
-        "disconnectAria": "Disconnect {{name}}",
-        "routes_one": "→ {{count}} route",
-        "routes_other": "→ {{count}} routes",
-        "routesHint": "Which tasks of this List are imported, where they go and how a status change moves the card is up to the intake routes with a “ClickUp List” condition.",
-        "listRoutes": "Routes of this List",
-        "noRoutes": "No route names this List, so its tasks are not imported. Add a route with a “ClickUp List” condition below."
-      },
-      "picker": {
-        "title": "Choose ClickUp Lists",
-        "description": "Tasks from the chosen Lists are imported. Changes save right away.",
-        "chosen": "Chosen Lists",
-        "remove": "Remove {{name}}",
-        "done": "Done",
-        "count_one": "{{count}} chosen",
-        "count_other": "{{count}} chosen"
-      }
+      "ready": "Tasks are checked every {{seconds}} s in the Lists the intake routes below name (the «ClickUp List» condition): a route decides whether a task is imported, where its card goes and what a status change does.",
+      "sync": "Import ClickUp tasks"
     },
     "sources": {
       "title": "Sources",
-      "description": "Where cards come from. Where a card goes and what happens to it next is up to the intake routes below.",
+      "description": "Where cards come from: the connections. What happens to cards — which List to import from, where to put them, what to file on a schedule — is decided by the intake routes below.",
       "repositories": "GitHub and GitLab: issues and pull requests of this Factory's repositories.",
       "repositoriesLink": "Set up in Repositories",
       "manual": "By hand: the board’s “New card” button."
@@ -767,95 +741,6 @@
       }
     }
   },
-  "intakeRules": {
-    "title": "On a schedule",
-    "description": "A task source of {{name}}: makes a card on a schedule. Where it goes is up to the route “Розклад · name” that comes with the rule.",
-    "add": "Add rule",
-    "loading": "Loading rules",
-    "unavailable": "Intake rules are unavailable.",
-    "empty": "No rules yet. For example: every Monday a “Security audit” card on Audits.",
-    "listLabel": "Intake rules",
-    "newTitle": "New rule",
-    "editTitle": "Edit rule {{name}}",
-    "name": "Rule name",
-    "namePlaceholder": "e.g. Weekly security audit",
-    "when": "When",
-    "then": "Then",
-    "triggerKind": "Trigger",
-    "actionKind": "Action",
-    "ifOpen": "If the last one is still open",
-    "policy": "Overlap policy",
-    "preview": "Schedule in words",
-    "nextFires": "Next runs: {{list}}",
-    "kindNotEditable": "“{{kind}}” can't be edited in this interface.",
-    "cancel": "Cancel",
-    "save": "Save",
-    "saved": "Rule saved",
-    "saveFailed": "Couldn't save the rule",
-    "deleted": "Rule deleted",
-    "enabledFor": "Enabled: {{name}}",
-    "history": "History",
-    "historyFor": "History of {{name}}",
-    "loadingHistory": "Loading history",
-    "noFires": "The rule hasn't run yet.",
-    "openCard": "card",
-    "edit": "Edit",
-    "delete": "Delete",
-    "confirmDelete": "Yes, delete",
-    "deleteRule": "Delete {{name}}",
-    "summary": "{{trigger}} → {{action}}",
-    "nextRun": "Next run: {{at}}",
-    "noClock": "Runs on an event",
-    "paused": "Paused",
-    "lastRun": "last: {{at}}, {{outcome}}",
-    "problem": "Not working: {{problem}}",
-    "outcomes": {
-      "done": "done",
-      "skipped": "skipped",
-      "failed": "failed"
-    },
-    "schedule": {
-      "preset": "How often",
-      "presets": {
-        "daily": "Every day",
-        "weekdays": "Weekdays",
-        "weekly": "Every week",
-        "hourly": "Every N hours",
-        "cron": "Custom cron"
-      },
-      "weekday": "Weekday",
-      "weekdays": {
-        "0": "Sunday",
-        "1": "Monday",
-        "2": "Tuesday",
-        "3": "Wednesday",
-        "4": "Thursday",
-        "5": "Friday",
-        "6": "Saturday"
-      },
-      "time": "Time",
-      "everyHours": "Every",
-      "hours_one": "{{count}} hour",
-      "hours_other": "{{count}} hours",
-      "minute": "Minute",
-      "cron": "Cron expression",
-      "timezone": "Timezone"
-    },
-    "card": {
-      "board": "Card board",
-      "chooseBoard": "Choose a board",
-      "phase": "Card phase",
-      "firstPhase": "First phase",
-      "title": "Card title",
-      "titlePlaceholder": "e.g. Security audit — {date}",
-      "description": "Card description",
-      "descriptionPlaceholder": "What the agent should do, e.g. Audit: security. Focus on secrets and access.",
-      "repository": "Repository (optional)",
-      "repositoryPlaceholder": "owner/repo — empty: the whole environment",
-      "placeholders": "Placeholders: {{list}}",
-      "routingHint": "Intake routes place the card first (the Rule condition, or the \"intake-rule card\" type); this board and phase take the cards no route matched."
-    }
-  },
   "intakeRoutes": {
     "title": "Intake routes",
     "description": "Where new cards of the Factory \"{{name}}\" land. The first enabled route that matches a card places it; a ClickUp task is imported only by a route that names its List, and everything else goes where the last route that takes every card says. Routes with an event (task status changed, task closed, pull request merged…) move a card that already exists.",
@@ -904,8 +789,6 @@
     "cancel": "Cancel",
     "save": "Save",
     "tagPlaceholder": "tag",
-    "fromRule": "from rule \"{{rule}}\"",
-    "fromTrigger": "from \"{{trigger}}\" rules",
     "choose": "choose",
     "titlePlaceholder": "text in the title",
     "fields": {
@@ -914,8 +797,6 @@
       "author.trusted": "Author",
       "item.labels": "Tag",
       "item.title": "Title",
-      "intake.rule": "Rule",
-      "intake.trigger": "Rule trigger",
       "source.repository": "Repository",
       "item.key": "Key",
       "item.state": "State",
@@ -930,8 +811,7 @@
     "kinds": {
       "issue": "issue",
       "pull_request": "pull request",
-      "task": "ClickUp task",
-      "intake_rule": "on a schedule"
+      "task": "ClickUp task"
     },
     "defaults": {
       "outsideAuthors": "Outside authors wait in Intake",
@@ -978,7 +858,76 @@
       "createdAndChanged": "A new task and a status change",
       "changed": "Only a status change",
       "hint": "A status change moves the card while it is still where the previous status put it; into a closing phase, always."
+    },
+    "origins": {
+      "clickupStatus": "ClickUp: status “{{status}}”"
     }
+  },
+  "intakeTriggers": {
+    "ifOpen": "If the last one is still open",
+    "policy": "Overlap policy",
+    "preview": "Schedule in words",
+    "nextFires": "Next runs: {{list}}",
+    "kindNotEditable": "“{{kind}}” can't be edited in this interface.",
+    "loadingHistory": "Loading history",
+    "noFires": "The rule hasn't run yet.",
+    "openCard": "card",
+    "outcomes": {
+      "done": "done",
+      "skipped": "skipped",
+      "failed": "failed"
+    },
+    "schedule": {
+      "preset": "How often",
+      "presets": {
+        "daily": "Every day",
+        "weekdays": "Weekdays",
+        "weekly": "Every week",
+        "hourly": "Every N hours",
+        "cron": "Custom cron"
+      },
+      "weekday": "Weekday",
+      "weekdays": {
+        "0": "Sunday",
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday"
+      },
+      "time": "Time",
+      "everyHours": "Every",
+      "hours_one": "{{count}} hour",
+      "hours_other": "{{count}} hours",
+      "minute": "Minute",
+      "cron": "Cron expression",
+      "timezone": "Timezone"
+    },
+    "card": {
+      "title": "Card title",
+      "titlePlaceholder": "e.g. Security audit — {date}",
+      "description": "Card description",
+      "descriptionPlaceholder": "What the agent should do, e.g. Audit: security. Focus on secrets and access.",
+      "repository": "Repository (optional)",
+      "repositoryPlaceholder": "owner/repo — empty: the whole environment",
+      "placeholders": "Placeholders: {{list}}"
+    },
+    "repeats": "Repeats",
+    "then": "Does",
+    "triggerKind": "Schedule kind",
+    "actionKind": "Action",
+    "mode": "When",
+    "modeArrival": "A card arrives from a source",
+    "modeSchedule": "On a schedule (repeats)",
+    "modeHint": "A route on a schedule files a card itself on every fire and puts it where it leads; it takes no part in the order for arriving cards.",
+    "history": "History",
+    "historyFor": "Fire history of “{{name}}”",
+    "nextRun": "Next run: {{at}}",
+    "noClock": "No clock",
+    "paused": "Off",
+    "lastRun": "Last: {{outcome}}, {{at}}",
+    "whenSchedule": "{{schedule}}"
   },
   "workBoard": {
     "description": "How cards move through this board: when each phase starts on its own, what its agent is told, when its plan is approved without a person, and where cards go next. Changes apply to this Factory only.",
@@ -1008,10 +957,7 @@
       "state": "State",
       "assignees": "Assignees",
       "provider": "Provider",
-      "repository": "Repository or project",
-      "intake": "Intake",
-      "intakeRule": "Intake rule",
-      "intakeTrigger": "Intake trigger"
+      "repository": "Repository or project"
     },
     "rule": {
       "invalidJson": "Not valid JSON.",

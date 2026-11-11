@@ -11,12 +11,12 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { settingsSectionPath } from '../settingsSections';
 import { ClickUpIntakeSection } from './ClickUpIntakeSection';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
-import { IntakeRulesSection } from '../intake-rules/IntakeRulesSection';
 
 /**
- * Settings › Intake in two parts. **Sources** say where cards come from: ClickUp Lists, schedules,
- * the Factory's repositories and the board's «New card». **Intake routes** then decide, in one
- * ordered list, where each card goes and what a later event does to it; no source places a card.
+ * Settings › Intake in two parts. **Sources** are connections only: ClickUp, the Factory's
+ * repositories and the board's «New card». **Intake routes** are one ordered list: «Коли» is a source
+ * and a condition (a ClickUp List and status, a pull request…) or a schedule of the route's own, and
+ * the route says where the card goes and what a later event does to it.
  */
 export function IntakeSection() {
   const { t } = useTranslation('settings');
@@ -44,7 +44,7 @@ export function IntakeSection() {
     });
   };
 
-  // Routes and schedules belong to one Factory: the one these settings were opened from.
+  // Routes belong to one Factory: the one these settings were opened from.
   const factory = factoryId ? (factoriesQuery.data ?? []).find(candidate => candidate.id === factoryId) : undefined;
 
   return (
@@ -62,9 +62,7 @@ export function IntakeSection() {
           config={config}
           busy={saveMutation.isPending}
           update={update}
-          factories={factoriesQuery.data ?? []}
         />
-        {factory && <IntakeRulesSection factoryProjectId={factory.id} factoryName={factory.name} />}
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Txt as="p" variant="caption" tone="muted">

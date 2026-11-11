@@ -233,8 +233,8 @@ export interface UpdateOMResponse {
   ok: true;
   config: OMConfigInfo;
 }
-export type IntakeRuleListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRuleList.responseSchema>;
-export type IntakeRuleInfo = IntakeRuleListResponse['intakeRules'][number];
-export type IntakeRuleFireInfo = NonNullable<IntakeRuleInfo['lastFire']>;
-export type IntakeRuleKindsInfo = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRuleKinds.responseSchema>;
+/** A route «За розкладом»'s own trigger, action and policy, in words, with its next and last fires. */
+export type IntakeRouteTriggeredInfo = NonNullable<IntakeRouteInfo['triggered']>;
+export type IntakeRouteFireInfo = NonNullable<IntakeRouteTriggeredInfo['lastFire']>;
+export type IntakeTriggerKindsInfo = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeTriggerKinds.responseSchema>;
 export type IntakeTriggerPreviewInfo = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeTriggerPreview.responseSchema>;

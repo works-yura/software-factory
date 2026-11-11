@@ -14,16 +14,22 @@ import type { TFunction } from 'i18next';
 import type { CardRuleGroup, InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useClickUpListsQuery, useClickUpStatusQuery } from '../../../../hooks/useClickUp';
-import { useIntakeRuleKindsQuery, useIntakeRulesQuery } from '../../../../hooks/useIntakeRules';
 import {
   useCreateIntakeRouteMutation,
   useDeleteIntakeRouteMutation,
+  useIntakeRouteFiresQuery,
   useIntakeRoutesCanEditQuery,
   useIntakeRoutesQuery,
+  useIntakeTriggerKindsQuery,
   useReorderIntakeRoutesMutation,
   useUpdateIntakeRouteMutation,
 } from '../../../../hooks/useIntakeRoutes';
-import type { IntakeRouteDraft } from '../../../../hooks/useIntakeRoutes';
+import type { IntakeRouteDraft, IntakeRouteTriggeredDraft } from '../../../../hooks/useIntakeRoutes';
+import type { IntakeTriggerKindsInfo } from '../../../../api/types';
+import { currentLanguage } from '../../../i18n';
+import '../intake-triggers/builtinForms';
+import type { IntakeKindFormContext } from '../intake-triggers/formRegistry';
+import { defaultTriggeredDraft, TriggerFields, triggeredReady } from '../intake-triggers/TriggerFields';
 import { phaseTitle, boardTitle } from '../../../i18n/boardLabels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import {
@@ -51,9 +57,10 @@ const FIRST_PHASE = '__first_phase__';
 const failure = (error: unknown, fallback: string) => (error instanceof Error && error.message ? error.message : fallback);
 
 /**
- * Settings › Intake › Routes of one Factory: an ordered list that decides where each new card lands.
- * The first enabled route whose condition matches a new card places it; tag routes and the List's
- * board apply only when none does.
+ * Settings › Intake › Routes of one Factory: one ordered list. A route's «Коли» is either a card
+ * arriving from a source (with conditions: a ClickUp List and status, a pull request, a tag…) — the
+ * first enabled route that matches places it — or a schedule of the route's own («За розкладом»),
+ * which files its card itself and stays out of that order. Its fire history unfolds in its row.
  */
 export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factoryProjectId: string; factoryName: string }) {
   const { t } = useTranslation('settings');
@@ -70,15 +77,18 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
 
   const routes = routesQuery.data ?? [];
   const boards = catalog.data ?? [];
-  const rulesQuery = useIntakeRulesQuery(factoryProjectId);
-  const kindsQuery = useIntakeRuleKindsQuery(factoryProjectId);
+  const kindsQuery = useIntakeTriggerKindsQuery(factoryProjectId);
   const clickUpConnected = useClickUpStatusQuery().data?.connected === true;
   const clickUpLists = useClickUpListsQuery(clickUpConnected).data ?? [];
   const origins: IntakeOrigins = {
-    rules: (rulesQuery.data ?? []).map(rule => ({ value: rule.id, label: rule.name })),
-    triggers: (kindsQuery.data?.triggers ?? []).map(trigger => ({ value: trigger.kind, label: trigger.label })),
     lists: clickUpLists.map(list => ({ value: list.id, label: list.path ? `${list.path} / ${list.name}` : list.name })),
   };
+  const triggerContext: IntakeKindFormContext = {
+    factoryProjectId,
+    boards,
+    placeholders: kindsQuery.data?.placeholders ?? [],
+  };
+  const [history, setHistory] = useState<string | null>(null);
   const busy = create.isPending || update.isPending || remove.isPending || reorder.isPending;
 
   const move = (index: number, offset: -1 | 1) => {
@@ -158,6 +168,8 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                     initial={route}
                     boards={boards}
                     origins={origins}
+                    kinds={kindsQuery.data}
+                    triggerContext={triggerContext}
                     busy={busy}
                     onCancel={() => setEditing(null)}
                     onSave={draft => saveEdit(route, draft, () => setEditing(null))}
@@ -239,6 +251,14 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                       target: describeTarget(route.target, boards, t),
                     })}
                   </Txt>
+                  {route.triggered && (
+                    <TriggerStatus
+                      route={route}
+                      factoryProjectId={factoryProjectId}
+                      open={history === route.id}
+                      onToggle={() => setHistory(current => (current === route.id ? null : route.id))}
+                    />
+                  )}
                   {route.problems.map(problem => (
                     <Txt key={problem} as="p" variant="caption" tone="muted" role="alert">
                       {t('intakeRoutes.problem', { problem })}
@@ -249,7 +269,15 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
             )}
           </ol>
           {editing === 'new' && (
-            <RouteEditor boards={boards} origins={origins} busy={busy} onCancel={() => setEditing(null)} onSave={saveNew} />
+            <RouteEditor
+              boards={boards}
+              origins={origins}
+              kinds={kindsQuery.data}
+              triggerContext={triggerContext}
+              busy={busy}
+              onCancel={() => setEditing(null)}
+              onSave={saveNew}
+            />
           )}
         </div>
       )}
@@ -259,19 +287,14 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
 
 type T = TFunction<'settings'>;
 
-/** What an intake-rule condition can name: the project's rules and the trigger kinds, labelled. */
+/** What a condition can name from outside the project, labelled: the ClickUp Lists of the connected workspace. */
 interface IntakeOrigins {
-  rules: { value: string; label: string }[];
-  triggers: { value: string; label: string }[];
-  /** The ClickUp Lists the organization reads, for the `source.list` condition. */
+  /** The ClickUp Lists, for the `source.list` condition: naming one is what makes the project read it. */
   lists: { value: string; label: string }[];
 }
 
-const originLabel = (options: IntakeOrigins['rules'], value: string) =>
+const originLabel = (options: IntakeOrigins['lists'], value: string) =>
   options.find(option => option.value === value)?.label ?? value;
-
-const originsFor = (origins: IntakeOrigins, field: 'intake.rule' | 'intake.trigger' | 'source.list') =>
-  field === 'intake.rule' ? origins.rules : field === 'intake.trigger' ? origins.triggers : origins.lists;
 
 /** What a route on a ClickUp List reacts to: a new task, a status change of a known one, or both. */
 type RouteEvents = 'created' | 'createdAndChanged' | 'changed' | 'other';
@@ -291,10 +314,6 @@ function routeEventsOf(on: readonly string[] | undefined): RouteEvents {
 
 function describeCondition(condition: RouteCondition, origins: IntakeOrigins, t: T): string {
   switch (condition.field) {
-    case 'intake.rule':
-      return t('intakeRoutes.fromRule', { rule: originLabel(origins.rules, condition.value) });
-    case 'intake.trigger':
-      return t('intakeRoutes.fromTrigger', { trigger: originLabel(origins.triggers, condition.value) });
     case 'source.list':
       return t('intakeRoutes.inList', { list: originLabel(origins.lists, condition.value) });
     case 'source.integration':
@@ -334,9 +353,19 @@ const DEFAULT_ROUTE_NAMES: Readonly<Record<string, string>> = {
   'Everything else goes to Work › Intake': 'everythingElse',
 };
 
+/**
+ * A route's name in the interface language: Factory's default routes and the routes it wrote (a
+ * ClickUp status, a migrated schedule) carry the name it gave them, shown translated until a person
+ * renames the route.
+ */
 function routeName(route: IntakeRouteInfo, t: T): string {
   const key = DEFAULT_ROUTE_NAMES[route.name];
-  return key ? t(`intakeRoutes.defaults.${key}` as never) : route.name;
+  if (key) return t(`intakeRoutes.defaults.${key}` as never);
+  const origin = route.origin;
+  if (origin && origin.generatedName === route.name && origin.kind === 'clickup-status') {
+    return t('intakeRoutes.origins.clickupStatus', { status: origin.status });
+  }
+  return route.name;
 }
 
 const ROUTE_EVENTS = [
@@ -362,6 +391,7 @@ function describeEventCondition(condition: CardRuleGroup['conditions'][number], 
 }
 
 function describeWhen(route: IntakeRouteInfo, origins: IntakeOrigins, t: T): string {
+  if (route.triggered) return route.triggered.trigger.summary;
   const events = route.on.filter(event => event !== 'work_item.created').map(event => t(`intakeRoutes.events.${event}`));
   const eventConditions: string[] = [];
   let cardConditions = route.when;
@@ -400,10 +430,85 @@ function describeTarget(
   });
 }
 
+/** A route «За розкладом»'s next fire, its last one, and its fire history on demand. */
+function TriggerStatus({
+  route,
+  factoryProjectId,
+  open,
+  onToggle,
+}: {
+  route: IntakeRouteInfo;
+  factoryProjectId: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation('settings');
+  const fires = useIntakeRouteFiresQuery(factoryProjectId, route.id, open);
+  const triggered = route.triggered!;
+  const format = new Intl.DateTimeFormat(currentLanguage(), { dateStyle: 'medium', timeStyle: 'short' });
+  const outcome = (value: string) => t(`intakeTriggers.outcomes.${value}` as never);
+  const next = !route.enabled
+    ? t('intakeTriggers.paused')
+    : triggered.nextFires[0]
+      ? t('intakeTriggers.nextRun', { at: format.format(new Date(triggered.nextFires[0])) })
+      : t('intakeTriggers.noClock');
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <Txt as="span" variant="caption" tone="muted">
+          {next}
+        </Txt>
+        {triggered.lastFire && (
+          <Txt as="span" variant="caption" tone="muted">
+            {t('intakeTriggers.lastRun', {
+              outcome: outcome(triggered.lastFire.outcome),
+              at: format.format(new Date(triggered.lastFire.firedAt)),
+            })}
+          </Txt>
+        )}
+        <Button size="sm" variant="ghost" aria-expanded={open} onClick={onToggle}>
+          {t('intakeTriggers.history')}
+        </Button>
+      </div>
+      {open && (
+        <ul aria-label={t('intakeTriggers.historyFor', { name: route.name })} className="flex flex-col gap-0.5">
+          {fires.isPending && (
+            <li>
+              <Txt as="span" variant="caption" tone="muted">
+                {t('intakeTriggers.loadingHistory')}
+              </Txt>
+            </li>
+          )}
+          {fires.data?.length === 0 && (
+            <li>
+              <Txt as="span" variant="caption" tone="muted">
+                {t('intakeTriggers.noFires')}
+              </Txt>
+            </li>
+          )}
+          {fires.data?.map(fire => (
+            <li key={fire.id}>
+              <Txt as="span" variant="caption" tone="muted">
+                {format.format(new Date(fire.firedAt))} · {outcome(fire.outcome)}
+                {fire.reason ? ` · ${fire.reason}` : ''}
+                {fire.workItemId ? ` · ${t('intakeTriggers.openCard')}` : ''}
+              </Txt>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+type RouteMode = 'arrival' | 'schedule';
+
 function RouteEditor({
   initial,
   boards,
   origins,
+  kinds,
+  triggerContext,
   busy,
   onSave,
   onCancel,
@@ -411,11 +516,27 @@ function RouteEditor({
   initial?: IntakeRouteInfo;
   boards: InstalledBoardInfo[];
   origins: IntakeOrigins;
+  /** The kinds a route «За розкладом» can use; unset while they load (or on a server without them). */
+  kinds: IntakeTriggerKindsInfo | undefined;
+  triggerContext: IntakeKindFormContext;
   busy: boolean;
   onSave: (draft: IntakeRouteDraft) => void;
   onCancel: () => void;
 }) {
   const { t } = useTranslation('settings');
+  // A new route chooses its «Коли»; an existing one keeps the kind it is.
+  const [mode, setMode] = useState<RouteMode>(initial?.triggered ? 'schedule' : 'arrival');
+  const [triggered, setTriggered] = useState<IntakeRouteTriggeredDraft | undefined>(() =>
+    initial?.triggered
+      ? {
+          trigger: { kind: initial.triggered.trigger.kind, config: initial.triggered.trigger.config },
+          action: { kind: initial.triggered.action.kind, config: initial.triggered.action.config },
+          policy: { kind: initial.triggered.policy.kind },
+        }
+      : undefined,
+  );
+  const scheduled = mode === 'schedule';
+  const triggeredDraft = triggered ?? (kinds ? defaultTriggeredDraft(kinds, triggerContext) : undefined);
   const [name, setName] = useState(initial?.name ?? '');
   const readable = readRouteConditions(initial?.when ?? null);
   const [conditions, setConditions] = useState<RouteCondition[]>(readable ?? []);
@@ -436,7 +557,15 @@ function RouteEditor({
   const editableEvents = !initial || routeEventsOf(initial.on) !== 'other';
 
   const save = () =>
-    onSave({
+    scheduled
+      ? onSave({
+          name: name.trim(),
+          enabled: initial?.enabled ?? true,
+          when: null,
+          target: { boardKey: boardKey!, phaseKey },
+          triggered: triggeredDraft!,
+        })
+      : onSave({
       name: name.trim(),
       enabled: initial?.enabled ?? true,
       // Only a route that names a ClickUp List says which events it handles here; others keep theirs.
@@ -453,7 +582,7 @@ function RouteEditor({
       className="flex flex-col gap-3 rounded-md border border-border1 px-3 py-3"
       onSubmit={event => {
         event.preventDefault();
-        if (name.trim() && boardKey) save();
+        if (name.trim() && boardKey && (!scheduled || (triggeredDraft && triggeredReady(triggeredDraft)))) save();
       }}
     >
       <Input
@@ -465,7 +594,37 @@ function RouteEditor({
         onChange={event => setName(event.target.value)}
       />
 
-      <div className="flex flex-col gap-2">
+      {!initial && kinds && kinds.triggers.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <Txt as="span" variant="caption" tone="muted">
+              {t('intakeTriggers.mode')}
+            </Txt>
+            <Select value={mode} disabled={busy} onValueChange={next => setMode(next as RouteMode)}>
+              <SelectTrigger size="sm" aria-label={t('intakeTriggers.mode')} className="w-auto">
+                <Txt as="span" variant="caption">
+                  {t(scheduled ? 'intakeTriggers.modeSchedule' : 'intakeTriggers.modeArrival')}
+                </Txt>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="arrival">{t('intakeTriggers.modeArrival')}</SelectItem>
+                <SelectItem value="schedule">{t('intakeTriggers.modeSchedule')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {scheduled && (
+            <Txt as="p" variant="caption" tone="muted">
+              {t('intakeTriggers.modeHint')}
+            </Txt>
+          )}
+        </div>
+      )}
+
+      {scheduled && kinds && triggeredDraft && (
+        <TriggerFields kinds={kinds} context={triggerContext} value={triggeredDraft} onChange={setTriggered} disabled={busy} />
+      )}
+
+      <div className="flex flex-col gap-2" hidden={scheduled}>
         <Txt as="span" variant="caption" tone="muted">
           {t('intakeRoutes.when')}
         </Txt>
@@ -499,7 +658,7 @@ function RouteEditor({
         )}
       </div>
 
-      {namesList && editableEvents && (
+      {!scheduled && namesList && editableEvents && (
         <div className="flex flex-col gap-2">
           <Txt as="span" variant="caption" tone="muted">
             {t('intakeRoutes.listEvents.label')}
@@ -568,7 +727,12 @@ function RouteEditor({
         <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
           {t('intakeRoutes.cancel')}
         </Button>
-        <Button type="submit" size="sm" variant="primary" disabled={busy || !name.trim() || !boardKey}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="primary"
+          disabled={busy || !name.trim() || !boardKey || (scheduled && !(triggeredDraft && triggeredReady(triggeredDraft)))}
+        >
           {t('intakeRoutes.save')}
         </Button>
       </div>
@@ -699,7 +863,7 @@ function ConditionRow({
           </SelectContent>
         </Select>
       )}
-      {(condition.field === 'intake.rule' || condition.field === 'intake.trigger' || condition.field === 'source.list') && (
+      {condition.field === 'source.list' && (
         <Select
           value={condition.value}
           disabled={busy}
@@ -707,11 +871,11 @@ function ConditionRow({
         >
           <SelectTrigger size="sm" aria-label={fieldLabel} className="w-auto">
             <Txt as="span" variant="caption">
-              {condition.value ? originLabel(originsFor(origins, condition.field), condition.value) : t('intakeRoutes.choose')}
+              {condition.value ? originLabel(origins.lists, condition.value) : t('intakeRoutes.choose')}
             </Txt>
           </SelectTrigger>
           <SelectContent>
-            {originsFor(origins, condition.field).map(option => (
+            {origins.lists.map(option => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>

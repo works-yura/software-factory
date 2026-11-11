@@ -46,15 +46,15 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Select value={preset} disabled={disabled} onValueChange={next => setSpec(specFor(next as SchedulePreset, spec))}>
-        <SelectTrigger size="sm" aria-label={t('intakeRules.schedule.preset')} className="w-auto">
+        <SelectTrigger size="sm" aria-label={t('intakeTriggers.schedule.preset')} className="w-auto">
           <Txt as="span" variant="caption">
-            {t(`intakeRules.schedule.presets.${preset}`)}
+            {t(`intakeTriggers.schedule.presets.${preset}`)}
           </Txt>
         </SelectTrigger>
         <SelectContent>
           {SCHEDULE_PRESETS.map(option => (
             <SelectItem key={option} value={option}>
-              {t(`intakeRules.schedule.presets.${option}`)}
+              {t(`intakeTriggers.schedule.presets.${option}`)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -66,15 +66,15 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
           disabled={disabled}
           onValueChange={next => setSpec({ ...spec, weekday: Number(next) })}
         >
-          <SelectTrigger size="sm" aria-label={t('intakeRules.schedule.weekday')} className="w-auto">
+          <SelectTrigger size="sm" aria-label={t('intakeTriggers.schedule.weekday')} className="w-auto">
             <Txt as="span" variant="caption">
-              {t(`intakeRules.schedule.weekdays.${(typeof spec.weekday === 'number' ? spec.weekday : 1) as (typeof WEEKDAYS)[number]}`)}
+              {t(`intakeTriggers.schedule.weekdays.${(typeof spec.weekday === 'number' ? spec.weekday : 1) as (typeof WEEKDAYS)[number]}`)}
             </Txt>
           </SelectTrigger>
           <SelectContent>
             {WEEKDAYS.map(day => (
               <SelectItem key={day} value={String(day)}>
-                {t(`intakeRules.schedule.weekdays.${day}`)}
+                {t(`intakeTriggers.schedule.weekdays.${day}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -86,7 +86,7 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
           size="sm"
           type="time"
           className="w-28"
-          aria-label={t('intakeRules.schedule.time')}
+          aria-label={t('intakeTriggers.schedule.time')}
           value={typeof spec.time === 'string' ? spec.time : ''}
           disabled={disabled}
           onChange={event => setSpec({ ...spec, time: event.target.value })}
@@ -100,15 +100,15 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
             disabled={disabled}
             onValueChange={next => setSpec({ ...spec, everyHours: Number(next) })}
           >
-            <SelectTrigger size="sm" aria-label={t('intakeRules.schedule.everyHours')} className="w-auto">
+            <SelectTrigger size="sm" aria-label={t('intakeTriggers.schedule.everyHours')} className="w-auto">
               <Txt as="span" variant="caption">
-                {t('intakeRules.schedule.hours', { count: Number(spec.everyHours ?? 1) })}
+                {t('intakeTriggers.schedule.hours', { count: Number(spec.everyHours ?? 1) })}
               </Txt>
             </SelectTrigger>
             <SelectContent>
               {SCHEDULE_HOUR_STEPS.map(step => (
                 <SelectItem key={step} value={String(step)}>
-                  {t('intakeRules.schedule.hours', { count: step })}
+                  {t('intakeTriggers.schedule.hours', { count: step })}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -119,7 +119,7 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
             min={0}
             max={59}
             className="w-20"
-            aria-label={t('intakeRules.schedule.minute')}
+            aria-label={t('intakeTriggers.schedule.minute')}
             value={String(spec.minute ?? 0)}
             disabled={disabled}
             onChange={event => setSpec({ ...spec, minute: Number(event.target.value) })}
@@ -131,7 +131,7 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
         <Input
           size="sm"
           className="w-48 font-mono"
-          aria-label={t('intakeRules.schedule.cron')}
+          aria-label={t('intakeTriggers.schedule.cron')}
           placeholder="0 9 * * 1-5"
           value={typeof spec.cron === 'string' ? spec.cron : ''}
           disabled={disabled}
@@ -142,7 +142,7 @@ function ScheduleFields({ config, onChange, disabled }: IntakeKindFormProps) {
       <Input
         size="sm"
         className="w-44"
-        aria-label={t('intakeRules.schedule.timezone')}
+        aria-label={t('intakeTriggers.schedule.timezone')}
         placeholder="Europe/Kyiv"
         value={timezone}
         disabled={disabled}

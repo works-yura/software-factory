@@ -81,12 +81,10 @@ export const queryKeys = {
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
-  intakeRules: (factoryProjectId: string | undefined, locale?: string) =>
-    ['intake', 'rules', factoryProjectId ?? null, ...(locale ? [locale] : [])] as const,
-  intakeRuleKinds: (factoryProjectId: string | undefined, locale: string) =>
-    ['intake', 'rule-kinds', factoryProjectId ?? null, locale] as const,
-  intakeRuleFires: (factoryProjectId: string | undefined, ruleId: string) =>
-    ['intake', 'rules', factoryProjectId ?? null, 'fires', ruleId] as const,
+  intakeTriggerKinds: (factoryProjectId: string | undefined, locale: string) =>
+    ['intake', 'trigger-kinds', factoryProjectId ?? null, locale] as const,
+  intakeRouteFires: (factoryProjectId: string | undefined, routeId: string) =>
+    ['intake', 'routes', factoryProjectId ?? null, 'fires', routeId] as const,
   intakeTriggerPreview: (factoryProjectId: string | undefined, trigger: string, locale: string) =>
     ['intake', 'trigger-preview', factoryProjectId ?? null, trigger, locale] as const,
   channelAccounts: () => ['channel-accounts'] as const,

@@ -29,6 +29,8 @@ function intakeRouteTo(boardKey: string, overrides: Partial<IntakeRoute> = {}): 
     updatedBy: 'user-1',
     updatedAt: '2026-11-01T00:00:00.000Z',
     problems: [],
+    triggered: null,
+    origin: null,
     ...overrides,
   };
 }

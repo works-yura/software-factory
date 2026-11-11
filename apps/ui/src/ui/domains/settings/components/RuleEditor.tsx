@@ -49,14 +49,6 @@ export function cardFacts(): Facts {
           repository: { type: 'string', title: tk('workBoard.facts.repository') },
         },
       },
-      intake: {
-        type: 'object',
-        title: tk('workBoard.facts.intake'),
-        properties: {
-          rule: { type: 'string', title: tk('workBoard.facts.intakeRule') },
-          trigger: { type: 'string', title: tk('workBoard.facts.intakeTrigger') },
-        },
-      },
     },
   };
 }
