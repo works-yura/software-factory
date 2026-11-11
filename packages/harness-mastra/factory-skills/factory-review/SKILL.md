@@ -92,7 +92,7 @@ Bots have false positives — verify, don't rubber-stamp. But a major finding fr
 
   | Check                  | Result             | Tests                                |
   | ---------------------- | ------------------ | ------------------------------------ |
-  | `@mastra/core` tests   | ✅ Passed          | 216 passed, 1 skipped (needs Docker) |
+  | `@acme/api` tests     | ✅ Passed          | 216 passed, 1 skipped (needs Docker) |
   | Typecheck              | ✅ Passed          |                                      |
   | New tests on base code | ✅ Catches the bug | 3 of 3 fail on base, pass on head    |
 

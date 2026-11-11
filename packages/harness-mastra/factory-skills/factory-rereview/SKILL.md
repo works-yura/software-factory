@@ -86,7 +86,7 @@ If you suspect a regression, don't speculate — construct a repro against the p
 
   | Check                  | Result             | Tests                                |
   | ---------------------- | ------------------ | ------------------------------------ |
-  | `@mastra/core` tests   | ✅ Passed          | 216 passed, 1 skipped (needs Docker) |
+  | `@acme/api` tests     | ✅ Passed          | 216 passed, 1 skipped (needs Docker) |
   | Typecheck              | ✅ Passed          |                                      |
   | New tests on base code | ✅ Catches the bug | 3 of 3 fail on base, pass on head    |
 
