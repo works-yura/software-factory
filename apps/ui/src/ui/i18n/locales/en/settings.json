@@ -34,7 +34,7 @@
       "organizationRequired": "Select an organization to manage ClickUp syncing.",
       "statusUnavailable": "ClickUp status could not be loaded.",
       "rejected": "ClickUp rejected the configured API token. Ask the operator to check it.",
-      "ready": "Tasks from the connected Lists are checked every {{seconds}} s. What happens to each depends on its status, set in each List.",
+      "ready": "Tasks from the connected Lists are checked every {{seconds}} s. A task is imported only when an intake route names its List; where its card goes and what a status change does is decided by the routes below.",
       "sync": "Import ClickUp tasks",
       "lists": "ClickUp Lists",
       "listsFailed": "ClickUp Lists could not be loaded. Try again in a minute.",
@@ -827,7 +827,7 @@
   },
   "intakeRoutes": {
     "title": "Intake routes",
-    "description": "Where new cards of the Factory \"{{name}}\" land. The first enabled route that matches a card places it; a ClickUp task no route with a condition takes lands on its List’s board, and everything else goes where the last route that takes every card says. A route places a card once, when it arrives.",
+    "description": "Where new cards of the Factory \"{{name}}\" land. The first enabled route that matches a card places it; a ClickUp task is imported only by a route that names its List, and everything else goes where the last route that takes every card says. Routes with an event (task status changed, task closed, pull request merged…) move a card that already exists.",
     "add": "Add route",
     "loading": "Loading routes…",
     "unavailable": "Couldn't load intake routes.",
