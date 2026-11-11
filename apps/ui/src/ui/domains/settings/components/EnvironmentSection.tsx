@@ -112,6 +112,7 @@ function EnvironmentBlocks({
         description={t('environment.repositories.description')}
       >
         <RepositoriesBlock
+          factoryId={factoryId}
           repositories={environment.repositories}
           providers={providers}
           disabled={disabled}

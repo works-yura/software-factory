@@ -19,15 +19,25 @@ interface RecordedRequest {
   body: unknown;
 }
 
-function env(name: string, appliesTo: SandboxEnv['appliesTo']): SandboxEnv {
-  return { name, appliesTo, updatedAt: '2026-11-09T12:00:00.000Z', updatedBy: 'user-1' };
+function env(name: string, appliesTo: SandboxEnv['appliesTo'], stage: SandboxEnv['stage'] = 'development'): SandboxEnv {
+  return { name, appliesTo, stage, updatedAt: '2026-11-09T12:00:00.000Z', updatedBy: 'user-1' };
 }
 
-/** A tiny in-memory server for the four routes; values are kept but never returned, like the real one. */
-function useSandboxEnvsServer(initial: SandboxEnv[], writable = true) {
+/** A tiny in-memory server for the routes; values are kept but never returned, like the real one. */
+function useSandboxEnvsServer(
+  initial: SandboxEnv[],
+  writable = true,
+  options: { canManage?: boolean; stages?: SandboxEnvList['stages'] } = {},
+) {
   const envs = new Map(initial.map(item => [item.name, item]));
   const requests: RecordedRequest[] = [];
-  const list = (): SandboxEnvList => ({ envs: [...envs.values()], writable });
+  let stages = options.stages ?? ['development'];
+  const list = (): SandboxEnvList => ({
+    envs: [...envs.values()],
+    writable,
+    stages,
+    canManage: options.canManage ?? true,
+  });
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme', repositories: [] }] }),
@@ -36,22 +46,32 @@ function useSandboxEnvsServer(initial: SandboxEnv[], writable = true) {
       HttpResponse.json({ environment: environmentPayload() }),
     ),
     http.get(ENVS_URL, () => HttpResponse.json(list())),
-    http.put<{ name: string }, { value: string; appliesTo: SandboxEnv['appliesTo'] }>(
+    http.put<never, { stages: SandboxEnvList['stages'] }>(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sandbox-stages`,
+      async ({ request }) => {
+        const body = await request.json();
+        requests.push({ method: 'PUT', name: 'sandbox-stages', body });
+        stages = body.stages;
+        return HttpResponse.json({ stages });
+      },
+    ),
+    http.put<{ name: string }, { value: string; appliesTo: SandboxEnv['appliesTo']; stage?: SandboxEnv['stage'] }>(
       `${ENVS_URL}/:name`,
       async ({ params, request }) => {
         const body = await request.json();
         requests.push({ method: 'PUT', name: params.name, body });
-        const saved = env(params.name, body.appliesTo);
+        const saved = env(params.name, body.appliesTo, body.stage ?? envs.get(params.name)?.stage);
         envs.set(params.name, saved);
         return HttpResponse.json({ env: saved });
       },
     ),
-    http.patch<{ name: string }, { appliesTo: SandboxEnv['appliesTo'] }>(
+    http.patch<{ name: string }, { appliesTo?: SandboxEnv['appliesTo']; stage?: SandboxEnv['stage'] }>(
       `${ENVS_URL}/:name`,
       async ({ params, request }) => {
         const body = await request.json();
         requests.push({ method: 'PATCH', name: params.name, body });
-        const saved = env(params.name, body.appliesTo);
+        const current = envs.get(params.name)!;
+        const saved = env(params.name, body.appliesTo ?? current.appliesTo, body.stage ?? current.stage);
         envs.set(params.name, saved);
         return HttpResponse.json({ env: saved });
       },
@@ -99,7 +119,7 @@ describe('Environment variables settings', () => {
     const headers = within(table)
       .getAllByRole('columnheader')
       .map(header => header.textContent);
-    expect(headers).toEqual(['Name', 'Value', 'Applies to', 'Updated', 'Actions']);
+    expect(headers).toEqual(['Name', 'Value', 'Applies to', 'Stage', 'Updated', 'Actions']);
     expect(within(table).getByRole('button', { name: 'About where variables apply' })).toHaveAccessibleDescription(
       /Runtime: every command in the sandbox.*Build: only the template image build/,
     );
@@ -142,7 +162,9 @@ describe('Environment variables settings', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
-      expect(requests).toEqual([{ method: 'PUT', name: 'API_KEY', body: { value: 'sk-123', appliesTo: 'both' } }]),
+      expect(requests).toEqual([
+        { method: 'PUT', name: 'API_KEY', body: { value: 'sk-123', appliesTo: 'both', stage: 'development' } },
+      ]),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(await vars.findByLabelText('API_KEY value hidden')).toHaveTextContent('••••••••••••');
@@ -258,5 +280,62 @@ describe('Environment variables settings', () => {
     expect(await screen.findByRole('menuitem', { name: 'Edit' })).toHaveAttribute('aria-disabled', 'true');
     // Delete still works so old values can be removed.
     expect(screen.getByRole('menuitem', { name: 'Delete' })).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it("shows each variable's stage and moves one to staging with PATCH", async () => {
+    const requests = useSandboxEnvsServer([env('API_KEY', 'runtime'), env('PROD_KEY', 'runtime', 'production')]);
+    const user = userEvent.setup();
+
+    renderSettings();
+
+    const vars = await section();
+    expect(await vars.findByLabelText('API_KEY stage')).toHaveTextContent('Development');
+    expect(vars.getByLabelText('PROD_KEY stage')).toHaveTextContent('Production');
+    await openRowAction(user, vars, 'API_KEY', 'Edit');
+    const dialog = await screen.findByRole('dialog');
+    const stage = within(dialog).getByRole('radiogroup', { name: 'Stage' });
+    expect(within(stage).getByRole('radio', { name: 'Development' })).toBeChecked();
+    await user.click(within(stage).getByRole('radio', { name: 'Production' }));
+    expect(within(dialog).getByText(/Production never reaches agent sandboxes/)).toBeInTheDocument();
+    await user.click(within(stage).getByRole('radio', { name: 'Staging' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(requests).toEqual([{ method: 'PATCH', name: 'API_KEY', body: { stage: 'staging' } }]));
+    await waitFor(() => expect(vars.getByLabelText('API_KEY stage')).toHaveTextContent('Staging'));
+  });
+
+  it('lets an admin give sandboxes staging, and says production never reaches them', async () => {
+    const requests = useSandboxEnvsServer([]);
+    const user = userEvent.setup();
+
+    renderSettings();
+
+    const vars = await section();
+    const toggle = await vars.findByRole('switch', { name: 'Staging in sandboxes' });
+    expect(toggle).not.toBeChecked();
+    expect(vars.getByText(/Production never reaches agent sandboxes/)).toBeInTheDocument();
+    await user.click(toggle);
+
+    await waitFor(() =>
+      expect(requests).toEqual([{ method: 'PUT', name: 'sandbox-stages', body: { stages: ['development', 'staging'] } }]),
+    );
+    await waitFor(() => expect(toggle).toBeChecked());
+    await user.click(toggle);
+    await waitFor(() =>
+      expect(requests.at(-1)).toEqual({ method: 'PUT', name: 'sandbox-stages', body: { stages: ['development'] } }),
+    );
+  });
+
+  it("shows a member the stages but doesn't let them change them", async () => {
+    const requests = useSandboxEnvsServer([], true, { canManage: false, stages: ['development', 'staging'] });
+
+    renderSettings();
+
+    const vars = await section();
+    const toggle = await vars.findByRole('switch', { name: 'Staging in sandboxes' });
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeDisabled();
+    expect(vars.getByText('Only organization admins can change this.')).toBeInTheDocument();
+    expect(requests).toEqual([]);
   });
 });

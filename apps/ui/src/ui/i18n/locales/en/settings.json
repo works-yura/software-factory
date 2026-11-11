@@ -1317,6 +1317,62 @@
     "saving": "Saving…",
     "save": "Save"
   },
+  "sandboxStages": {
+    "stageColumn": "Stage",
+    "stageOf": "{{name}} stage",
+    "stage": {
+      "development": "Development",
+      "staging": "Staging",
+      "production": "Production"
+    },
+    "stageHelp": "Reaches sandboxes only while the Factory gives them this stage.",
+    "productionNever": "Production never reaches agent sandboxes: build and deploy production in CI.",
+    "stagingLabel": "Staging in sandboxes",
+    "stagingDescription": "Development variables and env files always reach this Factory's sandboxes; turn this on to add staging ones.",
+    "adminOnly": "Only organization admins can change this.",
+    "stagingOn": "Sandboxes now get staging",
+    "stagingOff": "Sandboxes no longer get staging",
+    "saveFailed": "Failed to save the sandbox stages"
+  },
+  "envFiles": {
+    "title": "Env files",
+    "description": "Written into this checkout in every sandbox before setup runs, readable by agents, never committed.",
+    "adminOnly": "Only organization admins can add, view or change env files.",
+    "add": "Add env file",
+    "addTo": "Add env file to {{name}}",
+    "loadFailed": "Failed to load env files",
+    "notWritable": "Env files can't be saved until a credential encryption key is configured on the server.",
+    "empty": "No env files.",
+    "tableOf": "Env files of {{name}}",
+    "path": "Path",
+    "pathHelp": "Relative to the repository root, e.g. .env.staging, apps/mobile/.env or ios/Config.xcconfig.",
+    "pathProblem": {
+      "empty": "Enter a path.",
+      "absolute": "Use a path relative to the repository root.",
+      "parent": "The path can't leave the repository (..).",
+      "segments": "Remove empty or . path segments.",
+      "git": "The path can't be inside .git.",
+      "chars": "Use letters, digits and . _ @ + - in names, at most 256 characters."
+    },
+    "taken": "{{path}} already exists in this repository.",
+    "content": "Content",
+    "contentHidden": "{{path}} content hidden",
+    "emptyFile": "empty",
+    "contentHelp": "Stored encrypted. Written exactly as entered, with mode 0600.",
+    "keepContent": "Hidden: saving keeps the current content. Reveal to view or change it.",
+    "reveal": "Reveal",
+    "revealing": "Revealing…",
+    "revealFailed": "Failed to load the content",
+    "replace": "Replace",
+    "tooLong": "Use at most 64 KB.",
+    "editTitle": "Edit {{path}}",
+    "dialogDescription": "Agents in the sandbox can read this file. Stages the Factory doesn't enable, and production, are never written.",
+    "saved": "Saved {{path}}",
+    "saveFailed": "Failed to save the env file",
+    "deleteTitle": "Delete {{path}}?",
+    "deleteDescription": "It is removed from every sandbox on its next command. Its content can't be recovered.",
+    "deleteFailed": "Failed to delete the env file"
+  },
   "routing": {
     "lanes": {
       "chats": "Chats",

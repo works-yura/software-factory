@@ -18,17 +18,20 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playgro
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Table } from '@mastra/playground-ui/components/Table';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { MoreHorizontal, Plus } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useSandboxEnvMutations, useSandboxEnvsQuery } from '../../../../../hooks/useSandboxEnvs';
 import { relativeTime } from '../../../../../lib/date/relativeTime';
-import type { SandboxEnv, SandboxEnvAppliesTo } from '../../../workspaces/services/sandbox-envs';
+import type { SandboxEnv, SandboxEnvAppliesTo, SandboxStage } from '../../../workspaces/services/sandbox-envs';
+import { StageBadge, StagePicker } from './SandboxStage';
 
 const MASK = '••••••••••••';
 
@@ -87,10 +90,11 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
   }
   if (!envsQuery.data) return <Skeleton className="h-16 w-full" />;
 
-  const { envs, writable } = envsQuery.data;
+  const { envs, writable, stages, canManage } = envsQuery.data;
 
   return (
     <div className="flex flex-col gap-4">
+      <SandboxStagesRow stages={stages} canManage={canManage} mutations={mutations} />
       {!writable && (
         <Notice variant="destructive">
           {t('sandboxEnvs.notWritable')}
@@ -112,6 +116,7 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
                   <InfoTooltip aria-label={t('sandboxEnvs.appliesToAbout')}>{t('sandboxEnvs.appliesToHelp')}</InfoTooltip>
                 </span>
               </Table.Head>
+              <Table.Head>{t('sandboxStages.stageColumn')}</Table.Head>
               <Table.Head>{t('sandboxEnvs.updated')}</Table.Head>
               <Table.Head align="end">
                 <span className="sr-only">{t('sandboxEnvs.actions')}</span>
@@ -150,6 +155,11 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
                         </Badge>
                       )}
                     </div>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <span aria-label={t('sandboxStages.stageOf', { name: env.name })}>
+                      <StageBadge stage={env.stage} />
+                    </span>
                   </Table.Cell>
                   <Table.Cell>
                     <Txt as="span" variant="body-sm" tone="muted">
@@ -224,12 +234,15 @@ function SandboxEnvDialog({
   const [name, setName] = useState(env?.name ?? '');
   const [value, setValue] = useState('');
   const [targets, setTargets] = useState<Targets>(toTargets(env?.appliesTo ?? 'runtime'));
+  const [stage, setStage] = useState<SandboxStage>(env?.stage ?? 'development');
   const [error, setError] = useState<string>();
 
   const trimmedName = name.trim();
   const appliesTo = toAppliesTo(targets);
   const taken = !env && envs.some(existing => existing.name === trimmedName);
-  const changed = env ? Boolean(value) || appliesTo !== env.appliesTo : Boolean(trimmedName && value);
+  const changed = env
+    ? Boolean(value) || appliesTo !== env.appliesTo || stage !== env.stage
+    : Boolean(trimmedName && value);
   const pending = mutations.set.isPending || mutations.updateAppliesTo.isPending;
   const canSave = changed && appliesTo !== undefined && !taken && !pending;
 
@@ -244,9 +257,15 @@ function SandboxEnvDialog({
   const save = () => {
     if (!canSave || !appliesTo) return;
     setError(undefined);
-    // A new value is sent with where it applies; otherwise only where it applies changes.
-    if (value) mutations.set.mutate({ name: trimmedName, value, appliesTo }, callbacks);
-    else mutations.updateAppliesTo.mutate({ name: trimmedName, appliesTo }, callbacks);
+    // A new value is sent with where it applies and its stage; otherwise only what changed is.
+    const stageChange = !env || stage !== env.stage ? { stage } : {};
+    if (value) mutations.set.mutate({ name: trimmedName, value, appliesTo, ...stageChange }, callbacks);
+    else {
+      mutations.updateAppliesTo.mutate(
+        { name: trimmedName, ...(appliesTo !== env?.appliesTo ? { appliesTo } : {}), ...stageChange },
+        callbacks,
+      );
+    }
   };
 
   return (
@@ -312,6 +331,13 @@ function SandboxEnvDialog({
             <FieldDescription>{t('sandboxEnvs.appliesToShort')}</FieldDescription>
             {appliesTo === undefined && <FieldError>{t('sandboxEnvs.pickOne')}</FieldError>}
           </Field>
+          <Field>
+            <FieldLabel>{t('sandboxStages.stageColumn')}</FieldLabel>
+            <StagePicker value={stage} onChange={setStage} label={t('sandboxStages.stageColumn')} />
+            <FieldDescription>
+              {stage === 'production' ? t('sandboxStages.productionNever') : t('sandboxStages.stageHelp')}
+            </FieldDescription>
+          </Field>
           {error && (
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
               {error}
@@ -326,5 +352,48 @@ function SandboxEnvDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Which stages this Factory's sandboxes get: development always, staging when
+ * switched on (organization admins). Production never reaches an agent sandbox.
+ */
+function SandboxStagesRow({
+  stages,
+  canManage,
+  mutations,
+}: {
+  stages: SandboxStage[];
+  canManage: boolean;
+  mutations: Mutations;
+}) {
+  const { t } = useTranslation('settings');
+  const staging = stages.includes('staging');
+  return (
+    <SettingsContainer>
+      <SettingsRow
+        label={t('sandboxStages.stagingLabel')}
+        description={
+          <>
+            <span>{t('sandboxStages.stagingDescription')}</span>
+            <span>{t('sandboxStages.productionNever')}</span>
+            {!canManage && <span>{t('sandboxStages.adminOnly')}</span>}
+          </>
+        }
+      >
+        <Switch
+          aria-label={t('sandboxStages.stagingLabel')}
+          checked={staging}
+          disabled={!canManage || mutations.setStages.isPending}
+          onCheckedChange={checked =>
+            mutations.setStages.mutate(checked ? ['development', 'staging'] : ['development'], {
+              onSuccess: () => toast.success(checked ? t('sandboxStages.stagingOn') : t('sandboxStages.stagingOff')),
+              onError: error => toast.error(errorMessage(error, t('sandboxStages.saveFailed'))),
+            })
+          }
+        />
+      </SettingsRow>
+    </SettingsContainer>
   );
 }

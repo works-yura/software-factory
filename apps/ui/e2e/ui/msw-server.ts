@@ -57,6 +57,10 @@ export const server = setupServer(
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
+  // Ambient env files (an open repository card in Environment settings); env file tests override it.
+  http.get('*/web/factory/projects/:id/sandbox-env-files', () =>
+    HttpResponse.json({ files: [], writable: true, canManage: true }),
+  ),
   // The sidebar and the board page read the intake routes to learn whether the caller may change
   // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
   // Routes are what a project reads (ADR-0022): the board suites' project reads its linked
@@ -104,7 +108,9 @@ export const server = setupServer(
   http.get('*/web/gitlab/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   // Ambient sandbox environment variables (Manage Factory); variable tests override it with `server.use(...)`.
-  http.get('*/web/factory/projects/:id/sandbox-envs', () => HttpResponse.json({ envs: [], writable: true })),
+  http.get('*/web/factory/projects/:id/sandbox-envs', () =>
+    HttpResponse.json({ envs: [], writable: true, stages: ['development'], canManage: true }),
+  ),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),

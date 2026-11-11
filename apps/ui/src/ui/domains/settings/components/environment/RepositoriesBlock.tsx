@@ -16,6 +16,7 @@ import type {
 import { GitLabIcon } from '../../../../ui/icons';
 import { CommittedInput } from './CommittedInput';
 import type { SaveEnvironment } from './CommittedInput';
+import { RepositoryEnvFiles } from './RepositoryEnvFiles';
 
 /**
  * A reorder must number every link of the project 1..n, so it lists them all
@@ -43,11 +44,14 @@ function splitRows(repositories: FactoryEnvironmentRepository[]) {
 
 /** The ordered repository list: one card each, drag to reorder, include or exclude; the header opens setup and teardown. */
 export function RepositoriesBlock({
+  factoryId,
   repositories,
   providers,
   disabled,
   onSave,
 }: {
+  /** Set to show each repository's env files when its card is open. */
+  factoryId?: string;
   repositories: FactoryEnvironmentRepository[];
   providers: RepositoryProviders;
   disabled: boolean;
@@ -72,6 +76,7 @@ export function RepositoriesBlock({
         <ContentBlock key={repository.projectRepositoryId} draggableId={repository.projectRepositoryId} index={index}>
           {dragHandleProps => (
             <RepositoryRow
+              factoryId={factoryId}
               repository={repository}
               position={index + 1}
               provider={providers[repository.projectRepositoryId] ?? 'github'}
@@ -93,6 +98,7 @@ export function RepositoriesBlock({
 const stop = (event: React.SyntheticEvent) => event.stopPropagation();
 
 function RepositoryRow({
+  factoryId,
   repository,
   position,
   provider,
@@ -101,6 +107,7 @@ function RepositoryRow({
   onToggle,
   onCommands,
 }: {
+  factoryId: string | undefined;
   repository: FactoryEnvironmentRepository;
   position: number;
   provider: 'github' | 'gitlab';
@@ -230,6 +237,13 @@ function RepositoryRow({
               />
             </div>
           </SettingsRow>
+          {factoryId && (
+            <RepositoryEnvFiles
+              factoryId={factoryId}
+              projectRepositoryId={repository.projectRepositoryId}
+              repositoryName={label}
+            />
+          )}
         </>
       )}
     </SettingsContainer>
