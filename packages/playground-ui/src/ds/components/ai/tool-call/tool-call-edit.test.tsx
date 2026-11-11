@@ -2,7 +2,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ToolCallEdit, unifiedDiffLines } from './tool-call-edit';
+import { editLineCounts, ToolCallEdit, unifiedDiffLines } from './tool-call-edit';
 
 afterEach(cleanup);
 
@@ -50,6 +50,14 @@ describe('ToolCallEdit', () => {
     );
     expect(rows()[0]?.textContent).toBe('-const a = 1');
     expect(rows()[2]?.textContent).toBe('+const b = 3');
+  });
+
+  it('counts the lines a change adds and removes, for a replacement and a diff alike', () => {
+    const diff = ['@@ update src/a.ts @@', '@@ -1,2 +1,3 @@', ' keep', '-old', '+new', '+more', '@@ add src/b.ts @@', '+b'].join('\n');
+    render(<ToolCallEdit edit={{ path: 'src/a.ts', diff }} />);
+    expect(screen.getByTestId('tool-call-edit-counts').textContent).toBe('+3−1');
+    expect(editLineCounts({ path: 'a.ts', oldText: 'a\nb', newText: 'c' })).toEqual({ added: 1, removed: 2 });
+    expect(editLineCounts({ path: 'a.ts', content: 'x' })).toBeUndefined();
   });
 
   it('shows a written file as its content', () => {

@@ -29,6 +29,28 @@ export function unifiedDiffLines(diff: string): UnifiedLine[] {
   return lines;
 }
 
+/** How many lines a change adds and removes: the card's `+N −M`, as a code review shows it. */
+export function editLineCounts(edit: ToolEdit): { added: number; removed: number } | undefined {
+  if ('content' in edit) return undefined;
+  if ('diff' in edit) {
+    const lines = unifiedDiffLines(edit.diff);
+    return { added: lines.filter(line => line.kind === 'added').length, removed: lines.filter(line => line.kind === 'removed').length };
+  }
+  const count = (text: string) => (text === '' ? 0 : text.split('\n').length);
+  return { added: count(edit.newText), removed: count(edit.oldText) };
+}
+
+function LineCounts({ edit }: { edit: ToolEdit }) {
+  const counts = editLineCounts(edit);
+  if (!counts || (counts.added === 0 && counts.removed === 0)) return null;
+  return (
+    <div className="flex gap-2 pb-1 font-mono text-caption" data-testid="tool-call-edit-counts" aria-label={libText('Lines added and removed')}>
+      <span className="text-success-subtle-foreground">+{counts.added}</span>
+      <span className="text-destructive-subtle-foreground">−{counts.removed}</span>
+    </div>
+  );
+}
+
 /** A unified diff drawn as the replacement card draws its sides: removed red, added green, context plain. */
 function UnifiedDiff({ diff, lang, showFullContent }: { diff: string; lang: string | undefined; showFullContent: boolean }) {
   const all = unifiedDiffLines(diff);
@@ -106,7 +128,14 @@ function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof D
 export function ToolCallEdit({ edit, showFullContent = false }: { edit: ToolEdit; showFullContent?: boolean }) {
   const lang = languageForPath(edit.path);
 
-  if ('diff' in edit) return <UnifiedDiff diff={edit.diff} lang={lang} showFullContent={showFullContent} />;
+  if ('diff' in edit) {
+    return (
+      <div className="min-w-0">
+        <LineCounts edit={edit} />
+        <UnifiedDiff diff={edit.diff} lang={lang} showFullContent={showFullContent} />
+      </div>
+    );
+  }
 
   if ('content' in edit) {
     return (
@@ -124,17 +153,20 @@ export function ToolCallEdit({ edit, showFullContent = false }: { edit: ToolEdit
   const hidden = removed.hidden + added.hidden;
 
   return (
-    <div
-      className={cn(
-        'max-w-full min-w-0 overflow-x-auto rounded-md border border-border bg-fill font-mono text-caption',
-        showFullContent && 'max-h-60 overflow-y-auto',
-      )}
-      role="group"
-      aria-label={libText('File change')}
-    >
-      <DiffSide lines={removed.lines} side="removed" lang={lang} />
-      <DiffSide lines={added.lines} side="added" lang={lang} />
-      {hidden > 0 && <div className="px-2.5 py-1 text-muted-foreground select-none">… {hidden} more lines</div>}
+    <div className="min-w-0">
+      <LineCounts edit={edit} />
+      <div
+        className={cn(
+          'max-w-full min-w-0 overflow-x-auto rounded-md border border-border bg-fill font-mono text-caption',
+          showFullContent && 'max-h-60 overflow-y-auto',
+        )}
+        role="group"
+        aria-label={libText('File change')}
+      >
+        <DiffSide lines={removed.lines} side="removed" lang={lang} />
+        <DiffSide lines={added.lines} side="added" lang={lang} />
+        {hidden > 0 && <div className="px-2.5 py-1 text-muted-foreground select-none">… {hidden} more lines</div>}
+      </div>
     </div>
   );
 }
