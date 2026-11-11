@@ -254,13 +254,17 @@ function conditionNames(when: RuleGroup | null, field: string): boolean {
   return when.conditions.some(member => ('conditions' in member ? conditionNames(member, field) : member.field === field));
 }
 
-/** The values a route's condition compares `field` to with `equals` or `in` (the sources it names). */
+/**
+ * The values a route's condition compares `field` to with `equals` or `in`: the sources it names.
+ * Any other operator (`not_equals`, `contains`…) names no source, so it never subscribes the
+ * project to one.
+ */
 export function routeSourceValues(route: Pick<IntakeRoute, 'when'>, field: string): string[] {
   const values: string[] = [];
   const walk = (group: RuleGroup | null) => {
     for (const member of group?.conditions ?? []) {
       if ('conditions' in member) walk(member);
-      else if (member.field === field) {
+      else if (member.field === field && (member.operator === 'equals' || member.operator === 'in')) {
         const value = member.value;
         for (const one of Array.isArray(value) ? value : [value]) {
           if (typeof one === 'string' || typeof one === 'number') values.push(String(one));
