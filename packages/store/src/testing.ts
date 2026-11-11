@@ -37,6 +37,7 @@ import type { WorkItemRow, WorkItemSourceRow } from './work-items/work-item-sche
 import { bumpBoardVersions } from './work-items/board-version.ts';
 import { Cards } from './work-items/cards.ts';
 import { SandboxEnvsStorage } from './sandbox-envs/base.ts';
+import { UsageStorage } from './usage/base.ts';
 
 /**
  * Leave cards only where a 0.26 Factory wrote them, the legacy table, and restart the work-items
@@ -140,6 +141,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   attachments: AttachmentsStorage;
   intakeRouteFires: IntakeRouteFiresStorage;
   sandboxEnvs: SandboxEnvsStorage;
+  usage: UsageStorage;
 }
 
 /**
@@ -177,6 +179,7 @@ export async function createFactoryStorageForTests<T extends FactoryStorage = Fa
   const attachments = storage.registerDomain(new AttachmentsStorage());
   const intakeRouteFires = storage.registerDomain(new IntakeRouteFiresStorage());
   const sandboxEnvs = storage.registerDomain(new SandboxEnvsStorage());
+  const usage = storage.registerDomain(new UsageStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -199,5 +202,6 @@ export async function createFactoryStorageForTests<T extends FactoryStorage = Fa
     attachments,
     intakeRouteFires,
     sandboxEnvs,
+    usage,
   };
 }
