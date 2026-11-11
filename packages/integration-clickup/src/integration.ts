@@ -15,6 +15,7 @@ import type {
   ConversationRouterOptions,
   FactoryIntegration,
   IntegrationContext,
+  IntegrationMigrationContext,
   IntegrationTools,
   Transcriber,
 } from '@factory/integrations';
@@ -27,7 +28,6 @@ import { buildClickUpRoutes } from './routes.ts';
 import { CLICKUP_PLATFORM, createClickUpChannel, createClickUpConversationPoller } from './conversation.ts';
 import type { ClickUpConversationClient } from './conversation.ts';
 import { migrateListStatusRules } from './status-routes.ts';
-import { toBoardSource } from '@factory/core';
 
 export const DEFAULT_CLICKUP_POLL_SECONDS = 60;
 
@@ -52,6 +52,8 @@ export interface ClickUpIntegrationOptions {
 export class ClickUpIntegration implements FactoryIntegration {
   readonly id = 'clickup';
   readonly intake: ClickUpIntake;
+  /** ClickUp imports and moves cards only through intake routes (stored with the boards). */
+  readonly requiredDomains = ['intake', 'boards', 'work-items'] as const;
 
   readonly #client: ClickUpClient;
   readonly #taskSource: ClickUpTaskSource;
@@ -77,7 +79,6 @@ export class ClickUpIntegration implements FactoryIntegration {
         auth: ctx.auth,
         client: this.#client,
         intake: this.intake,
-        storage: ctx.storage.generic,
         intervalSeconds: this.#intervalSeconds,
       }),
       buildConnectCodeRoute({ platform: CLICKUP_PLATFORM, auth: ctx.auth, codes: this.#codes }),
@@ -89,27 +90,35 @@ export class ClickUpIntegration implements FactoryIntegration {
     return createConversationReplyTool([this.#channel]);
   }
 
+  /** Moves the retired per-List status rules into intake routes, once per boot (idempotent). */
+  async migrate(ctx: IntegrationMigrationContext): Promise<void> {
+    const orgIds = [...new Set((await ctx.projects.listAll()).map(project => project.orgId))];
+    const result = await migrateListStatusRules({
+      orgIds,
+      settings: ctx.storage,
+      intake: ctx.intake,
+      intakeRoutes: ctx.intakeRoutes,
+      projectBoards: ctx.projectBoards,
+    });
+    if (result.lists + result.named > 0) {
+      console.info(`[clickup] moved the status rules of ${result.lists} List(s) into intake routes; named ${result.named} route(s)`);
+    }
+  }
+
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!ctx.runtime) return [];
-    const storage = ctx.storage.generic;
     const { intakeRoutes, projectBoards } = ctx.runtime;
-    // Intake routes decide which tasks a List imports and where they go; without them nothing would.
-    if (!intakeRoutes?.createIntakeRoute || !projectBoards) {
-      throw new Error('ClickUp intake needs the project intake routes (stored boards); none are configured.');
+    // Unreachable while `requiredDomains` holds: the factory counts ClickUp not ready without boards.
+    if (!intakeRoutes || !projectBoards) {
+      throw new Error('ClickUp intake needs the project intake routes (the boards domain); ClickUp should have been disabled.');
     }
-    const routesWriter = { listIntakeRoutes: intakeRoutes.listIntakeRoutes.bind(intakeRoutes), createIntakeRoute: intakeRoutes.createIntakeRoute.bind(intakeRoutes) };
     const reconcile = createClickUpPoller({
       client: this.#taskSource,
       intake: ctx.storage.intake,
       projects: ctx.storage.projects,
       workItems: ctx.runtime.workItems,
-      // Card lookups read the code boards; stored boards come through `projectBoards` for routing.
-      boards: toBoardSource(ctx.runtime.boards).codeRegistry,
       intakeRoutes,
       projectBoards,
-      beforeSweep: async orgId => {
-        await migrateListStatusRules({ orgId, settings: storage, intake: ctx.storage.intake, boards: routesWriter, projectBoards });
-      },
       configVersion: ctx.runtime.configVersion,
     });
     if (!ctx.baseUrl) throw new Error("ClickUp conversations need the server's public URL for the connect link.");
@@ -128,6 +137,7 @@ export class ClickUpIntegration implements FactoryIntegration {
       client: this.#conversationClient,
       router,
       intake: ctx.storage.intake,
+      intakeRoutes,
       projects: ctx.storage.projects,
       workItems: ctx.runtime.workItems,
     });

@@ -3,7 +3,9 @@ import type { IssueReconcileSummary } from '@factory/integrations';
 import type { FactoryProject, FactoryProjectsStorage, IntakeStorage, WorkItemRow, WorkItemsStorage } from '@factory/store';
 
 import type { ClickUpTask, ClickUpThreadComment, ClickUpUser } from './api.ts';
-import { CLICKUP_INTEGRATION_ID } from './poller.ts';
+import type { IntakeRoutesReader } from '@factory/core';
+
+import { CLICKUP_INTEGRATION_ID, routedClickUpLists } from './lists.ts';
 
 export const CLICKUP_PLATFORM = 'clickup';
 const DAY_MS = 24 * 60 * 60_000;
@@ -44,7 +46,9 @@ export function createClickUpChannel(client: Pick<ClickUpConversationClient, 're
 export interface ClickUpConversationPollerOptions {
   client: ClickUpConversationClient;
   router: Pick<ConversationRouter, 'handle'>;
-  intake: Pick<IntakeStorage, 'getConfig' | 'listBindings'>;
+  intake: Pick<IntakeStorage, 'getConfig'>;
+  /** The Factories' intake routes: the Lists they name are the ones whose comment threads are read. */
+  intakeRoutes: IntakeRoutesReader;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
   workItems: Pick<WorkItemsStorage, 'getByProjectSource'>;
   now?: () => Date;
@@ -108,22 +112,13 @@ export function createClickUpConversationPoller(options: ClickUpConversationPoll
     };
     bot ??= await options.client.authorizedUser();
     const me = bot;
-    const projects = await options.projects.listAll();
-    const projectsById = new Map(projects.map(project => [project.id, project]));
     const touched = new Set<string>();
 
-    for (const orgId of new Set(projects.map(project => project.orgId))) {
-      const selection = (await options.intake.getConfig({ orgId, integrationIds: [CLICKUP_INTEGRATION_ID] }))[
-        CLICKUP_INTEGRATION_ID
-      ];
-      if (!selection?.enabled || !selection.sourceIds?.length) continue;
-      const bindings = await options.intake.listBindings({ orgId, integrationId: CLICKUP_INTEGRATION_ID });
-      for (const listId of selection.sourceIds) {
-        const binding = bindings.find(candidate => candidate.sourceId === listId);
-        const project = binding ? projectsById.get(binding.factoryProjectId) : undefined;
-        if (!project || project.orgId !== orgId) continue;
+    for (const { project, listId } of await routedClickUpLists(options)) {
+      const orgId = project.orgId;
+      {
         touched.add(project.id);
-        const cursorKey = `${orgId}:${listId}`;
+        const cursorKey = `${project.id}:${listId}`;
         const since = cursors.get(cursorKey) ?? new Date(startedAt.getTime() - DAY_MS);
         let newest = since;
         let failed = false;

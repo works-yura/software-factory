@@ -97,6 +97,21 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(paths.some(p => p.startsWith('/web/'))).toBe(true);
   });
 
+  it(
+    'boots with ClickUp installed and starts its pollers with the intake routes they need',
+    { timeout: 60_000 },
+    async () => {
+      // Every integration the app can install goes through the same context; a missing dependency
+      // (as once the intake routes for ClickUp's workers) used to fail the whole boot.
+      vi.stubEnv('CLICKUP_API_TOKEN', 'pk_test_boot');
+      const mod = await import('./index.js');
+      const installed = factoryConfigs[0]?.integrations?.map(integration => integration.id) ?? [];
+      expect(installed).toContain('clickup');
+      expect(mod.mastra.getWorker('clickup-issue-reconcile')).toBeDefined();
+      expect(mod.mastra.getWorker('clickup-conversations-issue-reconcile')).toBeDefined();
+    },
+  );
+
   it('uses the preferred installed boards without deployment-owned lifecycle handlers', async () => {
     const { factoryConfigVersion } = await import('./index.js');
     expect(factoryConfigVersion).toBe('mastracode-web-v1');

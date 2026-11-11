@@ -63,9 +63,18 @@ function setup(comments: ClickUpThreadComment[], replies: ClickUpThreadComment[]
         return outcome;
       },
     },
-    intake: {
-      getConfig: async () => ({ clickup: { enabled: true, sourceIds: ['list-1'] } }) as never,
-      listBindings: async () => [{ sourceId: 'list-1', factoryProjectId: 'p-1', board: 'work' }] as never,
+    intake: { getConfig: async () => ({ clickup: { enabled: true } }) as never },
+    // The project reads list-1 because one of its routes names it.
+    intakeRoutes: {
+      listIntakeRoutes: async () => [
+        {
+          id: 'route-1',
+          enabled: true,
+          on: ['work_item.created'],
+          when: { operator: 'AND', conditions: [{ field: 'source.list', operator: 'equals', value: 'list-1' }] },
+          target: { boardKey: 'work' },
+        },
+      ],
     },
     projects: { listAll: async () => [{ id: 'p-1', orgId: 'org-1' }] as never },
     workItems: { getByProjectSource: async () => ({ id: 'card-1', revision: 2, sessions: {} }) as unknown as WorkItemRow },

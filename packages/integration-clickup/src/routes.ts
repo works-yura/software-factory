@@ -4,12 +4,10 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 
 import type { RouteAuth } from '@factory/http';
-import type { IntegrationStorageHandle } from '@factory/store';
 
 import { ClickUpApiError } from './api.ts';
 import type { ClickUpClient } from './api.ts';
 import type { ClickUpIntake } from './intake.ts';
-import { readClickUpSettings } from './settings.ts';
 
 const listIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
@@ -17,7 +15,6 @@ export interface ClickUpRoutesOptions {
   auth: RouteAuth;
   client: ClickUpClient;
   intake: Pick<ClickUpIntake, 'lists'>;
-  storage: Pick<IntegrationStorageHandle, 'settings'>;
   intervalSeconds: number;
 }
 
@@ -35,7 +32,7 @@ async function resolveOrg(
 }
 
 export function buildClickUpRoutes(options: ClickUpRoutesOptions): ApiRoute[] {
-  const { auth, client, intake, storage, intervalSeconds } = options;
+  const { auth, client, intake, intervalSeconds } = options;
   return [
     registerApiRoute('/web/clickup/status', {
       method: 'GET',
@@ -76,15 +73,6 @@ export function buildClickUpRoutes(options: ClickUpRoutesOptions): ApiRoute[] {
             rejected ? 409 : 502,
           );
         }
-      },
-    }),
-    registerApiRoute('/web/clickup/settings', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrg(c as unknown as Context, auth);
-        if ('response' in resolved) return resolved.response;
-        return c.json(await readClickUpSettings(storage, resolved.orgId));
       },
     }),
     registerApiRoute('/web/clickup/lists/:listId/statuses', {

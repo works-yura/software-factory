@@ -1,21 +1,15 @@
-import type { BoardRegistry, IntakeRoutesReader, RuleGroup, StatusEvent } from '@factory/core';
+import { createHash } from 'node:crypto';
+
+import type { BoardRegistry, RuleGroup, StatusEvent } from '@factory/core';
 import type { IntakeStorage, IntegrationStorageHandle, StoredBoardsStorage } from '@factory/store';
 
 import { readClickUpSettings, saveListRules } from './settings.ts';
 import type { StatusRule } from './settings.ts';
 
-/** Who the routes made from a List's status rules are attributed to in their history. */
+/** The actor on the routes Factory writes from a List's retired status rules. */
 export const STATUS_ROUTE_MIGRATION_ACTOR = 'system:clickup-status-route-migration';
 
-/** Whether a route's condition names a ClickUp List: such a route imports that List's tasks. */
-export function routeNamesList(when: RuleGroup | null): boolean {
-  if (!when) return false;
-  return when.conditions.some(member =>
-    'conditions' in member ? routeNamesList(member) : member.field === 'source.list',
-  );
-}
-
-/** The condition a status rule stood for: a task of this List with this status. */
+/** The condition of a status route: tasks of this List with this status. */
 export function listStatusCondition(listId: string, status: string): RuleGroup {
   return {
     operator: 'AND',
@@ -26,6 +20,22 @@ export function listStatusCondition(listId: string, status: string): RuleGroup {
   };
 }
 
+/** The List and status a route's condition names, when it is exactly a status route's condition. */
+export function statusRouteParts(when: RuleGroup | null): { listId: string; status: string } | undefined {
+  if (!when || when.operator !== 'AND' || when.conditions.length !== 2) return undefined;
+  const [list, state] = when.conditions;
+  if (!list || !state || 'conditions' in list || 'conditions' in state) return undefined;
+  if (list.field !== 'source.list' || state.field !== 'item.state') return undefined;
+  if (list.operator !== 'equals' || state.operator !== 'equals') return undefined;
+  if (typeof list.value !== 'string' || typeof state.value !== 'string') return undefined;
+  return { listId: list.value, status: state.value };
+}
+
+/** The name Factory gives a status route; the settings show it in the reader's language (`origin`). */
+export function statusRouteName(status: string): string {
+  return `ClickUp status “${status}”`;
+}
+
 export interface StatusRoute {
   name: string;
   when: RuleGroup;
@@ -34,15 +44,12 @@ export interface StatusRoute {
 }
 
 /**
- * The intake route that does what a List's status rule did, on the List's board:
- * - `import` — a new task with this status is filed in the board's first phase (other routes with a
- *   condition still win, as they did); later status changes leave the card alone;
- * - `phase` — a new task is filed in that phase, and a later change to this status moves the card
- *   there while it still sits where its previous status put it;
- * - `close` — a change to this status finishes the card the way the board does when its source
- *   closes; a new task with this status is not imported.
- * `ignore` needs no route (a status no route names is not imported). Undefined when the rule can't
- * be carried out on this board (a close on a board without a close phase did nothing before either).
+ * The intake route a retired List status rule becomes, on the List's board:
+ * - `import` places a new task with that status in the board's first phase;
+ * - `phase` places a new task there and moves the card there when the task's status changes to it;
+ * - `close` moves the card to the board's completed phase when the status changes to it (only a
+ *   board that closes cards has one; on any other, the rule did nothing and no route is made);
+ * - `ignore` makes no route.
  */
 export function statusRoute(
   listId: string,
@@ -51,7 +58,7 @@ export function statusRoute(
   board: { id: string; sourceClosed?: { completed: string } },
 ): StatusRoute | undefined {
   const when = listStatusCondition(listId, status);
-  const name = `ClickUp: статус «${status}»`;
+  const name = statusRouteName(status);
   switch (rule.action) {
     case 'ignore':
       return undefined;
@@ -71,59 +78,85 @@ export function statusRoute(
   }
 }
 
-const sameRoute = (
-  route: { when: RuleGroup | null; on: readonly string[]; target: { boardKey: string; phaseKey?: string | null } },
-  wanted: StatusRoute,
-) =>
-  JSON.stringify(route.when) === JSON.stringify(wanted.when) &&
-  [...route.on].sort().join() === [...wanted.on].sort().join() &&
-  route.target.boardKey === wanted.target.boardKey &&
-  (route.target.phaseKey ?? null) === wanted.target.phaseKey;
+/**
+ * The fixed id of the route a List status migrates into: the same on every replica and every run,
+ * so the route is written once (the id is the routes table's primary key).
+ */
+export function statusRouteId(orgId: string, factoryProjectId: string, listId: string, status: string): string {
+  const hex = createHash('sha256').update(`clickup-status-route\u0000${orgId}\u0000${factoryProjectId}\u0000${listId}\u0000${status}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+export interface StatusRouteMigration {
+  /** Lists whose rules became routes on this run. */
+  lists: number;
+  /** Routes Factory wrote before that now carry their origin, so the settings can name them. */
+  named: number;
+}
 
 /**
- * Moves an organization's per-List status rules (Settings › Intake › ClickUp, retired) into the
- * intake routes of the Factory each List belongs to, then clears the List's rules. A List not yet
- * routed to a Factory and a board keeps its rules until it is: they never applied before that
- * either. A route an earlier, interrupted run already added is not added twice. Returns how many
- * Lists were moved.
+ * Moves each List's retired status rules (the per-List settings) into intake routes on the List's
+ * Factory and board, then clears them — run once per boot by the integration's `migrate`. Each
+ * route gets a fixed id ({@link statusRouteId}), so a rerun or a second replica adds nothing twice.
+ * A List not bound to a Factory and a board keeps its rules (they did nothing before either).
+ * Routes an earlier migration wrote without an origin get one, so the settings show their name
+ * in the reader's language.
  */
 export async function migrateListStatusRules({
-  orgId,
+  orgIds,
   settings,
   intake,
-  boards,
+  intakeRoutes,
   projectBoards,
 }: {
-  orgId: string;
+  orgIds: readonly string[];
   settings: Pick<IntegrationStorageHandle, 'settings'>;
   intake: Pick<IntakeStorage, 'listBindings'>;
-  boards: IntakeRoutesReader & Pick<StoredBoardsStorage, 'createIntakeRoute'>;
+  intakeRoutes: Pick<StoredBoardsStorage, 'listIntakeRoutes' | 'createIntakeRoute' | 'updateIntakeRoute'>;
   projectBoards: { load(scope: { orgId: string; factoryProjectId: string }): Promise<Pick<BoardRegistry, 'get'>> };
-}): Promise<number> {
-  const { lists } = await readClickUpSettings(settings, orgId);
-  const listIds = Object.keys(lists);
-  if (listIds.length === 0) return 0;
-  const bindings = await intake.listBindings({ orgId, integrationId: 'clickup' });
-  let moved = 0;
-  for (const listId of listIds) {
-    const binding = bindings.find(candidate => candidate.sourceId === listId);
-    if (!binding?.board) continue;
-    const scope = { orgId, factoryProjectId: binding.factoryProjectId };
-    const registry = await projectBoards.load(scope);
-    const board = registry.get(binding.board);
-    if (!board) continue;
-    const existing = await boards.listIntakeRoutes(scope);
-    for (const [status, rule] of Object.entries(lists[listId]!.statuses)) {
-      const route = statusRoute(listId, status, rule, board);
-      if (!route || existing.some(candidate => sameRoute(candidate, route))) continue;
-      await boards.createIntakeRoute(
-        scope,
-        { name: route.name, when: route.when, on: route.on, target: route.target },
-        STATUS_ROUTE_MIGRATION_ACTOR,
-      );
+}): Promise<StatusRouteMigration> {
+  const result: StatusRouteMigration = { lists: 0, named: 0 };
+  const scopes = new Map<string, { orgId: string; factoryProjectId: string }>();
+  for (const orgId of orgIds) {
+    const bindings = await intake.listBindings({ orgId, integrationId: 'clickup' });
+    for (const binding of bindings) scopes.set(`${orgId}:${binding.factoryProjectId}`, { orgId, factoryProjectId: binding.factoryProjectId });
+    const { lists } = await readClickUpSettings(settings, orgId);
+    for (const [listId, rules] of Object.entries(lists)) {
+      const binding = bindings.find(candidate => candidate.sourceId === listId);
+      if (!binding?.board) continue;
+      const scope = { orgId, factoryProjectId: binding.factoryProjectId };
+      const board = (await projectBoards.load(scope)).get(binding.board);
+      if (!board) continue;
+      for (const [status, rule] of Object.entries(rules.statuses)) {
+        const route = statusRoute(listId, status, rule, board);
+        if (!route) continue;
+        await intakeRoutes.createIntakeRoute(
+          scope,
+          {
+            ...route,
+            origin: { kind: 'clickup-status', listId, status, generatedName: route.name },
+          },
+          STATUS_ROUTE_MIGRATION_ACTOR,
+          { id: statusRouteId(orgId, binding.factoryProjectId, listId, status) },
+        );
+      }
+      await saveListRules(settings, orgId, listId, { statuses: {} });
+      result.lists += 1;
     }
-    await saveListRules(settings, orgId, listId, { statuses: {} });
-    moved += 1;
   }
-  return moved;
+  for (const scope of scopes.values()) {
+    for (const route of await intakeRoutes.listIntakeRoutes(scope)) {
+      if (route.origin || route.createdBy !== STATUS_ROUTE_MIGRATION_ACTOR) continue;
+      const parts = statusRouteParts(route.when);
+      if (!parts) continue;
+      await intakeRoutes.updateIntakeRoute(
+        scope,
+        route.id,
+        { origin: { kind: 'clickup-status', ...parts, generatedName: route.name } },
+        { expectedRevision: route.revision, actor: STATUS_ROUTE_MIGRATION_ACTOR },
+      );
+      result.named += 1;
+    }
+  }
+  return result;
 }
