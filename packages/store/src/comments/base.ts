@@ -17,7 +17,7 @@ import type { FactoryStorageOps } from '@mastra/core/storage';
 import { externalSourceKey } from '../work-items/base.ts';
 import type { ExternalWorkItemSource, WorkItemsStorage } from '../work-items/base.ts';
 import { FACTORY_BOARD_ITEMS_SCHEMA } from '../work-items/work-item-schema.ts';
-import { bumpBoardVersions, FACTORY_BOARD_VERSIONS_SCHEMA, trackBoardWrites } from '../work-items/board-version.ts';
+import { bumpBoardVersions, CARD_TABLES, FACTORY_BOARD_VERSIONS_SCHEMA, trackBoardWrites } from '../work-items/board-version.ts';
 import { fanOutWorkItemActivity, listActivityForUser, PARTICIPANT_SCAN_LIMIT } from './activity.ts';
 import type { WorkItemActivityRow } from './activity.ts';
 import type { FactoryActorExternalIdentity, FactoryActorRef } from './actor.ts';
@@ -334,7 +334,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
   /** Comment counts live on the card, so these writes change the board too. */
   protected override get ops(): FactoryStorageOps {
     const ops = super.ops;
-    return trackBoardWrites(ops, scope => bumpBoardVersions(ops, [scope]));
+    return trackBoardWrites(ops, CARD_TABLES, scope => bumpBoardVersions(ops, [scope]));
   }
 
   async dangerouslyClearAll(): Promise<void> {

@@ -24,10 +24,13 @@ import {
 import {
   BoardScopes,
   bumpBoardVersions,
+  CARD_TABLES,
+  DECISION_TABLES,
   FACTORY_BOARD_VERSIONS_SCHEMA,
   readBoardVersion,
   trackBoardWrites,
 } from './board-version.ts';
+import type { BoardScope } from './board-version.ts';
 import { Cards, splitCardRows } from './cards.ts';
 import {
   copyLegacyRows,
@@ -1361,11 +1364,8 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
   };
 }
 
-/** The project whose attention list a write just changed. */
-export interface FactoryAttentionScope {
-  orgId: string;
-  factoryProjectId: string;
-}
+/** The project whose board a committed card or decision write just changed. */
+export type FactoryBoardScope = Required<BoardScope>;
 
 /** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
 const LIST_CACHE_TTL_MS = 60_000;
@@ -1380,7 +1380,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   readonly #listCache = new Map<string, { version: string; takenAt: number; items: Card[] }>();
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
-  #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
+  #boardChanged: (scope: FactoryBoardScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards. Until the host says which phases are terminal,
   // no card counts as finished, so the boot sweep never supersedes on a guess.
@@ -1407,12 +1407,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Wired once at boot. Every write below that changes what this project's
-   * attention list projects announces it here — the one place a new such write
-   * has to remember, since clients stop polling while their stream is up.
+   * Wired once at boot. Fires after a committed write changes what a board shows of a card
+   * or a deferred decision, so open boards refetch instead of polling.
    */
-  onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
-    this.#attentionChanged = listener;
+  onBoardChanged(listener: (scope: FactoryBoardScope) => void): void {
+    this.#boardChanged = listener;
   }
 
   /**
@@ -1820,18 +1819,32 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   protected override get ops(): FactoryStorageOps {
     const ops = super.ops;
     // Outside a transaction a resolved write has committed, so its wake can go out at once.
+    const cards = trackBoardWrites(ops, CARD_TABLES, async scope => {
+      await bumpBoardVersions(ops, [scope]);
+      this.#announceBoard(scope);
+    });
     return trackClaimableWrites(
-      trackBoardWrites(ops, scope => bumpBoardVersions(ops, [scope])),
+      trackBoardWrites(cards, DECISION_TABLES, scope => this.#announceBoard(scope)),
       scope => this.#claimableWork(scope),
     );
   }
 
-  /** `storage.withTransaction`, bumping the board version of every project it wrote once it commits. */
+  /** Only legacy dry-run writes name no project, and no feed is keyed by org alone. */
+  #announceBoard(scope: BoardScope): void {
+    if (scope.factoryProjectId) this.#boardChanged({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+  }
+
+  /** `storage.withTransaction`, bumping and announcing the board of every project it wrote once it commits. */
   async #withTransaction<T>(
     fn: (ops: FactoryStorageOps) => Promise<T>,
     options?: { isolationLevel?: 'serializable' },
   ): Promise<T> {
     const changed = new BoardScopes();
+    const touched = new BoardScopes();
+    const cardWritten = (scope: BoardScope) => {
+      changed.add(scope);
+      touched.add(scope);
+    };
     let queued = new Map<string, FactoryClaimableWorkScope>();
     const run = () => {
       // A retried transaction starts over: wakes queued by the rolled-back attempt never committed.
@@ -1839,8 +1852,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       return this.storage.withTransaction(
         ops =>
           fn(
-            trackClaimableWrites(trackBoardWrites(ops, changed.add), scope =>
-              queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
+            trackClaimableWrites(
+              trackBoardWrites(trackBoardWrites(ops, CARD_TABLES, cardWritten), DECISION_TABLES, touched.add),
+              scope => queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
             ),
           ),
         options,
@@ -1862,6 +1876,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
       for (const scope of queued.values()) this.#claimableWork(scope);
     }
+    for (const scope of touched.values()) this.#announceBoard(scope);
     return result;
   }
 
@@ -1932,7 +1947,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
       return changed;
     });
-    if (changed) this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    // Supervisor findings are attention items outside the card and decision tables the write tracker announces.
+    if (changed) this.#boardChanged({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
   }
 
   async listSupervisorFindingPage(input: {
@@ -3090,11 +3106,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
-    if (!row) return null;
-    const record = toDeferredDecision(row);
-    // A retryable failure surfaces nothing; only a terminal one mints an item.
-    if (input.terminal) this.#attentionChanged(record);
-    return record;
+    return row ? toDeferredDecision(row) : null;
   }
 
   /** Park a claimed effect for human approval; the dispatcher never claims `proposed` rows. */
@@ -3119,10 +3131,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
-    if (!proposed || !row) return null;
-    const record = toDeferredDecision(row);
-    this.#attentionChanged(record);
-    return record;
+    return proposed && row ? toDeferredDecision(row) : null;
   }
 
   /**
@@ -3138,7 +3147,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
     approvedBy?: string,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const approved = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let settled = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -3166,8 +3175,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
       return record;
     });
-    if (approved) this.#attentionChanged(approved);
-    return approved;
   }
 
   /** Retire a proposal nobody wants: `dismissed` is terminal, so the run never happens. */
@@ -3230,7 +3237,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     { orgId, factoryProjectId, decisionId }: { orgId: string; factoryProjectId: string; decisionId: string },
     patch: Partial<GovernanceDbRow>,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const settled = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let updated = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -3245,8 +3252,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       await ops.deleteMany('factory_attention_receipts', proposalReceiptFilter(orgId, factoryProjectId, decisionId));
       return toDeferredDecision(row);
     });
-    if (settled) this.#attentionChanged(settled);
-    return settled;
   }
 
   async #resolveFailedDecision({
@@ -3262,7 +3267,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     status: 'succeeded' | 'superseded';
     now: Date;
   }): Promise<FactoryDeferredDecisionRecord | null> {
-    const resolved = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let resolved = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -3283,8 +3288,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
-    if (resolved) this.#attentionChanged(resolved);
-    return resolved;
   }
 
   async supersedeTerminalDecisionsForWorkItem(input: {
@@ -3512,7 +3515,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     decisionId: string,
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const retriedRecord = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let retried = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -3546,8 +3549,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
-    if (retriedRecord) this.#attentionChanged(retriedRecord);
-    return retriedRecord;
   }
 
   /** Resolve exact active agent authority; partial session matches never authorize. */
@@ -4428,7 +4429,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const candidate = await this.#cards(this.#db, { transaction: false }).findOne(where);
     if (!candidate) return null;
 
-    const removed = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
       const existing = await this.#cards(ops, { transaction: true }).findOne(where);
       if (!existing) return null;
       const deleted = await this.#cards(ops, { transaction: true }).deleteMany(where);
@@ -4448,7 +4449,5 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return toWorkItem(existing);
     });
-    if (removed) this.#attentionChanged(removed);
-    return removed;
   }
 }

@@ -32,7 +32,7 @@ describe('claudeLiveSession', () => {
     const notifier = createSessionNotifier();
     const registry = new LiveSessions(notifier);
     const changes: string[] = [];
-    registry.onParkedChanged(session => changes.push(session.identity.getId()));
+    registry.onRunChanged(session => changes.push(session.identity.getId()));
     notifier.created(claudeLiveSession(fake.channel, { orgId: 'org-1', factoryProjectId: 'factory-1' }));
 
     fake.setRunning(true);

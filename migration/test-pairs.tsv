@@ -11,7 +11,7 @@ boards/review.test.ts	pipelines/src/review/board.test.ts	0	session-branch refres
 boards/work.test.ts	pipelines/src/work/board.test.ts	-6	work spanning several repositories: Done waits for every open change request; upstream #29039: board transitions as phase config (-5); upstream #29707: board phases run only from their stored fields (-2)
 work-item-branch.test.ts	pipelines/src/shared/work-item-branch.test.ts	+5	Linear/Jira identifier branches dropped with the vocabulary (-1); per-item GitHub suffix cases ported from upstream c3a2784881 (+3); one sandbox folder per card: isWorkItemBranch (+2); upstream #29346: one card for an issue and its pull requests: branch ownership moved here from core semantics (+1)
 storage/domains/work-items/base.test.ts	store/src/work-items/base.test.ts	0	upstream #28889: the board poll reads the list cache without cloning (+1); upstream #29059: org-wide claims dropped, claim cases folded into one per-project case (-3); upstream #28959: card storage split into work and board items (+1); one sandbox folder per card: the cards a session was bound to (+1)
-storage/domains/work-items/attention-events.test.ts	store/src/work-items/attention-events.test.ts
+storage/domains/work-items/attention-events.test.ts	store/src/work-items/board-events.test.ts	+5	upstream #29777: attention announcements became board announcements; the test is now board-events (+5: card, decision and lease-renewal cases)
 storage/domains/audit/base.test.ts	store/src/audit/base.test.ts	+3	forward paging (`after`) ported from upstream f3bc1caddb
 storage/domains/audit/actions.test.ts	store/src/audit/actions.test.ts
 rules/dispatch-errors.test.ts	store/src/dispatch-errors.test.ts
@@ -140,7 +140,7 @@ session/factory-session.test.ts	session/src/factory-session.test.ts	-3	owner-def
 session/filesystem-capture.test.ts	session/src/filesystem-capture.test.ts
 session/first-exec-capture.test.ts	session/src/first-exec-capture.test.ts
 session/first-message-capture.test.ts	session/src/first-message-capture.test.ts
-session/live-sessions.test.ts	session/src/live-sessions.test.ts	+3	sessions of other harnesses: several notifiers, a session created again, unsubscribing
+session/live-sessions.test.ts	session/src/live-sessions.test.ts	+5	sessions of other harnesses: several notifiers, a session created again, unsubscribing (+3); upstream #29777: a run deleted mid-flight, a session found by its row (+2)
 session/memory-settings-hydration.test.ts	session/src/memory-settings-hydration.test.ts	-2	layerPersonalMemorySettings removed with personal memory settings
 session/org-seed-fail-open.test.ts	server/src/session/org-seed-fail-open.test.ts
 session/reply-credential-processor.test.ts	session/src/reply-credential-processor.test.ts
@@ -156,7 +156,7 @@ state-signing.test.ts	auth/src/state-signing.test.ts
 storage/domains/audit/agent-audit.test.ts	harness-mastra/src/agent-audit.test.ts
 storage/domains/audit/domain.test.ts	feed/src/audit/domain.test.ts	+1	upstream #28394: the feed filters by audit action (+1)
 storage/domains/comments/domain.test.ts	feed/src/comments/domain.test.ts
-storage/domains/comments/feed-events.test.ts	feed/src/comments/feed-events.test.ts
+storage/domains/comments/feed-events.test.ts	feed/src/comments/feed-events.test.ts	+2	upstream #29777: a card change sends one frame to its board only, a new reader gets a first byte at once (+2)
 storage/domains/work-items/metrics.test.ts	api/src/metrics.test.ts
 supervisor/health.test.ts	supervisor/src/health.test.ts
 supervisor/read-tools.test.ts	supervisor/src/read-tools.test.ts
@@ -361,7 +361,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	16	upstream #28838: src/m
 ../../../apps/ui/src/ui/domains/factory/boardRepository.test.ts	../apps/ui/src/ui/domains/factory/boardRepository.test.ts	+1	upstream #28961: the normalized provider id picks the repository (+1)
 ../../../apps/ui/src/ui/domains/factory/boardSort.test.ts	../apps/ui/src/ui/domains/factory/boardSort.test.ts
 ../../../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	../apps/ui/src/ui/domains/factory/boardSourceFilters.test.ts	-3	Linear/Jira/incident.io UI cases dropped with the vocabulary
-../../../apps/ui/src/ui/domains/factory/boardStages.test.ts	../apps/ui/src/ui/domains/factory/boardStages.test.ts	+4	upstream #28978: pull requests reviewed on the Work board (+2); upstream #29346: one card for an issue and its pull requests (+1); upstream #29712: board UI from each board's loop phases (+1)
+../../../apps/ui/src/ui/domains/factory/boardStages.test.ts	../apps/ui/src/ui/domains/factory/boardStages.test.ts	+5	upstream #28978: pull requests reviewed on the Work board (+2); upstream #29346: one card for an issue and its pull requests (+1); upstream #29712: board UI from each board's loop phases (+1); upstream #29777: loading placeholder in a board whose first phase is not Intake (+1)
 ../../../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	../apps/ui/src/ui/domains/factory/cardPrimaryAction.test.ts	+7	Linear/Jira/incident.io UI cases dropped with the vocabulary; upstream #28978: pull requests reviewed on the Work board (+1); upstream #29039: board transitions as phase config (+1); upstream #28960: approval reads normalized work item labels (+3, its Linear/Jira/incident.io case dropped); upstream #29346: one card for an issue and its pull requests (+2); upstream #29712: board UI from each board's loop phases (+2)
 ../../../apps/ui/src/ui/domains/factory/stageTones.test.ts	../apps/ui/src/ui/domains/factory/stageTones.test.ts
 ../../../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	../apps/ui/src/ui/domains/factory/workItemActivity.test.ts	-7	Linear/Jira/incident.io UI cases dropped with the vocabulary

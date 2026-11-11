@@ -16,7 +16,6 @@ export function useFactoryDecisionStatus(githubProjectId: string | undefined, st
     queryKey: queryKeys.factoryDecisions(githubProjectId, statusKey),
     queryFn: () => fetchFactoryDecisions(baseUrl, githubProjectId!, { statuses, limit: 50 }),
     enabled: Boolean(githubProjectId),
-    refetchInterval: 2_000,
     staleTime: 1_000,
   });
 }
@@ -49,7 +48,6 @@ export function useFactoryDecisionHistory(
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: FactoryDecisionPage) => lastPage.nextCursor,
     enabled: Boolean(githubProjectId),
-    refetchInterval: 5_000,
     staleTime: 2_000,
   });
 }

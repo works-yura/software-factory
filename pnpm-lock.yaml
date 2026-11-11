@@ -1891,6 +1891,9 @@ importers:
       '@factory/credentials':
         specifier: workspace:*
         version: link:../credentials
+      '@factory/feed':
+        specifier: workspace:*
+        version: link:../feed
       '@factory/http':
         specifier: workspace:*
         version: link:../http

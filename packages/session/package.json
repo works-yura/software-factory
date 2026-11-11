@@ -17,6 +17,7 @@
     "@factory/contracts": "workspace:*",
     "@factory/core": "workspace:*",
     "@factory/credentials": "workspace:*",
+    "@factory/feed": "workspace:*",
     "@factory/http": "workspace:*",
     "@factory/pipelines": "workspace:*",
     "@factory/sandbox": "workspace:*",

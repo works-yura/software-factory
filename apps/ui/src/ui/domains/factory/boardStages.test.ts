@@ -3,6 +3,7 @@ import { workBoard } from '@factory/pipelines/work/board';
 import { describe, expect, it } from 'vitest';
 
 import {
+  boardLoadingStages,
   currentItemStageLabel,
   itemAppearsInStage,
   itemStageOptions,
@@ -175,5 +176,18 @@ describe('pull request cards on a board with its own phase names', () => {
     expect(pullRequestMayEnter(shipBoard, issue, 'pr')).toBe(false);
     expect(pullRequestMayEnter(shipBoard, issue, 'make')).toBe(true);
     expect(currentItemStageLabel({ ...issue, stages: ['think', 'make'] }, shipBoard)).toBe('Make');
+  });
+});
+
+describe('boardLoadingStages', () => {
+  it("shows the intake feed loading in the board's own rest and triage columns", () => {
+    const loading = boardLoadingStages({
+      board: shipBoard,
+      stages: shipBoard.phases.map(phase => ({ id: phase.id, label: phase.title })),
+      itemsPending: false,
+      intakePending: true,
+      triagePending: true,
+    });
+    expect([...loading]).toEqual(['inbox', 'think']);
   });
 });

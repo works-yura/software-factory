@@ -18,6 +18,7 @@ function activeRunsQuery(agentControllerId: string, baseUrl: string) {
       const { controller } = createAgentControllerClient({ agentControllerId, baseUrl });
       return requireAgentController(controller).listActiveRuns();
     },
+    // A feed frame only makes this sooner: a session that moves to another thread mid-run leaves the registry without one.
     refetchInterval: 5_000,
     retry: false,
   });

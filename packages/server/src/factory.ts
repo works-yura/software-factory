@@ -197,8 +197,8 @@ import { createWorkItemFolders, workItemFolderForCard } from '@factory/session';
 import { observeSessionFilesystem } from '@factory/session';
 import { observeSessionFirstExec } from '@factory/session';
 import { observeSessionFirstMessage } from '@factory/session';
-import { createSessionNotifier, LiveSessions } from '@factory/session';
-import type { SessionNotifier } from '@factory/session';
+import { createSessionNotifier, liveSessionsTouchingTheFeed } from '@factory/session';
+import type { LiveSessions } from '@factory/session';
 import { hydrateSessionMemorySettings } from '@factory/session';
 import { hasResolvedOrg } from '@factory/session';
 import { FactoryReplyCredentialProcessor } from '@factory/session';
@@ -526,16 +526,6 @@ function hasPlatformCredentials(): boolean {
   return Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
 }
 
-/** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
-function liveSessionsTouchingTheFeed(eventBus: PubSub, ...notifiers: SessionNotifier[]): LiveSessions {
-  const liveSessions = new LiveSessions(...notifiers);
-  liveSessions.onParkedChanged(session => {
-    const { factoryOrgId, factoryProjectId } = session.state.get();
-    if (factoryOrgId && factoryProjectId) touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
-  });
-  return liveSessions;
-}
-
 let warnedDefinedBoards = false;
 
 /** Warns once per process when the app declares boards in code; Factory's own boards never warn. */
@@ -845,7 +835,7 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
-    workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
+    workItemsStorage.onBoardChanged(scope => touchFeed(eventBus, scope));
     // The dispatcher sleeps while idle. It wakes itself on this replica's writes
     // that leave claimable work; the bus carries those wakes to other replicas.
     workItemsStorage.onClaimableWork(() => publishDispatchWake(eventBus, this.#dispatchWakeOrigin));
@@ -2643,7 +2633,7 @@ export class MastraFactory {
             ...(this.#intakeRules ? { intakeRules: { engine: this.#intakeRules.engine, storage: intakeRulesStorage } } : {}),
             controllerId: CONTROLLER_ID,
             controller,
-            liveSessions: (liveSessionRegistry = liveSessionsTouchingTheFeed(eventBus, controller, claudeLiveSessions)),
+            liveSessions: (liveSessionRegistry = liveSessionsTouchingTheFeed(eventBus, sourceControlSessions, controller, claudeLiveSessions)),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,
