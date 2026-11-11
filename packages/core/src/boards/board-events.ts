@@ -10,6 +10,12 @@ export const STATUS_EVENTS = [
   'work_item.created',
   'work_item.closed',
   'work_item.reopened',
+  /**
+   * The item's own status changed at its provider without closing or reopening it (a ClickUp task
+   * moved from "to do" to "in progress"). A route naming it moves an existing card when the new
+   * status matches; see the ClickUp poller for the guard that keeps a card a person moved.
+   */
+  'work_item.state_changed',
   'pull_request.opened',
   'pull_request.synchronized',
   'pull_request.review_requested',

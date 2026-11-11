@@ -9,7 +9,7 @@ import type { IntegrationStorageHandle } from '@factory/store';
 import { ClickUpApiError } from './api.ts';
 import type { ClickUpClient } from './api.ts';
 import type { ClickUpIntake } from './intake.ts';
-import { listRulesSchema, readClickUpSettings, saveListRules } from './settings.ts';
+import { readClickUpSettings } from './settings.ts';
 
 const listIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
@@ -101,23 +101,6 @@ export function buildClickUpRoutes(options: ClickUpRoutesOptions): ApiRoute[] {
         } catch (error) {
           return c.json({ error: 'clickup_fetch_failed', message: error instanceof Error ? error.message : String(error) }, 502);
         }
-      },
-    }),
-    registerApiRoute('/web/clickup/lists/:listId/rules', {
-      method: 'PUT',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrg(c as unknown as Context, auth);
-        if ('response' in resolved) return resolved.response;
-        // Rules decide which tasks start agent work, so they are an admin's call once auth is on.
-        if (auth.enabled() && !(await auth.isOrganizationAdmin(c as unknown as Context, resolved.orgId))) {
-          return c.json({ error: 'forbidden', message: 'Only organization admins can change ClickUp rules.' }, 403);
-        }
-        const listId = listIdSchema.safeParse(c.req.param('listId'));
-        const body = listRulesSchema.safeParse(await c.req.json().catch(() => undefined));
-        if (!listId.success || !body.success) return c.json({ error: 'invalid_rules' }, 400);
-        const saved = await saveListRules(storage, resolved.orgId, listId.data, body.data);
-        return c.json(saved);
       },
     }),
   ];

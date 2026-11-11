@@ -26,6 +26,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry, IntakeRoutesReader, ProjectBoardSource } from '@factory/core';
+import type { StoredBoardsStorage } from '@factory/store';
 import type { Intake } from '@factory/capabilities';
 import type { VersionControl } from '@factory/capabilities';
 import type { RouteAuth } from '@factory/http';
@@ -155,8 +156,11 @@ export interface IntegrationContext {
      * per-project source serves each project its stored boards.
      */
     boards: BoardRegistry | ProjectBoardSource;
-    /** The project's intake routes, for integrations that place new cards themselves. */
-    intakeRoutes?: IntakeRoutesReader;
+    /**
+     * The project's intake routes, for integrations that place new cards themselves; `createIntakeRoute`
+     * lets one move its retired per-source rules into routes (ClickUp's List status rules).
+     */
+    intakeRoutes?: IntakeRoutesReader & Partial<Pick<StoredBoardsStorage, 'createIntakeRoute'>>;
     /** A project's boards, stored ones included, which an intake route may name. */
     projectBoards?: { load(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> };
   };
