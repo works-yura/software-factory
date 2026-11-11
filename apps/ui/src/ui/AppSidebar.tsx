@@ -17,7 +17,6 @@ import { SettingsNavigation } from './domains/settings/components/SettingsNaviga
 import { useSettingsOpen } from './domains/settings/hooks/useSettingsOpen';
 import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
 import { SessionsSection } from './domains/workspaces/components/SessionsSection';
-import { SidebarNewSessionButton } from './domains/workspaces/components/SidebarNewSessionButton';
 
 const MAIN_VIEW = 'main';
 const BOARD_CONFIG_VIEW = 'board-config';
@@ -68,7 +67,6 @@ function MainNavigation() {
       className="min-h-0 flex-1"
     >
       <Sidebar.NavStack.Root className="flex min-h-0 flex-col gap-4">
-        <SidebarNewSessionButton />
         <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label={t('navigation')}>
           <FactorySection />
           <SessionsSection />

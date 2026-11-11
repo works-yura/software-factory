@@ -32,6 +32,7 @@ import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
+import { SidebarNewSessionButton } from './SidebarNewSessionButton';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 import { useTranslation } from 'react-i18next';
 import { i18n } from '../../../i18n';
@@ -83,7 +84,9 @@ export function SessionsSection() {
       <Sidebar.NavHeader
         className="mt-0"
         action={
-          <PropertiesMenu
+          <div className="flex items-center gap-0.5">
+            <SidebarNewSessionButton />
+            <PropertiesMenu
             label={t('sessions.properties')}
             changedCount={changedSettingCount + activeFilterCount}
             onReset={() => {
@@ -128,6 +131,7 @@ export function SessionsSection() {
               onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
             />
           </PropertiesMenu>
+          </div>
         }
       >
         {t('sessions.title')}
