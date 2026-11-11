@@ -14,6 +14,7 @@ import {
   GitBranch,
   Inbox,
   Palette,
+  Plug,
   SlidersHorizontal,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -147,6 +148,14 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: Activity,
         searchText: 'observability logs crashes crashlytics firebase cloud logging errors stability service account',
+      },
+      {
+        id: 'mcp-servers',
+        get label() {
+          return SETTINGS_SECTION_LABELS['mcp-servers'];
+        },
+        icon: Plug,
+        searchText: 'mcp servers tools database firestore toolbox postgres connectors external access policy',
       },
       {
         id: 'factory',

@@ -50,6 +50,7 @@ describe('SettingsNavigation', () => {
       'Environment',
       'Work Intake',
       'Logs and crashes',
+      'MCP servers',
       'Manage Factory',
       'Debug',
     ]);
