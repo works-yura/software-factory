@@ -411,6 +411,18 @@ export interface FactoryDecisionDispatcherOptions {
   }) => Promise<string | null>;
   /** The project's intake routes, which place newly filed linked cards. Without it, decisions place cards as they say. */
   intakeRoutes?: IntakeRoutesReader;
+  /**
+   * Told the card an arrival filed (created, or found again on a retry): the host writes back what
+   * it keeps about where the card came from, such as the fire of the route that filed it.
+   * Idempotent; a failure fails the decision, which retries.
+   */
+  cardFiled?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    source: string;
+    sourceKey: string;
+  }) => Promise<void>;
   /** `false` spends a linked-card decision unfiled: its Factory project was deleted after the decision committed. */
   factoryProjectExists?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   maxInFlight?: number;
@@ -616,6 +628,7 @@ export class FactoryDecisionDispatcher {
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #reportRunEnd?: FactoryRunEndReporter;
+  readonly #cardFiled?: FactoryDecisionDispatcherOptions['cardFiled'];
   readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #reportReviewStatus?: FactoryReviewStatusReporter;
@@ -674,6 +687,7 @@ export class FactoryDecisionDispatcher {
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
     this.#reportRunEnd = options.reportRunEnd;
+    this.#cardFiled = options.cardFiled;
     this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#reportReviewStatus = options.reportReviewStatus;
@@ -1786,6 +1800,13 @@ export class FactoryDecisionDispatcher {
     if (!skipRules && itemBoard !== board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${board}".`);
     }
+    await this.#cardFiled?.({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItemId: result.item.id,
+      source: decision.source,
+      sourceKey: decision.sourceKey,
+    });
     // A re-evaluation for an already-filed card (poll/reconcile re-emitting
     // "opened") resolves the card itself as the triggering item; it is not
     // its own parent.

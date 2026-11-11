@@ -62,7 +62,7 @@ import {
   productBoard,
 } from '@factory/pipelines';
 import { AUDITS_BOARD_UPGRADE_ACTOR, migrateLegacyIntakeRules } from './intake/migrations.ts';
-import { intakeTriggerRouteRepository } from './intake/repository.ts';
+import { intakeTriggerRouteRepository, writeFireCardBack } from './intake/repository.ts';
 import { setupIntakeTriggers } from './intake/setup.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import {
@@ -3082,6 +3082,8 @@ export class MastraFactory {
                   await factoryProjectsStorage.ensureReady();
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
                 },
+                // A route's card is filed after its fire was committed: write the card back onto the fire.
+                cardFiled: writeFireCardBack(intakeRouteFiresStorage),
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),

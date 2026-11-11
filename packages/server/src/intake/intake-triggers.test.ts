@@ -11,7 +11,7 @@ import { storedTriggerRoute } from '@factory/store';
 import type { StoredIntakeRouteInput, StoredIntakeRouteRecord } from '@factory/store';
 
 import { migrateLegacyIntakeRules } from './migrations.ts';
-import { intakeTriggerRouteRepository } from './repository.ts';
+import { intakeTriggerRouteRepository, writeFireCardBack } from './repository.ts';
 import { INTAKE_ROUTE_FIRE_WORKFLOW_ID, intakeRouteScheduleId, legacyIntakeRuleScheduleId } from './schedule-trigger.ts';
 import type { ScheduleRows } from './schedule-trigger.ts';
 import { setupIntakeTriggers } from './setup.ts';
@@ -79,6 +79,7 @@ async function setup() {
     boards,
     intakeRoutes: seed.storedBoards,
     ownerId: 'worker-1',
+    cardFiled: writeFireCardBack(seed.intakeRouteFires),
   });
   const dispatch = async () => {
     for (let pass = 0; pass < 3; pass++) await dispatcher.runOnce(new Date(clock.getTime() + 60_000 * (pass + 1)));
@@ -144,6 +145,8 @@ describe('a route «За розкладом» files its own cards', () => {
     expect(filed!.metadata?.[INTAKE_ROUTE_ORIGIN_METADATA_KEY]).toMatchObject({ id: route.id, fireKey: 'schedule:claim-1' });
     expect(filed!.metadata?.description).toBe('Аудит: security. Route Security audit, fired 2026-11-16 08:00.');
     expect((await seed.workItems.listShared(scope)).filter(item => item.board === 'audits')).toHaveLength(1);
+    // The fire names the card it filed, written back once the dispatcher filed it.
+    expect((await seed.intakeRouteFires.findFire(route.id, 'schedule:claim-1'))?.workItemId).toBe(filed!.id);
   });
 
   it('skips a fire while the last card is open and files again once it is done', async () => {

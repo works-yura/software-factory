@@ -219,6 +219,21 @@ export class IntakeRouteFiresStorage extends FactoryStorageDomain {
     return rows[0] ? toFire(rows[0]) : null;
   }
 
+  /**
+   * Records the card a fire filed, once the dispatcher has filed it (after the fire's commit).
+   * False when the fire isn't recorded yet: the engine records it right after the action returns,
+   * so the caller retries.
+   */
+  async setFireCard(routeId: string, fireKey: string, workItemId: string): Promise<boolean> {
+    const where = { route_id: routeId, fire_key: fireKey };
+    const row = await this.ops.findOne<FireRow>(INTAKE_ROUTE_FIRES_SCHEMA.name, where);
+    if (!row) return false;
+    if (row.work_item_id !== workItemId) {
+      await this.ops.updateMany(INTAKE_ROUTE_FIRES_SCHEMA.name, where, { work_item_id: workItemId });
+    }
+    return true;
+  }
+
   /** Forgets a deleted route's fires. */
   async deleteFires(routeId: string): Promise<void> {
     await this.ops.deleteMany(INTAKE_ROUTE_FIRES_SCHEMA.name, { route_id: routeId });
