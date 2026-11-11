@@ -507,38 +507,51 @@ describe('intake routes placing linked cards', () => {
     });
   });
 
-  it('keeps the placement of a decision whose integration already applied the routes and names the route', async () => {
+  it("keeps the placement of a card a route already placed (it names the route), as a schedule route's card", async () => {
     const { boards, scope, route, deliver } = await setup();
     await boards.create(scope, docsBoard, 'admin');
     const docs = await route({ name: 'Everything to Docs', target: { boardKey: 'docs', phaseKey: 'writing' } });
 
-    // ClickUp's poller holds a task that predates the server at the route board's first phase.
-    const held = await deliver({
-      sourceKey: 'clickup-task:86c9',
+    const stamped = await deliver({
+      sourceKey: 'intake-route:r1',
       source: 'clickup-task',
       board: 'docs',
       stage: 'inbox',
       metadata: { intakeRouteId: docs.id },
     });
+    expect(placed(stamped)).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(stamped?.metadata).toMatchObject({ intakeRouteId: docs.id });
+  });
+
+  it("holds a task that predates the integration at its route board's first phase, naming the route", async () => {
+    const { boards, scope, route, deliver } = await setup();
+    await boards.create(scope, docsBoard, 'admin');
+    const docs = await route({
+      name: 'ClickUp to Docs',
+      when: { operator: 'AND', conditions: [{ field: 'source.integration', operator: 'equals', value: 'clickup' }] },
+      target: { boardKey: 'docs', phaseKey: 'writing' },
+    });
+
+    const held = await deliver({
+      sourceKey: 'clickup-task:86c9',
+      source: 'clickup-task',
+      routing: { skipCatchAll: true, holdAtInitialPhase: true },
+    });
     expect(placed(held)).toEqual({ board: 'docs', stages: ['inbox'] });
     expect(held?.metadata).toMatchObject({ intakeRouteId: docs.id });
   });
 
-  it("keeps a ClickUp List's placement when the poller applied the routes and none with a condition matched", async () => {
-    const { boards, scope, deliver } = await setup({ withDefaultRoute: true });
+  it('never lets the catch-all take an arrival that asks to skip it: it lands on the default board instead', async () => {
+    const { boards, scope, route, deliver } = await setup();
     await boards.create(scope, docsBoard, 'admin');
+    await route({ name: 'Everything to Docs', target: { boardKey: 'docs', phaseKey: 'writing' } });
 
-    // The List's board and its status rule's phase stand: the catch-all doesn't override them.
-    const listed = await deliver({
-      sourceKey: 'clickup-task:86d1',
-      source: 'clickup-task',
-      board: 'docs',
-      stage: 'inbox',
-      routesApplied: true,
-      metadata: {},
-    });
-    expect(placed(listed)).toEqual({ board: 'docs', stages: ['inbox'] });
-    expect(listed?.metadata?.intakeRouteId).toBeUndefined();
+    const skipped = await deliver({ sourceKey: 'clickup-task:86d1', source: 'clickup-task', routing: { skipCatchAll: true } });
+    expect(placed(skipped)).toEqual({ board: 'work', stages: ['intake'] });
+    expect(skipped?.metadata?.intakeRouteId).toBeUndefined();
+
+    const taken = await deliver({ sourceKey: 'clickup-task:86d2', source: 'clickup-task' });
+    expect(placed(taken)).toEqual({ board: 'docs', stages: ['writing'] });
   });
 
   it("routes a decision that names a later phase, as a host's rule overriding the default would", async () => {

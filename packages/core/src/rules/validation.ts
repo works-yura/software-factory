@@ -82,6 +82,24 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
   return { type, ...(reason ? { reason } : {}) };
 }
 
+function linkedItemRouting(value: unknown): { skipCatchAll?: boolean; holdAtInitialPhase?: boolean } | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new FactoryRuleValidationError('Factory linked work item routing must be an object.');
+  }
+  const routing = value as Record<string, unknown>;
+  assertExactKeys(routing, ['skipCatchAll', 'holdAtInitialPhase'], 'Factory linked work item routing');
+  for (const key of ['skipCatchAll', 'holdAtInitialPhase'] as const) {
+    if (routing[key] !== undefined && typeof routing[key] !== 'boolean') {
+      throw new FactoryRuleValidationError(`Factory linked work item routing.${key} must be a boolean.`);
+    }
+  }
+  return {
+    ...(routing.skipCatchAll === true ? { skipCatchAll: true } : {}),
+    ...(routing.holdAtInitialPhase === true ? { holdAtInitialPhase: true } : {}),
+  };
+}
+
 function linkedItemReference(value: unknown, field: 'attachTo' | 'closesIssue'): { workItemId: string } | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -312,6 +330,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'url',
           'stage',
           'skipRules',
+          'routing',
+          // Decisions saved before the dispatcher placed every arrival still carry it; it is ignored
+          // (the routes place the card, or its route stamp keeps where one already placed it).
           'routesApplied',
           'attachTo',
           'closesIssue',
@@ -322,9 +343,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.skipRules !== undefined && typeof value.skipRules !== 'boolean') {
         throw new FactoryRuleValidationError('Factory linked work item skipRules must be a boolean.');
       }
-      if (value.routesApplied !== undefined && typeof value.routesApplied !== 'boolean') {
-        throw new FactoryRuleValidationError('Factory linked work item routesApplied must be a boolean.');
-      }
+      const routing = linkedItemRouting(value.routing);
       const url = value.url;
       if (url !== null && (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\//.test(url))) {
         throw new FactoryRuleValidationError('Factory linked work item URL is invalid.');
@@ -342,7 +361,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
         ...(value.skipRules === true ? { skipRules: true } : {}),
-        ...(value.routesApplied === true ? { routesApplied: true } : {}),
+        ...(routing ? { routing } : {}),
         ...(attachTo ? { attachTo } : {}),
         ...(closesIssue ? { closesIssue } : {}),
         ...(metadata ? { metadata } : {}),

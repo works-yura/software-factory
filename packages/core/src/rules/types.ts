@@ -1,4 +1,5 @@
 import type { ActivityEvent, BoardEventFacts } from '../boards/board-events.ts';
+import type { ArrivalRouting } from '../boards/intake-routing.ts';
 import type { ExternalWorkItemSource, ProviderWorkItem } from '../card.ts';
 
 export const WORK_ITEM_SOURCES = [
@@ -571,11 +572,13 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
    */
   skipRules?: boolean;
   /**
-   * The integration already applied the project's intake routes to this arrival (ClickUp's poller,
-   * whose List board and status rules place what no specific route takes), so the dispatcher keeps
-   * `board` and `stage` as they are. Unlike `skipRules`, the board's phase rules still run.
+   * How the project's intake routes place this arrival; the dispatcher places every arrival.
+   * `skipCatchAll`: only a route with a condition may take it (a tracker task its List's route
+   * subscribed), never the route that takes every new card. `holdAtInitialPhase`: file it on the
+   * route's board but at the board's first phase, so it starts nothing on its own (a task that
+   * already existed before the integration first read it).
    */
-  routesApplied?: boolean;
+  routing?: ArrivalRouting;
   /**
    * File the pull or merge request on this existing card, the one that authored it, as one more
    * source instead of on a card of its own. Applies only when no card holds the record yet and

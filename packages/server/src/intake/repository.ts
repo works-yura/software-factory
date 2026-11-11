@@ -2,9 +2,6 @@ import type { IntakeTriggerRouteRepository } from '@factory/core';
 import { storedTriggerRoute } from '@factory/store';
 import type { IntakeRouteFiresStorage, StoredBoardsStorage } from '@factory/store';
 
-/** A stored route as a trigger route, or null when it has no trigger of its own. */
-export const toTriggerRoute = storedTriggerRoute;
-
 /**
  * The trigger-route repository the engine runs on: the routes live with every other intake route
  * (`StoredBoardsStorage`), their fires in the route fire log.
@@ -16,11 +13,11 @@ export function intakeTriggerRouteRepository(
   return {
     getTriggerRoute: async id => {
       const route = await boards.findIntakeRouteById(id);
-      return route ? toTriggerRoute(route) : null;
+      return route ? storedTriggerRoute(route) : null;
     },
     listTriggerRoutes: async () =>
       (await boards.listTriggerRoutes()).flatMap(route => {
-        const trigger = toTriggerRoute(route);
+        const trigger = storedTriggerRoute(route);
         return trigger ? [trigger] : [];
       }),
     recordFire: input => fires.recordFire(input),

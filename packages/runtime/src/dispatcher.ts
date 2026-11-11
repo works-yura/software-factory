@@ -7,7 +7,6 @@ import {
   cardBoardFlow,
   eventMovesCard,
   hasPullRequest,
-  intakeTarget,
   isPullRequestEvent,
   isPullRequestCard,
   isTerminalWorkItem,
@@ -26,7 +25,7 @@ import {
   landingPhase,
   placedByIntakeRoute,
   resolveEventRoute,
-  resolveIntakePlacement,
+  placeArrival,
   resolveIntakeRoute,
   routesHandleEvent,
 } from '@factory/core';
@@ -2010,11 +2009,8 @@ export class FactoryDecisionDispatcher {
     boards: BoardRegistry,
   ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
     if (!this.#intakeRoutes || decision.skipRules === true) return decision;
-    // An integration that applied the routes itself (ClickUp's poller) keeps its placement, such as
-    // a pre-existing task held at the board's first phase or a task its List's status rules place.
-    if (decision.routesApplied === true || typeof decision.metadata?.[INTAKE_ROUTE_METADATA_KEY] === 'string') {
-      return decision;
-    }
+    // A route already placed it (the card a route itself files, such as a schedule route's): keep it.
+    if (typeof decision.metadata?.[INTAKE_ROUTE_METADATA_KEY] === 'string') return decision;
     // A card another card's rule files (a board's child card) goes where that
     // board put it; routes place only what arrives from outside.
     if (record.workItemId !== null) return decision;
@@ -2038,16 +2034,15 @@ export class FactoryDecisionDispatcher {
           )
         : {}),
     };
-    const placement = resolveIntakePlacement(routes, facts, boards);
-    if (!placement) {
-      const fallback = intakeTarget(boards);
-      return fallback ? { ...decision, board: fallback.board, stage: fallback.initialPhase } : decision;
-    }
+    const placement = placeArrival(routes, facts, boards, decision.routing);
+    if (!placement) return decision;
     return {
       ...decision,
       board: placement.board,
       stage: placement.phase,
-      metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: placement.routeId },
+      ...(placement.routeId
+        ? { metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: placement.routeId } }
+        : {}),
     };
   }
 

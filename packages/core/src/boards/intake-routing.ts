@@ -2,7 +2,7 @@ import { evaluateRuleGroup } from '../rules/rule-group.ts';
 import type { RuleFacts, RuleGroup } from '../rules/rule-group.ts';
 import type { BoardEventFacts } from './board-events.ts';
 import type { BoardRegistry, InstalledBoard } from './registry.ts';
-import { boardFlow, boardForWorkItem, hasPullRequest } from './semantics.ts';
+import { boardFlow, boardForWorkItem, hasPullRequest, intakeTarget } from './semantics.ts';
 import type { WorkItemSourceRow } from '../card.ts';
 
 /** What intake routing reads of the card a pull request closes. */
@@ -225,6 +225,34 @@ export function resolveIntakePlacement(
   return resolution?.type === 'place'
     ? { board: resolution.board, phase: resolution.phase, routeId: resolution.routeId }
     : undefined;
+}
+
+/** How the routes place one arrival (`FactoryRuleLinkedWorkItemDecision.routing`). */
+export interface ArrivalRouting {
+  /** Only a route with a condition may take it, never the route that takes every new card. */
+  readonly skipCatchAll?: boolean;
+  /** File it on the route's board but at the board's first phase: it starts nothing on its own. */
+  readonly holdAtInitialPhase?: boolean;
+}
+
+/**
+ * Where an arriving card is filed: the first route that takes it, at its phase (or the board's
+ * first phase when held), naming the route; else the default board's first phase. The one
+ * placement every arrival goes through, whichever integration filed it.
+ */
+export function placeArrival(
+  routes: readonly IntakeRoute[],
+  facts: RuleFacts,
+  registry: BoardRegistry,
+  routing: ArrivalRouting = {},
+): { board: string; phase: string; routeId?: string } | undefined {
+  const placement = resolveIntakePlacement(routes, facts, registry, { skipCatchAll: routing.skipCatchAll === true });
+  if (!placement) {
+    const fallback = intakeTarget(registry);
+    return fallback ? { board: fallback.board, phase: fallback.initialPhase } : undefined;
+  }
+  const held = routing.holdAtInitialPhase === true ? registry.get(placement.board)?.initialPhase : undefined;
+  return { board: placement.board, phase: held ?? placement.phase, routeId: placement.routeId };
 }
 
 /** The phase a route's card lands in: its named phase when new cards can reach it, else the board's first. */

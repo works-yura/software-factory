@@ -7,10 +7,11 @@ import {
   FactoryDecisionDispatcher,
   FactoryTransitionService,
 } from '@factory/testing';
+import { storedTriggerRoute } from '@factory/store';
 import type { StoredIntakeRouteInput, StoredIntakeRouteRecord } from '@factory/store';
 
 import { migrateLegacyIntakeRules } from './migrations.ts';
-import { intakeTriggerRouteRepository, toTriggerRoute } from './repository.ts';
+import { intakeTriggerRouteRepository } from './repository.ts';
 import { INTAKE_ROUTE_FIRE_WORKFLOW_ID, intakeRouteScheduleId, legacyIntakeRuleScheduleId } from './schedule-trigger.ts';
 import type { ScheduleRows } from './schedule-trigger.ts';
 import { setupIntakeTriggers } from './setup.ts';
@@ -89,7 +90,7 @@ async function setup() {
       triggered: SECURITY,
       ...overrides,
     };
-    const trigger = toTriggerRoute({ ...(await seed.storedBoards.createIntakeRoute(scope, input, 'admin-1')) });
+    const trigger = storedTriggerRoute({ ...(await seed.storedBoards.createIntakeRoute(scope, input, 'admin-1')) });
     await engine.validate(trigger!, scope);
     await engine.sync(trigger!);
     return trigger!;
@@ -123,7 +124,7 @@ describe('a route «За розкладом» files its own cards', () => {
     });
     const stored = (await seed.storedBoards.getIntakeRoute(scope, route.id)) as StoredIntakeRouteRecord;
     const paused = await seed.storedBoards.updateIntakeRoute(scope, route.id, { enabled: false }, { expectedRevision: stored.revision, actor: 'admin-1' });
-    await engine.sync(toTriggerRoute(paused)!);
+    await engine.sync(storedTriggerRoute(paused)!);
     expect(rows.has(intakeRouteScheduleId(route.id))).toBe(false);
   });
 
