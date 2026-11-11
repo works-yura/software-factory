@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { workBoardCatalog } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import { sessionCardsWhileBoardLoads } from '../../../../../e2e/ui/session-cards';
 import type { ProviderWorkItem as WorkItemRow } from '@factory/core/card';
 
 import type { BoardCatalogResponse } from '../../../../api/types';
@@ -99,6 +100,29 @@ function renderHeader() {
 }
 
 describe('FactorySessionPage', () => {
+  describe('while the board is still loading', () => {
+    it("names the session's card and links its related work", async () => {
+      const currentItem = workItem(undefined);
+      const relatedItem = {
+        ...workItem(undefined),
+        id: 'related-item',
+        parentWorkItemId: currentItem.id,
+        title: 'Follow-up work',
+        metadata: { number: 8 },
+        sessions: {},
+      };
+      stubHeader(currentItem);
+      server.use(sessionCardsWhileBoardLoads(FACTORY_ID, SESSION_ID, [currentItem, relatedItem]));
+      renderHeader();
+
+      expect(await screen.findByText('Issue #7: Fix sandbox setup')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /Open .*Follow-up work/ })).toHaveAttribute(
+        'href',
+        `/factories/${FACTORY_ID}/work`,
+      );
+    });
+  });
+
   describe('when the active work item has an external issue URL', () => {
     it('renders an issue pill that opens the external issue in a new tab', async () => {
       const issueUrl = 'https://github.com/acme/app/issues/7';

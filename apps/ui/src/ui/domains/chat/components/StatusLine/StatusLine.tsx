@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../hooks/useFactories';
-import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
+import { useSessionWorkItemsQuery } from '../../../../../hooks/useWorkItems';
 import { isPullRequestSource } from '../../../factory/services/workItems';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { PullRequestLinks } from '../PullRequestLinks';
@@ -21,7 +21,7 @@ import { SessionUsageStatus } from '../../../usage/components/SessionUsageStatus
  */
 export function StatusLine() {
   const { t } = useTranslation('chat');
-  const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
+  const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
   const { factorySessionState } = useChatSessionContext();
   const { data: factory } = useFactoryQuery(factoryId);
   const repository = factory?.repositories.find(
@@ -29,11 +29,10 @@ export function StatusLine() {
   );
   const factoryProjectId = factorySessionState?.factoryProjectId;
   const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
-  const workItems = useWorkItemsQuery(factoryProjectKey);
+  const workItems = useSessionWorkItemsQuery(factoryProjectKey, sessionId);
   const currentItem = workItems.data?.find(item =>
     Object.values(item.sessions).some(session => session.threadId === threadId),
   );
-  const workItemsPending = Boolean(factoryProjectKey) && workItems.isPending;
 
   return (
     <div
@@ -48,7 +47,7 @@ export function StatusLine() {
       <ConnectionActivity />
       <QueuedFollowUps />
       <GoalStatus />
-      {!workItemsPending && (!currentItem || !isPullRequestSource(currentItem.source)) ? (
+      {!workItems.isLoading && (!currentItem || !isPullRequestSource(currentItem.source)) ? (
         <PullRequestLinks repository={repository} threadId={threadId} />
       ) : null}
     </div>

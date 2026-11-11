@@ -9,7 +9,7 @@ import { Link, useMatch, useNavigate, useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useSessionWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { boardTitle } from '../../../i18n/boardLabels';
 import { translator } from '../../../i18n/t';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
@@ -123,12 +123,13 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const userSessionId = sessionId ?? threadId;
   const sessionQuery = useUserSessionQuery(userSessionId);
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
-  const items = useWorkItemsQuery(factoryId);
+  const items = useSessionWorkItemsQuery(factoryId, sessionId);
   const workspaces = useWorkspacesQuery(factoryId);
   const catalog = useBoardCatalog(factoryId);
 
-  const allItems = items.data ?? [];
-  const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
+  // The session's cards and the cards related to them, not the board.
+  const sessionItems = items.data ?? [];
+  const currentItem = activeWorkItem(sessionItems, factoryId, sessionId, threadId);
   // Prefer the list row: PageTitle patches it with the generated title, the detail cache is not updated.
   const session = workspaces.data?.userSessions.find(entry => entry.sessionId === userSessionId) ?? sessionQuery.data;
   const workspaceTitle = !isUserThread && !currentItem ? session?.title?.trim() : undefined;
@@ -214,7 +215,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
           {currentItem && factoryId && threadId ? (
             <WorkItemActions
               item={currentItem}
-              allItems={allItems}
+              sessionItems={sessionItems}
               livePaths={livePaths}
               factoryId={factoryId}
               threadId={threadId}
@@ -232,14 +233,14 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
 
 function WorkItemActions({
   item,
-  allItems,
+  sessionItems,
   livePaths,
   factoryId,
   threadId,
   projectRepositoryId,
 }: {
   item: WorkItem;
-  allItems: WorkItem[];
+  sessionItems: WorkItem[];
   livePaths: ReadonlySet<string>;
   factoryId: string;
   threadId: string;
@@ -249,7 +250,7 @@ function WorkItemActions({
   const navigate = useNavigate();
   const externalItemUrl = genericExternalWorkItemUrl(item);
   const externalItemLabel = externalWorkItemLabel(item);
-  const relatedItems = relatedWorkItemIndex(allItems)(item);
+  const relatedItems = relatedWorkItemIndex(sessionItems)(item);
   // A pull request with its own Review card already has a link, as does the card's own.
   const linkedUrls = new Set([externalItemUrl, ...relatedItems.map(related => related.url)]);
   const pullRequests = cardPullRequestLinks(item).filter(pullRequest => !linkedUrls.has(pullRequest.url));

@@ -90,6 +90,9 @@ export const queryKeys = {
     ['intake', 'trigger-preview', factoryProjectId ?? null, trigger, locale] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  // Under the board's key: whatever refreshes or rewrites the board's cards reaches a session's too.
+  sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
   workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
   /** Every comment read for a work item — the invalidation target for a feed event. */
