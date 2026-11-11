@@ -3,6 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowUpDown, CircleDashed, Clock, UserRound } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -27,6 +28,7 @@ import {
 } from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
 import { pullRequestMergeTargets } from '../services/sessionRows';
+import type { SessionListRow } from '../services/sessionRows';
 import { SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
@@ -40,8 +42,6 @@ export function SessionsSection() {
   const { t } = useTranslation('nav');
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
-  const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
-  const catalog = useBoardCatalog(factoryId);
   const {
     view,
     hiddenGroupKeys,
@@ -52,6 +52,10 @@ export function SessionsSection() {
     changeGroupOrder,
     resetView,
   } = useSessionListView();
+  const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId, {
+    revealChildSessions: view.revealChildSessions,
+  });
+  const catalog = useBoardCatalog(factoryId);
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
   const deletion = useSessionDeletion(factoryId);
@@ -127,6 +131,16 @@ export function SessionsSection() {
               onVisibilityChange={changeGroupVisibility}
               onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
             />
+            <DropdownMenu.Separator />
+            <DropdownMenu.CheckboxItem checked={view.compact} onCheckedChange={compact => updateView({ compact })}>
+              {t('sessions.compactView')}
+            </DropdownMenu.CheckboxItem>
+            <DropdownMenu.CheckboxItem
+              checked={view.revealChildSessions}
+              onCheckedChange={revealChildSessions => updateView({ revealChildSessions })}
+            >
+              {t('sessions.revealChildSessions')}
+            </DropdownMenu.CheckboxItem>
           </PropertiesMenu>
         }
       >
@@ -139,15 +153,28 @@ export function SessionsSection() {
             key={group.key}
             group={group}
             showHeader={view.groupBy !== 'none'}
-            renderRow={row => (
-              <SessionListItem
-                factoryId={factoryId}
-                row={row}
-                disabled={deletion.deleting}
-                merged={mergedBySessionId[row.session.sessionId] ?? row.pullRequest?.knownMerged}
-                onDelete={deletion.requestDeletion}
-              />
-            )}
+            renderRow={row => {
+              const item = (entry: SessionListRow, level?: number, subItems?: ReactNode) => (
+                <SessionListItem
+                  key={entry.session.sessionId}
+                  factoryId={factoryId}
+                  row={entry}
+                  level={level}
+                  compact={view.compact}
+                  disabled={deletion.deleting}
+                  merged={mergedBySessionId[entry.session.sessionId] ?? entry.pullRequest?.knownMerged}
+                  onDelete={deletion.requestDeletion}
+                  subItems={subItems}
+                />
+              );
+              return item(
+                row,
+                undefined,
+                row.childRows?.length ? (
+                  <Sidebar.NavList className="mt-0.5">{row.childRows.map(child => item(child, 1))}</Sidebar.NavList>
+                ) : undefined,
+              );
+            }}
           />
         ))}
       </div>

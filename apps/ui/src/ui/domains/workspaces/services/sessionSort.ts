@@ -12,10 +12,6 @@ export const SESSION_SORT_OPTIONS: readonly DropdownMenuRadioOption<SessionSort>
   lazyOption(value, `nav:sessions.sortOptions.${value}`),
 );
 
-export function isSessionSort(value: unknown): value is SessionSort {
-  return SESSION_SORTS.some(sort => sort === value);
-}
-
 const ACTIVITY_RANK: Record<SessionActivityStatus, number> = {
   initializing: 0,
   working: 0,

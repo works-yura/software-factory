@@ -50,7 +50,9 @@
     "owners": {
       "all": "All owners",
       "mine": "Mine"
-    }
+    },
+    "compactView": "Compact view",
+    "revealChildSessions": "Reveal child sessions"
   },
   "switcher": {
     "select": "Select factory",

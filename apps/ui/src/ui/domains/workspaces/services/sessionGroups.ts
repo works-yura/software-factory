@@ -25,10 +25,6 @@ export const SESSION_GROUP_BY_OPTIONS: readonly DropdownMenuRadioOption<SessionG
   value => lazyOption(value, `workspaces:sessions.groupBy.${value}`),
 );
 
-export function isSessionGroupBy(value: unknown): value is SessionGroupBy {
-  return SESSION_GROUP_BYS.some(groupBy => groupBy === value);
-}
-
 export type SessionGroupIcon = 'board' | 'user' | 'slack' | 'status' | 'owner' | 'all';
 
 export interface SessionGroupHeading {
@@ -91,7 +87,7 @@ const GROUP_KEY_OF_ROW: Record<SessionGroupBy, (row: SessionListRow) => string> 
       : row.board === undefined
         ? USER_GROUP.key
         : boardGroupKey(row.board),
-  status: row => statusGroupKey(row.status),
+  status: row => statusGroupKey(row.cardStatus ?? row.status),
   owner: row => ownerGroupKey(row.session.userId),
   none: () => ALL_GROUP.key,
 };
@@ -177,45 +173,11 @@ export function groupSessionRows(
 
 export function collapsedRowsKeepingActive(rows: readonly SessionListRow[], additionalRowCount = 0): SessionListRow[] {
   const collapsed = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
-  const open = rows.find(row => row.active);
+  // A card whose open session is listed under it keeps the card in view.
+  const open = rows.find(row => row.active || row.childRows?.some(child => child.active));
   const openOutsideFold = open !== undefined && !collapsed.includes(open);
   const visible = rows.slice(0, collapsed.length + Number(openOutsideFold) + additionalRowCount);
   // The open row already occupies a slot, including when a later batch reaches it.
   if (open && !visible.includes(open)) visible[visible.length - 1] = open;
   return visible;
-}
-
-export type SessionListEntry =
-  | { kind: 'row'; row: SessionListRow }
-  | { kind: 'card'; itemId: string; title: string; rows: SessionListRow[] };
-
-/**
- * Gathers a card's sessions under one entry for the card, at the place of its
- * first row, so each is told apart by its context. A card with one session
- * (a Product card runs every phase in one) stays a single row under its own name:
- * there is nothing to tell apart, and a heading over one row only repeats it.
- * The sidebar lists one row per card (`oneRowPerCard`), so a card usually arrives here as one row.
- */
-export function nestCardSessions(rows: readonly SessionListRow[]): SessionListEntry[] {
-  const entries: SessionListEntry[] = [];
-  const cards = new Map<string, Extract<SessionListEntry, { kind: 'card' }>>();
-  for (const row of rows) {
-    if (row.itemId === undefined || row.contextLabel === undefined) {
-      entries.push({ kind: 'row', row });
-      continue;
-    }
-    const card = cards.get(row.itemId);
-    if (card) {
-      card.rows.push(row);
-      continue;
-    }
-    const entry: SessionListEntry = { kind: 'card', itemId: row.itemId, title: row.item?.title ?? row.name, rows: [row] };
-    cards.set(row.itemId, entry);
-    entries.push(entry);
-  }
-  return entries.map(entry =>
-    entry.kind === 'card' && entry.rows.length === 1
-      ? { kind: 'row', row: { ...entry.rows[0]!, contextLabel: undefined, contextAside: entry.rows[0]!.contextLabel } }
-      : entry,
-  );
 }

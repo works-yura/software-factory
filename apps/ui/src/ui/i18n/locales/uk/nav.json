@@ -52,7 +52,9 @@
     "owners": {
       "all": "Усі власники",
       "mine": "Мої"
-    }
+    },
+    "compactView": "Компактний вигляд",
+    "revealChildSessions": "Показувати дочірні сесії"
   },
   "switcher": {
     "select": "Вибрати Factory",

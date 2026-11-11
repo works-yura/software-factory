@@ -398,7 +398,21 @@
     "renamed": "Renamed to “{{title}}”",
     "regenerateFailed": "Failed to regenerate title",
     "addToChat": "Add to chat",
-    "noComposer": "Open a chat to add {{name}} to it"
+    "noComposer": "Open a chat to add {{name}} to it",
+    "changeRequest": {
+      "github": {
+        "draft": "Draft pull request",
+        "open": "Open pull request",
+        "closed": "Closed pull request",
+        "merged": "Merged pull request"
+      },
+      "gitlab": {
+        "draft": "Draft merge request",
+        "open": "Open merge request",
+        "closed": "Closed merge request",
+        "merged": "Merged merge request"
+      }
+    }
   },
   "preview": {
     "label": "{{name}} session details",

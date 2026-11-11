@@ -402,7 +402,21 @@
     "renamed": "Перейменовано на «{{title}}»",
     "regenerateFailed": "Не вдалося згенерувати назву",
     "addToChat": "Додати в чат",
-    "noComposer": "Відкрийте чат, щоб додати в нього {{name}}"
+    "noComposer": "Відкрийте чат, щоб додати в нього {{name}}",
+    "changeRequest": {
+      "github": {
+        "draft": "Чернетка pull request",
+        "open": "Відкритий pull request",
+        "closed": "Закритий pull request",
+        "merged": "Злитий pull request"
+      },
+      "gitlab": {
+        "draft": "Чернетка merge request",
+        "open": "Відкритий merge request",
+        "closed": "Закритий merge request",
+        "merged": "Злитий merge request"
+      }
+    }
   },
   "preview": {
     "label": "Деталі сесії {{name}}",

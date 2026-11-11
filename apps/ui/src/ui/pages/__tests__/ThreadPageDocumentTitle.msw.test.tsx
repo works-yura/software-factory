@@ -197,7 +197,7 @@ describe('ThreadPage document title', () => {
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
     await waitFor(() => expect(document.title).toBe('#42 | Factory'));
-    expect(await screen.findByRole('button', { name: 'Sess-1: Fix flaky login' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Fix flaky login' })).toBeInTheDocument();
   });
 
   it('keeps the branch label when a work-session thread has no title yet', async () => {

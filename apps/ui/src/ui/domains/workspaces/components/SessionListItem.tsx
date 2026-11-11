@@ -1,4 +1,5 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -15,13 +16,22 @@ export function SessionListItem({
   row,
   disabled,
   merged,
+  level,
+  compact,
   onDelete,
+  subItems,
 }: {
   factoryId: string;
   row: SessionListRow;
+  /** 1 for a card's child session, listed under the card's row. */
+  level?: number;
+  /** Single-line row; otherwise a second line shows when it last moved and its change request. */
+  compact: boolean;
   disabled: boolean;
   merged: boolean | undefined;
   onDelete: (row: SessionListRow) => void;
+  /** The card's child sessions, nested under its row. */
+  subItems?: ReactNode;
 }) {
   const { t } = useTranslation('workspaces');
   const navigate = useNavigate();
@@ -42,8 +52,8 @@ export function SessionListItem({
   return (
     <SessionNavRow
       name={row.name}
-      label={row.contextLabel}
-      context={row.contextAside}
+      label={row.phaseLabel}
+      level={level}
       url={row.url}
       source={row.source}
       active={row.active}
@@ -74,6 +84,10 @@ export function SessionListItem({
           ...(row.board ? { board: row.board } : {}),
         },
       }}
+      pullRequest={row.pullRequest}
+      updatedAt={row.updatedAt}
+      compact={compact}
+      subItems={subItems}
     />
   );
 }
