@@ -1,5 +1,5 @@
 /**
- * Factory › Analytics: one preset window over the work metrics and the usage summary, KPI cards
+ * Settings › Analytics: one preset window over the work metrics and the usage summary, KPI cards
  * whose trend grows into the daily chart, tabbed breakdowns, and the empty states. Renders the
  * real routes and hooks through MSW.
  */
@@ -10,12 +10,12 @@ import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import type { UsageSummaryResponse } from '../../../api/types';
-import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
-import { rangeWindow } from '../../domains/analytics/ranges';
-import type { FactoryMetrics } from '../../domains/factory/services/metrics';
-import { createAppRoutes } from '../../router';
+import type { UsageSummaryResponse } from '../../../../api/types';
+import { server } from '../../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import { rangeWindow } from '../ranges';
+import type { FactoryMetrics } from '../../factory/services/metrics';
+import { createAppRoutes } from '../../../router';
 
 const FACTORY_ID = 'fp-1';
 const PROJECT = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`;
@@ -164,12 +164,14 @@ function stub({ metrics = workMetrics(), usage = usageSummary(), workItems = [] 
   return asked;
 }
 
-function renderRoute(path = `/factories/${FACTORY_ID}/analytics`) {
+const SECTION = `/factories/${FACTORY_ID}/settings/analytics`;
+
+function renderRoute(path = SECTION) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
   return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
-describe('AnalyticsPage', () => {
+describe('Analytics settings section', () => {
   it('reads the work and the usage of this Factory over the last 30 days', async () => {
     const asked = stub();
     renderRoute();
@@ -285,7 +287,7 @@ describe('AnalyticsPage', () => {
 
   it('opens on the window a link names', async () => {
     const asked = stub();
-    renderRoute(`/factories/${FACTORY_ID}/analytics?range=365&scope=all`);
+    renderRoute(`${SECTION}?range=365&scope=all`);
 
     expect(await screen.findByRole('button', { name: 'Date range: Last 12 months' })).toBeInTheDocument();
     await waitFor(() => expect(asked.usage.at(-1)).toEqual(rangeWindow(365)));
@@ -325,17 +327,26 @@ describe('AnalyticsPage', () => {
     await waitFor(() => expect(asked.metrics.at(-1)).toEqual(rangeWindow(365)));
   });
 
-  it.each(['metrics', 'overview', 'settings/usage'])('opens Analytics from the old /%s link', async path => {
-    stub();
-    const { router } = renderRoute(`/factories/${FACTORY_ID}/${path}`);
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/analytics`));
-    expect(await screen.findByRole('heading', { name: 'Analytics', level: 1 })).toBeInTheDocument();
-  });
+  it.each(['analytics', 'metrics', 'overview', 'settings/usage'])(
+    'opens the Analytics settings section from the old /%s link, keeping its window',
+    async path => {
+      stub();
+      const { router } = renderRoute(`/factories/${FACTORY_ID}/${path}?range=7`);
+      await waitFor(() => expect(router.state.location.pathname).toBe(SECTION));
+      expect(router.state.location.search).toBe('?range=7');
+      expect(await screen.findByRole('heading', { name: 'Analytics', level: 1 })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Date range: Last 7 days' })).toBeInTheDocument();
+    },
+  );
 
-  it('is in the Factory sidebar', async () => {
+  it('is a Settings section, not a Factory sidebar entry', async () => {
     stub();
-    renderRoute(`/factories/${FACTORY_ID}/work`);
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/settings/preferences`);
     const link = await screen.findByRole('link', { name: 'Analytics' });
-    expect(link).toHaveAttribute('href', `/factories/${FACTORY_ID}/analytics`);
+    expect(link).toHaveAttribute('href', SECTION);
+
+    await router.navigate(`/factories/${FACTORY_ID}/work`);
+    await screen.findByRole('region', { name: 'Boards' });
+    expect(screen.queryByRole('link', { name: 'Analytics' })).not.toBeInTheDocument();
   });
 });

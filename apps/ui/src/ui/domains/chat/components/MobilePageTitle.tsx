@@ -7,7 +7,7 @@ import { translator } from '../../../i18n/t';
 
 const tk = translator('chat');
 
-const PAGE_IDS = ['activity', 'analytics', 'knowledge', 'new', 'new-factory', 'rules', 'supervisor', 'work'] as const;
+const PAGE_IDS = ['activity', 'knowledge', 'new', 'new-factory', 'rules', 'supervisor', 'work'] as const;
 const PAGE_TITLES: Readonly<Record<string, string>> = lazyLabels(PAGE_IDS, page => `chat:pageTitles.${page}`);
 
 function routeTitle(pathname: string): string {

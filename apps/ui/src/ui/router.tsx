@@ -20,7 +20,6 @@ import { RootGuards } from './domains/auth/components/RootGuards';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { PULL_REQUEST_SOURCE_FILTER } from './domains/factory/boardSourceFilters';
 import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
-import { AnalyticsPage } from './pages/AnalyticsPage';
 import { BoardConfigPage } from './pages/BoardConfigPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { FactorySkillsPage } from './pages/FactorySkillsPage';
@@ -78,6 +77,12 @@ function RetiredReviewBoardRedirect() {
   // Picked sources widen the filter, so any other source would show cards the Review board never held.
   params.set('source', PULL_REQUEST_SOURCE_FILTER);
   return <Navigate to={`../work?${params}`} relative="path" replace />;
+}
+
+/** Analytics is a Settings section; its old pages keep the window a link names. */
+function AnalyticsRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`../settings/analytics${search}`} relative="path" replace />;
 }
 
 function FactoryHomeRedirect() {
@@ -199,11 +204,11 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'work/skills', element: <FactorySkillsPage /> },
                 { path: 'boards/:boardId/skills', element: <FactorySkillsPage /> },
                 { path: 'activity', element: <FactoryHomeRedirect /> },
-                // Upstream's Overview and Metrics became Analytics.
-                { path: 'analytics', element: <AnalyticsPage /> },
-                { path: 'overview', element: <Navigate to="../analytics" relative="path" replace /> },
+                // Upstream's Overview and Metrics became Analytics, a Settings section.
+                { path: 'analytics', element: <AnalyticsRedirect /> },
+                { path: 'overview', element: <AnalyticsRedirect /> },
                 { path: 'attention', element: <FactoryHomeRedirect /> },
-                { path: 'metrics', element: <Navigate to="../analytics" relative="path" replace /> },
+                { path: 'metrics', element: <AnalyticsRedirect /> },
                 { path: 'audit', element: <FactoryHomeRedirect /> },
                 { path: 'rules', element: <RulesPage /> },
                 { path: 'knowledge', element: <KnowledgeRoute /> },
@@ -213,8 +218,6 @@ export function createAppRoutes(): RouteObject[] {
                     { index: true, element: <Navigate to="preferences" replace /> },
                     { path: 'board', element: <BoardSettingsRedirect /> },
                     { path: 'skills', element: <SkillsSettingsRedirect /> },
-                    // Usage moved to the Factory's Analytics page.
-                    { path: 'usage', element: <Navigate to="../../analytics" relative="path" replace /> },
                     { path: ':section', element: <SettingsPage /> },
                   ],
                 },

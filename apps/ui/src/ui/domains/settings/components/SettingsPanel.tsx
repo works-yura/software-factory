@@ -14,6 +14,7 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { AnalyticsSection } from '../../analytics/components/AnalyticsSection';
 import { DebugSection } from './DebugSection';
 import { EnvironmentSection } from './EnvironmentSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
@@ -69,6 +70,7 @@ export function SettingsPanel() {
     <section aria-label={t('panel.label')} className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
       {section === 'account' && <AccountSettingsSection />}
       {section === 'preferences' && <GeneralSettings />}
+      {section === 'analytics' && <AnalyticsSection />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}

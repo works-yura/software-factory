@@ -45,6 +45,7 @@ describe('SettingsNavigation', () => {
     expect(linksIn('Account')).toEqual(['My account', 'Preferences']);
     expect(linksIn('Agent')).toEqual(['Harness', 'Memory', 'Behavior']);
     expect(linksIn('Factory')).toEqual([
+      'Analytics',
       'Repositories',
       'Environment',
       'Work Intake',
@@ -54,6 +55,7 @@ describe('SettingsNavigation', () => {
     ]);
     expect(screen.getByRole('link', { name: 'Harness' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');
+    expect(screen.getByRole('link', { name: 'Analytics' })).toHaveAttribute('href', '/factories/fp-1/settings/analytics');
   });
 
   it('leaves Memory out for a Factory on Claude Code', async () => {
@@ -85,6 +87,8 @@ describe('SettingsNavigation', () => {
     { query: 'factory models', destination: 'Harness' },
     { query: 'factory memory', destination: 'Memory' },
     { query: 'shared memory', destination: 'Memory' },
+    { query: 'usage', destination: 'Analytics' },
+    { query: 'metrics', destination: 'Analytics' },
   ])('finds $destination by the former page name "$query"', async ({ query, destination }) => {
     const user = userEvent.setup();
     renderNavigation();

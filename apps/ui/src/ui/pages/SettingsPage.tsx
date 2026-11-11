@@ -5,6 +5,7 @@ import { useEffect, useId } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router';
 
+import { AnalyticsControls } from '../domains/analytics/components/AnalyticsSection';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
@@ -14,6 +15,9 @@ import {
   retiredSettingsTarget,
   settingsSectionPath,
 } from '../domains/settings/settingsSections';
+import { translator } from '../i18n/t';
+
+const tk = translator('analytics');
 
 export function SettingsPage() {
   const { section, factoryId } = useParams();
@@ -41,6 +45,14 @@ export function SettingsPage() {
       header={
         <PageHeader>
           <AnnouncedSectionTitle key={section}>{SETTINGS_SECTION_LABELS[section]}</AnnouncedSectionTitle>
+          {section === 'analytics' ? (
+            <>
+              <PageHeader.Description>{tk('description')}</PageHeader.Description>
+              <PageHeader.Action className="flex-wrap justify-end gap-2">
+                <AnalyticsControls />
+              </PageHeader.Action>
+            </>
+          ) : null}
         </PageHeader>
       }
     >

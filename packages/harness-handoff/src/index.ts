@@ -13,3 +13,5 @@ export * from "./model.ts";
 export * from "./orchestrationV2Timeline.ts";
 export * from "./threadRead.ts";
 export * from "./WireProjection.ts";
+export * from "./memoryHistory.ts";
+export * from "./sessionHandoffs.ts";

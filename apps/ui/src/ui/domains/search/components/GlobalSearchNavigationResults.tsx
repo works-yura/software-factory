@@ -56,14 +56,14 @@ export function GlobalSearchNavigationResults({
       />
       <CommandPaletteItem
         icon={<ChartColumn />}
-        title={t('navigation.analytics')}
-        subtitle={t('subtitles.factory')}
+        title={SETTINGS_SECTION_LABELS.analytics}
+        subtitle={t('subtitles.settings')}
         value={searchValue(
-          t('navigation.analytics'),
-          t('subtitles.factory'),
-          `Analytics metrics usage tokens cost overview Factory navigation /factories/${factoryId}/analytics`,
+          SETTINGS_SECTION_LABELS.analytics,
+          t('subtitles.settings'),
+          `Analytics Settings metrics usage tokens cost overview ${settingsSectionPath(factoryId, 'analytics')}`,
         )}
-        onSelect={() => onSelect(`/factories/${factoryId}/analytics`, false)}
+        onSelect={() => onSelect(settingsSectionPath(factoryId, 'analytics'), true)}
       />
       <CommandPaletteItem
         icon={<Brain />}

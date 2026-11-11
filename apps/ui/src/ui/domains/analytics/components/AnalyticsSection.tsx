@@ -1,7 +1,5 @@
 import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -9,24 +7,23 @@ import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { useBoardCatalog } from '../../hooks/useBoardCatalog';
-import { useFactoryMetrics } from '../../hooks/useFactoryMetrics';
-import { useUsageSummaryQuery } from '../../hooks/useUsage';
-import { useRunningSessions, useWorkItemsQuery } from '../../hooks/useWorkItems';
-import { AnalyticsEmptyState } from '../domains/analytics/components/AnalyticsEmptyState';
-import type { KpiExpansion, KpiId } from '../domains/analytics/components/AnalyticsKpis';
-import { UsageKpis, WorkKpis } from '../domains/analytics/components/AnalyticsKpis';
-import { RangePicker } from '../domains/analytics/components/RangePicker';
-import { UsageBreakdowns } from '../domains/analytics/components/UsageBreakdowns';
-import { WorkBreakdowns } from '../domains/analytics/components/WorkBreakdowns';
-import type { RangePreset } from '../domains/analytics/ranges';
-import { DEFAULT_RANGE_DAYS, isRangePreset, rangeWindow } from '../domains/analytics/ranges';
-import { stageCatalog } from '../domains/analytics/stages';
-import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
-import { rememberedBoardPath } from '../domains/factory/services/boardViews';
-import type { FactoryMetrics } from '../domains/factory/services/metrics';
-import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
-import { translator } from '../i18n/t';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { useFactoryMetrics } from '../../../../hooks/useFactoryMetrics';
+import { useUsageSummaryQuery } from '../../../../hooks/useUsage';
+import { useRunningSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { AnalyticsEmptyState } from './AnalyticsEmptyState';
+import type { KpiExpansion, KpiId } from './AnalyticsKpis';
+import { UsageKpis, WorkKpis } from './AnalyticsKpis';
+import { RangePicker } from './RangePicker';
+import { UsageBreakdowns } from './UsageBreakdowns';
+import { WorkBreakdowns } from './WorkBreakdowns';
+import type { RangePreset } from '../ranges';
+import { DEFAULT_RANGE_DAYS, isRangePreset, rangeWindow } from '../ranges';
+import { stageCatalog } from '../stages';
+import { rememberedBoardPath } from '../../factory/services/boardViews';
+import type { FactoryMetrics } from '../../factory/services/metrics';
+import { useActiveFactory } from '../../workspaces/components/FactoryLayout';
+import { translator } from '../../../i18n/t';
 
 const tk = translator('analytics');
 const tu = translator('usage');
@@ -57,43 +54,36 @@ function useAnalyticsParams() {
   };
 }
 
+/** The window and the Factories counted, as the settings header's actions. */
+export function AnalyticsControls() {
+  const { rangeDays, scope, setRangeDays, setScope } = useAnalyticsParams();
+  return (
+    <>
+      <SegmentedControl aria-label={tk('scope.label')} size="sm" value={scope} onValueChange={setScope}>
+        <SegmentedControlItem value="factory">{tk('scope.factory')}</SegmentedControlItem>
+        <SegmentedControlItem value="all">{tk('scope.all')}</SegmentedControlItem>
+      </SegmentedControl>
+      <RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />
+    </>
+  );
+}
+
 /**
- * Factory › Analytics: how the Factory's work flowed and what its agents spent doing it, over one
+ * Settings › Analytics: how the Factory's work flowed and what its agents spent doing it, over one
  * preset window. Upstream's Metrics page (a row of KPI cards whose trend grows into its daily chart,
  * then tabbed breakdowns), with the usage the Factory records read the same way.
  */
-export function AnalyticsPage() {
+export function AnalyticsSection() {
   const factory = useActiveFactory();
-  const slots = useSidebarHeaderSlots();
-  const { rangeDays, scope, setRangeDays, setScope } = useAnalyticsParams();
+  const { rangeDays, scope, setRangeDays } = useAnalyticsParams();
   return (
-    <PageLayout
-      variant="narrow"
-      header={
-        <div className="pb-8">
-          <PageHeader>
-            <PageHeader.Title>{tk('title')}</PageHeader.Title>
-            <PageHeader.Description>{tk('description')}</PageHeader.Description>
-            <PageHeader.Action className="flex-wrap justify-end gap-2">
-              <SegmentedControl aria-label={tk('scope.label')} size="sm" value={scope} onValueChange={setScope}>
-                <SegmentedControlItem value="factory">{tk('scope.factory')}</SegmentedControlItem>
-                <SegmentedControlItem value="all">{tk('scope.all')}</SegmentedControlItem>
-              </SegmentedControl>
-              <RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />
-            </PageHeader.Action>
-          </PageHeader>
-        </div>
-      }
-      {...slots}
-    >
-      <AnalyticsContent
-        key={factory.id}
-        factoryProjectId={factory.id}
-        rangeDays={rangeDays}
-        scope={scope}
-        onWiden={rangeDays < 365 ? () => setRangeDays(365) : undefined}
-      />
-    </PageLayout>
+    <AnalyticsContent
+      key={factory.id}
+      factoryProjectId={factory.id}
+      rangeDays={rangeDays}
+      scope={scope}
+      onWiden={rangeDays < 365 ? () => setRangeDays(365) : undefined}
+    />
   );
 }
 
@@ -127,7 +117,7 @@ function AnalyticsContent({
   const hasHistory = (itemsQuery.data ?? []).some(item => Object.keys(item.sessions).length > 0);
 
   return (
-    <div className="flex flex-col gap-16 pb-16">
+    <div className="flex flex-col gap-12">
       {quiet ? (
         <AnalyticsEmptyState hasHistory={hasHistory} rangeDays={rangeDays} boardPath={boardLink} onWiden={onWiden} />
       ) : null}

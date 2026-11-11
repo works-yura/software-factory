@@ -4,6 +4,7 @@ export type SettingsSection =
   | 'account'
   | 'preferences'
   | 'factory'
+  | 'analytics'
   | 'repositories'
   | 'environment'
   | 'intake'
@@ -17,6 +18,7 @@ const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   'account',
   'preferences',
   'factory',
+  'analytics',
   'repositories',
   'environment',
   'intake',
@@ -55,6 +57,8 @@ const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
   ['factory-memory', { section: 'memory' }],
   // Connections held only the MCP clients card; providers connect in Repositories.
   ['connections', { section: 'repositories' }],
+  // Usage became Analytics, which now lives in Settings.
+  ['usage', { section: 'analytics' }],
 ]);
 
 export function retiredSettingsTarget(section: string | undefined, hash: string): SettingsTarget | undefined {

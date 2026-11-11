@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Brain, ChartColumn, MessagesSquare, Plus, Settings2, SquareKanban } from 'lucide-react';
+import { Brain, MessagesSquare, Plus, Settings2, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
@@ -109,7 +109,6 @@ export function FactorySection() {
         </Sidebar.NavList>
       </section>
       <Sidebar.NavList>
-        <FactoryLink to={`/factories/${factoryId}/analytics`} icon={ChartColumn} label={t('analytics')} />
         {knowledge.available ? (
           <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label={t('knowledge')} />
         ) : null}

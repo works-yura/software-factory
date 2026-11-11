@@ -476,7 +476,7 @@ describe('Global search', () => {
     expect(screen.getByRole('combobox', { name: 'Search Factory' })).toHaveFocus();
   });
 
-  // `/overview` and `/metrics` open Analytics now (AnalyticsPage.msw.test.tsx).
+  // `/overview` and `/metrics` open the Analytics settings section now (AnalyticsSection.msw.test.tsx).
   it.each(['activity', 'attention', 'audit'])(
     'opens the same Factory board from the retired %s URL',
     async page => {
@@ -509,6 +509,7 @@ describe('Global search', () => {
       'Pull requests',
       'Rules',
       'Preferences',
+      'Analytics',
       'Manage Factory',
       'Repositories',
       'Work Intake',
@@ -1109,6 +1110,22 @@ describe('Global search', () => {
     await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), 'factory memory');
 
     expect(await within(dialog).findByText('Memory')).toBeInTheDocument();
+  });
+
+  it('opens Analytics as a Settings section, keeping where search was opened from', async () => {
+    stubSearchApi();
+    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
+    const user = userEvent.setup();
+    const { router } = renderSearchRoute(origin);
+    const dialog = await openWithShortcut();
+
+    await user.type(screen.getByRole('combobox', { name: 'Search Factory' }), 'token cost');
+    await user.click(await within(dialog).findByText('Analytics'));
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${ACTIVE_FACTORY_ID}/settings/analytics`),
+    );
+    expectOriginPathname(router.state.location.state, origin);
   });
 
   it('selects Settings with origin state and closes without creating a session', async () => {

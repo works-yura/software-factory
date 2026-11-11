@@ -9,6 +9,7 @@ import {
   Brain,
   Bug,
   Building2,
+  ChartColumn,
   CircleUserRound,
   GitBranch,
   Inbox,
@@ -106,6 +107,15 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
       return i18n.t('groups.factory', { ns: 'settings' });
     },
     items: [
+      {
+        id: 'analytics',
+        get label() {
+          return SETTINGS_SECTION_LABELS.analytics;
+        },
+        icon: ChartColumn,
+        searchText:
+          'analytics metrics usage tokens cost turns cache completions lead time throughput queue health overview dashboard',
+      },
       {
         id: 'repositories',
         get label() {
