@@ -350,6 +350,19 @@ describe('theme.css export', () => {
     expect(declared.toSorted()).toEqual([...TextRoles].toSorted());
   });
 
+  it('gives text roles two weights, regular 465 and strong 515', () => {
+    const variables = parseVariables(themeCss);
+    expect(variables.get('font-weight-normal')).toBe('465');
+    expect(variables.get('font-weight-medium')).toBe('515');
+    expect(variables.get('text-display--font-weight')).toBe('var(--font-weight-medium)');
+    for (const role of ['body', 'body-sm', 'caption', 'lead']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-normal)');
+    }
+    for (const role of ['label', 'column', 'eyebrow', 'meta', 'subheading', 'heading', 'title']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-medium)');
+    }
+  });
+
   it('generates the field and dialog fill utilities', async () => {
     const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
     const output = compiler.build(['bg-field', 'bg-field-disabled', 'bg-dialog']);

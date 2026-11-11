@@ -63,7 +63,7 @@ function SignalLine({ kind, label, message, detail, mode, defaultOpen }: Omit<Si
           <ActivityIcon className="[&_svg]:size-4">
             <Icon />
           </ActivityIcon>
-          <ActivityLabel className="text-body font-medium">{name}</ActivityLabel>
+          <ActivityLabel className="text-subheading">{name}</ActivityLabel>
           {mode && <ActivityLabel className="-ml-1 text-body before:content-['·_']">{mode}</ActivityLabel>}
           {detail && <ActivityDetail className="text-body-sm">{detail}</ActivityDetail>}
           {lineHoldsMessage && message && (
