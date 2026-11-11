@@ -32,5 +32,6 @@
 | `code-quality` | `references/code-quality.md` | critical |
 | `docs-drift` | `references/docs-drift.md` | critical |
 | `performance` | `references/performance.md` | critical |
+| `stability` | `references/stability.md` | high |
 
 Новий тип — рядок профілю + файл чекліста + рядок у таблиці скіла; тест `workspace.test.ts` перевіряє відповідність.
