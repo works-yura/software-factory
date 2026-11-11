@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createFactoryStorageForTests } from '../testing.ts';
 import { CATCH_ALL_INTAKE_ROUTE } from '../boards/base.ts';
 import { labelRouteCondition, migrateLabelRoutesToIntakeRoutes } from './label-route-migration.ts';
+import { seedLegacyLabelRoute } from './label-routes.test-support.ts';
 
 const routeName = (label: string) => `ClickUp tag "${label}"`;
 
@@ -16,16 +17,16 @@ async function seed() {
 
 describe('migrateLabelRoutesToIntakeRoutes', () => {
   it("moves each ClickUp tag route ahead of the project's catch-all, in every org, and leaves other integrations' label routes", async () => {
-    const { intake, storedBoards, project, other, scope } = await seed();
-    await intake.setLabelRoute({ ...scope, integrationId: 'clickup', label: 'Bug', board: 'work' });
-    await intake.setLabelRoute({
+    const { storage, intake, storedBoards, project, other, scope } = await seed();
+    await seedLegacyLabelRoute(storage.ops, { ...scope, integrationId: 'clickup', label: 'Bug', board: 'work' });
+    await seedLegacyLabelRoute(storage.ops, {
       orgId: 'org-2',
       factoryProjectId: other.id,
       integrationId: 'clickup',
       label: 'docs',
       board: 'review',
     });
-    await intake.setLabelRoute({ ...scope, integrationId: 'github', label: 'bug', board: 'work' });
+    await seedLegacyLabelRoute(storage.ops, { ...scope, integrationId: 'github', label: 'bug', board: 'work' });
     const before = await storedBoards.listIntakeRoutes(scope);
 
     const moved = await migrateLabelRoutesToIntakeRoutes({
@@ -55,21 +56,21 @@ describe('migrateLabelRoutesToIntakeRoutes', () => {
         route => route.name === routeName('docs'),
       ),
     ).toMatchObject({ when: labelRouteCondition('clickup', 'docs'), target: { boardKey: 'review' } });
-    expect(await intake.listLabelRoutes({ orgId: 'org-1', integrationId: 'clickup' })).toEqual([]);
-    expect(await intake.listLabelRoutes({ orgId: 'org-2', integrationId: 'clickup' })).toEqual([]);
-    expect(await intake.listLabelRoutes({ orgId: 'org-1', integrationId: 'github' })).toMatchObject([
+    expect((await intake.listLabelRoutesForIntegration('clickup')).filter(route => route.orgId === 'org-1')).toEqual([]);
+    expect((await intake.listLabelRoutesForIntegration('clickup')).filter(route => route.orgId === 'org-2')).toEqual([]);
+    expect((await intake.listLabelRoutesForIntegration('github')).filter(route => route.orgId === 'org-1')).toMatchObject([
       { factoryProjectId: project.id, label: 'bug' },
     ]);
   });
 
   it('adds no second route when an interrupted run already moved one, and does nothing once all are moved', async () => {
-    const { intake, storedBoards, scope } = await seed();
+    const { storage, intake, storedBoards, scope } = await seed();
     await storedBoards.createIntakeRoute(
       scope,
       { name: routeName('bug'), when: labelRouteCondition('clickup', 'bug'), target: { boardKey: 'work' } },
       'user-1',
     );
-    await intake.setLabelRoute({ ...scope, integrationId: 'clickup', label: 'bug', board: 'work' });
+    await seedLegacyLabelRoute(storage.ops, { ...scope, integrationId: 'clickup', label: 'bug', board: 'work' });
     const before = await storedBoards.listIntakeRoutes(scope);
 
     const options = { integrationId: 'clickup', routeName, intake, boards: storedBoards };
@@ -77,6 +78,6 @@ describe('migrateLabelRoutesToIntakeRoutes', () => {
     expect(await migrateLabelRoutesToIntakeRoutes(options)).toBe(0);
 
     expect(await storedBoards.listIntakeRoutes(scope)).toHaveLength(before.length);
-    expect(await intake.listLabelRoutes({ orgId: 'org-1', integrationId: 'clickup' })).toEqual([]);
+    expect((await intake.listLabelRoutesForIntegration('clickup')).filter(route => route.orgId === 'org-1')).toEqual([]);
   });
 });

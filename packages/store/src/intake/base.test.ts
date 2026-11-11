@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,12 +7,8 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { FactoryProjectsStorage } from '../projects/base.ts';
-import {
-  DEFAULT_INTAKE_CONFIG,
-  FactoryProjectNotFoundError,
-  IntakeStorage,
-  resolveIntakeLabelRoute,
-} from './base.ts';
+import { DEFAULT_INTAKE_CONFIG, FactoryProjectNotFoundError, IntakeStorage } from './base.ts';
+import { seedLegacyLabelRoute } from './label-routes.test-support.ts';
 
 /** `projectIdsByOrg`: Factory projects to create, since a binding needs its project to exist. */
 async function makeStorage(
@@ -329,57 +326,14 @@ describe('IntakeStorage', () => {
     });
   });
 
-  describe('label routes', () => {
-    const route = { orgId: 'org-1', factoryProjectId: 'proj-1', integrationId: 'github' };
-
-    it('scopes routes to one org and project and sorts them by label', async () => {
-      const storage = await makeStorage();
-      await storage.setLabelRoute({ ...route, label: 'release', board: 'release' });
-      await storage.setLabelRoute({ ...route, label: 'docs', board: 'docs' });
-      await storage.setLabelRoute({ ...route, factoryProjectId: 'proj-2', label: 'release', board: 'other' });
-      await storage.setLabelRoute({ ...route, orgId: 'org-2', label: 'release', board: 'other' });
-
-      expect(await storage.listLabelRoutes({ orgId: 'org-1', factoryProjectId: 'proj-1' })).toEqual([
-        { factoryProjectId: 'proj-1', integrationId: 'github', label: 'docs', board: 'docs' },
-        { factoryProjectId: 'proj-1', integrationId: 'github', label: 'release', board: 'release' },
-      ]);
-      expect(await storage.listLabelRoutes({ orgId: 'org-1' })).toHaveLength(3);
-    });
-
-    it('treats labels case-insensitively and updates the board in place', async () => {
-      const storage = await makeStorage();
-      await storage.setLabelRoute({ ...route, label: 'Release', board: 'release' });
-      await storage.setLabelRoute({ ...route, label: 'RELEASE ', board: 'release-2' });
-
-      expect(await storage.listLabelRoutes({ orgId: 'org-1' })).toEqual([
-        { factoryProjectId: 'proj-1', integrationId: 'github', label: 'release', board: 'release-2' },
-      ]);
-      expect(resolveIntakeLabelRoute(await storage.listLabelRoutes({ orgId: 'org-1' }), ['Bug', 'Release'])).toEqual({
-        factoryProjectId: 'proj-1',
-        integrationId: 'github',
-        label: 'release',
-        board: 'release-2',
-      });
-      expect(resolveIntakeLabelRoute(await storage.listLabelRoutes({ orgId: 'org-1' }), ['bug'])).toBeUndefined();
-    });
-
-    it('clears a route and returns what was removed', async () => {
-      const storage = await makeStorage();
-      await storage.setLabelRoute({ ...route, label: 'release', board: 'release' });
-
-      expect(await storage.clearLabelRoute({ ...route, label: 'release' })).toEqual({
-        factoryProjectId: 'proj-1',
-        integrationId: 'github',
-        label: 'release',
-        board: 'release',
-      });
-      expect(await storage.clearLabelRoute({ ...route, label: 'release' })).toBeNull();
-      expect(await storage.listLabelRoutes({ orgId: 'org-1' })).toEqual([]);
-    });
-  });
-
   it('moves sources and label routes off the retired Review board onto Work, once', async () => {
-    const storage = await makeStorage(undefined, { org1: ['proj-1'] });
+    const url = `file:${join(tmpdir(), `intake-review-${randomUUID()}.db`)}`;
+    const storage = await makeStorage(url, { org1: ['proj-1'] });
+    // A second handle on the same database, to write the old label rows nothing in the app writes now.
+    const backend = new LibSQLFactoryStorage({ id: 'intake-review-seed', url });
+    backend.registerDomain(new IntakeStorage());
+    await backend.init();
+    onTestFinished(() => backend.close());
     await storage.setBinding({
       orgId: 'org1',
       integrationId: 'github',
@@ -395,8 +349,8 @@ describe('IntakeStorage', () => {
       board: 'release',
     });
     const route = { orgId: 'org1', factoryProjectId: 'proj-1', integrationId: 'github' };
-    await storage.setLabelRoute({ ...route, label: 'needs-review', board: 'review' });
-    await storage.setLabelRoute({ ...route, label: 'release', board: 'release' });
+    await seedLegacyLabelRoute(backend.ops, { ...route, label: 'needs-review', board: 'review' });
+    await seedLegacyLabelRoute(backend.ops, { ...route, label: 'release', board: 'release' });
 
     expect(await storage.moveReviewBoardSourcesToWork()).toEqual({ bindings: 1, labelRoutes: 1 });
 
@@ -406,9 +360,11 @@ describe('IntakeStorage', () => {
         { integrationId: 'gitlab', sourceId: 'acme/web', factoryProjectId: 'proj-1', board: 'release' },
       ]),
     );
-    expect(await storage.listLabelRoutes({ orgId: 'org1' })).toEqual([
-      { factoryProjectId: 'proj-1', integrationId: 'github', label: 'needs-review', board: 'work' },
-      { factoryProjectId: 'proj-1', integrationId: 'github', label: 'release', board: 'release' },
+    expect(
+      (await storage.listLabelRoutesForIntegration('github')).sort((a, b) => a.label.localeCompare(b.label)),
+    ).toEqual([
+      { orgId: 'org1', factoryProjectId: 'proj-1', integrationId: 'github', label: 'needs-review', board: 'work' },
+      { orgId: 'org1', factoryProjectId: 'proj-1', integrationId: 'github', label: 'release', board: 'release' },
     ]);
     expect(await storage.moveReviewBoardSourcesToWork()).toEqual({ bindings: 0, labelRoutes: 0 });
   });

@@ -173,20 +173,6 @@ export function normalizeIntakeLabel(label: string): string {
   return label.trim().toLowerCase();
 }
 
-/**
- * The board a labelled item should land on under `routes`, or `undefined` when
- * none of its labels is routed. Ties resolve to the first route in `routes`
- * order, so callers should pass a deterministically ordered list.
- */
-export function resolveIntakeLabelRoute(
-  routes: readonly IntakeLabelRoute[],
-  labels: readonly string[] | undefined,
-): IntakeLabelRoute | undefined {
-  if (!labels?.length) return undefined;
-  const normalized = new Set(labels.map(normalizeIntakeLabel));
-  return routes.find(route => normalized.has(normalizeIntakeLabel(route.label)));
-}
-
 type IntakeSourceBindingRow = {
   integration_id: string;
   source_id: string;
@@ -489,64 +475,6 @@ export class IntakeStorage extends FactoryStorageDomain {
     );
   }
 
-  /** Label routes in the org, optionally narrowed to one project and/or integration. Sorted by label. */
-  async listLabelRoutes({
-    orgId,
-    factoryProjectId,
-    integrationId,
-  }: {
-    orgId: string;
-    factoryProjectId?: string;
-    integrationId?: string;
-  }): Promise<IntakeLabelRoute[]> {
-    const rows = await this.#db.findMany<IntakeLabelRouteRow>('intake_label_routes', {
-      org_id: orgId,
-      ...(factoryProjectId ? { factory_project_id: factoryProjectId } : {}),
-      ...(integrationId ? { integration_id: integrationId } : {}),
-    });
-    return rows.map(toIntakeLabelRoute).sort((a, b) => a.label.localeCompare(b.label));
-  }
-
-  async setLabelRoute({
-    orgId,
-    factoryProjectId,
-    integrationId,
-    label,
-    board,
-    userId,
-  }: {
-    orgId: string;
-    factoryProjectId: string;
-    integrationId: string;
-    label: string;
-    board: string;
-    userId?: string;
-  }): Promise<void> {
-    const where = {
-      org_id: orgId,
-      factory_project_id: factoryProjectId,
-      integration_id: integrationId,
-      label: normalizeIntakeLabel(label),
-    };
-    const now = new Date();
-    const patch = { board, updated_at: now };
-    const updated = await this.#db.updateMany('intake_label_routes', where, patch);
-    if (updated > 0) return;
-    try {
-      await this.#db.insertOne('intake_label_routes', {
-        ...where,
-        board,
-        created_by_user_id: userId ?? null,
-        created_at: now,
-        updated_at: now,
-      });
-    } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-      await this.#db.updateMany('intake_label_routes', where, patch);
-    }
-  }
-
-  /** Every org's label routes for one integration, for moving them into another model. */
   /**
    * The Review board was retired: sources and label routes that fed it now feed Work, where pull
    * and merge requests are reviewed. Runs across every org, once; returns how many rows moved.
@@ -566,6 +494,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     return { bindings, labelRoutes };
   }
 
+  /** Every org's label routes for one integration, for moving them into the intake routes (boot migration). */
   async listLabelRoutesForIntegration(integrationId: string): Promise<(IntakeLabelRoute & { orgId: string })[]> {
     const rows = await this.#db.findMany<IntakeLabelRouteRow & { org_id: string }>('intake_label_routes', {
       integration_id: integrationId,
