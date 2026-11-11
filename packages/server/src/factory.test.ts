@@ -749,14 +749,14 @@ describe('MastraFactory.prepare', () => {
       sandbox: new PlainSandbox(),
     }).prepare();
     // Intake rules' fire workflow is always there; the build workflow only with a building sandbox.
-    expect(Object.keys(plain.workflows ?? {})).toEqual(['factory-intake-rule-fire']);
+    expect(Object.keys(plain.workflows ?? {})).toEqual(['factory-intake-route-fire']);
 
     const building = await new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
       sandbox: new BuildingSandbox(),
     }).prepare();
-    expect(Object.keys(building.workflows ?? {})).toEqual(['factory-environment-build', 'factory-intake-rule-fire']);
+    expect(Object.keys(building.workflows ?? {})).toEqual(['factory-environment-build', 'factory-intake-route-fire']);
     expect(building.workflows?.['factory-environment-build']?.id).toBe('factory-environment-build');
   });
 
@@ -2082,6 +2082,26 @@ function fakeIntegration(overrides: Partial<FactoryIntegration> & { id: string }
 function fakeAuditIntegration(overrides: Partial<FactoryIntegration> & { id: string }): FactoryIntegration {
   return fakeIntegration({ audit: vi.fn(async () => {}), ...overrides });
 }
+
+describe('MastraFactory.prepare integration readiness', () => {
+  it('disables an integration whose required storage domain is missing, loudly, and boots the rest', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const workers = vi.fn(() => []);
+    const migrate = vi.fn(async () => {});
+    try {
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'tracker', requiredDomains: ['no-such-domain'], workers, migrate })],
+      });
+      await expect(factory.prepare()).resolves.toBeDefined();
+      expect(workers).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalledWith(expect.stringMatching(/integration "tracker" is disabled: .*no-such-domain/));
+    } finally {
+      error.mockRestore();
+    }
+  });
+});
 
 describe('MastraFactory.prepare audit-capable integrations', () => {
   it('rejects duplicate audit-capable integration ids', async () => {
