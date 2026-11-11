@@ -2,7 +2,6 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
-  Activity,
   ArrowLeft,
   Bot,
   Box,
@@ -100,14 +99,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: SlidersHorizontal,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
       },
-      {
-        id: 'mcp-servers',
-        get label() {
-          return SETTINGS_SECTION_LABELS['mcp-servers'];
-        },
-        icon: Plug,
-        searchText: 'mcp servers tools database firestore toolbox postgres connectors external access policy',
-      },
     ],
   },
   {
@@ -150,12 +141,13 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         searchText: 'work intake sources tasks issues pull requests github feed sync intake routes routing board catch-all',
       },
       {
-        id: 'observability',
+        id: 'integrations',
         get label() {
-          return SETTINGS_SECTION_LABELS.observability;
+          return SETTINGS_SECTION_LABELS.integrations;
         },
-        icon: Activity,
-        searchText: 'observability logs crashes crashlytics firebase cloud logging errors stability service account',
+        icon: Plug,
+        searchText:
+          'integrations services connections google cloud firebase logs crashes crashlytics database firestore clickup github gitlab mcp servers tools toolbox connectors service account',
       },
       {
         id: 'factory',

@@ -20,6 +20,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../../hooks/useFactories';
 import { useMcpServerMutations, useMcpSuggestions } from '../../../../../hooks/useMcpServers';
@@ -34,6 +35,7 @@ import type {
 import { McpCatalogFields, localized } from './McpCatalogFields';
 import type { CatalogFieldValues } from './McpCatalogFields';
 import { AssignmentRow, PolicySelect } from './McpServerAccess';
+import { integrationsPath } from '../../settingsSections';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -72,7 +74,12 @@ interface Props {
  */
 export function McpServerEditor({ server, start, state, onSaved }: Props) {
   const { t } = useTranslation('settings');
+  const { factoryId } = useParams<{ factoryId: string }>();
   const canEdit = state.canEdit;
+  // An integration's server (Google Cloud's «База»): its binding sets the config and access; here a
+  // person changes only what each tool may do and the masking.
+  const managedBy = server?.owner?.integration;
+  const configLocked = !canEdit || managedBy !== undefined;
   const factories = (useFactoriesQuery().data ?? []).map(factory => ({ id: factory.id, name: factory.name }));
   const { save, remove, check } = useMcpServerMutations();
   const entry = start.kind === 'catalog' ? start.entry : undefined;
@@ -183,13 +190,22 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
 
   return (
     <SettingsContainer>
+      {managedBy && (
+        <SettingsRow label={t('mcpServers.managed.title', { integration: t(`mcpServers.managed.by.${managedBy}`, { defaultValue: managedBy }) })} description={t('mcpServers.managed.hint')}>
+          {factoryId && (
+            <Link to={integrationsPath(factoryId, { tab: 'services', service: 'google-cloud' })} className="underline">
+              {t('mcpServers.managed.open')}
+            </Link>
+          )}
+        </SettingsRow>
+      )}
       <SettingsRow label={t('mcpServers.label')} description={t('mcpServers.labelHint')}>
-        <Input aria-label={t('mcpServers.label')} value={label} disabled={!canEdit} onChange={event => setLabel(event.target.value)} />
+        <Input aria-label={t('mcpServers.label')} value={label} disabled={configLocked} onChange={event => setLabel(event.target.value)} />
       </SettingsRow>
 
       {entry && entry.variants.length > 1 && (
         <SettingsRow label={t('mcpServers.variant')} description={variant?.summary ? localized(variant.summary) : localized(entry.summary)}>
-          <Select value={variantId ?? ''} disabled={!canEdit} onValueChange={setVariantId}>
+          <Select value={variantId ?? ''} disabled={configLocked} onValueChange={setVariantId}>
             <SelectTrigger aria-label={t('mcpServers.variant')} className="w-56">
               {variant ? localized(variant.label) : t('mcpServers.field.pickChoice')}
             </SelectTrigger>
@@ -211,7 +227,7 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
           storedSecrets={[...storedSecrets.env, ...storedSecrets.files]}
           accounts={state.credentials}
           suggestions={suggestions}
-          disabled={!canEdit}
+          disabled={configLocked}
         />
       )}
 
@@ -269,14 +285,20 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
         </>
       )}
 
-      <SettingsRow label={t('mcpServers.access.title')} description={t('mcpServers.access.hint')}>
+      <SettingsRow label={t('mcpServers.access.title')} description={managedBy ? t('mcpServers.managed.accessHint') : t('mcpServers.access.hint')}>
         <div className="flex w-full flex-col gap-2">
-          {assignments.length === 0 && (
+          {managedBy &&
+            assignments.map(assignment => (
+              <Txt key={assignment.factoryProjectId} as="span" variant="body" tone="ink">
+                {factories.find(factory => factory.id === assignment.factoryProjectId)?.name ?? assignment.factoryProjectId}
+              </Txt>
+            ))}
+          {!managedBy && assignments.length === 0 && (
             <Txt as="p" variant="caption" tone="muted">
               {t('mcpServers.access.none')}
             </Txt>
           )}
-          {assignments.map((assignment, index) => (
+          {!managedBy && assignments.map((assignment, index) => (
             <AssignmentRow
               key={index}
               assignment={assignment}
@@ -285,7 +307,7 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
               onRemove={() => setAssignments(current => current.filter((_, at) => at !== index))}
             />
           ))}
-          {canEdit && (
+          {!configLocked && (
             <Button
               size="sm"
               variant="ghost"
@@ -344,7 +366,7 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
         <Switch aria-label={t('mcpServers.mask')} checked={maskPersonalData} disabled={!canEdit} onCheckedChange={setMask} />
       </SettingsRow>
       <SettingsRow label={t('mcpServers.enabled')} description={t('mcpServers.enabledHint')}>
-        <Switch aria-label={t('mcpServers.enabled')} checked={enabled} disabled={!canEdit} onCheckedChange={setEnabled} />
+        <Switch aria-label={t('mcpServers.enabled')} checked={enabled} disabled={configLocked} onCheckedChange={setEnabled} />
       </SettingsRow>
 
       <div className="flex flex-col gap-2">
@@ -354,13 +376,13 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
         {advanced && (
           <SettingsRow label={t('mcpServers.name')} description={t('mcpServers.nameHint')}>
             {editingName ? (
-              <Input aria-label={t('mcpServers.name')} value={name || identifier} disabled={!canEdit} onChange={event => setName(event.target.value)} />
+              <Input aria-label={t('mcpServers.name')} value={name || identifier} disabled={configLocked} onChange={event => setName(event.target.value)} />
             ) : (
               <div className="flex items-center gap-2">
                 <Txt as="span" variant="body" tone="ink" className="font-mono" aria-label={t('mcpServers.name')}>
                   {identifier}
                 </Txt>
-                {canEdit && (
+                {!configLocked && (
                   <Button size="sm" variant="ghost" onClick={() => setEditingName(true)}>
                     {t('mcpServers.editName')}
                   </Button>
@@ -376,7 +398,7 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
           <Button size="sm" disabled={save.isPending || !ready} onClick={submit}>
             {t('mcpServers.save')}
           </Button>
-          {server && (
+          {server && !managedBy && (
             <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}>
               {t('mcpServers.delete')}
             </Button>

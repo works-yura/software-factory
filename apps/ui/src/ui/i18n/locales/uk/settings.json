@@ -1,6 +1,5 @@
 {
   "sections": {
-    "mcp-servers": "MCP-сервери",
     "account": "Мій акаунт",
     "preferences": "Налаштування",
     "factory": "Керування Factory",
@@ -8,7 +7,7 @@
     "repositories": "Репозиторії",
     "environment": "Середовище",
     "intake": "Надходження задач",
-    "observability": "Логи і креші",
+    "integrations": "Інтеграції",
     "board": "Дошки",
     "models": "Харнес",
     "skills": "Скіли",
@@ -36,12 +35,17 @@
       "organizationRequired": "Оберіть організацію, щоб керувати синхронізацією ClickUp.",
       "statusUnavailable": "Не вдалося завантажити стан ClickUp.",
       "rejected": "ClickUp відхилив налаштований API-токен. Попросіть оператора перевірити його.",
-      "ready": "Задачі перевіряються кожні {{seconds}} с у тих Lists, які називають маршрути надходження нижче (джерело ClickUp, умова «List»): маршрут вирішує, чи імпортувати задачу, куди піде картка і що буде при зміні статусу.",
+      "ready": "Задачі перевіряються кожні {{seconds}} с у тих Lists, які називають маршрути надходження (Налаштування › Надходження задач, джерело ClickUp, умова «List»): маршрут вирішує, чи імпортувати задачу, куди піде картка і що буде при зміні статусу.",
       "sync": "Імпортувати задачі ClickUp"
     },
     "sources": {
       "title": "Джерела",
       "description": "Звідки беруться картки: підключення. Що з картками робити — імпортувати з якого List, куди поставити, що робити за розкладом — вирішують маршрути надходження нижче."
+    },
+    "clickupLink": {
+      "connected": "ClickUp підключено.",
+      "notConnected": "ClickUp не підключено.",
+      "open": "Налаштувати в «Інтеграціях»"
     }
   },
   "intakeSource": {
@@ -213,7 +217,9 @@
     "connectGitlab": "Підключити GitLab",
     "githubFromEnv": "GitHub налаштовано токеном доступу розгортання (GITHUB_ACCESS_TOKEN)",
     "gitlabFromEnv": "GitLab налаштовано через змінні середовища розгортання",
-    "environmentHint": "Ресурси пісочниці, порядок репозиторіїв і команди налаштування задаються в розділі <link>Середовище</link>."
+    "environmentHint": "Ресурси пісочниці, порядок репозиторіїв і команди налаштування задаються в розділі <link>Середовище</link>.",
+    "connectionsHint": "Підключення GitHub і GitLab — у розділі «Інтеграції».",
+    "openIntegrations": "Відкрити «Інтеграції»"
   },
   "skills": {
     "title": "Скіли Factory",
@@ -1074,13 +1080,14 @@
     "field": {
       "required": "обов'язково",
       "default": "Порожньо — {{value}}",
-      "noAccounts": "Ще немає жодного акаунта Google Cloud. Додайте його в «Логи і креші», і він з'явиться тут.",
+      "noAccounts": "Ще немає жодного акаунта Google Cloud. Додайте його тут або в «Інтеграції › Google Cloud».",
       "pickAccount": "Оберіть акаунт",
       "suggest": "Взяти «{{value}}» з прив'язки Factory",
       "pickChoice": "Оберіть",
       "secretStored": "Збережено. Нове значення замінить його; порожнє лишить як є.",
       "secretKeep": "Збережено — лишіть порожнім, щоб не змінювати",
-      "pastedKey": "Зараз використовується вставлений раніше ключ. Оберіть акаунт, щоб брати ключ звідти."
+      "pastedKey": "Зараз використовується вставлений раніше ключ. Оберіть акаунт, щоб брати ключ звідти.",
+      "addAccount": "+ Додати акаунт"
     },
     "custom": {
       "how": "Як запускати",
@@ -1158,6 +1165,16 @@
       "off": "вимкнено",
       "local": "локальна команда",
       "address": "адреса"
+    },
+    "managed": {
+      "title": "Керує {{integration}}",
+      "hint": "Налаштування й доступ задає прив’язка в сервісі; тут можна змінити лише, що можна робити кожним інструментом, і маскування.",
+      "open": "Відкрити в «Сервісах»",
+      "accessHint": "Factory, які його отримують, задає прив’язка в сервісі.",
+      "summary": "керує {{integration}}",
+      "by": {
+        "firebase": "Google Cloud"
+      }
     }
   },
   "observability": {
@@ -1256,7 +1273,12 @@
       "save": "Зберегти",
       "saved": "Прив’язку збережено",
       "removeBinding": "Видалити прив’язку",
-      "removeAria": "Видалити прив’язку {{title}}"
+      "removeAria": "Видалити прив’язку {{title}}",
+      "database": "База (Firestore)",
+      "databaseHint": "Агенти читають Firestore цього проєкту через MCP Toolbox. Лише читання, якщо в акаунта лише роль Cloud Datastore Viewer. З’являється у вкладці MCP як «керує Google Cloud».",
+      "databaseId": "База Firestore",
+      "databaseIdHint": "Порожньо — база (default).",
+      "databaseOn": "база"
     },
     "check": {
       "run": "Перевірити доступ",
@@ -1266,7 +1288,8 @@
       "failed": "Немає доступу",
       "logs": "Логи проєкту Google Cloud {{target}}",
       "crashes": "Креші застосунку {{target}}",
-      "missingRole": "Бракує ролі {{role}}."
+      "missingRole": "Бракує ролі {{role}}.",
+      "database": "База {{target}}"
     }
   },
   "boards": {
@@ -1393,6 +1416,39 @@
     "lanes": {
       "chats": "Чати",
       "runs": "Запуски карток"
+    }
+  },
+  "integrations": {
+    "tabs": {
+      "services": "Сервіси",
+      "mcp": "MCP"
+    },
+    "services": {
+      "title": "Сервіси",
+      "description": "Підключення, з якими працює Factory. Деякі під капотом запускають MCP-сервер (база Google Cloud — це MCP Toolbox); налаштовувати його окремо не треба.",
+      "names": {
+        "google-cloud": "Google Cloud",
+        "clickup": "ClickUp",
+        "github": "GitHub",
+        "gitlab": "GitLab"
+      }
+    },
+    "status": {
+      "notConnected": "Не підключено",
+      "connected": "Підключено",
+      "fromEnv": "Підключено з середовища сервера",
+      "connectedTo": "Підключено: {{name}}",
+      "googleCloud": "Акаунтів: {{accounts}} · прив’язок: {{bindings}}"
+    },
+    "repositoriesHint": "З якими репозиторіями працює ця Factory — у розділі «Репозиторії».",
+    "openRepositories": "Відкрити «Репозиторії»",
+    "github": {
+      "connected": "GitHub App підключено для організації.",
+      "notConnected": "GitHub ще не підключено: встановіть GitHub App, щоб Factory бачила репозиторії."
+    },
+    "gitlab": {
+      "connected": "GitLab підключено для організації.",
+      "notConnected": "GitLab ще не підключено."
     }
   }
 }

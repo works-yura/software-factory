@@ -69,7 +69,7 @@ export function googleError(api: GoogleApiSpec, status: number, body: GoogleErro
   if (status === 404) {
     return new ObservabilityProviderError(`${api.label} found nothing at that address: ${message}`, {
       status,
-      fix: 'Check the Firebase project id and app ids in Settings › Logs and crashes.',
+      fix: 'Check the Firebase project id and app ids in Settings › Integrations › Google Cloud.',
     });
   }
   if (status === 429) {

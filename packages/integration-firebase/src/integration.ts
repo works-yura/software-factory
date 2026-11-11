@@ -23,7 +23,7 @@ export interface FirebaseIntegrationOptions {
 /**
  * Firebase for observability: read-only server logs (Cloud Logging) and app crashes (Crashlytics)
  * for agents. Nothing lives in the host's env: each organization adds its Google Cloud service
- * accounts in Settings › Logs and crashes (keys stored encrypted), and binds each Factory to one or
+ * accounts in Settings › Integrations › Google Cloud (keys stored encrypted), and binds each Factory to one or
  * more Google Cloud projects through one of them.
  */
 export class FirebaseIntegration implements FactoryIntegration {

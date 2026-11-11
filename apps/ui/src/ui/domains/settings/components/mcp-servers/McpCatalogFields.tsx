@@ -5,10 +5,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { currentLanguage } from '../../../../i18n';
 import type { McpCredentialOption, McpCredentialRef } from '../../services/mcpServers';
+import { AccountKeyDialog } from '../GoogleCloudService';
 
 /** A catalog text in the person's language. */
 export const localized = (text: McpLocalized) => (currentLanguage() === 'uk' ? text.uk : text.en);
@@ -56,19 +58,27 @@ function FieldControl({
   if (field.credential) {
     const picked = values.credentials[field.key];
     const name = accounts.find(account => account.id === picked?.id)?.name;
+    const pick = (id: string) => onChange({ ...values, credentials: { ...values.credentials, [field.key]: { kind: field.credential!, id } } });
+    // A Google Cloud account is added right here, with the same dialog as in Інтеграції › Google Cloud.
+    const addAccount =
+      field.credential === 'google-cloud-account' && !disabled ? <AddGoogleCloudAccount onAdded={pick} /> : null;
     if (!accounts.length) {
       return (
-        <Txt as="p" variant="caption" tone="muted">
-          {t('mcpServers.field.noAccounts')}
-        </Txt>
+        <div className="flex flex-col items-start gap-1">
+          <Txt as="p" variant="caption" tone="muted">
+            {t('mcpServers.field.noAccounts')}
+          </Txt>
+          {addAccount}
+        </div>
       );
     }
     return (
       <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-2">
         <Select
           value={picked?.id ?? ''}
           disabled={disabled}
-          onValueChange={id => onChange({ ...values, credentials: { ...values.credentials, [field.key]: { kind: field.credential!, id } } })}
+          onValueChange={pick}
         >
           <SelectTrigger aria-label={label} className="w-72">
             {name ?? t('mcpServers.field.pickAccount')}
@@ -81,6 +91,8 @@ function FieldControl({
             ))}
           </SelectContent>
         </Select>
+        {addAccount}
+        </div>
         {!picked && stored && (
           <Txt as="span" variant="caption" tone="muted">
             {t('mcpServers.field.pastedKey')}
@@ -135,6 +147,20 @@ function FieldControl({
         </Button>
       )}
     </div>
+  );
+}
+
+/** «+ Додати акаунт»: the Google Cloud account dialog, then the new account is picked. */
+function AddGoogleCloudAccount({ onAdded }: { onAdded: (accountId: string) => void }) {
+  const { t } = useTranslation('settings');
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        {t('mcpServers.field.addAccount')}
+      </Button>
+      {open && <AccountKeyDialog onClose={() => setOpen(false)} onAdded={account => onAdded(account.id)} />}
+    </>
   );
 }
 

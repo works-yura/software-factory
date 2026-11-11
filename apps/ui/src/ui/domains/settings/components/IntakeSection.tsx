@@ -1,66 +1,36 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
-import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
-import type { IntakeConfig } from '../../factory/services/intake';
+import { useClickUpStatusQuery } from '../../../../hooks/useClickUp';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import { ClickUpIntakeSection } from './ClickUpIntakeSection';
+import { integrationsPath } from '../settingsSections';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
 
 /**
- * Settings › Intake in two parts. **Sources** are connections only (ClickUp). **Intake routes** are one ordered list: «Коли» is a source
- * and a condition (a ClickUp List and status, a pull request…) or a schedule of the route's own, and
- * the route says where the card goes and what a later event does to it.
+ * Settings › Надходження задач: the intake routes only. «Коли» is a source and a condition (a ClickUp
+ * List and status, a pull request…) or a schedule of the route's own, and the route says where the
+ * card goes and what a later event does to it. Connecting a source (ClickUp, GitHub…) is in
+ * Settings › Інтеграції; one line here says whether ClickUp is connected and links there.
  */
 export function IntakeSection() {
   const { t } = useTranslation('settings');
   const { factoryId } = useParams<{ factoryId: string }>();
-  const configQuery = useIntakeConfigQuery();
-  const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
-  const config = configQuery.data;
-
-  if (configQuery.isPending) {
-    return <SkeletonRows label={t('intake.loading')} rows={4} />;
-  }
-  if (configQuery.isError || !config) {
-    return (
-      <Txt tone="muted" as="p" variant="caption">
-        {t('intake.unavailable')}
-      </Txt>
-    );
-  }
-
-  const update = (next: IntakeConfig) => {
-    saveMutation.mutate(next, {
-      onSuccess: () => toast.success(t('intake.saved')),
-      onError: err => toast.error(err instanceof Error ? err.message : t('intake.saveFailed')),
-    });
-  };
-
+  const clickup = useClickUpStatusQuery().data;
   // Routes belong to one Factory: the one these settings were opened from.
   const factory = factoryId ? (factoriesQuery.data ?? []).find(candidate => candidate.id === factoryId) : undefined;
 
   return (
     <div className="flex flex-col gap-8">
-      <section aria-labelledby="intake-sources" className="flex flex-col gap-6">
-        <div className="flex flex-col gap-1">
-          <Txt as="h2" id="intake-sources" variant="body" tone="ink">
-            {t('intake.sources.title')}
-          </Txt>
-          <Txt as="p" variant="caption" tone="muted">
-            {t('intake.sources.description')}
-          </Txt>
-        </div>
-        <ClickUpIntakeSection
-          config={config}
-          busy={saveMutation.isPending}
-          update={update}
-        />
-      </section>
+      {factory && (
+        <Txt as="p" variant="caption" tone="muted">
+          {clickup?.connected ? t('intake.clickupLink.connected') : t('intake.clickupLink.notConnected')}{' '}
+          <Link to={integrationsPath(factory.id, { tab: 'services', service: 'clickup' })} className="underline">
+            {t('intake.clickupLink.open')}
+          </Link>
+        </Txt>
+      )}
       {factory && <IntakeRoutesSection factoryProjectId={factory.id} factoryName={factory.name} />}
     </div>
   );

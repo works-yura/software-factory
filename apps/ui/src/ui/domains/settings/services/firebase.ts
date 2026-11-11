@@ -37,6 +37,8 @@ export interface FirebaseBindingInput {
   logs: boolean;
   crashes: boolean;
   apps: FirebaseApp[];
+  /** «База»: agents read the project's Firestore through MCP Toolbox (an MCP server the integration manages). */
+  database?: { enabled: boolean; databaseId?: string };
 }
 
 export interface FirebaseBinding extends FirebaseBindingInput {
@@ -49,7 +51,7 @@ export interface FirebaseState {
 }
 
 export interface FirebaseCheck {
-  check: 'logs' | 'crashes';
+  check: 'logs' | 'crashes' | 'database';
   target: string;
   ok: boolean;
   message?: string;
@@ -97,8 +99,9 @@ const json = (method: string, body?: unknown): RequestInit => ({ method, ...(bod
 
 export const fetchFirebaseState = (baseUrl: string) => request<FirebaseState>(baseUrl, '/web/firebase/status');
 
+/** Answers with the whole state and the account it added. */
 export const addFirebaseAccount = (baseUrl: string, input: { serviceAccountJson: string; name?: string }) =>
-  request<FirebaseState>(baseUrl, '/web/firebase/accounts', json('POST', input));
+  request<FirebaseState & { account: FirebaseAccount }>(baseUrl, '/web/firebase/accounts', json('POST', input));
 
 export const updateFirebaseAccount = (baseUrl: string, accountId: string, input: { serviceAccountJson?: string; name?: string }) =>
   request<FirebaseState>(baseUrl, `/web/firebase/accounts/${encodeURIComponent(accountId)}`, json('PUT', input));

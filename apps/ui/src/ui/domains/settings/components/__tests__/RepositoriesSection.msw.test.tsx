@@ -22,37 +22,6 @@ function renderRepositoriesSettings() {
 }
 
 describe('Repositories settings', () => {
-  it('offers reconnection when the Platform GitLab account needs reauthorization', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary', repositories: [] }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
-        HttpResponse.json({ enabled: false, connected: false, installations: [], reason: 'missing_config' }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
-        HttpResponse.json({
-          enabled: true,
-          configured: false,
-          mode: 'platform',
-          connections: [{ id: 'conn-1', integrationId: 'gitlab', status: 'needs_reauth', accountLabel: 'fixture' }],
-          accounts: [],
-          reauthRequired: true,
-          reason: 'not_connected',
-        }),
-      ),
-    );
-
-    renderRepositoriesSettings();
-
-    const reconnect = await screen.findByRole('button', { name: 'Reconnect GitLab' });
-    expect(reconnect).toBeInTheDocument();
-    expect(reconnect.tagName).toBe('BUTTON');
-  });
-
   it('shows GitLab repository details without unrelated GitHub settings for a GitLab-only Factory', async () => {
     let gitlabProjectReads = 0;
     server.use(
@@ -130,11 +99,12 @@ describe('Repositories settings', () => {
       'href',
       `/factories/${FACTORY_ID}/settings/environment`,
     );
-    const connectAnother = screen.getByRole('button', { name: 'Connect another GitLab account' });
-    expect(connectAnother).toBeInTheDocument();
-    expect(connectAnother.tagName).toBe('BUTTON');
-    const manage = screen.getByRole('link', { name: 'Manage GitLab connection' });
-    expect(manage).toHaveAttribute('href', 'https://projects.mastra.ai');
+    // Connecting GitLab (another account, managing it) is in Інтеграції; here only a link there.
+    expect(screen.queryByRole('button', { name: 'Connect another GitLab account' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Integrations' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/settings/integrations?tab=services&service=github`,
+    );
     expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
   });
 
@@ -220,7 +190,6 @@ describe('Repositories settings', () => {
     renderRepositoriesSettings();
 
     expect(await screen.findByText('yura/app')).toBeInTheDocument();
-    expect(screen.getByText("GitHub managed by the deployment's access token (GITHUB_ACCESS_TOKEN)")).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Connect GitHub' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Manage GitHub connection' })).not.toBeInTheDocument();
   });

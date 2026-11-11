@@ -42,6 +42,8 @@ export interface McpServer {
   id: string;
   name: string;
   label: string;
+  /** The integration that manages the server (Google Cloud's «База»); people change only its tool policy and masking. */
+  owner?: { integration: string; key: string };
   launch: McpServerLaunch;
   secretNames: { env: string[]; headers: string[]; files: string[] };
   assignments: McpServerAssignment[];

@@ -93,6 +93,7 @@ function ServerCard({ server, state }: { server: McpServer; state: McpServersSta
         ? t('mcpServers.summary.address')
         : t('mcpServers.summary.local');
   const summary = [
+    ...(server.owner ? [t('mcpServers.managed.summary', { integration: t(`mcpServers.managed.by.${server.owner.integration}`, { defaultValue: server.owner.integration }) })] : []),
     kind,
     server.assignments.length ? t('mcpServers.summary.factories', { count: server.assignments.length }) : t('mcpServers.summary.unassigned'),
     ...(server.enabled ? [] : [t('mcpServers.summary.off')]),
@@ -105,7 +106,8 @@ function ServerCard({ server, state }: { server: McpServer; state: McpServersSta
 }
 
 /**
- * Settings › MCP-сервери — the MCP manager. «Додати сервер» opens the catalog (MCP Registry
+ * Settings › Інтеграції › MCP — the MCP manager. Servers an integration runs under the hood (Google
+ * Cloud's «База») are listed too, marked «керує …», with only their tool policy and masking editable. «Додати сервер» opens the catalog (MCP Registry
  * `server.json` entries, in the person's language) and «Власний сервер»; the form is built from the
  * entry's declared inputs, an account input picks one of the organization's accounts. Each server
  * says which cards get it (Factory, boards, phases), what each of its tools may do, and whether

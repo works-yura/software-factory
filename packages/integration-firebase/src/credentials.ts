@@ -4,7 +4,7 @@ import type { IntegrationStorageHandle } from '@factory/store';
 import { UNBOUND_ACCOUNT, readAccountKey, readFirebaseState } from './settings.ts';
 
 /**
- * The organization's Google Cloud accounts (Settings › Logs and crashes) lent to other parts of
+ * The organization's Google Cloud accounts (Settings › Integrations › Google Cloud) lent to other parts of
  * the Factory by reference: an MCP server picks one instead of pasting its key again. The key
  * leaves only through `readSecret`, for the launcher.
  */

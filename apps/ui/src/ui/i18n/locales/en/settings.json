@@ -1,6 +1,5 @@
 {
   "sections": {
-    "mcp-servers": "MCP servers",
     "account": "My account",
     "preferences": "Preferences",
     "factory": "Manage Factory",
@@ -8,7 +7,7 @@
     "repositories": "Repositories",
     "environment": "Environment",
     "intake": "Work Intake",
-    "observability": "Logs and crashes",
+    "integrations": "Integrations",
     "board": "Boards",
     "models": "Harness",
     "skills": "Skills",
@@ -36,12 +35,17 @@
       "organizationRequired": "Select an organization to manage ClickUp syncing.",
       "statusUnavailable": "ClickUp status could not be loaded.",
       "rejected": "ClickUp rejected the configured API token. Ask the operator to check it.",
-      "ready": "Tasks are checked every {{seconds}} s in the Lists the intake routes below name (source ClickUp, the «List» condition): a route decides whether a task is imported, where its card goes and what a status change does.",
+      "ready": "Tasks are checked every {{seconds}} s in the Lists that intake routes name (Settings › Work Intake, source ClickUp, the «List» condition): a route decides whether a task is imported, where its card goes and what a status change does.",
       "sync": "Import ClickUp tasks"
     },
     "sources": {
       "title": "Sources",
       "description": "Where cards come from: the connections. What happens to cards — which List to import from, where to put them, what to file on a schedule — is decided by the intake routes below."
+    },
+    "clickupLink": {
+      "connected": "ClickUp is connected.",
+      "notConnected": "ClickUp is not connected.",
+      "open": "Set it up in Integrations"
     }
   },
   "intakeSource": {
@@ -211,7 +215,9 @@
     "connectGitlab": "Connect GitLab",
     "githubFromEnv": "GitHub managed by the deployment's access token (GITHUB_ACCESS_TOKEN)",
     "gitlabFromEnv": "GitLab managed by deployment environment variables",
-    "environmentHint": "Sandbox resources, repository order and setup commands live in <link>Environment</link>."
+    "environmentHint": "Sandbox resources, repository order and setup commands live in <link>Environment</link>.",
+    "connectionsHint": "Connecting GitHub and GitLab is under Integrations.",
+    "openIntegrations": "Open Integrations"
   },
   "skills": {
     "title": "Factory skills",
@@ -1066,13 +1072,14 @@
     "field": {
       "required": "required",
       "default": "Empty means {{value}}",
-      "noAccounts": "No Google Cloud account yet. Add one in «Logs and crashes» and it shows up here.",
+      "noAccounts": "No Google Cloud account yet. Add one here or in Integrations › Google Cloud.",
       "pickAccount": "Pick an account",
       "suggest": "Use «{{value}}» from the Factory's binding",
       "pickChoice": "Pick one",
       "secretStored": "Saved. A new value replaces it; leave empty to keep it.",
       "secretKeep": "Saved — leave empty to keep",
-      "pastedKey": "A key pasted earlier is in use. Pick an account to take the key from there."
+      "pastedKey": "A key pasted earlier is in use. Pick an account to take the key from there.",
+      "addAccount": "+ Add account"
     },
     "custom": {
       "how": "How it runs",
@@ -1148,6 +1155,16 @@
       "off": "off",
       "local": "local command",
       "address": "address"
+    },
+    "managed": {
+      "title": "Managed by {{integration}}",
+      "hint": "Its binding in the service sets the config and access; here you can change only what each tool may do and the masking.",
+      "open": "Open in Services",
+      "accessHint": "Its binding in the service sets which Factory gets it.",
+      "summary": "managed by {{integration}}",
+      "by": {
+        "firebase": "Google Cloud"
+      }
     }
   },
   "observability": {
@@ -1240,7 +1257,12 @@
       "save": "Save",
       "saved": "Binding saved",
       "removeBinding": "Remove binding",
-      "removeAria": "Remove binding {{title}}"
+      "removeAria": "Remove binding {{title}}",
+      "database": "Database (Firestore)",
+      "databaseHint": "Agents read this project’s Firestore through MCP Toolbox. Read-only when the account has only Cloud Datastore Viewer. Shows in the MCP tab as “managed by Google Cloud”.",
+      "databaseId": "Firestore database",
+      "databaseIdHint": "Empty for the (default) database.",
+      "databaseOn": "database"
     },
     "check": {
       "run": "Check access",
@@ -1250,7 +1272,8 @@
       "failed": "No access",
       "logs": "Logs of Google Cloud project {{target}}",
       "crashes": "Crashes of app {{target}}",
-      "missingRole": "Missing role {{role}}."
+      "missingRole": "Missing role {{role}}.",
+      "database": "Database {{target}}"
     }
   },
   "boards": {
@@ -1377,6 +1400,39 @@
     "lanes": {
       "chats": "Chats",
       "runs": "Work-item runs"
+    }
+  },
+  "integrations": {
+    "tabs": {
+      "services": "Services",
+      "mcp": "MCP"
+    },
+    "services": {
+      "title": "Services",
+      "description": "What the Factory connects to. Some run an MCP server under the hood (the Google Cloud database is MCP Toolbox); you never set it up separately.",
+      "names": {
+        "google-cloud": "Google Cloud",
+        "clickup": "ClickUp",
+        "github": "GitHub",
+        "gitlab": "GitLab"
+      }
+    },
+    "status": {
+      "notConnected": "Not connected",
+      "connected": "Connected",
+      "fromEnv": "Connected from the server environment",
+      "connectedTo": "Connected: {{name}}",
+      "googleCloud": "Accounts: {{accounts}} · bindings: {{bindings}}"
+    },
+    "repositoriesHint": "Which repositories this Factory works in is under Repositories.",
+    "openRepositories": "Open Repositories",
+    "github": {
+      "connected": "The GitHub App is connected for the organization.",
+      "notConnected": "GitHub is not connected yet: install the GitHub App so the Factory sees repositories."
+    },
+    "gitlab": {
+      "connected": "GitLab is connected for the organization.",
+      "notConnected": "GitLab is not connected yet."
     }
   }
 }

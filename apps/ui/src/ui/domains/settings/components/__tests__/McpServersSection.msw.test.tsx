@@ -3,6 +3,7 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 // The real catalog files the server ships, so the form under test is the one people get.
@@ -226,5 +227,69 @@ describe('McpServersSection', () => {
     expect(screen.queryByRole('button', { name: 'Add server' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Name' })).toBeDisabled();
+  });
+
+  it('marks a server Google Cloud manages: config and access read-only, tool policy editable, no delete, a link to the service', async () => {
+    const managed: McpServer = { ...stored, id: 'srv-gc', name: 'db-syncta-57c6a', label: 'Firestore syncta-57c6a', owner: { integration: 'firebase', key: 'bnd-1' }, assignments: [{ factoryProjectId: 'factory-1' }] };
+    const writes = useHandlers([managed]);
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/factory-1/settings/integrations?tab=mcp']}>
+        <Routes>
+          <Route path="/factories/:factoryId/settings/integrations" element={<McpServersSection />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const card = await screen.findByRole('button', { name: /^Firestore syncta-57c6a\s*managed by Google Cloud/ });
+    await userEvent.click(card);
+    expect(screen.getByRole('link', { name: 'Open in Services' })).toHaveAttribute(
+      'href',
+      '/factories/factory-1/settings/integrations?tab=services&service=google-cloud',
+    );
+    expect(screen.getByRole('textbox', { name: 'Name' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Add Factory' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+    await pick('Policy for delete_documents', 'Forbidden');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes.at(-1)?.body.toolPolicies).toEqual({ default: 'allow', tools: { delete_documents: 'deny' } }));
+  });
+
+  it('adds a Google Cloud account right from the form and picks it', async () => {
+    useHandlers();
+    const added = { id: 'acc-new', name: 'BookFate', clientEmail: 'factory@bookfate-prod.iam.gserviceaccount.com', projectId: 'bookfate-prod', keyId: 'k' };
+    const posted: unknown[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/firebase/accounts`, async ({ request }) => {
+        posted.push(await request.json());
+        return HttpResponse.json({ account: added, accounts: [{ ...added, bindingIds: [] }], bindings: [] });
+      }),
+      http.get(BASE, () =>
+        HttpResponse.json({
+          servers: [],
+          catalog: [toolbox],
+          credentials: {
+            'google-cloud-account': [
+              { id: 'acc-1', name: 'Syncta', detail: 'factory@syncta-57c6a.iam.gserviceaccount.com' },
+              ...(posted.length ? [{ id: 'acc-new', name: 'BookFate', detail: added.clientEmail }] : []),
+            ],
+          },
+          canEdit: true,
+        }),
+      ),
+    );
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add server' }));
+    await userEvent.click(screen.getByRole('button', { name: /Database \(MCP Toolbox\)/ }));
+    await pick('What to connect', 'Firestore');
+
+    await userEvent.click(screen.getByRole('button', { name: '+ Add account' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /key/i }), '{{"type":"service_account"}');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save key' }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(await screen.findByRole('combobox', { name: 'Google Cloud account' })).toHaveTextContent('BookFate');
   });
 });

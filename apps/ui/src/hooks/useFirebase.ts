@@ -23,7 +23,11 @@ export function useFirebaseStateQuery() {
 export function useFirebaseMutations() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const onSuccess = (state: FirebaseState) => queryClient.setQueryData(queryKeys.firebaseStatus(baseUrl), state);
+  const onSuccess = (state: FirebaseState) => {
+    queryClient.setQueryData(queryKeys.firebaseStatus(baseUrl), state);
+    // Accounts fill MCP servers' inputs, and «База» bindings are MCP servers Google Cloud manages.
+    void queryClient.invalidateQueries({ queryKey: ['mcp-servers'] });
+  };
   return {
     addAccount: useMutation({
       mutationFn: (input: { serviceAccountJson: string; name?: string }) => addFirebaseAccount(baseUrl, input),

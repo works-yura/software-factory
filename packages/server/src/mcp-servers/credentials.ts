@@ -2,7 +2,7 @@ import type { CredentialKind, CredentialOption, CredentialProvider, CredentialSu
 import type { McpCredentialRef } from '@factory/core';
 
 /**
- * The accounts integrations lend to MCP servers (Settings › Logs and crashes → Google Cloud),
+ * The accounts integrations lend to MCP servers (Settings › Integrations › Google Cloud → Google Cloud),
  * gathered from the ready integrations at boot. Lists never carry secrets; `readSecret` is for
  * the launcher only.
  */

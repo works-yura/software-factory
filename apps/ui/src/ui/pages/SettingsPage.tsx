@@ -29,7 +29,7 @@ export function SettingsPage() {
       <Navigate
         to={{
           pathname: settingsSectionPath(factoryId, retired.section),
-          search: location.search,
+          search: retired.search ?? location.search,
           hash: retired.anchor ?? location.hash,
         }}
         replace

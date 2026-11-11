@@ -43,13 +43,13 @@ describe('SettingsNavigation', () => {
         .getAllByRole('link')
         .map(link => link.textContent);
     expect(linksIn('Account')).toEqual(['My account', 'Preferences']);
-    expect(linksIn('Agent')).toEqual(['Harness', 'Memory', 'Behavior', 'MCP servers']);
+    expect(linksIn('Agent')).toEqual(['Harness', 'Memory', 'Behavior']);
     expect(linksIn('Factory')).toEqual([
       'Analytics',
       'Repositories',
       'Environment',
       'Work Intake',
-      'Logs and crashes',
+      'Integrations',
       'Manage Factory',
       'Debug',
     ]);
@@ -68,7 +68,7 @@ describe('SettingsNavigation', () => {
 
     const agent = screen.getByRole('region', { name: 'Agent' });
     await waitFor(() => expect(within(agent).queryByRole('link', { name: 'Memory' })).not.toBeInTheDocument());
-    expect(within(agent).getAllByRole('link').map(link => link.textContent)).toEqual(['Harness', 'Behavior', 'MCP servers']);
+    expect(within(agent).getAllByRole('link').map(link => link.textContent)).toEqual(['Harness', 'Behavior']);
   });
 
   it('keeps legacy terms searchable while showing the clearer destination label', async () => {
@@ -88,6 +88,9 @@ describe('SettingsNavigation', () => {
     { query: 'factory memory', destination: 'Memory' },
     { query: 'shared memory', destination: 'Memory' },
     { query: 'usage', destination: 'Analytics' },
+    { query: 'mcp', destination: 'Integrations' },
+    { query: 'crashlytics', destination: 'Integrations' },
+    { query: 'clickup', destination: 'Integrations' },
     { query: 'metrics', destination: 'Analytics' },
   ])('finds $destination by the former page name "$query"', async ({ query, destination }) => {
     const user = userEvent.setup();

@@ -30,7 +30,6 @@ import type {
   FirebaseCheckResult,
   FirebasePlatform,
 } from '../services/firebase';
-import { SettingsSubsection } from './SettingsSubsection';
 import { SourceItemCard } from './SourceItemCard';
 
 const PLATFORMS: FirebasePlatform[] = ['android', 'ios', 'web'];
@@ -51,8 +50,20 @@ function ListHeader({ title, action }: { title: string; action: ReactNode }) {
   );
 }
 
-/** Paste or pick a service account key: a new account, or a new key for `account`. Sent once, never shown again. */
-function AccountKeyDialog({ account, onClose }: { account?: FirebaseAccount; onClose: () => void }) {
+/**
+ * Paste or pick a service account key: a new account, or a new key for `account`. Sent once, never
+ * shown again. The one dialog for adding a Google Cloud account, also from an MCP server's form.
+ */
+export function AccountKeyDialog({
+  account,
+  onClose,
+  onAdded,
+}: {
+  account?: FirebaseAccount;
+  onClose: () => void;
+  /** The new account, so a form that asked for it can pick it. */
+  onAdded?: (account: FirebaseAccount) => void;
+}) {
   const { t } = useTranslation('settings');
   const { addAccount, updateAccount } = useFirebaseMutations();
   const [keyJson, setKeyJson] = useState('');
@@ -69,7 +80,16 @@ function AccountKeyDialog({ account, onClose }: { account?: FirebaseAccount; onC
   const save = () =>
     account
       ? updateAccount.mutate({ accountId: account.id, serviceAccountJson: keyJson }, done)
-      : addAccount.mutate({ serviceAccountJson: keyJson, ...(name.trim() ? { name: name.trim() } : {}) }, done);
+      : addAccount.mutate(
+          { serviceAccountJson: keyJson, ...(name.trim() ? { name: name.trim() } : {}) },
+          {
+            ...done,
+            onSuccess: result => {
+              onAdded?.(result.account);
+              done.onSuccess();
+            },
+          },
+        );
 
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
@@ -346,6 +366,11 @@ function BindingCard({
     ...(draft.projectNumber.trim() ? { projectNumber: draft.projectNumber.trim() } : {}),
     logs: draft.logs,
     crashes: draft.crashes,
+    ...(draft.database?.enabled
+      ? { database: { enabled: true, ...(draft.database.databaseId?.trim() ? { databaseId: draft.database.databaseId.trim() } : {}) } }
+      : draft.database
+        ? { database: { enabled: false } }
+        : {}),
     apps: draft.apps.map(app => ({
       appId: app.appId.trim(),
       platform: app.platform,
@@ -362,7 +387,10 @@ function BindingCard({
         accountName(stored.accountId),
         ...(stored.logs ? [t('observability.bindings.logsOn')] : []),
         ...(stored.crashes && stored.apps.length > 0 ? [t('observability.bindings.apps', { count: stored.apps.length })] : []),
-        ...(!stored.logs && !(stored.crashes && stored.apps.length > 0) ? [t('observability.bindings.nothingRead')] : []),
+        ...(stored.database?.enabled ? [t('observability.bindings.databaseOn')] : []),
+        ...(!stored.logs && !(stored.crashes && stored.apps.length > 0) && !stored.database?.enabled
+          ? [t('observability.bindings.nothingRead')]
+          : []),
       ].join(' · ')
     : t('observability.bindings.notSaved');
 
@@ -425,6 +453,23 @@ function BindingCard({
         <SettingsRow label={t('observability.bindings.crashes')} description={t('observability.bindings.crashesHint')}>
           <Switch aria-label={t('observability.bindings.crashes')} checked={draft.crashes} onCheckedChange={crashes => update({ crashes })} />
         </SettingsRow>
+        <SettingsRow label={t('observability.bindings.database')} description={t('observability.bindings.databaseHint')}>
+          <Switch
+            aria-label={t('observability.bindings.database')}
+            checked={draft.database?.enabled === true}
+            onCheckedChange={enabled => update({ database: { ...draft.database, enabled } })}
+          />
+        </SettingsRow>
+        {draft.database?.enabled && (
+          <SettingsRow label={t('observability.bindings.databaseId')} description={t('observability.bindings.databaseIdHint')}>
+            <Input
+              aria-label={t('observability.bindings.databaseId')}
+              value={draft.database.databaseId ?? ''}
+              placeholder="(default)"
+              onChange={event => update({ database: { enabled: true, databaseId: event.target.value } })}
+            />
+          </SettingsRow>
+        )}
       </SettingsContainer>
 
       {draft.crashes && (
@@ -532,11 +577,12 @@ function BindingCard({
 }
 
 /**
- * Firebase as a source of logs and crashes, shaped like an intake source: the org's Google Cloud
- * accounts (each its own key), and the bindings — which Factory reads which Google Cloud project
- * through which account. A Factory may have several bindings.
+ * Settings › Інтеграції › Сервіси › Google Cloud: the org's Google Cloud accounts (each its own key)
+ * and the bindings — which Factory reads which Google Cloud project through which account, and what:
+ * logs and crashes (our adapter) and «База», the project's Firestore through MCP Toolbox run under
+ * the hood (listed in the MCP tab as «керує Google Cloud»). A Factory may have several bindings.
  */
-function FirebaseSource() {
+export function GoogleCloudService() {
   const { t } = useTranslation('settings');
   const state = useFirebaseStateQuery();
   const factoriesQuery = useFactoriesQuery();
@@ -559,10 +605,6 @@ function FirebaseSource() {
     <Button size="sm" variant="ghost" onClick={() => void state.refetch()}>
       {t('intake.retry')}
     </Button>
-  ) : accounts.length > 0 ? (
-    <Txt tone="muted" as="span" variant="caption">
-      {t('observability.source.accountsCount', { count: accounts.length })}
-    </Txt>
   ) : undefined;
 
   const addBinding = () => {
@@ -579,11 +621,19 @@ function FirebaseSource() {
       logs: true,
       crashes: false,
       apps: [],
+      database: { enabled: false },
     };
   };
 
   return (
-    <SettingsSubsection scope="org" title={t('observability.source.firebase')} description={description} action={action}>
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Txt as="p" variant="caption" tone="muted">
+          {description}
+        </Txt>
+        {action}
+      </div>
+
       <div className="flex flex-col gap-3">
         <ListHeader
           title={t('observability.accounts.title')}
@@ -635,18 +685,6 @@ function FirebaseSource() {
       </div>
 
       {addingAccount && <AccountKeyDialog onClose={() => setAddingAccount(false)} />}
-    </SettingsSubsection>
-  );
-}
-
-/**
- * Settings › Logs and crashes: the sources agents read logs and crashes from, each shaped like an
- * intake source. Firebase is the only one today; another provider (Sentry) is one more block here.
- */
-export function ObservabilitySection() {
-  return (
-    <div className="flex flex-col gap-8">
-      <FirebaseSource />
-    </div>
+    </>
   );
 }

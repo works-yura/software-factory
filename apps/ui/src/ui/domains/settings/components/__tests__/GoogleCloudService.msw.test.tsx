@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { FirebaseAccount, FirebaseBinding, FirebaseState } from '../../services/firebase';
-import { ObservabilitySection } from '../ObservabilitySection';
+import { GoogleCloudService } from '../GoogleCloudService';
 
 const BASE = `${TEST_BASE_URL}/web/firebase`;
 const FACTORIES_URL = `${TEST_BASE_URL}/web/factory/projects`;
@@ -120,13 +120,13 @@ function useHandlers(initial: { accounts?: FirebaseAccount[]; bindings?: Firebas
 function renderSection() {
   return renderWithProviders(
     <>
-      <ObservabilitySection />
+      <GoogleCloudService />
       <Toaster />
     </>,
   );
 }
 
-describe('ObservabilitySection', () => {
+describe('GoogleCloudService', () => {
   it('adds a named account through the key dialog and shows whose key it is, never the key', async () => {
     const writes = useHandlers({ accounts: [synctaAccount] });
     renderSection();
@@ -142,7 +142,6 @@ describe('ObservabilitySection', () => {
     await waitFor(() => expect(writes[0]).toMatchObject({ method: 'POST', url: `${BASE}/accounts`, body: { name: 'BookFate' } }));
     expect((writes[0]!.body as { serviceAccountJson: string }).serviceAccountJson).toContain('service_account');
     expect(await screen.findByRole('button', { name: /^BookFate\s*factory@bookfate-prod/ })).toBeInTheDocument();
-    expect(screen.getByText('2 accounts')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain('BEGIN PRIVATE KEY');
   });
@@ -200,6 +199,7 @@ describe('ObservabilitySection', () => {
         projectNumber: '900351719125',
         logs: true,
         crashes: true,
+        database: { enabled: false },
         apps: [{ appId: '1:900351719125:android:65f109e838d2590e1a545c', platform: 'android' }],
       }),
     );
@@ -243,5 +243,20 @@ describe('ObservabilitySection', () => {
     await waitFor(() => expect(writes[0]).toMatchObject({ method: 'DELETE', url: `${BASE}/accounts/acc-syncta` }));
     expect(await screen.findByText('Add a Google Cloud account first.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add binding' })).toBeDisabled();
+  });
+
+  it('switches «База» on for a binding: the project\'s Firestore, with its database id, and the summary says so', async () => {
+    const writes = useHandlers({ accounts: [synctaAccount], bindings: [synctaBinding] });
+    renderSection();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^syncts → / }));
+    await userEvent.click(screen.getByRole('switch', { name: 'Database (Firestore)' }));
+    await userEvent.type(screen.getByLabelText('Firestore database'), 'analytics');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(writes.find(write => write.method === 'PUT')?.body).toMatchObject({ database: { enabled: true, databaseId: 'analytics' } }),
+    );
+    expect(await screen.findByRole('button', { name: /· database/ })).toBeInTheDocument();
   });
 });
