@@ -971,7 +971,15 @@
       "source": "Source",
       "kind": "Kind",
       "integration": "Integration",
-      "pullRequest": "Open pull request"
+      "pullRequest": "Open pull request",
+      "key": "Key",
+      "state": "State",
+      "assignees": "Assignees",
+      "provider": "Provider",
+      "repository": "Repository or project",
+      "intake": "Intake",
+      "intakeRule": "Intake rule",
+      "intakeTrigger": "Intake trigger"
     },
     "rule": {
       "invalidJson": "Not valid JSON.",

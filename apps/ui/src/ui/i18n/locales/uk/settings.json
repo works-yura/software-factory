@@ -987,7 +987,15 @@
       "source": "Джерело",
       "kind": "Вид",
       "integration": "Інтеграція",
-      "pullRequest": "Відкритий pull request"
+      "pullRequest": "Відкритий pull request",
+      "key": "Ключ",
+      "state": "Стан",
+      "assignees": "Виконавці",
+      "provider": "Провайдер",
+      "repository": "Репозиторій або проєкт",
+      "intake": "Надходження",
+      "intakeRule": "Правило надходження",
+      "intakeTrigger": "Тригер надходження"
     },
     "rule": {
       "invalidJson": "Некоректний JSON.",

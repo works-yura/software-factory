@@ -15,11 +15,15 @@ import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-rou
 import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
+import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { PULL_REQUEST_SOURCE_FILTER } from './domains/factory/boardSourceFilters';
 import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
+import { BoardConfigPage } from './pages/BoardConfigPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
+import { FactorySkillsPage } from './pages/FactorySkillsPage';
+import { NewBoardPage } from './pages/NewBoardPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -128,6 +132,26 @@ function ConnectionsRedirect() {
   return <Navigate to={`/factories/${firstFactory.id}/settings/repositories`} replace />;
 }
 
+/**
+ * Boards used to be edited in Settings: old links (`?board=…`, `?new=1`) open that board's settings, the
+ * new-board form, or the Work board's settings.
+ */
+function BoardSettingsRedirect() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const { search } = useLocation();
+  if (!factoryId) return null;
+  const params = new URLSearchParams(search);
+  if (params.has('new')) return <Navigate to={newBoardPath(factoryId)} replace />;
+  return <Navigate to={boardConfigPath(factoryId, params.get('board') ?? 'work')} replace />;
+}
+
+/** Skills used to live in Settings; old links open them beside the Work board's settings. */
+function SkillsSettingsRedirect() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  if (!factoryId) return null;
+  return <Navigate to={boardSkillsPath(factoryId, 'work')} replace />;
+}
+
 function KnowledgeRoute() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const knowledge = useKnowledgeAvailable(factoryId);
@@ -163,10 +187,15 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'supervisor', element: <SupervisorRoute /> },
                 { path: 'new', element: <NewPage /> },
                 { path: 'new-factory', element: <CreateFactoryPage /> },
+                { path: 'new-board', element: <NewBoardPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
                 // The Review board was retired: pull requests are reviewed on Work.
                 { path: 'review', element: <RetiredReviewBoardRedirect /> },
                 { path: 'boards/:boardId', element: <CustomBoardPage /> },
+                { path: 'work/config/:phaseKey?', element: <BoardConfigPage /> },
+                { path: 'boards/:boardId/config/:phaseKey?', element: <BoardConfigPage /> },
+                { path: 'work/skills', element: <FactorySkillsPage /> },
+                { path: 'boards/:boardId/skills', element: <FactorySkillsPage /> },
                 { path: 'activity', element: <FactoryHomeRedirect /> },
                 { path: 'overview', element: <FactoryHomeRedirect /> },
                 { path: 'attention', element: <FactoryHomeRedirect /> },
@@ -178,6 +207,8 @@ export function createAppRoutes(): RouteObject[] {
                   path: 'settings',
                   children: [
                     { index: true, element: <Navigate to="preferences" replace /> },
+                    { path: 'board', element: <BoardSettingsRedirect /> },
+                    { path: 'skills', element: <SkillsSettingsRedirect /> },
                     { path: ':section', element: <SettingsPage /> },
                   ],
                 },

@@ -66,5 +66,10 @@
   },
   "newSession": "New session",
   "searchAndNavigate": "Search and navigate",
-  "newBoard": "New board"
+  "newBoard": "New board",
+  "boardSettings": "Board settings",
+  "backToBoard": "Back to {{name}}",
+  "backToBoardFallback": "Back to board",
+  "configureBoard": "Configure board",
+  "configureNamedBoard": "Configure {{name}}"
 }

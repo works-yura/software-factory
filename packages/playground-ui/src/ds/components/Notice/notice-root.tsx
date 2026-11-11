@@ -36,9 +36,11 @@ export interface NoticeRootProps {
   action?: ReactNode;
   children?: ReactNode;
   className?: string;
+  /** `alert` for an error the reader must notice now, `status` for news that can wait. */
+  role?: 'alert' | 'status';
 }
 
-export function NoticeRoot({ variant, title, icon, action, children, className }: NoticeRootProps) {
+export function NoticeRoot({ variant, title, icon, action, children, className, role }: NoticeRootProps) {
   const { icon: defaultIcon, iconClass } = variantConfig[variant];
   const glyph = (
     <span className={cn('flex h-lh shrink-0 items-center [&>svg]:size-icon-sm', iconClass)}>{icon ?? defaultIcon}</span>
@@ -53,6 +55,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
   return (
     <div
       data-slot="notice"
+      role={role}
       className={cn(
         'relative isolate flex flex-col gap-2 overflow-hidden rounded-2xl border border-surface-rim p-3',
         className,

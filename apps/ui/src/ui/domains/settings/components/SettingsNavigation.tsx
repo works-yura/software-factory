@@ -4,7 +4,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   Activity,
   ArrowLeft,
-  BookOpen,
   Bot,
   Box,
   Brain,
@@ -15,7 +14,6 @@ import {
   Inbox,
   Palette,
   SlidersHorizontal,
-  SquareKanban,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -93,14 +91,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
           'memory factory memory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
-        id: 'skills',
-        get label() {
-          return SETTINGS_SECTION_LABELS.skills;
-        },
-        icon: BookOpen,
-        searchText: 'skills factory triage plan review agent instructions prompts stages',
-      },
-      {
         id: 'behavior',
         get label() {
           return SETTINGS_SECTION_LABELS.behavior;
@@ -147,15 +137,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: Activity,
         searchText: 'observability logs crashes crashlytics firebase cloud logging errors stability service account',
-      },
-      {
-        id: 'board',
-        get label() {
-          return SETTINGS_SECTION_LABELS.board;
-        },
-        icon: SquareKanban,
-        searchText:
-          'boards new board create delete work board phases triage planning building review pr review auto start auto approve plans next phases runner instructions reset default',
       },
       {
         id: 'factory',

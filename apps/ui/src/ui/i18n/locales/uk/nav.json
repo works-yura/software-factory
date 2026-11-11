@@ -68,5 +68,10 @@
   },
   "newSession": "Нова сесія",
   "searchAndNavigate": "Пошук і навігація",
-  "newBoard": "Нова дошка"
+  "newBoard": "Нова дошка",
+  "boardSettings": "Налаштування дошки",
+  "backToBoard": "Назад до «{{name}}»",
+  "backToBoardFallback": "Назад до дошки",
+  "configureBoard": "Налаштувати дошку",
+  "configureNamedBoard": "Налаштувати «{{name}}»"
 }

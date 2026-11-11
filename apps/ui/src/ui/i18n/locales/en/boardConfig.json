@@ -1,0 +1,189 @@
+{
+  "kinds": {
+    "resting": {
+      "label": "Resting",
+      "meaning": "No agent works here. Cards wait for a person or an event to move them."
+    },
+    "working": {
+      "label": "Working",
+      "meaning": "An agent works on each card here, following the steps below."
+    },
+    "terminal": {
+      "label": "Terminal",
+      "meaning": "Cards are finished here. Their agent sessions stop."
+    }
+  },
+  "header": {
+    "phaseName": "Phase name",
+    "boardName": "Board name",
+    "phaseKind": "Phase kind",
+    "revision": "Revision {{revision}}",
+    "revisionMeaning": "Goes up each time the board is saved. If someone else saves first, you're asked to reload before saving.",
+    "phaseDescription": "Phase description",
+    "boardDescription": "Board description",
+    "addDescription": "Add a description"
+  },
+  "cancel": "Cancel",
+  "editor": {
+    "noSuchPhase": "{{board}} has no such phase.",
+    "backToGeneral": "Back to general",
+    "phases": "Phases",
+    "factory": "Factory",
+    "skills": "Skills",
+    "default": "Default",
+    "resetToDefault": "Reset to default",
+    "resetDescription": "Go back to Factory's version of this board.",
+    "reset": "Reset",
+    "resetTitle": "Reset {{board}} to default?",
+    "resetBody": "Every change made to this board's name and phases is replaced with Factory's version.",
+    "notReset": "The board was not reset. {{error}}",
+    "delete": "Delete",
+    "deleteBoard": "Delete board",
+    "deleteDescription": "A board that still has cards cannot be deleted.",
+    "deleteTitle": "Delete {{board}}?",
+    "deleteBody": "The board and its phases are removed from this project.",
+    "notDeleted": "The board was not deleted. {{error}}",
+    "definedInCode": "This board is defined in code, so it can't be changed here.",
+    "adminsOnly": "Only organization admins can change this board.",
+    "problems": "This board has problems",
+    "staleTitle": "Someone else changed this board",
+    "reload": "Reload",
+    "staleBody": "Reload to see their version. Your unsaved changes will be lost.",
+    "notSaved": "The board was not saved. {{error}}",
+    "nameToSave": "Name the board to save.",
+    "fixToSave": "Fix {{phases}} to save.",
+    "unsaved": "Unsaved changes",
+    "discard": "Discard",
+    "saving": "Saving…",
+    "save": "Save",
+    "discardTitle": "Discard changes to {{board}}?",
+    "discardBody": "Your unsaved changes to this board will be lost.",
+    "keepEditing": "Keep editing"
+  },
+  "configureBoard": "Configure board",
+  "addPhase": {
+    "add": "Add phase",
+    "name": "Phase name",
+    "key": "Phase key",
+    "keyHint": "Cards and other phases refer to it. Cannot be changed later."
+  },
+  "intakeNote": {
+    "before": "New cards land on the Development board unless an intake route sends them to this one. Add a route in",
+    "link": "Work Intake",
+    "after": "."
+  },
+  "tools": {
+    "recordVerdict": "Record a review verdict",
+    "reviewSource": "Review the source of a change request"
+  },
+  "key": {
+    "empty": "Enter a key.",
+    "tooLong": "Use at most {{max}} characters.",
+    "invalid": "Use letters, digits, hyphens and underscores, starting with a letter or digit.",
+    "taken": "This key is already in use."
+  },
+  "starter": {
+    "backlog": "Backlog",
+    "doing": "Doing",
+    "done": "Done"
+  },
+  "skill": {
+    "notFound": "Not found",
+    "failedToLoad": "Failed to load",
+    "overridden": "Overridden by app",
+    "edited": "Edited",
+    "loadError": "Agents can't load this skill: {{error}}",
+    "missing": "This factory has no {{skill}} skill, so cards entering {{phase}} fail to start.",
+    "edit": "Edit",
+    "view": "View",
+    "editOf": "Edit {{name}}",
+    "viewOf": "View {{name}}"
+  },
+  "phase": {
+    "remove": "Remove {{name}}",
+    "allowedMoves": "Allowed moves",
+    "howItRuns": "How {{name}} runs",
+    "starts": "Starts",
+    "autoStart": "Start on its own",
+    "autoStartOf": "{{name}}: start on its own",
+    "autoStartWhen": "{{name}}: start only when",
+    "autoStartWhenHint": "Leave empty to start every card on its own.",
+    "agentRuns": "Agent runs",
+    "instructions": "Instructions",
+    "instructionsHint": "Added to the agent's prompt when the phase starts.",
+    "tooLong": "Too long to save.",
+    "instructionsOf": "{{name}} instructions",
+    "goal": "Goal",
+    "goalHint": "The agent keeps working until a judge finds this objective met. Leave empty for a single run.",
+    "goalOf": "{{name}} goal",
+    "goalRuns": "Goal runs",
+    "goalRunsHint": "Runs before the goal pauses for a person, from 1 to {{max}}. Leave empty for Factory's default.",
+    "goalRunsInvalid": "Use a whole number from 1 to {{max}}.",
+    "goalRunsOf": "{{name}} goal runs",
+    "session": "Session",
+    "sessionHint": "Phases with the same session share one agent session per card.",
+    "sessionOf": "{{name}} session",
+    "skill": "Skill",
+    "none": "None",
+    "skillOf": "{{name}} skill",
+    "change": "Change",
+    "tools": "Factory tools",
+    "toolsHint": "Given to the session that works the card in this phase.",
+    "toolOf": "{{name}}: {{tool}}",
+    "ends": "Ends",
+    "exitTool": "Exit tool",
+    "exitToolHint": "Ends the phase when it succeeds. Leave empty for none.",
+    "exitToolOf": "{{name}} exit tool",
+    "autoApprove": "Approve on its own",
+    "autoApproveOf": "{{name}}: approve {{tool}} on its own",
+    "autoApproveWhen": "{{name}}: approve only when",
+    "autoApproveWhenHint": "Leave empty to approve for every card."
+  },
+  "moves": {
+    "from": "Allowed moves from {{name}}",
+    "thisPhase": "(this phase)",
+    "locked": "{{name}} (locked)",
+    "codeMakesIt": "Factory's code makes this move"
+  },
+  "skills": {
+    "showFormatted": "Show formatted",
+    "showRaw": "Show raw",
+    "loading": "Loading skills…",
+    "loadFailed": "Failed to load skills",
+    "boardsFailed": "Installed boards could not be loaded, so some of these skills may run in a board phase.",
+    "allOnBoards": "Every skill runs in a board phase.",
+    "description": "Agents load these when they need them. Skills a phase runs are on that phase's page."
+  },
+  "nav": {
+    "label": "Board configuration",
+    "general": "General",
+    "loadingPhases": "Loading phases",
+    "phasesError": "Unable to load phases.",
+    "board": "Board",
+    "boardOf": "Board: {{name}}",
+    "openBoard": "Open board",
+    "newBoard": "New board",
+    "moved": "{{name}} moved to position {{position}} of {{count}}.",
+    "moveHint": "Alt+Up or Alt+Down moves this phase."
+  },
+  "page": {
+    "breadcrumb": "Breadcrumb",
+    "configure": "Configure",
+    "loadingBoard": "Loading board",
+    "notInstalled": "Board unavailable: this board is not installed.",
+    "loadError": "Unable to load this board."
+  },
+  "newBoard": {
+    "copyOf": "Copy of {{name}}",
+    "starter": "Backlog, Doing, Done",
+    "adminsOnly": "Only organization admins can create boards.",
+    "key": "Board key",
+    "keyHint": "Names the board in links and the API. Cannot be changed later.",
+    "startFrom": "Start from",
+    "startFromHint": "The phases the board starts with. Change them once it's created.",
+    "notCopied": "The board was not copied",
+    "notCreated": "The board was not created",
+    "creating": "Creating…",
+    "create": "Create board"
+  }
+}
