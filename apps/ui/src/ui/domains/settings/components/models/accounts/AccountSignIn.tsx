@@ -1,17 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ExternalLink, LogIn } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useAccountSignIn } from '../../../../../../hooks/useCredentialAccounts';
 import { accountErrorMessage } from './accountErrors';
 import type { HarnessAccounts } from './harnessAccounts';
 
-/**
- * Where a sign-in stands, in words; nothing before it started. A device
- * sign-in (Codex's) shows its page and one-time code while it waits.
- */
+/** Where a sign-in stands, in words; nothing before it started. */
 export function AccountSignInStatus({
   accounts,
   signIn,
@@ -29,34 +26,6 @@ export function AccountSignInStatus({
     );
   }
   if (signIn.status === 'pending') {
-    const prompt = signIn.signIn?.prompt;
-    if (prompt) {
-      return (
-        <div role="status" className="flex flex-col gap-1.5">
-          {prompt.code && (
-            <>
-              <Txt as="p" variant="caption" tone="muted">
-                {t('accounts.signIn.codePrompt')}
-              </Txt>
-              <Txt as="p" variant="subheading" font="mono" className="select-all tracking-widest" aria-label={prompt.code}>
-                {prompt.code}
-              </Txt>
-            </>
-          )}
-          <a
-            href={prompt.url}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="text-caption text-foreground inline-flex w-fit items-center gap-1 underline-offset-2 hover:underline"
-          >
-            <ExternalLink size={12} aria-hidden /> {t('accounts.signIn.openPage')}
-          </a>
-          <Txt as="p" variant="caption" tone="muted" className="flex items-center gap-2">
-            <Spinner size="sm" aria-hidden /> {t('accounts.signIn.waiting')}
-          </Txt>
-        </div>
-      );
-    }
     return (
       <Txt as="p" variant="caption" tone="muted" role="status" className="flex items-center gap-2">
         <Spinner size="sm" aria-hidden /> {t(`${texts}.signIn.pending`)}
@@ -81,10 +50,10 @@ export function AccountSignInStatus({
 }
 
 /**
- * Sign in for a harness's runs: the server runs the provider's sign-in
- * (`claude auth login`, whose page opens in the browser on its machine; or
- * Codex's device sign-in, whose page and code show here), and the login is
- * kept as the person's own account. Shown only where the server offers it.
+ * Sign in for a harness's runs: the server runs the provider's CLI sign-in
+ * (`claude auth login`, `codex login`), whose page opens in the browser on its
+ * machine, and the login is kept as the person's own account. Shown only where
+ * the server offers it (local development).
  */
 export function AccountSignInButton({ accounts, disabled }: { accounts: HarnessAccounts; disabled?: boolean }) {
   const { t } = useTranslation('settings');

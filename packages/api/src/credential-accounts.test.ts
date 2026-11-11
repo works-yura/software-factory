@@ -294,22 +294,19 @@ describe('Codex accounts', () => {
     expect(refused.body).toMatchObject({ error: 'sign_in_required', message: expect.stringContaining('signing in to ChatGPT') });
   });
 
-  it('shows a device sign-in’s page and code while it waits, and refuses where the server offers none', async () => {
-    const flow: ClaudeSignInFlowView = {
-      id: 'flow-1',
-      orgId: 'org1',
-      userId: 'alice',
-      status: 'pending',
-      prompt: { url: 'https://auth.openai.com/codex/device', code: 'ABCD-EFGHI' },
-    };
+  it('runs a Codex sign-in where the server offers one, and refuses where it offers none', async () => {
+    const flow: ClaudeSignInFlowView = { id: 'flow-1', orgId: 'org1', userId: 'alice', status: 'pending' };
     const signIn: ClaudeSignInFlows = { start: () => flow, get: id => (id === flow.id ? flow : undefined), cancel: () => true };
     const { send } = await setup(undefined, { 'openai-codex': signIn });
     const started = await send('alice', 'POST', `${CODEX}/sign-in`);
     expect(started.status).toBe(202);
-    expect(started.body.signIn).toEqual({ id: 'flow-1', status: 'pending', prompt: { url: 'https://auth.openai.com/codex/device', code: 'ABCD-EFGHI' } });
+    expect(started.body.signIn).toEqual({ id: 'flow-1', status: 'pending' });
     // The Claude sign-in stays Claude's: none is offered here.
     expect((await send('alice', 'POST', `${BASE}/sign-in`)).status).toBe(404);
     const { send: without } = await setup();
-    expect((await without('alice', 'POST', `${CODEX}/sign-in`)).body).toMatchObject({ error: 'sign_in_unavailable' });
+    expect((await without('alice', 'POST', `${CODEX}/sign-in`)).body).toMatchObject({
+      error: 'sign_in_unavailable',
+      message: 'Signing in to ChatGPT here works only where the Factory server runs on your own machine.',
+    });
   });
 });

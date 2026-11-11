@@ -4,19 +4,11 @@ import type { CredentialAccount, ModelCredentialsStorage, SignInCredentialKind, 
 
 export type AccountSignInStatus = 'pending' | 'done' | 'error';
 
-/** What the person does to finish a sign-in elsewhere: open the page and, for a device code, enter it there. */
-export interface AccountSignInPrompt {
-  url: string;
-  code?: string;
-}
-
 export interface AccountSignInFlow {
   id: string;
   orgId: string;
   userId: string;
   status: AccountSignInStatus;
-  /** Shown while pending, once the provider gave it (a device sign-in's page and code). */
-  prompt?: AccountSignInPrompt;
   error?: string;
   accountId?: string;
 }
@@ -28,12 +20,11 @@ export interface AccountSignInService {
   cancel(id: string): boolean;
 }
 
-/** One sign-in, run to its end: the pair it got and who signed in. */
-export type AccountSignInCapture = (options: {
-  signal: AbortSignal;
-  /** The page (and code) the person finishes the sign-in with, when the provider gives one. */
-  onPrompt: (prompt: AccountSignInPrompt) => void;
-}) => Promise<SignInOAuth>;
+/**
+ * One sign-in, run to its end: the pair it got and who signed in. The provider's CLI runs it on the
+ * server's machine and opens its page in the browser there.
+ */
+export type AccountSignInCapture = (options: { signal: AbortSignal }) => Promise<SignInOAuth>;
 
 /** How long a finished sign-in's outcome stays readable. */
 const FINISHED_FLOW_TTL_MS = 10 * 60_000;
@@ -61,10 +52,7 @@ export function createAccountSignInService(options: AccountSignInServiceOptions)
   const { credentials, provider, kind, name } = options;
   const now = options.now ?? (() => Date.now());
   const flows = new Map<string, HeldFlow>();
-  const view = ({ controller: _controller, finishedAt: _finishedAt, ...flow }: HeldFlow): AccountSignInFlow => ({
-    ...flow,
-    ...(flow.prompt ? { prompt: { ...flow.prompt } } : {}),
-  });
+  const view = ({ controller: _controller, finishedAt: _finishedAt, ...flow }: HeldFlow): AccountSignInFlow => ({ ...flow });
   const prune = () => {
     for (const [id, flow] of flows) {
       if (flow.finishedAt !== undefined && now() - flow.finishedAt > FINISHED_FLOW_TTL_MS) flows.delete(id);
@@ -103,16 +91,12 @@ export function createAccountSignInService(options: AccountSignInServiceOptions)
       }
       const flow: HeldFlow = { id: randomUUID(), orgId, userId, status: 'pending', controller: new AbortController() };
       flows.set(flow.id, flow);
-      const onPrompt = (prompt: AccountSignInPrompt) => {
-        if (flow.status === 'pending') flow.prompt = prompt;
-      };
       void options
-        .capture({ signal: flow.controller.signal, onPrompt })
+        .capture({ signal: flow.controller.signal })
         .then(oauth => file(orgId, userId, oauth))
         .then(account => {
           if (flow.status !== 'pending') return;
           Object.assign(flow, { status: 'done', accountId: account.id, finishedAt: now() });
-          delete flow.prompt;
         })
         .catch((error: unknown) => {
           if (flow.status !== 'pending') return;
@@ -121,7 +105,6 @@ export function createAccountSignInService(options: AccountSignInServiceOptions)
             error: options.isUserFacing(error) ? error.message : `${name} sign-in failed.`,
             finishedAt: now(),
           });
-          delete flow.prompt;
           if (!options.isUserFacing(error)) console.warn(`[factory] ${name} sign-in failed`, { orgId, error });
         });
       return view(flow);
@@ -136,7 +119,6 @@ export function createAccountSignInService(options: AccountSignInServiceOptions)
       if (!flow || flow.status !== 'pending') return false;
       flow.controller.abort();
       Object.assign(flow, { status: 'error', error: `${name} sign-in was cancelled.`, finishedAt: now() });
-      delete flow.prompt;
       return true;
     },
   };

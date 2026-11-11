@@ -69,13 +69,11 @@ export interface AccountSignInFlowView {
   orgId: string;
   userId: string;
   status: 'pending' | 'done' | 'error';
-  /** The page (and device code) the person finishes signing in with, once the provider gave it. */
-  prompt?: { url: string; code?: string };
   error?: string;
   accountId?: string;
 }
 
-/** Runs a provider's sign-in for a person (`claude auth login`, Codex's device sign-in). */
+/** Runs a provider's sign-in for a person (`claude auth login`, `codex login`), on the server's machine. */
 export interface AccountSignInFlows {
   start(owner: { orgId: string; userId: string }): AccountSignInFlowView;
   get(id: string): AccountSignInFlowView | undefined;
@@ -92,7 +90,7 @@ export interface CredentialAccountRoutesDeps extends RouteDependencies {
   modelCredentials?: ModelCredentialsStorage;
   /** Claude sign-in on this host; unset where the CLI's browser would open on a machine nobody sits at. */
   claudeSignIn?: AccountSignInFlows;
-  /** Sign-in per provider (`openai-codex`: Codex's device sign-in); `claudeSignIn` is `anthropic`'s. */
+  /** Sign-in per provider (`openai-codex`: `codex login`), unset as `claudeSignIn` is; `claudeSignIn` is `anthropic`'s. */
   accountSignIn?: Readonly<Record<string, AccountSignInFlows | undefined>>;
   now?: () => Date;
 }
@@ -191,10 +189,7 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
           response: c.json(
             {
               error: 'sign_in_unavailable',
-              message:
-                ctx.provider === CLAUDE_CODE_ACCOUNT_PROVIDER
-                  ? 'Signing in to Claude here works only where the Factory server runs on your own machine.'
-                  : `Signing in to ${name} is not available on this server.`,
+              message: `Signing in to ${name} here works only where the Factory server runs on your own machine.`,
             },
             404,
           ),
@@ -211,7 +206,6 @@ export class CredentialAccountRoutes extends Route<CredentialAccountRoutesDeps> 
       return {
         id: flow.id,
         status: flow.status,
-        ...(flow.prompt ? { prompt: flow.prompt } : {}),
         ...(flow.error ? { error: flow.error } : {}),
         ...(account ? { account: view(account, ctx) } : {}),
       };

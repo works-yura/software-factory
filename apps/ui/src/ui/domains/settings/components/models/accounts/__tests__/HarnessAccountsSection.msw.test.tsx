@@ -329,7 +329,7 @@ describe('HarnessAccountsSection for Codex', () => {
   const CODEX_URL = `${TEST_BASE_URL}/web/config/providers/openai-codex/accounts`;
   const signedIn = account({ id: 'codex-1', label: 'alice@example.com', kind: 'codex_login' });
 
-  it('lists ChatGPT sign-ins, shows the device code and page while signing in, then the new sign-in', async () => {
+  it('lists ChatGPT sign-ins, says to finish in the page that opened while signing in, then the new sign-in', async () => {
     let listed = 0;
     let polls = 0;
     server.use(
@@ -339,9 +339,7 @@ describe('HarnessAccountsSection for Codex', () => {
       http.get(`${CODEX_URL}/sign-in/:id`, () => {
         polls += 1;
         return polls < 3
-          ? HttpResponse.json({
-              signIn: { id: 'flow-1', status: 'pending', prompt: { url: 'https://auth.openai.com/codex/device', code: 'ABCD-EFGHI' } },
-            })
+          ? HttpResponse.json({ signIn: { id: 'flow-1', status: 'pending' } })
           : HttpResponse.json({ signIn: { id: 'flow-1', status: 'done', account: signedIn } });
       }),
     );
@@ -350,8 +348,10 @@ describe('HarnessAccountsSection for Codex', () => {
 
     expect(await screen.findByText('Codex accounts')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'Sign in with ChatGPT' }));
-    expect(await screen.findByText('ABCD-EFGHI', {}, { timeout: 5000 })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Open sign-in page/ })).toHaveAttribute('href', 'https://auth.openai.com/codex/device');
+    expect(
+      await screen.findByText(/Finish signing in on the ChatGPT page that opened in your browser/, {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
 
     expect(await screen.findByText('Signed in as alice@example.com.', {}, { timeout: 5000 })).toBeInTheDocument();
     expect(await screen.findByRole('listitem', { name: 'alice@example.com' })).toBeInTheDocument();

@@ -523,6 +523,12 @@ export interface MastraFactoryCodexConfig
   > {
   /** Where session records live (and, beside them, each session's own `CODEX_HOME`); required unless `store` is given. */
   storeDir?: string;
+  /**
+   * Local development: the server and the person's browser share a machine, so ChatGPT sign-in
+   * (`codex login`, which opens the CLI's browser page here) is offered. Runs still use only the
+   * stored accounts.
+   */
+  localDevelopment?: boolean;
   /** Replaces the default credentials (`createCodexCredentials`: the members' ChatGPT sign-ins). */
   credentials?: CodexCredentials;
   /** Replaces the default checkout (`createClaudeCheckoutResolver`). */
@@ -2965,19 +2971,17 @@ export class MastraFactory {
                       : false,
                 }
               : {}),
-            // Signing in opens the CLI's browser page on this machine: only where it is the person's own.
+            // Signing in (`claude auth login`, `codex login`) opens the CLI's browser page on this
+            // machine: only where it is the person's own.
             ...(claudeCode !== undefined && claudeCodeConfig?.localDevelopment === true && modelCredentialsStorage
               ? { claudeSignIn: createClaudeSignInService({ credentials: modelCredentialsStorage }) }
               : {}),
-            // A ChatGPT device sign-in shows its page and code in the browser: it works wherever the CLI runs.
-            ...(codex !== undefined && codexInstalled && modelCredentialsStorage
+            ...(codex !== undefined && codexConfig?.localDevelopment === true && codexInstalled && modelCredentialsStorage
               ? {
                   codexSignIn: createCodexSignInService({
                     credentials: modelCredentialsStorage,
-                    ...(codexConfig?.command ? { command: codexConfig.command } : {}),
-                    ...(codexConfig?.launchArgs ? { launchArgs: codexConfig.launchArgs } : {}),
-                    ...(codexConfig?.spawn ? { spawn: codexConfig.spawn } : {}),
-                    ...(codexConfig?.env ? { env: codexConfig.env } : {}),
+                    ...(codexConfig.command ? { command: codexConfig.command } : {}),
+                    ...(codexConfig.env ? { env: codexConfig.env } : {}),
                   }),
                 }
               : {}),

@@ -24,7 +24,6 @@
  * command line only while the default item is put back.
  */
 
-import { spawn as nodeSpawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
@@ -33,6 +32,8 @@ import { join } from 'node:path';
 import { buildClaudeEnv } from '@factory/harness-claude-code';
 import type { ClaudeLoginOAuth, ModelCredentialsStorage } from '@factory/store';
 
+import { createSignInCommandRunner } from '../accounts/sign-in-command.ts';
+import type { SignInCommandResult, SignInCommandRunner } from '../accounts/sign-in-command.ts';
 import { createAccountSignInService } from '../accounts/sign-in.ts';
 import type { AccountSignInFlow, AccountSignInService, AccountSignInStatus } from '../accounts/sign-in.ts';
 
@@ -48,18 +49,10 @@ const KEYCHAIN_TIMEOUT_MS = 10_000;
 /** `security` exits with this when the item does not exist. */
 const KEYCHAIN_NOT_FOUND_EXIT = 44;
 
-export interface ClaudeSignInCommandResult {
-  code: number | null;
-  stdout: string;
-  stderr: string;
-}
+export type ClaudeSignInCommandResult = SignInCommandResult;
 
 /** Runs one command to its end. Rejects only when it cannot start or runs past its timeout. */
-export type ClaudeSignInRunner = (
-  command: string,
-  args: string[],
-  options: { env: Record<string, string>; timeoutMs: number; signal?: AbortSignal },
-) => Promise<ClaudeSignInCommandResult>;
+export type ClaudeSignInRunner = SignInCommandRunner;
 
 export class ClaudeSignInError extends Error {
   constructor(message: string) {
@@ -188,34 +181,10 @@ async function signedInAccount(dir: string): Promise<Pick<ClaudeLoginOAuth, 'ema
 }
 
 /** The default {@link ClaudeSignInRunner}: spawns the command with stdio piped. */
-export const runClaudeSignInCommand: ClaudeSignInRunner = (command, args, { env, timeoutMs, signal }) =>
-  new Promise((resolve, reject) => {
-    // stdin stays open: `claude auth login` may wait for a code pasted there.
-    const child = nodeSpawn(command, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    let settled = false;
-    const finish = (settle: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', abort);
-      settle();
-    };
-    const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-      finish(() => reject(new ClaudeSignInError(`${command} ${args[0] ?? ''} timed out.`)));
-    }, timeoutMs);
-    const abort = () => {
-      child.kill('SIGTERM');
-      finish(() => reject(new ClaudeSignInError('Claude sign-in was cancelled.')));
-    };
-    signal?.addEventListener('abort', abort, { once: true });
-    child.stdout?.on('data', chunk => (stdout += String(chunk)));
-    child.stderr?.on('data', chunk => (stderr += String(chunk)));
-    child.on('error', error => finish(() => reject(new ClaudeSignInError(`${command} could not start: ${error.message}`))));
-    child.on('close', code => finish(() => resolve({ code, stdout, stderr })));
-  });
+export const runClaudeSignInCommand: ClaudeSignInRunner = createSignInCommandRunner({
+  name: 'Claude',
+  error: message => new ClaudeSignInError(message),
+});
 
 export type ClaudeSignInStatus = AccountSignInStatus;
 export type ClaudeSignInFlow = AccountSignInFlow;

@@ -100,12 +100,10 @@ export interface CredentialAccountInfo {
   createdAt: string;
 }
 
-/** A sign-in a person started on this server (`claude auth login`, Codex's device sign-in). */
+/** A sign-in a person started on this server (`claude auth login`, `codex login`). */
 export interface AccountSignInInfo {
   id: string;
   status: 'pending' | 'done' | 'error';
-  /** Where the person finishes signing in, and the one-time code they enter there (a device sign-in). */
-  prompt?: { url: string; code?: string };
   error?: string;
   /** The account the sign-in was filed as, once done. */
   account?: CredentialAccountInfo;

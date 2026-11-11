@@ -302,7 +302,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server).
    * `claudeSignIn`: a person can sign in to Claude from the settings, the CLI's browser page opening on
    * this machine (see `CredentialAccountRoutes`).
-   * `codexSignIn`: a person can sign in to ChatGPT for Codex from the settings (a device sign-in).
+   * `codexSignIn`: a person can sign in to ChatGPT for Codex from the settings, the CLI's browser page
+   * opening on this machine, as for `claudeSignIn`.
    */
   features?: {
     knowledge: boolean;

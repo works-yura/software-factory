@@ -58,8 +58,7 @@ export const ACCOUNT_SIGN_IN_POLL_MS = 1_500;
 
 /**
  * A sign-in: `start` asks the server to run the provider's sign-in (`claude
- * auth login`, whose page opens on the server's machine; Codex's device
- * sign-in, whose page and code the flow carries as `prompt`); the flow is then
+ * auth login`, `codex login`, whose page opens on the server's machine); the flow is then
  * polled until it is done (the accounts list refreshes) or failed. `cancel`
  * stops it.
  */

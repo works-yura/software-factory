@@ -39,30 +39,21 @@ export interface GetAccountResponse {
 }
 
 /**
- * `account/login/start`: a device sign-in (a page and a one-time code the person enters there),
- * or tokens the host holds and refreshes (`chatgptAuthTokens`: Codex keeps them in memory only and
- * asks the host again with `account/chatgptAuthTokens/refresh` when the backend refuses them).
+ * `account/login/start`: tokens the host holds and refreshes (`chatgptAuthTokens`: Codex keeps them
+ * in memory only and asks the host again with `account/chatgptAuthTokens/refresh` when the backend
+ * refuses them). A person's own sign-in is `codex login`, run by the server, not this.
  */
-export type LoginAccountParams =
-  | { readonly type: 'chatgptDeviceCode' }
-  | {
-      readonly type: 'chatgptAuthTokens';
-      readonly accessToken: string;
-      readonly chatgptAccountId: string;
-      readonly chatgptPlanType?: string | null;
-    };
+export type LoginAccountParams = {
+  readonly type: 'chatgptAuthTokens';
+  readonly accessToken: string;
+  readonly chatgptAccountId: string;
+  readonly chatgptPlanType?: string | null;
+};
 
 export type LoginAccountResponse =
-  | { readonly type: 'chatgptDeviceCode'; readonly loginId: string; readonly verificationUrl: string; readonly userCode: string }
   | { readonly type: 'chatgptAuthTokens' }
   | { readonly type: 'chatgpt'; readonly loginId: string; readonly authUrl: string }
   | { readonly type: 'apiKey' };
-
-export interface AccountLoginCompletedNotification {
-  readonly loginId: string | null;
-  readonly success: boolean;
-  readonly error: string | null;
-}
 
 export interface ChatgptAuthTokensRefreshParams {
   readonly reason: 'unauthorized' | (string & {});
@@ -454,7 +445,6 @@ export interface ClientRequests {
   initialize: { params: InitializeParams; result: InitializeResponse };
   'account/read': { params: { readonly refreshToken?: boolean }; result: GetAccountResponse };
   'account/login/start': { params: LoginAccountParams; result: LoginAccountResponse };
-  'account/login/cancel': { params: { readonly loginId: string }; result: Record<string, unknown> };
   'account/rateLimits/read': { params: null; result: { rateLimits: RateLimitSnapshot; rateLimitsByLimitId?: Record<string, RateLimitSnapshot> | null } };
   'model/list': { params: ModelListParams; result: ModelListResponse };
   'thread/start': { params: ThreadStartParams; result: ThreadStartResponse };
@@ -476,7 +466,6 @@ export interface ServerNotifications {
   'turn/plan/updated': TurnPlanUpdatedNotification;
   'thread/tokenUsage/updated': ThreadTokenUsageUpdatedNotification;
   'account/rateLimits/updated': AccountRateLimitsUpdatedNotification;
-  'account/login/completed': AccountLoginCompletedNotification;
   error: ErrorNotification;
 }
 

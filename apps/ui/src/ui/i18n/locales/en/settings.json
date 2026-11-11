@@ -678,10 +678,7 @@
       "failed": "Something went wrong. Try again."
     },
     "signIn": {
-      "done": "Signed in as {{label}}.",
-      "codePrompt": "Open the sign-in page, sign in, and enter this one-time code:",
-      "openPage": "Open sign-in page",
-      "waiting": "Waiting for you to finish signing in…"
+      "done": "Signed in as {{label}}."
     },
     "harness": {
       "claudeCode": {
@@ -719,7 +716,7 @@
         },
         "signIn": {
           "button": "Sign in with ChatGPT",
-          "pending": "Starting the ChatGPT sign-in…",
+          "pending": "Finish signing in on the ChatGPT page that opened in your browser…",
           "failed": "ChatGPT sign-in failed."
         },
         "dialog": {

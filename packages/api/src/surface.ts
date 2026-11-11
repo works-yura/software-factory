@@ -168,7 +168,7 @@ export interface FactoryApiRoutesDeps {
   deviceEnabled?: boolean;
   /** Claude sign-in on this host (local development): `claude auth login`, kept as the person's account. */
   claudeSignIn?: AccountSignInFlows;
-  /** Codex sign-in (a ChatGPT device sign-in run by the server), kept as the person's account. */
+  /** Codex sign-in on this host (local development): `codex login`, kept as the person's account. */
   codexSignIn?: AccountSignInFlows;
   /** Personal sessions of Claude Code Factories start in the Claude Code harness (see the session routes). */
   claudeCodeUserSessions?: ClaudeCodeUserSessions;
