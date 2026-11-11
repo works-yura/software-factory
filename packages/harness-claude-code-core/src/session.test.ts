@@ -160,6 +160,43 @@ describe('ClaudeCodeSession', () => {
     expect(modelFor).toHaveBeenCalledTimes(2);
   });
 
+  it('runs each turn on turnSelectionFor: model, effort, settings, the Ultrathink prefix and the switch marker', async () => {
+    const from = { instanceId: 'claude-code', model: 'opus', options: [{ id: 'effort', value: 'high' }] };
+    const to = { instanceId: 'claude-code', model: 'sonnet', options: [{ id: 'effort', value: 'ultrathink' }] };
+    const selections = [
+      { model: 'opus', effort: 'high', settings: { fastMode: true } },
+      { model: 'sonnet', effort: 'medium', promptEffort: 'ultrathink', modelSwitch: { from, to } },
+      { model: 'sonnet', effort: 'medium', promptEffort: 'ultrathink' },
+    ];
+    const turnSelectionFor = vi.fn(() => selections.shift());
+    const { fake, session, signal, transcript } = await setup(
+      [{ lines: fixture('turn-complete.jsonl') }, { lines: fixture('turn-complete.jsonl') }, { lines: fixture('turn-complete.jsonl') }],
+      { model: 'haiku', effort: 'low', modelFor: () => 'haiku', turnSelectionFor },
+    );
+    for (const [id, text] of [
+      ['one', 'first'],
+      ['two', 'second'],
+      ['three', '/compact keep errors'],
+    ] as const) {
+      const end = nextEnd(session);
+      await signal(id, text);
+      await end;
+    }
+
+    expect(flagValue(fake.calls[0]!.args, '--model')).toBe('opus');
+    expect(flagValue(fake.calls[0]!.args, '--effort')).toBe('high');
+    expect(JSON.parse(flagValue(fake.calls[0]!.args, '--settings')!)).toMatchObject({ fastMode: true });
+    expect(fake.calls[0]!.stdin).toBe('first');
+    expect(flagValue(fake.calls[1]!.args, '--model')).toBe('sonnet');
+    expect(flagValue(fake.calls[1]!.args, '--effort')).toBe('medium');
+    expect(fake.calls[1]!.stdin).toBe('Ultrathink:\nsecond');
+    // A slash command is never prefixed: the prefix would stop Claude Code from running it.
+    expect(fake.calls[2]!.stdin).toBe('/compact keep errors');
+    const inputs = transcript.filter(entry => entry.kind === 'input');
+    expect(inputs.map(entry => 'modelSwitch' in entry && entry.modelSwitch)).toEqual([false, { from, to }, false]);
+    expect(turnSelectionFor).toHaveBeenCalledTimes(3);
+  });
+
   it('passes no --model when neither modelFor nor model name one', async () => {
     const { fake, session, signal } = await setup([{ lines: fixture('turn-complete.jsonl') }], {
       modelFor: () => undefined,

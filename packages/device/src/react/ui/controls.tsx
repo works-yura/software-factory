@@ -1,5 +1,5 @@
-// Minimal stand-ins for t3code's spinner, switch, input, toggle group, select,
-// collapsible and discovery list: plain elements, the original class names.
+// Minimal spinner, switch, input, toggle group, select, collapsible and
+// discovery list: plain elements with the theme's class names.
 import {
   createContext,
   use,
@@ -160,7 +160,7 @@ export function Toggle(props: { readonly value: string; readonly children: React
 }
 
 /**
- * A native <select> styled like t3code's select trigger. A null value shows the
+ * A native <select> styled as a select trigger. A null value shows the
  * placeholder; picking an option reports it and the parent decides the value.
  */
 export function Select<V extends string>(props: {

@@ -1,4 +1,5 @@
 import { CLAUDE_CODE_HARNESS } from '@factory/contracts/harnesses';
+import { claudeCodeTestInstance, mastraTestInstance } from '../../modelPicker/__tests__/catalogInstances';
 import type { HarnessDescriptor } from '@factory/contracts/harnesses';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -43,6 +44,7 @@ const models: AvailableModelOption[] = [
   },
 ];
 
+
 const baseSession: ChatSessionContextApi = {
   sessionId: 'session-1',
   resourceId: 'user-1',
@@ -72,6 +74,9 @@ function renderPicker({
   sessionPolicy,
   withChangeModelAction = false,
   harness,
+  claudeCodeCatalog = false,
+  claudeCode,
+  modelSelection,
 }: {
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
@@ -94,13 +99,27 @@ function renderPicker({
   withChangeModelAction?: boolean;
   /** The harness the chat context reports; absent leaves it unknown, as older contexts do. */
   harness?: HarnessDescriptor;
+  /** The server runs Claude Code: the catalog lists its models too. */
+  claudeCodeCatalog?: boolean;
+  /** The chat runs on Claude Code (the Factory's Claude model). */
+  claudeCode?: ChatSessionContextApi['claudeCode'];
+  /** A Claude Code session's selection, as its state reports it. */
+  modelSelection?: unknown;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
-      if (!modelScope) return HttpResponse.json({ models, defaultModelId });
+      if (!modelScope) {
+        // The Factory's Claude Code default is the Claude model the chat context names.
+        const claudeDefault = claudeCode?.model ? { instanceId: 'claude-code', model: claudeCode.model } : null;
+        const instances = [
+          mastraTestInstance(models as never, defaultModelId ?? null),
+          ...(claudeCodeCatalog ? [claudeCodeTestInstance(claudeDefault)] : []),
+        ];
+        return HttpResponse.json({ models, defaultModelId, instances });
+      }
       const params = new URL(request.url).searchParams;
       if (params.has('resourceId')) {
         if (catalogFails) {
@@ -173,7 +192,7 @@ function renderPicker({
   }
 
   const picker = (
-    <ChatSessionContext.Provider value={{ ...baseSession, kind, harness }}>
+    <ChatSessionContext.Provider value={{ ...baseSession, kind, harness, claudeCode }}>
       <ChatConnectionContext.Provider
         value={{
           status: 'ready',
@@ -183,7 +202,8 @@ function renderPicker({
             resourceId: 'user-1',
             modeId: 'build',
             modelId,
-          },
+            ...(modelSelection ? { modelSelection } : {}),
+          } as never,
         }}
       >
         <ChatModelsProvider>
@@ -212,6 +232,7 @@ function renderPicker({
 
 afterEach(() => {
   delete window.__MASTRACODE_CONFIG__;
+  localStorage.clear();
   server.events.removeAllListeners('response:mocked');
 });
 
@@ -289,23 +310,24 @@ describe('ModelPicker', () => {
     expect(screen.queryByRole('button', { name: /^Session model/ })).not.toBeInTheDocument();
   });
 
-  it('shows only provider-grouped models and marks the default', async () => {
+  it("lists each provider's models under the Mastra instance and marks the default", async () => {
     const user = userEvent.setup();
     renderPicker();
 
-    await user.click(await screen.findByLabelText('Session model'));
+    await user.click(await screen.findByRole('button', { name: /^Session model/ }));
 
-    expect(screen.getByText('anthropic')).toBeInTheDocument();
-    expect(screen.getByText('openai')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mastra', pressed: true })).toBeInTheDocument();
     const defaultOption = screen.getByRole('option', { name: /claude-sonnet-4-6/i });
+    expect(within(defaultOption).getByText('Anthropic')).toBeInTheDocument();
     expect(within(defaultOption).getByText('Default')).toBeInTheDocument();
+    expect(within(screen.getByRole('option', { name: /gpt-5/i })).getByText('OpenAI')).toBeInTheDocument();
   });
 
   it('offers no reset to a personal default', async () => {
     const user = userEvent.setup();
     renderPicker();
 
-    await user.click(await screen.findByLabelText('Session model'));
+    await user.click(await screen.findByRole('button', { name: /^Session model/ }));
 
     expect(screen.getByRole('option', { name: /gpt-5/i })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Reset to your default' })).not.toBeInTheDocument();
@@ -318,8 +340,7 @@ describe('ModelPicker', () => {
       thinkingLevel: 'max',
     });
 
-    await screen.findByRole('button', { name: 'Thinking: Max · this session' });
-    await user.click(screen.getByLabelText('Session model'));
+    await user.click(await screen.findByRole('button', { name: 'Session model, Max' }));
     await user.click(screen.getByRole('option', { name: /gpt-5/i }));
     await waitForMutationsIdle(client);
 
@@ -330,91 +351,110 @@ describe('ModelPicker', () => {
   it('shows the level the model runs when the saved choice is above what it supports', async () => {
     renderPicker({ modelId: 'openai/gpt-5', thinkingLevel: 'max' });
 
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Session model, High' })).toBeEnabled();
   });
 
   it('given no session level, when the session picks one, then it leaves the Factory default and saves it', async () => {
     const user = userEvent.setup();
-    const { client, stateUpdates } = renderPicker({ inFactory: true });
+    // The session runs the Factory's default model, so only its level can be its own.
+    const { client, stateUpdates } = renderPicker({ inFactory: true, defaultModelId: 'openai/gpt-5' });
 
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Factory default' }));
+    await user.click(await screen.findByRole('button', { name: 'Session model, Medium' }));
     expect(screen.getByText('Follows the Factory default.')).toBeInTheDocument();
-    const ramp = screen.getByRole('slider', { name: 'Thinking' });
-    expect(screen.queryByText('Max')).not.toBeInTheDocument();
-    fireEvent.change(ramp, { target: { value: '3' } });
-    fireEvent.keyUp(ramp);
+    const levels = screen.getByRole('radiogroup', { name: 'Thinking' });
+    expect(within(levels).queryByRole('radio', { name: 'Max' })).not.toBeInTheDocument();
+    expect(within(levels).getByRole('radio', { name: 'Medium' })).toHaveAttribute('aria-checked', 'true');
+    await user.click(within(levels).getByRole('radio', { name: 'High' }));
     await waitForMutationsIdle(client);
 
     expect(stateUpdates).toEqual([{ thinkingLevel: 'high' }]);
-    expect(screen.getByRole('button', { name: 'Thinking: High · this session' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Session model, High' })).toBeInTheDocument();
     expect(screen.getByText('Set for this session.')).toBeInTheDocument();
   });
 
   it('given a session level, when Use default is chosen, then the session follows the Factory default', async () => {
     const user = userEvent.setup();
-    const { client, stateUpdates } = renderPicker({ thinkingLevel: 'high', inFactory: true });
+    const { client, stateUpdates, modelSwitches } = renderPicker({
+      thinkingLevel: 'high',
+      inFactory: true,
+      defaultModelId: 'openai/gpt-5',
+    });
 
-    await user.click(await screen.findByRole('button', { name: 'Thinking: High · this session' }));
+    await user.click(await screen.findByRole('button', { name: 'Session model, High' }));
     await user.click(screen.getByRole('button', { name: 'Use default' }));
     await waitForMutationsIdle(client);
 
     expect(stateUpdates).toEqual([{ thinkingLevel: null }]);
-    expect(screen.getByRole('button', { name: 'Thinking: Medium · Factory default' })).toBeInTheDocument();
+    expect(modelSwitches).toEqual([]);
+    expect(await screen.findByRole('button', { name: 'Session model, Medium' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Use default' })).not.toBeInTheDocument();
   });
 
+  it('given a session model other than the Factory default, Use default moves it back onto that model', async () => {
+    const user = userEvent.setup();
+    const { client, stateUpdates, modelSwitches } = renderPicker({
+      inFactory: true,
+      modelId: 'openai/gpt-5',
+      defaultModelId: 'anthropic/claude-sonnet-4-6',
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Session model, Medium' }));
+    expect(screen.getByText('Set for this session.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Use default' }));
+    await waitForMutationsIdle(client);
+
+    expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-sonnet-4-6' }]);
+    expect(stateUpdates).toEqual([]);
+  });
+
   it('says the thinking level failed to load instead of loading forever', async () => {
+    const user = userEvent.setup();
     renderPicker({ thinkingDefaultsFail: true, inFactory: true });
 
+    await user.click(await screen.findByRole('button', { name: 'Session model' }, { timeout: 10_000 }));
     expect(
-      await screen.findByRole(
-        'button',
-        { name: "Thinking: unavailable. The thinking level couldn't be loaded." },
-        { timeout: 10_000 },
-      ),
-    ).toHaveAttribute('aria-disabled', 'true');
+      await screen.findByText("The thinking level couldn't be loaded.", undefined, { timeout: 10_000 }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the session's own level usable when the defaults fail to load", async () => {
     renderPicker({ thinkingLevel: 'high', thinkingDefaultsFail: true, inFactory: true });
 
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Session model, High' })).toBeEnabled();
   });
 
-  it('holds the thinking control disabled, not the Factory default, until the session level loads', async () => {
+  it('holds the effort, not the Factory default, until the session level loads', async () => {
     let loadSettings = () => {};
     const settingsLoaded = new Promise<void>(resolve => {
       loadSettings = resolve;
     });
+    const user = userEvent.setup();
     renderPicker({ thinkingLevel: 'high', settingsLoaded });
 
-    expect(
-      await screen.findByRole('button', { name: "Thinking: unavailable. The thinking level isn't loaded yet." }),
-    ).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.queryByRole('button', { name: 'Thinking: Medium · Factory default' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Session model' }));
+    expect(screen.getByText("The thinking level isn't loaded yet.")).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup', { name: 'Thinking' })).not.toBeInTheDocument();
 
     loadSettings();
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Session model, High' })).toBeEnabled();
   });
 
-  it("holds the thinking control until the model's levels load, then shows the level it runs", async () => {
+  it("holds the effort until the model's levels load, then shows the level it runs", async () => {
     let loadCatalog = () => {};
     const catalogLoaded = new Promise<void>(resolve => {
       loadCatalog = resolve;
     });
+    const user = userEvent.setup();
     renderPicker({ modelId: 'openai/gpt-5', thinkingLevel: 'max', catalogLoaded });
 
-    expect(
-      await screen.findByRole('button', {
-        name: "Thinking: unavailable. This model's thinking levels aren't loaded yet.",
-      }),
-    ).toHaveAttribute('aria-disabled', 'true');
+    await user.click(await screen.findByRole('button', { name: 'Session model' }));
+    expect(screen.getByText("This model's thinking levels aren't loaded yet.")).toBeInTheDocument();
 
     loadCatalog();
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Session model, High' })).toBeEnabled();
   });
 
-  it('locks the thinking level while a model switch is in flight', async () => {
+  it('locks the picker and its effort while a model switch is in flight', async () => {
     let finishSwitch = () => {};
     const modelSwitched = new Promise<void>(resolve => {
       finishSwitch = resolve;
@@ -422,19 +462,15 @@ describe('ModelPicker', () => {
     const user = userEvent.setup();
     const { client } = renderPicker({ modelId: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'high', modelSwitched });
 
-    await screen.findByRole('button', { name: 'Thinking: High · this session' });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Session model' })).toBeEnabled());
-    await user.click(screen.getByRole('button', { name: 'Session model' }));
+    await user.click(await screen.findByRole('button', { name: 'Session model, High' }));
     await user.click(screen.getByRole('option', { name: /gpt-5/i }));
 
-    expect(await screen.findByRole('button', { name: 'Thinking: unavailable. Switching model…' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
+    expect(await screen.findByText('Switching model…')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Session model/ })).toBeDisabled());
 
     finishSwitch();
     await waitForMutationsIdle(client);
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Session model, High' })).toBeEnabled());
   });
 
   it('locks the status-line picker while the error card switches the model', async () => {
@@ -457,13 +493,146 @@ describe('ModelPicker', () => {
     const sessionModel = await screen.findByRole('button', { name: 'Session model' });
     await waitFor(() => expect(sessionModel).toBeDisabled());
     expect(sessionModel).toHaveTextContent(/gpt-5/i);
-    expect(screen.getByRole('button', { name: 'Thinking: unavailable. Switching model…' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
 
     finishSwitch();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Session model' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Session model/ })).toBeEnabled());
+  });
+
+  it('keeps favorites in this browser and lists them in their own tab', async () => {
+    const user = userEvent.setup();
+    renderPicker();
+
+    await user.click(await screen.findByRole('button', { name: /^Session model/ }));
+    const option = screen.getByRole('option', { name: /gpt-5/i });
+    await user.click(within(option).getByRole('button', { name: 'Add to favorites' }));
+    expect(JSON.parse(localStorage.getItem('mastracode.modelPicker.favorites') ?? '[]')).toEqual([
+      { provider: 'mastra', model: 'openai/gpt-5' },
+    ]);
+
+    await user.click(screen.getByRole('button', { name: 'Favorites' }));
+    expect(screen.getByRole('option', { name: /gpt-5/i })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /claude-sonnet-4-6/i })).not.toBeInTheDocument();
+  });
+
+  it('ranks a search across every instance, without the rail', async () => {
+    const user = userEvent.setup();
+    renderPicker({ claudeCodeCatalog: true });
+
+    await user.click(await screen.findByRole('button', { name: /^Session model/ }));
+    await user.keyboard('sonnet');
+
+    expect(screen.queryByRole('toolbar', { name: 'Providers' })).not.toBeInTheDocument();
+    const names = screen.getAllByRole('option').map(option => option.textContent ?? '');
+    expect(names.some(name => /claude-sonnet-4-6/.test(name))).toBe(true);
+    expect(names.some(name => /Sonnet 5\.5/.test(name))).toBe(true);
+    expect(names.some(name => /gpt-5/.test(name))).toBe(false);
+  });
+
+  it("blocks a pick on another harness: the chat can't switch providers after it starts", async () => {
+    const user = userEvent.setup();
+    const { modelSwitches } = renderPicker({ claudeCodeCatalog: true });
+
+    await user.click(await screen.findByRole('button', { name: /^Session model/ }));
+    await user.click(screen.getByRole('button', { name: 'Claude Code' }));
+    await user.click(await screen.findByRole('option', { name: /Sonnet 5\.5/ }));
+
+    expect(await screen.findByText('Start a new chat to switch providers')).toBeInTheDocument();
+    expect(modelSwitches).toEqual([]);
+  });
+
+  it('moves between the rail, the list and the effort column with the arrow keys', async () => {
+    const user = userEvent.setup();
+    renderPicker({ modelId: 'openai/gpt-5', thinkingLevel: 'low' });
+
+    await user.click(await screen.findByRole('button', { name: /^Session model/ }));
+    const search = screen.getByPlaceholderText('Search models…');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{ArrowLeft}');
+    expect(screen.getByRole('button', { name: 'Mastra' })).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    expect(search).toHaveFocus();
+    // The first row (the default model) is highlighted: Right picks it, then lands on its levels.
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() =>
+      expect(within(screen.getByRole('radiogroup', { name: 'Thinking' })).getByRole('radio', { checked: true })).toHaveFocus(),
+    );
+    await user.keyboard('{ArrowLeft}');
+    expect(search).toHaveFocus();
+  });
+
+  it('opens with mod+shift+m and goes to the effort with mod+shift+e', async () => {
+    const user = userEvent.setup();
+    renderPicker({ thinkingLevel: 'high' });
+
+    await screen.findByRole('button', { name: 'Session model, High' });
+    await user.keyboard('{Control>}{Shift>}m{/Shift}{/Control}');
+    expect(await screen.findByPlaceholderText('Search models…')).toBeInTheDocument();
+    await user.keyboard('{Control>}{Shift>}e{/Shift}{/Control}');
+    await waitFor(() =>
+      expect(within(screen.getByRole('radiogroup', { name: 'Thinking' })).getByRole('radio', { name: 'High' })).toHaveFocus(),
+    );
+    await user.keyboard('{Control>}{Shift>}m{/Shift}{/Control}');
+    await waitFor(() => expect(screen.queryByPlaceholderText('Search models…')).not.toBeInTheDocument());
+  });
+
+  describe('in a Claude Code session', () => {
+    const claudeSession = {
+      kind: 'user' as const,
+      inFactory: true,
+      harness: CLAUDE_CODE_HARNESS,
+      claudeCode: { model: 'opus' as const },
+      claudeCodeCatalog: true,
+      modelSelection: { instanceId: 'claude-code', model: 'opus', options: [{ id: 'effort', value: 'medium' }] },
+    };
+
+    it("offers the Claude catalog's models and efforts, following the Factory's until it picks", async () => {
+      const user = userEvent.setup();
+      renderPicker(claudeSession);
+
+      const trigger = await screen.findByRole('button', { name: 'Session model, Medium' });
+      expect(trigger).toHaveTextContent('Opus 5.5');
+      await user.click(trigger);
+      expect(screen.getByRole('button', { name: 'Claude Code', pressed: true })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: /Sonnet 5\.5/ })).toBeInTheDocument();
+      const levels = screen.getByRole('radiogroup', { name: 'Reasoning' });
+      // Medium is this model's default, which its row names too.
+      expect(within(levels).getByRole('radio', { name: /^Medium/ })).toHaveAttribute('aria-checked', 'true');
+      // Ultrathink is a prompt keyword, not a level to pick.
+      expect(within(levels).queryByRole('radio', { name: 'Ultrathink' })).not.toBeInTheDocument();
+      expect(screen.getByRole('radiogroup', { name: 'Fast Mode' })).toBeInTheDocument();
+      expect(screen.getByText('Follows the Factory default.')).toBeInTheDocument();
+    });
+
+    it("sends an effort with the session's model, and a model pick with its remembered options", async () => {
+      const user = userEvent.setup();
+      const { client, modelSwitches } = renderPicker(claudeSession);
+
+      await user.click(await screen.findByRole('button', { name: 'Session model, Medium' }));
+      await user.click(within(screen.getByRole('radiogroup', { name: 'Reasoning' })).getByRole('radio', { name: 'High' }));
+      await waitForMutationsIdle(client);
+      expect(modelSwitches).toHaveLength(1);
+      expect(modelSwitches[0]).toMatchObject({ modelId: 'opus' });
+      expect((modelSwitches[0] as { options: unknown[] }).options).toContainEqual({ id: 'effort', value: 'high' });
+
+      await user.click(screen.getByRole('option', { name: /Sonnet 5\.5/ }));
+      await waitForMutationsIdle(client);
+      expect(modelSwitches[1]).toEqual({ modelId: 'claude-sonnet-5-5', options: [], instanceId: 'claude-code' });
+    });
+
+    it("goes back to the Factory's model and effort with Use default", async () => {
+      const user = userEvent.setup();
+      const { client, modelSwitches } = renderPicker({
+        ...claudeSession,
+        modelSelection: { instanceId: 'claude-code', model: 'claude-sonnet-5-5', options: [{ id: 'effort', value: 'high' }] },
+      });
+
+      await user.click(await screen.findByRole('button', { name: 'Session model, High' }));
+      expect(screen.getByText('Set for this session.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Use default' }));
+      await waitForMutationsIdle(client);
+      expect(modelSwitches).toEqual([{ modelId: null }]);
+    });
   });
 });

@@ -212,7 +212,8 @@ export function createPhoneViewer(options: {
       renderer.render(scene, camera);
       if (motion.needsFrame() || framing.needsFrame() || orientationTurn || foldTurn)
         scheduler.invalidate();
-    } catch {
+    } catch (cause) {
+      console.warn("Device 3D render failed", cause);
       options.onUnavailable();
     }
   });
@@ -331,6 +332,7 @@ export function createPhoneViewer(options: {
   };
   const contextLost = (event: Event) => {
     event.preventDefault();
+    console.warn("Device 3D WebGL context was lost");
     options.onUnavailable();
   };
   options.canvas.addEventListener("webglcontextlost", contextLost);

@@ -69,7 +69,7 @@ function setup(state = deviceState) {
   const fake = fakeDeviceApi(state);
   fake.api.list.mockResolvedValue(state);
   const openDevice = vi.fn();
-  // A controlled target that never changes, as t3code's mocked right panel store did.
+  // A controlled target that never changes.
   const devicePanel = (threadId: string) => (
     <DevicePanel
       key="device-panel"
@@ -167,7 +167,6 @@ describe("DevicePanel discovery warning", () => {
   });
 });
 
-// From t3code's state/device.browser.test.tsx.
 describe("DevicePanel first load", () => {
   it("reports a failed first device load and retries it", async () => {
     const { api, devicePanel } = setup();

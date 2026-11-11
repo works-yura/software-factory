@@ -1,3 +1,5 @@
+import { CLAUDE_CODE_INSTANCE_ID } from '@factory/harness-claude-code/models/aliases';
+import { MASTRA_INSTANCE_ID } from '@factory/credentials/mastra-models';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { translator } from '../../../i18n/t';
@@ -12,7 +14,9 @@ import {
   fetchFactoryProject,
   renameFactoryProject,
   unlinkRepository,
-  updateFactoryDefaultModel,
+  clearFactoryModelDefault,
+  createFactoryWithClaudeModel,
+  setFactoryModelDefault,
   updateFactoryHarness,
 } from '../services/github';
 import {
@@ -69,7 +73,7 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       const factory =
         existing ??
         (claude
-          ? await createFactoryProject(baseUrl, repo.name, undefined, 'claude-code', claude.claudeCodeModel)
+          ? await createFactoryWithClaudeModel(baseUrl, { name: repo.name, harness: 'claude-code', claudeCodeModel: claude.claudeCodeModel })
           : await createFactoryProject(baseUrl, repo.name));
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);
@@ -93,9 +97,12 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
         if (existing && existing.harness === 'claude-code') {
           await updateFactoryHarness(baseUrl, factory.id, { harness: 'mastra' });
         }
-        await updateFactoryDefaultModel(baseUrl, factory.id, choice.modelId);
+        await setFactoryModelDefault(baseUrl, factory.id, MASTRA_INSTANCE_ID, { model: choice.modelId });
       } else if (existing && claude) {
-        await updateFactoryHarness(baseUrl, factory.id, { harness: 'claude-code', ...claude });
+        await updateFactoryHarness(baseUrl, factory.id, { harness: 'claude-code' });
+        await (claude.claudeCodeModel
+          ? setFactoryModelDefault(baseUrl, factory.id, CLAUDE_CODE_INSTANCE_ID, { model: claude.claudeCodeModel })
+          : clearFactoryModelDefault(baseUrl, factory.id, CLAUDE_CODE_INSTANCE_ID));
       }
       return factory.id;
     },

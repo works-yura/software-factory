@@ -1004,7 +1004,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     await seed.projects.update({
       orgId: 'org1',
       id: PROJECT_ID,
-      input: { defaultModelId: 'anthropic/claude-fable-5' },
+      input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'anthropic/claude-fable-5' } } },
     });
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();

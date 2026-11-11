@@ -7,7 +7,6 @@ import type {
 import { defaultDisplayState } from '@mastra/core/agent-controller';
 import type { MemoryStorage } from '@mastra/core/storage';
 
-import type { ClaudeCodeSession } from '@factory/harness-claude-code';
 import { ASK_USER_QUESTION_TOOL, askUserPrompt } from '@factory/harness-claude-code';
 
 import {
@@ -17,6 +16,7 @@ import {
   type Projection,
   type UiTask,
 } from './projector.ts';
+import type { ChatTranscriptSession } from './session.ts';
 
 /** A memory thread row, as the store reads and writes it. */
 type StorageThreadType = Parameters<MemoryStorage['saveThread']>[0]['thread'];
@@ -88,7 +88,7 @@ export const THREAD_MODEL_KEY = 'currentModelId';
  * its threadId) and its live events fanned out to the open streams.
  */
 export class ClaudeSessionUiChannel {
-  readonly session: ClaudeCodeSession;
+  readonly session: ChatTranscriptSession;
   readonly #storage: ClaudeUiStorage;
   readonly #projector: ClaudeTranscriptProjector;
   readonly #listeners = new Set<ClaudeUiEventListener>();
@@ -110,11 +110,12 @@ export class ClaudeSessionUiChannel {
   /** Settles once the thread exists and a parked plan was picked back up. */
   readonly ready: Promise<void>;
 
-  constructor(session: ClaudeCodeSession, deps: AttachClaudeSessionDeps) {
+  constructor(session: ChatTranscriptSession, deps: AttachClaudeSessionDeps) {
     this.session = session;
     this.#storage = deps.storage;
     this.#projector = new ClaudeTranscriptProjector({
       resourceId: this.resourceId,
+      ...(session.modelProvider ? { modelProvider: session.modelProvider } : {}),
       ...(deps.now ? { now: deps.now } : {}),
     });
     this.#detach = [
@@ -443,6 +444,6 @@ export class ClaudeSessionUiChannel {
  * {@link ClaudeSessionUi.attach} does this and also registers the session
  * with the routes.
  */
-export function attachClaudeSessionToUi(session: ClaudeCodeSession, deps: AttachClaudeSessionDeps): ClaudeSessionUiChannel {
+export function attachClaudeSessionToUi(session: ChatTranscriptSession, deps: AttachClaudeSessionDeps): ClaudeSessionUiChannel {
   return new ClaudeSessionUiChannel(session, deps);
 }

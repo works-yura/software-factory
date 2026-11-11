@@ -27,9 +27,12 @@ import {
 } from '@factory/credentials';
 import { Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
+import type { HarnessModelContext, HarnessModelInstanceInfo } from '@factory/harness/models/facet';
+import type { HarnessModelRegistry } from '@factory/harness/models/registry';
+import { MASTRA_INSTANCE_ID, mastraModelInstance } from '@factory/credentials/mastra-models';
 import { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, buildProviderAccess, buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
-import type { ModelCatalog } from '@factory/credentials';
-import { CLAUDE_CODE_HARNESS, HARNESSES } from '@factory/contracts';
+import type { ModelCatalog, ModelCatalogEntry } from '@factory/credentials';
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES } from '@factory/contracts';
 
 import { readRunningPackages } from './running-packages.ts';
 import type { RunningPackage } from './running-packages.ts';
@@ -299,8 +302,17 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server).
    * `claudeSignIn`: a person can sign in to Claude from the settings, the CLI's browser page opening on
    * this machine (see `CredentialAccountRoutes`).
+   * `codexSignIn`: a person can sign in to ChatGPT for Codex from the settings (a device sign-in).
    */
-  features?: { knowledge: boolean; mcp?: boolean; claudeCode?: boolean; claudeSignIn?: boolean; device?: boolean };
+  features?: {
+    knowledge: boolean;
+    mcp?: boolean;
+    claudeCode?: boolean;
+    claudeSignIn?: boolean;
+    codex?: boolean;
+    codexSignIn?: boolean;
+    device?: boolean;
+  };
   /** Reads the Mastra packages this server runs; defaults to the build manifest. */
   readPackages?: () => Promise<RunningPackage[]>;
   authStorage?: AuthStorage;
@@ -326,6 +338,22 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * own credentials (see `DEPLOYMENT_MODEL_PROVIDERS`).
    */
   deploymentProviders?: ReadonlySet<string>;
+  /**
+   * The server's harness model registry: every harness's instance, with its catalog, lands in
+   * `/web/config/models` `instances` (Mastra's from the catalog this route resolves). Absent: Mastra's alone.
+   */
+  harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forInstance'> | undefined;
+}
+
+/** `GET /web/config/models`: Mastra's catalog (`models`, kept for the Settings pickers) and every harness instance. */
+export interface ModelCatalogResponseBody {
+  models: ModelCatalogEntry[];
+  /** The session's Factory default (session query). */
+  defaultModelId?: string | null;
+  /** The model a chat starts on while the Factory has no default (factory query). */
+  fallbackModelId?: string | null;
+  /** One per harness this server runs, Mastra's first-class like any other: what the model picker reads. */
+  instances: HarnessModelInstanceInfo[];
 }
 
 /**
@@ -335,7 +363,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
  *   - `GET    /web/config/providers`              — list providers + key source
  *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
  *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
- *   - `GET    /web/config/models`                  — list available models (credentialed providers)
+ *   - `GET    /web/config/models`                  — list available models (credentialed providers) with their
+ *                                                   option descriptors, and the Claude Code catalog
  *   - `GET    /web/config/custom-providers`        — list custom OpenAI-compatible providers
  *   - `POST   /web/config/custom-providers`        — create/update a custom provider
  *   - `DELETE /web/config/custom-providers/:id`    — remove a custom provider
@@ -350,6 +379,30 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const { controller, authStorage, auth, deploymentProviders } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
+    // Every harness's instance: Mastra's from the catalog this route resolved, the others from their facets.
+    const withInstances = async (
+      body: Omit<ModelCatalogResponseBody, 'instances'>,
+      ctx: HarnessModelContext,
+    ): Promise<ModelCatalogResponseBody> => {
+      const registry = options.harnessModels?.();
+      const mastraFacet = registry?.forInstance(MASTRA_INSTANCE_ID);
+      // Mastra's instance from the catalog this route resolved; its defaults as every facet reports them.
+      const mastra = mastraModelInstance(body.models, {
+        factoryDefault: mastraFacet?.factoryDefault ? await mastraFacet.factoryDefault(ctx) : await storedMastraDefault(ctx),
+        catalogDefaultModelId:
+          body.fallbackModelId ?? controller.getDefaultMode?.().defaultModelId ?? null,
+        appliesToRunningSessions: mastraFacet?.applyDefaultToRunningSessions !== undefined,
+      });
+      const instances = registry ? await registry.describe(ctx, [mastra]) : [mastra];
+      return { ...body, instances };
+    };
+    // A server without the Mastra facet registered (tests, a bare config server) reads the store itself.
+    const storedMastraDefault = async (ctx: HarnessModelContext) => {
+      if (!ctx.factoryProjectId || !options.factoryProjects) return null;
+      const project = await options.factoryProjects.getById({ id: ctx.factoryProjectId }).catch(() => null);
+      if (!project || (ctx.viewer.orgId && project.orgId !== ctx.viewer.orgId)) return null;
+      return project.harnessModelDefaults[MASTRA_INSTANCE_ID] ?? null;
+    };
 
     const resolveOMResponseContext = async (c: Context) => {
       const tenantCredentials = await listTenantCredentialsForRequest({
@@ -406,9 +459,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             mcp: options.features?.mcp ?? false,
             claudeCode: options.features?.claudeCode ?? false,
             claudeSignIn: (options.features?.claudeCode ?? false) && (options.features?.claudeSignIn ?? false),
+            codex: options.features?.codex ?? false,
+            codexSignIn: (options.features?.codex ?? false) && (options.features?.codexSignIn ?? false),
             device: options.features?.device ?? false,
             // What each harness this server runs can do; the UI asks these instead of checking ids.
-            harnesses: HARNESSES.filter(harness => harness.id !== CLAUDE_CODE_HARNESS.id || options.features?.claudeCode === true),
+            harnesses: HARNESSES.filter(
+              harness =>
+                (harness.id !== CLAUDE_CODE_HARNESS.id || options.features?.claudeCode === true) &&
+                (harness.id !== CODEX_HARNESS.id || options.features?.codex === true),
+            ),
           }),
       }),
 
@@ -646,6 +705,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
             let sessionPolicy: { defaultModelId: string | null } | undefined;
+            let sessionFactoryProjectId: string | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             const sessionId = c.req.query('sessionId');
@@ -690,6 +750,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                   userId: policy.tenant.userId,
                 });
                 sessionPolicy = { defaultModelId: policy.factoryDefaultModelId ?? null };
+                sessionFactoryProjectId = policy.factoryProjectId;
               }
             }
             const customProviders = options.customProviders;
@@ -706,7 +767,16 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               deploymentProviders,
               listCustomProviders,
             });
-            if (sessionPolicy || !tenant || !c.req.query('factoryId')) return c.json({ ...sessionPolicy, models });
+            const viewer = { userId: tenant?.userId ?? '', orgId: tenant ? tenantOrgId(tenant) : '' };
+            // A session answers for its own Factory, whose defaults its harness follows.
+            const factoryProjectId = sessionFactoryProjectId ?? (c.req.query('factoryId') || undefined);
+            const harnessContext: HarnessModelContext = {
+              viewer,
+              ...(sessionId ?? resourceId ? { sessionId: sessionId ?? resourceId } : {}),
+              ...(factoryProjectId ? { factoryProjectId } : {}),
+            };
+            if (sessionPolicy || !tenant || !factoryProjectId)
+              return c.json(await withInstances({ ...sessionPolicy, models }, harnessContext));
             // A Factory's own catalog, outside any session. Name the model a chat starts on when the
             // Factory has no default, the same pick session hydration makes; null when no key runs it.
             const modeModelId = controller.getDefaultMode?.().defaultModelId;
@@ -721,7 +791,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 return undefined;
               })) ?? modeModelId;
             const fallbackModelId = models.find(model => model.id === candidate)?.id ?? null;
-            return c.json({ fallbackModelId, models });
+            return c.json(await withInstances({ fallbackModelId, models }, harnessContext));
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

@@ -1,4 +1,4 @@
-// Minimal stand-in for t3code's Base UI button: same variant and size classes, plain <button>.
+// Minimal button: variant and size classes on a plain <button>.
 import type { ComponentProps } from "react";
 import { cn } from "./cn.ts";
 

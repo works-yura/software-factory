@@ -21,6 +21,23 @@ export function resolveDeviceModelId(platform: DevicePlatform, name: string): De
   if (/^iPhone 18 Pro Max$/i.test(name)) return "iphone-18-pro-max";
   if (/^iPhone 18 Pro$/i.test(name)) return "iphone-18-pro";
   if (/^iPad Pro 13-inch \(M5\)$/i.test(name)) return "ipad-pro-13-m5";
+  return closestDeviceModelId(name);
+}
+
+/**
+ * Factory addition: earlier devices with the same front design borrow the nearest bundled body.
+ * Their screens match the model's within 0.4% (aspect 2.168–2.175 vs 2.175), so the live screen
+ * fits the frame; only the back and camera differ. Dynamic Island iPhones only (14 Pro and later);
+ * notch and Home-button models keep the flat-shaded frame.
+ */
+function closestDeviceModelId(name: string): DeviceModelId | null {
+  const iphone = /^iPhone (1[4-7]|Air)(?: (Pro Max|Pro|Plus))?$/i.exec(name);
+  if (iphone) {
+    const [, generation, variant] = iphone;
+    if (generation === "14" && !/^Pro/i.test(variant ?? "")) return null;
+    return /^(Pro Max|Plus)$/i.test(variant ?? "") ? "iphone-18-pro-max" : "iphone-18-pro";
+  }
+  if (/^iPad Pro 13-inch \(M4\)$/i.test(name)) return "ipad-pro-13-m5";
   return null;
 }
 

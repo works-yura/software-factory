@@ -25,13 +25,16 @@
  */
 
 import { spawn as nodeSpawn } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 
 import { buildClaudeEnv } from '@factory/harness-claude-code';
-import type { ClaudeLoginOAuth, CredentialAccount, ModelCredentialsStorage } from '@factory/store';
+import type { ClaudeLoginOAuth, ModelCredentialsStorage } from '@factory/store';
+
+import { createAccountSignInService } from '../accounts/sign-in.ts';
+import type { AccountSignInFlow, AccountSignInService, AccountSignInStatus } from '../accounts/sign-in.ts';
 
 import { CLAUDE_CODE_ACCOUNT_PROVIDER } from './credentials.ts';
 
@@ -214,112 +217,33 @@ export const runClaudeSignInCommand: ClaudeSignInRunner = (command, args, { env,
     child.on('close', code => finish(() => resolve({ code, stdout, stderr })));
   });
 
-export type ClaudeSignInStatus = 'pending' | 'done' | 'error';
-
-export interface ClaudeSignInFlow {
-  id: string;
-  orgId: string;
-  userId: string;
-  status: ClaudeSignInStatus;
-  error?: string;
-  accountId?: string;
-}
-
+export type ClaudeSignInStatus = AccountSignInStatus;
+export type ClaudeSignInFlow = AccountSignInFlow;
 /** Sign-ins people started, by id; each runs one `claude auth login` and keeps its outcome for a while. */
-export interface ClaudeSignInService {
-  start(owner: { orgId: string; userId: string }): ClaudeSignInFlow;
-  get(id: string): ClaudeSignInFlow | undefined;
-  cancel(id: string): boolean;
-}
-
-/** How long a finished sign-in's outcome stays readable. */
-const FINISHED_FLOW_TTL_MS = 10 * 60_000;
+export type ClaudeSignInService = AccountSignInService;
 
 /**
- * Runs sign-ins and files each as the person's `claude_login` account: a new
- * sign-in to a Claude account they already added replaces its pair (and turns
- * it back on) instead of adding a second one.
+ * Runs sign-ins and files each as the person's `claude_login` account (see
+ * `createAccountSignInService`): a new sign-in to a Claude account they
+ * already added replaces its pair (and turns it back on) instead of adding a
+ * second one.
  */
 export function createClaudeSignInService({
   credentials,
   capture = captureClaudeSignIn,
-  now = () => Date.now(),
+  now,
 }: {
   credentials: ModelCredentialsStorage;
   capture?: (options: { signal: AbortSignal }) => Promise<ClaudeLoginOAuth>;
   now?: () => number;
 }): ClaudeSignInService {
-  const flows = new Map<string, ClaudeSignInFlow & { controller: AbortController; finishedAt?: number }>();
-  const view = ({ controller: _controller, finishedAt: _finishedAt, ...flow }: ClaudeSignInFlow & { controller: AbortController; finishedAt?: number }) => ({ ...flow });
-  const prune = () => {
-    for (const [id, flow] of flows) {
-      if (flow.finishedAt !== undefined && now() - flow.finishedAt > FINISHED_FLOW_TTL_MS) flows.delete(id);
-    }
-  };
-
-  const file = async (orgId: string, userId: string, oauth: ClaudeLoginOAuth): Promise<CredentialAccount> => {
-    const label = oauth.email ?? 'Claude';
-    const accounts = await credentials.listAccounts(orgId, CLAUDE_CODE_ACCOUNT_PROVIDER);
-    const own = accounts.filter(account => account.kind === 'claude_login' && account.ownerUserId === userId);
-    for (const account of own) {
-      const stored = await credentials.getAccountOAuth(orgId, account.id);
-      const same = oauth.accountUuid ? stored?.accountUuid === oauth.accountUuid : account.label === label;
-      if (!same) continue;
-      const updated = await credentials.updateAccount(orgId, account.id, { oauth, label });
-      if (updated) return updated;
-    }
-    return credentials.addAccount({
-      orgId,
-      provider: CLAUDE_CODE_ACCOUNT_PROVIDER,
-      label,
-      kind: 'claude_login',
-      ownerUserId: userId,
-      secret: oauth.accessToken,
-      oauth,
-      createdBy: userId,
-    });
-  };
-
-  return {
-    start({ orgId, userId }) {
-      prune();
-      for (const flow of flows.values()) {
-        // One browser sign-in per person at a time: a second click shows the first.
-        if (flow.orgId === orgId && flow.userId === userId && flow.status === 'pending') return view(flow);
-      }
-      const flow = { id: randomUUID(), orgId, userId, status: 'pending' as ClaudeSignInStatus, controller: new AbortController() } as ClaudeSignInFlow & {
-        controller: AbortController;
-        finishedAt?: number;
-      };
-      flows.set(flow.id, flow);
-      void capture({ signal: flow.controller.signal })
-        .then(oauth => file(orgId, userId, oauth))
-        .then(account => {
-          if (flow.status !== 'pending') return;
-          Object.assign(flow, { status: 'done', accountId: account.id, finishedAt: now() });
-        })
-        .catch((error: unknown) => {
-          if (flow.status !== 'pending') return;
-          Object.assign(flow, {
-            status: 'error',
-            error: error instanceof ClaudeSignInError ? error.message : 'Claude sign-in failed.',
-            finishedAt: now(),
-          });
-          if (!(error instanceof ClaudeSignInError)) console.warn('[factory] Claude sign-in failed', { orgId, error });
-        });
-      return view(flow);
-    },
-    get(id) {
-      prune();
-      const flow = flows.get(id);
-      return flow ? view(flow) : undefined;
-    },
-    cancel(id) {
-      const flow = flows.get(id);
-      if (!flow || flow.status !== 'pending') return false;
-      flow.controller.abort();
-      Object.assign(flow, { status: 'error', error: 'Claude sign-in was cancelled.', finishedAt: now() });
-      return true;
-    },
-  };
+  return createAccountSignInService({
+    credentials,
+    provider: CLAUDE_CODE_ACCOUNT_PROVIDER,
+    kind: 'claude_login',
+    name: 'Claude',
+    capture: ({ signal }) => capture({ signal }),
+    isUserFacing: (error): error is Error => error instanceof ClaudeSignInError,
+    ...(now ? { now } : {}),
+  });
 }

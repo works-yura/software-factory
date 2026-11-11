@@ -27,6 +27,11 @@ export function ShortcutsOverlay() {
   const { t } = useTranslation('chat');
   const { close } = useOverlays();
   const searchShortcutLabel = useKeyboardShortcutLabel('K');
+  // The model picker bindings (`modelPicker.toggle`, `composer.effort`).
+  const modelPickerShortcuts = [
+    { id: 'modelPicker', label: useKeyboardShortcutLabel('⇧M') },
+    { id: 'effort', label: useKeyboardShortcutLabel('⇧E') },
+  ] as const;
 
   return (
     <Dialog open onOpenChange={open => !open && close('shortcuts')}>
@@ -42,6 +47,14 @@ export function ShortcutsOverlay() {
               </Txt>
               <Kbd>{searchShortcutLabel}</Kbd>
             </li>
+            {modelPickerShortcuts.map(shortcut => (
+              <li key={shortcut.id} className="flex items-center justify-between gap-4 py-1.5">
+                <Txt as="span" variant="body-sm" tone="ink">
+                  {tk(`shortcuts.items.${shortcut.id}`)}
+                </Txt>
+                <Kbd>{shortcut.label}</Kbd>
+              </li>
+            ))}
             {SHORTCUTS.map(s => (
               <li key={s.id} className="flex items-center justify-between gap-4 py-1.5">
                 <Txt as="span" variant="body-sm" tone="ink">

@@ -125,7 +125,7 @@ describe('SupervisorPage', () => {
         id: FACTORY_ID,
         name: 'Acme Factory',
         harness: 'claude-code',
-        claudeCodeModel: 'haiku',
+        harnessModelDefaults: { 'claude-code': { instanceId: 'claude-code', model: 'haiku' } },
       });
       renderSupervisor();
 

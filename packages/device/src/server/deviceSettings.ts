@@ -1,5 +1,5 @@
-// t3code kept these three switches in its server settings (enableDeviceSupport,
-// enableAgentDeviceAccess, deviceOnboardingCompleted); here they live in a JSON file in the state dir.
+// The three device switches (enableDeviceSupport, enableAgentDeviceAccess,
+// deviceOnboardingCompleted), kept in a JSON file in the state dir.
 import * as NodePath from 'node:path';
 
 import { z } from 'zod';

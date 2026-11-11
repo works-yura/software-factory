@@ -1,4 +1,3 @@
-// Ported from t3code packages/contracts/src/device.ts (effect/Schema → zod).
 // Dropped: SSH, EAS and Simlock host configs, their account checks and the
 // wire transform that kept older clients compatible. Only the local host remains.
 import { z } from 'zod';
@@ -311,7 +310,7 @@ export const DeviceToolCloseInput = z.object({
 });
 export type DeviceToolCloseInput = z.infer<typeof DeviceToolCloseInput>;
 
-// Errors. t3code used Schema.TaggedError; these keep the same `_tag` and messages
+// Errors. Each carries a `_tag` and a message
 // so the server can send `{ _tag, ...fields, message }` and the UI can switch on `_tag`.
 
 abstract class TaggedDeviceError<F extends object = object> extends Error {

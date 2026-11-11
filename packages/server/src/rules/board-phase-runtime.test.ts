@@ -17,7 +17,7 @@ import type { RuleGroup } from '@factory/core';
 import { mountApiRoutes } from '@factory/http/testing';
 import { GithubIntegration } from '@factory/integration-github';
 import { createFactorySecretEncryption } from '@factory/store';
-import type { ModelCredentialsStorage, WorkItemRow, WorkItemsStorage } from '@factory/store';
+import type { FactoryProjectsStorage, ModelCredentialsStorage, WorkItemRow, WorkItemsStorage } from '@factory/store';
 import { MastraFactory } from '../factory.ts';
 
 class TestSandbox extends MastraSandbox {
@@ -206,9 +206,12 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
 
   const { project } = await (await send('POST', '/web/factory/projects', { name: 'Phase project' })).json();
   // No project setting starts runs: only the phase's own start rule may.
-  expect(
-    (await send('PATCH', `/web/factory/projects/${project.id}`, { defaultModelId: 'openai/gpt-5.6-sol' })).status,
-  ).toBe(200);
+  // The stub model is no catalog model, so the default is stored as the model-defaults route would store a checked one.
+  await storage.getDomain<FactoryProjectsStorage>('projects').update({
+    orgId: ORG,
+    id: project.id,
+    input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'openai/gpt-5.6-sol' } } },
+  });
   const sourceControl = github.sourceControlStorage;
   const installation = await sourceControl.installations.upsert({
     orgId: ORG,

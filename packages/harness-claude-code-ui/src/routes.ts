@@ -9,12 +9,13 @@ import {
   ASK_USER_QUESTION_TOOL,
   ClaudeCodeRunContext,
   MESSAGE_AUTHOR_KEY,
-  type ClaudeChatDelivery,
-  type ClaudeCodeSession,
 } from '@factory/harness-claude-code';
+
+import type { ModelSelection } from '@factory/harness/models/contracts';
 
 import { ClaudeSessionUiChannel, type ClaudeUiStorage } from './channel.ts';
 import { runErrorIdentity } from './projector.ts';
+import type { ChatDelivery, ChatTranscriptSession } from './session.ts';
 
 /** How often an idle stream sends a comment so proxies and the client's idle timer keep it open. */
 const HEARTBEAT_MS = 25_000;
@@ -32,7 +33,7 @@ export interface ClaudeSessionUiOptions {
    * has not yet; `undefined` for a session another harness runs. Without it
    * only sessions passed to {@link ClaudeSessionUi.attach} are answered.
    */
-  resolveSession?: (sessionId: string) => Promise<ClaudeCodeSession | undefined>;
+  resolveSession?: (sessionId: string) => Promise<ChatTranscriptSession | undefined>;
   /**
    * Told, before it is passed on, that a person sent a session a message or
    * answered its plan or permission request, with the request it came in, e.g.
@@ -42,7 +43,7 @@ export interface ClaudeSessionUiOptions {
   heartbeatMs?: number;
 }
 
-export type PersonInputHook = (c: Context, session: ClaudeCodeSession) => void | Promise<void>;
+export type PersonInputHook = (c: Context, session: ChatTranscriptSession) => void | Promise<void>;
 
 /**
  * A person's answer to a parked plan, before the session resumes on it. `true`
@@ -51,9 +52,16 @@ export type PersonInputHook = (c: Context, session: ClaudeCodeSession) => void |
  */
 export type PlanDecisionHook = (
   c: Context,
-  session: ClaudeCodeSession,
+  session: ChatTranscriptSession,
   answer: { resumeData: PlanDecision; toolCallId: string },
 ) => boolean | Promise<boolean>;
+
+/**
+ * The selection a Claude Code session's next turn runs on, Factory defaults filled in (`null` for the
+ * CLI's own), for the state route's `modelSelection`. The host reads it from the harness's model
+ * facet; switching is the host's generic `POST …/sessions/:id/model` (`HarnessModelRegistry`).
+ */
+export type ClaudeSessionModelSelectionReader = (session: ChatTranscriptSession) => Promise<ModelSelection | null>;
 
 function decode(segment: string): string {
   try {
@@ -87,7 +95,7 @@ export function toWireEvent(event: AgentControllerEvent | { type: 'display_state
 }
 
 /** The chat route a message came in on, and how the session takes it. */
-const CHAT_DELIVERY: Record<string, ClaudeChatDelivery> = {
+const CHAT_DELIVERY: Record<string, ChatDelivery> = {
   'POST /messages': 'message',
   'POST /follow-up': 'follow-up',
   'POST /steer': 'steer',
@@ -178,6 +186,7 @@ export class ClaudeSessionUi {
   #resolve: ClaudeSessionUiOptions['resolveSession'];
   #onPersonInput: PersonInputHook | undefined;
   #onPlanDecision: PlanDecisionHook | undefined;
+  #modelSelection: ClaudeSessionModelSelectionReader | undefined;
 
   constructor(options: ClaudeSessionUiOptions) {
     this.#options = options;
@@ -190,6 +199,11 @@ export class ClaudeSessionUi {
     this.#onPersonInput = hook;
   }
 
+  /** Sets the {@link ClaudeSessionModelSelectionReader}, once the host's model facet exists. */
+  setModelSelectionReader(reader: ClaudeSessionModelSelectionReader): void {
+    this.#modelSelection = reader;
+  }
+
   /** Sets the {@link PlanDecisionHook}, once the host's boards exist. */
   setPlanDecisionHook(hook: PlanDecisionHook): void {
     this.#onPlanDecision = hook;
@@ -200,7 +214,7 @@ export class ClaudeSessionUi {
    * Idempotent per session object; a new object for the same id (a rehydrated
    * session) replaces the old one's channel.
    */
-  attach(session: ClaudeCodeSession): ClaudeSessionUiChannel {
+  attach(session: ChatTranscriptSession): ClaudeSessionUiChannel {
     const existing = this.#channels.get(session.id);
     if (existing?.session === session) return existing;
     existing?.detach();
@@ -210,7 +224,7 @@ export class ClaudeSessionUi {
   }
 
   /** Sets how sessions this process has not attached yet are found, once the harness exists. */
-  setSessionResolver(resolve: (sessionId: string) => Promise<ClaudeCodeSession | undefined>): void {
+  setSessionResolver(resolve: (sessionId: string) => Promise<ChatTranscriptSession | undefined>): void {
     this.#resolve = resolve;
   }
 
@@ -374,6 +388,7 @@ export class ClaudeSessionUi {
       threadId: requested ?? channel.threadId,
       modeId: channel.session.mode ?? 'default',
       modelId: channel.modelId ?? '',
+      ...(this.#modelSelection ? { modelSelection: await this.#modelSelection(channel.session) } : {}),
       running: channel.running,
       tasks: own ? display.tasks : [],
       omProgress: {

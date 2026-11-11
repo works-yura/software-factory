@@ -21,6 +21,8 @@
     "@factory/credentials": "workspace:*",
     "@factory/device": "workspace:*",
     "@factory/feed": "workspace:*",
+    "@factory/harness": "workspace:*",
+    "@factory/harness-claude-code": "workspace:*",
     "@factory/integration-github": "workspace:*",
     "@factory/observability": "workspace:*",
     "@factory/pipelines": "workspace:*",

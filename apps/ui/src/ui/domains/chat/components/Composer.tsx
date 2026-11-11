@@ -19,6 +19,7 @@ import {
 } from '@mastra/playground-ui/components/Composer';
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { Paperclip } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
@@ -49,6 +50,8 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { FACTORY_REF_EVENT, FACTORY_REF_MIME, readDraggedRef, sameRef, serializeRefs, withRef } from '../services/factoryRefs';
 import type { FactoryRef } from '../services/factoryRefs';
 import { StatusLine } from './StatusLine';
+import { useComposerProviderModel } from './modelPicker/useComposerProviderModel';
+import './modelPicker/ultrathink.css';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerFileAttachments } from './ComposerFileAttachments';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
@@ -74,6 +77,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
   const { isLoading: modelLoading, error: modelError } = useChatModels();
+  // The Ultrathink cue: a prompt that asks for it frames the composer.
+  const { composerProviderState } = useComposerProviderModel();
   const {
     commands,
     composerDraft: draft,
@@ -363,7 +368,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         <ComposerConnectionNotice notice={connectionNotice.notice} />
       </ComposerHeader>
       <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
-        <ComposerBox>
+        <ComposerBox
+          className={cn(composerProviderState.composerFrameClassName, composerProviderState.composerSurfaceClassName)}
+        >
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerAnnotations />
           <ComposerFactoryRefs refs={refs} onRemove={removeRef} />

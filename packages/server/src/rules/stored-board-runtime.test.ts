@@ -505,13 +505,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       async function runnableProject(replica: Awaited<ReturnType<typeof boot>>, orgId: string) {
         // Shipyard's Work is an older project's, with Triage.
         const projectId = await createOlderProject(replica, orgId, 'Shipyard');
-        const configured = await replica.send('PATCH', `/web/factory/projects/${projectId}`, {
-          defaultModelId: 'openai/gpt-5.6-sol',
-        });
-        expect(configured.status).toBe(200);
         await replica.storage
           .getDomain<ModelCredentialsStorage>('model-credentials')
           .setCredential({ orgId }, 'openai', { type: 'api_key', key: 'sk-stored-boards-test' });
+        // The stub model is no catalog model, so the default is stored as the model-defaults route would store a checked one.
+        expect(
+          await replica.storage.getDomain<FactoryProjectsStorage>('projects').update({
+            orgId,
+            id: projectId,
+            input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'openai/gpt-5.6-sol' } } },
+          }),
+        ).not.toBeNull();
         // The stubbed model answers only OpenAI; keep observational memory from calling its observer model.
         await replica.storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
           orgId,

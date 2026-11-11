@@ -3,7 +3,7 @@ import type { AgentController, Session } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
-import type { AgentHarness, AgentRunContextInput, AgentSession, AgentSkill } from '@factory/harness';
+import type { AgentHarness, AgentRunContextInput, AgentSession, AgentSkill, HarnessModels } from '@factory/harness';
 
 import { REVIEW_ONLY_FACTORY_SKILLS, rescanFactorySkills } from './workspace.ts';
 
@@ -43,8 +43,13 @@ async function findMastraSkill(session: MastraSession, name: string) {
  * The Mastra harness: Factory sessions run on Mastra Code's AgentController,
  * whose sessions already speak the contract's session surface.
  */
-export function createMastraHarness(controller: MastraFactoryController): AgentHarness {
+export function createMastraHarness(
+  controller: MastraFactoryController,
+  options: { models?: HarnessModels } = {},
+): AgentHarness {
   return {
+    // The model facet (`createMastraHarnessModels`), when the host built one.
+    ...(options.models ? { models: options.models } : {}),
     getSession: async sessionId => {
       const session = await controller.getSession(sessionId);
       return session ? asAgentSession(session) : undefined;

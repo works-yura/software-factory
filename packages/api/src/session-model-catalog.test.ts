@@ -11,7 +11,7 @@ async function setup(visibility: 'org' | 'private' = 'org') {
   const project = await seed.projects.create({
     orgId: 'org-1',
     userId: 'owner',
-    input: { name: 'Billing', defaultModelId: 'deepseek/deepseek-flash' },
+    input: { name: 'Billing', harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'deepseek/deepseek-flash' } } },
   });
   const sourceControl = seed.sourceControl.forIntegration('github');
   const installation = await sourceControl.installations.upsert({

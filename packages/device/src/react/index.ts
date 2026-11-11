@@ -1,6 +1,5 @@
 // Web UI for device preview: simulators and emulators streamed into the page,
-// with input, controls and a device tools panel. Ported from t3code's
-// apps/web/src/components/device.
+// with input, controls and a device tools panel.
 export { DevicePanel, type DevicePanelProps, type DevicePanelTarget } from "./DevicePanel.tsx";
 export { DeviceWorkspace } from "./DeviceWorkspace.tsx";
 export {

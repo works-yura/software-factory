@@ -34,12 +34,13 @@ import {
   CREDENTIAL_ACCOUNTS,
   CREDENTIAL_ACCOUNTS_SCHEMA,
   isPersonalCredentialKind,
+  isSignInCredentialKind,
   secretHint,
   toCredentialAccount,
 } from './accounts.ts';
 import type {
   AddCredentialAccountInput,
-  ClaudeLoginOAuth,
+  SignInOAuth,
   CredentialAccountKind,
   CredentialAccount,
   CredentialAccountDbRow,
@@ -48,8 +49,8 @@ import type {
 } from './accounts.ts';
 
 /** What a new account row encrypts: a sign-in keeps its OAuth pair, with the access token as its secret. */
-function accountSecret(kind: CredentialAccountKind, secret: string, oauth: ClaudeLoginOAuth | undefined): CredentialAccountSecret {
-  return kind === 'claude_login' && oauth ? { secret: oauth.accessToken, oauth } : { secret };
+function accountSecret(kind: CredentialAccountKind, secret: string, oauth: SignInOAuth | undefined): CredentialAccountSecret {
+  return isSignInCredentialKind(kind) && oauth ? { secret: oauth.accessToken, oauth } : { secret };
 }
 
 /** Owning tenant of a credential row. `userId` absent = org-scoped row. */
@@ -410,15 +411,15 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     return (await this.encryption.decrypt<CredentialAccountSecret>(row.data)).value.secret;
   }
 
-  /** A `claude_login`'s OAuth pair, for the server that refreshes it; never handed to a run. */
-  async getAccountOAuth(orgId: string, id: string): Promise<ClaudeLoginOAuth | undefined> {
+  /** A sign-in's OAuth pair, for the server that refreshes it; never handed to a run. */
+  async getAccountOAuth(orgId: string, id: string): Promise<SignInOAuth | undefined> {
     const row = await this.#db.findOne<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, { org_id: orgId, id });
     if (!row) return undefined;
     return (await this.encryption.decrypt<CredentialAccountSecret>(row.data)).value.oauth;
   }
 
   /**
-   * Refresh a `claude_login`'s OAuth pair under the backend's atomic
+   * Refresh a sign-in's OAuth pair under the backend's atomic
    * read-modify-write, like {@link refreshOAuth}: the token endpoint rotates
    * the refresh token, so two replicas refreshing the same pair would leave
    * one holding a dead token. Under the lock the pair is read again: when
@@ -429,9 +430,9 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
   async refreshAccountOAuth(
     orgId: string,
     id: string,
-    { isFresh, refresh }: { isFresh: (current: ClaudeLoginOAuth) => boolean; refresh: (current: ClaudeLoginOAuth) => Promise<ClaudeLoginOAuth> },
-  ): Promise<ClaudeLoginOAuth | undefined> {
-    let result: ClaudeLoginOAuth | undefined;
+    { isFresh, refresh }: { isFresh: (current: SignInOAuth) => boolean; refresh: (current: SignInOAuth) => Promise<SignInOAuth> },
+  ): Promise<SignInOAuth | undefined> {
+    let result: SignInOAuth | undefined;
     await this.#db.updateAtomic<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, { org_id: orgId, id }, async row => {
       const current = (await this.encryption.decrypt<CredentialAccountSecret>(row.data)).value.oauth;
       if (!current) return null;
@@ -453,8 +454,8 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     if (isPersonalCredentialKind(input.kind) && !input.ownerUserId) {
       throw new Error('A subscription account needs the person it belongs to.');
     }
-    if (input.kind === 'claude_login' && !input.oauth) {
-      throw new Error('A Claude sign-in needs its OAuth tokens.');
+    if (isSignInCredentialKind(input.kind) && !input.oauth) {
+      throw new Error('A sign-in needs its OAuth tokens.');
     }
     const now = new Date();
     const row = await this.#db.insertOne<CredentialAccountDbRow>(CREDENTIAL_ACCOUNTS, {

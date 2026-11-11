@@ -1,5 +1,5 @@
 /**
- * Joins truthy class names. Unlike t3code's `cn` it does not resolve conflicting
+ * Joins truthy class names. It does not resolve conflicting
  * Tailwind utilities (no tailwind-merge), so callers avoid passing conflicts.
  */
 export type ClassValue = string | false | null | undefined | 0;

@@ -261,7 +261,7 @@ describe('chat run errors', () => {
       );
 
       expect(screen.getByText('Provider access failed')).toBeVisible();
-      expect(await screen.findByRole('link', { name: 'Review Claude accounts' })).toHaveAttribute(
+      expect(await screen.findByRole('link', { name: 'Review Claude Code accounts' })).toHaveAttribute(
         'href',
         '/factories/factory-1/settings/models',
       );
@@ -275,7 +275,7 @@ describe('chat run errors', () => {
       expect(screen.getByText('Provider rate limit reached')).toBeVisible();
       expect(screen.getByText('Claude AI usage limit reached')).toBeVisible();
       expect(screen.getByText(/^The limit resets /)).toBeVisible();
-      expect(await screen.findByRole('link', { name: 'Review Claude accounts' })).toBeVisible();
+      expect(await screen.findByRole('link', { name: 'Review Claude Code accounts' })).toBeVisible();
     });
 
     it('reads an error without the Claude fields as before', () => {

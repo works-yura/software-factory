@@ -5,7 +5,10 @@ import type { FactoryProject } from '../../../workspaces/services/github';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 import { chatHarnessId, claudeCodeChat } from '../ChatSessionProvider';
 
-const claudeFactory = { harness: 'claude-code', claudeCodeModel: 'sonnet' } as FactoryProject;
+const claudeFactory = {
+  harness: 'claude-code',
+  harnessModelDefaults: { 'claude-code': { instanceId: 'claude-code', model: 'sonnet' } },
+} as unknown as FactoryProject;
 const claudeSession = { harness: 'claude-code' } as FactoryUserSession;
 const mastraSession = {} as FactoryUserSession;
 

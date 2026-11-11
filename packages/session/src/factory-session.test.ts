@@ -517,7 +517,7 @@ describe('resolveFactorySessionModel', () => {
     const project = await seeded.projects.create({
       orgId: 'org-1',
       userId: 'user-1',
-      input: { name: 'Mastra', defaultModelId: 'anthropic/factory-model' },
+      input: { name: 'Mastra', harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'anthropic/factory-model' } } },
     });
     // A personal default left in the database by an older build is never read.
     await seeded.modelDefaults.set({ orgId: 'org-1', userId: 'owner-1', modelId: 'openai/owner-model' });
@@ -533,7 +533,7 @@ describe('resolveFactorySessionModel', () => {
     await seeded.projects.update({
       orgId: 'org-1',
       id: project.id,
-      input: { defaultModelId: 'anthropic/claude-opus-5' },
+      input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'anthropic/claude-opus-5' } } },
     });
 
     await expect(

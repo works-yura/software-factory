@@ -1,10 +1,11 @@
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
   connectInstallation,
-  createFactoryProject,
+  createFactoryWithClaudeModel,
   deleteFactoryProject,
   isGitLabRepository,
   linkRepository,
@@ -12,7 +13,6 @@ import {
   unlinkRepository,
 } from '../ui/domains/workspaces/services/github';
 import type {
-  ClaudeCodeModel,
   FactoryHarness,
   FactoryProject,
   LinkedRepositoryPayload,
@@ -71,7 +71,7 @@ export function useCreateFactoryMutation() {
       description?: string;
       harness?: FactoryHarness;
       claudeCodeModel?: ClaudeCodeModel | null;
-    }) => createFactoryProject(baseUrl, name, description, harness, claudeCodeModel),
+    }) => createFactoryWithClaudeModel(baseUrl, { name, description, harness, claudeCodeModel }),
     onSuccess: () => refetchFactories(queryClient),
   });
 }

@@ -1,6 +1,5 @@
-// Typed HTTP client for the device server API. Replaces t3code's WebSocket RPC
-// (`WS_METHODS.device*`) and its device hub ticket minting: the hub proxy is on
-// the same origin and authenticates with cookies.
+// Typed HTTP client for the device server API. No hub ticket minting: the hub proxy
+// is on the same origin and authenticates with cookies.
 import type { z } from "zod";
 import {
   DeviceDetail,
@@ -170,7 +169,7 @@ export function deviceHubAccess(
   return { httpBase, wsBase: httpBase.replace(/^http/, "ws"), query: {}, credentials: true };
 }
 
-/** The message a failed command shows, like t3code's `formatEnvironmentQueryError`. */
+/** The message a failed command shows. */
 export function formatDeviceError(cause: unknown): string {
   if (cause instanceof Error && cause.message) return cause.message;
   if (typeof cause === "string" && cause) return cause;

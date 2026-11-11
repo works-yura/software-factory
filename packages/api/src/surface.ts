@@ -71,8 +71,9 @@ import {
 import type { WorkItemBranchSource } from '@factory/pipelines';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
-import { CredentialAccountRoutes } from './credential-accounts.ts';
-import type { ClaudeSignInFlows } from './credential-accounts.ts';
+import type { HarnessModelRegistry } from '@factory/harness/models/registry';
+import { CODEX_ACCOUNT_PROVIDER, CredentialAccountRoutes } from './credential-accounts.ts';
+import type { AccountSignInFlows } from './credential-accounts.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
 import { buildFsRoutes } from './fs.ts';
 import type { LocalCheckoutAttacher } from './fs.ts';
@@ -159,10 +160,16 @@ export interface FactoryApiRoutesDeps {
   mcpEnabled: boolean;
   /** The Claude Code harness is configured, so new factories may pick `harness: 'claude-code'`. */
   claudeCodeEnabled?: boolean;
+  /** The Codex harness runs here (the `codex` CLI is installed), so factories may pick `harness: 'codex'`. */
+  codexEnabled?: boolean;
+  /** Every harness's model facet: `/web/config/models` `instances` and a session's `switchModel` / `modelInstanceId`. */
+  harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forSession' | 'forInstance'> | undefined;
   /** Device preview (`/web/device`) is mounted: simulators and emulators on this server's machine. */
   deviceEnabled?: boolean;
   /** Claude sign-in on this host (local development): `claude auth login`, kept as the person's account. */
-  claudeSignIn?: ClaudeSignInFlows;
+  claudeSignIn?: AccountSignInFlows;
+  /** Codex sign-in (a ChatGPT device sign-in run by the server), kept as the person's account. */
+  codexSignIn?: AccountSignInFlows;
   /** Personal sessions of Claude Code Factories start in the Claude Code harness (see the session routes). */
   claudeCodeUserSessions?: ClaudeCodeUserSessions;
   /** With a local sandbox: attaches a session's checkout on disk without starting it (file panels, sandbox start). */
@@ -779,6 +786,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
           ...(deps.claudeCodeUserSessions ? { claudeCode: deps.claudeCodeUserSessions } : {}),
+          ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
           ...(deps.attachLocalCheckout ? { attachLocalCheckout: deps.attachLocalCheckout } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
@@ -878,10 +886,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         knowledge: deps.knowledgeEnabled,
         mcp: deps.mcpEnabled,
         claudeCode: deps.claudeCodeEnabled ?? false,
+        codex: deps.codexEnabled ?? false,
         device: deps.deviceEnabled ?? false,
         claudeSignIn: deps.claudeSignIn !== undefined,
+        codexSignIn: deps.codexSignIn !== undefined,
       },
       deploymentProviders: deps.deploymentModelProviders,
+      ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),
@@ -889,6 +900,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       modelCredentials: deps.domains.modelCredentials,
       ...(deps.claudeSignIn ? { claudeSignIn: deps.claudeSignIn } : {}),
+      ...(deps.codexSignIn ? { accountSignIn: { [CODEX_ACCOUNT_PROVIDER]: deps.codexSignIn } } : {}),
     }).routes(),
     ...new OAuthRoutes({
       auth: deps.auth,

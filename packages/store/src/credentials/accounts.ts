@@ -4,11 +4,12 @@
  * another (see `@factory/credentials` `pickCredentialAccount`).
  *
  * Kinds, with different owners:
- * - `claude_login`: a person's Claude sign-in (`claude auth login`). It records
- *   whose it is (`ownerUserId`) and only that person's runs use it. It keeps
- *   the OAuth pair, which only the server refreshes: a run gets the access
- *   token alone, so no copy of the rotating refresh token lives anywhere else
- *   to fall out of step. Claude Code runs on these alone.
+ * - sign-ins (`claude_login`, a person's Claude sign-in for Claude Code;
+ *   `codex_login`, a person's ChatGPT sign-in for Codex): each records whose
+ *   it is (`ownerUserId`) and only that person's runs use it. It keeps the
+ *   OAuth pair, which only the server refreshes: a run gets the access token
+ *   alone, so no copy of the rotating refresh token lives anywhere else to
+ *   fall out of step. The turn-based harnesses run on these alone.
  * - `api_key` (an organization key) and `subscription` (a person's pasted
  *   `claude setup-token`): no longer added and never used by a run; rows left
  *   from before are kept only so they can be listed as legacy and removed.
@@ -19,25 +20,42 @@
 
 import type { CollectionSchema } from '@mastra/core/storage';
 
-export type CredentialAccountKind = 'api_key' | 'subscription' | 'claude_login';
+export type CredentialAccountKind = 'api_key' | 'subscription' | 'claude_login' | 'codex_login';
+
+/** The sign-in kinds: an OAuth pair a person signed in with, refreshed by the server alone. */
+export const SIGN_IN_CREDENTIAL_KINDS = ['claude_login', 'codex_login'] as const satisfies readonly CredentialAccountKind[];
+
+export type SignInCredentialKind = (typeof SIGN_IN_CREDENTIAL_KINDS)[number];
+
+export function isSignInCredentialKind(kind: CredentialAccountKind): kind is SignInCredentialKind {
+  return (SIGN_IN_CREDENTIAL_KINDS as readonly string[]).includes(kind);
+}
 
 /** Kinds that belong to one person and serve only that person's runs. */
 export function isPersonalCredentialKind(kind: CredentialAccountKind): boolean {
   return kind !== 'api_key';
 }
 
-/** A Claude sign-in: the OAuth pair the server refreshes, and who signed in (not secret, but kept with it). */
-export interface ClaudeLoginOAuth {
+/** A sign-in: the OAuth pair the server refreshes, and who signed in (not secret, but kept with it). */
+export interface SignInOAuth {
   accessToken: string;
   refreshToken: string;
   /** When the access token expires, in epoch milliseconds. */
   expiresAt: number;
   scopes: string[];
+  /** The plan the sign-in is on (Claude's `subscriptionType`, ChatGPT's `plan_type`). */
   subscriptionType?: string;
   email?: string;
   accountUuid?: string;
   organizationUuid?: string;
+  /** The OpenID token the provider answered with (ChatGPT sign-ins). */
+  idToken?: string;
+  /** The provider's workspace the tokens act in (ChatGPT's `chatgpt_account_id`). */
+  workspaceId?: string;
 }
+
+/** A Claude sign-in (`claude auth login`). */
+export type ClaudeLoginOAuth = SignInOAuth;
 
 export interface CredentialAccount {
   id: string;
@@ -69,10 +87,10 @@ export interface AddCredentialAccountInput {
   label: string;
   kind: CredentialAccountKind;
   ownerUserId?: string;
-  /** For a `claude_login`, the access token of {@link oauth}. */
+  /** For a sign-in, the access token of {@link oauth}. */
   secret: string;
-  /** A `claude_login`'s OAuth pair. */
-  oauth?: ClaudeLoginOAuth;
+  /** A sign-in's OAuth pair. */
+  oauth?: SignInOAuth;
   createdBy: string;
   priority?: number;
 }
@@ -83,8 +101,8 @@ export interface UpdateCredentialAccountInput {
   disabled?: boolean;
   /** A new secret also clears the account's limit and error, and turns it back on. */
   secret?: string;
-  /** A new sign-in for a `claude_login`; like a new secret, it turns the account back on. */
-  oauth?: ClaudeLoginOAuth;
+  /** A new sign-in for a sign-in account; like a new secret, it turns the account back on. */
+  oauth?: SignInOAuth;
 }
 
 export const CREDENTIAL_ACCOUNTS = 'model_credential_accounts';
@@ -135,7 +153,7 @@ export interface CredentialAccountDbRow extends Record<string, unknown> {
 /** The encrypted payload of a row. */
 export interface CredentialAccountSecret {
   secret: string;
-  oauth?: ClaudeLoginOAuth;
+  oauth?: SignInOAuth;
 }
 
 /** How long a stored error message may be. */
@@ -143,7 +161,7 @@ const MAX_ERROR_LENGTH = 500;
 
 /** A sign-in's access token changes on every refresh, so it has no stable hint; its label names the account. */
 export function accountSecretHint(kind: CredentialAccountKind, secret: string): string {
-  return kind === 'claude_login' ? '' : secretHint(secret);
+  return isSignInCredentialKind(kind) ? '' : secretHint(secret);
 }
 
 export function secretHint(secret: string): string {

@@ -5,8 +5,11 @@ import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboa
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { getModelReasoningOptions } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
+import { getAvailableThinkingLevelsForModel } from '@mastra/code-sdk/thinking';
+import type { ModelCapabilities } from '@factory/harness/models/contracts';
 import type { CredentialRecord, LoginSessionKind, ModelCredentialsStorage } from '@factory/store';
 import type { CustomProviderRecord } from '@factory/store';
+import { mastraModelCapabilities } from './mastra-models.ts';
 import { credentialLabel, getAuthProviderId, WEB_OAUTH_PROVIDERS } from './provider-credentials.ts';
 
 /**
@@ -275,8 +278,19 @@ export interface ModelCatalogEntry {
   modelName: string;
   hasApiKey: true;
   reasoningOptions?: ModelReasoningOption[];
+  /**
+   * The model's options as `ProviderOptionDescriptor`s: a `select` `effort` (role `reasoning`) over the
+   * thinking levels it runs at, which a session takes as `thinkingLevel`. Empty when it has no choice.
+   * Always set by `buildModelCatalog`; optional so older clients' fixtures still type.
+   */
+  capabilities?: ModelCapabilities;
   credentialLabel?: string;
   credentialHolder?: ModelCredentialHolder;
+}
+
+/** A Mastra model's option descriptors, from the thinking levels Mastra Code runs it at. */
+export function mastraCatalogCapabilities(id: string, reasoningOptions: ModelReasoningOption[] | undefined): ModelCapabilities {
+  return mastraModelCapabilities(getAvailableThinkingLevelsForModel(id, reasoningOptions));
 }
 
 /**
@@ -316,6 +330,7 @@ export async function buildModelCatalog({
             modelName,
             hasApiKey: true as const,
             reasoningOptions: getModelReasoningOptions(id),
+            capabilities: mastraCatalogCapabilities(id, getModelReasoningOptions(id)),
             ...tenantModelCredential(tenantCredentials, provider),
           },
         ]
@@ -339,6 +354,7 @@ export async function buildModelCatalog({
             provider: record.providerId,
             modelName: model,
             hasApiKey: true,
+            capabilities: mastraCatalogCapabilities(id, undefined),
             ...customProviderCredential,
           });
         }

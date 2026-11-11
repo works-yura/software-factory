@@ -13,6 +13,9 @@ import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '@factory/harness-mastra';
 import type { FactoryStorageTestSeed } from '@factory/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
+import type { ModelSelection } from '@factory/harness/models/contracts';
+import { createHarnessModelRegistry } from '@factory/harness/models/registry';
+import { codexStubModels } from '@factory/harness/models/registry.testFixtures';
 import { ProjectRoutes } from './projects.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
@@ -76,7 +79,7 @@ describe('ProjectRoutes', () => {
     expect((await app.request(`/web/factory/projects/${created.project.id}`)).status).toBe(404);
   });
 
-  it('creates a Claude Code factory with its model and switches harness and model later', async () => {
+  it('creates a Claude Code factory and switches harness later; models are set per harness elsewhere', async () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
     app.use('*', async (context, next) => {
@@ -87,28 +90,22 @@ describe('ProjectRoutes', () => {
     const send = (method: string, path: string, body: unknown) =>
       app.request(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
-    const created = await send('POST', '/web/factory/projects', {
-      name: 'Claude',
-      harness: 'claude-code',
-      claudeCodeModel: 'opus',
-    });
+    // A legacy `claudeCodeModel` is not a project field any more: it is ignored.
+    const created = await send('POST', '/web/factory/projects', { name: 'Claude', harness: 'claude-code', claudeCodeModel: 'opus' });
     expect(created.status).toBe(201);
     const { project } = (await created.json()) as { project: { id: string } };
-    expect(project).toMatchObject({ harness: 'claude-code', claudeCodeModel: 'opus' });
-
-    expect((await send('POST', '/web/factory/projects', { name: 'Bad', claudeCodeModel: 'claude-opus-4' })).status).toBe(
-      400,
-    );
+    expect(project).toMatchObject({ harness: 'claude-code', harnessModelDefaults: {} });
+    expect(project).not.toHaveProperty('claudeCodeModel');
 
     const path = `/web/factory/projects/${project.id}`;
     const switched = await send('PATCH', path, { harness: 'mastra' });
     expect(switched.status).toBe(200);
-    // The Claude model stays for a later switch back.
-    expect(await switched.json()).toMatchObject({ project: { harness: 'mastra', claudeCodeModel: 'opus' } });
-    const model = await send('PATCH', path, { claudeCodeModel: null });
-    expect(await model.json()).toMatchObject({ project: { harness: 'mastra', claudeCodeModel: null } });
-    expect((await send('PATCH', path, { harness: 'codex' })).status).toBe(400);
-    expect((await send('PATCH', path, { claudeCodeModel: 'gpt-5' })).status).toBe(400);
+    expect(await switched.json()).toMatchObject({ project: { harness: 'mastra' } });
+    expect(await (await send('PATCH', path, { harness: 'codex' })).json()).toMatchObject({ project: { harness: 'codex' } });
+    expect((await send('PATCH', path, { harness: 'cursor' })).status).toBe(400);
+    // Old clients' model fields alone change nothing: there is no field to update.
+    expect((await send('PATCH', path, { defaultModelId: 'openai/gpt-5.5' })).status).toBe(400);
+    expect((await send('PATCH', path, { claudeCodeModel: 'haiku' })).status).toBe(400);
   });
 
   it('reads and switches the agent language, refusing languages it does not offer', async () => {
@@ -292,41 +289,197 @@ describe('ProjectRoutes', () => {
     expect(await seed.projects.getById({ id: project.id })).not.toHaveProperty('modelScope');
   });
 
-  it('requires an organization admin to change the thinking default and rejects unknown levels', async () => {
-    const seed = await createFactoryStorageForTests();
-    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
-    expect(project.defaultThinkingLevel).toBe('medium');
-    const isOrganizationAdmin = vi.fn(async () => false);
-    const app = new Hono();
-    app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { id: 'member', organizationId: 'org-1' } as never);
-      await next();
-    });
-    mountApiRoutes(
-      app as never,
-      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
-    );
-    const patch = (body: Record<string, unknown>) =>
-      app.request(`/web/factory/projects/${project.id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+  describe('model defaults per harness instance', () => {
+    type ApplyContext = { factoryProjectId: string; stillCurrent?: () => Promise<boolean> };
+    type ApplyResult = { applied: string[]; skipped: Array<{ threadId: string; reason: string }> };
+    const setup = async (
+      options: {
+        admin?: boolean;
+        withApply?: boolean;
+        apply?: (selection: ModelSelection, ctx: ApplyContext) => Promise<ApplyResult>;
+      } = {},
+    ) => {
+      const seed = await createFactoryStorageForTests();
+      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
+      const isOrganizationAdmin = vi.fn(async () => options.admin ?? true);
+      // A third harness the routes know nothing about, beside a stub of Claude Code's catalog.
+      const factoryDefaults = { current: {} as Record<string, ModelSelection> };
+      const codex = codexStubModels(new Set(), factoryDefaults);
+      const applyDefaultToRunningSessions = vi.fn(
+        options.apply ??
+          (async (_selection: ModelSelection, _ctx: ApplyContext): Promise<ApplyResult> => ({
+            applied: ['thread-1'],
+            skipped: [{ threadId: 'thread-2', reason: 'not-running' }],
+          })),
+      );
+      const registry = createHarnessModelRegistry([
+        options.withApply ? { ...codex, applyDefaultToRunningSessions } : codex,
+      ]);
+      const app = new Hono();
+      app.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { id: 'member', organizationId: 'org-1' } as never);
+        await next();
       });
+      mountApiRoutes(
+        app as never,
+        projectRoutes(seed, undefined, undefined, undefined, {
+          auth: fakeRouteAuth({ isOrganizationAdmin }),
+          harnessModels: () => registry,
+        }),
+      );
+      const send = (method: string, instanceId: string, body?: unknown, suffix = '') =>
+        app.request(`/web/factory/projects/${project.id}/model-defaults/${instanceId}${suffix}`, {
+          method,
+          headers: { 'content-type': 'application/json' },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+      return { seed, project, send, isOrganizationAdmin, applyDefaultToRunningSessions };
+    };
 
-    const denied = await patch({ defaultThinkingLevel: 'high' });
-    expect(denied.status).toBe(403);
-    expect(await denied.json()).toMatchObject({
-      error: 'forbidden',
-      message: 'Organization administrator access is required to change the thinking default.',
+    it("sets one instance's default, checked by that harness's facet, and clears it", async () => {
+      const { seed, project, send } = await setup();
+      const fast = { model: 'gpt-5.3-codex', options: [{ id: 'reasoningEffort', value: 'high' }, { id: 'fastMode', value: true }] };
+      const saved = await send('PUT', 'codex-stub', fast);
+      expect(saved.status).toBe(200);
+      const selection = { instanceId: 'codex-stub', ...fast };
+      expect(await saved.json()).toMatchObject({ selection, project: { harnessModelDefaults: { 'codex-stub': selection } } });
+      expect((await seed.projects.getById({ id: project.id }))?.harnessModelDefaults).toEqual({ 'codex-stub': selection });
+
+      // The facet refuses what its catalog does not offer; nothing is stored.
+      const unknownOption = await send('PUT', 'codex-stub', { model: 'gpt-5-mini', options: [{ id: 'reasoningEffort', value: 'high' }] });
+      expect(unknownOption.status).toBe(400);
+      expect(await unknownOption.json()).toMatchObject({
+        error: 'invalid_model_default',
+        message: expect.stringMatching(/gpt-5-mini has no option reasoningEffort/),
+      });
+      expect((await send('PUT', 'codex-stub', { model: 'o3' })).status).toBe(400);
+      expect((await send('PUT', 'codex-stub', { options: [] })).status).toBe(400);
+      expect((await seed.projects.getById({ id: project.id }))?.harnessModelDefaults).toEqual({ 'codex-stub': selection });
+
+      // An instance no harness on this server runs.
+      expect(await (await send('PUT', 'gemini', { model: 'x' })).json()).toMatchObject({ error: 'unknown_instance' });
+
+      const cleared = await send('DELETE', 'codex-stub');
+      expect(cleared.status).toBe(200);
+      expect(await cleared.json()).toMatchObject({ project: { harnessModelDefaults: {} } });
     });
-    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('medium');
 
-    isOrganizationAdmin.mockResolvedValue(true);
-    expect((await patch({ defaultThinkingLevel: 'enormous' })).status).toBe(400);
-    const saved = await patch({ defaultThinkingLevel: 'high' });
-    expect(saved.status).toBe(200);
-    expect(await saved.json()).toMatchObject({ project: { defaultThinkingLevel: 'high' } });
-    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('high');
+    it('keeps the other instances when one changes', async () => {
+      const { seed, project, send } = await setup();
+      const mastra = { instanceId: 'mastra', model: 'openai/gpt-5.5' };
+      await seed.projects.update({ orgId: 'org-1', id: project.id, input: { harnessModelDefaults: { mastra } } });
+      await send('PUT', 'codex-stub', { model: 'gpt-5-mini' });
+      expect((await seed.projects.getById({ id: project.id }))?.harnessModelDefaults).toEqual({
+        mastra,
+        'codex-stub': { instanceId: 'codex-stub', model: 'gpt-5-mini' },
+      });
+      await send('DELETE', 'codex-stub');
+      expect((await seed.projects.getById({ id: project.id }))?.harnessModelDefaults).toEqual({ mastra });
+    });
+
+    it('is admin-only', async () => {
+      const { seed, project, send } = await setup({ admin: false });
+      const denied = await send('PUT', 'codex-stub', { model: 'gpt-5-mini' });
+      expect(denied.status).toBe(403);
+      expect(await denied.json()).toEqual({
+        error: 'forbidden',
+        message: 'Organization administrator access is required to change the default model.',
+      });
+      expect((await send('DELETE', 'codex-stub')).status).toBe(403);
+      expect((await send('POST', 'codex-stub', undefined, '/apply')).status).toBe(403);
+      expect((await seed.projects.getById({ id: project.id }))?.harnessModelDefaults).toEqual({});
+    });
+
+    it("moves running sessions onto the default through the facet, when it can", async () => {
+      const withApply = await setup({ withApply: true });
+      const unset = await withApply.send('POST', 'codex-stub', undefined, '/apply');
+      expect(unset.status).toBe(400);
+      expect(await unset.json()).toMatchObject({ error: 'default_model_not_set' });
+
+      await withApply.send('PUT', 'codex-stub', { model: 'gpt-5-mini' });
+      const completed = vi.spyOn(console, 'info').mockImplementation(() => {});
+      try {
+        // Acknowledged at once; the facet switches the sessions in the background.
+        const applied = await withApply.send('POST', 'codex-stub', undefined, '/apply');
+        expect(applied.status).toBe(202);
+        expect(await applied.json()).toEqual({
+          selection: { instanceId: 'codex-stub', model: 'gpt-5-mini' },
+          status: 'started',
+        });
+        await vi.waitFor(() =>
+          expect(withApply.applyDefaultToRunningSessions).toHaveBeenCalledWith(
+            { instanceId: 'codex-stub', model: 'gpt-5-mini' },
+            {
+              viewer: { userId: 'member', orgId: 'org-1' },
+              factoryProjectId: withApply.project.id,
+              stillCurrent: expect.any(Function),
+            },
+          ),
+        );
+        await vi.waitFor(() =>
+          expect(completed).toHaveBeenCalledWith('[factory] apply-default-model completed', {
+            projectId: withApply.project.id,
+            instanceId: 'codex-stub',
+            model: 'gpt-5-mini',
+            applied: 1,
+            skipped: 1,
+          }),
+        );
+      } finally {
+        completed.mockRestore();
+      }
+
+      const without = await setup();
+      await without.send('PUT', 'codex-stub', { model: 'gpt-5-mini' });
+      expect(await (await without.send('POST', 'codex-stub', undefined, '/apply')).json()).toMatchObject({
+        error: 'model_apply_unavailable',
+      });
+    });
+
+    it('runs one apply at a time per instance, and an older one stops once the default moved on', async () => {
+      let releaseFirst = () => {};
+      const firstBlocked = new Promise<void>(resolve => (releaseFirst = resolve));
+      const calls: Array<{ model: string; ctx: ApplyContext }> = [];
+      const stillCurrentAfterRelease: boolean[] = [];
+      const { send, applyDefaultToRunningSessions } = await setup({
+        withApply: true,
+        apply: async (selection, ctx) => {
+          calls.push({ model: selection.model, ctx });
+          if (calls.length === 1) {
+            await firstBlocked;
+            stillCurrentAfterRelease.push(await ctx.stillCurrent!());
+          }
+          return { applied: [], skipped: [] };
+        },
+      });
+      const completed = vi.spyOn(console, 'info').mockImplementation(() => {});
+      try {
+        await send('PUT', 'codex-stub', { model: 'gpt-5-mini' });
+        expect((await send('POST', 'codex-stub', undefined, '/apply')).status).toBe(202);
+        await vi.waitFor(() => expect(calls).toHaveLength(1));
+
+        await send('PUT', 'codex-stub', { model: 'gpt-5.3-codex' });
+        const second = await send('POST', 'codex-stub', undefined, '/apply');
+        expect(second.status).toBe(202);
+        expect(await second.json()).toEqual({
+          selection: { instanceId: 'codex-stub', model: 'gpt-5.3-codex' },
+          status: 'started',
+        });
+        // The second waits for the first.
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(applyDefaultToRunningSessions).toHaveBeenCalledTimes(1);
+
+        releaseFirst();
+        await vi.waitFor(() => expect(calls).toHaveLength(2));
+        expect(calls.map(call => call.model)).toEqual(['gpt-5-mini', 'gpt-5.3-codex']);
+        // The older job sees its default is no longer the Factory's.
+        expect(stillCurrentAfterRelease).toEqual([false]);
+        expect(await calls[1]!.ctx.stillCurrent!()).toBe(true);
+      } finally {
+        releaseFirst();
+        completed.mockRestore();
+      }
+    });
   });
 
   it('keeps a Factory’s tool permissions for an organization admin and rejects unknown categories and policies', async () => {
@@ -401,235 +554,6 @@ describe('ProjectRoutes', () => {
     expect((await create({ name: 'Other', modelScope: 'org' })).status).toBe(201);
   });
 
-  describe('apply default model', () => {
-    const mount = (
-      seed: FactoryStorageTestSeed,
-      overrides?: Partial<ConstructorParameters<typeof ProjectRoutes>[0]>,
-      user: { id: string; organizationId?: string } | null = {
-        id: 'user-1',
-        organizationId: 'org-1',
-      },
-    ) => {
-      const app = new Hono();
-      app.use('*', async (context, next) => {
-        if (user) context.set('factoryAuthUser' as never, user as never);
-        await next();
-      });
-      mountApiRoutes(app as never, projectRoutes(seed, undefined, undefined, undefined, overrides));
-      return app;
-    };
-
-    it('requires project access and a configured default model', async () => {
-      const seed = await createFactoryStorageForTests();
-      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
-      const path = `/web/factory/projects/${project.id}/apply-default-model`;
-
-      expect((await mount(seed, undefined, null).request(path, { method: 'POST' })).status).toBe(401);
-      expect(
-        (
-          await mount(seed, undefined, { id: 'user-2', organizationId: 'org-2' }).request(path, {
-            method: 'POST',
-          })
-        ).status,
-      ).toBe(404);
-
-      const forbidden = await mount(seed, {
-        auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }),
-      }).request(path, { method: 'POST' });
-      expect(forbidden.status).toBe(403);
-      expect(await forbidden.json()).toEqual({
-        error: 'forbidden',
-        message: 'Organization administrator access is required to update running sessions.',
-      });
-
-      const response = await mount(seed).request(path, { method: 'POST' });
-      expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
-        error: 'default_model_not_set',
-        message: 'Set a default model on the project first.',
-      });
-    });
-
-    it('acknowledges before applying the default to running bound threads', async () => {
-      const seed = await createFactoryStorageForTests();
-      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
-      await seed.projects.update({
-        orgId: 'org-1',
-        id: project.id,
-        input: { defaultModelId: 'anthropic/claude-opus-4-6' },
-      });
-      const now = new Date();
-      const binding = (threadId: string, workItemId: string, resourceId: string) => ({
-        id: `binding-${threadId}`,
-        orgId: 'org-1',
-        factoryProjectId: project.id,
-        workItemId,
-        role: 'work',
-        threadId,
-        resourceId,
-        sessionId: `session-${threadId}`,
-        branch: `factory/${threadId}`,
-        status: 'active' as const,
-        createdAt: now,
-        revokedAt: null,
-      });
-      const bindings = [
-        binding('thread-applied', 'item-applied', 'resource-applied'),
-        binding('thread-applied', 'item-applied', 'resource-applied'),
-        binding('thread-no-item', 'item-missing', 'resource-no-item'),
-        binding('thread-inactive', 'item-inactive', 'resource-inactive'),
-        binding('thread-not-running', 'item-not-running', 'resource-not-running'),
-        binding('thread-missing', 'item-thread-missing', 'resource-thread-missing'),
-        binding('thread-lookup-failed', 'item-lookup-failed', 'resource-lookup-failed'),
-        binding('thread-mode-unknown', 'item-mode-unknown', 'resource-mode-unknown'),
-        binding('thread-apply-failed', 'item-apply-failed', 'resource-apply-failed'),
-      ];
-      const item = (id: string, stages = ['execute']) => ({ id, factoryProjectId: project.id, stages });
-      const items = new Map([
-        ['item-applied', item('item-applied')],
-        ['item-inactive', item('item-inactive', ['done'])],
-        ['item-not-running', item('item-not-running')],
-        ['item-thread-missing', item('item-thread-missing')],
-        ['item-lookup-failed', item('item-lookup-failed')],
-        ['item-mode-unknown', item('item-mode-unknown')],
-        ['item-apply-failed', item('item-apply-failed')],
-      ]);
-      let releaseFirstWrite = () => {};
-      const firstWrite = new Promise<void>(resolve => (releaseFirstWrite = resolve));
-      const setSettingOn = vi
-        .fn()
-        .mockImplementationOnce(() => firstWrite)
-        .mockResolvedValue(undefined);
-      const failingSetSettingOn = vi.fn().mockRejectedValue(new Error('write failed'));
-      const sessions = new Map([
-        [
-          'session-thread-applied',
-          {
-            thread: {
-              getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
-              setSettingOn,
-            },
-          },
-        ],
-        ['session-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
-        [
-          'session-thread-mode-unknown',
-          { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } },
-        ],
-        [
-          'session-thread-apply-failed',
-          {
-            thread: {
-              getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
-              setSettingOn: failingSetSettingOn,
-            },
-          },
-        ],
-      ]);
-      const workItems = {
-        listRunBindings: vi.fn().mockResolvedValue(bindings),
-        get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
-      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
-      const controller = {
-        getSession: vi.fn(async (sessionId: string) => {
-          if (sessionId === 'session-thread-lookup-failed') throw new Error('gateway unavailable');
-          return sessions.get(sessionId) ?? null;
-        }),
-      } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
-
-      const completed = vi.spyOn(console, 'info').mockImplementation(() => {});
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      try {
-        const response = await mount(seed, { workItems, controller }).request(
-          `/web/factory/projects/${project.id}/apply-default-model`,
-          { method: 'POST' },
-        );
-
-        expect(response.status).toBe(202);
-        expect(await response.json()).toEqual({ modelId: 'anthropic/claude-opus-4-6', status: 'started' });
-        await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(1));
-        expect(completed).not.toHaveBeenCalled();
-        releaseFirstWrite();
-        await vi.waitFor(() =>
-          expect(completed).toHaveBeenCalledWith('[factory] apply-default-model completed', {
-            projectId: project.id,
-            modelId: 'anthropic/claude-opus-4-6',
-            applied: 2,
-            skipped: 6,
-          }),
-        );
-        expect(warn).toHaveBeenCalledTimes(2);
-        expect(failingSetSettingOn).toHaveBeenCalledTimes(1);
-        expect(setSettingOn).toHaveBeenCalledTimes(2);
-        expect(setSettingOn).toHaveBeenNthCalledWith(1, {
-          threadId: 'thread-applied',
-          key: 'currentModelId',
-          value: 'anthropic/claude-opus-4-6',
-        });
-        expect(setSettingOn).toHaveBeenNthCalledWith(2, {
-          threadId: 'thread-mode-unknown',
-          key: 'currentModelId',
-          value: 'anthropic/claude-opus-4-6',
-        });
-      } finally {
-        releaseFirstWrite();
-        completed.mockRestore();
-        warn.mockRestore();
-      }
-    });
-
-    it('does not let an older delayed request overwrite a newer default', async () => {
-      const seed = await createFactoryStorageForTests();
-      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
-      await seed.projects.update({
-        orgId: 'org-1',
-        id: project.id,
-        input: { defaultModelId: 'openai/old' },
-      });
-      let releaseWrite = () => {};
-      const blockedWrite = new Promise<void>(resolve => (releaseWrite = resolve));
-      const writes: Array<{ threadId: string; value: string }> = [];
-      const setSettingOn = vi.fn(async ({ threadId, value }: { threadId: string; value: string }) => {
-        if (value === 'openai/old') await blockedWrite;
-        writes.push({ threadId, value });
-      });
-      const bindings = ['thread-one', 'thread-two'].map(threadId => ({
-        sessionId: 'session-1',
-        threadId,
-        workItemId: 'item-1',
-        status: 'active' as const,
-      }));
-      const workItems = {
-        listRunBindings: vi.fn().mockResolvedValue(bindings),
-        get: vi.fn().mockResolvedValue({ id: 'item-1', factoryProjectId: project.id, stages: ['execute'] }),
-      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
-      const controller = {
-        getSession: vi.fn().mockResolvedValue({ thread: { getById: vi.fn().mockResolvedValue({}), setSettingOn } }),
-      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
-      const completed = vi.spyOn(console, 'info').mockImplementation(() => {});
-      try {
-        const app = mount(seed, { workItems, controller });
-        const path = `/web/factory/projects/${project.id}/apply-default-model`;
-        const first = await app.request(path, { method: 'POST' });
-        expect(first.status).toBe(202);
-        await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(1));
-        await seed.projects.update({ orgId: 'org-1', id: project.id, input: { defaultModelId: 'openai/new' } });
-        const second = await app.request(path, { method: 'POST' });
-        expect(second.status).toBe(202);
-        expect(await second.json()).toEqual({ modelId: 'openai/new', status: 'started' });
-        releaseWrite();
-        await vi.waitFor(() => expect(completed).toHaveBeenCalledTimes(2));
-        expect(writes).toEqual([
-          { threadId: 'thread-one', value: 'openai/old' },
-          { threadId: 'thread-one', value: 'openai/new' },
-          { threadId: 'thread-two', value: 'openai/new' },
-        ]);
-      } finally {
-        releaseWrite();
-        completed.mockRestore();
-      }
-    });
-  });
 
   it('retires active repository sessions before destructive project deletion', async () => {
     const seed = await createFactoryStorageForTests();

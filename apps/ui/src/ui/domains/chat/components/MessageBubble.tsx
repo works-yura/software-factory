@@ -46,6 +46,7 @@ import { HostedStretch } from './activity/HostedStretch';
 import { activityPartKey, NO_ACTIVITY } from './activity/activity-plan';
 import type { EntryActivity } from './activity/activity-plan';
 import { messageEntryView } from './message-entry-view';
+import { ModelSwitchRow, readModelSwitch } from './modelPicker/ModelSwitchRow';
 import type { StatusMetadata } from './message-entry-view';
 import {
   isSkillNotificationSignal,
@@ -142,6 +143,7 @@ export function MessageBubble({
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
   const metadata = entry.message.content.metadata;
+  const modelSwitch = entry.message.role === 'user' ? readModelSwitch(metadata) : null;
   const replyModelId = meta && typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
   const credentialLabel = replyModelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
   const messageActions = meta ? (
@@ -315,9 +317,18 @@ export function MessageBubble({
     case 'parts':
       break;
   }
-  if (!drawsAnything) return null;
+  if (!drawsAnything) return modelSwitch ? <ModelSwitchRow modelSwitch={modelSwitch} /> : null;
 
-  return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
+  const bubble = <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
+  // The divider above the message that starts a turn on another model or effort.
+  return modelSwitch ? (
+    <>
+      <ModelSwitchRow modelSwitch={modelSwitch} />
+      {bubble}
+    </>
+  ) : (
+    bubble
+  );
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {

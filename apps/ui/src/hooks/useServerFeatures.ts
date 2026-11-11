@@ -13,6 +13,10 @@ export interface ServerFeatures {
   claudeCode?: boolean;
   /** People can sign in to Claude from here; the sign-in page opens on the server's machine. Absent from older servers. */
   claudeSignIn?: boolean;
+  /** The Codex harness runs here (its CLI is installed), so new Factories may run on it. Absent from older servers. */
+  codex?: boolean;
+  /** People can sign in to ChatGPT for Codex from here (a device sign-in). Absent from older servers. */
+  codexSignIn?: boolean;
   /** Device preview: simulators and emulators on the server's machine (local development). Absent from older servers. */
   device?: boolean;
   /** The harnesses this server runs and what each can do. Absent from older servers. */

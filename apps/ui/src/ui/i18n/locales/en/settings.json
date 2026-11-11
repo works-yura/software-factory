@@ -551,23 +551,12 @@
       "title": "Factory defaults"
     },
     "factoryDefault": {
-      "saving": "Saving default model",
-      "placeholder": "Select a model",
-      "pickerLabel": "Factory default model",
       "confirmTitle": "Also switch running sessions to {{model}}?",
       "confirmDescription": "New activity using the Factory defaults will use this model. Running work and review sessions keep their current model unless you switch them. Switched sessions keep their work and pick up the new model on their next step.",
       "keep": "Keep them as-is",
       "switch": "Switch running sessions",
       "starting": "Starting…",
       "switchStarted": "Switch started in the background. Running sessions will pick up the new model on their next step."
-    },
-    "thinking": {
-      "label": "Thinking",
-      "description": "Used by every session and work-item run in this Factory until it picks its own level. Each run caps it at what its model supports.",
-      "loadFailed": "The thinking level couldn't be loaded.",
-      "notLoaded": "The thinking level isn't loaded yet.",
-      "changeFailed": "Failed to change thinking level",
-      "adminsOnly": "Only organization admins can change the thinking level"
     },
     "picker": {
       "auto": "Auto",
@@ -587,6 +576,8 @@
       "mastra": "Mastra",
       "claudeCode": "Claude Code",
       "claudeUnavailable": "Claude Code isn’t configured on this server.",
+      "codex": "Codex",
+      "codexUnavailable": "Codex isn’t available on this server: install the codex CLI there and run `codex login`.",
       "changeFailed": "Couldn’t switch the harness"
     },
     "agentLanguage": {
@@ -600,18 +591,27 @@
       },
       "changeFailed": "Couldn’t change the agent language"
     },
-    "claudeCode": {
-      "title": "Claude Code",
-      "description": "How this Factory’s Claude Code sessions run.",
-      "modelLabel": "Claude model",
-      "modelDescription": "Passed to `claude --model` from each session’s next turn.",
-      "models": {
-        "default": "Claude Code default",
-        "opus": "Opus",
-        "sonnet": "Sonnet",
-        "haiku": "Haiku"
-      },
-      "changeFailed": "Couldn’t change the Claude model"
+    "defaults": {
+      "title": "Default models",
+      "description": "What new sessions and card runs of each harness start on until they pick their own model. A change applies from each session’s next turn.",
+      "inUse": "In use",
+      "inUseHint": "This Factory starts new sessions on this harness.",
+      "setForFactory": "Set for this Factory.",
+      "followsCatalog": "Follows the catalog default: {{model}}.",
+      "followsHarness": "Follows the harness’s own default.",
+      "useCatalogDefault": "Use catalog default",
+      "model": "Model",
+      "modelLabel": "{{harness}} default model",
+      "modelDescription": "New sessions start on it unless they pick their own.",
+      "reasoningDescription": "How much the model reasons before it answers. A session can still pick its own level.",
+      "saving": "Saving default model",
+      "saveFailed": "Couldn’t save the default model",
+      "adminsOnly": "Only organization admins can change the default model",
+      "needsSetup": "Connect a model provider below to choose a default model.",
+      "unavailable": "{{harness}} isn’t available on this server right now.",
+      "unavailableBecause": "{{harness}} isn’t available: {{reason}}",
+      "loadFailed": "The harnesses’ models couldn’t be loaded.",
+      "change": "Change"
     }
   },
   "memory": {
@@ -673,7 +673,6 @@
   "routing": {
     "title": "Model routing",
     "description": "Chats and work-item runs both use the Factory defaults. Running threads keep the model they already picked.",
-    "thinkingDescription": "Every chat and work-item run in this Factory starts at this level.",
     "lanes": {
       "chats": "Chats",
       "runs": "Work-item runs"
@@ -685,14 +684,8 @@
     "model": "Model",
     "providers": "Providers"
   },
-  "claudeAccounts": {
-    "title": "Claude Code accounts",
-    "description": "Claude Code sessions run on Claude sign-ins. When one runs out of usage (5-hour or weekly limit), the session continues on the next; a limited sign-in comes back after its reset, and a refused one stays off until its owner signs in again.",
-    "loading": "Loading Claude Code accounts",
-    "empty": "No Claude sign-ins yet. Sign in with Claude so Claude Code sessions can run.",
+  "accounts": {
     "kind": {
-      "mySignIn": "Your Claude sign-in",
-      "memberSignIn": "Member’s Claude sign-in",
       "legacy": "Old token: remove it"
     },
     "status": {
@@ -715,21 +708,63 @@
     "dialog": {
       "renameTitle": "Rename {{label}}",
       "label": "Name",
-      "labelPlaceholder": "e.g. My Max plan",
       "cancel": "Cancel",
       "save": "Save",
       "saving": "Saving…"
     },
     "errors": {
       "forbidden": "You can’t change this account.",
-      "needSignIn": "Sign in to an organization to use Claude Code accounts.",
       "failed": "Something went wrong. Try again."
     },
     "signIn": {
-      "button": "Sign in with Claude",
-      "pending": "Finish signing in on the Claude page that opened in your browser…",
       "done": "Signed in as {{label}}.",
-      "failed": "Claude sign-in failed."
+      "codePrompt": "Open the sign-in page, sign in, and enter this one-time code:",
+      "openPage": "Open sign-in page",
+      "waiting": "Waiting for you to finish signing in…"
+    },
+    "harness": {
+      "claudeCode": {
+        "title": "Claude Code accounts",
+        "description": "Claude Code sessions run on Claude sign-ins. When one runs out of usage (5-hour or weekly limit), the session continues on the next; a limited sign-in comes back after its reset, and a refused one stays off until its owner signs in again.",
+        "loading": "Loading Claude Code accounts",
+        "empty": "No Claude sign-ins yet. Sign in with Claude so Claude Code sessions can run.",
+        "kind": {
+          "mySignIn": "Your Claude sign-in",
+          "memberSignIn": "Member’s Claude sign-in"
+        },
+        "errors": {
+          "needSignIn": "Sign in to an organization to use Claude Code accounts."
+        },
+        "signIn": {
+          "button": "Sign in with Claude",
+          "pending": "Finish signing in on the Claude page that opened in your browser…",
+          "failed": "Claude sign-in failed."
+        },
+        "dialog": {
+          "labelPlaceholder": "e.g. My Max plan"
+        }
+      },
+      "codex": {
+        "title": "Codex accounts",
+        "description": "Codex sessions run on ChatGPT sign-ins. When one runs out of usage (5-hour or weekly limit), the session continues on the next; a limited sign-in comes back after its reset, and a refused one stays off until its owner signs in again. The server’s own codex login is never used.",
+        "loading": "Loading Codex accounts",
+        "empty": "No ChatGPT sign-ins yet. Sign in with ChatGPT so Codex sessions can run.",
+        "kind": {
+          "mySignIn": "Your ChatGPT sign-in",
+          "memberSignIn": "Member’s ChatGPT sign-in"
+        },
+        "errors": {
+          "needSignIn": "Sign in to an organization to use Codex accounts."
+        },
+        "signIn": {
+          "button": "Sign in with ChatGPT",
+          "pending": "Starting the ChatGPT sign-in…",
+          "failed": "ChatGPT sign-in failed."
+        },
+        "dialog": {
+          "labelPlaceholder": "e.g. My Plus plan"
+        }
+      }
     }
   },
   "intakeRules": {

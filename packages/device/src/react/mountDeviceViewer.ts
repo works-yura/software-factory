@@ -85,10 +85,11 @@ export function mountDeviceViewer<V extends MountableViewer>(
       mounted = options.ready({ viewer, cancelTrackpad: () => trackpad?.cancel() });
       options.onFrameListener(mounted.frame);
       mounted.frame();
-      // t3code's desktop app also ended trackpad orbits on its native scroll-end event.
       trackpad = bindPhoneTrackpad(canvas, interaction, mounted.pinch);
     })
-    .catch(() => {
+    .catch((cause: unknown) => {
+      // Factory addition: say why, since the panel only shows "3D is unavailable on this browser".
+      console.warn("Device 3D viewer could not start", cause);
       if (!disposed) options.onUnavailable();
     });
   return () => {

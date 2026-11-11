@@ -1436,7 +1436,7 @@ describe('personal sessions of a Claude Code Factory', () => {
     await seeded.seed.projects.update({
       orgId: 'org-1',
       id: seeded.project.id,
-      input: { harness: 'claude-code', claudeCodeModel: 'sonnet' },
+      input: { harness: 'claude-code', harnessModelDefaults: { 'claude-code': { instanceId: 'claude-code', model: 'sonnet' } } },
     });
     return seeded;
   }
@@ -1451,16 +1451,16 @@ describe('personal sessions of a Claude Code Factory', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      session: { sessionId, harness: 'claude-code', capabilities: { switchModel: false, recreateSandbox: false } },
+      session: { sessionId, harness: 'claude-code', capabilities: { switchModel: true, recreateSandbox: false } },
     });
     expect(claude.started).toEqual([{ sessionId, resourceId: 'user-1', title: 'Fix the login page' }]);
     expect(controller!.createSession).not.toHaveBeenCalled();
 
-    // Opening it reports the Claude session's resource and no model switch.
+    // Opening it reports the Claude session's resource; its owner switches its model from the Claude catalog.
     const opened = await app.request(`/web/user-sessions/${sessionId}`);
     expect(opened.status).toBe(200);
     await expect(opened.json()).resolves.toMatchObject({
-      session: { sessionId, resourceId: 'user-1', harness: 'claude-code', capabilities: { switchModel: false } },
+      session: { sessionId, resourceId: 'user-1', harness: 'claude-code', capabilities: { switchModel: true } },
     });
 
     // A retried create stays on Claude Code.
@@ -1484,6 +1484,41 @@ describe('personal sessions of a Claude Code Factory', () => {
       message: 'needs a local sandbox',
     });
     await expect(seeded.sourceControl.sessions.getBySessionId(sessionId)).resolves.toBeNull();
+  });
+
+  it('starts a Codex Factory\'s session on Codex, and refuses one where Codex cannot run', async () => {
+    const seeded = await seedGitLabRepository();
+    await seeded.seed.projects.update({ orgId: 'org-1', id: seeded.project.id, input: { harness: 'codex' } });
+    const started: Array<{ sessionId: string; resourceId: string; harness?: string }> = [];
+    const held = new Map<string, { resourceId: string; harness: 'codex' }>();
+    const codexSessions: NonNullable<RouteOptions['claudeCode']> = {
+      harnesses: ['codex'],
+      get: async id => held.get(id),
+      start: async ({ session, resourceId, harness }) => {
+        started.push({ sessionId: session.sessionId, resourceId, ...(harness ? { harness } : {}) });
+        held.set(session.sessionId, { resourceId, harness: 'codex' });
+      },
+    };
+    const app = claudeApp(seeded, codexSessions);
+    const response = await create(app, seeded.projectRepository.id);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ session: { sessionId, harness: 'codex' } });
+    expect(started).toEqual([{ sessionId, resourceId: 'user-1', harness: 'codex' }]);
+    const opened = await app.request(`/web/user-sessions/${sessionId}`);
+    await expect(opened.json()).resolves.toMatchObject({ session: { sessionId, harness: 'codex', resourceId: 'user-1' } });
+
+    // A server with only Claude Code, or whose Codex CLI is missing, refuses before writing a row.
+    const other = '33333333-3333-4333-8333-333333333333';
+    const claudeOnly = claudeApp(seeded, fakeClaude().claudeCode);
+    const refused = await create(claudeOnly, seeded.projectRepository.id, other);
+    expect(refused.status).toBe(409);
+    await expect(refused.json()).resolves.toMatchObject({ error: 'claude_code_unavailable', message: expect.stringContaining('no Codex harness') });
+    const missing = claudeApp(seeded, { ...codexSessions, unavailableReasonFor: () => 'The codex CLI is not installed on this server.' });
+    await expect((await create(missing, seeded.projectRepository.id, other)).json()).resolves.toEqual({
+      error: 'claude_code_unavailable',
+      message: 'The codex CLI is not installed on this server.',
+    });
+    await expect(seeded.sourceControl.sessions.getBySessionId(other)).resolves.toBeNull();
   });
 
   it('keeps a Mastra Factory on Mastra even when Claude Code is configured', async () => {

@@ -5,6 +5,7 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
+import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 
 import { externalSessionFor } from '@factory/integrations';
 import { reclaimDeletedSessionSandbox } from '@factory/sandbox';
@@ -80,12 +81,16 @@ export interface SourceControlSessionRoutesOptions {
   /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
   /**
-   * Personal sessions of a Factory whose harness is `claude-code` run on Claude
-   * Code: created in its session store (the chat then reaches them through the
-   * Claude session UI) instead of starting a Mastra conversation. Unset when
-   * the server has no Claude Code harness.
+   * Personal sessions of a Factory whose harness is a turn-based one (`claude-code`, `codex`) run
+   * there: created in that harness's session store (the chat then reaches them through the session
+   * UI) instead of starting a Mastra conversation. Unset when the server has no such harness.
    */
   claudeCode?: ClaudeCodeUserSessions;
+  /**
+   * The server's harness model registry: a session can switch models when the harness that runs it
+   * has a model facet, and its `modelInstanceId` tells the picker which instance's catalog applies.
+   */
+  harnessModels?: () => Pick<HarnessModelRegistry, 'forSession'> | undefined;
   /**
    * Present with a local sandbox: attaches a session's checkout already on
    * disk without starting it. Starting a Claude Code session's sandbox does
@@ -95,24 +100,40 @@ export interface SourceControlSessionRoutesOptions {
 }
 
 /** How the session routes reach the Claude Code harness for personal sessions. */
-export interface ClaudeCodeUserSessions {
-  /** The Claude Code session behind a session id, or undefined when Claude Code does not run it. */
-  get(sessionId: string): Promise<{ resourceId?: string } | undefined>;
-  /** Get-or-create the Claude Code session of a user session: its thread is the session id, under `resourceId`. */
-  start(input: { session: SourceControlSession; resourceId: string }): Promise<void>;
-  /**
-   * Why new Claude Code sessions cannot run on this server (e.g. no local
-   * sandbox to check the repository out in); undefined when they can.
-   */
-  unavailableReason?: string;
+/** The harnesses whose sessions live in their own store and reach the chat through the session UI. */
+export const TURN_HARNESSES = ['claude-code', 'codex'] as const;
+export type TurnHarnessKind = (typeof TURN_HARNESSES)[number];
+
+export function isTurnHarness(value: unknown): value is TurnHarnessKind {
+  return TURN_HARNESSES.some(harness => harness === value);
 }
 
-/** What a personal session of a Claude Code Factory needs and this server cannot give, or undefined. */
-function claudeCodeRefusal(options: SourceControlSessionRoutesOptions): string | undefined {
-  if (!options.claudeCode) {
-    return "This Factory runs on Claude Code, but this server has no Claude Code harness. Switch the Factory's harness to Mastra in Settings → Models, or configure Claude Code on the server.";
+const TURN_HARNESS_LABELS: Record<TurnHarnessKind, string> = { 'claude-code': 'Claude Code', codex: 'Codex' };
+
+export interface ClaudeCodeUserSessions {
+  /** The session behind a session id and the harness that runs it, or undefined when none of these harnesses does. */
+  get(sessionId: string): Promise<{ resourceId?: string; harness?: TurnHarnessKind } | undefined>;
+  /** Get-or-create the harness's session of a user session: its thread is the session id, under `resourceId`. */
+  start(input: { session: SourceControlSession; resourceId: string; harness?: TurnHarnessKind }): Promise<void>;
+  /**
+   * Why new sessions cannot run on this server (e.g. no local sandbox to check the repository out
+   * in); undefined when they can.
+   */
+  unavailableReason?: string;
+  /** The harnesses this server runs sessions of; Claude Code alone when absent. */
+  harnesses?: readonly TurnHarnessKind[];
+  /** Why new sessions of one harness cannot run here (its CLI is missing); falls back to {@link unavailableReason}. */
+  unavailableReasonFor?(harness: TurnHarnessKind): string | undefined;
+}
+
+/** What a personal session of a Claude Code or Codex Factory needs and this server cannot give, or undefined. */
+function turnHarnessRefusal(options: SourceControlSessionRoutesOptions, harness: TurnHarnessKind = 'claude-code'): string | undefined {
+  const label = TURN_HARNESS_LABELS[harness];
+  const sessions = options.claudeCode;
+  if (!sessions || !(sessions.harnesses ?? ['claude-code']).includes(harness)) {
+    return `This Factory runs on ${label}, but this server has no ${label} harness. Switch the Factory's harness to Mastra in Settings → Models, or configure ${label} on the server.`;
   }
-  return options.claudeCode.unavailableReason;
+  return sessions.unavailableReasonFor?.(harness) ?? sessions.unavailableReason;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -293,34 +314,39 @@ async function startPersonalSession(
   options: SourceControlSessionRoutesOptions,
   session: SourceControlSession,
   factoryHarness?: string,
-): Promise<{ claude: boolean } | { refused: string }> {
+): Promise<{ claude: TurnHarnessKind | false } | { refused: string }> {
   const held = await options.claudeCode?.get(session.sessionId);
   let harness = factoryHarness;
   if (!held && harness === undefined && session.factoryProjectId) {
     harness = (await options.projects.get({ orgId: session.orgId, id: session.factoryProjectId }))?.harness;
   }
-  if (held || harness === 'claude-code') {
-    const refused = held ? undefined : claudeCodeRefusal(options);
-    if (refused || !options.claudeCode) return { refused: refused ?? 'Claude Code is unavailable.' };
+  if (held || isTurnHarness(harness)) {
+    const kind: TurnHarnessKind = held ? (held.harness ?? 'claude-code') : (harness as TurnHarnessKind);
+    const refused = held ? undefined : turnHarnessRefusal(options, kind);
+    if (refused || !options.claudeCode) return { refused: refused ?? `${TURN_HARNESS_LABELS[kind]} is unavailable.` };
     await options.claudeCode.start({
       session,
       resourceId: held?.resourceId ?? userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
+      harness: kind,
     });
-    return { claude: true };
+    return { claude: kind };
   }
   await startUserSessionConversation(options.controller, session);
   return { claude: false };
 }
 
-/** A created session as the page reads it; a Claude Code session has no Mastra model to switch. */
+/**
+ * A created session as the page reads it. A Claude Code session switches its model too: the
+ * Claude catalog's, through the same route, from its next turn; it cannot recreate a sandbox.
+ */
 function createdSessionPayload(
   options: SourceControlSessionRoutesOptions,
   session: SourceControlSession,
-  claude: boolean,
+  claude: TurnHarnessKind | false,
 ) {
   return {
-    ...withCapabilities(session, { recreateSandbox: !claude && canRecreateSandbox(options), switchModel: !claude }),
-    ...(claude ? { harness: 'claude-code' as const } : {}),
+    ...withCapabilities(session, { recreateSandbox: !claude && canRecreateSandbox(options), switchModel: true }),
+    ...(claude ? { harness: claude } : {}),
   };
 }
 
@@ -504,8 +530,8 @@ function projectSessionRoutes(
 
         // A Claude Code Factory refuses before writing anything, so a session row never outlives a refused start.
         const factory = await options.projects.get({ orgId, id: project.factoryProjectId });
-        if (factory?.harness === 'claude-code') {
-          const refused = claudeCodeRefusal(options);
+        if (isTurnHarness(factory?.harness)) {
+          const refused = turnHarnessRefusal(options, factory.harness);
           if (refused) return c.json({ error: 'claude_code_unavailable', message: refused }, 409);
         }
 
@@ -598,15 +624,18 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           !claude &&
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
+        // The model facet of the harness that runs it decides what it switches to (`modelInstanceId`).
+        const registry = options.harnessModels?.();
+        const models = registry ? await registry.forSession(session.sessionId) : undefined;
         return c.json({
           session: {
             ...withCapabilities(withOwnerProfile(session, owners), {
               recreateSandbox,
-              // A Claude Code session runs on its Factory's Claude model, set in settings, not per session.
-              switchModel: !claude && canSwitchSessionModel(session, resolved.tenant),
+              switchModel: canSwitchSessionModel(session, resolved.tenant) && (!registry || models !== undefined),
             }),
             resourceId,
-            ...(claude ? { harness: 'claude-code' as const } : {}),
+            ...(models ? { modelInstanceId: models.instanceId } : {}),
+            ...(claude ? { harness: claude.harness ?? ('claude-code' as const) } : {}),
           },
         });
       },

@@ -238,7 +238,7 @@ describe('Create Factory wizard', () => {
     expect(calls).toEqual(['create', 'connect', 'link']);
     // No harness step on this deployment, so the Factory runs on Mastra.
     expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'mastra' }]);
-    expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
+    expect(patchedBodies).toEqual([{ instanceId: 'mastra', model: 'anthropic/claude-sonnet-4-5' }]);
     // The picked repository feeds Work intake without a trip to Settings.
     expect(intakeConfigs).toEqual([
       {
@@ -557,12 +557,12 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
       HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: savedModelId } }),
     ),
-    http.patch<never, { defaultModelId: string | null }>(
-      `${TEST_BASE_URL}/web/factory/projects/fp-1`,
-      async ({ request }) => {
+    http.put<{ instanceId: string }, { model: string }>(
+      `${TEST_BASE_URL}/web/factory/projects/fp-1/model-defaults/:instanceId`,
+      async ({ request, params }) => {
         const body = await request.json();
-        patchedBodies.push(body);
-        savedModelId = body.defaultModelId;
+        patchedBodies.push({ instanceId: params.instanceId, ...body });
+        if (params.instanceId === 'mastra') savedModelId = body.model;
         return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: savedModelId } });
       },
     ),
@@ -769,9 +769,9 @@ describe('harness step', () => {
     await user.click(screen.getByRole('option', { name: /Opus/ }));
 
     await waitForMutationsIdle(client);
-    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'claude-code', claudeCodeModel: 'opus' }]);
-    // No Mastra default model is written for a Claude Code Factory.
-    expect(patchedBodies).toEqual([]);
+    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'claude-code' }]);
+    // The Claude model is the Factory's Claude Code default; no Mastra default is written.
+    expect(patchedBodies).toEqual([{ instanceId: 'claude-code', model: 'opus' }]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(HARNESS_KEY)).toBeNull();
   });
@@ -836,7 +836,8 @@ describe('harness step', () => {
     await user.click(await screen.findByRole('option', { name: /Claude Code default/ }));
 
     await waitForMutationsIdle(client);
-    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'claude-code', claudeCodeModel: null }]);
+    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'claude-code' }]);
+    // The CLI's own default: the Factory follows the Claude Code catalog default.
     expect(patchedBodies).toEqual([]);
   });
 
@@ -855,7 +856,7 @@ describe('harness step', () => {
 
     await waitForMutationsIdle(client);
     expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'mastra' }]);
-    expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
+    expect(patchedBodies).toEqual([{ instanceId: 'mastra', model: 'anthropic/claude-sonnet-4-5' }]);
   });
 
   describe('Claude Code sign-in on the model step', () => {

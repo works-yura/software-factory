@@ -7,7 +7,7 @@ export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
 export const DEFAULT_FACTORY_THINKING_LEVEL: ThinkingLevelSetting = 'medium';
 
 /** The engines a Factory can run its agents on. */
-export const FACTORY_HARNESSES = ['mastra', 'claude-code'] as const;
+export const FACTORY_HARNESSES = ['mastra', 'claude-code', 'codex'] as const;
 export type FactoryHarnessKind = (typeof FACTORY_HARNESSES)[number];
 export const DEFAULT_FACTORY_HARNESS: FactoryHarnessKind = 'mastra';
 
@@ -18,9 +18,19 @@ export function isFactoryHarnessKind(value: unknown): value is FactoryHarnessKin
 /**
  * Models a Claude Code Factory may pin, as the `claude` CLI's own aliases
  * (`claude --model opus`), so they follow the CLI's current Opus/Sonnet/Haiku.
+ * Defined once in @factory/harness-claude-code, next to the Claude model catalog they resolve in.
  */
-export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
-export type ClaudeCodeModel = (typeof CLAUDE_CODE_MODELS)[number];
+export { CLAUDE_CODE_MODELS, isClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+export type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import { CLAUDE_CODE_INSTANCE_ID, isClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import { checkClaudeCodeModelSelection, claudeEffortForThinkingLevel } from '@factory/harness-claude-code/models/claude-code';
+import type { ModelSelection } from '@factory/harness/models/contracts';
+import { parseHarnessModelDefaults } from '@factory/harness/models/defaults';
+import type { HarnessModelDefaults } from '@factory/harness/models/defaults';
+import { EFFORT_OPTION_ID } from '@factory/harness/models/selection';
+
+/** Mastra's `ModelSelection.instanceId` (`MASTRA_INSTANCE_ID` in @factory/credentials, which reads this package). */
+const MASTRA_INSTANCE_ID = 'mastra';
 
 /**
  * The language a Factory's agents write in to the team: messages, plans,
@@ -60,10 +70,6 @@ export function parseFactoryToolPermissions(value: unknown): FactoryToolPermissi
   return { categories, yolo: raw.yolo === true };
 }
 
-export function isClaudeCodeModel(value: unknown): value is ClaudeCodeModel {
-  return typeof value === 'string' && (CLAUDE_CODE_MODELS as readonly string[]).includes(value);
-}
-
 export interface FactoryProject {
   id: string;
   orgId: string;
@@ -71,11 +77,21 @@ export interface FactoryProject {
   name: string;
   description: string | null;
   /**
-   * Default model for every session, run and Supervisor turn under this Factory (null = harness
-   * default). They all bill the organization's credentials; there is no personal model scope.
+   * The Factory's default model per harness instance (`{ [instanceId]: ModelSelection }`): what
+   * every session, run and Supervisor turn of that harness starts on unless it picked its own. An
+   * instance left out follows its harness's catalog default. Written only through the
+   * model-defaults route, which checks a selection against its harness's catalog.
+   */
+  harnessModelDefaults: HarnessModelDefaults;
+  /**
+   * @deprecated Read-only view of `harnessModelDefaults.mastra.model`, for the Mastra runtime's
+   * readers; null when the Factory follows Mastra's catalog default.
    */
   defaultModelId: string | null;
-  /** Thinking level for this Factory's sessions and runs that have not picked their own. */
+  /**
+   * @deprecated Read-only view of the `effort` option of `harnessModelDefaults.mastra`: the
+   * thinking level of this Factory's Mastra sessions and runs that have not picked their own.
+   */
   defaultThinkingLevel: ThinkingLevelSetting;
   /**
    * The engine new agent sessions of this Factory start on. It can be switched
@@ -84,8 +100,6 @@ export interface FactoryProject {
    * started on (the start coordinator routes it there).
    */
   harness: FactoryHarnessKind;
-  /** `claude --model` for this Factory's Claude Code sessions; null = the CLI's own default. */
-  claudeCodeModel: ClaudeCodeModel | null;
   /** The language every agent session of this Factory writes to the team in. */
   agentLanguage: AgentLanguage;
   /** Tool permissions as last set in Settings; null until someone set them (every category asks). */
@@ -134,10 +148,10 @@ export interface RetiredAutomationSettings {
 export interface CreateFactoryProjectInput {
   name: string;
   description?: string | null;
-  defaultModelId?: string | null;
   /** `mastra` when omitted. */
   harness?: FactoryHarnessKind;
-  claudeCodeModel?: ClaudeCodeModel | null;
+  /** Checked selections only: the model-defaults route checks each against its harness. */
+  harnessModelDefaults?: HarnessModelDefaults;
   /** `uk` when omitted. */
   agentLanguage?: AgentLanguage;
 }
@@ -145,11 +159,10 @@ export interface CreateFactoryProjectInput {
 export interface UpdateFactoryProjectInput {
   name?: string;
   description?: string | null;
-  defaultModelId?: string | null;
-  defaultThinkingLevel?: ThinkingLevelSetting;
   /** Applies to sessions started from now on; running cards keep their harness. */
   harness?: FactoryHarnessKind;
-  claudeCodeModel?: ClaudeCodeModel | null;
+  /** The whole map; checked selections only (see `CreateFactoryProjectInput`). */
+  harnessModelDefaults?: HarnessModelDefaults;
   agentLanguage?: AgentLanguage;
   toolPermissions?: FactoryToolPermissions | null;
   sandboxWorkingDirectory?: string | null;
@@ -173,13 +186,19 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     created_by: { type: 'text' },
     name: { type: 'text' },
     description: { type: 'text', nullable: true },
+    // Legacy: no longer written. Read once by `migrateLegacyModelDefaults` while
+    // `harness_model_defaults` is unset, then ignored.
     default_model_id: { type: 'text', nullable: true },
     // Deprecated: no longer read or written; every Factory uses the organization's credentials and
     // its own default model. Kept so existing databases need no migration.
     model_scope: { type: 'text', default: 'hybrid' },
+    // Legacy, like `default_model_id`.
     default_thinking_level: { type: 'text', default: DEFAULT_FACTORY_THINKING_LEVEL },
     harness: { type: 'text', default: DEFAULT_FACTORY_HARNESS },
+    // Legacy, like `default_model_id`.
     claude_code_model: { type: 'text', nullable: true },
+    // `{ [instanceId]: ModelSelection }`; null on rows from before it (see `migrateLegacyModelDefaults`).
+    harness_model_defaults: { type: 'json', nullable: true },
     agent_language: { type: 'text', default: DEFAULT_AGENT_LANGUAGE },
     tool_permissions: { type: 'json', nullable: true },
     // Deprecated: no longer read or written. Kept so existing databases need no
@@ -230,6 +249,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   default_thinking_level: string | null;
   harness: string | null;
   claude_code_model: string | null;
+  harness_model_defaults?: unknown;
   agent_language: string | null;
   tool_permissions?: unknown;
   auto_run_enabled: boolean;
@@ -255,21 +275,70 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   updated_at: Date;
 }
 
+/**
+ * The per-harness defaults a row from before `harness_model_defaults` meant: its Mastra default
+ * model with its thinking level as the `effort` option, and its Claude Code model with that thinking
+ * level as a Claude effort (`claudeEffortForThinkingLevel`). A thinking level without a Mastra model
+ * has no selection to live in and is dropped; a Claude effort the model does not offer is dropped.
+ */
+export function migrateLegacyModelDefaults(legacy: {
+  defaultModelId: string | null | undefined;
+  defaultThinkingLevel: string | null | undefined;
+  claudeCodeModel: string | null | undefined;
+}): Record<string, ModelSelection> {
+  const out: Record<string, ModelSelection> = {};
+  const thinkingLevel = isThinkingLevelSetting(legacy.defaultThinkingLevel) ? legacy.defaultThinkingLevel : null;
+  const mastraModel = legacy.defaultModelId?.trim();
+  if (mastraModel) {
+    out[MASTRA_INSTANCE_ID] = {
+      instanceId: MASTRA_INSTANCE_ID,
+      model: mastraModel,
+      ...(thinkingLevel ? { options: [{ id: EFFORT_OPTION_ID, value: thinkingLevel }] } : {}),
+    };
+  }
+  if (isClaudeCodeModel(legacy.claudeCodeModel)) {
+    const effort = claudeEffortForThinkingLevel(thinkingLevel);
+    const withEffort = effort
+      ? checkClaudeCodeModelSelection({ model: legacy.claudeCodeModel, options: [{ id: EFFORT_OPTION_ID, value: effort }] })
+      : null;
+    out[CLAUDE_CODE_INSTANCE_ID] = withEffort?.ok
+      ? withEffort.selection
+      : { instanceId: CLAUDE_CODE_INSTANCE_ID, model: legacy.claudeCodeModel };
+  }
+  return out;
+}
+
+function harnessModelDefaultsOf(row: FactoryProjectDbRow): HarnessModelDefaults {
+  // Rows from before the column carry their defaults in the legacy columns.
+  if (row.harness_model_defaults === null || row.harness_model_defaults === undefined) {
+    return migrateLegacyModelDefaults({
+      defaultModelId: row.default_model_id,
+      defaultThinkingLevel: row.default_thinking_level,
+      claudeCodeModel: row.claude_code_model,
+    });
+  }
+  return parseHarnessModelDefaults(row.harness_model_defaults);
+}
+
+function mastraThinkingLevel(selection: ModelSelection | undefined): ThinkingLevelSetting {
+  const effort = selection?.options?.find(option => option.id === EFFORT_OPTION_ID)?.value;
+  return isThinkingLevelSetting(effort) ? effort : DEFAULT_FACTORY_THINKING_LEVEL;
+}
+
 function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
+  const harnessModelDefaults = harnessModelDefaultsOf(row);
+  const mastra = harnessModelDefaults[MASTRA_INSTANCE_ID];
   return {
     id: row.id,
     orgId: row.org_id,
     createdBy: row.created_by,
     name: row.name,
     description: row.description,
-    defaultModelId: row.default_model_id,
-    defaultThinkingLevel: isThinkingLevelSetting(row.default_thinking_level)
-      ? row.default_thinking_level
-      : DEFAULT_FACTORY_THINKING_LEVEL,
+    harnessModelDefaults,
+    defaultModelId: mastra?.model ?? null,
+    defaultThinkingLevel: mastraThinkingLevel(mastra),
     // Rows from before the column, or with a value this build does not know, run on Mastra.
     harness: isFactoryHarnessKind(row.harness) ? row.harness : DEFAULT_FACTORY_HARNESS,
-    // Rows from before the column, or with an alias this build does not know, use the CLI default.
-    claudeCodeModel: isClaudeCodeModel(row.claude_code_model) ? row.claude_code_model : null,
     // Rows from before the column read as the column's default.
     agentLanguage: isAgentLanguage(row.agent_language) ? row.agent_language : DEFAULT_AGENT_LANGUAGE,
     toolPermissions: parseFactoryToolPermissions(row.tool_permissions),
@@ -323,9 +392,8 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       created_by: userId,
       name: input.name,
       description: input.description ?? null,
-      default_model_id: input.defaultModelId ?? null,
       harness: input.harness ?? DEFAULT_FACTORY_HARNESS,
-      claude_code_model: input.claudeCodeModel ?? null,
+      harness_model_defaults: input.harnessModelDefaults ?? {},
       agent_language: input.agentLanguage ?? DEFAULT_AGENT_LANGUAGE,
       created_at: now,
       updated_at: now,
@@ -394,12 +462,10 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
         return {
           ...(changes.name !== undefined ? { name: changes.name } : {}),
           ...(changes.description !== undefined ? { description: changes.description } : {}),
-          ...(changes.defaultModelId !== undefined ? { default_model_id: changes.defaultModelId } : {}),
-          ...(changes.defaultThinkingLevel !== undefined
-            ? { default_thinking_level: changes.defaultThinkingLevel }
-            : {}),
           ...(changes.harness !== undefined ? { harness: changes.harness } : {}),
-          ...(changes.claudeCodeModel !== undefined ? { claude_code_model: changes.claudeCodeModel } : {}),
+          ...(changes.harnessModelDefaults !== undefined
+            ? { harness_model_defaults: changes.harnessModelDefaults }
+            : {}),
           ...(changes.agentLanguage !== undefined ? { agent_language: changes.agentLanguage } : {}),
           ...(changes.toolPermissions !== undefined ? { tool_permissions: changes.toolPermissions } : {}),
           ...(changes.sandboxWorkingDirectory !== undefined

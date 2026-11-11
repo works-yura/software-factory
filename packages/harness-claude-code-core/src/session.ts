@@ -3,6 +3,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { applyClaudePromptEffortPrefix } from '@factory/harness/models/model';
+import type { ModelSelection } from '@factory/harness/models/contracts';
 import type {
   AgentEvent,
   AgentEventListener,
@@ -91,6 +93,26 @@ export type ClaudeNotificationInput = AgentNotificationInput & {
   metadata?: Record<string, unknown>;
 };
 
+/** What one turn runs on, from {@link ClaudeCodeSessionConfig.turnSelectionFor}. */
+export interface ClaudeTurnSelection {
+  /** `--model`. */
+  model?: string;
+  /** `--effort`. */
+  effort?: string;
+  /** Joins the turn's `--settings` (e.g. `fastMode`, `ultracode`). */
+  settings?: Record<string, unknown>;
+  /** An effort the CLI reads from the prompt: `ultrathink` prefixes the input with `Ultrathink:`. */
+  promptEffort?: string;
+  /** The selection changed since the thread's last turn: recorded on the turn's first input. */
+  modelSwitch?: ClaudeModelSwitch;
+}
+
+/** A model or effort change between two turns, recorded on the user message that starts the turn. */
+export interface ClaudeModelSwitch {
+  from: ModelSelection;
+  to: ModelSelection;
+}
+
 /** How a person's chat message joins the session (the chat's message, follow-up and steer routes). */
 export type ClaudeChatDelivery = 'message' | 'follow-up' | 'steer';
 
@@ -164,6 +186,13 @@ export interface ClaudeCodeSessionConfig
    * A function so a host can read a per-session setting (a Factory's chosen model) when the turn starts.
    */
   modelFor?: (session: ClaudeCodeSession) => string | undefined | Promise<string | undefined>;
+  /**
+   * The model selection for this session's next turn, asked before each turn (before its input is
+   * echoed). Its `model` and `effort` win over {@link modelFor} and {@link effort}; its `settings`
+   * join `--settings`; a `promptEffort` the CLI reads from the prompt (`ultrathink`) prefixes the
+   * input (slash commands excepted); a `modelSwitch` marks the turn's first input in the transcript.
+   */
+  turnSelectionFor?: (session: ClaudeCodeSession) => ClaudeTurnSelection | undefined | Promise<ClaudeTurnSelection | undefined>;
   /**
    * MCP servers for every turn (e.g. the Factory MCP endpoint); the gate server is added to them.
    * A function is asked before each turn, so per-session servers can carry credentials minted for that turn.
@@ -813,7 +842,8 @@ export class ClaudeCodeSession implements AgentSession {
   }
 
   /** Records input as the session takes it, once; `whileActive` marks input that joins a run in flight. */
-  #echo(inputs: ClaudePendingInput[], run: ActiveRun, whileActive = false) {
+  #echo(inputs: ClaudePendingInput[], run: ActiveRun, whileActive = false, modelSwitch?: ClaudeModelSwitch) {
+    let marker = modelSwitch;
     for (const input of inputs) {
       if (input.echoed) continue;
       // A plan answer queued for this turn shows as the decision it is, not as typed input.
@@ -829,9 +859,11 @@ export class ClaudeCodeSession implements AgentSession {
             ...(input.author ? { author: input.author } : {}),
             ...(input.notification ? { notification: input.notification } : {}),
             ...(whileActive && input.kind === 'signal' ? { delivery: 'while-active' as const } : {}),
+            ...(marker ? { modelSwitch: marker } : {}),
           },
           run,
         );
+        marker = undefined;
       }
       input.echoed = true;
     }
@@ -1053,6 +1085,7 @@ export class ClaudeCodeSession implements AgentSession {
     permissions: { rules?: { allow: string[]; ask: string[]; deny: string[] } } = {},
     systemPrompt: string | undefined = this.#config.appendSystemPrompt,
     sessionSettingSources?: ClaudeSettingSource[] | false,
+    selection: { effort?: string; settings?: Record<string, unknown> } = {},
   ): ClaudeArgsInput {
     const config = this.#config;
     const mode = thread.mode ?? config.mode;
@@ -1069,6 +1102,7 @@ export class ClaudeCodeSession implements AgentSession {
     ];
     const granted = thread.grantedTools ?? [];
     const settings: Record<string, unknown> = {
+      ...selection.settings,
       ...(attribution ? { attribution } : {}),
       ...(plansDirectory ? { plansDirectory } : {}),
       ...(rules?.ask.length ? { permissions: { ask: rules.ask } } : {}),
@@ -1076,7 +1110,7 @@ export class ClaudeCodeSession implements AgentSession {
     return {
       ...(thread.claudeSessionId ? { resumeSessionId: thread.claudeSessionId } : {}),
       ...(model ? { model } : {}),
-      ...(config.effort ? { effort: config.effort } : {}),
+      ...((selection.effort ?? config.effort) ? { effort: selection.effort ?? config.effort } : {}),
       ...(permissionMode ? { permissionMode } : {}),
       ...(settingSources ? { settingSources } : {}),
       ...(Object.keys(settings).length ? { settings } : {}),
@@ -1107,8 +1141,13 @@ export class ClaudeCodeSession implements AgentSession {
     const thread = this.#threadState(run.threadId);
     const planning = (thread.mode ?? this.#config.mode) === 'planning';
     const lead = planning ? [this.#config.planningPrompt ?? PLANNING_PROMPT] : [];
-    const prompt = [...lead, ...inputs.map(input => input.text)].join('\n\n');
-    if (!run.settled) this.#echo(inputs, run);
+    // Asked before the echo, so the turn's first input can carry the model-switch marker.
+    const selection = this.#config.turnSelectionFor ? await this.#config.turnSelectionFor(this) : undefined;
+    const text = inputs.map(input => input.text).join('\n\n');
+    const prompt = [...lead, selection?.promptEffort ? applyClaudePromptEffortPrefix(text, selection.promptEffort) : text].join(
+      '\n\n',
+    );
+    if (!run.settled) this.#echo(inputs, run, false, selection?.modelSwitch);
     run.begun = true;
     run.unsent = inputs;
     const tried: string[] = [];
@@ -1121,7 +1160,7 @@ export class ClaudeCodeSession implements AgentSession {
     const cwd = await this.#cwd();
     const mcpConfig =
       typeof this.#config.mcpConfig === 'function' ? await this.#config.mcpConfig(this) : this.#config.mcpConfig;
-    const model = (await this.#config.modelFor?.(this)) || this.#config.model;
+    const model = selection?.model || (await this.#config.modelFor?.(this)) || this.#config.model;
     const permissions = await this.#config.permissions?.(this);
     const systemPrompt = (await this.#config.appendSystemPromptFor?.(this)) ?? this.#config.appendSystemPrompt;
     const settingSources = await this.#config.settingSourcesFor?.(this);
@@ -1172,6 +1211,8 @@ export class ClaudeCodeSession implements AgentSession {
         cwd,
         mcpConfigPaths: mcpFile.paths,
         model,
+        ...(selection?.effort ? { effort: selection.effort } : {}),
+        ...(selection?.settings ? { settings: selection.settings } : {}),
         systemPrompt,
         ...(settingSources !== undefined ? { settingSources } : {}),
         ...(rules ? { rules } : {}),
@@ -1195,6 +1236,8 @@ export class ClaudeCodeSession implements AgentSession {
       cwd: string;
       mcpConfigPaths: string[];
       model: string | undefined;
+      effort?: string;
+      settings?: Record<string, unknown>;
       systemPrompt: string | undefined;
       settingSources?: ClaudeSettingSource[] | false;
       rules?: { allow: string[]; ask: string[]; deny: string[] };
@@ -1202,6 +1245,7 @@ export class ClaudeCodeSession implements AgentSession {
   ): Promise<TurnOutcome | { kind: 'aborted' }> {
     const { thread, planning, prompt, inputs, tried, envFor, cwd, mcpConfigPaths, model, systemPrompt, settingSources, rules } =
       turn;
+    const selection = { ...(turn.effort ? { effort: turn.effort } : {}), ...(turn.settings ? { settings: turn.settings } : {}) };
     let { credentials, env } = turn;
     let turnPrompt = prompt;
     let resumedStale = false;
@@ -1218,7 +1262,16 @@ export class ClaudeCodeSession implements AgentSession {
       // The replies that follow ran on this account, as a Mastra reply names its credential.
       if (credentials.credential) this.#emitTranscript({ kind: 'credential', ...credentials.credential }, run);
       const args = buildClaudeArgs(
-        this.#argsInput(thread, planning, mcpConfigPaths, model, rules ? { rules } : {}, systemPrompt, settingSources),
+        this.#argsInput(
+          thread,
+          planning,
+          mcpConfigPaths,
+          model,
+          rules ? { rules } : {},
+          systemPrompt,
+          settingSources,
+          selection,
+        ),
       );
       const translator = new TurnTranslator();
       run.translator = translator;

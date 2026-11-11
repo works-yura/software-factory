@@ -1,4 +1,4 @@
-// Agent tools (t3code mcp/toolkits/device) as plain functions. An MCP server mounts them by
+// Device agent tools as plain functions. An MCP server mounts them by
 // name with `deviceAgentToolDefinitions` and calls them with the invoking thread's context.
 import {
   type DeviceHostId,
@@ -166,7 +166,7 @@ export interface DeviceAgentToolContext {
   /** The project directory, for hosts whose devices depend on it. */
   readonly workspaceRoot?: string | undefined;
   /**
-   * False when agent device access is off for this caller (t3code's per-thread MCP capability).
+   * False when agent device access is off for this caller (e.g. a per-thread MCP capability).
    * Defaults to true; the service still requires agent access in its settings.
    */
   readonly deviceAccess?: boolean | undefined;

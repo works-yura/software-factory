@@ -1,3 +1,4 @@
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { createContext } from 'react';
 
 export interface ChatModelsApi {
@@ -7,7 +8,8 @@ export interface ChatModelsApi {
   pendingModelId: string | undefined;
   isLoading: boolean;
   error: Error | undefined;
-  setModel: (modelId: string) => Promise<void>;
+  /** Switches the model; a `thinkingLevel` switches the level with it (a sticky pick for that model). */
+  setModel: (modelId: string, thinkingLevel?: ThinkingLevelSetting) => Promise<void>;
 }
 
 export const ChatModelsContext = createContext<ChatModelsApi | null>(null);

@@ -23,7 +23,7 @@ async function seedProject(defaultModelId: string | null = 'anthropic/claude-son
   const project = await seed.projects.create({
     orgId: 'org-1',
     userId: 'user-1',
-    input: { name: 'Mastra', ...(defaultModelId ? { defaultModelId } : {}) },
+    input: { name: 'Mastra', ...(defaultModelId ? { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: defaultModelId } } } : {}) },
   });
   return { ...seed, project };
 }

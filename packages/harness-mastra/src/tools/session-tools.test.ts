@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '@factory/testing';
 import { routeExternalSessions } from '@factory/integrations';
+import { createHarnessModelRegistry } from '@factory/harness/models/registry';
+import type { ModelSelection } from '@factory/harness/models/contracts';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { fakeRouteAuth } from '@factory/http/testing';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
@@ -356,9 +358,10 @@ describe('factory_switch_session_model', () => {
 
     await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' })).resolves.toEqual({
       sessionId: started.sessionId,
-      threadId: started.sessionId,
       modelId: 'openai/gpt-5.6',
+      modelSelection: { instanceId: 'mastra', model: 'openai/gpt-5.6' },
       live: true,
+      appliesFrom: 'now',
     });
     expect(live.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
     expect(env.created).toHaveLength(1);
@@ -366,9 +369,10 @@ describe('factory_switch_session_model', () => {
     env.controller.getSession.mockResolvedValue(null);
     await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-6.1-sol' })).resolves.toEqual({
       sessionId: started.sessionId,
-      threadId: started.sessionId,
       modelId: 'openai/gpt-6.1-sol',
+      modelSelection: { instanceId: 'mastra', model: 'openai/gpt-6.1-sol' },
       live: false,
+      appliesFrom: 'next turn',
     });
     expect(live.model.switch).toHaveBeenCalledTimes(1);
     expect(env.created).toHaveLength(1);
@@ -426,9 +430,10 @@ describe('factory_switch_session_model with stored credentials', () => {
 
     await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' })).resolves.toEqual({
       sessionId: env.sessionId,
-      threadId: env.sessionId,
       modelId: 'deepseek/deepseek-flash',
+      modelSelection: { instanceId: 'mastra', model: 'deepseek/deepseek-flash' },
       live: true,
+      appliesFrom: 'now',
     });
     expect(env.created[0]!.session.model.switch).toHaveBeenCalledWith('deepseek/deepseek-flash');
 
@@ -977,7 +982,7 @@ describe('factory_start_session in work-item mode', () => {
     await env.seed.projects.update({
       orgId: 'org-1',
       id: env.scope.factoryProjectId,
-      input: { defaultModelId: 'deepseek/deepseek-flash' },
+      input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'deepseek/deepseek-flash' } } },
     });
     await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' });
 
@@ -1388,14 +1393,77 @@ describe('factory session tools on a Factory whose sessions another harness runs
     };
   }
 
-  it("refuses to switch a Claude Code session's model instead of reporting a switch that does nothing", async () => {
+  it("refuses to switch a Claude Code session's model when the server has no switch for its harness", async () => {
     const env = await setup();
     const { controller } = (await env.deps.messaging()) as { controller: object };
     routeExternalSessions(controller, async sessionId =>
       sessionId === env.scope.sessionId ? { sendNotificationSignal: vi.fn() } : undefined,
     );
     await expect(env.switchModel({ sessionId: env.scope.sessionId, modelId: 'openai/gpt-5' })).rejects.toThrow(
-      'runs on Claude Code',
+      "harness can't switch models",
+    );
+  });
+
+  it("switches another harness's session through its registered model facet, which checks the pick", async () => {
+    const env = await setup();
+    const { controller } = (await env.deps.messaging()) as { controller: object };
+    routeExternalSessions(controller, async sessionId =>
+      sessionId === env.scope.sessionId ? { sendNotificationSignal: vi.fn() } : undefined,
+    );
+    // Another harness's facet, registered beside Mastra's: the tool only goes through the registry.
+    const setSelection = vi.fn(async (_sessionId: string, selection: ModelSelection | null) => ({
+      ok: true as const,
+      modelSelection: selection,
+      appliesFrom: 'next-turn' as const,
+    }));
+    const registry = createHarnessModelRegistry([
+      {
+        instanceId: 'claude-code',
+        harnessId: 'claude-code',
+        displayName: 'Claude Code',
+        owns: async sessionId => sessionId === env.scope.sessionId,
+        list: async () => [],
+        defaultSelection: async () => null,
+        catalogDefault: async () => null,
+        check: async request =>
+          request.model === 'sonnet'
+            ? {
+                ok: true,
+                selection: {
+                  instanceId: 'claude-code',
+                  model: 'sonnet',
+                  options: [...(request.options ?? []), { id: 'effort', value: request.thinkingLevel ?? 'medium' }],
+                },
+              }
+            : { ok: false, error: `Unknown Claude Code model ${request.model}.` },
+        getSelection: async () => null,
+        setSelection,
+      },
+    ]);
+    const tools = createFactorySessionTools(env.scope, { ...env.deps, harnessModels: () => registry });
+    const switchModel = (input: Record<string, unknown>) =>
+      (tools.factory_switch_session_model as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }).execute(
+        input,
+        {},
+      );
+
+    await expect(
+      switchModel({ sessionId: env.scope.sessionId, modelId: 'sonnet', thinkingLevel: 'high', options: [{ id: 'fastMode', value: true }] }),
+    ).resolves.toMatchObject({ modelSelection: { model: 'sonnet' }, appliesFrom: 'next turn', live: false });
+    expect(setSelection).toHaveBeenCalledWith(
+      env.scope.sessionId,
+      {
+        instanceId: 'claude-code',
+        model: 'sonnet',
+        options: [
+          { id: 'fastMode', value: true },
+          { id: 'effort', value: 'high' },
+        ],
+      },
+      expect.objectContaining({ sessionId: env.scope.sessionId, viewer: { userId: env.scope.userId, orgId: env.scope.orgId } }),
+    );
+    await expect(switchModel({ sessionId: env.scope.sessionId, modelId: 'openai/gpt-5' })).rejects.toThrow(
+      'Unknown Claude Code model openai/gpt-5.',
     );
   });
 

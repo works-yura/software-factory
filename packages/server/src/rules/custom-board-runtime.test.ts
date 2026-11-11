@@ -13,7 +13,7 @@ import { MastraFactory } from '../factory.ts';
 import { GithubIntegration } from '@factory/integration-github';
 import { mountApiRoutes } from '@factory/http/testing';
 import { createFactorySecretEncryption } from '@factory/store';
-import type { AuditStorage } from '@factory/store';
+import type { AuditStorage, FactoryProjectsStorage } from '@factory/store';
 import type { ModelCredentialsStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 
@@ -220,12 +220,14 @@ describe('custom board public runtime', () => {
         const projectResponse = await post('/web/factory/projects', { name: 'Release project' });
         expect(projectResponse.status).toBe(201);
         const { project } = await projectResponse.json();
-        const settingsResponse = await app.request(`/web/factory/projects/${project.id}`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ defaultModelId: 'openai/gpt-5.6-sol' }),
-        });
-        expect(settingsResponse.status).toBe(200);
+        // The stub model is no catalog model, so the default is stored as the model-defaults route would store a checked one.
+        expect(
+          await storage.getDomain<FactoryProjectsStorage>('projects').update({
+            orgId: 'release-org',
+            id: project.id,
+            input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'openai/gpt-5.6-sol' } } },
+          }),
+        ).not.toBeNull();
         const sourceControl = github.sourceControlStorage;
         const installation = await sourceControl.installations.upsert({
           orgId: 'release-org',

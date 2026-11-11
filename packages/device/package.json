@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Device preview: iOS Simulator and Android emulator streamed into the web UI (WebRTC, H.264 over WebCodecs, MJPEG), touch and keyboard input, settings and app actions, agent control and video recording through agent-device. Ported from t3code.",
-  "license": "MIT",
+  "description": "Device preview: iOS Simulator and Android emulator streamed into the web UI (WebRTC, H.264 over WebCodecs, MJPEG), touch and keyboard input, settings and app actions, agent control and video recording through agent-device.",
   "exports": {
     ".": "./src/index.ts",
     "./contracts": "./src/contracts.ts",

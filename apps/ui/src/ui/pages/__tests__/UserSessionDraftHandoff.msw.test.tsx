@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -107,10 +107,8 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Factory default' }));
-    const ramp = screen.getByRole('slider', { name: 'Thinking' });
-    fireEvent.change(ramp, { target: { value: '3' } });
-    fireEvent.keyUp(ramp);
+    await user.click(await screen.findByRole('button', { name: 'Session model, Medium' }));
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Thinking' })).getByRole('radio', { name: 'High' }));
     await user.type(message, 'think harder');
     await user.keyboard('{Enter}');
 
@@ -131,10 +129,8 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Factory default' }));
-    const ramp = screen.getByRole('slider', { name: 'Thinking' });
-    fireEvent.change(ramp, { target: { value: '3' } });
-    fireEvent.keyUp(ramp);
+    await user.click(await screen.findByRole('button', { name: 'Session model, Medium' }));
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Thinking' })).getByRole('radio', { name: 'High' }));
     await user.click(await screen.findByRole('button', { name: 'Use default' }));
     expect(await screen.findByText('Follows the Factory default.')).toBeInTheDocument();
     await user.type(message, 'use the default');
@@ -404,14 +400,13 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    const modelPicker = await screen.findByLabelText('Session model');
-    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
+    const modelPicker = await screen.findByRole('button', { name: /^Session model/ });
+    await waitFor(() => expect(modelPicker).toHaveTextContent('gpt-4o-mini'));
     await user.click(modelPicker);
     await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
-    await user.click(await screen.findByRole('button', { name: /^Thinking: Medium/ }));
-    const ramp = screen.getByRole('slider', { name: 'Thinking' });
-    fireEvent.change(ramp, { target: { value: '3' } });
-    fireEvent.keyUp(ramp);
+    // The docked effort column stays open after the model pick.
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Thinking' })).getByRole('radio', { name: 'High' }));
+    await user.keyboard('{Escape}');
     await user.type(message, 'fix the login bug');
     await user.keyboard('{Enter}');
 
@@ -448,14 +443,13 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    const modelPicker = await screen.findByLabelText('Session model');
-    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
+    const modelPicker = await screen.findByRole('button', { name: /^Session model/ });
+    await waitFor(() => expect(modelPicker).toHaveTextContent('gpt-4o-mini'));
     await user.click(modelPicker);
     await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
-    await user.click(await screen.findByRole('button', { name: /^Thinking: Medium/ }));
-    const ramp = screen.getByRole('slider', { name: 'Thinking' });
-    fireEvent.change(ramp, { target: { value: '3' } });
-    fireEvent.keyUp(ramp);
+    // The docked effort column stays open after the model pick.
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Thinking' })).getByRole('radio', { name: 'High' }));
+    await user.keyboard('{Escape}');
     await user.type(message, 'fix the login bug');
     await user.keyboard('{Enter}');
     expect(await screen.findByText('fix the login bug', { selector: 'main p' }, { timeout: 5000 })).toBeInTheDocument();

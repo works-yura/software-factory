@@ -4,6 +4,8 @@ import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { AvailableModelsFilter } from '../api/keys';
+import type { HarnessModelInstanceInfo } from '@factory/harness/models/facet';
+
 import type { AvailableModelOption } from './useAvailableModels';
 
 export interface SessionModelCatalogTarget extends AvailableModelsFilter {
@@ -16,6 +18,7 @@ export interface SessionModelCatalogTarget extends AvailableModelsFilter {
 export interface SessionModelCatalog {
   models: AvailableModelOption[];
   defaultModelId?: string | null;
+  instances?: HarnessModelInstanceInfo[];
 }
 
 export function fetchSessionModelCatalog(client: ApiClient, target: SessionModelCatalogTarget) {

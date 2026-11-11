@@ -1,6 +1,6 @@
-import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { z } from 'zod';
+
+import { ModelSelection, ProviderInstanceId, ProviderOptionSelections } from '@factory/harness/models/contracts';
 
 import {
   cardRuleGroupSchema,
@@ -12,6 +12,7 @@ import {
 import { IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@factory/core';
 import {
   ATTACHMENT_SOURCES,
+  CLAUDE_CODE_MODELS,
   MAX_INTAKE_ROUTES,
   storedBoardDefinitionSchema,
   storedBoardInputSchema,
@@ -19,7 +20,6 @@ import {
 } from '@factory/store';
 
 import { INTAKE_RULE_ROUTE_CONTRACTS } from './intake-rules.ts';
-const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -236,11 +236,20 @@ const workItemResponseSchema = z.object({ workItem: cardSchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
 
 /** The engines a Factory can run its agents on; switching applies to sessions started afterwards. */
-export const FACTORY_HARNESS_KINDS = ['mastra', 'claude-code'] as const;
+export const FACTORY_HARNESS_KINDS = ['mastra', 'claude-code', 'codex'] as const;
 
 /** `claude --model` aliases a Claude Code Factory may pin; null means the CLI's own default. */
-export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
-const claudeCodeModelSchema = z.enum(CLAUDE_CODE_MODELS).nullable();
+export { CLAUDE_CODE_MODELS };
+
+/**
+ * A Factory's default for one harness instance (`PUT …/model-defaults/:instanceId`): a model of
+ * that harness's catalog (slug or alias) and its options, checked by the harness's model facet.
+ */
+export const setModelDefaultBodySchema = z.object({
+  model: z.string().trim().min(1).max(200),
+  options: ProviderOptionSelections.optional(),
+});
+const modelDefaultPathSchema = z.object({ id: uuidSchema, instanceId: ProviderInstanceId.max(100) });
 
 /** The language a Factory's agents write to the team in; mirrors `AGENT_LANGUAGES` in @factory/store. */
 export const AGENT_LANGUAGES = ['uk', 'en'] as const;
@@ -250,7 +259,6 @@ export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
   harness: z.enum(FACTORY_HARNESS_KINDS).optional().default('mastra'),
-  claudeCodeModel: claudeCodeModelSchema.optional().default(null),
   agentLanguage: agentLanguageSchema.optional(),
 });
 
@@ -272,10 +280,7 @@ export const updateProjectBodySchema = z
   .object({
     name: nonEmptyTrimmed(200).optional(),
     description: nullableTrimmed(2_000).optional(),
-    defaultModelId: nullableTrimmed(200).optional(),
-    defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     harness: z.enum(FACTORY_HARNESS_KINDS).optional(),
-    claudeCodeModel: claudeCodeModelSchema.optional(),
     agentLanguage: agentLanguageSchema.optional(),
     toolPermissions: toolPermissionsSchema.nullable().optional(),
     /** @deprecated Ignored. Each board phase starts its own runs with `autoStart` and `autoStartWhen`. */
@@ -884,12 +889,28 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: sandboxEnvPathSchema,
     responseSchema: z.null(),
   },
-  projectApplyDefaultModel: {
+  projectModelDefaultSet: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/model-defaults/:instanceId',
+    description: "Set a Factory's default model for one harness instance, checked against that harness's catalog",
+    pathSchema: modelDefaultPathSchema,
+    bodySchema: setModelDefaultBodySchema,
+    responseSchema: z.object({ project: projectSchema, selection: ModelSelection }),
+  },
+  projectModelDefaultClear: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/model-defaults/:instanceId',
+    description: "Clear a Factory's default for one harness instance: it follows the harness's catalog default",
+    pathSchema: modelDefaultPathSchema,
+    responseSchema: projectResponseSchema,
+  },
+  projectModelDefaultApply: {
     method: 'POST',
-    path: '/web/factory/projects/:id/apply-default-model',
-    description: 'Start applying the Factory default model to running work and review threads in the background',
-    pathSchema: projectPathSchema,
-    responseSchema: z.object({ modelId: z.string(), status: z.literal('started') }),
+    path: '/web/factory/projects/:id/model-defaults/:instanceId/apply',
+    description:
+      "Start moving the Factory's running sessions of one harness instance onto its default model, in the background",
+    pathSchema: modelDefaultPathSchema,
+    responseSchema: z.object({ selection: ModelSelection, status: z.literal('started') }),
   },
   projectDelete: {
     method: 'DELETE',

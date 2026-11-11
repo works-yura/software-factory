@@ -546,6 +546,14 @@ describe('Claude Code session routes', () => {
     const withFiles = await post(app, `${BASE}/card-1/messages`, { message: 'look', files: [{ data: 'x', mediaType: 'image/png' }] });
     expect(withFiles.status).toBe(400);
   });
+
+  it('reports the session’s model selection from the host’s reader in the state', async () => {
+    const { app, ui } = await setup([]);
+    ui.setModelSelectionReader(async () => ({ instanceId: 'claude-code', model: 'sonnet' }));
+    expect(await (await app.request(`${BASE}/card-1`)).json()).toMatchObject({
+      modelSelection: { instanceId: 'claude-code', model: 'sonnet' },
+    });
+  });
 });
 
 describe('Claude Code session routes: Mastra parity', () => {
