@@ -65,5 +65,6 @@
     "settingsFor": "Settings for {{name}}"
   },
   "newSession": "New session",
-  "searchAndNavigate": "Search and navigate"
+  "searchAndNavigate": "Search and navigate",
+  "newBoard": "New board"
 }

@@ -67,5 +67,6 @@
     "settingsFor": "Налаштування: {{name}}"
   },
   "newSession": "Нова сесія",
-  "searchAndNavigate": "Пошук і навігація"
+  "searchAndNavigate": "Пошук і навігація",
+  "newBoard": "Нова дошка"
 }

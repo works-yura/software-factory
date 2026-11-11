@@ -394,5 +394,6 @@
       "agent": "Moved back by an agent",
       "system": "Moved back by Factory"
     }
-  }
+  },
+  "editBoard": "Edit board"
 }

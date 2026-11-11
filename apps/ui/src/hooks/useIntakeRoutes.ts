@@ -36,6 +36,15 @@ export function useIntakeRoutesCanEditQuery(factoryProjectId: string | undefined
   });
 }
 
+/**
+ * Whether the caller may create, edit and delete this project's boards (an organization admin).
+ * Read off the intake routes, which answer for the project whatever boards it has: a project
+ * need not have a Work board. The server enforces it on every write.
+ */
+export function useCanEditBoards(factoryProjectId: string | undefined): boolean {
+  return useIntakeRoutesCanEditQuery(factoryProjectId).data ?? false;
+}
+
 function useRefetchRoutes(factoryProjectId: string) {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) });

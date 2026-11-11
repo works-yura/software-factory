@@ -1018,7 +1018,21 @@
       "toolLabels": {
         "recordVerdict": "Record a review verdict",
         "reviewSource": "Review the source of a change request"
-      }
+      },
+      "kindOf": "{{name}} kind",
+      "moveUp": "Move up",
+      "moveUpOf": "Move {{name}} up",
+      "moveDown": "Move down",
+      "moveDownOf": "Move {{name}} down",
+      "remove": "Remove phase",
+      "removeOf": "Remove {{name}}"
+    },
+    "boardDescription": "Board description",
+    "addPhase": {
+      "name": "New phase name",
+      "key": "New phase key",
+      "keyHint": "Cannot be changed once the phase is added.",
+      "add": "Add phase"
     }
   },
   "debug": {
@@ -1103,6 +1117,34 @@
       "nothingRead": "nothing read",
       "unlink": "Unlink",
       "unlinkAria": "Unlink {{name}} from Firebase"
+    }
+  },
+  "boards": {
+    "title": "Boards",
+    "description": "The boards of this Factory and how cards move through each: its phases, when a phase starts on its own, what its agent is told, when its plan is approved without a person, and where cards go next. Changes apply to this Factory only.",
+    "newBoard": "New board",
+    "board": "Board",
+    "none": "No boards installed.",
+    "intakeNote": "New cards land on the Work board unless an intake route sends them to this one. Add a route in <intake>Work Intake</intake>.",
+    "delete": "Delete board",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteDescription": "The board and its phases are removed from this Factory. A board that still has cards cannot be deleted. This cannot be undone.",
+    "cancel": "Cancel",
+    "notDeleted": "The board was not deleted",
+    "notCreated": "The board was not created",
+    "notCopied": "The board was not copied",
+    "startFrom": "Start from",
+    "startFromHint": "The phases the board starts with. Change them below before you create it.",
+    "starter": "Backlog, Doing, Done",
+    "copyOf": "Copy of {{name}}",
+    "key": "Board key",
+    "keyHint": "Names the board in links and the API. Cannot be changed later.",
+    "create": "Create board",
+    "keyProblems": {
+      "empty": "Enter a key.",
+      "tooLong": "Use at most {{max}} characters.",
+      "invalid": "Use letters, digits, hyphens and underscores, starting with a letter or digit.",
+      "taken": "This key is already in use."
     }
   }
 }

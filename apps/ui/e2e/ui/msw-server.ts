@@ -36,6 +36,9 @@ export const server = setupServer(
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
+  // The sidebar and the board page read the intake routes to learn whether the caller may change
+  // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/intake-routes', () => HttpResponse.json({ intakeRoutes: [], canEdit: false })),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   // A server without Platform machine credentials mounts no platform connect
   // routes; the ambient 404 hides the provider sections. Provider connection

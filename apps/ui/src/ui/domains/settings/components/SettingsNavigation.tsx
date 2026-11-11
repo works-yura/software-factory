@@ -155,7 +155,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: SquareKanban,
         searchText:
-          'work board phases triage planning building review pr review auto start auto approve plans next phases runner instructions reset default',
+          'boards new board create delete work board phases triage planning building review pr review auto start auto approve plans next phases runner instructions reset default',
       },
       {
         id: 'factory',
