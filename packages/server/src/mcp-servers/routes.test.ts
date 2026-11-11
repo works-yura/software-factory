@@ -44,7 +44,7 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
   );
   const call = (method: string, path: string, body?: unknown) =>
     app.request(path, { method, ...(body !== undefined ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
-  return { call, audits, checked };
+  return { call, audits, checked, servers };
 }
 
 const firestore = {
@@ -154,5 +154,38 @@ describe('MCP server routes', () => {
     const member = await setup({ isAdmin: false });
     expect((await member.call('POST', '/web/mcp-servers', firestore)).status).toBe(403);
     expect((await (await member.call('GET', '/web/mcp-servers')).json()).canEdit).toBe(false);
+  });
+
+  it('lets a person change only the tool policy and masking of a server an integration manages, and not delete it', async () => {
+    const { call, servers } = await setup();
+    await servers.syncOwned(
+      'org-1',
+      'firebase',
+      [{ key: 'bnd-1', name: 'db-syncta-57c6a', label: 'Firestore syncta-57c6a', launch: firestore.launch as never, assignments: [{ factoryProjectId: 'syncts' }] }],
+      'integration:firebase',
+    );
+    const [managed] = await servers.list('org-1');
+
+    const changed = await call('PUT', `/web/mcp-servers/${managed!.id}`, {
+      ...firestore,
+      name: 'renamed',
+      assignments: [{ factoryProjectId: 'other' }],
+      toolPolicies: { default: 'allow', tools: { delete_documents: 'deny' } },
+      maskPersonalData: false,
+      enabled: false,
+    });
+    expect(changed.status).toBe(200);
+    expect((await changed.json()).server).toMatchObject({
+      name: 'db-syncta-57c6a',
+      assignments: [{ factoryProjectId: 'syncts' }],
+      toolPolicies: { tools: { delete_documents: 'deny' } },
+      maskPersonalData: false,
+      enabled: true,
+      owner: { integration: 'firebase', key: 'bnd-1' },
+    });
+
+    const deleted = await call('DELETE', `/web/mcp-servers/${managed!.id}`);
+    expect(deleted.status).toBe(409);
+    expect(await deleted.json()).toMatchObject({ error: 'managed_by_integration', integration: 'firebase' });
   });
 });

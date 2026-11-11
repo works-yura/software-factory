@@ -36,7 +36,12 @@ export interface FakeGoogleCall {
 
 export interface FakeGoogleOptions {
   /** Status and Google error body per API, to simulate refusals. */
-  fail?: { logging?: { status: number; body: unknown }; crashlytics?: { status: number; body: unknown }; token?: { status: number; body: unknown } };
+  fail?: {
+    logging?: { status: number; body: unknown };
+    crashlytics?: { status: number; body: unknown };
+    firestore?: { status: number; body: unknown };
+    token?: { status: number; body: unknown };
+  };
 }
 
 const json = (status: number, body: unknown) =>
@@ -76,6 +81,10 @@ export function fakeGoogle(seed: ObservabilityContractSeed, options: FakeGoogleO
         })),
         ...(seed.logs.length > pageSize ? { nextPageToken: 'page-2' } : {}),
       });
+    }
+    if (url.startsWith('https://firestore.googleapis.com/')) {
+      if (options.fail?.firestore) return json(options.fail.firestore.status, options.fail.firestore.body);
+      return json(200, { collectionIds: ['bookings'] });
     }
     if (url.startsWith(CRASHLYTICS_BASE_URL)) {
       if (options.fail?.crashlytics) return json(options.fail.crashlytics.status, options.fail.crashlytics.body);

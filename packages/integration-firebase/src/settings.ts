@@ -51,6 +51,20 @@ export const firebaseBindingInputSchema = z.object({
   logs: z.boolean(),
   crashes: z.boolean(),
   apps: z.array(firebaseAppSchema).max(20),
+  /**
+   * «База»: agents read the project's Firestore through MCP Toolbox, run under the hood as an MCP
+   * server the integration manages. Absent reads as off (bindings saved before it existed).
+   */
+  database: z
+    .object({
+      enabled: z.boolean(),
+      /** Firestore database id; empty or absent is `(default)`. */
+      databaseId: z
+        .string()
+        .regex(/^[a-z][a-z0-9-]{0,61}[a-z0-9]$|^\(default\)$/, 'Firestore database id, e.g. (default) or analytics')
+        .optional(),
+    })
+    .optional(),
 });
 export type FirebaseBindingInput = z.infer<typeof firebaseBindingInputSchema>;
 
@@ -292,7 +306,12 @@ export function readsCrashes(binding: Pick<FirebaseBinding, 'crashes' | 'apps'>)
   return binding.crashes && binding.apps.length > 0;
 }
 
-/** Whether a binding reads anything at all. */
+/** Whether a binding gives agents its project's Firestore («База»). */
+export function readsDatabase(binding: Pick<FirebaseBinding, 'database'>): boolean {
+  return binding.database?.enabled === true;
+}
+
+/** Whether a binding reads logs or crashes (what the observability tools serve; «База» is an MCP server). */
 export function bindingReads(binding: Pick<FirebaseBinding, 'logs' | 'crashes' | 'apps'>): boolean {
   return binding.logs || readsCrashes(binding);
 }

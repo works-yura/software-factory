@@ -24,6 +24,7 @@ const bookfate = () =>
 
 function setup(options: { user?: TestAuthUser | null; isAdmin?: boolean; google?: Parameters<typeof fakeGoogle>[1] } = {}) {
   const storage = memoryIntegrationStorage();
+  const managedSyncs: string[] = [];
   const google = fakeGoogle(observabilityContractSeed(), options.google ?? {});
   const audits: Array<{ action: string; metadata?: Record<string, unknown> }> = [];
   const app = new Hono();
@@ -38,7 +39,10 @@ function setup(options: { user?: TestAuthUser | null; isAdmin?: boolean; google?
       auth: fakeRouteAuth({ isOrganizationAdmin: async () => options.isAdmin ?? true }),
       storage,
       projects: { get: async ({ orgId, id }) => (orgId === 'org-1' && FACTORIES.has(id) ? ({ id } as never) : null) },
-      hooks: { emitAudit: async ({ input }) => void audits.push({ action: input.action, ...(input.metadata ? { metadata: input.metadata } : {}) }) },
+      hooks: {
+        emitAudit: async ({ input }) => void audits.push({ action: input.action, ...(input.metadata ? { metadata: input.metadata } : {}) }),
+        onManagedMcpServersChanged: async orgId => void managedSyncs.push(orgId),
+      },
       fetch: google.fetch,
       now: () => OBSERVABILITY_CONTRACT_NOW,
     }),
@@ -48,7 +52,7 @@ function setup(options: { user?: TestAuthUser | null; isAdmin?: boolean; google?
   const json = async <T = any>(method: string, path: string, body?: unknown): Promise<T> => (await call(method, path, body)).json() as Promise<T>;
   const addAccount = async (key = syncta(), name?: string) =>
     (await json<{ account: { id: string } }>('POST', '/web/firebase/accounts', { serviceAccountJson: JSON.stringify(key), ...(name ? { name } : {}) })).account.id;
-  return { storage, google, audits, call, json, addAccount };
+  return { storage, google, audits, call, json, addAccount, managedSyncs };
 }
 
 const binding = (accountId: string, overrides: Record<string, unknown> = {}) => ({
@@ -290,5 +294,58 @@ describe('FirebaseIntegration agent tools', () => {
     expect((await logs.execute({ ...window, project: 'bookfate-prod' }, {})).project).toBe('bookfate-prod');
     const read = google.calls.filter(call => call.url.includes('entries:list')).at(-1);
     expect(read?.body).toMatchObject({ resourceNames: ['projects/bookfate-prod'] });
+  });
+});
+
+describe('Google Cloud «База»', () => {
+  it('asks for the managed MCP servers to be synced after each binding or account change, and serves one Toolbox server per «База» binding', async () => {
+    const { json, call, addAccount, managedSyncs, storage } = setup();
+    const accountId = await addAccount();
+    const created = await json<{ binding: { id: string } }>(
+      'POST',
+      '/web/firebase/bindings',
+      binding(accountId, { database: { enabled: true, databaseId: 'analytics' } }),
+    );
+    await json('POST', '/web/firebase/bindings', binding(accountId, { factoryProjectId: 'factory-2', projectId: 'other-prod' }));
+    expect(managedSyncs).toEqual(['org-1', 'org-1']);
+
+    const integration = new FirebaseIntegration();
+    integration.initialize({ storage: storage as never });
+    expect(await integration.managedMcpServers('org-1')).toEqual([
+      {
+        key: created.binding.id,
+        name: 'db-syncta-prod',
+        label: 'Firestore syncta-prod · analytics',
+        launch: {
+          transport: 'catalog',
+          entry: 'mcp-toolbox',
+          variant: 'firestore',
+          inputs: { FIRESTORE_PROJECT: 'syncta-prod', FIRESTORE_DATABASE: 'analytics' },
+          credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: accountId } },
+        },
+        assignments: [{ factoryProjectId: 'factory-1' }],
+      },
+    ]);
+
+    await call('DELETE', `/web/firebase/bindings/${created.binding.id}`);
+    expect(managedSyncs).toHaveLength(3);
+    expect(await integration.managedMcpServers('org-1')).toEqual([]);
+  });
+
+  it('checks «База» by listing the database\'s collections and names Cloud Datastore Viewer when refused', async () => {
+    const ok = setup();
+    const okAccount = await ok.addAccount();
+    const passed = await ok.json<{ ok: boolean; checks: Array<{ check: string; ok: boolean; target: string }> }>('POST', '/web/firebase/bindings/check', {
+      binding: binding(okAccount, { logs: false, crashes: false, database: { enabled: true } }),
+    });
+    expect(passed).toEqual({ ok: true, checks: [{ check: 'database', target: 'syncta-prod/(default)', ok: true }] });
+
+    const refused = setup({ google: { fail: { firestore: { status: 403, body: { error: { code: 403, message: 'Missing or insufficient permissions.', status: 'PERMISSION_DENIED' } } } } } });
+    const refusedAccount = await refused.addAccount();
+    const failed = await refused.json<{ ok: boolean; checks: Array<{ check: string; ok: boolean; missingRole?: string }> }>('POST', '/web/firebase/bindings/check', {
+      binding: binding(refusedAccount, { logs: false, crashes: false, database: { enabled: true } }),
+    });
+    expect(failed.ok).toBe(false);
+    expect(failed.checks[0]).toMatchObject({ check: 'database', ok: false, missingRole: 'roles/datastore.viewer' });
   });
 });

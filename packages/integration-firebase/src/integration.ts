@@ -2,15 +2,17 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { CredentialProvider } from '@factory/capabilities';
+import type { ManagedMcpServerSpec } from '@factory/core';
 
 import { createObservabilityTools } from '@factory/integrations';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
 import type { IntegrationStorageHandle } from '@factory/store';
 
 import { googleCloudAccountProvider } from './credentials.ts';
+import { managedDatabaseServers } from './managed-mcp.ts';
 import { buildFirebaseRoutes } from './routes.ts';
 import type { FetchLike } from './service-account.ts';
-import { FIREBASE_INTEGRATION_ID } from './settings.ts';
+import { FIREBASE_INTEGRATION_ID, readFirebaseState } from './settings.ts';
 import { FirebaseObservabilityProvider } from './source.ts';
 
 export interface FirebaseIntegrationOptions {
@@ -49,6 +51,12 @@ export class FirebaseIntegration implements FactoryIntegration {
   credentialProviders(): CredentialProvider[] {
     if (!this.#storage) throw new Error('FirebaseIntegration used before initialize().');
     return [googleCloudAccountProvider(this.#storage)];
+  }
+
+  /** «База» bindings run MCP Toolbox for their project's Firestore, managed here (Settings › Інтеграції › MCP). */
+  async managedMcpServers(orgId: string): Promise<ManagedMcpServerSpec[]> {
+    if (!this.#storage) throw new Error('FirebaseIntegration used before initialize().');
+    return managedDatabaseServers((await readFirebaseState(this.#storage, orgId)).bindings);
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {

@@ -1,8 +1,9 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
-import { DEFAULT_MCP_TOOL_POLICIES, mcpServerLaunchSchema, mcpServerSecretsSchema } from '@factory/core';
+import { DEFAULT_MCP_TOOL_POLICIES, mcpServerLaunchSchema, mcpServerOwnerSchema, mcpServerSecretsSchema } from '@factory/core';
 import type {
+  ManagedMcpServerSpec,
   McpServerAssignment,
   McpServerInput,
   McpServerLaunch,
@@ -36,6 +37,8 @@ export const MCP_SERVERS_SCHEMA: CollectionSchema = {
     tool_policies: { type: 'json' },
     mask_personal_data: { type: 'boolean' },
     enabled: { type: 'boolean' },
+    /** The integration managing the server (`McpServerOwner`), or null for a person's own server. */
+    owner: { type: 'json', nullable: true },
     created_by: { type: 'text' },
     updated_by: { type: 'text' },
     created_at: { type: 'timestamp' },
@@ -55,10 +58,18 @@ interface McpServerDbRow extends Record<string, unknown> {
   tool_policies: unknown;
   mask_personal_data: boolean;
   enabled: boolean;
+  owner: unknown;
   created_by: string;
   updated_by: string;
   created_at: Date;
   updated_at: Date;
+}
+
+/** What a sync of an integration's servers did. */
+export interface ManagedMcpSyncResult {
+  created: string[];
+  updated: string[];
+  removed: string[];
 }
 
 /** A server name already taken in the organization. */
@@ -149,6 +160,7 @@ export class McpServersStorage extends FactoryStorageDomain {
         tool_policies: input.toolPolicies,
         mask_personal_data: input.maskPersonalData,
         enabled: input.enabled,
+        owner: null,
         created_by: actorId,
         updated_by: actorId,
         created_at: now,
@@ -184,6 +196,79 @@ export class McpServersStorage extends FactoryStorageDomain {
       if (error instanceof UniqueViolationError) throw new McpServerNameTakenError(`MCP server "${input.name}" already exists.`);
       throw error;
     }
+  }
+
+  /**
+   * Makes `integration`'s servers in the organization match `specs` (its settings' desired state):
+   * creates the missing, rewrites config and access of the existing, removes the ones no spec asks
+   * for. A person's tool policy, masking and on/off switch on an existing server are kept. A spec's
+   * name taken by another server gets the first free `name-2`, `name-3`… Idempotent.
+   */
+  async syncOwned(
+    orgId: string,
+    integration: string,
+    specs: readonly ManagedMcpServerSpec[],
+    actorId: string,
+  ): Promise<ManagedMcpSyncResult> {
+    const result: ManagedMcpSyncResult = { created: [], updated: [], removed: [] };
+    const rows = await this.#db.findMany<McpServerDbRow>(SERVERS, { org_id: orgId });
+    const owned = new Map<string, McpServerDbRow>();
+    for (const row of rows) {
+      const owner = row.owner ? mcpServerOwnerSchema.safeParse(row.owner) : null;
+      if (owner?.success && owner.data.integration === integration) owned.set(owner.data.key, row);
+    }
+    const wanted = new Set(specs.map(spec => spec.key));
+    for (const [key, row] of owned) {
+      if (wanted.has(key)) continue;
+      if ((await this.#db.deleteMany(SERVERS, { org_id: orgId, id: row.id })) > 0) result.removed.push(row.id);
+    }
+    const now = new Date();
+    for (const spec of specs) {
+      const launch = mcpServerLaunchSchema.parse(spec.launch) as McpServerLaunch;
+      const existing = owned.get(spec.key);
+      if (existing) {
+        const same =
+          existing.label === spec.label &&
+          JSON.stringify(existing.launch) === JSON.stringify(launch) &&
+          JSON.stringify(existing.assignments) === JSON.stringify(spec.assignments);
+        if (same) continue;
+        await this.#db.updateAtomic<McpServerDbRow>(SERVERS, { org_id: orgId, id: existing.id }, async () => ({
+          label: spec.label,
+          launch,
+          assignments: spec.assignments,
+          updated_by: actorId,
+          updated_at: now,
+        }));
+        result.updated.push(existing.id);
+        continue;
+      }
+      for (let attempt = 1; ; attempt += 1) {
+        const name = attempt === 1 ? spec.name : `${spec.name.slice(0, 28)}-${attempt}`;
+        try {
+          const row = await this.#db.insertOne<McpServerDbRow>(SERVERS, {
+            org_id: orgId,
+            name,
+            label: spec.label,
+            launch,
+            secrets: await this.#encryption.encrypt(EMPTY_SECRETS),
+            assignments: spec.assignments,
+            tool_policies: DEFAULT_MCP_TOOL_POLICIES,
+            mask_personal_data: true,
+            enabled: true,
+            owner: { integration, key: spec.key },
+            created_by: actorId,
+            updated_by: actorId,
+            created_at: now,
+            updated_at: now,
+          });
+          result.created.push(row.id);
+          break;
+        } catch (error) {
+          if (!(error instanceof UniqueViolationError) || attempt >= 20) throw error;
+        }
+      }
+    }
+    return result;
   }
 
   /**
@@ -233,6 +318,7 @@ export class McpServersStorage extends FactoryStorageDomain {
       toolPolicies: (row.tool_policies as McpToolPolicies | null) ?? DEFAULT_MCP_TOOL_POLICIES,
       maskPersonalData: row.mask_personal_data !== false,
       enabled: row.enabled !== false,
+      ...(row.owner ? { owner: mcpServerOwnerSchema.parse(row.owner) } : {}),
       updatedAt: new Date(row.updated_at).toISOString(),
       updatedBy: row.updated_by,
     };

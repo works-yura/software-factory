@@ -33,6 +33,13 @@ export const CRASHLYTICS_API: GoogleApiSpec = {
   role: 'roles/firebasecrashlytics.viewer',
 };
 
+export const FIRESTORE_API: GoogleApiSpec = {
+  label: 'Firestore',
+  service: 'firestore.googleapis.com',
+  scope: 'https://www.googleapis.com/auth/datastore',
+  role: 'roles/datastore.viewer',
+};
+
 interface GoogleErrorBody {
   error?: {
     code?: number;

@@ -20,6 +20,8 @@ export const GOOGLE_TOKEN_URI = 'https://oauth2.googleapis.com/token';
 export const GOOGLE_SCOPES = {
   logging: 'https://www.googleapis.com/auth/logging.read',
   crashlytics: 'https://www.googleapis.com/auth/firebase',
+  /** Firestore (the «База» check). Writes stay impossible while the account has only Cloud Datastore Viewer. */
+  datastore: 'https://www.googleapis.com/auth/datastore',
 } as const;
 export type GoogleScope = (typeof GOOGLE_SCOPES)[keyof typeof GOOGLE_SCOPES];
 

@@ -16,7 +16,8 @@ import type { RouteAuth } from '@factory/http';
 import type { IntegrationHooks } from '@factory/integrations';
 import type { FactoryProjectsStorage, IntegrationStorageHandle } from '@factory/store';
 
-import { ServiceAccountKeyError, parseServiceAccountKey } from './service-account.ts';
+import { FIRESTORE_API, GoogleApiClient } from './google-api.ts';
+import { ServiceAccountKeyError, ServiceAccountTokens, parseServiceAccountKey } from './service-account.ts';
 import type { FetchLike, ServiceAccountKey } from './service-account.ts';
 import {
   deleteAccount,
@@ -26,6 +27,7 @@ import {
   readAccountKey,
   readFirebaseState,
   readsCrashes,
+  readsDatabase,
   renameAccount,
   saveAccount,
   saveBinding,
@@ -44,8 +46,8 @@ export interface FirebaseRoutesOptions {
 
 /** One line of the access check. */
 export interface FirebaseCheck {
-  check: 'logs' | 'crashes';
-  /** The Google Cloud project (logs) or app id (crashes) checked. */
+  check: 'logs' | 'crashes' | 'database';
+  /** The Google Cloud project (logs), app id (crashes) or Firestore database (database) checked. */
   target: string;
   ok: boolean;
   message?: string;
@@ -144,8 +146,9 @@ export function stateView(state: FirebaseState): FirebaseStateView {
 /** Runs the reads an agent would make, one per feature and app, and reports each. */
 export async function checkFirebaseAccess(
   source: FirebaseObservabilitySource,
-  binding: Pick<FirebaseBinding, 'projectId' | 'logs' | 'crashes' | 'apps'>,
+  binding: Pick<FirebaseBinding, 'projectId' | 'logs' | 'crashes' | 'apps' | 'database'>,
   now: Date,
+  database?: { listCollections(projectId: string, databaseId: string): Promise<unknown> },
 ): Promise<FirebaseCheck[]> {
   const checks: FirebaseCheck[] = [];
   const run = async (check: FirebaseCheck['check'], target: string, read: () => Promise<unknown>) => {
@@ -174,7 +177,24 @@ export async function checkFirebaseAccess(
   for (const app of readsCrashes(binding) ? binding.apps : []) {
     await run('crashes', app.appId, () => source.listCrashIssues({ appId: app.appId, from, to: now, limit: 1 }));
   }
+  if (readsDatabase(binding) && database) {
+    const id = binding.database?.databaseId || '(default)';
+    await run('database', `${binding.projectId}/${id}`, () => database.listCollections(binding.projectId, id));
+  }
   return checks;
+}
+
+/** The read MCP Toolbox's Firestore tools start with: list a database's top-level collections. */
+export function firestoreReader(key: ServiceAccountKey, fetch?: FetchLike): { listCollections(projectId: string, databaseId: string): Promise<unknown> } {
+  const tokens = new ServiceAccountTokens(key, fetch ? { fetch } : {});
+  return {
+    listCollections: (projectId, databaseId) =>
+      new GoogleApiClient({ tokens, projectId, ...(fetch ? { fetch } : {}) }).request(
+        FIRESTORE_API,
+        `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/${encodeURIComponent(databaseId)}/documents:listCollectionIds`,
+        { method: 'POST', body: { pageSize: 1 } },
+      ),
+  };
 }
 
 export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] {
@@ -198,6 +218,10 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
     });
 
   const view = async (orgId: string) => stateView(await readFirebaseState(storage, orgId));
+  /** «База» bindings are MCP servers the factory manages: bring them in line after any change. */
+  const syncManaged = async (orgId: string) => {
+    await hooks?.onManagedMcpServersChanged?.(orgId);
+  };
 
   /** A binding the org may save: its Factory is the org's, its account exists, its apps are unique. */
   const validBinding = async (orgId: string, input: FirebaseBindingInput) => {
@@ -218,6 +242,7 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
     logs: binding.logs,
     crashes: binding.crashes,
     apps: binding.apps.map(app => app.appId),
+    database: readsDatabase(binding),
   });
 
   return [
@@ -285,6 +310,7 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
         const removed = await deleteAccount(storage, orgId, accountId);
         if (!removed) throw new Refusal(404, { error: 'account_not_found' });
         await audit(c, 'disconnected', { accountId, removedBindings: removed.removedBindings });
+        await syncManaged(orgId);
         return c.json(await view(orgId));
       }),
     }),
@@ -297,6 +323,7 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
         await validBinding(orgId, input);
         const binding = await saveBinding(storage, orgId, { id: newBindingId(), ...input });
         await audit(c, 'mapping_updated', bindingAudit(binding), binding.factoryProjectId);
+        await syncManaged(orgId);
         return c.json({ binding, ...(await view(orgId)) });
       }),
     }),
@@ -311,6 +338,7 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
         if (!state.bindings.some(binding => binding.id === bindingId)) throw new Refusal(404, { error: 'binding_not_found' });
         const binding = await saveBinding(storage, orgId, { id: bindingId, ...input });
         await audit(c, 'mapping_updated', bindingAudit(binding), binding.factoryProjectId);
+        await syncManaged(orgId);
         return c.json({ binding, ...(await view(orgId)) });
       }),
     }),
@@ -323,6 +351,7 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
         const existing = (await readFirebaseState(storage, orgId)).bindings.find(binding => binding.id === bindingId);
         if (!existing || !(await deleteBinding(storage, orgId, bindingId))) throw new Refusal(404, { error: 'binding_not_found' });
         await audit(c, 'mapping_updated', { bindingId, removed: true, projectId: existing.projectId }, existing.factoryProjectId);
+        await syncManaged(orgId);
         return c.json(await view(orgId));
       }),
     }),
@@ -336,7 +365,7 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
         const key = await readAccountKey(storage, orgId, binding.accountId);
         if (!key) throw new Refusal(422, { error: 'account_not_found', message: 'Choose one of the Google Cloud accounts.' });
         const source = new FirebaseObservabilitySource({ key, binding, ...(options.fetch ? { fetch: options.fetch } : {}), now });
-        const checks = await checkFirebaseAccess(source, binding, now());
+        const checks = await checkFirebaseAccess(source, binding, now(), firestoreReader(key, options.fetch));
         return c.json({ ok: checks.length > 0 && checks.every(check => check.ok), checks });
       }),
     }),

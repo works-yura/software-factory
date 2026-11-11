@@ -56,6 +56,8 @@ export interface McpServerHubDeps {
   log?: Pick<Console, 'warn'>;
   /** Reads an organization's account secret for a server filled from it (a Google Cloud key). */
   credentials?: { readSecret(orgId: string, ref: McpCredentialRef): Promise<string | null> };
+  /** Brings the servers integrations manage in line with their settings before the first read per org. */
+  managed?: { ensure(orgId: string): Promise<void> };
 }
 
 interface SessionServers {
@@ -169,6 +171,8 @@ export class McpServerHub {
   }
 
   async #serversFor(session: McpHubSession): Promise<SessionServers | undefined> {
+    // A failed sync is logged loudly by `ensure`; the session keeps the servers as stored.
+    await this.#deps.managed?.ensure(session.orgId).catch(() => undefined);
     const records = (await this.#deps.servers.listRecords(session.orgId)).filter(record => mcpServerAvailable(record, session));
     const fingerprint = records.map(record => `${record.id}@${record.updatedAt}`).join('|');
     const current = this.#sessions.get(session.sessionId);

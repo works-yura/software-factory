@@ -25,7 +25,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import type { BoardRegistry, IntakeRoutesReader, ProjectBoardSource } from '@factory/core';
+import type { BoardRegistry, IntakeRoutesReader, ManagedMcpServerSpec, ProjectBoardSource } from '@factory/core';
 import type { StoredBoardsStorage } from '@factory/store';
 import type { Intake } from '@factory/capabilities';
 import type { VersionControl } from '@factory/capabilities';
@@ -61,6 +61,11 @@ export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
   /** Hand a push off for an environment build; never blocks the webhook and never throws. */
   onRepositoryPush?: (event: RepositoryPushEvent) => void;
+  /**
+   * The integration's settings changed what MCP servers it manages (`managedMcpServers`); the
+   * factory syncs the organization's servers to match. Resolves once they do; a failure throws.
+   */
+  onManagedMcpServersChanged?: (orgId: string) => Promise<void>;
 }
 
 /**
@@ -248,6 +253,12 @@ export interface FactoryIntegration {
    * server filled from a Google Cloud account). Called after `initialize`.
    */
   credentialProviders?(): CredentialProvider[];
+  /**
+   * MCP servers this integration runs under the hood for an organization, as its settings say
+   * (desired state): Google Cloud's «База» is MCP Toolbox for a binding's project. The factory
+   * syncs them into Settings › Інтеграції › MCP, marked as managed. Called after `initialize`.
+   */
+  managedMcpServers?(orgId: string): Promise<ManagedMcpServerSpec[]>;
   /**
    * One-off data migrations the integration owns, such as moving its retired per-source settings
    * into intake routes. Run by the factory once per boot, in `prepare()`, after storage and the

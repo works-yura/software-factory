@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@factory/capabilities": "workspace:*",
+    "@factory/core": "workspace:*",
     "@factory/http": "workspace:*",
     "@factory/integrations": "workspace:*",
     "@factory/store": "workspace:*",

@@ -63,4 +63,61 @@ describe('McpServersStorage', () => {
       mergeMcpSecrets({ env: { A: '1' }, headers: { H: 'x' }, files: {} }, { headers: { H: null }, files: { F: 'f' } }),
     ).toEqual({ env: { A: '1' }, headers: {}, files: { F: 'f' } });
   });
+
+  describe('servers an integration manages', () => {
+    const spec = (key: string, overrides: Record<string, unknown> = {}) => ({
+      key,
+      name: 'db-syncta-57c6a',
+      label: 'Firestore syncta-57c6a',
+      launch: {
+        transport: 'catalog' as const,
+        entry: 'mcp-toolbox',
+        variant: 'firestore',
+        inputs: { FIRESTORE_PROJECT: 'syncta-57c6a' },
+        credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account' as const, id: 'acc-1' } },
+      },
+      assignments: [{ factoryProjectId: 'fp-1' }],
+      ...overrides,
+    });
+
+    it('creates, keeps a person\'s policy across updates, and removes what the settings no longer ask for', async () => {
+      const { domain } = await makeStore();
+      const first = await domain.syncOwned(ORG, 'firebase', [spec('bnd-1')], 'integration:firebase');
+      expect(first.created).toHaveLength(1);
+      const [created] = await domain.list(ORG);
+      expect(created).toMatchObject({ name: 'db-syncta-57c6a', owner: { integration: 'firebase', key: 'bnd-1' }, maskPersonalData: true });
+
+      // A person forbids a write tool; the integration then moves the server to another Factory.
+      await domain.update(
+        ORG,
+        created!.id,
+        { ...created!, toolPolicies: { default: 'allow', tools: { delete_documents: 'deny' } }, secrets: undefined } as never,
+        'user-1',
+      );
+      const second = await domain.syncOwned(ORG, 'firebase', [spec('bnd-1', { assignments: [{ factoryProjectId: 'fp-2' }] })], 'integration:firebase');
+      expect(second).toEqual({ created: [], updated: [created!.id], removed: [] });
+      const [moved] = await domain.list(ORG);
+      expect(moved).toMatchObject({ assignments: [{ factoryProjectId: 'fp-2' }], toolPolicies: { tools: { delete_documents: 'deny' } } });
+
+      expect(await domain.syncOwned(ORG, 'firebase', [spec('bnd-1', { assignments: [{ factoryProjectId: 'fp-2' }] })], 'x')).toEqual({
+        created: [],
+        updated: [],
+        removed: [],
+      });
+      expect((await domain.syncOwned(ORG, 'firebase', [], 'x')).removed).toEqual([created!.id]);
+      expect(await domain.list(ORG)).toEqual([]);
+    });
+
+    it('takes a free name when a person already uses it, and leaves people\'s and other integrations\' servers alone', async () => {
+      const { domain } = await makeStore();
+      await domain.create(ORG, input({ name: 'db-syncta-57c6a' }), 'user-1');
+      await domain.syncOwned(ORG, 'other', [spec('x-1')], 'integration:other');
+      await domain.syncOwned(ORG, 'firebase', [spec('bnd-1')], 'integration:firebase');
+
+      const names = (await domain.list(ORG)).map(server => `${server.name}:${server.owner?.integration ?? 'person'}`);
+      expect(names.sort()).toEqual(['db-syncta-57c6a-2:other', 'db-syncta-57c6a-3:firebase', 'db-syncta-57c6a:person']);
+      await domain.syncOwned(ORG, 'firebase', [], 'integration:firebase');
+      expect((await domain.list(ORG)).map(server => server.owner?.integration ?? 'person').sort()).toEqual(['other', 'person']);
+    });
+  });
 });

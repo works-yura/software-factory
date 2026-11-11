@@ -166,6 +166,8 @@ import { ProjectRoutes } from '@factory/api';
 import { createModelSwitchRoute, createSessionAccessGuard } from '@factory/session';
 import { McpCredentials } from './mcp-servers/credentials.ts';
 import { McpServerHub } from './mcp-servers/hub.ts';
+import { ManagedMcpServers } from './mcp-servers/managed.ts';
+import type { McpServerManagingIntegration } from './mcp-servers/managed.ts';
 import { buildMcpServerRoutes } from './mcp-servers/routes.ts';
 import { mcpSessionCoordinates, resolveMcpSessionScope } from './mcp-servers/scope.ts';
 import { FactoryModelSwitchProcessor } from '@factory/session';
@@ -979,7 +981,19 @@ export class MastraFactory {
     // Accounts integrations lend to MCP servers (a Google Cloud account), set once integrations are ready below.
     let mcpCredentialProviders: readonly CredentialProvider[] = [];
     const mcpCredentials = new McpCredentials(() => mcpCredentialProviders);
-    const mcpServerHub = new McpServerHub({ servers: mcpServersStorage, audit: auditDomain, credentials: mcpCredentials });
+    // Integrations that run MCP servers under the hood (Google Cloud's «База»), set once they are ready below.
+    let mcpManagingIntegrations: readonly McpServerManagingIntegration[] = [];
+    const managedMcpServers = new ManagedMcpServers({
+      servers: mcpServersStorage,
+      integrations: () => mcpManagingIntegrations,
+      logger: { error: (message, meta) => console.error(message, meta ?? {}) },
+    });
+    const mcpServerHub = new McpServerHub({
+      servers: mcpServersStorage,
+      audit: auditDomain,
+      credentials: mcpCredentials,
+      managed: managedMcpServers,
+    });
     this.#mcpServers = mcpServerHub;
     // Held by reference: the channel attach below pushes into it, long after this.
     const feedPublishers: WorkItemFeedPublisher[] = [];
@@ -1203,6 +1217,10 @@ export class MastraFactory {
     mcpCredentialProviders = integrationRegistrations.flatMap(({ integration, ready }) =>
       ready ? (integration.credentialProviders?.() ?? []) : [],
     );
+    mcpManagingIntegrations = integrationRegistrations.flatMap(({ integration, ready }) => {
+      const managed = integration.managedMcpServers?.bind(integration);
+      return ready && managed ? [{ id: integration.id, managedMcpServers: managed }] : [];
+    });
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
@@ -2874,6 +2892,7 @@ export class MastraFactory {
             servers: mcpServersStorage,
             hub: mcpServerHub,
             credentials: mcpCredentials,
+            managed: managedMcpServers,
             audit: auditDomain,
           }),
           ...(mcpEnabled || sessionTokens
@@ -2965,6 +2984,7 @@ export class MastraFactory {
             stateSigner,
             sandbox: sandboxConfig,
             ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
+            onManagedMcpServersChanged: orgId => managedMcpServers.sync(orgId),
             sessionRetirement,
             // Without a retirement coordinator, the delete route removes a session's CLI config dir itself.
             onSessionDeleted: sessionId => removeTurnSessionFiles(sessionId),

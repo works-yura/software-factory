@@ -19,12 +19,15 @@ import type { McpServersStorage } from '@factory/store';
 import type { McpServerHub } from './hub.ts';
 import { MCP_CATALOG, mcpCatalogEntryById } from './catalog.ts';
 import type { McpCredentials } from './credentials.ts';
+import type { ManagedMcpServers } from './managed.ts';
 
 export interface McpServerRoutesOptions {
   auth: RouteAuth;
   servers: Pick<McpServersStorage, 'list' | 'get' | 'create' | 'update' | 'delete'>;
   hub: Pick<McpServerHub, 'status'>;
   credentials: Pick<McpCredentials, 'options' | 'suggestions'>;
+  /** Syncs the servers integrations manage before the organization's list is read. */
+  managed?: Pick<ManagedMcpServers, 'ensure'>;
   audit?: {
     record(input: {
       orgId: string;
@@ -113,12 +116,13 @@ function target(server: McpServerView) {
 }
 
 export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[] {
-  const { auth, servers, hub, audit, credentials } = options;
+  const { auth, servers, hub, audit, credentials, managed } = options;
   return [
     registerApiRoute('/web/mcp-servers', {
       method: 'GET',
       handler: handle(async c => {
         const { orgId } = await caller(c, auth, false);
+        await managed?.ensure(orgId);
         const canEdit = !auth.enabled() || (await auth.isOrganizationAdmin(c, orgId));
         return c.json({ servers: await servers.list(orgId), catalog: MCP_CATALOG, credentials: await credentials.options(orgId), canEdit });
       }),
@@ -145,7 +149,24 @@ export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[
       method: 'PUT',
       handler: handle(async c => {
         const { orgId, userId } = await caller(c, auth, true);
-        const updated = await servers.update(orgId, id(c), await readInput(c), userId);
+        const serverId = id(c);
+        const input = await readInput(c);
+        const existing = await servers.get(orgId, serverId);
+        if (!existing) throw new Refusal(404, { error: 'not_found' });
+        // An integration's server keeps the config and access its settings give it: only what each
+        // tool may do and the masking are a person's to change here.
+        const write: McpServerInput = existing.owner
+          ? {
+              name: existing.name,
+              label: existing.label,
+              launch: existing.launch,
+              assignments: existing.assignments,
+              toolPolicies: input.toolPolicies,
+              maskPersonalData: input.maskPersonalData,
+              enabled: existing.enabled,
+            }
+          : input;
+        const updated = await servers.update(orgId, serverId, write, userId);
         if (!updated) throw new Refusal(404, { error: 'not_found' });
         await audit?.record({ orgId, actorId: userId, action: 'factory.mcp_server.updated', targets: target(updated) });
         return c.json({ server: updated });
@@ -156,7 +177,15 @@ export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[
       handler: handle(async c => {
         const { orgId, userId } = await caller(c, auth, true);
         const existing = await servers.get(orgId, id(c));
-        if (!existing || !(await servers.delete(orgId, existing.id))) throw new Refusal(404, { error: 'not_found' });
+        if (!existing) throw new Refusal(404, { error: 'not_found' });
+        if (existing.owner) {
+          throw new Refusal(409, {
+            error: 'managed_by_integration',
+            integration: existing.owner.integration,
+            message: 'An integration manages this server; switch it off in Settings › Integrations.',
+          });
+        }
+        if (!(await servers.delete(orgId, existing.id))) throw new Refusal(404, { error: 'not_found' });
         await audit?.record({ orgId, actorId: userId, action: 'factory.mcp_server.deleted', targets: target(existing) });
         return c.json({ deleted: true });
       }),

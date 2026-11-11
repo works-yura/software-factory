@@ -135,11 +135,38 @@ export interface McpSecretNames {
   files: string[];
 }
 
+/**
+ * The integration that manages a server (Settings › Інтеграції › Сервіси): it decides the server's
+ * config and which Factory gets it; people may change only its tool policy and masking. `key` is
+ * the integration's own id for it (a Google Cloud binding's id), so a sync finds it again.
+ */
+export const mcpServerOwnerSchema = z.object({
+  integration: z.string().min(1).max(64),
+  key: z.string().min(1).max(128),
+});
+export type McpServerOwner = z.infer<typeof mcpServerOwnerSchema>;
+
+/**
+ * A server an integration wants to exist, as its settings say (desired state). The Factory's sync
+ * creates, updates or removes the integration's servers to match; tool policy, masking and the
+ * on/off switch a person set are kept.
+ */
+export interface ManagedMcpServerSpec {
+  key: string;
+  /** Preferred server name; a free variant is used if another server has it. */
+  name: string;
+  label: string;
+  launch: McpServerLaunch;
+  assignments: McpServerAssignment[];
+}
+
 /** A server as the API shows it. */
 export interface McpServerView {
   id: string;
   name: string;
   label: string;
+  /** Present when an integration manages the server. */
+  owner?: McpServerOwner;
   launch: McpServerLaunch;
   secretNames: McpSecretNames;
   assignments: McpServerAssignment[];

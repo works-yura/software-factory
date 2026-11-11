@@ -138,6 +138,8 @@ export interface FactoryApiRoutesDeps {
   sandbox?: FactorySandbox;
   /** Push hand-off for environment builds, present when the sandbox can build templates. */
   onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
+  /** Syncs an organization's integration-managed MCP servers after an integration's settings change. */
+  onManagedMcpServersChanged?: IntegrationHooks['onManagedMcpServersChanged'];
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -557,6 +559,7 @@ export function buildIntegrationContext(
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
     onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
+    onManagedMcpServersChanged?: IntegrationHooks['onManagedMcpServersChanged'];
     configVersion: string;
     boardRegistry: BoardRegistry | ProjectBoardSource;
     /** The project's intake routes and boards, so integrations filing cards themselves apply the routes. */
@@ -612,11 +615,12 @@ export function buildIntegrationContext(
           },
         }
       : {}),
-    ...(deps.emitAudit || deps.onRepositoryPush
+    ...(deps.emitAudit || deps.onRepositoryPush || deps.onManagedMcpServersChanged
       ? {
           hooks: {
             ...(deps.emitAudit ? { emitAudit: deps.emitAudit } : {}),
             ...(deps.onRepositoryPush ? { onRepositoryPush: deps.onRepositoryPush } : {}),
+            ...(deps.onManagedMcpServersChanged ? { onManagedMcpServersChanged: deps.onManagedMcpServersChanged } : {}),
           },
         }
       : {}),

@@ -1223,6 +1223,9 @@ importers:
       '@factory/capabilities':
         specifier: workspace:*
         version: link:../capabilities
+      '@factory/core':
+        specifier: workspace:*
+        version: link:../core
       '@factory/http':
         specifier: workspace:*
         version: link:../http
@@ -14133,7 +14136,7 @@ snapshots:
       obug: 2.2.1
       std-env: 4.3.0
       tinyrainbow: 3.2.0
-      vitest: 4.1.11(@opentelemetry/api@1.10.0)(@types/node@22.20.1)(@vitest/coverage-v8@4.1.11)(jsdom@30.1.1)(msw@2.14.6(@types/node@22.20.1)(typescript@6.0.3))(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 4.1.11(@opentelemetry/api@1.10.0)(@types/node@22.20.1)(@vitest/coverage-v8@4.1.11)(jsdom@30.1.1)(msw@2.14.6(@types/node@22.20.1)(typescript@7.0.2))(vite@8.3.5(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/expect@4.1.11':
     dependencies:
