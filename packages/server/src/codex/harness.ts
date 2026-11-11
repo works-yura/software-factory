@@ -31,7 +31,15 @@ import type { FactoryProject, FactoryProjectsStorage } from '@factory/store';
 import { withAgentLanguage } from '../agent-language.ts';
 import { claudeFactorySkillDirectories, type ClaudeFactoryPermissionsHook } from '../claude/harness.ts';
 import { createSessionDirs } from '../claude/config-dir.ts';
+import {
+  CLAUDE_SUPERVISOR_WRITE_TOOLS,
+  CODEX_SUPERVISOR_INSTRUCTIONS,
+  claudeSupervisorProjectId,
+  createClaudeSupervisorWorkdir,
+  createTurnSupervisorSessions,
+} from '../claude/supervisor.ts';
 import { CLAUDE_THREAD_SETTINGS } from '../claude/start-coordinator.ts';
+import { codexUntrustedCheckoutConfig, isUntrustedCheckout } from '../turn-harness.ts';
 import type { CodexCredentials } from './credentials.ts';
 
 /** The MCP server name the Factory's tools are mounted under in a Codex thread. */
@@ -39,6 +47,14 @@ export const CODEX_FACTORY_MCP_SERVER = 'factory';
 
 /** A run can take hours; its Factory token outlives it (Claude Code mints one per turn instead). */
 const CODEX_SESSION_TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
+
+/** The Factory chat's write tools as Codex names them: asked about on every call. */
+export const CODEX_SUPERVISOR_ASK_TOOLS = CLAUDE_SUPERVISOR_WRITE_TOOLS.map(id => `mcp__${CODEX_FACTORY_MCP_SERVER}__${id}`);
+
+/** The Factory chat's write tools, each prompted for (`mcp_servers.factory.tools.<tool>.approval_mode`). */
+const CODEX_SUPERVISOR_PROMPTED_TOOLS: Record<string, { approval_mode: 'prompt' }> = Object.fromEntries(
+  CLAUDE_SUPERVISOR_WRITE_TOOLS.map(id => [id, { approval_mode: 'prompt' as const }]),
+);
 
 /** The thread's developer instructions: what a Factory session is, and where its tools are. */
 export const CODEX_FACTORY_INSTRUCTIONS = [
@@ -82,8 +98,10 @@ export interface CodexFactoryHarnessOptions {
   storeDir?: string;
   store?: CodexSessionStore;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
-  /** The Factories: each session's Codex default and agent language, read per run. */
-  projects?: Pick<FactoryProjectsStorage, 'get'>;
+  /** The Factories: each session's Codex default and agent language, read per run; `getById` serves the Factory chat. */
+  projects?: Pick<FactoryProjectsStorage, 'get'> & Partial<Pick<FactoryProjectsStorage, 'getById'>>;
+  /** Where Factory chats on Codex get their private empty working folders; `<storeDir>-supervisor` by default. */
+  supervisorWorkdirRoot?: string;
   /** The session's checkout (see `createClaudeCheckoutResolver`). */
   cwdFor: (sessionId: string) => string | Promise<string>;
   /** The Factory MCP endpoint for a factory, and the signer for the session tokens it accepts. */
@@ -128,6 +146,8 @@ export interface CodexFactoryHarness {
   /** For the routing harness: a session is Codex's when its store has it. */
   route: HarnessRoute;
   models: CodexHarnessModels<CodexSession>;
+  /** A session by id, the Factory chat's (`factory-supervisor:<factory>`) created when a Codex Factory's chat first reaches it. */
+  resolveSession(sessionId: string): Promise<CodexSession | undefined>;
   /** The CLI's catalog, probed and cached; also what says whether Codex is available. */
   catalog: CodexCatalogSource;
 }
@@ -151,10 +171,34 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
   // The catalog probe runs in an empty home of its own: the CLI lists its models without a login.
   const probeHome = join(homeRoot, '.catalog-probe');
 
+  /**
+   * Who a session's run runs for, as a Claude Code session's turn: a session with a row runs as its
+   * row; the Factory chat (supervisor) has none: it belongs to its Factory and runs as the person
+   * whose message or answer started the run, or the Factory's creator before anyone did.
+   */
   const tenantOf = async (session: CodexSession) => {
+    const supervisorProjectId = claudeSupervisorProjectId(session.id);
+    if (supervisorProjectId) {
+      const project = await options.projects?.getById?.({ id: supervisorProjectId });
+      if (!project) throw new Error(`The Factory of supervisor session ${session.id} was not found.`);
+      const actor = await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.actorUserId });
+      return {
+        orgId: project.orgId,
+        factoryProjectId: project.id,
+        userId: typeof actor === 'string' && actor ? actor : project.createdBy,
+        supervisor: true as const,
+        originSessionId: null,
+      };
+    }
     const row = await options.sessions.getBySessionId(session.id);
     if (!row?.factoryProjectId) throw new Error(`Codex session ${session.id} has no Factory session row.`);
-    return { orgId: row.orgId, factoryProjectId: row.factoryProjectId, userId: row.userId, originSessionId: row.originSessionId ?? null };
+    return {
+      orgId: row.orgId,
+      factoryProjectId: row.factoryProjectId,
+      userId: row.userId,
+      supervisor: false as const,
+      originSessionId: row.originSessionId ?? null,
+    };
   };
   const coordinates = async (session: CodexSession): Promise<SessionCoordinates & { userId: string }> => {
     const tenant = await tenantOf(session);
@@ -174,10 +218,29 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
   };
   const isCardRun = async (session: CodexSession) => {
     const tenant = await tenantOf(session);
+    if (tenant.supervisor) return false;
     if (tenant.originSessionId) return true;
     if (await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.workItemId })) return true;
     return (await options.cardRun?.({ orgId: tenant.orgId, factoryProjectId: tenant.factoryProjectId, sessionId: session.id })) === true;
   };
+
+  const supervisorWorkdir = createClaudeSupervisorWorkdir(
+    options.supervisorWorkdirRoot ??
+      (options.storeDir ? `${options.storeDir.replace(/\/+$/, '')}-supervisor` : join(homeRoot, '.supervisor')),
+  );
+  // The Factory chat of a Codex Factory is a Codex session too, as a Claude Code Factory's is a Claude one.
+  const projects = options.projects;
+  const supervisors = projects?.getById
+    ? createTurnSupervisorSessions<CodexSession>({
+        harnessId: 'codex',
+        harness: { getSession: id => harness.getSession(id), createSession: input => harness.createSession(input) },
+        projects: { getById: args => projects.getById!(args) },
+      })
+    : undefined;
+  const resolveSession = (sessionId: string) => (supervisors ? supervisors.resolve(sessionId) : harness.getSession(sessionId));
+  const owns = async (sessionId: string) =>
+    (await store.get(sessionId)) !== undefined ||
+    (claudeSupervisorProjectId(sessionId) !== null && (await supervisors?.resolve(sessionId)) !== undefined);
 
   const catalog =
     options.catalog ??
@@ -196,8 +259,8 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
     });
 
   const models = createCodexHarnessModels<CodexSession>({
-    owns: async sessionId => (await store.get(sessionId)) !== undefined,
-    getSession: sessionId => harness.getSession(sessionId),
+    owns,
+    getSession: resolveSession,
     defaults: async session => codexModelDefaults(await projectOf(session)),
     ...(options.projects
       ? {
@@ -217,7 +280,11 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
   const harness = createCodexHarness({
     models,
     store,
-    cwdFor: options.cwdFor,
+    // The Factory chat has no repository: a private empty folder instead of a checkout.
+    cwdFor: async sessionId => {
+      const supervisorProjectId = claudeSupervisorProjectId(sessionId);
+      return supervisorProjectId ? supervisorWorkdir(supervisorProjectId) : options.cwdFor(sessionId);
+    },
     env,
     ...(options.command ? { command: options.command } : {}),
     ...(options.launchArgs ? { launchArgs: options.launchArgs } : {}),
@@ -240,11 +307,17 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
     ...(options.turnTimeoutMs ? { turnTimeoutMs: options.turnTimeoutMs } : {}),
     skillsDir: claudeFactorySkillDirectories(options.skillsDir),
     planningPrompt: CODEX_FACTORY_PLANNING_PROMPT,
+    // A pull or merge request checkout reads no repository config: no AGENTS.md, an untrusted project (the shared rule).
+    threadConfigFor: async session => ((await isUntrustedCheckout(session.thread)) ? codexUntrustedCheckoutConfig(session.cwd) : undefined),
     // Read per turn, so a model, effort or tier changed in Settings or for the session applies from its next turn.
     turnSelectionFor: session => models.turnSelection(session),
     developerInstructionsFor: async session => {
       const target = await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.targetInstruction });
-      const base = typeof target === 'string' && target ? `${CODEX_FACTORY_INSTRUCTIONS}\n\n${target}` : CODEX_FACTORY_INSTRUCTIONS;
+      const base = claudeSupervisorProjectId(session.id)
+        ? CODEX_SUPERVISOR_INSTRUCTIONS
+        : typeof target === 'string' && target
+          ? `${CODEX_FACTORY_INSTRUCTIONS}\n\n${target}`
+          : CODEX_FACTORY_INSTRUCTIONS;
       if (!options.projects) return base;
       const tenant = await tenantOf(session);
       // The Factory's agent language closes every session's instructions.
@@ -258,24 +331,38 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
             // A run a signed-in person started is interactive, as a Mastra turn over HTTP; the mark is taken by that run.
             const interactive = (await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.personTurn })) === true;
             if (interactive) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.personTurn, value: false });
+            // The Factory chat's token is a supervisor token: its tools, acting as the person behind the run.
             const token = mcp.tokens.sign(
               {
                 orgId: tenant.orgId,
                 factoryProjectId: tenant.factoryProjectId,
                 sessionId: session.id,
                 threadId: session.thread.requireId(),
-                resourceId: session.resourceId ?? tenant.factoryProjectId,
+                resourceId: session.resourceId ?? (tenant.supervisor ? session.id : tenant.factoryProjectId),
+                ...(tenant.supervisor ? { scope: 'supervisor' as const, userId: tenant.userId } : {}),
                 ...(interactive ? { interactive: true } : {}),
               },
               { ttlMs: CODEX_SESSION_TOKEN_TTL_MS },
             );
-            return { [CODEX_FACTORY_MCP_SERVER]: { url: mcp.url(tenant.factoryProjectId), http_headers: { [FACTORY_SESSION_TOKEN_HEADER]: token } } };
+            return {
+              [CODEX_FACTORY_MCP_SERVER]: {
+                url: mcp.url(tenant.factoryProjectId),
+                http_headers: { [FACTORY_SESSION_TOKEN_HEADER]: token },
+                // The Factory chat's repairs ask a person on every call, as on Claude Code.
+                ...(tenant.supervisor ? { tools: CODEX_SUPERVISOR_PROMPTED_TOOLS } : {}),
+              },
+            };
           },
         }
       : {}),
     policyFor: async session => {
       const tenant = await tenantOf(session);
       const permissions = (await options.permissions?.({ orgId: tenant.orgId, factoryProjectId: tenant.factoryProjectId })) ?? undefined;
+      // The Factory chat asks before every repair (unless the Factory auto-approves), as on Claude Code.
+      if (tenant.supervisor) {
+        const policy = codexPolicyFromPermissions(permissions);
+        return permissions?.yolo ? policy : { ...policy, askEachTime: [...CODEX_SUPERVISOR_ASK_TOOLS] };
+      }
       // A card run reads freely; where the settings say to ask, it waits on the board and in the inbox for a person.
       const cardRun = await isCardRun(session);
       return codexPolicyFromPermissions(cardRun ? { ...permissions, unattended: true, parkAsks: true } : permissions);
@@ -284,7 +371,7 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
     turnContextFor: async session => {
       const environment = peekSessionEnvironment(session.id);
       const signals = environment ? [`<factory-environment>\n${renderSessionEnvironment(environment)}\n</factory-environment>`] : [];
-      if (!session.thread.getId()) return signals.join('\n') || undefined;
+      if (!session.thread.getId() || claudeSupervisorProjectId(session.id)) return signals.join('\n') || undefined;
       const where = await coordinates(session);
       const sessions = await options.sessionsFor?.(where);
       if (sessions) signals.push(`<factory-sessions>\n${sessions}\n</factory-sessions>`);
@@ -302,6 +389,7 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
     store,
     removeSessionHome: sessionId => homes.remove(sessionId),
     models,
+    resolveSession,
     catalog,
     route: { harness, owns: async sessionId => (await store.get(sessionId)) !== undefined },
   };

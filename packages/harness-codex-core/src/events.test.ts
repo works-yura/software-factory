@@ -25,7 +25,7 @@ describe('CodexTurnTranslator', () => {
       ],
     };
     expect(turn.itemStarted({ ...at, item })).toEqual([
-      { kind: 'tool_call', toolCallId: 'p1', toolName: 'write_file', input: { path: 'src/new.ts', diff: '+export {}' } },
+      { kind: 'tool_call', toolCallId: 'p1', toolName: 'write_file', input: { path: 'src/new.ts', content: 'export {}' } },
       { kind: 'tool_call', toolCallId: 'p1:1', toolName: 'string_replace_lsp', input: { path: 'src/a.ts', diff: '-a\n+b' } },
       { kind: 'tool_call', toolCallId: 'p1:2', toolName: 'delete_file', input: { path: 'old.ts' } },
     ]);
@@ -115,5 +115,36 @@ describe('codexErrorFromTurn', () => {
     expect(codexErrorFromTurn({ message: 'x', codexErrorInfo: 'contextWindowExceeded' })).toMatchObject({ kind: 'context' });
     expect(codexErrorFromTurn({ message: 'x', codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: 502 } } })).toMatchObject({ kind: 'overloaded', status: 502 });
     expect(codexErrorFromTurn({ message: 'odd' })).toMatchObject({ kind: 'unknown', message: 'odd' });
+  });
+
+  it('draws a command Codex parsed as one read, listing or search as the file tool for it', () => {
+    const turn = translator();
+    const command = (id: string, commandActions: unknown[]) => ({
+      type: 'commandExecution' as const,
+      id,
+      command: 'x',
+      cwd: '/w',
+      status: 'inProgress' as const,
+      commandActions: commandActions as never,
+    });
+    expect(turn.itemStarted({ ...at, item: command('c1', [{ type: 'read', command: 'cat a.ts', name: 'a.ts', path: 'src/a.ts' }]) })).toEqual([
+      { kind: 'tool_call', toolCallId: 'c1', toolName: 'view', input: { command: 'x', cwd: '/w', path: 'src/a.ts' } },
+    ]);
+    expect(turn.itemStarted({ ...at, item: command('c2', [{ type: 'search', command: 'rg foo', query: 'foo', path: 'src' }]) })).toEqual([
+      { kind: 'tool_call', toolCallId: 'c2', toolName: 'search_content', input: { command: 'x', cwd: '/w', pattern: 'foo', path: 'src' } },
+    ]);
+    expect(turn.itemStarted({ ...at, item: command('c3', [{ type: 'listFiles', command: 'ls', path: null }]) })).toEqual([
+      { kind: 'tool_call', toolCallId: 'c3', toolName: 'list_files', input: { command: 'x', cwd: '/w' } },
+    ]);
+    // Several actions, or none Codex understood: a command.
+    expect(
+      turn.itemStarted({
+        ...at,
+        item: command('c4', [
+          { type: 'read', command: 'cat a', name: 'a', path: 'a' },
+          { type: 'unknown', command: 'make' },
+        ]),
+      }),
+    ).toEqual([{ kind: 'tool_call', toolCallId: 'c4', toolName: 'execute_command', input: { command: 'x', cwd: '/w' } }]);
   });
 });

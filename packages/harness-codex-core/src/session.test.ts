@@ -498,4 +498,43 @@ describe('createCodexHarness', () => {
       expect(error?.error).toMatchObject({ kind: 'rate_limit', message: 'Every ChatGPT account is out of usage.' });
     });
   });
+
+  it('parks an MCP tool call Codex asks to allow, and an ask-each-time tool’s Allow covers that call alone', async () => {
+    const answers: unknown[] = [];
+    const ask: Script = async (server, { threadId, turnId }) => {
+      const reply1 = await server.request('mcpServer/elicitation/request', {
+        threadId,
+        turnId,
+        serverName: 'factory',
+        mode: 'form',
+        message: 'Allow factory to retry the decision?',
+        _meta: { codex_approval_kind: 'mcp_tool_call', tool_name: 'factory_retry_decision' },
+      });
+      answers.push(reply1.result);
+      reply('Retried.', false)(server, { threadId, turnId, params: {} });
+    };
+    const spawn = scripted([ask]);
+    const { session, events } = await harnessWith(spawn, { policyFor: async () => ({ askEachTime: ['mcp__factory__factory_retry_decision'] }) });
+    expect(await session.sendMessage({ content: 'retry it' })).toEqual({ reason: 'suspended' });
+    expect(session.pendingPermission).toMatchObject({
+      toolName: 'mcp__factory__factory_retry_decision',
+      input: { reason: 'Allow factory to retry the decision?' },
+      once: true,
+    });
+    await session.respondToToolApproval({ approved: true });
+    await until(() => ended(events).length === 2, 'resumed run');
+    expect(answers).toEqual([{ action: 'accept', content: null, _meta: null }]);
+    expect(session.grantedTools).toEqual([]);
+
+    // Any other elicitation (a form) is declined.
+    const other = scripted([
+      async (server, { threadId, turnId }) => {
+        answers.push((await server.request('mcpServer/elicitation/request', { threadId, turnId, serverName: 'x', mode: 'form', message: 'Name?', _meta: null })).result);
+        reply('ok', false)(server, { threadId, turnId, params: {} });
+      },
+    ]);
+    const plain = await harnessWith(other);
+    expect(await plain.session.sendMessage({ content: 'go' })).toEqual({ reason: 'complete' });
+    expect(answers.at(-1)).toEqual({ action: 'decline' });
+  });
 });

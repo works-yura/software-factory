@@ -28,7 +28,7 @@ export const ONBOARDING_UPDATED_AT_KEY = 'mastracode.factory-onboarding.updated-
  */
 export const ONBOARDING_RESUME_WINDOW_MS = 30 * 60 * 1000;
 
-/** `harness` is only walked when the server runs Claude Code (`features.claudeCode`). */
+/** `harness` is only walked when the server runs Claude Code or Codex (`features.claudeCode`, `features.codex`). */
 export const ONBOARDING_STEPS = [
   'initial',
   'vcs',
@@ -63,23 +63,32 @@ const repositorySchema: z.ZodType<SourceControlRepository> = z.union([
 ]);
 const connectionSchema = z.object({ providerId: z.string(), method: z.enum(['api_key', 'oauth']) });
 const modelChoiceSchema = connectionSchema.extend({ modelId: z.string().min(1) });
-const claudeCodeModelSchema = z.enum(CLAUDE_CODE_MODELS).nullable();
-const draftSchema = z.object({
-  repository: repositorySchema.optional(),
-  /** Absent = Mastra (no harness step on servers without Claude Code). */
-  harness: z.enum(FACTORY_HARNESSES).optional(),
-  model: connectionSchema.extend({ modelId: z.string() }).optional(),
-  /** The Claude model of a Claude Code Factory; null = the CLI's default, absent = not picked yet. */
-  claudeCodeModel: claudeCodeModelSchema.optional(),
-});
+/** A turn-based harness's model: a Claude alias or a Codex catalog slug; null = the harness's own default. */
+const harnessModelSchema = z.string().min(1).nullable();
+const draftSchema = z.preprocess(
+  // Drafts saved before Codex named the Claude model `claudeCodeModel`.
+  value =>
+    value && typeof value === 'object' && 'claudeCodeModel' in value && !('harnessModel' in value)
+      ? { ...(value as Record<string, unknown>), harnessModel: (value as { claudeCodeModel: unknown }).claudeCodeModel }
+      : value,
+  z.object({
+    repository: repositorySchema.optional(),
+    /** Absent = Mastra (no harness step on servers without Claude Code or Codex). */
+    harness: z.enum(FACTORY_HARNESSES).optional(),
+    model: connectionSchema.extend({ modelId: z.string() }).optional(),
+    /** The model of a Claude Code or Codex Factory; null = the harness's default, absent = not picked yet. */
+    harnessModel: harnessModelSchema.optional(),
+  }),
+);
 
 /**
  * A Factory is created with its repository and either the company account's
- * model (Mastra) or, on Claude Code, the Claude model its sessions run.
+ * model (Mastra) or, on Claude Code or Codex, the model its sessions run.
  */
 export const completeOnboardingSchema = z.union([
   z.object({ repository: repositorySchema, harness: z.literal('mastra').optional(), model: modelChoiceSchema }),
-  z.object({ repository: repositorySchema, harness: z.literal('claude-code'), claudeCodeModel: claudeCodeModelSchema }),
+  z.object({ repository: repositorySchema, harness: z.literal('claude-code'), harnessModel: z.enum(CLAUDE_CODE_MODELS).nullable() }),
+  z.object({ repository: repositorySchema, harness: z.literal('codex'), harnessModel: harnessModelSchema }),
 ]);
 
 export type CompleteOnboardingSetup = z.infer<typeof completeOnboardingSchema>;

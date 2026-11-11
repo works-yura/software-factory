@@ -14,8 +14,6 @@
  */
 
 import type { ModelSelection, ProviderOptionSelection } from '@factory/harness/models/contracts';
-import { CLAUDE_CODE_INSTANCE_ID } from '@factory/harness-claude-code/models/aliases';
-import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ProjectListRepository } from '@factory/contracts';
 
@@ -415,16 +413,16 @@ export async function createFactoryProject(
 }
 
 /**
- * Create a Factory and, for one on Claude Code, set the `claude --model` alias picked with it as
- * its Claude Code default (null: the catalog default).
+ * Create a Factory and, for one on a turn-based harness (Claude Code, Codex), set the model picked
+ * with it as that harness's default (its instance id is the harness id; null: the catalog default).
  */
-export async function createFactoryWithClaudeModel(
+export async function createFactoryWithHarnessModel(
   baseUrl: string,
-  input: { name: string; description?: string | undefined; harness?: FactoryHarness | undefined; claudeCodeModel?: ClaudeCodeModel | null | undefined },
+  input: { name: string; description?: string | undefined; harness?: FactoryHarness | undefined; model?: string | null | undefined },
 ): Promise<FactoryProjectPayload> {
   const project = await createFactoryProject(baseUrl, input.name, input.description, input.harness);
-  if (!input.claudeCodeModel) return project;
-  return setFactoryModelDefault(baseUrl, project.id, CLAUDE_CODE_INSTANCE_ID, { model: input.claudeCodeModel });
+  if (!input.model || !input.harness || input.harness === 'mastra') return project;
+  return setFactoryModelDefault(baseUrl, project.id, input.harness, { model: input.model });
 }
 
 /** Fetch a single Factory project (includes its `defaultModelId`). */

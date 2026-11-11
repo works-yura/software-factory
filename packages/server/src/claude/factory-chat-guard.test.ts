@@ -5,6 +5,7 @@ import { createClaudeFactoryChatGuard } from './factory-chat-guard.ts';
 
 const CLAUDE_FACTORY = '11111111-1111-4111-8111-111111111111';
 const MASTRA_FACTORY = '22222222-2222-4222-8222-222222222222';
+const CODEX_FACTORY = '33333333-3333-4333-8333-333333333333';
 
 function app() {
   const reached: string[] = [];
@@ -13,7 +14,8 @@ function app() {
     '*',
     createClaudeFactoryChatGuard({
       controllerId: 'code',
-      factoryHarness: async id => (id === CLAUDE_FACTORY ? 'claude-code' : id === MASTRA_FACTORY ? 'mastra' : undefined),
+      factoryHarness: async id =>
+        id === CLAUDE_FACTORY ? 'claude-code' : id === CODEX_FACTORY ? 'codex' : id === MASTRA_FACTORY ? 'mastra' : undefined,
     }),
   );
   hono.all('*', async c => {
@@ -43,6 +45,11 @@ describe('a Claude Code Factory never becomes a Mastra chat under its own id', (
       expect(response.status).toBe(409);
       await expect(response.json()).resolves.toMatchObject({ error: expect.stringContaining('runs on Claude Code') });
     }
+    expect(reached).toEqual([]);
+    // A Codex Factory's id is not a Mastra session either.
+    const codex = await hono.request('/api/agent-controller/code/sessions', post({ sessionId: CODEX_FACTORY }));
+    expect(codex.status).toBe(409);
+    await expect(codex.json()).resolves.toMatchObject({ error: expect.stringContaining('runs on Codex') });
     expect(reached).toEqual([]);
   });
 

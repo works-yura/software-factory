@@ -1,9 +1,9 @@
 import { Command, CommandList } from '@mastra/playground-ui/components/Command';
 import type { ReactNode } from 'react';
 
-import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import type { FactoryHarness } from '../../services/github';
-import { CreateFactoryClaudeCodeStep } from '../create-factory/CreateFactoryClaudeCodeStep';
+import type { TurnHarness } from '../../services/turnHarness';
+import { CreateFactoryTurnHarnessStep } from '../create-factory/CreateFactoryTurnHarnessStep';
 import { CreateFactoryHarnessRows } from '../create-factory/CreateFactoryHarnessRows';
 
 /**
@@ -39,17 +39,19 @@ export function OnboardingHarnessStep({
   );
 }
 
-/** Claude Code's sign-in and Claude model, in place of the Mastra provider and model. */
-export function OnboardingClaudeCodeStep({
+/** A turn-based harness's sign-in and model (Claude Code's, Codex's), in place of the Mastra provider and model. */
+export function OnboardingTurnHarnessStep({
   label,
+  harness,
   onPick,
 }: {
   label: string;
-  onPick: (model: ClaudeCodeModel | null) => void;
+  harness: TurnHarness;
+  onPick: (model: string | null) => void;
 }) {
   return (
     <OnboardingCommandList label={label}>
-      <CreateFactoryClaudeCodeStep query="" onPick={onPick} />
+      <CreateFactoryTurnHarnessStep harness={harness} query="" onPick={onPick} />
     </OnboardingCommandList>
   );
 }

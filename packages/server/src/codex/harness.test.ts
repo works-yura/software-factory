@@ -13,6 +13,9 @@ import type { FactorySessionTokenClaims } from '@factory/mcp';
 
 import { agentLanguageInstruction } from '../agent-language.ts';
 import { CLAUDE_THREAD_SETTINGS } from '../claude/start-coordinator.ts';
+import { supervisorResourceId } from '@factory/session';
+
+import { CODEX_SUPERVISOR_INSTRUCTIONS } from '../claude/supervisor.ts';
 import { CODEX_FACTORY_INSTRUCTIONS, codexPolicyFromPermissions, createCodexFactoryHarness } from './harness.ts';
 import { combineTurnHarnessUserSessions, createCodexUserSessions } from './user-sessions.ts';
 import type { CodexCredentials } from './credentials.ts';
@@ -56,7 +59,11 @@ function setup(options: { cardRun?: boolean; permissions?: Parameters<typeof cod
     spawn,
     env: { PATH: '/bin' },
     sessions: { getBySessionId: async id => (id === 'session-a' ? ({ orgId: 'org-a', userId: 'user-a', factoryProjectId: 'factory-a' } as never) : null) },
-    projects: { get: async ({ id }) => (id === 'factory-a' ? (project as never) : null) },
+    projects: {
+      get: async ({ id }) => (id === 'factory-a' ? (project as never) : null),
+      getById: async ({ id }) => (id === 'factory-a' ? ({ ...project, harness: 'codex', createdBy: 'creator' } as never) : null),
+    },
+    supervisorWorkdirRoot: join(homeRoot, 'supervisor'),
     cwdFor: () => '/work/session-a',
     mcp: {
       url: id => `https://factory.test/web/factory/projects/${id}/mcp`,
@@ -121,6 +128,39 @@ describe('createCodexFactoryHarness', () => {
     await factory.removeSessionHome('session-a');
     const { existsSync } = await import('node:fs');
     expect(existsSync(home)).toBe(false);
+  });
+
+  it('reads no repository config from a pull request checkout, as a Claude Code session reads no settings file', async () => {
+    const { factory, spawn } = setup();
+    const session = await factory.harness.createSession({ sessionId: 'session-a', threadId: 'session-a', resourceId: 'factory-a' });
+    await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout, value: true });
+    await session.sendMessage({ content: 'Review it' });
+    const config = (spawn.servers[0]!.requests('thread/start')[0]!.params as any).config;
+    expect(config).toMatchObject({ project_doc_max_bytes: 0, projects: { '/work/session-a': { trust_level: 'untrusted' } } });
+
+    const trusted = setup();
+    const own = await trusted.factory.harness.createSession({ sessionId: 'session-a', threadId: 'session-a', resourceId: 'factory-a' });
+    await own.sendMessage({ content: 'Build it' });
+    expect((trusted.spawn.servers[0]!.requests('thread/start')[0]!.params as any).config).not.toHaveProperty('project_doc_max_bytes');
+  });
+
+  it("runs a Codex Factory's chat as a Codex session: no checkout, the supervisor's tools, each repair asked", async () => {
+    const { factory, spawn, signed, homeRoot } = setup();
+    const id = supervisorResourceId('factory-a');
+    const session = await factory.resolveSession(id);
+    expect(session).toBeDefined();
+    expect(await factory.models.owns(id)).toBe(true);
+    await session!.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.actorUserId, value: 'user-b' });
+    expect(await session!.sendMessage({ content: 'What is stuck?' })).toEqual({ reason: 'complete' });
+
+    const thread = spawn.servers[0]!.requests('thread/start')[0]!.params as any;
+    expect(thread.cwd.startsWith(join(homeRoot, 'supervisor'))).toBe(true);
+    expect(thread.developerInstructions).toContain(CODEX_SUPERVISOR_INSTRUCTIONS);
+    expect(thread.config['mcp_servers.factory'].tools).toMatchObject({ factory_retry_decision: { approval_mode: 'prompt' } });
+    expect(signed[0]!.claims).toMatchObject({ scope: 'supervisor', userId: 'user-b', resourceId: id, sessionId: id });
+    // Not a card run: it asks, and the turn carries no card signals.
+    const turn = spawn.servers[0]!.requests('turn/start')[0]!.params as any;
+    expect(turn.input[0].text).toBe('What is stuck?');
   });
 
   it('is available to a person only with a ChatGPT sign-in, and says where to add one', async () => {

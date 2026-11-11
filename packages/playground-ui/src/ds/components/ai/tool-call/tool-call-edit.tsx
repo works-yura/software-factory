@@ -14,6 +14,65 @@ const DIFF_SIDES = {
   added: { sign: '+', row: 'bg-success-subtle', gutter: 'text-success-subtle-foreground' },
 } as const;
 
+type UnifiedLine = { kind: 'removed' | 'added' | 'context' | 'hunk'; text: string };
+
+/** A unified diff's lines by kind; file headers (`---`, `+++`, `diff`, `index`) are dropped. */
+export function unifiedDiffLines(diff: string): UnifiedLine[] {
+  const lines: UnifiedLine[] = [];
+  for (const line of diff.replace(/\n$/, '').split('\n')) {
+    if (/^(?:---|\+\+\+|diff |index |\\ No newline)/.test(line)) continue;
+    if (line.startsWith('@@')) lines.push({ kind: 'hunk', text: line });
+    else if (line.startsWith('-')) lines.push({ kind: 'removed', text: line.slice(1) });
+    else if (line.startsWith('+')) lines.push({ kind: 'added', text: line.slice(1) });
+    else lines.push({ kind: 'context', text: line.startsWith(' ') ? line.slice(1) : line });
+  }
+  return lines;
+}
+
+/** A unified diff drawn as the replacement card draws its sides: removed red, added green, context plain. */
+function UnifiedDiff({ diff, lang, showFullContent }: { diff: string; lang: string | undefined; showFullContent: boolean }) {
+  const all = unifiedDiffLines(diff);
+  const lines = showFullContent ? all : all.slice(0, DIFF_MAX_LINES);
+  const hidden = all.length - lines.length;
+  const code = lines.map(line => line.text).join('\n');
+  const highlighted = useHighlight(code, lang);
+  const tokens = highlighted?.code === code ? highlighted.tokens : undefined;
+  return (
+    <div
+      className={cn(
+        'max-w-full min-w-0 overflow-x-auto rounded-md border border-border bg-fill font-mono text-caption',
+        showFullContent && 'max-h-60 overflow-y-auto',
+      )}
+      role="group"
+      aria-label={libText('File change')}
+    >
+      {lines.map((line, index) => {
+        if (line.kind === 'hunk') {
+          return (
+            <div key={index} className="px-2.5 whitespace-pre text-muted-foreground select-none">
+              {line.text}
+            </div>
+          );
+        }
+        const side = line.kind === 'context' ? undefined : DIFF_SIDES[line.kind];
+        return (
+          <div key={index} className={cn('flex whitespace-pre', side?.row)} data-diff-line={line.kind}>
+            <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', side?.gutter)}>{side?.sign ?? ' '}</span>
+            <span className="flex-1 pr-2.5 text-foreground">
+              {tokens?.[index]?.map((token, tokenIndex) => (
+                <span key={tokenIndex} className={token.className}>
+                  {token.content}
+                </span>
+              )) ?? line.text}
+            </span>
+          </div>
+        );
+      })}
+      {hidden > 0 && <div className="px-2.5 py-1 text-muted-foreground select-none">… {hidden} more lines</div>}
+    </div>
+  );
+}
+
 function boundedLines(text: string, showFullContent: boolean): { lines: string[]; hidden: number } {
   const lines = text.split('\n');
   if (showFullContent) return { lines, hidden: 0 };
@@ -46,6 +105,8 @@ function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof D
 
 export function ToolCallEdit({ edit, showFullContent = false }: { edit: ToolEdit; showFullContent?: boolean }) {
   const lang = languageForPath(edit.path);
+
+  if ('diff' in edit) return <UnifiedDiff diff={edit.diff} lang={lang} showFullContent={showFullContent} />;
 
   if ('content' in edit) {
     return (

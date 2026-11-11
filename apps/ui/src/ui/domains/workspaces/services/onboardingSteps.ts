@@ -5,7 +5,7 @@ import { translator } from '../../../i18n/t';
 
 const tk = translator('workspaces');
 
-/** The steps this run walks; the harness step only when the server runs Claude Code. */
+/** The steps this run walks; the harness step only when the server runs Claude Code or Codex. */
 export function onboardingSteps({ harnessChoice = false }: { harnessChoice?: boolean } = {}): OnboardingStep[] {
   return harnessChoice
     ? ['initial', 'vcs', 'harness', 'model-provider', 'review']
@@ -48,12 +48,14 @@ export const STEP_META: Readonly<Record<OnboardingStep, StepMeta>> = Object.from
 ) as Record<OnboardingStep, StepMeta>;
 
 export function onboardingStepMeta(step: OnboardingStep, local = false, harness?: FactoryHarness): StepMeta {
-  if (step === 'model-provider' && harness === 'claude-code')
+  if (step === 'model-provider' && (harness === 'claude-code' || harness === 'codex')) {
+    const key = harness === 'codex' ? 'codex' : 'claudeCode';
     return {
       label: STEP_META[step].label,
-      title: tk('onboarding.claudeCode.title'),
-      description: tk('onboarding.claudeCode.description'),
+      title: tk(`onboarding.${key}.title`),
+      description: tk(`onboarding.${key}.description`),
     };
+  }
   if (step === 'model-provider')
     return {
       ...STEP_META[step],

@@ -43,6 +43,13 @@ export interface ClaudeSessionUiOptions {
   heartbeatMs?: number;
 }
 
+const HARNESS_LABELS: Readonly<Record<string, string>> = { 'claude-code': 'Claude Code', codex: 'Codex' };
+
+/** How a refusal names the session's harness. */
+function harnessLabel(session: Pick<ChatTranscriptSession, 'harness'> | undefined): string {
+  return HARNESS_LABELS[session?.harness ?? 'claude-code'] ?? session?.harness ?? 'Claude Code';
+}
+
 export type PersonInputHook = (c: Context, session: ChatTranscriptSession) => void | Promise<void>;
 
 /**
@@ -290,7 +297,7 @@ export class ClaudeSessionUi {
           return c.json({ error: 'message is required' }, 400);
         }
         if (Array.isArray(body.files) && body.files.length > 0) {
-          return c.json({ error: 'Claude Code sessions do not take attachments yet.' }, 400);
+          return c.json({ error: `${harnessLabel(session)} sessions do not take attachments yet.` }, 400);
         }
         await this.#onPersonInput?.(c, session);
         await session.sendChatMessage({
@@ -366,7 +373,7 @@ export class ClaudeSessionUi {
     }
     const messages = THREAD_MESSAGES.exec(rest);
     if (messages && method === 'GET') return this.#messages(c, channel, decode(messages[1]!));
-    return c.json({ error: `Claude Code sessions do not support ${method} ${rest || '/'}.` }, 409);
+    return c.json({ error: `${harnessLabel(channel.session)} sessions do not support ${method} ${rest || '/'}.` }, 409);
   }
 
   async #state(c: Context, channel: ClaudeSessionUiChannel): Promise<Response> {

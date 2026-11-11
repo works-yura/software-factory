@@ -63,7 +63,11 @@
         "title": "Claude Code",
         "description": "Офіційний CLI Claude Code. Працює на вашій підписці Claude або з ключем Anthropic; акаунти додаються в Налаштування → Моделі."
       },
-      "changeLaterNote": "Харнес можна змінити згодом у Налаштування → Моделі; зміна діє для нових сесій."
+      "changeLaterNote": "Харнес можна змінити згодом у Налаштування → Моделі; зміна діє для нових сесій.",
+      "codex": {
+        "title": "Codex",
+        "description": "CLI Codex від OpenAI. Працює на входах ChatGPT ваших учасників; додайте акаунти в Налаштування → Моделі."
+      }
     },
     "steps": {
       "name": {
@@ -85,6 +89,10 @@
       "claudeCode": {
         "title": "Виберіть модель Claude",
         "placeholder": "Пошук моделей Claude…"
+      },
+      "codex": {
+        "title": "Оберіть модель Codex",
+        "placeholder": "Пошук моделей Codex…"
       }
     },
     "repos": {
@@ -135,8 +143,8 @@
         "none": "Для роботи Claude Code потрібен вхід Claude.",
         "needSignIn": "Увійдіть в організацію, щоб користуватися її акаунтами Claude Code.",
         "addHint": "Увійти можна будь-коли в Налаштування → Моделі → Акаунти Claude Code.",
-        "signInWithClaude": "Увійти через Claude",
-        "signInWithClaudeDescription": "Відкриває сторінку входу Claude; Фабрика тримає власний вхід"
+        "signInWith": "Увійти через Claude",
+        "signInWithDescription": "Відкриває сторінку входу Claude; Фабрика тримає власний вхід"
       },
       "models": {
         "heading": "Модель Claude",
@@ -155,6 +163,28 @@
         "haiku": {
           "title": "Haiku",
           "description": "Найшвидша, для легких задач"
+        }
+      }
+    },
+    "codex": {
+      "signIn": {
+        "heading": "Вхід",
+        "loading": "Перевірка входу Codex",
+        "accounts_one": "Працює на акаунті Codex вашої організації.",
+        "accounts_few": "Працює на {{count}} акаунтах Codex вашої організації.",
+        "accounts_many": "Працює на {{count}} акаунтах Codex вашої організації.",
+        "accounts_other": "Працює на {{count}} акаунтах Codex вашої організації.",
+        "none": "Для роботи Codex потрібен вхід ChatGPT.",
+        "needSignIn": "Увійдіть в організацію, щоб користуватися її акаунтами Codex.",
+        "addHint": "Увійти можна будь-коли в Налаштування → Моделі → Акаунти Codex.",
+        "signInWith": "Увійти через ChatGPT",
+        "signInWithDescription": "Показує сторінку входу ChatGPT і код; Factory зберігає власний вхід"
+      },
+      "models": {
+        "heading": "Модель Codex",
+        "default": {
+          "title": "Типова модель Codex",
+          "description": "Модель, яку обирає CLI codex"
         }
       }
     }
@@ -264,6 +294,10 @@
     "claudeCode": {
       "title": "Виберіть модель Claude.",
       "description": "Claude Code входить самостійно: через ваш вхід claude на цьому комп’ютері або акаунти Claude Code організації."
+    },
+    "codex": {
+      "title": "Оберіть модель Codex.",
+      "description": "Codex входить через акаунти Codex вашої організації (входи ChatGPT), ніколи через codex login цієї машини."
     }
   },
   "welcomePreview": {
@@ -307,7 +341,8 @@
     },
     "harness": "Харнес",
     "harnessDetail": "Можна змінити згодом у Налаштування → Моделі",
-    "claudeModelDetail": "Claude Code · для роботи Factory і сесій"
+    "claudeModelDetail": "Claude Code · для роботи Factory і сесій",
+    "codexModelDetail": "Codex · для роботи Factory і сесій"
   },
   "githubCallback": {
     "requested": "Запит на встановлення GitHub App надіслано. Власник організації має схвалити його, перш ніж тут з'являться репозиторії.",

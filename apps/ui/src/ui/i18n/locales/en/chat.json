@@ -415,10 +415,10 @@
     "openModelSettings": "Open model settings",
     "resetsAt": "The limit resets {{time}}."
   },
-  "claudeCode": {
-    "placeholder": "Ask Claude Code…",
-    "model": "Claude Code · {{model}}",
-    "modelHint": "This chat runs on Claude Code with the Factory’s Claude model. Change it in Settings → Models."
+  "turnHarness": {
+    "placeholder": "Ask {{harness}}…",
+    "model": "{{harness}} · {{model}}",
+    "modelHint": "This chat runs on {{harness}} with the Factory’s model for it. Change it in Settings → Models."
   },
   "connectionNotice": {
     "reconnecting": "Reconnecting…",

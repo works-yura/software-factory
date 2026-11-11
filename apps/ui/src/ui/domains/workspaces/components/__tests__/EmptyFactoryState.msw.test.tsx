@@ -658,7 +658,7 @@ describe('harness choice in onboarding', () => {
 
   it('switches back to Mastra from review and asks for a provider model again', async () => {
     serveClaudeCode(true);
-    persistOnboardingDraft({ repository: repo, harness: 'claude-code', claudeCodeModel: null });
+    persistOnboardingDraft({ repository: repo, harness: 'claude-code', harnessModel: null });
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
     const writes = registerSetup();
     const user = userEvent.setup();

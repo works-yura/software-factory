@@ -3,6 +3,7 @@ import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPale
 import { Boxes } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { useServerFeatures } from '../../../../../hooks/useServerFeatures';
 import type { FactoryHarness } from '../../services/github';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteMessage } from './CreateFactoryPalette';
@@ -17,6 +18,7 @@ export interface CreateFactoryHarnessRowsProps {
 /** Which runtime the Factory's agents run on. Switchable later in settings, for new sessions. */
 export function CreateFactoryHarnessRows({ selected, disabled, onSelect }: CreateFactoryHarnessRowsProps) {
   const { t } = useTranslation('workspaces');
+  const features = useServerFeatures();
 
   return (
     <>
@@ -40,6 +42,17 @@ export function CreateFactoryHarnessRows({ selected, disabled, onSelect }: Creat
           disabled={disabled}
           onSelect={() => onSelect('claude-code')}
         />
+        {(features.data?.codex === true || selected === 'codex') && (
+          <CommandPaletteItem
+            icon={<ProviderBrandIcon provider="openai" />}
+            title={t('createFactory.harness.codex.title')}
+            subtitle={t('createFactory.harness.codex.description')}
+            badge={selected === 'codex' ? t('createFactory.harness.selected') : undefined}
+            value="harness-codex"
+            disabled={disabled}
+            onSelect={() => onSelect('codex')}
+          />
+        )}
       </CommandGroup>
     </>
   );

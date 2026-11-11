@@ -471,9 +471,9 @@
     "fanfare": "Fanfare"
   },
   "behavior": {
-    "claudeCode": {
-      "generalDescription": "Shared by everyone working in this Factory. Saved with the Factory and applied to every Claude Code turn. Smart editing and completion notifications belong to Mastra, so they are not shown here.",
-      "permissionsDescription": "“Allow” runs without asking, “Ask” asks you, “Deny” blocks. Auto-approve above allows every category. Saved with the Factory and applied to every Claude Code turn.",
+    "turnHarness": {
+      "generalDescription": "Shared by everyone working in this Factory. Saved with the Factory and applied to every {{harness}} turn. Smart editing and completion notifications belong to Mastra, so they are not shown here.",
+      "permissionsDescription": "“Allow” runs without asking, “Ask” asks you, “Deny” blocks. Auto-approve above allows every category. Saved with the Factory and applied to every {{harness}} turn.",
       "saveFailed": "Could not save the tool permissions"
     },
     "general": {
@@ -625,9 +625,9 @@
       "description": "Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first.",
       "action": "Open Models settings"
     },
-    "claudeCode": {
-      "title": "Claude Code manages its own context",
-      "description": "Observational memory belongs to the Mastra harness. This Factory starts its sessions on Claude Code, which compacts its context itself, so these settings do not apply. Sessions that already run on Mastra keep using them.",
+    "turnHarness": {
+      "title": "{{harness}} manages its own context",
+      "description": "Observational memory belongs to the Mastra harness. This Factory starts its sessions on {{harness}}, which compacts its context itself, so these settings do not apply. Sessions that already run on Mastra keep using them.",
       "action": "Open Models settings"
     },
     "loading": "Loading observational-memory settings",

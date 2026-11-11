@@ -134,6 +134,12 @@ describe('Claude Code tools', () => {
     expect(toolEdit('Read', { file_path: 'a.ts' })).toBeUndefined();
   });
 
+  it('reads a Codex file change with a unified diff as an edit', () => {
+    expect(toolEdit('string_replace_lsp', { path: 'a.ts', diff: '@@ -1 +1 @@\n-x\n+y' })).toEqual({ path: 'a.ts', diff: '@@ -1 +1 @@\n-x\n+y' });
+    expect(toolEdit('string_replace_lsp', { path: 'a.ts', diff: '' })).toBeUndefined();
+    expect(toolEdit('write_file', { path: 'a.ts', content: 'x' })).toEqual({ path: 'a.ts', content: 'x' });
+  });
+
   it('presents a call whose arguments have not streamed yet without a detail', () => {
     const presentation = presentTool('Read', undefined);
     expect(presentation.label).toBe('Read');

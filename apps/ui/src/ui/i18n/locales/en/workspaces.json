@@ -63,7 +63,11 @@
         "title": "Claude Code",
         "description": "The official Claude Code CLI. Runs on your Claude subscription or an Anthropic key; add accounts in Settings → Models."
       },
-      "changeLaterNote": "You can switch the harness later in Settings → Models; the switch applies to new sessions."
+      "changeLaterNote": "You can switch the harness later in Settings → Models; the switch applies to new sessions.",
+      "codex": {
+        "title": "Codex",
+        "description": "OpenAI’s Codex CLI. Runs on your members’ ChatGPT sign-ins; add accounts in Settings → Models."
+      }
     },
     "steps": {
       "name": {
@@ -85,6 +89,10 @@
       "claudeCode": {
         "title": "Choose your Claude model",
         "placeholder": "Search Claude models…"
+      },
+      "codex": {
+        "title": "Choose your Codex model",
+        "placeholder": "Search Codex models…"
       }
     },
     "repos": {
@@ -131,8 +139,8 @@
         "none": "Claude Code needs a Claude sign-in to run.",
         "needSignIn": "Sign in to an organization to use its Claude Code accounts.",
         "addHint": "You can sign in any time in Settings → Models → Claude Code accounts.",
-        "signInWithClaude": "Sign in with Claude",
-        "signInWithClaudeDescription": "Opens the Claude sign-in page; the Factory keeps its own login"
+        "signInWith": "Sign in with Claude",
+        "signInWithDescription": "Opens the Claude sign-in page; the Factory keeps its own login"
       },
       "models": {
         "heading": "Claude model",
@@ -151,6 +159,26 @@
         "haiku": {
           "title": "Haiku",
           "description": "Fastest, for light work"
+        }
+      }
+    },
+    "codex": {
+      "signIn": {
+        "heading": "Sign-in",
+        "loading": "Checking Codex sign-in",
+        "accounts_one": "Runs on your organization’s Codex account.",
+        "accounts_other": "Runs on your organization’s {{count}} Codex accounts.",
+        "none": "Codex needs a ChatGPT sign-in to run.",
+        "needSignIn": "Sign in to an organization to use its Codex accounts.",
+        "addHint": "You can sign in any time in Settings → Models → Codex accounts.",
+        "signInWith": "Sign in with ChatGPT",
+        "signInWithDescription": "Shows a ChatGPT sign-in page and code; the Factory keeps its own login"
+      },
+      "models": {
+        "heading": "Codex model",
+        "default": {
+          "title": "Codex default",
+          "description": "Whichever model the codex CLI picks"
         }
       }
     }
@@ -260,6 +288,10 @@
     "claudeCode": {
       "title": "Choose your Claude model.",
       "description": "Claude Code signs in on its own: your claude login on this machine or the organization’s Claude Code accounts."
+    },
+    "codex": {
+      "title": "Choose your Codex model.",
+      "description": "Codex signs in with your organization’s Codex accounts (ChatGPT sign-ins), never this machine’s codex login."
     }
   },
   "welcomePreview": {
@@ -303,7 +335,8 @@
     },
     "harness": "Harness",
     "harnessDetail": "You can switch it later in Settings → Models",
-    "claudeModelDetail": "Claude Code · for Factory work and sessions"
+    "claudeModelDetail": "Claude Code · for Factory work and sessions",
+    "codexModelDetail": "Codex · for Factory work and sessions"
   },
   "githubCallback": {
     "requested": "GitHub App installation requested. An organization owner needs to approve it before repositories appear here.",

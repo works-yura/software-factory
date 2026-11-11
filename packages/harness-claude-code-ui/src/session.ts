@@ -18,6 +18,8 @@ export interface ChatTranscriptSession
   readonly queuedFollowUps: number;
   /** The provider of the session's models, stamped beside a reply's model id; Anthropic when absent. */
   readonly modelProvider?: string;
+  /** The harness that runs it (`claude-code`, `codex`), as refusals name it; Claude Code when absent. */
+  readonly harness?: string;
   onTranscript(listener: (entry: TranscriptEntry, meta: { runId: string; threadId: string }) => void): () => void;
   sendChatMessage(input: { content: string; requestContext?: AgentRunContext; delivery?: ChatDelivery }): Promise<{ action: 'wake' | 'deliver' | 'queued' }>;
   respondToToolApproval(input: { approved: boolean; toolCallId?: string }): Promise<void>;

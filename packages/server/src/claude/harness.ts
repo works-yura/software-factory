@@ -23,6 +23,7 @@ import type { SourceControlSessionLookup } from '@factory/session';
 import type { FactoryProjectsStorage } from '@factory/store';
 
 import { withAgentLanguage } from '../agent-language.ts';
+import { isUntrustedCheckout } from '../turn-harness.ts';
 import { createClaudeSessionConfigDirs } from './config-dir.ts';
 import type { ClaudeCodeCredentialFailureHook, ClaudeCodeCredentialsHook } from './credentials.ts';
 import { CLAUDE_THREAD_SETTINGS } from './start-coordinator.ts';
@@ -413,9 +414,8 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       }
       return permissions;
     },
-    // A pull or merge request checkout reads no settings file: its hooks would run on this host.
-    settingSourcesFor: async session =>
-      (await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.untrustedCheckout })) === true ? [] : undefined,
+    // A pull or merge request checkout reads no settings file: its hooks would run on this host (the shared rule).
+    settingSourcesFor: async session => ((await isUntrustedCheckout(session.thread)) ? [] : undefined),
     // What a Mastra session's signals say: the repositories its workspace holds, where, on which branch;
     // and, for a card run, the bound work item's phase.
     turnContextFor: async session => {

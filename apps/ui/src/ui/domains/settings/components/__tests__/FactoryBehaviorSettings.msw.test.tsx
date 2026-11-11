@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
-import { ClaudeBehaviorSettings } from '../ClaudeBehaviorSettings';
+import { FactoryBehaviorSettings as ClaudeBehaviorSettings } from '../FactoryBehaviorSettings';
 
 const PROJECT_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
 

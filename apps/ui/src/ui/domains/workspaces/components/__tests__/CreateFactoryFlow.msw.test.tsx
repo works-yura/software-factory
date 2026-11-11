@@ -776,6 +776,60 @@ describe('harness step', () => {
     expect(sessionStorage.getItem(HARNESS_KEY)).toBeNull();
   });
 
+  it('offers Codex where the server runs it, and creates on a Codex model with its ChatGPT sign-in', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/features`, () =>
+        HttpResponse.json({ knowledge: false, mcp: false, claudeCode: true, codex: true, codexSignIn: true }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers/openai-codex/accounts`, () => HttpResponse.json({ accounts: [] })),
+    );
+    sessionStorage.setItem(STEP_KEY, 'harness');
+    sessionStorage.setItem(NAME_KEY, 'Mastra');
+    const { createdBodies, patchedBodies } = stubModelStepEndpoints([]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [],
+          instances: [
+            {
+              instanceId: 'codex',
+              harnessId: 'codex',
+              displayName: 'Codex',
+              available: false,
+              needsSetup: true,
+              defaultModel: null,
+              defaultSelection: null,
+              factoryDefaultSelection: null,
+              catalogDefaultSelection: null,
+              appliesToRunningSessions: false,
+              models: [{ slug: 'gpt-test-sol', name: 'GPT Test Sol', isCustom: false, capabilities: null }],
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Codex.*ChatGPT sign-ins/ }));
+    expect(sessionStorage.getItem(HARNESS_KEY)).toBe('codex');
+    await pickRepositories(user, /octo\/hello/);
+
+    expect(await screen.findByLabelText('Choose your Codex model')).toBeInTheDocument();
+    expect(await screen.findByText(/Codex needs a ChatGPT sign-in to run/)).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Sign in with ChatGPT/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Codex default/ })).toBeInTheDocument();
+    expectNoProviderRows();
+    await user.click(await screen.findByRole('option', { name: /GPT Test Sol/ }));
+
+    await waitForMutationsIdle(client);
+    expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'codex' }]);
+    expect(patchedBodies).toEqual([{ instanceId: 'codex', model: 'gpt-test-sol' }]);
+  });
+
   it('creates a Mastra Factory when Mastra is picked', async () => {
     serveClaudeCodeFeature(true);
     sessionStorage.setItem(STEP_KEY, 'harness');
