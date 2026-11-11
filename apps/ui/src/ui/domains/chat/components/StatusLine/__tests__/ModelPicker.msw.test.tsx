@@ -77,6 +77,8 @@ function renderPicker({
   claudeCodeCatalog = false,
   claudeCode,
   modelSelection,
+  acceptsHandoff,
+  switchResponse = { ok: true },
 }: {
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
@@ -105,6 +107,10 @@ function renderPicker({
   claudeCode?: ChatSessionContextApi['claudeCode'];
   /** A Claude Code session's selection, as its state reports it. */
   modelSelection?: unknown;
+  /** The Claude Code instance accepts a session from another harness (a context handoff). */
+  acceptsHandoff?: boolean;
+  /** What `POST …/model` answers. */
+  switchResponse?: Record<string, unknown>;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
@@ -116,7 +122,9 @@ function renderPicker({
         const claudeDefault = claudeCode?.model ? { instanceId: 'claude-code', model: claudeCode.model } : null;
         const instances = [
           mastraTestInstance(models as never, defaultModelId ?? null),
-          ...(claudeCodeCatalog ? [claudeCodeTestInstance(claudeDefault)] : []),
+          ...(claudeCodeCatalog
+            ? [{ ...claudeCodeTestInstance(claudeDefault), ...(acceptsHandoff !== undefined ? { acceptsHandoff } : {}) }]
+            : []),
         ];
         return HttpResponse.json({ models, defaultModelId, instances });
       }
@@ -169,7 +177,7 @@ function renderPicker({
     http.post(`${API}/sessions/:resourceId/model`, async ({ request }) => {
       modelSwitches.push(await request.json());
       await modelSwitched;
-      return HttpResponse.json({ ok: true });
+      return HttpResponse.json(switchResponse);
     }),
   );
   if (modelScope) {
@@ -541,6 +549,41 @@ describe('ModelPicker', () => {
     expect(modelSwitches).toEqual([]);
   });
 
+  it('still blocks a pick on another harness whose instance accepts no handoff', async () => {
+    const user = userEvent.setup();
+    const { modelSwitches } = renderPicker({ claudeCodeCatalog: true, acceptsHandoff: false });
+
+    await user.click(await screen.findByRole('button', { name: /^Session model/ }));
+    await user.click(screen.getByRole('button', { name: 'Claude Code' }));
+    await user.click(await screen.findByRole('option', { name: /Sonnet 5\.5/ }));
+
+    expect(await screen.findByText('Start a new chat to switch providers')).toBeInTheDocument();
+    expect(modelSwitches).toEqual([]);
+  });
+
+  it('moves the session to another harness that accepts a handoff, with the pick and its instance', async () => {
+    const user = userEvent.setup();
+    const { client, modelSwitches } = renderPicker({
+      claudeCodeCatalog: true,
+      acceptsHandoff: true,
+      switchResponse: {
+        ok: true,
+        modelSelection: { instanceId: 'claude-code', model: 'claude-sonnet-5-5' },
+        appliesFrom: 'next-turn',
+        handoff: { id: 'h1', fromInstanceId: 'mastra', toInstanceId: 'claude-code', harnessId: 'claude-code' },
+      },
+    });
+
+    await user.click(await screen.findByRole('button', { name: /^Session model/ }));
+    await user.click(screen.getByRole('button', { name: 'Claude Code' }));
+    await user.click(await screen.findByRole('option', { name: /Sonnet 5\.5/ }));
+    await waitForMutationsIdle(client);
+
+    expect(modelSwitches).toEqual([{ modelId: 'claude-sonnet-5-5', options: [], instanceId: 'claude-code' }]);
+    expect(screen.queryByText('Start a new chat to switch providers')).not.toBeInTheDocument();
+    expect(await screen.findByText('This chat moves to Claude Code')).toBeInTheDocument();
+  });
+
   it('moves between the rail, the list and the effort column with the arrow keys', async () => {
     const user = userEvent.setup();
     renderPicker({ modelId: 'openai/gpt-5', thinkingLevel: 'low' });
@@ -619,6 +662,32 @@ describe('ModelPicker', () => {
       await user.click(screen.getByRole('option', { name: /Sonnet 5\.5/ }));
       await waitForMutationsIdle(client);
       expect(modelSwitches[1]).toEqual({ modelId: 'claude-sonnet-5-5', options: [], instanceId: 'claude-code' });
+    });
+
+    it('sends a Mastra pick through the model route with its instance, to move the session back', async () => {
+      const user = userEvent.setup();
+      const { client, modelSwitches } = renderPicker({ ...claudeSession, acceptsHandoff: false, modelId: 'openai/gpt-5' });
+      // Only the target's acceptsHandoff matters: Mastra's instance accepts the move here.
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models,
+            defaultModelId: 'anthropic/claude-sonnet-4-6',
+            instances: [
+              { ...mastraTestInstance(models as never, 'anthropic/claude-sonnet-4-6'), acceptsHandoff: true },
+              claudeCodeTestInstance({ instanceId: 'claude-code', model: 'opus' }),
+            ],
+          }),
+        ),
+      );
+
+      await user.click(await screen.findByRole('button', { name: 'Session model, Medium' }));
+      await user.click(screen.getByRole('button', { name: 'Mastra' }));
+      await user.click(await screen.findByRole('option', { name: /gpt-5/ }));
+      await waitForMutationsIdle(client);
+
+      expect(modelSwitches).toEqual([expect.objectContaining({ modelId: 'openai/gpt-5', instanceId: 'mastra' })]);
+      expect(screen.queryByText('Start a new chat to switch providers')).not.toBeInTheDocument();
     });
 
     it("goes back to the Factory's model and effort with Use default", async () => {

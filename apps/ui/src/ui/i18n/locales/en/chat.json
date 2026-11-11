@@ -260,7 +260,13 @@
     "applyFailedTitle": "Could not apply model selection",
     "applyFailedDescription": "This model pick was not saved. {{message}}",
     "tryAgain": "Try again.",
-    "switchLabel": "{{from}} → {{to}}"
+    "switchLabel": "{{from}} → {{to}}",
+    "handoffStartedTitle": "This chat moves to {{to}}",
+    "handoffStartedDescription": "Your next message carries the conversation so far to {{to}}.",
+    "handoffLabel": "Context handoff: {{from}} → {{to}}",
+    "handoffLabelNewConversation": "Context handoff: {{from}} → {{to}} (new conversation)",
+    "handoffPending": "{{label}} · carried with the next message",
+    "handoffFailed": "{{label}} · failed"
   },
   "thinking": {
     "label": "Thinking",

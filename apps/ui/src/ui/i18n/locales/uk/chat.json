@@ -262,7 +262,13 @@
     "applyFailedTitle": "Не вдалося застосувати вибір моделі",
     "applyFailedDescription": "Цей вибір моделі не збережено. {{message}}",
     "tryAgain": "Спробуйте ще раз.",
-    "switchLabel": "{{from}} → {{to}}"
+    "switchLabel": "{{from}} → {{to}}",
+    "handoffStartedTitle": "Цей чат переходить на {{to}}",
+    "handoffStartedDescription": "Ваше наступне повідомлення передасть {{to}} розмову досі.",
+    "handoffLabel": "Передача контексту: {{from}} → {{to}}",
+    "handoffLabelNewConversation": "Передача контексту: {{from}} → {{to}} (нова розмова)",
+    "handoffPending": "{{label}} · передається з наступним повідомленням",
+    "handoffFailed": "{{label}} · не вдалося"
   },
   "thinking": {
     "label": "Міркування",

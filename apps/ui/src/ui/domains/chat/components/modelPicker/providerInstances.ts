@@ -28,7 +28,10 @@ export type ServerProviderState = "ready" | "warning" | "error" | "disabled";
 
 export interface ProviderInstanceEntry {
   readonly instanceId: ProviderInstanceId;
-  /** The harness that runs it (`HarnessDescriptor.id`): a pick on another harness needs a new chat. */
+  /**
+   * The harness that runs it (`HarnessDescriptor.id`): a pick on another harness moves the session
+   * there with a context handoff where the target `acceptsHandoff`, else needs a new chat.
+   */
   readonly driverKind: ProviderDriverKind;
   readonly displayName: string;
   readonly accentColor?: string | undefined;
@@ -44,6 +47,8 @@ export interface ProviderInstanceEntry {
   readonly catalogDefault: ModelSelection | null;
   /** Its facet can move running sessions onto a new Factory default. */
   readonly appliesToRunningSessions: boolean;
+  /** A session of another harness can move here (a model switch with a context handoff). */
+  readonly acceptsHandoff: boolean;
   /** Why it is unavailable, as its facet says. */
   readonly reason?: string | undefined;
   readonly models: ReadonlyArray<ServerProviderModel>;
@@ -151,6 +156,7 @@ function toEntry(instance: HarnessModelInstanceInfo): ProviderInstanceEntry {
     factoryDefault,
     catalogDefault,
     appliesToRunningSessions: instance.appliesToRunningSessions ?? false,
+    acceptsHandoff: instance.acceptsHandoff ?? false,
     ...(instance.reason ? { reason: instance.reason } : {}),
     // "Default" in the picker is what a session follows: the Factory's default, else the catalog's.
     models: withDefaultMarked(models, factoryDefault ?? catalogDefault),

@@ -1,8 +1,9 @@
 // The composer's model selection, with `getStartedThreadModelChangeBlockReason`. A pick on the
 // thread's own harness instance is written to the draft store, remembered as sticky and sent to
-// the session at once (`useApplyThreadModelPick`); a pick on another harness gets a "Start a new
-// chat to switch providers" toast, since a chat cannot be handed over to another harness. Runtime
-// mode, worktree and branch choices stay in their own controls.
+// the session at once (`useApplyThreadModelPick`). A pick on another harness's instance does the
+// same where that instance accepts a handoff (`acceptsHandoff`): the session moves there and its
+// next message carries the conversation's context. Where it does not, the pick gets a "Start a new
+// chat to switch providers" toast. Runtime mode, worktree and branch choices stay in their own controls.
 import type {
   ModelSelection,
   ProviderInstanceId,
@@ -116,7 +117,10 @@ export function useComposerSelection() {
     };
     const modelChangeBlockReason = getStartedThreadModelChangeBlockReason({
       hasStartedSession: true,
-      supportsProviderSwitchingViaHandoff: false,
+      // A draft runs on its Factory's harness until its first message, so only a started session moves.
+      supportsProviderSwitchingViaHandoff:
+        !draftSessionId &&
+        providerInstanceEntries.find((entry) => entry.instanceId === instanceId)?.acceptsHandoff === true,
       currentModelSelection,
       currentProviderInstanceId: lockedEntry?.instanceId ?? null,
       nextModelSelection,

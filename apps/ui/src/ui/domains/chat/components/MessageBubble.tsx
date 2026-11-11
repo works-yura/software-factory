@@ -298,7 +298,7 @@ export function MessageBubble({
           <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} appearance="inline" />
         );
       }
-      if (row.kind === 'divider') return <TranscriptDivider label={row.label} />;
+      if (row.kind === 'divider') return <TranscriptDivider label={row.label} {...(row.title ? { title: row.title } : {})} />;
       if (row.kind === 'reminder') {
         return (
           <SignalActivity
