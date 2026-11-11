@@ -285,6 +285,7 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | `b87062b541` (#29866) | документація про сфокусовані тестові команди `mastracode/factory` | шляхи й команди upstream; у v4 свої (`README.md`, `scripts/run-tests.mjs`) |
 | `8015cf5a55` (#29372), `e0bbdc6066` (#29623) | Slack: розшифровка голосових кліпів, відповідь у треді, коли бота згадує незалінкований користувач | Slack у v4 прибрано. Самі можливості (розшифровка голосових, відповідь у треді користувачу без прив'язки) підуть у запланований спільний інтерфейс повідомлень, який реалізують ClickUp та інші |
 | `a3c0884445` (#29902), `c1205b357f` (#29954) | новий дизайн Switch і його повний відкат | разом нічого не змінюють: `git diff a3c0884445~1 c1205b357f -- packages/playground-ui/src/ds/components/Switch` порожній |
+| `d41d7ac33d` (#28037) | схвалення плану запускає його як мету (mastracode SDK і TUI) | у Factory-шляхах коміт лише вимикає це: `planApprovalStartsGoal: false` у конфігу mastracode. `@mastra/code-sdk` 1.18.0, який пінить v4, такої опції не має і на схвалення плану мету не запускає, тож Factory вже поводиться так само. Решта — SDK, TUI, документація mastracode, яких у v4 немає. Повернутися при оновленні `@mastra/code-sdk`: тоді додати `planApprovalStartsGoal: false` у `server/src/factory.ts`. |
 
 ## Перенесено з upstream після efc06290c0
 
