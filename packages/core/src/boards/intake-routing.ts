@@ -21,8 +21,6 @@ export interface IntakeRoute {
   readonly target: { readonly boardKey: string; readonly phaseKey?: string | null; readonly joinClosedIssue?: boolean };
   /** The status events the route handles; `work_item.created` places new cards. */
   readonly on: readonly string[];
-  /** Whether a status event may move a card into a working phase, which starts a run. */
-  readonly allowWorkingPhase?: boolean;
 }
 
 /** Reads a project's intake routes, in order; `StoredBoardsStorage` implements it. */
@@ -223,7 +221,7 @@ export function resolveEventRoute(
   cardFacts: RuleFacts,
   board: InstalledBoard,
   carriesPullRequest = false,
-): { phase: string; routeId: string; allowWorkingPhase: boolean } | undefined {
+): { phase: string; routeId: string } | undefined {
   const facts: RuleFacts = {
     ...cardFacts,
     'event.type': event.type,
@@ -234,7 +232,7 @@ export function resolveEventRoute(
     if (!evaluateRuleGroup(route.when, facts)) continue;
     const phase = route.target.phaseKey ?? board.initialPhase;
     if (board.phaseKind(phase) === undefined || !placementTakesCard(board, phase, facts, carriesPullRequest)) continue;
-    return { phase, routeId: route.id, allowWorkingPhase: route.allowWorkingPhase ?? false };
+    return { phase, routeId: route.id };
   }
   return undefined;
 }

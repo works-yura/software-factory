@@ -31,7 +31,6 @@ function route(overrides: Partial<IntakeRouteInfo> & Pick<IntakeRouteInfo, 'id' 
     when: null,
     target: { boardKey: 'work', phaseKey: null, joinClosedIssue: false },
     on: ['work_item.created'],
-    allowWorkingPhase: false,
     revision: 1,
     createdBy: 'admin',
     createdAt: '2026-11-04T00:00:00.000Z',
