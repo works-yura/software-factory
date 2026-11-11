@@ -846,9 +846,10 @@
       "clickup": "ClickUp",
       "github": "GitHub",
       "gitlab": "GitLab",
-      "git": "GitHub or GitLab",
       "manual": "By hand (“New card”)"
     },
+    "alsoSources": "also {{sources}}",
+    "sourceNotConnected": "not connected",
     "sourceEvents": {
       "clickup": {
         "work_item.created": "new task",

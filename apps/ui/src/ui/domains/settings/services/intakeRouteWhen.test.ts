@@ -38,9 +38,10 @@ describe('route editor model', () => {
       const route = DEFAULT_INTAKE_ROUTES.find(entry => entry.key === key)!.route;
       return readRouteWhen((route.when ?? null) as CardRuleGroup | null, route.on ?? ['work_item.created'])?.source.id;
     };
-    expect(sourceOf('outside-authors')).toBe('git');
-    expect(sourceOf('pull-requests')).toBe('git');
-    expect(sourceOf('pull-request-merged')).toBe('git');
+    // A repository-host route stands for GitHub and GitLab; with nothing to prefer, the first is shown.
+    expect(sourceOf('outside-authors')).toBe('github');
+    expect(sourceOf('pull-requests')).toBe('github');
+    expect(sourceOf('pull-request-merged')).toBe('github');
     expect(sourceOf('closed-completed')).toBe('any');
     expect(sourceOf('everything-else')).toBe('any');
     // OR-free but with fields the editor doesn't edit: kept as written.
@@ -89,6 +90,28 @@ describe('route editor model', () => {
     expect(writeRouteWhen(chooseRouteSource(clickUp, intakeSource('manual')!))).toEqual({
       operator: 'AND',
       conditions: [{ field: 'source.integration', operator: 'not_exists' }],
+    });
+  });
+
+  it('shows a GitHub-or-GitLab route as the host the Factory uses, and saves it as stored', () => {
+    const route = DEFAULT_INTAKE_ROUTES.find(entry => entry.key === 'outside-authors')!.route;
+    const when = (route.when ?? null) as CardRuleGroup | null;
+    const on = route.on ?? ['work_item.created'];
+
+    const onGitLab = readRouteWhen(when, on, source => source.id === 'gitlab')!;
+    expect(onGitLab.source.id).toBe('gitlab');
+    expect(onGitLab.candidates.map(source => source.id)).toEqual(['github', 'gitlab']);
+    expect(writeRouteWhen(onGitLab)).toEqual(when);
+
+    const onGitHub = readRouteWhen(when, on, source => source.id === 'github')!;
+    expect(onGitHub.source.id).toBe('github');
+    expect(writeRouteWhen(onGitHub)).toEqual(when);
+
+    // Choosing one host for good names only that host.
+    expect(writeRouteWhen(chooseRouteSource(onGitHub, intakeSource('gitlab')!))?.conditions[0]).toEqual({
+      field: 'source.integration',
+      operator: 'equals',
+      value: 'gitlab',
     });
   });
 });

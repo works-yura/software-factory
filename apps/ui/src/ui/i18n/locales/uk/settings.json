@@ -852,9 +852,10 @@
       "clickup": "ClickUp",
       "github": "GitHub",
       "gitlab": "GitLab",
-      "git": "GitHub або GitLab",
       "manual": "Вручну («Нова картка»)"
     },
+    "alsoSources": "також {{sources}}",
+    "sourceNotConnected": "не підключено",
     "sourceEvents": {
       "clickup": {
         "work_item.created": "нова задача",

@@ -63,8 +63,45 @@ const clickUpTriage = route({
   target: { boardKey: 'work', phaseKey: 'triage', joinClosedIssue: false },
 });
 
+/**
+ * The sources the Factory uses, behind the real API paths: its linked repositories' hosts and the
+ * org's ClickUp connection.
+ */
+function useConnections({ hosts = ['github'], clickUp = true }: { hosts?: string[]; clickUp?: boolean } = {}) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({
+        projects: [
+          {
+            id: PROJECT,
+            name: 'Acme',
+            repositories: hosts.map((host, at) => ({
+              projectRepositoryId: `repo-${at}`,
+              integrationId: host,
+              slug: `acme/app-${host}`,
+              sandboxWorkdir: `app-${host}`,
+            })),
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/clickup/status`, () =>
+      HttpResponse.json(
+        clickUp
+          ? { configured: true, connected: true, workspaces: ['Acme'], intervalSeconds: 60 }
+          : { configured: false, connected: false, workspaces: [], intervalSeconds: 60 },
+      ),
+    ),
+    http.get(`${TEST_BASE_URL}/web/clickup/lists`, () => HttpResponse.json({ lists: [] })),
+  );
+}
+
 /** A project's routes behind the real API paths; returns what the UI wrote. */
-function useRouteHandlers(initial: IntakeRouteInfo[], { canEdit = true } = {}) {
+function useRouteHandlers(
+  initial: IntakeRouteInfo[],
+  { canEdit = true, hosts, clickUp }: { canEdit?: boolean; hosts?: string[]; clickUp?: boolean } = {},
+) {
+  useConnections({ hosts, clickUp });
   let routes = [...initial];
   const written = { created: [] as unknown[], patched: [] as unknown[], deleted: [] as string[], reordered: [] as string[][] };
   server.use(
@@ -117,10 +154,44 @@ describe('IntakeRoutesSection', () => {
     await waitFor(() => expect(routeRows()).toHaveLength(2));
     const [first, second] = routeRows();
     expect(within(first!).getByText('Outside authors wait in Intake')).toBeTruthy();
+    // A route stored for both hosts reads as the one the Factory uses, the other noted.
     expect(
-      within(first!).getByText('When: GitHub or GitLab · outside author · new issue or pull request → Development › Intake'),
+      await within(first!).findByText(
+        'When: GitHub (also GitLab) · outside author · new issue or pull request → Development › Intake',
+      ),
     ).toBeTruthy();
     expect(within(second!).getByText('When: ClickUp · new task → Development › Triage')).toBeTruthy();
+  });
+
+  it('offers in «When» only the sources the Factory uses, with no combined «GitHub or GitLab»', async () => {
+    const user = userEvent.setup();
+    useRouteHandlers([], { hosts: ['github'], clickUp: false });
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    const form = screen.getByRole('form', { name: 'New route' });
+    await waitFor(async () => {
+      await user.click(within(form).getByRole('combobox', { name: 'When' }));
+      const offered = (await screen.findAllByRole('option')).map(option => option.textContent);
+      expect(offered).toEqual(['Any source', 'GitHub', 'By hand (“New card”)']);
+      await user.keyboard('{Escape}');
+    });
+  });
+
+  it('keeps a route on a source the Factory no longer uses, marked «not connected», and saves it unchanged', async () => {
+    const user = userEvent.setup();
+    const written = useRouteHandlers([clickUpTriage], { clickUp: false });
+    renderSection();
+
+    expect(await screen.findByText('When: ClickUp (not connected) · new task → Development › Triage')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const form = screen.getByRole('form', { name: 'Edit route "ClickUp to Triage"' });
+    expect(within(form).getByRole('combobox', { name: 'When' })).toHaveTextContent('ClickUp');
+    expect(within(form).getByText('not connected')).toBeTruthy();
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(written.patched).toHaveLength(1));
+    expect(written.patched[0]).toMatchObject({ when: clickUpTriage.when, on: ['work_item.created'] });
   });
 
   it('adds a route for ClickUp tasks with a tag: the source is chosen once, in «When», and only its fields are offered', async () => {
@@ -191,7 +262,9 @@ describe('IntakeRoutesSection', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Edit' }));
     const form = screen.getByRole('form', { name: 'Edit route "Outside authors wait in Intake"' });
-    expect(within(form).getByRole('combobox', { name: 'When' })).toHaveTextContent('GitHub or GitLab');
+    // Stored for GitHub and GitLab: shown as the Factory's GitHub, GitLab noted, kept as stored.
+    expect(within(form).getByRole('combobox', { name: 'When' })).toHaveTextContent(/^GitHub$/);
+    expect(within(form).getByText('also GitLab')).toBeTruthy();
     expect(within(form).queryByRole('group', { name: 'Source' })).toBeNull();
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
@@ -401,7 +474,6 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
   });
 
   it('describes a List’s migrated status routes and tags a schedule’s route', async () => {
-    clickUpHandlers();
     useRouteHandlers([
       route({
         id: '00000000-0000-4000-8000-000000000021',
@@ -431,6 +503,7 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
         },
       }),
     ]);
+    clickUpHandlers();
     renderSection();
 
     await waitFor(() => expect(routeRows()).toHaveLength(2));
@@ -445,7 +518,6 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
 
   it('names a status route Factory wrote in the reader’s language, and unfolds a schedule route’s fire history', async () => {
     const user = userEvent.setup();
-    clickUpHandlers();
     useRouteHandlers([
       route({
         id: '00000000-0000-4000-8000-000000000031',
@@ -483,6 +555,7 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
         }),
       ),
     );
+    clickUpHandlers();
     renderSection();
 
     await waitFor(() => expect(routeRows()).toHaveLength(2));

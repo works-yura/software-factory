@@ -20,8 +20,11 @@ describe('intake sources', () => {
         { field: 'author.trusted', operator: 'equals', value: false },
       ],
     });
-    expect(read?.source.id).toBe('git');
+    // A set of hosts reads as each of them; there is no combined source.
+    expect(read?.source.id).toBe('github');
+    expect(read?.candidates.map(source => source.id)).toEqual(['github', 'gitlab']);
     expect(read?.named).toBe(true);
+    expect(read?.leaf).toEqual({ field: 'source.integration', operator: 'in', value: ['gitlab', 'github'] });
     expect(read?.rest).toEqual([{ field: 'author.trusted', operator: 'equals', value: false }]);
 
     expect(readIntakeSource({ operator: 'AND', conditions: [{ field: 'source.integration', operator: 'not_exists' }] })?.source.id).toBe(
@@ -43,10 +46,14 @@ describe('intake sources', () => {
     expect(status).toMatchObject({ source: { id: 'clickup' }, named: false });
     expect(status?.rest).toHaveLength(2);
 
-    expect(readIntakeSource(null, ['pull_request.merged'])?.source.id).toBe('git');
+    const merged = readIntakeSource(null, ['pull_request.merged']);
+    expect(merged?.candidates.map(source => source.id)).toEqual(['github', 'gitlab']);
+    expect(merged?.named).toBe(false);
     expect(
-      readIntakeSource({ operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] })?.source.id,
-    ).toBe('git');
+      readIntakeSource({ operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] })
+        ?.candidates.map(source => source.id),
+    ).toEqual(['github', 'gitlab']);
+    expect(status?.candidates.map(source => source.id)).toEqual(['clickup']);
     expect(readIntakeSource(null)?.source.id).toBe('any');
     expect(readIntakeSource(null, ['work_item.reopened'])?.source.id).toBe('any');
   });
@@ -58,6 +65,10 @@ describe('intake sources', () => {
         conditions: [{ field: 'source.integration', operator: 'in', value: ['github', 'clickup'] }],
       }),
     ).toBeUndefined();
+  });
+
+  it('offers no combined source: each repository host is its own', () => {
+    expect(intakeSources().map(source => source.id)).toEqual(['any', 'clickup', 'github', 'gitlab', 'manual']);
   });
 
   it('writes the condition that names a source', () => {

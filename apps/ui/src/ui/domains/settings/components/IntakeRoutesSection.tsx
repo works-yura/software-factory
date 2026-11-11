@@ -16,6 +16,7 @@ import type { TFunction } from 'i18next';
 import type { CardRuleGroup, InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useClickUpListsQuery, useClickUpListStatusesQuery, useClickUpStatusQuery } from '../../../../hooks/useClickUp';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import {
   useCreateIntakeRouteMutation,
   useDeleteIntakeRouteMutation,
@@ -87,8 +88,12 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
   const kindsQuery = useIntakeTriggerKindsQuery(factoryProjectId);
   const clickUpConnected = useClickUpStatusQuery().data?.connected === true;
   const clickUpLists = useClickUpListsQuery(clickUpConnected).data ?? [];
+  // Repository hosts the Factory uses: those its linked repositories come from.
+  const factory = (useFactoriesQuery().data ?? []).find(candidate => candidate.id === factoryProjectId);
+  const hosts = new Set((factory?.repositories ?? []).map(repository => repository.provider ?? 'github'));
   const origins: IntakeOrigins = {
     lists: clickUpLists.map(list => ({ value: list.id, label: list.path ? `${list.path} / ${list.name}` : list.name })),
+    available: source => sourceAvailable(source, { clickUp: clickUpConnected, hosts }),
   };
   const triggerContext: IntakeKindFormContext = {
     factoryProjectId,
@@ -294,11 +299,32 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
 
 type T = TFunction<'settings'>;
 
-/** What a condition can name from outside the project, labelled: the ClickUp Lists of the connected workspace. */
+/** What a route can name from outside the project: the sources the Factory uses and the ClickUp Lists of the connected workspace. */
 interface IntakeOrigins {
   /** The ClickUp Lists, for the `source.list` condition: naming one is what makes the project read it. */
   lists: { value: string; label: string }[];
+  /** Whether the Factory uses a source: «Коли» offers only these (and keeps a stored route's other source, marked). */
+  available: (source: IntakeSourceDescriptor) => boolean;
 }
+
+/**
+ * A source the Factory uses: ClickUp once the org's ClickUp is connected, GitHub or GitLab when a
+ * linked repository comes from it; «будь-яке джерело», «Вручну» and a source added later always.
+ */
+export function sourceAvailable(
+  source: IntakeSourceDescriptor,
+  used: { clickUp: boolean; hosts: ReadonlySet<string> },
+): boolean {
+  if (source.id === 'clickup') return used.clickUp;
+  if (source.id === 'github' || source.id === 'gitlab') return used.hosts.has(source.id);
+  return true;
+}
+
+/** A stored route's other candidates beside the one shown, as a muted note («також GitLab»). */
+const alsoNote = (model: RouteWhenModel, t: T) => {
+  const others = model.candidates.filter(candidate => candidate.id !== model.source.id);
+  return others.length > 0 ? t('intakeRoutes.alsoSources', { sources: others.map(other => sourceLabel(other, t)).join(', ') }) : undefined;
+};
 
 const originLabel = (options: IntakeOrigins['lists'], value: string) =>
   options.find(option => option.value === value)?.label ?? value;
@@ -417,14 +443,18 @@ function describeEventCondition(condition: CardRuleGroup['conditions'][number], 
  */
 function describeWhen(route: IntakeRouteInfo, origins: IntakeOrigins, t: T): string {
   if (route.triggered) return route.triggered.trigger.summary;
-  const model = readRouteWhen(route.when, route.on);
+  const model = readRouteWhen(route.when, route.on, origins.available);
   if (model) {
     const { source } = model;
     const onlyNewCards = route.on.length === 1 && route.on[0] === 'work_item.created';
     if (source.id === 'any' && model.conditions.length === 0 && onlyNewCards) return t('intakeRoutes.everyCard');
     const events = route.on.map(event => eventLabel(source, event, t)).join(t('intakeRoutes.or'));
+    const also = alsoNote(model, t);
+    const unused = origins.available(source) ? undefined : t('intakeRoutes.sourceNotConnected');
     return [
-      ...(source.id === 'any' ? [] : [sourceLabel(source, t)]),
+      ...(source.id === 'any'
+        ? []
+        : [[sourceLabel(source, t), also && `(${also})`, unused && `(${unused})`].filter(Boolean).join(' ')]),
       ...model.conditions.map(condition => describeCondition(condition, origins, t, source)),
       model.closeReason ? `${events} · ${t(`intakeRoutes.closeReasons.${model.closeReason}`)}` : events,
     ].join(' · ');
@@ -580,11 +610,14 @@ function RouteEditor({
   const [name, setName] = useState(initial?.name ?? '');
   const initialOn = initial?.on ?? ['work_item.created'];
   // Undefined: the route's condition is one this form can't show, and is kept exactly as written.
-  const readable = initial && !initial.triggered ? readRouteWhen(initial.when, initialOn) : undefined;
+  const readable =
+    initial && !initial.triggered ? readRouteWhen(initial.when, initialOn, origins.available) : undefined;
   const custom = Boolean(initial && !initial.triggered && !readable);
-  const [model, setModel] = useState<RouteWhenModel>(
-    () => readable ?? { source: intakeSource('any')!, named: false, closeReason: null, conditions: [] },
-  );
+  const [model, setModel] = useState<RouteWhenModel>(() => {
+    if (readable) return readable;
+    const any = intakeSource('any')!;
+    return { source: any, candidates: [any], named: false, closeReason: null, conditions: [] };
+  });
   // A route whose events this form can't offer for its source keeps them as they are.
   const eventsEditable = !custom && routeEventsEditable(model.source, initialOn);
   const [events, setEvents] = useState<string[]>(() => [...initialOn]);
@@ -596,7 +629,10 @@ function RouteEditor({
   const phases = (board?.phases ?? []).filter(phase => phase.kind !== 'terminal');
   const offered = conditionFieldsFor(model.source).filter(field => !model.conditions.some(condition => condition.field === field));
   const label = initial ? t('intakeRoutes.editTitle', { name: initial.name }) : t('intakeRoutes.newTitle');
-  const sources = intakeSources();
+  // Only the sources the Factory uses; a stored route's source it no longer uses stays, marked.
+  const sources = intakeSources().filter(source => origins.available(source) || source.id === model.source.id);
+  const sourceUnused = !scheduled && !origins.available(model.source);
+  const also = scheduled ? undefined : alsoNote(model, t);
   // A new route chooses between arriving cards and a schedule; an existing one keeps the kind it is.
   const canSchedule = !initial && Boolean(kinds && kinds.triggers.length > 0);
   const listId = model.conditions.find(condition => condition.field === 'source.list')?.value as string | undefined;
@@ -682,12 +718,24 @@ function RouteEditor({
             <SelectContent>
               {sources.map(source => (
                 <SelectItem key={source.id} value={source.id}>
-                  {sourceLabel(source, t)}
+                  {origins.available(source)
+                    ? sourceLabel(source, t)
+                    : `${sourceLabel(source, t)} (${t('intakeRoutes.sourceNotConnected')})`}
                 </SelectItem>
               ))}
               {canSchedule && <SelectItem value={SCHEDULE}>{t('intakeTriggers.modeSchedule')}</SelectItem>}
             </SelectContent>
           </Select>
+          {also && (
+            <Txt as="span" variant="caption" tone="muted">
+              {also}
+            </Txt>
+          )}
+          {sourceUnused && (
+            <Txt as="span" variant="caption" tone="muted">
+              {t('intakeRoutes.sourceNotConnected')}
+            </Txt>
+          )}
         </div>
       )}
       {scheduled && !initial && (

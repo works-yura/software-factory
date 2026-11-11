@@ -170,7 +170,13 @@ export type RouteCloseReason = (typeof ROUTE_CLOSE_REASONS)[number];
  * condition of its own.
  */
 export interface RouteWhenModel {
+  /** The source the editor shows: of the route's candidates, the first the Factory uses. */
   source: IntakeSourceDescriptor;
+  /**
+   * Every source the stored route stands for (GitHub and GitLab for `in ['github', 'gitlab']` or a
+   * pull request event with no source named); `source` is one of them. One after choosing a source.
+   */
+  candidates: readonly IntakeSourceDescriptor[];
   /** The stored condition naming the source, written back unchanged while the source stays. */
   sourceLeaf?: CardRuleGroup['conditions'][number];
   /** Whether the route names its source (a source chosen here always is, except «будь-яке джерело»). */
@@ -187,7 +193,12 @@ const isCloseReason = (value: unknown): value is RouteCloseReason =>
  * editor can't show (OR, nested groups, other fields or operators, a set of integrations no source
  * covers) — the route then keeps them exactly as written.
  */
-export function readRouteWhen(when: CardRuleGroup | null, on?: readonly string[]): RouteWhenModel | undefined {
+export function readRouteWhen(
+  when: CardRuleGroup | null,
+  on?: readonly string[],
+  /** Whether the Factory uses a source; the first used candidate is shown. Absent: every source counts. */
+  available?: (source: IntakeSourceDescriptor) => boolean,
+): RouteWhenModel | undefined {
   if (when && when.operator !== 'AND') return undefined;
   const read = readIntakeSource(when as RuleGroup | null, on ?? ['work_item.created']);
   if (!read) return undefined;
@@ -209,7 +220,8 @@ export function readRouteWhen(when: CardRuleGroup | null, on?: readonly string[]
     conditions.push(parsed);
   }
   return {
-    source: read.source,
+    source: (available && read.candidates.find(available)) ?? read.source,
+    candidates: read.candidates,
     ...(read.leaf ? { sourceLeaf: read.leaf as CardRuleGroup['conditions'][number] } : {}),
     named: read.named,
     closeReason,
@@ -252,6 +264,7 @@ export function chooseRouteSource(model: RouteWhenModel, source: IntakeSourceDes
   const fields = conditionFieldsFor(source);
   return {
     source,
+    candidates: [source],
     named: source.integrations !== undefined,
     closeReason: source.events.includes('work_item.closed') ? model.closeReason : null,
     conditions: model.conditions.filter(condition => fields.includes(condition.field)),
