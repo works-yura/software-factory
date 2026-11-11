@@ -39,7 +39,7 @@ Dependencies: `zod` (catalog) and `@mastra/core` at the version the workspace al
 |---|---|
 | `@factory/harness-handoff` | everything below |
 | `@factory/harness-handoff/contracts` | zod schemas and types (`OrchestrationV2ContextHandoff`, `…TurnItem`, `…HistoricalMessage`, thread-read input/result) |
-| `@factory/harness-handoff/mastra` | `createThreadReadTool(sourceFor)`: `factory_thread_read` as a Mastra tool |
+| `@factory/harness-handoff/mastra` | `createThreadReadTool(sourceFor)` (`factory_thread_read` as a Mastra tool) and `FactoryContextHandoffProcessor` |
 
 | File | What |
 |---|---|
@@ -56,6 +56,8 @@ Dependencies: `zod` (catalog) and `@mastra/core` at the version the workspace al
 | `WireProjection.ts` | `projectContextHandoffForWire` |
 | `threadRead.ts` | `readThread` and the `factory_thread_read` tool description |
 | `historySource.ts` | `HandoffHistorySource`, the host's thread reads, and an in-memory timeline page |
+| `memoryHistory.ts` | a memory thread's messages as turn items; `createMemoryHistorySource` |
+| `sessionHandoffs.ts` | `createSessionHandoffs`: a session's handoffs on its thread, the marker, delivery per turn |
 | `contracts.ts`, `errors.ts` | zod schemas; `Error` subclasses with a `_tag` |
 
 ### Conventions
@@ -82,91 +84,56 @@ Dependencies: `zod` (catalog) and `@mastra/core` at the version the workspace al
 - **Thread read.** It pages the timeline and long items only: no environments, thread detail or
   recent-runs header, message author lookup, or acknowledging delegated child-task results.
 - **Ids and injection.** Handoff ids come from an injected allocator with a random default. No
-  harness injects history natively yet: `inject` is the hook where a harness that supports it
-  plugs in.
+  harness injects history natively: every delivery is inline context.
 
 ## Wiring
 
-This package is not wired yet. These are the exact places in v4 where it plugs in.
+How v4 uses it.
 
-**A host adapter (new code, in `packages/server`).** Implement `HandoffHistorySource` over Mastra
-memory, the way `productReadThread` in `packages/server/src/factory.ts:1283` pages
-`memory.listMessages` (ASC, 100 per page). Map each `MastraDBMessage` to a turn item: text parts
-become `user_message` or `assistant_message`, and tool parts become `command_execution` or
-`dynamic_tool`. Use `messageText` and `messageToolCalls` in `packages/supervisor/src/read-tools.ts:130`
-and `:144` as the reference parsers. For Claude Code sessions, map the transcript entries
-(`ClaudeTranscriptEntry`, `packages/harness-claude-code-core/src/events.ts:123`). A Factory run is
-a `run`, and its ordinal is the turn index. Persist the returned handoff records with the
-session; for Claude Code that is next to `ClaudeThreadState` in
-`packages/harness-claude-code-core/src/store.ts:26`.
+**History.** Every harness keeps a session's conversation in its memory thread (thread = session id):
+Mastra its own messages, Claude Code and Codex their transcript, projected by the chat channel
+(`@factory/harness-claude-code-ui`). `memoryHistory.ts` maps those messages to runs and turn items
+(`turnItemsFromMessages`; a person's input or a notification starts a run; shell calls become
+`command_execution`, other tools `dynamic_tool`) and `createMemoryHistorySource` serves them as a
+`HandoffHistorySource`, for all three harnesses.
 
-**1. Claude Code: fresh CLI session.**
-- In `packages/harness-claude-code-core/src/session.ts:1288`, an `unknown_session` error on resume
-  clears `thread.claudeSessionId` and starts a fresh CLI conversation with no history. This is the
-  "start fresh provider session" case.
-- Call `prepareProviderHandoff({ strategy: "full_thread_summary", items: visibleConversationItems(...) })`
-  there.
-- Deliver through the `turnContextFor` hook, configured in `packages/server/src/claude/harness.ts:392`
-  and read in `session.ts:1128`. Its output is prepended as `${turnContext}\n\n${prompt}` at
-  `session.ts:1166`. Append `deliverContextHandoffs(...).context` to the signals it returns. Use:
-  - `providerThread.nativeThreadRef.nativeId` = `claudeSessionId`;
-  - `inject` = undefined (the CLI has no native history API);
-  - `budget = handoffBudget({ tokenCap: handoffTokenCapFromEnv(), userText: prompt, attachments, providerThread, nativeContextEstimate: 0, modelContextWindow })`.
-- Call `delivered()` once the CLI has the prompt (`session.ts:1236`, "from here on the input counts
-  as delivered"). Call `unsent()` if the spawn fails before that. Both points need a small
-  callback added to `ClaudeCodeSessionConfig` in harness-claude-code-core.
+**Session state.** `createSessionHandoffs` (`sessionHandoffs.ts`) keeps a session's handoff records
+on its memory thread's metadata (`factoryContextHandoff`), the one place all harnesses share.
+`prepare` builds a `full_thread_summary` handoff and writes a timeline marker (a
+`factory-context-handoff` signal with `metadata.contextHandoff`, which the chat draws as a divider:
+pending, delivered, failed). Each handoff opens a new native conversation key, so `forTurn` delivers
+it once per key through `deliverContextHandoffs`; `delivered` / `unsent` follow whether the provider
+took the prompt.
 
-**2. Model or provider switch.**
-- `factory_switch_session_model` (`packages/harness-mastra/src/tools/session-tools.ts:197`, calling
-  `controller.setThreadModel` at `:237`) and the UI path
-  (`apps/ui/src/hooks/useAgentControllerStateMutations.ts:49` → AgentController `switchModel`)
-  switch Mastra threads in place. Mastra memory replays the thread to any model. That is the
-  policy's `switch_model_in_session`, so no handoff is needed.
-- Claude Code sessions refuse switches today: `claudeModelError()` at `session-tools.ts:121/225/293`,
-  and `switchModel: !claude` at `packages/api/src/source-control-sessions.ts:322` and `:606`.
-- To allow Mastra ↔ Claude Code, or a Claude model or account change that cannot `--resume`:
-  1. Run `makeProviderSwitchService(registry).plan(...)` in place of those refusals. The
-     registry's `continuationKey` is `claude:<account>` or `mastra`.
-  2. On `create_with_handoff`, call `prepareProviderHandoff` with `"delta_since_target_last_seen"`
-     (or `"full_thread_summary"` for a target that never saw the thread). Use the items since
-     the target last ran, and `visibleDeltaRunOrdinals` for the covered run range.
-  3. Deliver as in 1 (Claude Code), or for Mastra prepend `withInlineContext(context, text)` to
-     the first `sendMessage` / `sendSignal` contents (`AgentSession` in
-     `packages/harness-core/src/contract.ts`).
-- `modelSwitchSince` gives the "model a → b" divider for the switching run's user message.
+**Moving a session between harnesses** (`packages/server/src/handoff/harness-switch.ts`). The model
+registry hands a pick on another harness's instance to its `HarnessSwitch`
+(`@factory/harness/models/registry`); the server registers `createHarnessSwitch`. The session keeps
+its id, chat URL, source-control row and thread: the source gives it up (a Claude Code or Codex
+store record is removed, its chat channel detached; Mastra holds every session no other harness
+does) and the target adopts it with no native conversation. The plan is
+`makeProviderSwitchService(...).plan` (each harness its own continuation key, so
+`create_with_handoff`); a running session or one without a Factory row is refused.
 
-**3. Fork.** v4 has no thread fork yet. Mastra's `memory.cloneThread`
-(`@mastra/core/dist/memory/memory.d.ts:401`) copies rows for a Mastra → Mastra fork; that is a
-native fork. For a portable fork, use `planThreadFork(...)` to get the target thread and
-transfer, then `readForkHistoryItems(source, …, throughRun)` to get what the fork carries.
-`prepareProviderHandoff({ strategy: "full_thread_summary" })` builds the handoff, and it is
-delivered as in 1 or 2.
+**Delivery.** Mastra: `FactoryContextHandoffProcessor` (`./mastra`) adds the context as a system
+message of the run and confirms it after the model's first response. Claude Code and Codex:
+`handoffContextFor` (`TurnHandoffHook`, `@factory/harness/turn-handoff`) is asked before each turn;
+the context goes ahead of the prompt as `withInlineContext` does, and is confirmed once the CLI
+reports init / Codex accepts `turn/start`.
 
-**4. Merge back / side sessions.**
-- `factory_start_session` (`packages/harness-mastra/src/tools/session-tools.ts:243`) starts a
-  side session. Its results come back as `factory-session` notifications through
-  `deliverFactorySessionNotification` (`packages/harness-mastra/src/tools/deliver.ts:58`), which
-  calls `sendNotificationSignal` at `:101`.
-- To hand the origin the child's real activity instead of a report, call `prepareForkDelta`. Use
-  `deltaItems` = the child's visible items since it started and `coveredRunOrdinals` from
-  `visibleDeltaRunOrdinals`. Put `deliverContextHandoffs(...).context` (or the handoff's
-  `summaryText`) in the notification payload.
-- A side session started "beside" a running thread can take `prepareSideChatContext`.
+**Lost native conversations.** A Claude Code `unknown_session` resume, or a Codex `thread/resume`
+that fails, asks the hook again with `resume_failed`: the server prepares a same-harness handoff of
+the thread (without the turn's own request) and the fresh conversation gets it.
 
-**5. The read tool.**
-- Add `createThreadReadTool(requestContext => source)` from `@factory/harness-handoff/mastra` to
-  `createFactoryTools` (`packages/harness-mastra/src/tools/index.ts:42`). Claude Code sessions get
-  the same Mastra tools over MCP through `buildFactoryMcpRoutes` (`packages/server/src/factory.ts:2564`).
-- `sourceFor` must enforce access the way `factory_read_session`
-  (`packages/harness-mastra/src/rules/product-tools.ts:524`) does: same Factory, and no other
-  person's private session. Its `getThread` throws `HandoffThreadNotFoundError` otherwise.
-  `threadReadSourceFromHistory(history)` builds the source from the adapter above.
+**`factory_thread_read`.** In `createFactoryTools` for every session kind, so Claude Code and Codex
+get it over the Factory MCP route. Access: the caller's own thread, or a session of the same Factory
+that is not another person's private one (`scopedThreadReadSource` in `@factory/harness-mastra`).
 
-**6. UI.** When a handoff record goes to clients, send it through `projectContextHandoffForWire`,
-so the transcript and delivery state stay on the server.
+**Not wired.** v4 has no "fork this session" entry point, so `planThreadFork` stays unused; side
+sessions (`factory_start_session`) still report back with `factory-session` notifications, not
+`prepareForkDelta`.
 
 ## Tests
 
 `pnpm --filter @factory/harness-handoff check` and `pnpm --filter @factory/harness-handoff test`.
-51 cases, including `threadRead.test.ts` and an unavailable-target case in
+62 cases, including `threadRead.test.ts` and an unavailable-target case in
 `ProviderSwitchService.test.ts`.
