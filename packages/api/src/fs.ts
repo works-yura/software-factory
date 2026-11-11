@@ -11,7 +11,7 @@ import type { Context } from 'hono';
 
 import { requireExec } from '@factory/sandbox';
 import type { ExecutableSandbox } from '@factory/sandbox';
-import { peekSessionSandbox, sessionFilesSandbox, sessionLayout } from '@factory/sandbox';
+import { ENV_FILES_MANIFEST, peekSessionSandbox, sessionFilesSandbox, sessionLayout } from '@factory/sandbox';
 import type { SessionLayout, SessionLayoutRepository } from '@factory/sandbox';
 import { peekSessionEnvironment } from '@factory/sandbox';
 import type { SourceControlSession } from '@factory/store';
@@ -655,20 +655,37 @@ function treeLocation(
 }
 
 /**
- * The checkout-relative paths git ignores, in one `git check-ignore` call.
- * Ignored files (`.env`, build output, `node_modules`) are neither listed nor
- * served: viewers of a session shouldn't read its local secrets. Fails closed
- * when git can't answer.
+ * `git check-ignore` the paths, then add the ones Factory wrote as env files
+ * (listed in the checkout's `ENV_FILES_MANIFEST`): an env file at a path git
+ * tracks (`ios/Config.xcconfig`) is not ignored, yet holds the real values.
+ * Exits 0 when something is hidden, 1 when nothing is, like `check-ignore`.
+ */
+const HIDDEN_PATHS_SCRIPT = `cd "$1" && shift || exit 2
+printf '%s\\0' "$@" | git check-ignore -z --stdin
+status=$?
+[ "$status" -gt 1 ] && exit "$status"
+manifest=$(git rev-parse --git-path ${ENV_FILES_MANIFEST}) || exit 2
+if [ -f "$manifest" ]; then
+  for p; do
+    if grep -qxF -- "$p" "$manifest"; then printf '%s\\0' "$p"; status=0; fi
+  done
+fi
+exit "$status"`;
+
+/**
+ * The checkout-relative paths git ignores, in one `git check-ignore` call,
+ * plus the env files Factory wrote into the checkout. Ignored files (`.env`,
+ * build output, `node_modules`) are neither listed nor served: viewers of a
+ * session shouldn't read its local secrets. Fails closed when git can't answer.
  */
 async function ignoredPaths(sandbox: ExecutableSandbox, repoDir: string, paths: string[]): Promise<Set<string>> {
   if (paths.length === 0) return new Set();
   // Paths go in as positional arguments, never into the script text, and back
   // NUL-separated so no filename needs quoting either way.
-  const result = await sandbox.executeCommand(
-    'sh',
-    ['-c', 'cd "$1" && shift && printf \'%s\\0\' "$@" | git check-ignore -z --stdin', 'sh', repoDir, ...paths],
-    { timeout: 30_000, maxRetainedBytes: Infinity },
-  );
+  const result = await sandbox.executeCommand('sh', ['-c', HIDDEN_PATHS_SCRIPT, 'sh', repoDir, ...paths], {
+    timeout: 30_000,
+    maxRetainedBytes: Infinity,
+  });
   // 0: some paths are ignored, 1: none are.
   if (result.exitCode === 1) return new Set();
   if (result.exitCode !== 0) throw new Error(`Unable to check ignored files: ${result.stderr.trim() || 'git failed'}`);

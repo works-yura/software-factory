@@ -529,6 +529,24 @@ describe('live session file tree', () => {
     }
   });
 
+  it('hides env files Factory wrote, even at a path git tracks', async () => {
+    const { parent } = await seedHostCheckouts();
+    const repo = join(parent, 'repo');
+    await mkdir(join(repo, 'ios'), { recursive: true });
+    await writeFile(join(repo, 'ios', 'Config.xcconfig'), 'API_URL = real\n');
+    await writeFile(join(repo, '.env.staging'), 'S=1');
+    await execFileAsync('git', ['-C', repo, 'add', 'ios/Config.xcconfig']);
+    await mkdir(join(repo, '.git', 'info'), { recursive: true });
+    await writeFile(join(repo, '.git', 'info', 'factory-env-files'), 'ios/Config.xcconfig\n.env.staging\n');
+
+    expect(names(await listSessionWorkspaceTree(makeSession(), 'ios'))).toEqual([]);
+    expect(names(await listSessionWorkspaceTree(makeSession()))).not.toContain('f .env.staging');
+    for (const path of ['ios/Config.xcconfig', '.env.staging']) {
+      await expect(readSessionWorkspaceFile(makeSession(), path)).rejects.toThrow('not available');
+    }
+    expect((await readSessionWorkspaceFile(makeSession(), 'README.md')).path).toBe('README.md');
+  });
+
   it('checks odd filenames exactly, with nothing read as shell', async () => {
     const { parent } = await seedHostCheckouts();
     await writeFile(join(parent, 'repo', '.gitignore'), `.env\n*.log\n`);

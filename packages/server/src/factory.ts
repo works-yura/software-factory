@@ -3173,6 +3173,16 @@ export class MastraFactory {
             sandboxEnvs: sandboxEnvsStorage,
             writable: !secretsUnencrypted,
             audit: auditDomain,
+            // An env file names one of the Factory's own repository links.
+            isProjectRepository: async ({ orgId, projectId, projectRepositoryId }) => {
+              for (const handle of sourceControlHandles) {
+                const link = await handle.projectRepositories.get({ orgId, id: projectRepositoryId });
+                if (!link) continue;
+                const connection = await handle.connections.get({ orgId, id: link.connectionId });
+                return connection?.factoryProjectId === projectId;
+              }
+              return false;
+            },
           }).routes(),
           ...auditDomain.routes(),
           ...commentsDomain.routes(),

@@ -2,12 +2,18 @@ import type { EventCallback, PubSub } from '@mastra/core/events';
 import { withAck } from '@mastra/core/events';
 
 import type {
+  CreateSandboxEnvFileInput,
   ResolvedSandboxEnvs,
   SandboxEnvAppliesTo,
+  SandboxEnvFile,
+  SandboxEnvFileMetadata,
   SandboxEnvMetadata,
   SandboxEnvRevisions,
   SandboxEnvStore,
+  SandboxMaterializableStage,
   SetSandboxEnvInput,
+  UpdateSandboxEnvFileInput,
+  UpdateSandboxEnvInput,
 } from '@factory/store';
 
 /** One topic for every Factory: a replica drops its cached entry for the Factory named in the event. */
@@ -94,8 +100,55 @@ export class CachedSandboxEnvs implements SandboxEnvStore {
     return env;
   }
 
+  async update(orgId: string, projectId: string, name: string, patch: UpdateSandboxEnvInput, actorId: string) {
+    const env = await this.store.update(orgId, projectId, name, patch, actorId);
+    if (env) this.#changed({ orgId, projectId });
+    return env;
+  }
+
   async delete(orgId: string, projectId: string, name: string) {
     const deleted = await this.store.delete(orgId, projectId, name);
+    if (deleted) this.#changed({ orgId, projectId });
+    return deleted;
+  }
+
+  stages(orgId: string, projectId: string): Promise<SandboxMaterializableStage[]> {
+    return this.store.stages(orgId, projectId);
+  }
+
+  async setStages(
+    orgId: string,
+    projectId: string,
+    stages: readonly SandboxMaterializableStage[],
+    actorId: string,
+  ): Promise<SandboxMaterializableStage[]> {
+    const next = await this.store.setStages(orgId, projectId, stages, actorId);
+    this.#changed({ orgId, projectId });
+    return next;
+  }
+
+  listFiles(orgId: string, projectId: string): Promise<SandboxEnvFileMetadata[]> {
+    return this.store.listFiles(orgId, projectId);
+  }
+
+  getFile(orgId: string, projectId: string, id: string): Promise<SandboxEnvFile | null> {
+    return this.store.getFile(orgId, projectId, id);
+  }
+
+  async createFile(orgId: string, projectId: string, input: CreateSandboxEnvFileInput, actorId: string) {
+    const file = await this.store.createFile(orgId, projectId, input, actorId);
+    this.#changed({ orgId, projectId });
+    return file;
+  }
+
+  async updateFile(orgId: string, projectId: string, id: string, patch: UpdateSandboxEnvFileInput, actorId: string) {
+    const file = await this.store.updateFile(orgId, projectId, id, patch, actorId);
+    if (file) this.#changed({ orgId, projectId });
+    return file;
+  }
+
+  async deleteFile(orgId: string, projectId: string, id: string) {
+    const deleted = await this.store.deleteFile(orgId, projectId, id);
     if (deleted) this.#changed({ orgId, projectId });
     return deleted;
   }

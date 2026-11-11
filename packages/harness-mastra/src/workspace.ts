@@ -46,6 +46,7 @@ import {
   resolveSandboxEnv,
   resolveSandboxEnvOrEmpty,
   sandboxBuildContext,
+  writeEnvFilesToCheckouts,
 } from '@factory/sandbox';
 import {
   createEnvironmentSetupHook,
@@ -849,6 +850,22 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const env = await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope);
       return [env.build, env.runtime];
     };
+    // Each checkout of the sandbox by repository link, recorded as the boot
+    // materializes it, so an env file edit later reaches every checkout.
+    const envFileTargets = new Map<string, string>();
+    /**
+     * Write the env files of one checkout, after its clone and branch sync
+     * and before its setup command, so the setup sees them. A failure is
+     * logged: a missing env file never stops a boot.
+     */
+    const writeCheckoutEnvFiles = async (target: ExecutableSandbox, projectRepositoryId: string, dir: string) => {
+      envFileTargets.set(projectRepositoryId, dir);
+      if (!envScope) return;
+      const { files } = await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope);
+      await timedPhase('workspace.env-files', () =>
+        writeEnvFilesToCheckouts(target, [{ projectRepositoryId, dir }], files),
+      );
+    };
     // The session's own link must be part of the environment: it is the
     // checkout the PR tools and `resolveSessionWorkdir` target (D1). A session
     // whose link left the environment keeps its single-repository sandbox.
@@ -1099,6 +1116,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               initial: sandboxEnv,
               revision: async () => (await sandboxEnvs!.revisions(envScope.orgId, envScope.projectId))?.revision ?? '',
               load: () => resolveSandboxEnv(sandboxEnvs!, envScope),
+              // Rewrites every checkout the boot recorded; files deleted or of a
+              // stage switched off are removed.
+              applyFiles: files =>
+                writeEnvFilesToCheckouts(
+                  requireExec(sandbox),
+                  [...envFileTargets].map(([projectRepositoryId, dir]) => ({ projectRepositoryId, dir })),
+                  files,
+                ),
             });
           }
           // A turn can outlive the token installed when the workspace was
@@ -1583,6 +1608,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // checkout is, so the role inherits what the earlier roles left.
         ...(folder ? { inheritCheckout: true } : {}),
       });
+      await writeCheckoutEnvFiles(target, projectRepository.id, workdir);
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
         // than failing every start: the first failure surfaced loudly in the
@@ -1747,6 +1773,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             );
             state.branch = synced.branch;
             secondary.synced = true;
+            await writeCheckoutEnvFiles(target, repo.projectRepositoryId, entry.dir);
           } catch (error) {
             console.warn('[Factory] Environment repository could not be synced; continuing the boot', {
               orgId: session.orgId,

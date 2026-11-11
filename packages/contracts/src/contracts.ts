@@ -14,6 +14,8 @@ import {
   ATTACHMENT_SOURCES,
   CLAUDE_CODE_MODELS,
   MAX_INTAKE_ROUTES,
+  MAX_SANDBOX_ENV_FILE_CONTENT_LENGTH,
+  sandboxEnvFilePathProblem,
   storedBoardDefinitionSchema,
   storedBoardInputSchema,
   storedPhaseInputSchema,
@@ -388,6 +390,10 @@ export const sandboxEnvNameSchema = z
   // Names like `__proto__` or `toString` collide with object built-ins and would be dropped or stick around.
   .refine(name => !(name in Object.prototype), { message: "This name can't be used." });
 export const sandboxEnvAppliesToSchema = z.enum(['build', 'runtime', 'both']);
+/** The stage a variable or env file belongs to; production is stored but never reaches a sandbox. */
+export const sandboxStageSchema = z.enum(['development', 'staging', 'production']);
+/** The stages a Factory may give its sandboxes: development always, staging when enabled. */
+export const sandboxMaterializableStageSchema = z.enum(['development', 'staging']);
 const sandboxEnvPathSchema = z.object({ id: uuidSchema, name: sandboxEnvNameSchema });
 export const sandboxEnvSetBodySchema = z.object({
   value: z
@@ -396,12 +402,19 @@ export const sandboxEnvSetBodySchema = z.object({
     // A NUL byte in an env value makes every spawn fail.
     .refine(value => !value.includes('\0'), { message: "Values can't contain NUL characters." }),
   appliesTo: sandboxEnvAppliesToSchema,
+  /** Defaults to development for a new variable; an existing one keeps its stage. */
+  stage: sandboxStageSchema.optional(),
 });
-export const sandboxEnvUpdateBodySchema = z.object({ appliesTo: sandboxEnvAppliesToSchema });
+export const sandboxEnvUpdateBodySchema = z
+  .object({ appliesTo: sandboxEnvAppliesToSchema.optional(), stage: sandboxStageSchema.optional() })
+  .refine(body => body.appliesTo !== undefined || body.stage !== undefined, {
+    message: 'Send appliesTo, stage or both.',
+  });
 /** A variable as routes return it. There is deliberately no value field. */
 const sandboxEnvSchema = z.object({
   name: z.string(),
   appliesTo: sandboxEnvAppliesToSchema,
+  stage: sandboxStageSchema,
   updatedAt: z.string(),
   updatedBy: z.string(),
 });
@@ -409,8 +422,65 @@ const sandboxEnvsListResponseSchema = z.object({
   envs: z.array(sandboxEnvSchema),
   /** False when values can't be stored encrypted, so writes are refused. */
   writable: z.boolean(),
+  /** The stages this Factory's sandboxes get. */
+  stages: z.array(sandboxMaterializableStageSchema),
+  /** Whether the caller may change the stages and env files (an organization admin). */
+  canManage: z.boolean(),
 });
 const sandboxEnvResponseSchema = z.object({ env: sandboxEnvSchema });
+export const sandboxStagesBodySchema = z.object({
+  stages: z
+    .array(sandboxMaterializableStageSchema)
+    .refine(stages => stages.includes('development'), { message: 'Development is always on.' }),
+});
+const sandboxStagesResponseSchema = z.object({ stages: z.array(sandboxMaterializableStageSchema) });
+
+export const sandboxEnvFilePathSchema = z
+  .string()
+  .superRefine((path, context) => {
+    const problem = sandboxEnvFilePathProblem(path);
+    if (problem) context.addIssue({ code: 'custom', message: problem });
+  });
+const sandboxEnvFileContentSchema = z
+  .string()
+  .max(MAX_SANDBOX_ENV_FILE_CONTENT_LENGTH, `Use at most ${MAX_SANDBOX_ENV_FILE_CONTENT_LENGTH / 1024} KB.`)
+  .refine(value => !value.includes('\0'), { message: "Files can't contain NUL characters." });
+const sandboxEnvFileIdPathSchema = z.object({ id: uuidSchema, fileId: uuidSchema });
+export const sandboxEnvFileCreateBodySchema = z.object({
+  projectRepositoryId: uuidSchema,
+  path: sandboxEnvFilePathSchema,
+  stage: sandboxStageSchema,
+  content: sandboxEnvFileContentSchema,
+});
+export const sandboxEnvFileUpdateBodySchema = z
+  .object({
+    path: sandboxEnvFilePathSchema.optional(),
+    stage: sandboxStageSchema.optional(),
+    content: sandboxEnvFileContentSchema.optional(),
+  })
+  .refine(body => body.path !== undefined || body.stage !== undefined || body.content !== undefined, {
+    message: 'Send path, stage or content.',
+  });
+/** An env file as lists return it: never its content. */
+const sandboxEnvFileSchema = z.object({
+  id: z.string(),
+  projectRepositoryId: z.string(),
+  path: z.string(),
+  stage: sandboxStageSchema,
+  size: z.number(),
+  updatedAt: z.string(),
+  updatedBy: z.string(),
+});
+const sandboxEnvFilesListResponseSchema = z.object({
+  files: z.array(sandboxEnvFileSchema),
+  writable: z.boolean(),
+  /** Organization admins may reveal, add, edit and delete env files; everyone else sees metadata only. */
+  canManage: z.boolean(),
+});
+const sandboxEnvFileResponseSchema = z.object({ file: sandboxEnvFileSchema });
+const sandboxEnvFileContentResponseSchema = z.object({
+  file: sandboxEnvFileSchema.extend({ content: z.string() }),
+});
 
 export const projectEnvironmentResponseSchema = z.object({
   environment: z.object({
@@ -926,6 +996,51 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/sandbox-envs/:name',
     description: 'Delete a sandbox environment variable of a Factory project',
     pathSchema: sandboxEnvPathSchema,
+    responseSchema: z.null(),
+  },
+  projectSandboxStagesSet: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/sandbox-stages',
+    description: "Choose which stages a Factory's sandboxes get (development always, staging optionally; never production)",
+    pathSchema: projectPathSchema,
+    bodySchema: sandboxStagesBodySchema,
+    responseSchema: sandboxStagesResponseSchema,
+  },
+  projectSandboxEnvFilesList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/sandbox-env-files',
+    description: "List a Factory's env files per repository: paths, stages and sizes, never contents",
+    pathSchema: projectPathSchema,
+    responseSchema: sandboxEnvFilesListResponseSchema,
+  },
+  projectSandboxEnvFileCreate: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/sandbox-env-files',
+    description: 'Add an env file to a repository of a Factory (organization admins)',
+    pathSchema: projectPathSchema,
+    bodySchema: sandboxEnvFileCreateBodySchema,
+    responseSchema: sandboxEnvFileResponseSchema,
+  },
+  projectSandboxEnvFileGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/sandbox-env-files/:fileId',
+    description: "Reveal an env file's content (organization admins)",
+    pathSchema: sandboxEnvFileIdPathSchema,
+    responseSchema: sandboxEnvFileContentResponseSchema,
+  },
+  projectSandboxEnvFileUpdate: {
+    method: 'PATCH',
+    path: '/web/factory/projects/:id/sandbox-env-files/:fileId',
+    description: "Change an env file's path, stage or content (organization admins)",
+    pathSchema: sandboxEnvFileIdPathSchema,
+    bodySchema: sandboxEnvFileUpdateBodySchema,
+    responseSchema: sandboxEnvFileResponseSchema,
+  },
+  projectSandboxEnvFileDelete: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/sandbox-env-files/:fileId',
+    description: 'Delete an env file (organization admins)',
+    pathSchema: sandboxEnvFileIdPathSchema,
     responseSchema: z.null(),
   },
   projectModelDefaultSet: {

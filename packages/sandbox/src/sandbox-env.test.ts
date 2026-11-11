@@ -327,8 +327,8 @@ describe('sandbox env on a real LocalSandbox', () => {
 describe('sandboxBuildContext', () => {
   it('carries Build variables and their revision, and nothing without them', () => {
     expect(sandboxBuildContext(undefined)).toEqual({});
-    expect(sandboxBuildContext({ runtime: { A: 'a' }, build: {}, revision: 'r', buildRevision: 'b' })).toEqual({});
-    expect(sandboxBuildContext({ runtime: {}, build: { B: 'b' }, revision: 'r', buildRevision: 'rev-b' })).toEqual({
+    expect(sandboxBuildContext({ runtime: { A: 'a' }, build: {}, files: [], revision: 'r', buildRevision: 'b' })).toEqual({});
+    expect(sandboxBuildContext({ runtime: {}, build: { B: 'b' }, files: [], revision: 'r', buildRevision: 'rev-b' })).toEqual({
       buildEnv: { B: 'b' },
       buildEnvRevision: 'rev-b',
     });

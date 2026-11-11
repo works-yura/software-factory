@@ -4,14 +4,18 @@
  * edits on its next command.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import type { FactorySandboxContext } from '@mastra/core/workspace';
-import type { SandboxEnvStore } from '@factory/store';
+import type { ResolvedSandboxEnvFile, SandboxEnvStore } from '@factory/store';
 
 export interface SandboxEnv {
   /** Variables every command in the sandbox gets. */
   runtime: Record<string, string>;
   /** Variables template builds and Factory-run setup commands get; never runtime commands. */
   build: Record<string, string>;
+  /** Env files of the Factory's sandbox stages, written into their repositories' checkouts. */
+  files: ResolvedSandboxEnvFile[];
   /** Read before the values: an edit landing in between makes the next check reload. */
   revision: string;
   buildRevision: string;
@@ -26,8 +30,8 @@ export async function resolveSandboxEnv(
   store: Pick<SandboxEnvStore, 'resolve'>,
   scope: { orgId: string; projectId: string },
 ): Promise<SandboxEnv> {
-  const { runtime, build, revision, buildRevision } = await store.resolve(scope.orgId, scope.projectId);
-  return { runtime, build, revision, buildRevision };
+  const { runtime, build, files, revision, buildRevision } = await store.resolve(scope.orgId, scope.projectId);
+  return { runtime, build, files: files ?? [], revision, buildRevision };
 }
 
 function warnReadFailed(message: string, error: unknown) {
@@ -51,7 +55,7 @@ export async function resolveSandboxEnvOrEmpty(
     return await resolveSandboxEnv(store, scope);
   } catch (error) {
     warnReadFailed('Could not read sandbox environment variables; starting without them', error);
-    return { runtime: {}, build: {}, revision: '', buildRevision: '' };
+    return { runtime: {}, build: {}, files: [], revision: '', buildRevision: '' };
   }
 }
 
@@ -109,6 +113,12 @@ export function appliedSandboxEnv(sandbox: object): Record<string, string> {
   return appliedBySandbox.get(sandbox)?.() ?? {};
 }
 
+/**
+ * Set while a refresh writes env files: the commands it runs go through the
+ * same `ensureRunning`, which must not wait on the refresh that issued them.
+ */
+const writingEnvFiles = new AsyncLocalStorage<true>();
+
 export interface RefreshableSandbox {
   ensureRunning?: () => Promise<void>;
   setEnv?: (update: (env: EnvOverlay) => EnvOverlay) => void;
@@ -130,7 +140,12 @@ export function attachSandboxEnvRefresh(
   options: {
     initial: Pick<SandboxEnv, 'runtime' | 'revision'>;
     revision: () => Promise<string>;
-    load: () => Promise<Pick<SandboxEnv, 'runtime' | 'revision'>>;
+    load: () => Promise<Pick<SandboxEnv, 'runtime' | 'revision'> & Partial<Pick<SandboxEnv, 'files'>>>;
+    /**
+     * Rewrite the env files in the sandbox's checkouts after a change. Its
+     * commands skip the refresh, so it can run them through the sandbox.
+     */
+    applyFiles?: (files: ResolvedSandboxEnvFile[]) => Promise<void>;
     onError?: (error: unknown) => void;
   },
 ): void {
@@ -170,10 +185,13 @@ export function attachSandboxEnvRefresh(
     if ((await options.revision()) === appliedRevision) return;
     const next = await options.load();
     apply(next.runtime);
+    const applyFiles = options.applyFiles;
+    if (applyFiles && next.files) await writingEnvFiles.run(true, () => applyFiles(next.files!));
     appliedRevision = next.revision;
   };
   sandbox.ensureRunning = async () => {
     await original();
+    if (writingEnvFiles.getStore()) return;
     inFlight ??= refresh()
       .catch(error => {
         if (options.onError) options.onError(error);

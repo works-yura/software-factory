@@ -28,7 +28,15 @@ async function makeStore() {
       list: store.list.bind(store),
       set: store.set.bind(store),
       updateAppliesTo: store.updateAppliesTo.bind(store),
+      update: store.update.bind(store),
       delete: store.delete.bind(store),
+      stages: store.stages.bind(store),
+      setStages: store.setStages.bind(store),
+      listFiles: store.listFiles.bind(store),
+      getFile: store.getFile.bind(store),
+      createFile: store.createFile.bind(store),
+      updateFile: store.updateFile.bind(store),
+      deleteFile: store.deleteFile.bind(store),
       ...reads,
     },
     reads,
@@ -137,5 +145,24 @@ describe('CachedSandboxEnvs', () => {
     await expect(cache.resolve(ORG, PROJECT)).rejects.toThrow('Unknown key id');
     await Promise.resolve();
     expect((await cache.resolve(ORG, PROJECT)).runtime).toEqual({});
+  });
+
+  it('drops the cached values when an env file or the stages change', async () => {
+    const { store } = await makeStore();
+    const cache = new CachedSandboxEnvs(store, { now: () => 0 });
+    expect((await cache.resolve(ORG, PROJECT)).files).toEqual([]);
+    const file = await cache.createFile(
+      ORG,
+      PROJECT,
+      { projectRepositoryId: 'link', path: '.env.staging', stage: 'staging', content: 'A=1' },
+      'u',
+    );
+    expect((await cache.resolve(ORG, PROJECT)).files).toEqual([]);
+    await cache.setStages(ORG, PROJECT, ['development', 'staging'], 'u');
+    expect((await cache.resolve(ORG, PROJECT)).files).toEqual([expect.objectContaining({ content: 'A=1' })]);
+    await cache.updateFile(ORG, PROJECT, file.id, { content: 'A=2' }, 'u');
+    expect((await cache.resolve(ORG, PROJECT)).files).toEqual([expect.objectContaining({ content: 'A=2' })]);
+    await cache.deleteFile(ORG, PROJECT, file.id);
+    expect((await cache.resolve(ORG, PROJECT)).files).toEqual([]);
   });
 });
