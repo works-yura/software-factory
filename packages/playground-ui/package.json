@@ -11,6 +11,8 @@
     "theme.css",
     "components.css",
     "sources.css",
+    "fonts.css",
+    "fonts",
     "theme"
   ],
   "exports": {
@@ -18,6 +20,7 @@
     "./theme.css": "./theme.css",
     "./components.css": "./components.css",
     "./sources.css": "./sources.css",
+    "./fonts.css": "./fonts.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",
