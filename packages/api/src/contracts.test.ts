@@ -139,9 +139,9 @@ describe('Factory route contracts', () => {
     expect(updateProjectBodySchema.parse({ claudeCodeModel: null })).toEqual({ claudeCodeModel: null });
     expect(updateProjectBodySchema.safeParse({ harness: 'codex' }).success).toBe(false);
     expect(updateProjectBodySchema.safeParse({}).success).toBe(false);
-    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', autoRunEnabled: true })).toEqual({
+    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', reviewTestChecksEnabled: true })).toEqual({
       defaultModelId: null,
-      autoRunEnabled: true,
+      reviewTestChecksEnabled: true,
     });
     // There is no model scope: the field is stripped, so a body carrying only it is empty.
     expect(updateProjectBodySchema.safeParse({ modelScope: 'factory' }).success).toBe(false);

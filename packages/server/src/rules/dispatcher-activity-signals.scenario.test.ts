@@ -9,6 +9,7 @@
  * because the busy case needs a run that is provably in flight while the
  * comments arrive.
  */
+import { autoStartingBoards } from '@factory/pipelines/testing';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
@@ -129,7 +130,7 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
   const boards = createBoardRegistry();
   const dispatcher = new FactoryDecisionDispatcher({
     harness: createMastraHarness(controller),
-    isAutoRunEnabled: async () => true,
+    boards: autoStartingBoards(),
     transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards }),
     storage,
     ownerId: 'worker-1',

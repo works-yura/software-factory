@@ -805,7 +805,7 @@ Upstream 2026-10-23 прибрав сторінку Activity і сповіщен
 
 ### 9. Self-review: як налаштувати якість?
 
-- Вмикається на проєкті: `selfReviewEnabled`.
+- Вмикає дошка, а не проєкт: картка проходить self-review, коли на її дошці є фаза self-review (робоча фаза в контексті `review`, що дає лише `factory_record_review_verdict`). Перемикач `selfReviewEnabled` прибрано (upstream `d5d36fd813`); проєкти, де він був вимкнений, втратили цю фазу на своїх дошках один раз при міграції `self-review-switch-v1`.
 - Ліміт — `SELF_REVIEW_ROUND_LIMIT = 3`, захардкоджено (`pipelines/src/work/phase-rules.ts:69`). Кожен третій «request changes» відкладає картку в Intake з `selfReviewNeedsHuman`. Якщо людина поверне її в роботу, агент отримає ще 3 раунди.
 - **Критерії якості — лише текст скіла** (`factory-self-review/SKILL.md`, бере фази 3–5 з `factory-review`). Налаштування на проєкт нема. Щоб змінити критерії, треба правити скіл або покласти свій у репозиторій (`.agents/skills`).
 

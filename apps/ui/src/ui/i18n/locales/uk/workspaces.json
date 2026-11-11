@@ -353,7 +353,6 @@
     "updateName": "Не вдалося оновити назву Factory",
     "updateThinkingLevel": "Не вдалося оновити рівень міркування Factory",
     "switchSessions": "Не вдалося перемкнути запущені сесії",
-    "updateAutomation": "Не вдалося оновити автоматизацію",
     "connectInstallation": "Не вдалося підключити встановлення {{host}}",
     "linkRepository": "Не вдалося прив'язати репозиторій {{host}}",
     "unlinkRepository": "Не вдалося відв'язати репозиторій ({{status}})",

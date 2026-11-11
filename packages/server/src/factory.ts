@@ -164,7 +164,14 @@ import { createReviewSourceTool, resolveReviewSourceUiOrigin } from '@factory/ha
 import type { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { createPhaseGoalEnder, createTerminalStageCleanup } from '@factory/runtime';
 import { createAttachmentTools, createFactoryTransitionTools } from '@factory/harness-mastra';
-import { BoardWriteError, BoardWrites, FactoryTransitionService, ProjectBoardCache, toBoardSource } from '@factory/runtime';
+import {
+  BoardWriteError,
+  BoardWrites,
+  FactoryTransitionService,
+  occupiedPhasesOf,
+  ProjectBoardCache,
+  toBoardSource,
+} from '@factory/runtime';
 import type { BoardWriter } from '@factory/runtime';
 import type { ProjectBoardSource } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
@@ -975,6 +982,8 @@ export class MastraFactory {
         storage: storedBoardsStorage,
         projects: factoryProjectsStorage,
         skillProblems: registry => findBoardSkillProblems(registry, this.#skills),
+        // Board migrations must not remove a phase cards sit in; work items are read once they're ready.
+        ...(storage.isDomainReady('work-items') ? { occupiedPhases: occupiedPhasesOf(workItemsStorage) } : {}),
       });
       this.#projectBoards = projectBoards;
       this.#boardStore = {
@@ -1684,7 +1693,7 @@ export class MastraFactory {
       requestContext.set('mastra__factoryMemorySettings', record satisfies MemorySettingsRecord | null);
     };
     const workItemProcessor = workItemsReady
-      ? new FactoryWorkItemStateProcessor({ storage: workItemsStorage, boards, projects: factoryProjectsStorage })
+      ? new FactoryWorkItemStateProcessor({ storage: workItemsStorage, boards })
       : undefined;
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
@@ -1820,15 +1829,6 @@ export class MastraFactory {
                   )
                 ) {
                   return undefined;
-                }
-                // A verdict already recorded still binds the change request to its head.
-                if (item.metadata?.selfReviewVerdict === undefined) {
-                  await factoryProjectsStorage.ensureReady();
-                  const project = await factoryProjectsStorage.get({
-                    orgId: binding.orgId,
-                    id: binding.factoryProjectId,
-                  });
-                  if (!project?.selfReviewEnabled) return undefined;
                 }
                 return item.metadata?.selfReviewVerdict === 'approve'
                   ? selfReviewedHeadFor(item.metadata, repository)
@@ -2049,7 +2049,6 @@ export class MastraFactory {
                   const described = await describeFactoryWorkItem({
                     storage: workItemsStorage,
                     boards,
-                    projects: factoryProjectsStorage,
                     binding,
                   });
                   return described?.contents;
@@ -2745,11 +2744,6 @@ export class MastraFactory {
                 boards,
                 ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
-                isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
-                  await factoryProjectsStorage.ensureReady();
-                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                  return project?.autoRunEnabled ?? false;
-                },
                 factoryProjectExists: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;

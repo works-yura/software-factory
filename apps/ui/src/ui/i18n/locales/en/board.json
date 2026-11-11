@@ -170,19 +170,8 @@
   "automationSettings": {
     "title": "Automation settings",
     "heading": "Automation",
-    "scope": "All boards in this factory.",
-    "autoRun": {
-      "label": "Auto-start runs",
-      "description": "Start incoming work automatically."
-    },
-    "autoApprove": {
-      "label": "Auto-approve plans",
-      "description": "Continue without waiting for approval."
-    },
-    "selfReview": {
-      "label": "Self-review before pull requests",
-      "description": "An independent agent reviews and tests the branch before the pull request opens."
-    }
+    "ownedByBoard": "The board's phases decide which runs start on their own and whether cards get a self-review.",
+    "editBoard": "Edit the Work board"
   },
   "filters": {
     "isAnyOf": "is any of",

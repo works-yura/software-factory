@@ -294,12 +294,8 @@ export interface FactoryProjectPayload {
   defaultModelId?: string | null;
   /** Thinking level every session and run uses until it picks its own. */
   defaultThinkingLevel?: ThinkingLevelSetting;
-  /** Whether Factory rules may start agent runs without someone asking for them. */
-  autoRunEnabled?: boolean;
   /** Settings → Behavior tool permissions of a Factory on Claude Code; null until set (every category asks). */
   toolPermissions?: FactoryToolPermissions | null;
-  /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
-  selfReviewEnabled?: boolean;
 }
 
 /** A Factory project row from `GET /web/factory/projects`, with its linked repositories. */
@@ -542,22 +538,6 @@ export async function applyFactoryDefaultModelToSessions(
     },
   );
   return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, tk('errors.switchSessions'));
-}
-
-/** Toggle a Factory's automation settings: rule-started runs and self-review. */
-export async function updateFactoryAutomation(
-  baseUrl: string,
-  factoryProjectId: string,
-  patch: Pick<FactoryProjectPayload, 'autoRunEnabled' | 'selfReviewEnabled'>,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(patch),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.updateAutomation'));
-  return project;
 }
 
 /**

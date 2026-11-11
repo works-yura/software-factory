@@ -349,7 +349,6 @@
     "updateName": "Failed to update Factory name",
     "updateThinkingLevel": "Failed to update Factory thinking level",
     "switchSessions": "Failed to switch running sessions",
-    "updateAutomation": "Failed to update automation",
     "connectInstallation": "Failed to connect {{host}} installation",
     "linkRepository": "Failed to link {{host}} repository",
     "unlinkRepository": "Failed to unlink repository ({{status}})",

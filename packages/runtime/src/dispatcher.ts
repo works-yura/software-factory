@@ -386,8 +386,6 @@ export interface FactoryDecisionDispatcherOptions {
   /** Installed boards; defaults to the built-in Work board. */
   boards?: BoardRegistry | ProjectBoardSource;
   ownerId?: string;
-  /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
-  isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -615,7 +613,6 @@ export class FactoryDecisionDispatcher {
   readonly #boards: ProjectBoardSource;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
-  readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -674,7 +671,6 @@ export class FactoryDecisionDispatcher {
     this.#boards = toBoardSource(options.boards);
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
-    this.#isAutoRunEnabled = options.isAutoRunEnabled;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
@@ -1304,19 +1300,19 @@ export class FactoryDecisionDispatcher {
   }
 
   // Effects a person owns: starting a run (compute + code execution), and an
-  // external event pulling a card back into a working lane.
+  // external event pulling a card back into a working lane. The board decides
+  // which of them start on their own: a phase with `autoStart` (and a card its
+  // `autoStartWhen` matches). Anything else waits for a person.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
     if (record.approvedAt !== null) return false;
     const boards = await this.#boards.load(record);
     if (!requestsConsent(boards, record, decision)) return false;
-    // Withholding auto-run decides what the Factory may pick up on its own, not
-    // whether it may finish work a person already handed it. Once someone starts
-    // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    if (item?.autonomyArmedAt != null) return false;
-    if (item && reviewsFactoryAuthoredCode(boards, item, decision)) return false;
-    if (item && startsInAutoPhase(boards, item, decision)) return false;
-    return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
+    if (!item) return true;
+    // Once someone starts a card, the runs that carry it to review are that same request continuing.
+    if (item.autonomyArmedAt != null) return false;
+    if (reviewsFactoryAuthoredCode(boards, item, decision)) return false;
+    return !startsInAutoPhase(boards, item, decision);
   }
 
   async #executeDecision(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {

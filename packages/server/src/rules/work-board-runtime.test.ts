@@ -1,3 +1,4 @@
+import { autoStartingBoards } from '@factory/pipelines/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createMastraHarness, FactoryStartCoordinator } from '@factory/harness-mastra';
@@ -183,8 +184,7 @@ describe('Work board runtime: a bug', () => {
       harness: createMastraHarness(controller as never),
       transitionService,
       storage: workItems,
-      boards,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(boards),
       ownerId: 'worker-1',
       primeCredentials: async () => {},
       prepareBinding: async ({ record, item, role }) => {

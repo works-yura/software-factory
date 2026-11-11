@@ -258,7 +258,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	16	upstream #28838: src/m
 ../../../apps/ui/src/hooks/__tests__/useWorkItems.msw.test.tsx	../apps/ui/src/hooks/__tests__/useWorkItems.msw.test.tsx
 ../../../apps/ui/src/lib/date/formatDuration.test.ts	../apps/ui/src/lib/date/formatDuration.test.ts
 ../../../apps/ui/src/lib/date/__tests__/relativeTime.test.ts	../apps/ui/src/lib/date/__tests__/relativeTime.test.ts
-../../../apps/ui/src/ui/__tests__/BoardAutomationSettings.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardAutomationSettings.msw.test.tsx	+1	upstream #29724: Work drops its self-review phase (+1)
+../../../apps/ui/src/ui/__tests__/BoardAutomationSettings.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardAutomationSettings.msw.test.tsx	-1	upstream #29724: Work drops its self-review phase (+1); upstream #29756: the board owns automation, the auto-run and self-review switches are gone (two switch cases replaced by one link-to-the-board case: -2)
 ../../../apps/ui/src/ui/__tests__/BoardCardSessionLiveness.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardCardSessionLiveness.msw.test.tsx	+1	an empty session neither glows nor holds its card
 ../../../apps/ui/src/ui/__tests__/BoardListRowActions.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardListRowActions.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/BoardPageCardClickStartsRun.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardPageCardClickStartsRun.msw.test.tsx	-3	Linear/Jira/incident.io UI cases dropped with the vocabulary

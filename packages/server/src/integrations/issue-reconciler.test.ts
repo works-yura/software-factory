@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '@factory/testing';
 import type { BoardRegistry } from '@factory/core';
-import { createTestBoard } from '@factory/pipelines/testing';
+import { autoStartingBoards, createTestBoard } from '@factory/pipelines/testing';
 import type { Intake, IntakeIssueDetail } from '@factory/capabilities';
 import { FactoryDecisionDispatcher } from '@factory/testing';
 import { FactoryTransitionService } from '@factory/testing';
@@ -485,13 +485,12 @@ describe('issue reconcilers', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       harness: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
@@ -533,13 +532,12 @@ describe('issue reconcilers', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       harness: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
@@ -659,13 +657,12 @@ describe('issue reconcilers', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       harness: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     const sweep = async (labels: string[], version: string, tick: string) => {

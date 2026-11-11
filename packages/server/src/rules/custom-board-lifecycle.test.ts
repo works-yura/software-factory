@@ -1,3 +1,4 @@
+import { autoStartingBoards } from '@factory/pipelines/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import { defineBoard, workItemPhaseSemantics } from '@factory/core';
@@ -89,10 +90,9 @@ async function setup(options: { reject?: boolean } = {}) {
   };
   const dispatcher = new FactoryDecisionDispatcher({
     storage,
-    boards,
+    boards: autoStartingBoards(boards),
     transitionService: service,
     harness: {} as never,
-    isAutoRunEnabled: async () => true,
   });
   return {
     storage,

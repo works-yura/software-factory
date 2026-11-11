@@ -1,11 +1,25 @@
-import { createBoardRegistry, PROJECT_BOARD_SOURCE } from '@factory/core';
+import { boardForWorkItem, createBoardRegistry, PROJECT_BOARD_SOURCE } from '@factory/core';
 import type { BoardRegistry, InstalledBoard, ProjectBoards, ProjectBoardSource, StoredBoardDetails } from '@factory/core';
 
 export { toBoardSource } from '@factory/core';
 export type { BoardSourceKind, ProjectBoards, ProjectBoardSource, StoredBoardDetails } from '@factory/core';
 import { defaultBoards } from '@factory/pipelines';
-import { boardDefinitionOf, compileStoredBoard, DEFAULT_INTAKE_ROUTE_ACTOR, mergeCodeBehaviour } from '@factory/store';
-import type { StoredBoardInput, StoredBoardRecord, StoredBoardScope, StoredBoardsStorage } from '@factory/store';
+import {
+  boardDefinitionOf,
+  compileStoredBoard,
+  DEFAULT_INTAKE_ROUTE_ACTOR,
+  mergeCodeBehaviour,
+} from '@factory/store';
+import type {
+  BoardMigrationContext,
+  RetiredAutomationSettings,
+  StoredBoardInput,
+  StoredBoardRecord,
+  StoredBoardScope,
+  StoredBoardsStorage,
+  WorkItemsStorage,
+} from '@factory/store';
+import type { FactoryStorageOps } from '@mastra/core/storage';
 
 import { BOARD_MIGRATIONS } from './work-migrations.ts';
 
@@ -56,8 +70,22 @@ export interface ProjectBoardCacheOptions {
   /** The code boards, built-ins included when enabled. */
   codeRegistry: BoardRegistry;
   storage: StoredBoardsStorage;
-  /** Lists every project, to warm them at boot. */
-  projects?: { listAll(): Promise<readonly { orgId: string; id: string }[]> };
+  /**
+   * Lists every project, to warm them at boot, and reads the retired switches the board
+   * migrations carry into each project's boards.
+   */
+  projects?: {
+    listAll(): Promise<readonly { orgId: string; id: string }[]>;
+    retiredAutomationSettings?(
+      project: { orgId: string; id: string },
+      ops: FactoryStorageOps,
+    ): Promise<RetiredAutomationSettings | null>;
+  };
+  /** The phases cards sit in on each of the project's boards, which a board migration must not remove. */
+  occupiedPhases?: (
+    scope: StoredBoardScope,
+    ops: FactoryStorageOps,
+  ) => Promise<ReadonlyMap<string, ReadonlySet<string>> | null>;
   /**
    * Problems with the skills a board's phases name (`findBoardSkillProblems` in `@factory/harness-mastra`,
    * which this package cannot import). Absent means a board is reported without skill problems.
@@ -70,6 +98,27 @@ export interface ProjectBoardCacheOptions {
 
 function scopeKey(scope: StoredBoardScope): string {
   return `${scope.orgId}\0${scope.factoryProjectId}`;
+}
+
+/**
+ * Reads the phases cards sit in on each of a project's boards, for `occupiedPhases`. Null while
+ * cards from before the work-item split are still being copied: `listWith` can't see those yet.
+ */
+export function occupiedPhasesOf(workItems: Pick<WorkItemsStorage, 'listWith' | 'legacyBackfillPending'>) {
+  return async (
+    scope: StoredBoardScope,
+    ops: FactoryStorageOps,
+  ): Promise<ReadonlyMap<string, ReadonlySet<string>> | null> => {
+    if (workItems.legacyBackfillPending) return null;
+    const occupied = new Map<string, Set<string>>();
+    for (const item of await workItems.listWith(ops, scope)) {
+      const board = boardForWorkItem(item);
+      const phases = occupied.get(board) ?? new Set<string>();
+      for (const stage of item.stages) phases.add(stage);
+      occupied.set(board, phases);
+    }
+    return occupied;
+  };
 }
 
 /**
@@ -97,10 +146,12 @@ export class ProjectBoardCache implements ProjectBoardSource {
   readonly #problemsOf: NonNullable<ProjectBoardCacheOptions['skillProblems']>;
   readonly #seeded = new Set<string>();
   readonly #seeds: ReadonlyMap<string, StoredBoardInput>;
+  readonly #occupiedPhases: ProjectBoardCacheOptions['occupiedPhases'];
 
   constructor(options: ProjectBoardCacheOptions) {
     this.codeRegistry = options.codeRegistry;
     this.#storage = options.storage;
+    this.#occupiedPhases = options.occupiedPhases;
     this.#projects = options.projects;
     this.#problemsOf = options.skillProblems ?? (() => []);
     this.#recheckMs = options.recheckMs ?? DEFAULT_RECHECK_MS;
@@ -244,17 +295,36 @@ export class ProjectBoardCache implements ProjectBoardSource {
 
   /** Runs the board migrations of the boards Factory stores here that the project hasn't had yet. */
   async #migrate(scope: StoredBoardScope): Promise<void> {
-    // A migration rewrites Factory's own board; an app board under the same key keeps its settings.
+    // A migration of one board rewrites Factory's own board; an app board under the same key keeps
+    // its settings. One that carries a project setting into every board rewrites them all.
     const migrations = BOARD_MIGRATIONS.filter(migration => {
+      if (migration.boardKey === null) return true;
       const code = this.codeRegistry.get(migration.boardKey);
       return code !== undefined && (defaultBoards as readonly InstalledBoard[]).includes(code);
     });
-    const changed = await this.#storage.applyBoardMigrations(scope, migrations);
+    const changed = await this.#storage.applyBoardMigrations(scope, migrations, ops =>
+      this.#migrationContext(scope, ops),
+    );
     if (changed.length === 0) return;
     const filled = changed.map(({ boardKey, filled }) => `${boardKey}: ${filled.join(', ')}`).join('; ');
-    console.info(
-      `[factory] Updated the boards of project ${scope.factoryProjectId} that still held old defaults (${filled}).`,
-    );
+    console.info(`[factory] Migrated the boards of project ${scope.factoryProjectId} (${filled}).`);
+  }
+
+  /** Read through the migration transaction's `ops`, so card moves can't slip in unseen on LibSQL. */
+  async #migrationContext(scope: StoredBoardScope, ops: FactoryStorageOps): Promise<BoardMigrationContext> {
+    const retiredSettings =
+      (await this.#projects?.retiredAutomationSettings?.({ orgId: scope.orgId, id: scope.factoryProjectId }, ops)) ??
+      null;
+    return {
+      retiredSettings,
+      occupiedPhases: retiredSettings && this.#occupiedPhases ? await this.#occupiedPhases(scope, ops) : null,
+      codePhases: boardKey => {
+        const code = this.codeRegistry.get(boardKey);
+        return code ? new Set(Object.keys(code.phases)) : undefined;
+      },
+      warn: message =>
+        this.#warnOnce(`migration:${scopeKey(scope)}:${message}`, `${message} (project ${scope.factoryProjectId})`),
+    };
   }
 
   #compile(scope: StoredBoardScope, rows: readonly StoredBoardRecord[]): ProjectBoards {

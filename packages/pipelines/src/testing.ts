@@ -1,4 +1,4 @@
-import { defineBoard } from '@factory/core';
+import { codeBoardOf, compileBoardDefinition, declarationOf, defineBoard } from '@factory/core';
 import type {
   BoardDefinition,
   BoardPhaseDefinition,
@@ -10,10 +10,32 @@ import type {
 
 export { createTestBoard } from '@factory/core/testing';
 
+import { createDefaultBoardRegistry } from './defaults.ts';
 import { workBoard } from './work/board.ts';
 import { selfReviewWorkBoard } from './work/legacy-self-review.ts';
 
 export { selfReviewWorkBoard };
+
+/**
+ * `boards` with every working phase starting on its own for every card: what the
+ * `auto-run-switch-v1` board migration gives a project that had the retired auto-run switch on.
+ */
+export function autoStartingBoards(boards: BoardRegistry = createDefaultBoardRegistry()): BoardRegistry {
+  return new Map(
+    [...boards.values()].map(board => {
+      const config = declarationOf(board);
+      if (!config) throw new Error(`Board '${board.id}' has no declaration to rebuild with autoStart.`);
+      const phases = Object.fromEntries(
+        Object.entries(config.phases as Record<string, BoardPhaseDefinition<string>>).map(([key, phase]) => {
+          if (phase.kind !== 'working') return [key, phase];
+          const { autoStartWhen: _when, ...rest } = phase;
+          return [key, { ...rest, autoStart: true }];
+        }),
+      );
+      return [board.id, compileBoardDefinition({ ...config, phases } as never, codeBoardOf(board))] as const;
+    }),
+  );
+}
 
 // Unit tests inject a registry directly to exercise Work-specific runtime policies.
 // Production installation still reserves built-in IDs and has no override API.

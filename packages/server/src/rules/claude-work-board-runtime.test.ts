@@ -1,3 +1,4 @@
+import { autoStartingBoards } from '@factory/pipelines/testing';
 import { mkdtemp } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -253,8 +254,7 @@ async function runToPlanGate(nextTurnText: string) {
       harness: createRoutingHarness({ routes: [claude.route], fallback: createMastraHarness(noMastra as never) }),
       transitionService,
       storage: workItems,
-      boards,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(boards),
       ownerId: 'worker-1',
       primeCredentials: async () => {},
       prepareBinding: input =>
