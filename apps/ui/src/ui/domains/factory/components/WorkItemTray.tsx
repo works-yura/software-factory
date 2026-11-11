@@ -11,6 +11,7 @@ import type { WorkItem } from '../services/workItems';
 import { CardSourceDescription, useSourceDescription } from './BoardCardDetails';
 import { CardAttachments } from './CardAttachments';
 import { CardSessions } from './CardSessions';
+import { CardUsage } from '../../usage/components/CardUsage';
 import { WorkItemDescription } from './WorkItemDescription';
 import { CommentComposer } from './feed/CommentComposer';
 import { CommentList } from './feed/CommentList';
@@ -71,6 +72,7 @@ export function WorkItemTray({
             />
             {rework && <WhyItMovedBack rework={rework} />}
             <CardSessions factoryId={factoryId} sessions={contextSessions} />
+            <CardUsage workItemId={item.id} enabled={enabled} />
             <CardAttachments workItemId={item.id} enabled={enabled} />
           </div>
         }

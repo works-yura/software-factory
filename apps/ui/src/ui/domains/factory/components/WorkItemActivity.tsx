@@ -17,8 +17,10 @@ import { useTranslation } from 'react-i18next';
 
 import { currentLanguage } from '../../../i18n';
 import { translator } from '../../../i18n/t';
+import { formatTokens } from '../../usage/format';
 
 const ta = translator('activity');
+const tu = translator('usage');
 
 function formatTimestamp(at: Date): string {
   return new Intl.DateTimeFormat(currentLanguage(), { dateStyle: 'medium', timeStyle: 'short' }).format(at);
@@ -85,6 +87,16 @@ function RejectedMove({ event, board }: { event: AuditEvent; board: BoardInfo | 
   );
 }
 
+/** A run's end carries the tokens its turns spent (`factory.run.ended` usage totals). */
+function runTokens(event: AuditEvent): string | null {
+  if (event.action !== 'factory.run.ended') return null;
+  const usage = event.metadata.usage as { status?: string; totals?: Record<string, unknown> } | undefined;
+  if (usage?.status !== 'recorded' || !usage.totals) return null;
+  const count = (key: string) => (typeof usage.totals?.[key] === 'number' ? (usage.totals[key] as number) : 0);
+  const tokens = count('totalTokens') || count('promptTokens') + count('completionTokens');
+  return tokens > 0 ? ` · ${tu('activity.runTokens', { tokens: formatTokens(tokens) })}` : null;
+}
+
 function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>): AuditActorProfile | undefined {
   if (event.actorType === 'agent') {
     return { id: event.actorId, name: metadataString(event, 'agentName') ?? ta('workItem.factoryAgent') };
@@ -132,7 +144,10 @@ export function ActivityEvent({
             ) : event.action === 'factory.work_item.transition_rejected' ? (
               <RejectedMove event={event} board={board} />
             ) : (
-              actionLabel(event.action)
+              <>
+                {actionLabel(event.action)}
+                {runTokens(event)}
+              </>
             )}
           </span>
           {isCreated ? null : (
