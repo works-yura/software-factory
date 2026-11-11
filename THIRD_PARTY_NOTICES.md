@@ -1,6 +1,6 @@
 # Third-party notices
 
-Parts of the following paths are derived from T3 Code (source commit 17a6a01d84e3adf9f29df2639d6b6079a434e1b2), used under the MIT License below: `packages/device`, `packages/harness-handoff`, `packages/harness-core/src/models`, `packages/harness-claude-code-core/src/models`, `packages/harness-codex-core`, `packages/harness-codex-ui`, `apps/ui/src/ui/domains/chat/components/modelPicker`.
+Parts of the following paths are derived from T3 Code (source commit 17a6a01d84e3adf9f29df2639d6b6079a434e1b2), used under the MIT License below: `packages/device`, `packages/harness-handoff`, `packages/harness-core/src/models`, `packages/harness-core/src/usage/pricing.ts`, `packages/harness-core/src/elicitation.ts`, `packages/harness-claude-code-core/src/models`, `packages/harness-codex-core`, `packages/harness-codex-ui`, `apps/ui/src/ui/domains/chat/components/modelPicker`.
 
 ```
 MIT License
