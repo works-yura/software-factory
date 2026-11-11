@@ -279,7 +279,7 @@ export interface ModelCatalogEntry {
   hasApiKey: true;
   reasoningOptions?: ModelReasoningOption[];
   /**
-   * The model's options as t3code descriptors: a `select` `effort` (role `reasoning`) over the
+   * The model's options as `ProviderOptionDescriptor`s: a `select` `effort` (role `reasoning`) over the
    * thinking levels it runs at, which a session takes as `thinkingLevel`. Empty when it has no choice.
    * Always set by `buildModelCatalog`; optional so older clients' fixtures still type.
    */

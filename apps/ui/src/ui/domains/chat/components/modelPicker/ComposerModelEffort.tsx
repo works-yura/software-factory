@@ -1,8 +1,7 @@
-// Ported from t3code apps/web/src/components/chat/ComposerModelEffort.tsx (MIT, see vendor/t3code).
-// t3code's Menu is v4's DropdownMenu, its Switch and Tooltip the playground-ui ones. The footer's
-// permissions menu is replaced by where the selection comes from (this session or the Factory's
-// default, with "Use default"), as v4's thinking control showed; a context window select sits in
-// the footer beside speed and Ultracode.
+// The model picker's docked effort column. Menus are DropdownMenu, the Switch and Tooltip the
+// playground-ui ones. The footer shows where the selection comes from (this session or the
+// Factory's default, with "Use default"); a context window select sits in the footer beside speed
+// and Ultracode.
 import {
   buildTraitsTriggerDisplay,
   getDescriptorStringValue,
@@ -32,7 +31,7 @@ import {
 
 const tk = translator("chat");
 
-/** t3code's Appearance setting: the effort as its word, or as bars. */
+/** The Appearance setting: the effort as its word, or as bars. */
 export type EffortDisplay = "label" | "bars";
 
 type SelectDescriptor = Extract<ProviderOptionDescriptor, { type: "select" }>;

@@ -1,16 +1,14 @@
-// Ported from t3code apps/server/src/orchestration-v2/ProviderSessionTransitionPolicy.ts.
-// Changed: imports; `ProviderContinuationIdentity` (provider-core driver.ts) and the mode types inlined.
 import type { ModelSelection, ProviderDriverKind } from "./contracts.ts";
 import { modelSelectionsEqual } from "./model.ts";
 import type { ProviderSelectionTransitionPlan } from "./selectionTransition.ts";
 
-/** From t3code packages/provider-core/src/server/driver.ts. */
+/** Which provider sessions can continue one another. */
 export interface ProviderContinuationIdentity {
   readonly driverKind: ProviderDriverKind;
   readonly continuationKey: string;
 }
 
-/** t3code: `RuntimeMode` and `ProviderInteractionMode` literals; a Factory host names its own. */
+/** `RuntimeMode` and `ProviderInteractionMode` literals; a Factory host names its own. */
 type RuntimeMode = string;
 type ProviderInteractionMode = string;
 

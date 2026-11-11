@@ -1,9 +1,6 @@
 // The thread-read tool a handoff points the agent at to recover omitted history.
-// Ported from t3code apps/server/src/mcp/OrchestratorMcpService.ts (`turnItemText`,
-// `textPageEnd`, `timelineItem`, `readThread`) and apps/server/src/mcp/toolkits/orchestrator/tools.ts
-// (`t3_thread_read`). Dropped: environments, the thread detail and recent-runs header (a Factory
-// host has its own thread views), message author lookup, and acknowledging delegated child-task
-// results on read; item types this port does not model.
+// It pages a thread's timeline and long items; the thread detail and recent-runs header are left
+// to the host's own thread views.
 import type {
   OrchestrationV2ProjectedTurnItem,
   OrchestrationV2TurnItem,
@@ -151,7 +148,7 @@ export async function readThread(
 }
 
 /**
- * A thread's visible timeline the way t3code indexes it: rows inherited from fork ancestors
+ * A thread's visible timeline: rows inherited from fork ancestors
  * (oldest first), then its own rows without rolled-back runs and cancelled queued input.
  */
 export async function readTimelineRows(

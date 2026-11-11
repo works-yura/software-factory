@@ -1,5 +1,4 @@
-// The host side of the port. t3code reads threads from its SQLite projection store
-// (`ProjectionStoreV2Shape.getThreadRecords` / `getTimelinePage`); a Factory host implements
+// The host side of the handoff: `getThreadRecords` / `getTimelinePage`. A Factory host implements
 // these over whatever keeps its threads (Mastra memory, the Claude Code transcript, …) and maps
 // its messages onto `OrchestrationV2TurnItem`.
 import type {
@@ -40,7 +39,7 @@ export interface HandoffHistorySource {
   ) => Promise<Pick<HandoffThreadRecords, "thread" | K>>;
 }
 
-/** From t3code apps/server/src/orchestration-v2/ProjectionStore.ts. */
+/** How `getTimelinePage` pages a thread's timeline. */
 export interface ProjectionTimelinePageOptions {
   readonly afterPosition?: number;
   readonly itemId?: TurnItemId;
@@ -65,7 +64,7 @@ export interface ThreadReadSource {
 }
 
 /**
- * The in-memory form of t3code's `getTimelinePage` SQL: page a thread's visible timeline (its
+ * An in-memory `getTimelinePage`: page a thread's visible timeline (its
  * inherited rows, then its own) by position, or find one item by id. `messages` shows only user
  * and assistant messages and plans.
  */

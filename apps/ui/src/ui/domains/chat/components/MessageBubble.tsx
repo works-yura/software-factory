@@ -320,7 +320,7 @@ export function MessageBubble({
   if (!drawsAnything) return modelSwitch ? <ModelSwitchRow modelSwitch={modelSwitch} /> : null;
 
   const bubble = <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
-  // t3code's divider above the message that starts a turn on another model or effort.
+  // The divider above the message that starts a turn on another model or effort.
   return modelSwitch ? (
     <>
       <ModelSwitchRow modelSwitch={modelSwitch} />

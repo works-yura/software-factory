@@ -107,7 +107,7 @@ export interface ClaudeTurnSelection {
   modelSwitch?: ClaudeModelSwitch;
 }
 
-/** A model or effort change between two turns, as t3code's `user_message.modelSwitch`. */
+/** A model or effort change between two turns, recorded on the user message that starts the turn. */
 export interface ClaudeModelSwitch {
   from: ModelSelection;
   to: ModelSelection;

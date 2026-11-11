@@ -17,7 +17,7 @@ export const agentDeviceConfigPath = (stateDir: string, hostId: string, deviceId
   );
 
 export const agentDeviceSession = (threadId: string, hostId: string, deviceId: string) =>
-  `t3-${shortHash(JSON.stringify([threadId, hostId, deviceId]))}`;
+  `factory-${shortHash(JSON.stringify([threadId, hostId, deviceId]))}`;
 
 export const writeAgentDeviceConfig = async (
   fs: DeviceFs,

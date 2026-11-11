@@ -1,5 +1,4 @@
-// Ported from t3code apps/web/src/components/chat/providerIconUtils.ts (MIT, see vendor/t3code).
-// `resolveModelShortName` (per-driver model families) is not ported: the instance adapter sets
+// Provider icon helpers. There are no per-driver model families: the instance adapter sets
 // `shortName` where a catalog's names repeat the family (`toProviderInstances`).
 import type { ProviderDriverKind } from "@factory/harness/models/contracts";
 

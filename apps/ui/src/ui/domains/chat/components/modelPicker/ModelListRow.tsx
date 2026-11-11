@@ -1,6 +1,5 @@
-// Ported from t3code apps/web/src/components/chat/ModelListRow.tsx (MIT, see vendor/t3code).
-// t3code's Base UI `ComboboxItem` is v4's cmdk `CommandItem` (picked through `onSelect`); the
-// jump-key label is not ported (v4 has no keybinding config for `modelPicker.jump.*`).
+// One model row of the picker: a cmdk `CommandItem` (picked through `onSelect`). Rows carry no
+// jump-key label, since there is no keybinding config for `modelPicker.jump.*`.
 import { Badge } from "@mastra/playground-ui/components/Badge";
 import { Button } from "@mastra/playground-ui/components/Button";
 import { CommandItem } from "@mastra/playground-ui/components/Command";

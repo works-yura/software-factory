@@ -27,7 +27,7 @@ export function ShortcutsOverlay() {
   const { t } = useTranslation('chat');
   const { close } = useOverlays();
   const searchShortcutLabel = useKeyboardShortcutLabel('K');
-  // t3code's model picker bindings (`modelPicker.toggle`, `composer.effort`).
+  // The model picker bindings (`modelPicker.toggle`, `composer.effort`).
   const modelPickerShortcuts = [
     { id: 'modelPicker', label: useKeyboardShortcutLabel('⇧M') },
     { id: 'effort', label: useKeyboardShortcutLabel('⇧E') },

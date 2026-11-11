@@ -1,6 +1,5 @@
-// Ported from t3code packages/contracts/src/{model,modelSelection,server}.ts (effect/Schema → zod).
-// Names stay as in t3code. Branded ids (`ProviderDriverKind`, `ProviderInstanceId`) are plain
-// trimmed strings here, as in @factory/harness-handoff.
+// Model, model selection and provider snapshot schemas. Ids (`ProviderDriverKind`,
+// `ProviderInstanceId`) are plain trimmed strings, as in @factory/harness-handoff.
 import { z } from "zod";
 
 export const TrimmedNonEmptyString = z.string().trim().min(1);
@@ -116,7 +115,7 @@ export type CustomModelSetting = z.infer<typeof CustomModelSetting>;
 
 const CLAUDE_DRIVER_KIND: ProviderDriverKind = "claudeAgent";
 
-/** Only the Claude entries of t3code's per-driver tables: Factory runs no other t3code driver. */
+/** Per-driver defaults: only Claude, the one driver these tables cover. */
 export const DEFAULT_MODEL_BY_PROVIDER: Partial<Record<ProviderDriverKind, string>> = {
   [CLAUDE_DRIVER_KIND]: "claude-opus-5-5",
 };

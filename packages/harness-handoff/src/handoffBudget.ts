@@ -1,6 +1,5 @@
-// Ported from t3code packages/provider-core/src/server/handoffBudget.ts.
-// Changed: `effect/Config` → `handoffTokenCapFromEnv` (env renamed to
-// FACTORY_CONTEXT_HANDOFF_TOKEN_CAP); `t3_thread_read` → THREAD_READ_TOOL_NAME.
+// The handoff token budget and history selection. The cap comes from
+// FACTORY_CONTEXT_HANDOFF_TOKEN_CAP through `handoffTokenCapFromEnv`.
 import type {
   ChatAttachment,
   ModelSelection,
@@ -20,9 +19,8 @@ const HANDOFF_BYTE_CAP = 64_000;
 export const HANDOFF_TOKEN_CAP_ENV = "FACTORY_CONTEXT_HANDOFF_TOKEN_CAP";
 
 /**
- * `Config.Int(...).pipe(Config.withDefault(DEFAULT), Config.map(clamp))` in t3code, read with
- * `orElseSucceed(DEFAULT)`: unset or not an integer means the default; otherwise clamped to
- * 1,024–64,000.
+ * The token cap from the environment: unset or not an integer means the default; otherwise
+ * clamped to 1,024–64,000.
  */
 export function handoffTokenCapFromEnv(
   env: Readonly<Record<string, string | undefined>> = process.env,

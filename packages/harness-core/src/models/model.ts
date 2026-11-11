@@ -1,4 +1,4 @@
-// Ported from t3code packages/shared/src/model.ts: `effect/Schema` decoding is zod's `safeParse`.
+// Model selection helpers: slug normalization, custom models, option descriptors and their values.
 import {
   type CustomModelSetting,
   MODEL_SLUG_ALIASES_BY_PROVIDER,

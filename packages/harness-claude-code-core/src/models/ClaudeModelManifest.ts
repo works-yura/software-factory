@@ -1,5 +1,5 @@
-// Ported from t3code apps/server/src/provider/ClaudeModelManifest.ts (effect/Schema → zod). The
-// `decode*Adapter` functions return the value or `null` where t3code returned an `Option`.
+// Claude adapter metadata in the model manifest. The `decode*Adapter` functions return the value,
+// or `null` when it is absent or invalid.
 import { z } from "zod";
 
 import { TrimmedNonEmptyString } from "@factory/harness/models/contracts";

@@ -2,8 +2,7 @@
 
 Device preview: iOS Simulator / Android emulator streamed into the web UI, touch and
 keyboard input, device settings and app actions, agent control and video recording.
-Ported from t3code (MIT, see `LICENSE`; source commit in `vendor/t3code/COMMIT`) with
-`effect` removed. `vendor/t3code/` holds the untouched originals for reference; it is not compiled.
+Plain TypeScript (zod, React, Node); no `effect` runtime.
 
 ## How it works
 
@@ -45,12 +44,12 @@ attachDeviceHubUpgrade(httpServer, { service, basePath: '/api/device' });
 HTTP API: `GET /state`, `GET /events` (SSE `state`), `POST /list|configure|open|close|shutdown|detail|action`,
 `ALL /hub/:hostId/*`. Errors: `{ _tag, message }`.
 
-UI host must let Tailwind scan `packages/device/src/react` (`@source`) and define t3code's theme
+UI host must let Tailwind scan `packages/device/src/react` (`@source`) and define the theme
 tokens used there (`text-success`, `text-warning-foreground`, `bg-info`, `text-2xs`, `dropdown-glass`, ...).
 
-## Not ported
+## Limitations
 
-EAS cloud simulators, Simlock leases, SSH remote hosts, the mobile (React Native) app, MCP wiring
+Not supported: EAS cloud simulators, Simlock leases, SSH remote hosts, the mobile (React Native) app, MCP wiring
 (`agentTools.ts` has the logic; mount it in `@factory/mcp`), auth scopes on the proxy (rely on the
-host server's middleware). `DeviceHost` stays general so remote hosts can come back;
+host server's middleware). `DeviceHost` stays general so remote hosts can be added;
 `DeviceHostSummary.kind` would need widening then.

@@ -27,8 +27,7 @@ function stampedSelection(message: MastraDBMessage): ModelSelection | null {
 }
 
 /**
- * Marks a model or effort switch in a Mastra thread, as t3code's `modelSwitchSince` marks a
- * run's user message. Each turn's first input is stamped with the selection the turn runs on
+ * Marks a model or effort switch in a Mastra thread on the run's user message. Each turn's first input is stamped with the selection the turn runs on
  * (`metadata.modelSelection`); when the latest earlier input in context ran another one, the input
  * also gets `metadata.modelSwitch = { from, to }`, which the chat draws as a divider. An earlier
  * input outside the loaded context marks nothing (no divider rather than a wrong one).

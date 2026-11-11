@@ -1,4 +1,3 @@
-// Ported from t3code apps/server/src/orchestration-v2/ProviderSessionTransitionPolicy.test.ts (imports; branded ids → strings).
 import { assert, it } from "vitest";
 
 import { decideProviderSessionTransition } from "./ProviderSessionTransitionPolicy.ts";

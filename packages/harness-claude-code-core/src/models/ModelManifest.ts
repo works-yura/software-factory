@@ -1,7 +1,6 @@
-// Ported from t3code apps/server/src/provider/ModelManifest.ts: the schemas (effect/Schema → zod),
-// the bundled manifest and `resolveProviderCatalog`. The remote refresh (GitHub raw fetch, disk
-// cache, TTLs, the `ModelManifest`/`ModelCatalog` Effect layers) is not ported: Factory reads the
-// manifest bundled with this package, and an update is a copy of t3code's `model-manifest.json`.
+// The model manifest: its schemas, the bundled manifest and `resolveProviderCatalog`. There is no
+// remote refresh: Factory reads the manifest bundled with this package, and an update replaces
+// `model-manifest.json`.
 import { z } from "zod";
 
 import { ModelCapabilities, TrimmedNonEmptyString, type ProviderDriverKind } from "@factory/harness/models/contracts";
@@ -45,7 +44,7 @@ const ModelManifestEnvelopeSchema = z.object({
   version: z.literal(1),
   /** Older disk caches must not override bundled manifests; absent dates rank below any dated bundle. */
   updatedAt: z.string().optional(),
-  /** t3code's `ProviderCompatibilityPolicy` list (Codex CLI version ranges); Factory does not read it. */
+  /** Per-driver CLI compatibility policies (Codex CLI version ranges); Factory does not read them. */
   compatibility: z.array(z.unknown()).optional(),
   currentModels: z.record(z.string(), z.array(z.string())),
   providers: z.record(z.string(), ManifestProviderCatalog).optional(),
@@ -73,7 +72,7 @@ const ModelManifestSchema = ModelManifestEnvelopeSchema.refine(hasValidProviderC
 });
 export type ModelManifestData = z.infer<typeof ModelManifestSchema>;
 
-/** `Schema.decodeUnknownEffect(ModelManifestSchema)` in t3code: `null` when the manifest is invalid. */
+/** Decodes a manifest: `null` when it is invalid. */
 export function decodeManifest(json: unknown): ModelManifestData | null {
   const decoded = ModelManifestSchema.safeParse(json);
   return decoded.success ? decoded.data : null;

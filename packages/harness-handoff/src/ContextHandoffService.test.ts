@@ -1,7 +1,3 @@
-// Ported from t3code apps/server/src/orchestration-v2/ContextHandoffService.test.ts.
-// Changed: @effect/vitest → vitest; the IdAllocator layer → the default allocator; branded
-// `X.make(...)` → plain strings; `DateTime` → ISO strings; `t3_thread_read` → the Factory tool;
-// the projection store stub → a `HandoffHistorySource` stub.
 import { assert, describe, it } from "vitest";
 
 import type { OrchestrationV2AppThread, OrchestrationV2TurnItem } from "./contracts.ts";

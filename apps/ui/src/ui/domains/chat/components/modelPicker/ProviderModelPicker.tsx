@@ -1,9 +1,7 @@
-// Ported from t3code apps/web/src/components/chat/ProviderModelPicker.tsx (MIT, see vendor/t3code).
-// Adapted to v4: the Popover is playground-ui's (Base UI underneath, as in t3code), the trigger is
-// v4's ghost button instead of t3code's `ComposerControl`, and the shortcut label is fixed
-// (`mod+shift+m`, t3code's default `modelPicker.toggle`) since v4 has no keybinding config. Not
-// ported: the catalog refresh on open (the server's catalog is bundled), multi-model triggers,
-// ChatGPT sharing, and the background scroll lock.
+// The status line's model picker. The Popover is playground-ui's (Base UI underneath), the trigger
+// is a ghost button, and the shortcut label is fixed (`mod+shift+m`) since there is no keybinding
+// config. Limitations: no catalog refresh on open (the server's catalog is bundled), one model per
+// trigger, and no background scroll lock.
 import { Badge } from "@mastra/playground-ui/components/Badge";
 import { buttonVariants } from "@mastra/playground-ui/components/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "@mastra/playground-ui/components/Popover";
@@ -20,7 +18,7 @@ import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { type ModelEsque, getDisplayModelName, getTriggerDisplayModelName } from "./providerIconUtils";
 import { shouldShowInstanceBadge, type ProviderInstanceEntry } from "./providerInstances";
 
-/** t3code's `ComposerControlSize`: the trigger's density. */
+/** The trigger's density. */
 export type ComposerControlSize = "sm" | "xs";
 
 /** What a docked effort column needs from its picker: the model it serves. */
@@ -28,7 +26,7 @@ export const DockedPickerContext = createContext<{ modelLabel: string }>({ model
 
 /**
  * composer.effort marks the model picker trigger it opens; the picker then moves focus to the
- * selected effort level once its popup is open (t3code `composerEventScope.ts`).
+ * selected effort level once its popup is open.
  */
 export function markOpenToEffort(trigger: HTMLElement): void {
   trigger.dataset.openToEffort = "true";

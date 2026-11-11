@@ -1,5 +1,4 @@
-// Not in t3code: its thread read is covered by orchestrator integration tests that need the whole
-// server. These cover the ported paging, the in-memory timeline index and the env cap.
+// Thread read: paging, the in-memory timeline index and the env cap.
 import { assert, describe, it } from "vitest";
 
 import type {

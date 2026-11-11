@@ -1,8 +1,7 @@
-// The provider instances the model picker offers, after t3code apps/web/src/providerInstances.ts and
-// client-runtime/src/state/providerInstanceDisplay.ts (MIT, see vendor/t3code). An instance is one
-// harness a chat can run on (Mastra, Claude Code, …) with its models; the picker and the draft
-// state only see this shape. `toProviderInstances` is the one place that reads the server's
-// catalog response (`/web/config/models` `instances`, one per harness model facet).
+// The provider instances the model picker offers. An instance is one harness a chat can run on
+// (Mastra, Claude Code, …) with its models; the picker and the draft state only see this shape.
+// `toProviderInstances` is the one place that reads the server's catalog response
+// (`/web/config/models` `instances`, one per harness model facet).
 import type { ModelCatalogEntry } from "@factory/api/config";
 import type { ModelCatalogResponse } from "../../../../../hooks/useAvailableModels";
 import { HARNESSES, MASTRA_HARNESS } from "@factory/contracts/harnesses";
@@ -120,7 +119,7 @@ function toEntry(instance: HarnessModelInstanceInfo): ProviderInstanceEntry {
 }
 
 /**
- * A server that predates `instances` lists Mastra's catalog alone: its entries as t3code models,
+ * A server that predates `instances` lists Mastra's catalog alone: its entries as harness models,
  * with the descriptors derived from each model's thinking levels as the server does.
  */
 function legacyMastraInstance(response: ModelCatalogResponse): HarnessModelInstanceInfo {

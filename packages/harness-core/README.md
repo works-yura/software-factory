@@ -6,29 +6,27 @@ Factory runtime drives, independent of any agent framework (`src/contract.ts`). 
 
 ## Model selection (`@factory/harness/models`)
 
-Ported from t3code (MIT, `vendor/t3code/LICENSE`; source commit in `vendor/t3code/COMMIT`) with
-`effect` removed. A model's options (reasoning effort, fast mode, context window, …) are **data**,
+A model's options (reasoning effort, fast mode, context window, …) are **data**,
 `ProviderOptionDescriptor`s; a session's pick is a
 `ModelSelection { instanceId, model, options: [{ id, value }] }`. Clients render pickers from the
 descriptors; each harness compiles a selection into what it runs. Browser-safe (zod only): the UI
 imports it directly.
 
-| File | What | From t3code |
-|---|---|---|
-| `models/contracts.ts` | zod schemas and types: `ProviderOptionDescriptor`, `ModelCapabilities`, `ProviderOptionSelection(s)`, `ModelSelection`, `ServerProviderModel` | `packages/contracts/src/{model,modelSelection,server}.ts` (subset, Schema → zod) |
-| `models/model.ts` | descriptor helpers, `modelSelectionsEqual`, `resolvePromptInjectedEffort`, … | `packages/shared/src/model.ts` (98%) |
-| `models/Array.ts`, `models/searchRanking.ts` | | `packages/shared/src` (100%) |
-| `models/modelTraits.ts`, `models/modelSearch.ts` | picker trait labels and search | `packages/client-runtime/src` (98–99%) |
-| `models/threadExecution.ts` | `REASONING_EFFORT_OPTION_IDS`, `formatModelSelectionEffort` | `client-runtime/src/state/threadExecution.ts` (those two) |
-| `models/ModelCatalog.ts` | `classifyCatalogModels`, `applyCatalogDefault`, `applyModelCatalog` | `packages/provider-core/src/server/ModelCatalog.ts` (85%) |
-| `models/selection.ts` | `EFFORT_OPTION_ID`, `checkOptionSelections`, `checkModelSelection`, `modelSwitchBetween` | new |
-| `models/facet.ts` | `HarnessModels`, the model facet of the contract | new |
-| `models/registry.ts` | `createHarnessModelRegistry`: the server's harnesses by model instance | new |
+| File | What |
+|---|---|
+| `models/contracts.ts` | zod schemas and types: `ProviderOptionDescriptor`, `ModelCapabilities`, `ProviderOptionSelection(s)`, `ModelSelection`, `ServerProviderModel` |
+| `models/model.ts` | descriptor helpers, `modelSelectionsEqual`, `resolvePromptInjectedEffort`, … |
+| `models/Array.ts`, `models/searchRanking.ts` | array helpers and search ranking |
+| `models/modelTraits.ts`, `models/modelSearch.ts` | picker trait labels and search |
+| `models/threadExecution.ts` | `REASONING_EFFORT_OPTION_IDS`, `formatModelSelectionEffort` |
+| `models/ModelCatalog.ts` | `classifyCatalogModels`, `applyCatalogDefault`, `applyModelCatalog` |
+| `models/selection.ts` | `EFFORT_OPTION_ID`, `checkOptionSelections`, `checkModelSelection`, `modelSwitchBetween` |
+| `models/facet.ts` | `HarnessModels`, the model facet of the contract |
+| `models/registry.ts` | `createHarnessModelRegistry`: the server's harnesses by model instance |
 
-`vendor/t3code/` holds the untouched originals of the ported files; it is not compiled. The
-Claude-only files (catalog, manifest, `model-manifest.json`, CLI compilation, `semver.ts`) live in
-`@factory/harness-claude-code` (`src/models/`, its own `vendor/t3code/`); Mastra's descriptors from
-its thinking levels in `@factory/credentials/mastra-models`.
+The Claude-only files (catalog, manifest, `model-manifest.json`, CLI compilation, `semver.ts`) live
+in `@factory/harness-claude-code` (`src/models/`); Mastra's descriptors from its thinking levels in
+`@factory/credentials/mastra-models`.
 
 ### The facet
 
@@ -72,9 +70,9 @@ To give a new harness (e.g. Codex) model choice, without touching the server, th
 
 1. **Catalog.** Describe its models as `ServerProviderModel`s with their `optionDescriptors`
    (a `select` with `role: 'reasoning'` for its reasoning control, `boolean`s for toggles).
-   For Codex, t3code's `apps/server/src/provider/CodexProvider.ts` (and the `codex` section of
-   `model-manifest.json`, already in `@factory/harness-claude-code/src/models/`) is the source to
-   port, as `ClaudeModelCatalog.ts` was for Claude.
+   For Codex, the `codex` section of `model-manifest.json` (already in
+   `@factory/harness-claude-code/src/models/`) is the starting point, read the way
+   `ClaudeModelCatalog.ts` reads the Claude one.
 2. **Facet.** Implement `HarnessModels` in the harness package: `owns` (its session store),
    `list` / `defaultSelection`, `check` (`checkModelSelection(instanceId, models, request)` covers a
    plain catalog; map `request.thinkingLevel` onto your reasoning option if you accept it),

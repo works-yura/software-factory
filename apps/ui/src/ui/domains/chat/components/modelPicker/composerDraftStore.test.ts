@@ -1,5 +1,4 @@
-// New for Factory: the ported draft-store actions (t3code tests them through its zustand store
-// and Effect schemas, which are not ported). Without localStorage the store keeps its state in memory.
+// The draft-store actions. Without localStorage the store keeps its state in memory.
 import { describe, expect, it } from "vitest";
 
 import { composerDraftActions, useComposerDraftStore } from "./composerDraftStore";

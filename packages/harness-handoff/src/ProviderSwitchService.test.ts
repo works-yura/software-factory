@@ -1,6 +1,3 @@
-// Ported from t3code apps/server/src/orchestration-v2/ProviderSwitchService.test.ts.
-// Changed: @effect/vitest → vitest; the mocked registry Layer → a registry object; the Codex
-// adapter's capability record → its `sessions` section; `DateTime` → ISO strings.
 import { assert, it } from "vitest";
 
 import type { OrchestrationV2ProviderCapabilities } from "./contracts.ts";
@@ -13,7 +10,7 @@ const currentInstanceId = "codex_primary";
 const currentSessionId = "session_primary";
 const now = "2026-06-20T00:00:00.000Z";
 const later = (seconds: number) => new Date(Date.parse(now) + seconds * 1_000).toISOString();
-/** `CodexProviderCapabilitiesV2.sessions` in t3code. */
+/** A Codex adapter's session capabilities. */
 const CodexProviderCapabilitiesV2: OrchestrationV2ProviderCapabilities = {
   sessions: {
     supportsMultipleProviderThreadsPerSession: true,
@@ -251,7 +248,7 @@ it("distinguishes compatible and incompatible instances of the same driver", asy
   assert.equal(incompatible.transition.type, "create_with_handoff");
 });
 
-/** Not in t3code: a target the registry does not know rejects instead of planning a handoff. */
+/** A target the registry does not know rejects instead of planning a handoff. */
 it("rejects an unavailable target instance", async () => {
   const service = serviceTest({ [currentInstanceId]: { continuationKey: "codex:account:primary" } });
   const error = await service

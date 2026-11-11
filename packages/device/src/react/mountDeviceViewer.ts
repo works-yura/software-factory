@@ -85,7 +85,6 @@ export function mountDeviceViewer<V extends MountableViewer>(
       mounted = options.ready({ viewer, cancelTrackpad: () => trackpad?.cancel() });
       options.onFrameListener(mounted.frame);
       mounted.frame();
-      // t3code's desktop app also ended trackpad orbits on its native scroll-end event.
       trackpad = bindPhoneTrackpad(canvas, interaction, mounted.pinch);
     })
     .catch((cause: unknown) => {

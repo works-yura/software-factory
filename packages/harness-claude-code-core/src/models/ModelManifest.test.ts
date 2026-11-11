@@ -1,6 +1,4 @@
-// Ported from t3code apps/server/src/provider/ModelManifest.test.ts: the `resolveProviderCatalog`
-// cases and the invalid manifests. The `ModelManifest service` cases (remote fetch, disk cache,
-// TTLs) test the refresh, which is not ported; their invalid payloads check `decodeManifest` here.
+// The `resolveProviderCatalog` cases and the invalid manifests `decodeManifest` rejects.
 import { assert, describe, it } from "vitest";
 
 import * as ModelManifest from "./ModelManifest.ts";

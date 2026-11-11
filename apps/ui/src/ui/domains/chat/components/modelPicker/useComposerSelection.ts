@@ -1,9 +1,8 @@
-// The model part of t3code apps/web/src/components/chat/useComposerSelection.ts (MIT, see
-// vendor/t3code), with `getStartedThreadModelChangeBlockReason` from components/ChatView.logic.ts.
-// A pick on the thread's own harness instance is written to the draft store, remembered as sticky
-// and sent to the session at once (`useApplyThreadModelPick`); a pick on another harness gets
-// t3code's "Start a new chat to switch providers" toast, since v4 cannot hand a chat over to
-// another harness. Runtime mode, worktree and branch choices stay in v4's own controls.
+// The composer's model selection, with `getStartedThreadModelChangeBlockReason`. A pick on the
+// thread's own harness instance is written to the draft store, remembered as sticky and sent to
+// the session at once (`useApplyThreadModelPick`); a pick on another harness gets a "Start a new
+// chat to switch providers" toast, since a chat cannot be handed over to another harness. Runtime
+// mode, worktree and branch choices stay in their own controls.
 import type { ModelSelection, ProviderInstanceId, ProviderOptionSelection } from "@factory/harness/models/contracts";
 import { MASTRA_HARNESS } from "@factory/contracts/harnesses";
 import { modelSelectionsEqual } from "@factory/harness/models/model";

@@ -1,7 +1,5 @@
-// t3code's model-switch divider (MIT, see vendor/t3code): `ModelSwitchRow` from
-// apps/web/src/components/chat/V2LifecycleRow.tsx, as `TimelineUserMessageRow.tsx` draws it above
-// the user message that starts the switching turn, and `resolveModelSwitchChange` from
-// packages/client-runtime/src/handoff.ts. t3code's `TimelineSystemDivider` is v4's
+// The model-switch divider: `ModelSwitchRow` is drawn above the user message that starts the
+// switching turn, and `resolveModelSwitchChange` says what changed. The divider is a
 // `TranscriptDivider`; its providers are the catalog's instances (`toProviderInstances`).
 import { TranscriptDivider } from "@mastra/playground-ui/components/ai/transcript-divider";
 import type { ModelSelection, ServerProviderModel } from "@factory/harness/models/contracts";

@@ -1,8 +1,6 @@
-// Ported from t3code apps/server/src/orchestration-v2/ProviderSwitchService.ts.
-// Changed: effect removed (the Layer → `makeProviderSwitchService(adapters)`, `Effect.option`
-// → undefined on a thrown lookup, the outer `mapError` → one catch that wraps anything not
-// already a ProviderSwitchPlanError); `DateTime` → ISO strings; the adapter registry is an
-// injected interface (t3code's `ProviderAdapterRegistryV2`, reduced to what `plan` calls).
+// Plans a provider or model switch. `makeProviderSwitchService(adapters)` takes the adapter
+// registry as an injected interface; a lookup that throws counts as unavailable, and anything
+// thrown that is not already a ProviderSwitchPlanError is wrapped in one.
 import type {
   ModelSelection,
   OrchestrationV2ProviderCapabilities,
@@ -28,7 +26,7 @@ export interface ProviderSwitchPlanV2 {
   readonly transition: ProviderSessionTransition;
 }
 
-/** The part of t3code's `ProviderAdapterV2` a switch plan asks. */
+/** The part of a provider adapter a switch plan asks. */
 export interface ProviderSwitchAdapter {
   readonly driver: ProviderDriverKind;
   readonly getCapabilities: () => Promise<OrchestrationV2ProviderCapabilities>;
@@ -45,7 +43,7 @@ export interface ProviderInstanceMetadata {
   readonly capabilities: OrchestrationV2ProviderCapabilities;
 }
 
-/** t3code's `ProviderAdapterRegistryV2`: lookups throw for an unknown instance. */
+/** The provider adapter registry: lookups throw for an unknown instance. */
 export interface ProviderSwitchAdapterRegistry {
   readonly get: (instanceId: ProviderInstanceId) => Promise<ProviderSwitchAdapter>;
   readonly getMetadata?: (instanceId: ProviderInstanceId) => Promise<ProviderInstanceMetadata>;

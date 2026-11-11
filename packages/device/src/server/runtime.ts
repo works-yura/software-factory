@@ -1,7 +1,7 @@
-// Plain-Node replacements for what t3code took from effect and @t3tools/shared: the process
+// Plain-Node host services: the process
 // runner, child spawner, host process references, semaphores, timeouts and readiness polling.
 // Everything the device server touches on the host goes through `DeviceRuntime`, so tests swap
-// in fakes the way the originals provided Layers.
+// in fakes.
 import * as NodeChildProcess from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as NodeFSP from 'node:fs/promises';
@@ -10,7 +10,7 @@ import * as NodePath from 'node:path';
 import * as NodeSea from 'node:sea';
 
 // ---------------------------------------------------------------------------------------------
-// Process runner (t3code apps/server/src/processRunner.ts)
+// Process runner
 
 export interface ProcessRunInput {
   readonly command: string;

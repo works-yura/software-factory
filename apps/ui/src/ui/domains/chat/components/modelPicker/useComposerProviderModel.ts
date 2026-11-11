@@ -1,9 +1,7 @@
-// After t3code apps/web/src/components/chat/useComposerProviderModel.ts (MIT, see vendor/t3code):
-// the provider instances the composer offers, which one is selected, and the model and options
-// the thread resolves to on it. t3code derives them from its server provider snapshots, settings
-// and project defaults (`deriveEffectiveComposerModelState`); v4 reads the catalog response
-// (`toProviderInstances`), the session's own selection (`threadModelSelection`) and the person's
-// pick still on its way to the session (the draft store), which wins while it is pending.
+// The provider instances the composer offers, which one is selected, and the model and options the
+// thread resolves to on it: read from the catalog response (`toProviderInstances`), the session's
+// own selection (`threadModelSelection`) and the person's pick still on its way to the session
+// (the draft store), which wins while it is pending.
 import type { ModelSelection, ServerProviderModel } from "@factory/harness/models/contracts";
 import { ModelSelection as ModelSelectionSchema } from "@factory/harness/models/contracts";
 import { MASTRA_HARNESS } from "@factory/contracts/harnesses";

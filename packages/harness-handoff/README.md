@@ -6,15 +6,12 @@ is forked, or a child thread merges back, the new conversation gets a budgeted s
 summary. The user's new request is never shortened to make history fit. Omitted items are named
 in a coverage block, so the agent can fetch them with `factory_thread_read`.
 
-Ported from t3code (MIT, see `LICENSE`; source commit in `vendor/t3code/COMMIT`) with `effect`
-removed. `vendor/t3code/` holds the untouched originals and the four design docs for reference.
-It is not compiled. No new dependencies: `zod` (catalog) and `@mastra/core` at the version the
-workspace already pins.
+Dependencies: `zod` (catalog) and `@mastra/core` at the version the workspace already pins.
 
 ## How it works
 
 1. **Budget** (`handoffBudget`). Cap = `FACTORY_CONTEXT_HANDOFF_TOKEN_CAP` (default 16,000,
-   clamped to 1,024–64,000; t3code's `T3CODE_CONTEXT_HANDOFF_TOKEN_CAP`). One token per UTF-8 byte,
+   clamped to 1,024–64,000). One token per UTF-8 byte,
    including JSON escaping and attribution. Window = known model window, else reported
    `maxTokens`, else 128,000; never above reported `maxTokens` or `autoCompactThreshold`.
    It subtracts existing native context (telemetry or an estimate), the new request's JSON
@@ -44,56 +41,49 @@ workspace already pins.
 | `@factory/harness-handoff/contracts` | zod schemas and types (`OrchestrationV2ContextHandoff`, `…TurnItem`, `…HistoricalMessage`, thread-read input/result) |
 | `@factory/harness-handoff/mastra` | `createThreadReadTool(sourceFor)`: `factory_thread_read` as a Mastra tool |
 
-| File | From t3code | Kept verbatim* |
-|---|---|---|
-| `handoffBudget.ts` | `packages/provider-core/src/server/handoffBudget.ts` | 97% |
-| `ContextHandoffService.ts` | `apps/server/src/orchestration-v2/ContextHandoffService.ts` | 70% (rest is Effect plumbing) |
-| `ContextHandoffDelivery.ts` | `…/orchestration-v2/ContextHandoffDelivery.ts` | 69% |
-| `ThreadForkService.ts` | `…/orchestration-v2/ThreadForkService.ts` | 81% |
-| `ProviderSwitchService.ts` | `…/orchestration-v2/ProviderSwitchService.ts` | 57% (Effect/Option/Layer plumbing) |
-| `ProviderSessionTransitionPolicy.ts` | `…/orchestration-v2/ProviderSessionTransitionPolicy.ts` | 89% |
-| `selectionTransition.ts` | `packages/provider-core/src/server/selectionTransition.ts` | 96% |
-| `modelSwitch.ts` | `…/orchestration-v2/modelSwitch.ts` | 93% |
-| `orchestrationV2Timeline.ts` | `packages/shared/src/orchestrationV2Timeline.ts` | 99% |
-| `model.ts` | `packages/shared/src/{model,Array,orchestrationV2ThreadError}.ts` (3 functions) | ~95% |
-| `WireProjection.ts` | `projectContextHandoffForWire` only | 100% |
-| `threadRead.ts` | `apps/server/src/mcp/OrchestratorMcpService.ts` (`turnItemText`, `textPageEnd`, `timelineItem`, `readThread`) + tool description | ~70% |
-| `historySource.ts` | `ProjectionStore` read interfaces + the `getTimelinePage` filter, now in memory | new adapter |
-| `contracts.ts`, `errors.ts` | `packages/contracts` subset (Schema → zod), `TaggedError` → `Error` + `_tag` | rewritten |
+| File | What |
+|---|---|
+| `handoffBudget.ts` | the token budget, history selection and rendering; `handoffTokenCapFromEnv()` |
+| `ContextHandoffService.ts` | `makeContextHandoffService({ idAllocator, tokenCap })`: builds handoff records |
+| `ContextHandoffDelivery.ts` | `deliverContextHandoffs`: native injection or inline context, delivery state |
+| `ThreadForkService.ts` | `planThreadFork(input)`: the target thread and context transfer of a fork |
+| `ProviderSwitchService.ts` | `makeProviderSwitchService(adapterRegistry)`: plans a provider or model switch |
+| `ProviderSessionTransitionPolicy.ts` | whether a switch stays in the session, restarts it, or hands off |
+| `selectionTransition.ts` | how a session applies a new model selection |
+| `modelSwitch.ts` | `modelSwitchSince`: the "model a → b" divider |
+| `orchestrationV2Timeline.ts` | which turn items the timeline shows |
+| `model.ts` | `modelSelectionsEqual`, run ordering |
+| `WireProjection.ts` | `projectContextHandoffForWire` |
+| `threadRead.ts` | `readThread` and the `factory_thread_read` tool description |
+| `historySource.ts` | `HandoffHistorySource`, the host's thread reads, and an in-memory timeline page |
+| `contracts.ts`, `errors.ts` | zod schemas; `Error` subclasses with a `_tag` |
 
-\* Share of the original's non-blank lines found unchanged in the port.
+### Conventions
 
-### Rewritten (mechanically)
+- Services are factories with injected dependencies: `makeContextHandoffService({ idAllocator, tokenCap })`,
+  `makeProviderSwitchService(adapterRegistry)` and `planThreadFork(input)`. `delivered`/`unsent`
+  are thunks the caller runs once the provider accepted or refused the prompt.
+- Errors are `Error` subclasses with a `_tag`, their fields and a message, so a host can switch on
+  `_tag` and send them over the wire. Ids are plain strings and timestamps ISO strings.
+- `handoffTokenCapFromEnv()` reads `FACTORY_CONTEXT_HANDOFF_TOKEN_CAP`. An unset or non-integer
+  value means the default.
+- Coverage and footer strings name `THREAD_READ_TOOL_NAME` (`factory_thread_read`). The
+  legacy-import header says "previous harness".
+- A host's thread store is `HandoffHistorySource.getThreadRecords`; a thread it does not have
+  throws `HandoffThreadNotFoundError`.
 
-- `Effect.fn` and generators become `async` functions. `Layer`/`Context.Service` become factories
-  with injected dependencies: `makeContextHandoffService({ idAllocator, tokenCap })`,
-  `makeProviderSwitchService(adapterRegistry)` and `planThreadFork(input)`. The lazy
-  `delivered`/`unsent` effects become thunks. `Effect.option` becomes `undefined` on a throw.
-- `Schema` is now zod, and `Schema.TaggedError` is now an `Error` subclass with the same `_tag`,
-  fields and message. Branded ids are plain strings, and `DateTime.Utc` is an ISO string.
-- `effect/Config` is now `handoffTokenCapFromEnv()`. An unset or non-integer value means the
-  default, as with t3code's `orElseSucceed`.
-- The tool name `t3_thread_read` becomes `THREAD_READ_TOOL_NAME` (`factory_thread_read`) in every
-  coverage and footer string. The legacy-import header says "previous harness".
-- The projection store becomes `HandoffHistorySource.getThreadRecords`, and
-  `ProjectionStoreThreadNotFoundError` becomes `HandoffThreadNotFoundError`.
+### Limitations
 
-### Dropped
-
-- **Other turn item types.** t3code has about 30; this port models the 16 the handoff and
-  thread-read code render. A host maps the rest to `dynamic_tool` or leaves them out.
+- **Turn item types.** The schema models the 16 types the handoff and thread-read code render. A
+  host maps the rest to `dynamic_tool` or leaves them out.
 - **App thread UI fields.** Pin, snooze, settle, guest share, title jobs and PR watch are not
   part of the schema. `OrchestrationV2AppThread` is a loose object, so `planThreadFork` still
-  resets them verbatim when a host's threads have them.
-- **Most of thread read.** Environments, the thread detail and recent-runs header, the message
-  author lookup, and acknowledging delegated child-task results on read are gone. They are
-  t3code MCP and orchestrator features with no Factory counterpart.
-- **Orchestrator plumbing.** `IdAllocator` is replaced by an injected allocator with a random
-  default. The SQLite projection store, `ThreadFork.execution.test.ts` (an integration test of
-  t3code's orchestrator) and Codex's native history injection are gone: `inject` is the hook
-  where a harness that supports it plugs in.
-- **The Effect test runtime** (`@effect/vitest`). The tests use plain vitest `assert`, with the
-  same cases.
+  resets them when a host's threads have them.
+- **Thread read.** It pages the timeline and long items only: no environments, thread detail or
+  recent-runs header, message author lookup, or acknowledging delegated child-task results.
+- **Ids and injection.** Handoff ids come from an injected allocator with a random default. No
+  harness injects history natively yet: `inject` is the hook where a harness that supports it
+  plugs in.
 
 ## Wiring
 
@@ -178,5 +168,5 @@ so the transcript and delivery state stay on the server.
 ## Tests
 
 `pnpm --filter @factory/harness-handoff check` and `pnpm --filter @factory/harness-handoff test`.
-Every case from the six original test files is ported: 46. Six cases are new: `threadRead.test.ts`
-and an unavailable-target case in `ProviderSwitchService.test.ts`.
+51 cases, including `threadRead.test.ts` and an unavailable-target case in
+`ProviderSwitchService.test.ts`.

@@ -1,5 +1,4 @@
-// Ported from t3code packages/shared/src/{model,Array}.ts: only `modelSelectionsEqual` and
-// what it calls.
+// Model selection equality (`modelSelectionsEqual`) and the run ordering helpers.
 import type { ModelSelection } from "./contracts.ts";
 
 export function copySorted<T>(
@@ -43,10 +42,6 @@ export function modelSelectionsEqual(left: ModelSelection, right: ModelSelection
   );
 }
 
-/**
- * From t3code packages/shared/src/orchestrationV2ThreadError.ts. `completedAt` is an ISO string
- * here, not `DateTime.Utc`.
- */
 /** Held queues can execute out of ordinal order; unfinished runs count as latest. */
 export function runRanAfter(
   run: { readonly ordinal: number; readonly completedAt: string | null },

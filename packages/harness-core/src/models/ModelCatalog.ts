@@ -1,8 +1,8 @@
-// Ported from t3code packages/provider-core/src/server/ModelCatalog.ts. The `ModelCatalog`
-// Effect service is gone: Factory reads the bundled manifest (see `ModelManifest.ts`).
+// Applies a model catalog to a provider's models. The catalog comes from the bundled manifest
+// (see `ModelManifest.ts` in @factory/harness-claude-code).
 import type { ModelCapabilities, ServerProviderModel } from "./contracts.ts";
 
-/** t3code's `ServerProviderDraft` (snapshotProbe.ts), reduced to what `applyModelCatalog` reads. */
+/** A provider snapshot before its catalog is applied: what `applyModelCatalog` reads. */
 export interface ServerProviderDraft {
   readonly models: ReadonlyArray<ServerProviderModel>;
   readonly updateRequiredModels?: unknown;

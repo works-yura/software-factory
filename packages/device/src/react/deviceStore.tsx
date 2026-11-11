@@ -1,6 +1,5 @@
-// Plain React replacement for t3code's device atoms (`~/state/device`,
-// `@t3tools/client-runtime/state/device`, `use-atom-command`): one store per
-// device API, read with `useSyncExternalStore`.
+// Device state as a plain React store: one store per device API, read with
+// `useSyncExternalStore`.
 import {
   createContext,
   use,
@@ -52,7 +51,7 @@ export interface AndroidFoldView {
 }
 
 export interface DeviceStoreOptions {
-  /** Shown for failed commands that report failures (t3code showed a toast). */
+  /** Shown for failed commands that report failures (e.g. as a toast). */
   readonly onCommandError?: (message: string, cause: unknown) => void;
 }
 
@@ -154,8 +153,7 @@ export function createDeviceStore(api: DeviceApi, options: DeviceStoreOptions = 
     if (retainers > 0) connect();
   };
 
-  // Commands. Reads and actions share one serial lane, as t3code's per-environment
-  // lane did, so a read never answers before an action sent ahead of it. Each
+  // Commands. Reads and actions share one serial lane, so a read never answers before an action sent ahead of it. Each
   // device opens in its own lane: a slow boot must not hold up anything else.
   const lanes = new Map<string, Promise<unknown>>();
   const serial = <T,>(lane: string, task: () => Promise<T>): Promise<T> => {

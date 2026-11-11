@@ -1,5 +1,4 @@
-// HTTP API for the Device panel. t3code served these as WebSocket RPCs plus an HTTP hub proxy;
-// here they are plain JSON routes, an SSE state stream, and the same whitelisted proxy.
+// HTTP API for the Device panel: plain JSON routes, an SSE state stream, and the same whitelisted proxy.
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';

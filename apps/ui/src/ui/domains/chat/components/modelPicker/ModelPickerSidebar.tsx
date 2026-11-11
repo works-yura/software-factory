@@ -1,6 +1,5 @@
-// Ported from t3code apps/web/src/components/chat/ModelPickerSidebar.tsx (MIT, see vendor/t3code).
-// Base UI's `Toolbar` (not a dependency of this app) is a `role="toolbar"` with the same vertical
-// arrow-key movement written out; the tooltips are playground-ui's.
+// The model picker's provider sidebar: a `role="toolbar"` with vertical arrow-key movement; the
+// tooltips are playground-ui's.
 import { Tooltip, TooltipContent, TooltipTrigger } from "@mastra/playground-ui/components/Tooltip";
 import { cn } from "@mastra/playground-ui/utils/cn";
 import type { ProviderInstanceId } from "@factory/harness/models/contracts";

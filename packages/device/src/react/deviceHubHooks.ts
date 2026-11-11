@@ -1,4 +1,4 @@
-// Plain React replacement for t3code's deviceHubAtoms.ts: each hook reads the
+// Plain React hooks over the device hub: each hook reads the
 // device hub while mounted and stops when unmounted or its target changes.
 import { useEffect, useState } from "react";
 import type { DeviceHubAccess } from "../client/hubAccess.ts";

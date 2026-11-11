@@ -1,4 +1,3 @@
-// Ported from t3code apps/server/src/orchestration-v2/modelSwitch.test.ts (imports; branded ids → strings).
 import type { OrchestrationV2ThreadProjection } from "./contracts.ts";
 import { describe, expect, it } from "vitest";
 

@@ -1,4 +1,4 @@
-// Minimal stand-ins for t3code's Base UI tooltip, menu and popover. Popups portal
+// Minimal tooltip, menu and popover. Popups portal
 // to the body with fixed positioning beside their trigger, so scrolling rails
 // do not clip them. The `render` prop keeps Base UI's call shape: the trigger
 // element is cloned with the trigger's props.

@@ -1,4 +1,4 @@
-// Errors. t3code used Schema.TaggedError; these keep the same `_tag`, fields and messages so a
+// Errors. Each carries a `_tag`, its fields and a message so a
 // host can switch on `_tag` and send `{ _tag, ...fields, message }` over the wire.
 import type { ProviderThreadId, RunId, ThreadId } from "./contracts.ts";
 
@@ -12,7 +12,7 @@ abstract class TaggedHandoffError<F extends object = object> extends Error {
   }
 }
 
-/** From t3code packages/provider-core/src/server/failure.ts. */
+/** Not even the coverage block fits the handoff budget. */
 export class ContextHandoffBudgetError extends TaggedHandoffError {
   readonly _tag = "ContextHandoffBudgetError";
   constructor() {
@@ -23,7 +23,7 @@ export class ContextHandoffBudgetError extends TaggedHandoffError {
   }
 }
 
-/** From t3code packages/provider-core/src/server/failure.ts. */
+/** The target provider still has background work running. */
 export class ContextHandoffBackgroundWorkError extends TaggedHandoffError {
   readonly _tag = "ContextHandoffBackgroundWorkError";
   constructor() {
@@ -109,7 +109,7 @@ export class ThreadForkPlanError extends TaggedHandoffError<ThreadForkPlanErrorF
 }
 
 /**
- * t3code's `ProjectionStoreThreadNotFoundError`: what a {@link HandoffHistorySource} throws for a
+ * What a {@link HandoffHistorySource} throws for a
  * thread it does not have, so fork-ancestor walks stop instead of failing.
  */
 export class HandoffThreadNotFoundError extends TaggedHandoffError<{ readonly threadId: ThreadId }> {

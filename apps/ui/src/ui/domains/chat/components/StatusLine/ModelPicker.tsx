@@ -28,7 +28,7 @@ function canSwitchModel({
   return sessionEnabled;
 }
 
-/** t3code's default `modelPicker.toggle` (`mod+shift+m`) and `composer.effort` (`mod+shift+e`). */
+/** The `modelPicker.toggle` (`mod+shift+m`) and `composer.effort` (`mod+shift+e`) shortcuts. */
 function pickerShortcut(event: KeyboardEvent): 'toggle' | 'effort' | null {
   if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.altKey || event.repeat) return null;
   const key = event.key.toLowerCase();
@@ -52,7 +52,7 @@ function usePickerShortcuts(enabled: boolean, onShortcut: (shortcut: 'toggle' | 
   }, [enabled]);
 }
 
-/** The session's model and effort: t3code's composer picker with its docked effort column. */
+/** The session's model and effort: the composer picker with its docked effort column. */
 function SessionModelPicker({
   busy,
   disabled = false,

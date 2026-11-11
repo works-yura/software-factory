@@ -1,6 +1,5 @@
-// Ported from t3code apps/web/src/components/chat/composerProviderState.tsx (MIT, see
-// vendor/t3code). Not ported: `getComposerReasoningStep` (t3code's increase/decrease-effort
-// shortcuts, which v4 does not bind) and OpenCode's out-of-catalog branch.
+// The composer's per-provider option state. There are no increase/decrease-effort shortcuts, and
+// a model outside the catalog gets no saved-options fallback here.
 import type {
   ModelCapabilities,
   ModelSelection,
@@ -59,7 +58,7 @@ export function getComposerPromptInjectionState(prompt: string): ComposerPromptI
   return isClaudeUltrathinkPrompt(prompt) ? "ultrathink" : "none";
 }
 
-/** Cursor ACP can default Fast to true; T3 requires a user selection. */
+/** Cursor ACP can default Fast to true; Factory requires a user selection. */
 export function withImplicitFastModeDefault(
   caps: ModelCapabilities,
   modelOptions: ReadonlyArray<ProviderOptionSelection> | null | undefined,

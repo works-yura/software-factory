@@ -1,5 +1,5 @@
-// A third harness for tests: what a Codex port (t3code apps/server/src/provider/CodexProvider.ts)
-// would register, with its own catalog and descriptors and nothing else.
+// A third harness for tests: what a Codex harness would register, with its own catalog and
+// descriptors and nothing else.
 import type { ModelSelection, ServerProviderModel } from './contracts.ts';
 import type { HarnessModels } from './facet.ts';
 import { checkModelSelection } from './selection.ts';

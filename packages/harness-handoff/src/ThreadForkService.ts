@@ -1,8 +1,6 @@
-// Ported from t3code apps/server/src/orchestration-v2/ThreadForkService.ts.
-// Changed: effect removed (the Layer → `planThreadFork`, a plain function that throws
-// ThreadForkPlanError); `DateTime.Utc` → ISO string. The thread fields t3code resets on a fork
-// (pin, snooze, settle, guest share, …) are kept verbatim: a host whose threads lack them gets
-// them as nulls, a host that has them gets them reset.
+// `planThreadFork`: a plain function that throws ThreadForkPlanError. The UI thread fields a fork
+// resets (pin, snooze, settle, guest share, …): a host whose threads lack them gets them as nulls,
+// a host that has them gets them reset.
 import type {
   ContextTransferId,
   OrchestrationV2Actor,

@@ -1,5 +1,4 @@
-// Minimal stand-in for t3code's wizard. t3code shows it in a modal dialog; the
-// standalone panel shows it inline, so WizardPopup is a card, not a dialog.
+// Minimal setup wizard. The standalone panel shows it inline, so WizardPopup is a card, not a dialog.
 import { useId, type ReactNode } from "react";
 import { cn } from "./cn.ts";
 import { Check } from "./icons.tsx";

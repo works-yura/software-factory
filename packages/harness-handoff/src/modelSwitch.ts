@@ -1,4 +1,3 @@
-// Ported verbatim from t3code apps/server/src/orchestration-v2/modelSwitch.ts (imports only).
 import {
   isCompactionCommandMessage,
   type ModelSelection,

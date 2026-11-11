@@ -1,8 +1,6 @@
-// The model picker's favorites, t3code's `useEnvironmentModelPreferences().favorites` and
-// `useToggleEnvironmentModelFavorite` (hooks/useSettings.ts). t3code keeps them in its server
-// settings; v4 has no per-person settings store on the server, so they live in this browser's
-// localStorage next to v4's other UI preferences (`mastracode.*`), and follow the person across
-// Factories and chats like t3code's.
+// The model picker's favorites. There is no per-person settings store on the server, so they live
+// in this browser's localStorage next to the other UI preferences (`mastracode.*`), and follow the
+// person across Factories and chats.
 import type { ProviderInstanceId } from "@factory/harness/models/contracts";
 import {
   createLocalStorageStore,

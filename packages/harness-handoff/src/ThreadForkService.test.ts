@@ -1,7 +1,3 @@
-// Ported from t3code apps/server/src/orchestration-v2/ThreadForkService.test.ts.
-// Changed: @effect/vitest → vitest; the service layer → `planThreadFork`; `Effect.flip` →
-// the thrown error; branded ids → strings; `DateTime` → ISO strings; the projection fixture → the
-// fields a fork plan reads; the PR link fixture → loose records (t3code's link schema is not ported).
 import { assert, it } from "vitest";
 
 import type {

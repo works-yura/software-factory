@@ -48,7 +48,7 @@ describe("device setup guidance", () => {
     ).toContain("discovery reported a problem");
   });
 
-  // t3code counted a remote SSH host here; only the local host exists now, so this
+  // Only the local host exists, so this
   // checks the per-host status that stands in for the legacy local hostStatus.
   it("counts the host's own ready status when the legacy hub status is idle", () => {
     const state = deviceState({

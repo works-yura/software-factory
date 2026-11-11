@@ -77,7 +77,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
   const { isLoading: modelLoading, error: modelError } = useChatModels();
-  // t3code's Ultrathink cue: a prompt that asks for it frames the composer.
+  // The Ultrathink cue: a prompt that asks for it frames the composer.
   const { composerProviderState } = useComposerProviderModel();
   const {
     commands,

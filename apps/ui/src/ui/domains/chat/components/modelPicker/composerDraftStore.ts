@@ -1,10 +1,9 @@
-// The model-selection part of t3code apps/web/src/composerDraftStore.ts (MIT, see vendor/t3code):
-// a thread's draft pick per provider instance (`modelSelectionByProvider`, `activeProvider`,
-// `modelSelectionExplicit`) and the sticky choices that follow the person into new chats
-// (`stickyModelSelectionByProvider`, `stickyOptionsByModelByProvider`, `stickyActiveProvider`).
-// zustand and Effect Schema are replaced by v4's `createLocalStorageStore` (playground-ui), which
-// keeps the state in this browser's localStorage; prompt text, terminal contexts, runtime mode and
-// the other draft fields stay where v4 keeps them (`ChatCommandsProvider`).
+// The composer's model selection: a thread's draft pick per provider instance
+// (`modelSelectionByProvider`, `activeProvider`, `modelSelectionExplicit`) and the sticky choices
+// that follow the person into new chats (`stickyModelSelectionByProvider`,
+// `stickyOptionsByModelByProvider`, `stickyActiveProvider`). It is a `createLocalStorageStore`
+// (playground-ui), which keeps the state in this browser's localStorage; prompt text, terminal
+// contexts, runtime mode and the other draft fields live in `ChatCommandsProvider`.
 import type {
   ModelSelection,
   ProviderInstanceId,

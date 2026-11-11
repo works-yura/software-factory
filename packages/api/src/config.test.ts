@@ -644,7 +644,7 @@ describe('provider key routes with a tenant', () => {
 
 describe('GET /web/config/models', () => {
   const fableReasoning: ModelReasoningOption[] = [{ type: 'effort', values: ['low', 'high'] }];
-  /** Its reasoning as a t3code option descriptor: the thinking levels Mastra Code runs it at. */
+  /** Its reasoning as an option descriptor: the thinking levels Mastra Code runs it at. */
   const fableCapabilities = {
     optionDescriptors: [
       {

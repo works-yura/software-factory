@@ -1,5 +1,5 @@
 // Mastra's side of model selection: the instance id its selections carry, its thinking levels as
-// option descriptors, and its catalog entries as t3code models. Pure (browser-safe): the server's
+// option descriptors, and its catalog entries as `ServerProviderModel`s. Pure (browser-safe): the server's
 // Mastra model facet (`@factory/harness-mastra`), the catalog and the UI all read it from here.
 import type { ModelCapabilities, ModelSelection, ServerProviderModel } from '@factory/harness/models/contracts';
 import type { HarnessModelInstanceInfo } from '@factory/harness/models/facet';
@@ -52,7 +52,7 @@ export function mastraModelSelection(modelId: string, thinkingLevel?: string | n
   };
 }
 
-/** A Mastra catalog entry as a t3code model: its router id is the slug, its provider the sub-provider. */
+/** A Mastra catalog entry as a `ServerProviderModel`: its router id is the slug, its provider the sub-provider. */
 export function mastraServerModel(
   entry: Pick<ModelCatalogEntry, 'id' | 'modelName' | 'provider' | 'capabilities'>,
   defaultModelId?: string | null,

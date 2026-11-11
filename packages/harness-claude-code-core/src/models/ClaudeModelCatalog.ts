@@ -1,4 +1,4 @@
-// Ported from t3code apps/server/src/provider/ClaudeModelCatalog.ts; `Option` checks are null checks.
+// The Claude model catalog: the bundled manifest's Claude models per CLI version, their slugs and capabilities.
 import type {
   CustomModelSetting,
   ModelCapabilities,

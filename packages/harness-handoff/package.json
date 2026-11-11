@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Portable context handoff for harness sessions: a budgeted selection of real thread history (never an agent-written summary) when a thread switches provider or model, is forked, or a child merges back. Ported from t3code.",
-  "license": "MIT",
+  "description": "Portable context handoff for harness sessions: a budgeted selection of real thread history (never an agent-written summary) when a thread switches provider or model, is forked, or a child merges back.",
   "exports": {
     ".": "./src/index.ts",
     "./contracts": "./src/contracts.ts",

@@ -1,4 +1,3 @@
-// From t3code apps/server/src/orchestration-v2/WireProjection.ts: only the handoff projection.
 import type { OrchestrationV2ContextHandoff } from "./contracts.ts";
 
 /** Clients see that a handoff happened, never the transcript it carried or its delivery state. */

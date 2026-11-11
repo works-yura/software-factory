@@ -1,7 +1,6 @@
-// Ported from t3code apps/server/src/orchestration-v2/ContextHandoffDelivery.ts.
-// Changed: effect removed. The lazy `delivered` / `unsent` effects are thunks the caller runs once
-// the provider accepted (or refused) the prompt; a lazy budget is `() => Promise<number>`;
-// failures throw the tagged errors in errors.ts. `t3_thread_read` → THREAD_READ_TOOL_NAME.
+// Delivers pending handoffs to a provider thread. `delivered` / `unsent` are thunks the caller runs
+// once the provider accepted (or refused) the prompt; a lazy budget is `() => Promise<number>`;
+// failures throw the tagged errors in errors.ts.
 import type {
   OrchestrationV2ContextHandoff,
   OrchestrationV2HistoricalMessage,
@@ -15,7 +14,7 @@ import {
   selectHistory,
 } from "./handoffBudget.ts";
 
-/** t3code's `ProviderAdapter.ProviderAdapterV2HistoricalContext`: what native injection receives. */
+/** What native history injection receives. */
 export interface ProviderAdapterV2HistoricalContext {
   readonly messages: ReadonlyArray<OrchestrationV2HistoricalMessage>;
   readonly context: string;

@@ -1,6 +1,5 @@
-// Ported from t3code apps/web/src/modelOrdering.ts (MIT, see vendor/t3code). `effect/Order` and
-// `effect/Array` are replaced by plain comparators with the same semantics: a stable sort over
-// the combined orders, the first that tells two items apart wins.
+// Model ordering as plain comparators: a stable sort over the combined orders, the first that
+// tells two items apart wins.
 import type { ProviderInstanceId } from "@factory/harness/models/contracts";
 
 type Order<T> = (left: T, right: T) => number;

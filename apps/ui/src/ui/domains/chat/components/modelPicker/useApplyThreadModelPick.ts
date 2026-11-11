@@ -1,9 +1,7 @@
-// Ported from t3code apps/web/src/components/chat/useApplyThreadModelPick.ts (MIT, see
-// vendor/t3code). t3code dispatches `thread.setModelSelection`; v4 sends the pick to the session
-// its harness runs: Mastra through its model and thinking-level routes (the chat's models and
-// thinking contexts, which also hold a draft's pick), any other harness through
-// `POST …/sessions/:id/model` with the selection's options. Unlike t3code, a failed pick is
-// released too, so the picker shows what the session runs again.
+// Sends a model pick to the session its harness runs: Mastra through its model and thinking-level
+// routes (the chat's models and thinking contexts, which also hold a draft's pick), any other
+// harness through `POST …/sessions/:id/model` with the selection's options. A failed pick is
+// released, so the picker shows what the session runs again.
 import { isThinkingLevelSetting } from "@mastra/code-sdk/thinking";
 import { toast } from "@mastra/playground-ui/components/Toaster";
 import type { ModelSelection } from "@factory/harness/models/contracts";

@@ -1,6 +1,3 @@
-// Ported from t3code apps/server/src/orchestration-v2/ContextHandoffBudget.test.ts.
-// Changed: @effect/vitest → vitest (`it.effect` → async `it`, `Effect.result` → caught rejection);
-// branded `X.make(...)` → plain strings; `DateTime` → ISO strings; `t3_thread_read` → the Factory tool.
 import { assert, describe, it } from "vitest";
 
 import {

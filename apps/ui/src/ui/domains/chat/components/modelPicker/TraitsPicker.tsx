@@ -1,7 +1,5 @@
-// Ported from t3code apps/web/src/components/chat/TraitsPicker.tsx (MIT, see vendor/t3code): what
-// a model's traits show and how a pick writes them. The standalone `TraitsPicker` menu and its
-// `TraitsMenuContent` are not ported: v4's status line docks the effort column inside the model
-// picker (`ComposerModelEffort.tsx`), as t3code's composer does.
+// What a model's traits show and how a pick writes them. There is no standalone traits menu: the
+// status line docks the effort column inside the model picker (`ComposerModelEffort.tsx`).
 import {
   getDescriptorStringValue,
   getTraitSelectChange,
@@ -78,7 +76,7 @@ function buildUnavailableModelOptionDescriptors(
   );
 }
 
-/** t3code `providerModels.getProviderModelCapabilities`: the catalog model by slug or alias. */
+/** The catalog model by slug or alias. */
 export function findProviderModel(
   models: ReadonlyArray<ServerProviderModel>,
   model: string | null | undefined,
@@ -119,8 +117,7 @@ function getSelectedTraits(
   allowPromptInjectedEffort: boolean,
 ) {
   const caps = getProviderModelCapabilities(models, model);
-  // t3code shows OpenCode's saved options when its model left the catalog; Factory does so for any
-  // harness, as a session can run on a model its viewer's catalog no longer lists.
+  // A model that left the catalog still shows its saved options, for any harness, as a session can run on a model its viewer's catalog no longer lists.
   const modelIsUnavailable = Boolean(model) && findProviderModel(models, model) === undefined;
   const descriptors = modelIsUnavailable
     ? buildUnavailableModelOptionDescriptors(modelOptions)

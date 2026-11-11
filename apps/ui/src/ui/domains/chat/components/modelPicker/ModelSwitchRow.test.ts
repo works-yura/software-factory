@@ -1,5 +1,4 @@
-// The "model switch change" cases of t3code packages/client-runtime/src/handoff.test.ts (MIT, see
-// vendor/t3code), against the ported `resolveModelSwitchChange`; the alias case is Factory's.
+// The "model switch change" cases of `resolveModelSwitchChange`, including an alias.
 import { describe, expect, it } from "vitest";
 
 import { readModelSwitch, resolveModelSwitchChange } from "./ModelSwitchRow";

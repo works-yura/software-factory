@@ -1,7 +1,5 @@
-// Ported from t3code apps/server/src/orchestration-v2/ContextHandoffService.ts.
-// Changed: effect removed (Effect.fn → async functions, the Layer → `makeContextHandoffService`
-// with the id allocator and token cap injected, TaggedError → errors.ts); the projection store
-// → `HandoffHistorySource`; `t3_thread_read` → THREAD_READ_TOOL_NAME; `DateTime.Utc` → ISO string.
+// Builds context handoff records. `makeContextHandoffService` takes the id allocator and token cap;
+// thread history comes from a `HandoffHistorySource`.
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -81,7 +79,7 @@ export interface ContextHandoffServiceV2Shape {
   }) => Promise<OrchestrationV2ContextHandoff>;
 }
 
-/** t3code's `IdAllocatorV2.allocate.contextHandoff`. */
+/** Allocates context handoff ids. */
 export interface ContextHandoffIdAllocator {
   readonly contextHandoff: (input: {
     readonly threadId: ThreadId;

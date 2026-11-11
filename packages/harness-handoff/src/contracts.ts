@@ -1,13 +1,11 @@
-// Ported from t3code packages/contracts/src/{orchestrationV2,orchestratorMcp,providerRuntime,chatAttachment}.ts
-// (effect/Schema → zod). Only the shapes the handoff code reads are kept; names stay as in t3code
-// so the ported algorithm reads the same. Branded ids are plain trimmed strings; `DateTime.Utc`
-// fields are ISO-8601 strings (what a host persists anyway).
+// The zod schemas the handoff code reads. Ids are plain trimmed strings; timestamps are ISO-8601
+// strings (what a host persists anyway).
 import { z } from "zod";
 
 const TrimmedNonEmptyString = z.string().trim().min(1);
 const NonNegativeInt = z.number().int().min(0);
 const PositiveInt = z.number().int().min(1);
-/** `Schema.DateTimeUtc` in t3code; here the ISO string a host stores. */
+/** The ISO string a host stores. */
 const IsoDateTime = z.string();
 
 export const ThreadId = TrimmedNonEmptyString;
@@ -96,7 +94,7 @@ export type ThreadTokenUsageSnapshot = z.infer<typeof ThreadTokenUsageSnapshot>;
 export const OrchestrationV2Actor = z.enum(["user", "agent", "system"]);
 export type OrchestrationV2Actor = z.infer<typeof OrchestrationV2Actor>;
 
-/** t3code lists its own clients (web, mobile, mcp, provider, server); a Factory host names its own. */
+/** The client a request came from; a Factory host names its own. */
 export const OrchestrationV2CreationSource = z.string();
 export type OrchestrationV2CreationSource = z.infer<typeof OrchestrationV2CreationSource>;
 
@@ -203,7 +201,7 @@ export const OrchestrationV2SessionCapabilities = z.object({
 });
 export type OrchestrationV2SessionCapabilities = z.infer<typeof OrchestrationV2SessionCapabilities>;
 
-/** t3code's capability record has thread/turn/tool sections too; only `sessions` is read here. */
+/** A provider's capabilities; only `sessions` is read here. */
 export const OrchestrationV2ProviderCapabilities = z.looseObject({
   sessions: OrchestrationV2SessionCapabilities,
 });
@@ -333,9 +331,9 @@ export const OrchestrationV2ProviderTurn = z.object({
 export type OrchestrationV2ProviderTurn = z.infer<typeof OrchestrationV2ProviderTurn>;
 
 /**
- * The app thread a handoff moves between. t3code's record also carries UI state (pin, snooze,
- * settle, guest share, pull request watches, title jobs) that a fork resets; a Factory thread
- * keeps that elsewhere, so only lineage and the fields the handoff code reads remain. Unknown
+ * The app thread a handoff moves between. UI state (pin, snooze, settle, guest share, pull
+ * request watches, title jobs) that a fork resets lives elsewhere in a Factory thread, so only
+ * lineage and the fields the handoff code reads are modelled. Unknown
  * keys pass through, so a host's own thread fields survive a fork plan.
  */
 export const OrchestrationV2AppThread = z.looseObject({
@@ -413,7 +411,7 @@ const TurnItemBase = {
 };
 
 /**
- * Timeline rows. t3code has ~30 item types; these are the ones the handoff and thread-read code
+ * Timeline rows: the item types the handoff and thread-read code
  * render. A host maps everything else to `dynamic_tool` or leaves it out.
  */
 export const OrchestrationV2TurnItem = z.discriminatedUnion("type", [

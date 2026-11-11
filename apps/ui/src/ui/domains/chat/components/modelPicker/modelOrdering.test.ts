@@ -1,5 +1,5 @@
-// New for Factory: t3code has no test of its own for modelOrdering.ts; these pin the semantics the
-// Effect `Order` combination had, which the plain comparators replace.
+// Pins the semantics of the combined comparators: a stable sort where the first order that tells
+// two items apart wins.
 import { describe, expect, it } from "vitest";
 
 import {

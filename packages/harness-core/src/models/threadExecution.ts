@@ -1,5 +1,4 @@
-// From t3code packages/client-runtime/src/state/threadExecution.ts: the reasoning option ids and
-// `formatModelSelectionEffort` only (the rest is t3code's thread projection).
+// The reasoning option ids and `formatModelSelectionEffort`: a selection's effort as a label.
 import type { ModelSelection, ServerProviderModel } from "./contracts.ts";
 import {
   getProviderOptionCurrentLabel,

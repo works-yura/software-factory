@@ -76,7 +76,7 @@
   }
 }
 
-/* Sizes and a surface device preview's panel (ported from t3code) uses that our theme lacks.
+/* Sizes and a surface the device preview's panel uses that our theme lacks.
  * Its colors use our tokens directly. */
 @theme inline {
   --text-2xs: 0.6875rem;

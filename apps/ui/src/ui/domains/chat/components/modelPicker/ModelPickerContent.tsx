@@ -1,10 +1,8 @@
-// Ported from t3code apps/web/src/components/chat/ModelPickerContent.tsx (MIT, see vendor/t3code).
-// Adapted to v4: Base UI's Combobox is cmdk's `Command` (unfiltered: the list is ranked here by
-// `rankModelPickerSearch`, cmdk keeps the highlighted row and Up/Down/Enter), LegendList's
-// virtualization is a plain scrolling list (catalogs are tens of models), favorites come from
-// `modelFavorites.ts`, and the provider setup and Settings links go to Settings → Models. Not
-// ported: multi-model picks (`selectedModels`, `onToggleModel`), jump keys
-// (`modelPicker.jump.*`), update-required notices, and the screen-reader `announce` calls.
+// The model picker's popup. The list is cmdk's `Command` (unfiltered: the list is ranked here by
+// `rankModelPickerSearch`, cmdk keeps the highlighted row and Up/Down/Enter) as a plain scrolling
+// list (catalogs are tens of models), favorites come from `modelFavorites.ts`, and the provider
+// setup and Settings links go to Settings → Models. Limitations: one model per pick, no jump keys
+// (`modelPicker.jump.*`), no update-required notices, and no screen-reader announcements.
 import {
   Command,
   CommandEmpty,
@@ -202,7 +200,7 @@ function WindowKeyDownListener({ onKeyDown }: { onKeyDown: (event: KeyboardEvent
   return null;
 }
 
-/** `mod+shift+arrowup` / `mod+shift+arrowdown`: t3code's previous and next provider bindings. */
+/** `mod+shift+arrowup` / `mod+shift+arrowdown`: the previous and next provider bindings. */
 function providerStepFromEvent(event: KeyboardEvent): 1 | -1 | null {
   if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.altKey) return null;
   if (event.key === "ArrowUp") return -1;

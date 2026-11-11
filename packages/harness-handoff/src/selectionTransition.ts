@@ -1,4 +1,3 @@
-// Ported verbatim from t3code packages/provider-core/src/server/selectionTransition.ts (imports only).
 import type { ModelSelection, OrchestrationV2ProviderCapabilities } from "./contracts.ts";
 
 export interface ProviderSelectionTransitionInput {

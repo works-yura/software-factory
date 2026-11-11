@@ -1,5 +1,5 @@
-// Stands in for t3code's ProviderInstanceIcon (MIT, see vendor/t3code) with v4's provider logos:
-// a Mastra row shows its model's provider, an instance the harness's own mark.
+// A provider instance's icon with Factory's provider logos: a Mastra row shows its model's
+// provider, an instance the harness's own mark.
 import { ProviderLogo } from "@mastra/playground-ui/domains/llm";
 import { cn } from "@mastra/playground-ui/utils/cn";
 
