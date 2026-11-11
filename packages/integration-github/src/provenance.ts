@@ -145,7 +145,7 @@ export async function recordFactoryPullRequestProvenance(
     });
 
     const reviewItem = (
-      await workItems.list({
+      await workItems.listShared({
         orgId: input.binding.orgId,
         factoryProjectId: input.binding.factoryProjectId,
       })

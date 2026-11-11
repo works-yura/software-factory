@@ -88,7 +88,7 @@ export function createGithubIssueReconciler(
 
         for (const project of projects) {
           await rules.loadBoards(project);
-          const items = await options.storage.list({
+          const items = await options.storage.listShared({
             orgId: project.orgId,
             factoryProjectId: project.factoryProjectId,
           });
@@ -125,7 +125,7 @@ export function createGithubIssueReconciler(
                 factoryProjectId: project.factoryProjectId,
                 sources: uncarded.flatMap(issue => githubItemSources(repository.id, 'issue', issue.number)),
               });
-              const items = await options.storage.list({
+              const items = await options.storage.listShared({
                 orgId: project.orgId,
                 factoryProjectId: project.factoryProjectId,
               });

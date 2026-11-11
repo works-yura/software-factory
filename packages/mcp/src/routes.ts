@@ -150,7 +150,7 @@ export interface FactoryMcpToolDependencies {
   createSupervisor?: (
     scope: FactoryMcpToolScope,
   ) => Record<string, Tool<any, any, any, any>> | Promise<Record<string, Tool<any, any, any, any>>>;
-  workItems: Pick<WorkItemsStorage, 'list' | 'getForProject' | 'hasRunBindingForSession'>;
+  workItems: Pick<WorkItemsStorage, 'list' | 'listShared' | 'getForProject' | 'hasRunBindingForSession'>;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   audit: Pick<AuditStorage, 'list'>;
 }
@@ -214,7 +214,7 @@ function createSearchFetchTools(
       inputSchema: z.object({ query: z.string().describe('Words to look for in work item titles.') }),
       execute: async ({ query }) => {
         const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-        const items = await deps.tools.workItems.list(project);
+        const items = await deps.tools.workItems.listShared(project);
         const results = items
           .filter(item => {
             const haystack = `${item.id} ${item.title}`.toLowerCase();
