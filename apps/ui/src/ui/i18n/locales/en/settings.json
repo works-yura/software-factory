@@ -850,7 +850,8 @@
       "trusted": "Trusted",
       "source": "Source",
       "kind": "Kind",
-      "integration": "Integration"
+      "integration": "Integration",
+      "pullRequest": "Open pull request"
     },
     "rule": {
       "invalidJson": "Not valid JSON.",
@@ -861,13 +862,10 @@
     },
     "phase": {
       "label": "{{name}} phase",
-      "codeBehaviour": "Code behaviour",
-      "codeNote": "Factory runs this phase's work in code, so its runner context, skill and exit tool are fixed, and so are the moves code makes from it. Its instructions, automation and other next phases are yours to change.",
       "name": "Name",
       "description": "Description",
       "skill": "Skill",
       "skillOf": "{{name}} skill",
-      "chosenByCode": "Chosen by code",
       "none": "None",
       "context": "Runner context",
       "instructions": "Instructions",
@@ -878,8 +876,6 @@
       "autoStartWhen": "{{name}}: start only when",
       "autoStartWhenHint": "Leave empty to start every card on its own.",
       "exitTool": "Exit tool",
-      "exitToolCode": "Factory waits for this tool in code, so it stays.",
-      "exitToolHandlers": "Factory moves cards on from this phase in code, without an exit tool.",
       "exitToolHint": "The tool whose success ends the phase. Leave empty for none.",
       "autoApprove": "Approve on its own",
       "autoApproveHint": "Approve {{tool}} without a person, such as a submitted plan.",
@@ -892,6 +888,16 @@
         "resting": "Waiting",
         "working": "Agent works",
         "terminal": "Final"
+      },
+      "goal": "Goal",
+      "goalHint": "The agent keeps working until a judge finds this objective met, so say when it is done and when it should wait for a person. Leave empty for a single run. {{count}}/{{max}}",
+      "goalRuns": "Goal runs",
+      "goalRunsHint": "How many runs the goal gets before it pauses for a person, from 1 to {{max}}. Leave empty for Factory's default.",
+      "tools": "Factory tools",
+      "toolsHint": "Given to the session that works the card in this phase, in its runner context.",
+      "toolLabels": {
+        "recordVerdict": "Record a review verdict",
+        "reviewSource": "Review the source of a change request"
       }
     }
   },

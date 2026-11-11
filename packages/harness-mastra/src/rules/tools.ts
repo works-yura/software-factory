@@ -13,7 +13,9 @@ import {
   workItemSource,
 } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import { PRODUCT_CONTEXT, SELF_REVIEW_ROUND_LIMIT } from '@factory/pipelines';
+import { PRODUCT_CONTEXT } from '@factory/pipelines';
+import { SELF_REVIEW_ROUND_LIMIT } from '@factory/core';
+import { phaseGrantsTool } from './phase-tools.ts';
 import { createProductTools, isProductBinding } from './product-tools.ts';
 import type { ProductToolDependencies } from './product-tools.ts';
 import type { IntegrationTools } from '@factory/integrations';
@@ -112,29 +114,35 @@ export async function createFactoryTransitionTools(options: {
   // The project's boards as they are now; the tools below read them for this run.
   const boards = boardSource ? await boardSource.load(availableBinding) : undefined;
   const bound = { ...options, boards };
+  const readItem = () => options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
   let isTriage = false;
   if (availableBinding.role === 'triage') {
-    const item = await options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
+    const item = await readItem();
     if (!item) return {};
     isTriage = classifiesTriage(boards, item);
   }
 
   let productTools: IntegrationTools = {};
   if (availableBinding.role === PRODUCT_CONTEXT && options.product) {
-    const item = await options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
+    const item = await readItem();
     if (isProductBinding(availableBinding, item)) {
       productTools = createProductTools({ ...bound, product: options.product }, availableBinding.workItemId);
     }
   }
 
+  // Tools are built for every turn, so a card that moves on takes its phase's tools with it. A
+  // failed lookup grants no phase tools but keeps the move tool; the verdict tool checks again.
+  const recordsVerdict = await readItem()
+    .then(item => (item ? phaseGrantsTool(boards, availableBinding, item, 'factory_record_review_verdict') : false))
+    .catch(() => false);
+
   return {
     ...productTools,
-    ...(availableBinding.role === 'review' ? createReviewVerdictTool(bound, availableBinding.workItemId) : {}),
+    ...(recordsVerdict ? createReviewVerdictTool(bound, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
-      description: isTriage
-        ? 'Request a governed stage transition for the Factory work item exactly bound to this thread, with your classification in the rationale. Move a confirmed bug to planning. Move feature requests and other open non-bugs to intake, where a maintainer decides whether to take them on. Move closures to done or canceled.'
-        : 'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
+      description:
+        'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
       inputSchema: transitionInputSchema,
       requireApproval: true,
       execute: async ({ stage, expectedRevision, rationale }, execution) => {
@@ -243,6 +251,7 @@ function createReviewVerdictTool(
     storage: WorkItemsStorage;
     transitionService: Pick<FactoryTransitionService, 'transition'>;
     sessions?: FactorySessionSourceLookup;
+    /** The project's boards as they are for this run. */
     boards?: BoardRegistry;
   },
   boundWorkItemId: string,
@@ -261,11 +270,17 @@ function createReviewVerdictTool(
           sessions: options.sessions,
         });
         const binding = resolution ? await options.storage.findActiveRunBinding(resolution.address) : null;
-        if (!binding || binding.workItemId !== boundWorkItemId || binding.role !== 'review') {
+        if (!binding || binding.workItemId !== boundWorkItemId) {
           throw new Error('Factory review binding is unavailable, revoked, or no longer matches this session.');
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        // The card may have moved since the tools were built for this turn.
+        if (!(await phaseGrantsTool(options.boards, binding, item, 'factory_record_review_verdict'))) {
+          throw new Error(
+            `This session does not review the card in its current phase (${item.stages.join(', ')}); it cannot record a verdict.`,
+          );
+        }
         const board = boardForWorkItem(item);
         const source = workItemSource(item.externalSource);
         // A pull request's own card can sit in Work's phases too; it is never self-reviewed.

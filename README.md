@@ -55,10 +55,7 @@ const boards = createPipelines();
 
 ```
 <board>/
-  board.ts               фази, переходи, підключення правил
-  phase-rules.ts         onEnter: яку сесію агента запустити
-  transition-policy.ts   хто і куди може перенести картку
-  tool-rules.ts          реакція на результат інструмента агента (лише Work)
+  board.ts               фази з виконавцями (runner: скіл, контекст, мета), переходи, політика переходів
 shared/work-item-branch.ts   назви гілок і номери PR/MR для Work і Review
 ```
 

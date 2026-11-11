@@ -32,7 +32,7 @@ const bugs = {
  * a runner naming a skill outside the built-in ones is reported the way it reports one.
  */
 function unknownSkills(registry: BoardRegistry): string[] {
-  const known = new Set(['factory-triage', 'factory-plan', 'factory-review', 'factory-self-review']);
+  const known = new Set(['factory-triage', 'factory-plan', 'factory-build', 'factory-review', 'factory-self-review']);
   return [...registry.values()].flatMap(board =>
     Object.entries(board.phases).flatMap(([key, phase]) =>
       phase.kind === 'working' && phase.runner.skill && !known.has(phase.runner.skill)
@@ -184,7 +184,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
           {
             ...work,
             phases: work.phases.map(phase =>
-              phase.key === 'triage' ? { ...phase, runner: { ...phase.runner, context: 'work' } } : phase,
+              // Runner fields are plain stored fields now; a terminal phase code moves cards to is still locked.
+              phase.key === 'done' ? { ...phase, kind: 'resting' as const } : phase,
             ),
           },
           { expectedRevision: 1, writer },
@@ -224,9 +225,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
       [404, 'board_not_found'],
       [409, 'board_exists'],
     ]);
-    expect(refusals[2]!.body.conflicts).toEqual([
-      'Phase "triage" runs its code handlers in the "triage" context; keep runner.context.',
-    ]);
+    expect(refusals[2]!.body.conflicts).toEqual(['Phase "done" must stay terminal; its code behaviour depends on it.']);
     expect(await storage.readVersion(scope)).toBe(version);
     expect(audits.map(audit => audit.action)).toEqual(['factory.board.created']);
   });

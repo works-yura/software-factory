@@ -2,7 +2,10 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 
 import type { WorkItemsStorage } from '@factory/store';
-import { createFactoryStorageForTests } from '@factory/testing';
+import { createBoardRegistry, createFactoryStorageForTests } from '@factory/testing';
+
+/** Work's PR review phase grants the tool; tests run on Factory's default boards. */
+const boards = createBoardRegistry();
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './review-source-tool.ts';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -51,7 +54,8 @@ async function prepareReviewItem(
           ...(options.url ? { url: options.url } : {}),
         },
         title: 'Review card',
-        stages: ['review'],
+        // A pull request's own card is reviewed in Work's PR review phase (v4 retired the Review board).
+        stages: ['pr-review'],
         sessions: {},
         metadata: {
           authorTrusted: true,
@@ -78,7 +82,7 @@ describe('factory_review_source', () => {
     });
 
     const context = requestContext();
-    const tools = await createReviewSourceTool({
+    const tools = await createReviewSourceTool({ boards,
       requestContext: context,
       storage,
       uiOrigin: PUBLIC_ORIGIN,
@@ -114,7 +118,7 @@ describe('factory_review_source', () => {
       metadata: { gitlabHost: 'gitlab.example.com', gitlabProjectId: 101 },
     });
     const context = requestContext();
-    const tools = await createReviewSourceTool({
+    const tools = await createReviewSourceTool({ boards,
       requestContext: context,
       storage,
       uiOrigin: PUBLIC_ORIGIN,
@@ -139,7 +143,7 @@ describe('factory_review_source', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareReviewItem(storage);
     const context = requestContext();
-    const tools = await createReviewSourceTool({
+    const tools = await createReviewSourceTool({ boards,
       requestContext: context,
       storage,
       uiOrigin: PUBLIC_ORIGIN,
@@ -163,7 +167,7 @@ describe('factory_review_source', () => {
       metadata: { state: 'open', number: 34 },
     });
     const context = requestContext();
-    const tools = await createReviewSourceTool({ requestContext: context, storage, uiOrigin: PUBLIC_ORIGIN });
+    const tools = await createReviewSourceTool({ boards, requestContext: context, storage, uiOrigin: PUBLIC_ORIGIN });
     const output = (await (tools.factory_review_source as ExecutableTool).execute(
       {},
       { requestContext: context, agent: { toolCallId: 'tc-1' } },
@@ -176,12 +180,32 @@ describe('factory_review_source', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareReviewItem(storage, { role: 'work', externalId: 'github-issue:99' });
     const context = requestContext();
-    const tools = await createReviewSourceTool({
+    const tools = await createReviewSourceTool({ boards,
       requestContext: context,
       storage,
       uiOrigin: PUBLIC_ORIGIN,
     });
     expect(tools.factory_review_source).toBeUndefined();
+  });
+
+  it('is not offered to a review session in self-review, a phase that does not grant it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepareReviewItem(storage, { type: 'issue', externalId: 'github-issue:7' });
+    const [card] = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    await storage.update({ orgId: 'org-1', id: card!.id, userId: 'user-1', patch: { stages: ['review'] } });
+
+    const tools = await createReviewSourceTool({ boards, requestContext: requestContext(), storage, uiOrigin: PUBLIC_ORIGIN });
+    expect(tools.factory_review_source).toBeUndefined();
+  });
+
+  it('is withdrawn once the reviewed card leaves PR review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareReviewItem(storage);
+    const build = () => createReviewSourceTool({ boards, requestContext: requestContext(), storage, uiOrigin: PUBLIC_ORIGIN });
+    expect((await build()).factory_review_source).toBeDefined();
+
+    await storage.update({ orgId: 'org-1', id: prepared.item.id, userId: 'user-1', patch: { stages: ['intake'] } });
+    expect((await build()).factory_review_source).toBeUndefined();
   });
 
   it('is not offered when the UI origin is unset — matches Slack, which omits the deep-link rather than falling back to the API origin', async () => {
@@ -194,7 +218,7 @@ describe('factory_review_source', () => {
     // tool exactly like undefined does, or the review body publishes a
     // hostless `sessionUrl` like `/factories/<id>/workspaces/...`.
     for (const raw of [undefined, '', '   ']) {
-      const tools = await createReviewSourceTool({
+      const tools = await createReviewSourceTool({ boards,
         requestContext: context,
         storage,
         uiOrigin: resolveReviewSourceUiOrigin(raw),
@@ -212,7 +236,7 @@ describe('factory_review_source', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareReviewItem(storage, { author: 'octocat' });
     const context = requestContext();
-    const tools = await createReviewSourceTool({
+    const tools = await createReviewSourceTool({ boards,
       requestContext: context,
       storage,
       uiOrigin: `${PUBLIC_ORIGIN}/`,
@@ -254,7 +278,7 @@ describe('factory_review_source', () => {
     };
 
     const context = requestContext();
-    const tools = await createReviewSourceTool({
+    const tools = await createReviewSourceTool({ boards,
       requestContext: context,
       storage: wrapped,
       uiOrigin: PUBLIC_ORIGIN,

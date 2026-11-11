@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@factory/testing": "workspace:*",
+    "@mastra/libsql": "1.29.0",
     "@types/node": "22.20.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

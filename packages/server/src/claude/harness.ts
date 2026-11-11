@@ -93,7 +93,7 @@ export const CLAUDE_FACTORY_PLANNING_DISALLOWED_TOOLS = [
 export const CLAUDE_FACTORY_SYSTEM_PROMPT = [
   'You are an agent session of a Factory: a work item on a board is bound to this session, and Factory skills tell you what to do with it.',
   `The Factory's tools are on the \`${CLAUDE_FACTORY_MCP_SERVER}\` MCP server (\`mcp__${CLAUDE_FACTORY_MCP_SERVER}__<tool>\`); instructions name them without that prefix.`,
-  `Each turn opens with the Factory's signals: \`<factory-environment>\` (the repositories in your working directory) and, on a card run, \`<factory-phase>\` (stage, revision, role). Mid-turn, \`mcp__${CLAUDE_FACTORY_MCP_SERVER}__factory_bound_work_item\` reads the current stage and revision.`,
+  `Each turn opens with the Factory's signals: \`<factory-environment>\` (the repositories in your working directory) and, on a card run, \`<factory-phase>\` (stage, revision, role) and \`<factory-work-item>\` (the card, its sources and Factory state). Mid-turn, \`mcp__${CLAUDE_FACTORY_MCP_SERVER}__factory_bound_work_item\` reads the current stage and revision.`,
   `Your environment holds no source-control credentials: reach the provider only through the \`mcp__${CLAUDE_FACTORY_MCP_SERVER}__source_control_*\` tools (push, change requests, reviews, issues, \`source_control_api_read\` for other reads), never \`git push\`, \`gh\`, \`glab\` or direct API calls.`,
 ].join(' ');
 
@@ -145,6 +145,17 @@ export interface ClaudeFactoryHarnessOptions {
     resourceId: string;
   }) => Promise<string[] | undefined>;
   phaseFor?: (session: {
+    orgId: string;
+    factoryProjectId: string;
+    sessionId: string;
+    threadId: string;
+    resourceId: string;
+  }) => Promise<string | undefined>;
+  /**
+   * The `factory-work-item` signal a bound Mastra run sees (`describeFactoryWorkItem`): the card its
+   * thread works, its sources and Factory state; `undefined` when the thread is bound to none.
+   */
+  workItemFor?: (session: {
     orgId: string;
     factoryProjectId: string;
     sessionId: string;
@@ -405,6 +416,17 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
           resourceId: session.resourceId ?? tenant.factoryProjectId,
         });
         if (phase) signals.push(`<factory-phase>\n${phase}\n</factory-phase>`);
+      }
+      if (options.workItemFor && !claudeSupervisorProjectId(session.id) && session.thread.getId()) {
+        const tenant = await tenantOf(session);
+        const workItem = await options.workItemFor({
+          orgId: tenant.orgId,
+          factoryProjectId: tenant.factoryProjectId,
+          sessionId: session.id,
+          threadId: session.thread.requireId(),
+          resourceId: session.resourceId ?? tenant.factoryProjectId,
+        });
+        if (workItem) signals.push(`<factory-work-item>\n${workItem}\n</factory-work-item>`);
       }
       return signals.length > 0 ? signals.join('\n') : undefined;
     },

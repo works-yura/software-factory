@@ -34,8 +34,9 @@ import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { InlineSkill } from '@mastra/core/skills';
-import type { FactoryStorage } from '@mastra/core/storage';
+import type { FactoryStorage, GoalObjectiveRecord } from '@mastra/core/storage';
 import type { Tool } from '@mastra/core/tools';
+import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
@@ -148,7 +149,7 @@ import { describeFactoryPhase, FactoryPhaseStateProcessor, reportMemorySettingsU
 import { asAgentSession, createMastraHarness } from '@factory/harness-mastra';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from '@factory/harness-mastra';
 import type { FactoryStartCoordinator } from '@factory/harness-mastra';
-import { createTerminalStageCleanup } from '@factory/runtime';
+import { createPhaseGoalEnder, createTerminalStageCleanup } from '@factory/runtime';
 import { createAttachmentTools, createFactoryTransitionTools } from '@factory/harness-mastra';
 import { BoardWriteError, BoardWrites, FactoryTransitionService, ProjectBoardCache, toBoardSource } from '@factory/runtime';
 import type { BoardWriter } from '@factory/runtime';
@@ -181,6 +182,7 @@ import type { SessionNotifier } from '@factory/session';
 import { hydrateSessionMemorySettings } from '@factory/session';
 import { hasResolvedOrg } from '@factory/session';
 import { FactoryReplyCredentialProcessor } from '@factory/session';
+import { describeFactoryWorkItem, FactoryWorkItemStateProcessor } from '@factory/harness-mastra';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from '@factory/session';
 import { observeSessionRunEnd } from '@factory/runtime';
 import { sessionMemoryResourceId, sessionStampCounts } from '@factory/session';
@@ -636,7 +638,7 @@ export class MastraFactory {
    * it, and each one that has it, edited or not, has it replaced at the next revision. Use it to
    * push a board from code into projects; it isn't run for you, and projects created later don't
    * get it until you run it again. A Work or app board's key keeps that board's code behaviour,
-   * so the definition is checked as an edit is; a new key gets none (no handlers, outcomes, tool or
+   * so the definition is checked as an edit is; a new key gets none (no tool, source-closed or
    * event rules). The board is validated once, as the boards API does, and each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
    * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `code_board` when a
@@ -1399,16 +1401,31 @@ export class MastraFactory {
           boards,
           storage: workItemsStorage,
           audit: auditDomain,
-          selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
-            await factoryProjectsStorage.ensureReady();
-            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-            return project?.selfReviewEnabled ?? false;
-          },
           ...(onTerminalStage ? { onTerminalStage } : {}),
-          onTransitionCommitted: createStageChangeNotifier({
-            workItems: workItemsStorage,
-            reporting: factoryReporting,
-          }),
+          onTransitionCommitted: (() => {
+            const notifyStageChange = createStageChangeNotifier({
+              workItems: workItemsStorage,
+              reporting: factoryReporting,
+            });
+            const endPhaseGoal = createPhaseGoalEnder({
+              workItems: workItemsStorage,
+              agentFor: async goal =>
+                (await this.#prepared?.base.controller.getSession(goal.sessionId))?.machinery.getAgent(),
+              // The record is the one `read` returned, marked done.
+              store: async () => {
+                const store = await resolveGoalStore(this.#prepared?.base.controller.getMastra());
+                return store
+                  ? {
+                      read: threadId => readObjective(store, threadId),
+                      write: (threadId, record) => writeObjective(store, threadId, record as GoalObjectiveRecord),
+                    }
+                  : undefined;
+              },
+            });
+            return async (args: Parameters<typeof notifyStageChange>[0]) => {
+              await Promise.all([notifyStageChange(args), endPhaseGoal(args)]);
+            };
+          })(),
           ...(githubIntegration
             ? {
                 onAccepted: (args: { orgId: string; factoryProjectId: string; item: Card }) =>
@@ -1590,6 +1607,9 @@ export class MastraFactory {
         : null;
       requestContext.set('mastra__factoryMemorySettings', record satisfies MemorySettingsRecord | null);
     };
+    const workItemProcessor = workItemsReady
+      ? new FactoryWorkItemStateProcessor({ storage: workItemsStorage, boards, projects: factoryProjectsStorage })
+      : undefined;
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           configVersion,
@@ -1959,6 +1979,22 @@ export class MastraFactory {
                   });
                   return described?.contents;
                 },
+                workItemFor: async ({ orgId, threadId, resourceId, sessionId }) => {
+                  const binding = await workItemsStorage.findActiveRunBindingByThread({
+                    orgId,
+                    threadId,
+                    resourceId,
+                    sessionId,
+                  });
+                  if (!binding) return undefined;
+                  const described = await describeFactoryWorkItem({
+                    storage: workItemsStorage,
+                    boards,
+                    projects: factoryProjectsStorage,
+                    binding,
+                  });
+                  return described?.contents;
+                },
               }
             : {}),
           // The factory-sessions signal a Mastra run gets, read as the session's own tools see it.
@@ -2189,6 +2225,7 @@ export class MastraFactory {
             requestContext,
             storage: workItemsStorage,
             uiOrigin: reviewSourceUiOrigin,
+            boards,
             ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
           }),
         );
@@ -2428,8 +2465,8 @@ export class MastraFactory {
         // rather than following the host's Mastra Code settings toggle.
         knowledge: this.#config.knowledge ?? false,
         // The environment signal tells the agent which repositories its
-        // sandbox holds and where; the phase signal, when work items are on,
-        // comes after it.
+        // sandbox holds and where; the phase and work-item signals, when work
+        // items are on, come after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
           const channelReplyProcessor = new FactoryChannelReplyProcessor();
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
@@ -2437,7 +2474,13 @@ export class MastraFactory {
           const sessionsProcessor = sessionsState ? [sessionsState] : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
-            return [channelReplyProcessor, environmentProcessor, ...sessionsProcessor, factoryProcessor];
+            return [
+              channelReplyProcessor,
+              environmentProcessor,
+              ...sessionsProcessor,
+              factoryProcessor,
+              ...(workItemProcessor ? [workItemProcessor] : []),
+            ];
           }
           // Without work items there is no run binding, so the caller's row applies.
           try {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { FACTORY_RULE_SOURCES } from '@factory/core';
+import { FACTORY_RULE_SOURCES, phaseRunDecision } from '@factory/core';
 import type { FactoryStageRuleContext } from '@factory/core';
 import { createDefaultBoardRegistry, defaultBoards } from '../defaults.ts';
 import { PRODUCT_CONTEXT, productBoard } from './board.ts';
@@ -120,16 +120,17 @@ describe('Product board', () => {
       ['spec', 'product-spec'],
       ['phases', 'product-phases'],
     ] as const) {
-      const decision = await productBoard.rules[phase]?.manual?.onEnter?.(stageContext('intake', phase));
+      const decision = phaseRunDecision(productBoard, phase, stageContext('intake', phase));
       expect(decision).toMatchObject({ type: 'invokeSkill', role: PRODUCT_CONTEXT, skillName });
     }
   });
 
   describe('gates', () => {
-    const exit = (from: 'brief' | 'spec-review' | 'phases' | 'phases-review', source = 'manual') => {
-      const handler = productBoard.rules[from]?.[source as 'manual']?.onExit;
-      if (!handler) throw new Error(`${from} has no exit gate for ${source} cards`);
-      return async (context: FactoryStageRuleContext) => handler(context);
+    // The gates are the board's transition policy: they hold a move whoever makes it, from any source.
+    const exit = (_from: 'brief' | 'spec-review' | 'phases' | 'phases-review', _source = 'manual') => {
+      const policy = productBoard.transitionPolicy;
+      if (!policy) throw new Error('Product declares no gates');
+      return async (context: FactoryStageRuleContext) => policy(context as never);
     };
 
     it('holds Phases until the spec check passed, for cards from every source', async () => {

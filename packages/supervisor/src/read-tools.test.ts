@@ -2,8 +2,8 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { describe, expect, it } from 'vitest';
 
 import { createBoardRegistry } from '@factory/testing';
+import { commitDecisions, FactoryTransitionService } from '@factory/testing';
 import { createLifecycleTestRegistry } from '@factory/pipelines/testing';
-import { FactoryTransitionService } from '@factory/testing';
 import type { WorkItemsStorage } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
 import type { SupervisorMessageReader } from './read-tools.ts';
@@ -36,34 +36,15 @@ const builtInBoards = createBoardRegistry();
 /** Queue and lease one invokeSkill decision on a fresh card by moving it into Execute under a rule override. */
 async function queueClaimedPlan(storage: WorkItemsStorage, number: number) {
   const item = await createItem(storage, number);
-  const boards = createLifecycleTestRegistry({
-    execute: {
-      issue: {
-        onEnter: () => ({
-          type: 'invokeSkill',
-          role: 'plan',
-          skillName: 'factory-plan',
-          idempotencyKey: `plan-${number}`,
-        }),
-      },
-    },
-  });
-  const transitions = new FactoryTransitionService({
-    storage,
-    configVersion: 'rules-v1',
-    boards,
-  });
-  const result = await transitions.transition({
-    ...SCOPE,
+  // Phases only start their runner, so the decision is committed the way an accepted move persists it.
+  const result = await commitDecisions(storage, {
+    factoryProjectId: PROJECT_ID,
     workItemId: item.id,
-    board: 'work',
     stage: 'execute',
-    expectedRevision: item.revision,
-    actor: { type: 'human', id: 'user-1' },
-    ingress: { type: 'human', identity: `move-${number}` },
-    cause: 'board_drag',
+    ingress: `move-${number}`,
+    decisions: [{ type: 'invokeSkill', role: 'plan', skillName: 'factory-plan', idempotencyKey: `plan-${number}` }],
   });
-  expect(result.status).toBe('accepted');
+  expect(result.status).toBe('committed');
   const [claimed] = await storage.claimDeferredDecisions({
     ownerId: 'test',
     now: CLAIM_NOW,

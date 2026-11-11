@@ -18,9 +18,9 @@ Do not guess a file path. Factory deployments can assemble `MastraFactory` from 
 
 ## Preserve the public shape
 
-Installed board definitions exclusively own lifecycle handlers: use `phases.<phase>.onEnter.<source>` and `phases.<phase>.onExit.<source>` in `defineBoard()`. Sources are `issue`, `pullRequest`, `gitlabIssue`, `gitlabPullRequest`, and `manual`. Work installs automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
+A phase starts its work only through its stored `runner` (`skill`, `context`, `instructions`, `goal`); `onEnter`, `onExit` and `outcomes` in `defineBoard()` are ignored with a warning. Work installs automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
 
-Remove former global `rules.work` and `rules.review` configuration. There is no board override API. To customize Work, set `includeDefaultBoards: false` and install a same-ID board, preferably using the exported `workBoard` phases as the starting point. The Review board is retired: its pull requests live in Work's PR review phase. Keep the built-in phase names and roles unless the changed runtime and UI behavior is intentional. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares `submit_plan`, and custom boards inherit nothing.
+Remove former global `rules.work` and `rules.review` configuration. There is no board override API. To customize Work, set `includeDefaultBoards: false` and install a same-ID board, preferably using the exported `workBoard` phases as the starting point. The Review board is retired: its pull requests live in Work's PR review phase. Keep the built-in phase names and roles unless the changed runtime and UI behavior is intentional. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares none, and custom boards inherit nothing.
 
 By default, every integration arrival stays in its routed board's initial phase (Intake on Work) without starting or suggesting a run. This applies to GitHub and GitLab; explicit trusted GitHub review requests without an existing card go directly to PR review. Do not restore default arrival automation on the built-in boards.
 
@@ -53,15 +53,15 @@ backlog: {
 },
 ```
 
-Read `packages/pipelines/src/work/board.ts` for Work's topology (no skipping Planning, Building only through an approved plan, self-review returns to Building or parks in Intake) and `packages/pipelines/src/work/pr-review-rules.ts` for its PR review phase. Whether work is finished is the agent's instructions, not the board's: say when to move a card to Done in the phase's skill or `runner.instructions`.
+Read `packages/pipelines/src/work/board.ts` for Work's topology (no skipping Planning, Building only through an approved plan, self-review returns to Building or parks in Intake) and `factory-skills/factory-review/SKILL.md` for its PR review phase. Whether work is finished is the agent's instructions, not the board's: say when to move a card to Done in the phase's skill or `runner.instructions`.
 
-A working phase whose `exitTool` has a board tool rule (`tools[exitTool.id]`) leaves through that tool: anyone but a person asking to move the card on to another working phase is rejected unless the exit tool is auto-approved for the card. Work's Planning uses `submit_plan` with `autoApprove: false`, so every plan waits for a person. To approve plans without a person on your own board, set `exitTool.autoApprove` (optionally with `autoApproveWhen`); there is no project setting.
+A working phase with an `exitTool` holds the card until that tool succeeds (for `submit_plan`, with an approved plan) in the session working the card there: until then anyone but a person asking to move the card on to another working phase is rejected with `approval_required`. Once it succeeded, the agent moves the card with `factory_transition_work_item` (or a board tool rule for the tool moves it). `autoApprove`/`autoApproveWhen` only decide whether the tool approves itself or waits for a person. Work's Planning uses `submit_plan` with `autoApprove: false`, so every plan waits for a person. To approve plans without a person on your own board, set `exitTool.autoApprove` (optionally with `autoApproveWhen`); there is no project setting.
 
 `transitionPolicy` is deprecated: it still runs for boards that set it and logs one warning per board. Do not add new policies; express the flow with `nextPhases` and `exitTool`. Factory no longer records triage classification or acceptance: Work's triage agent sends open non-bugs back to Intake, and a person moving the card on is the approval. Custom boards inherit none of Work's rules through phase or role names.
 
 ## Configure board phase semantics
 
-Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal'`; working phases also require `role`. Read `packages/core/src/boards/define-board.ts` for validation and the derived helpers (`phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, `phaseForRole`) and `packages/core/src/boards/semantics.ts` for how runtime resolves an item's board and phase. Work's declaration lives in `packages/pipelines/src/work/board.ts`; its PR review handler is in `packages/pipelines/src/work/pr-review-rules.ts`.
+Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal'`; working phases also require `role`. Read `packages/core/src/boards/define-board.ts` for validation and the derived helpers (`phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, `phaseForRole`) and `packages/core/src/boards/semantics.ts` for how runtime resolves an item's board and phase. Work's declaration lives in `packages/pipelines/src/work/board.ts`; each phase starts its runner's skill, and the card's detail reaches the agent through the `factory-work-item` signal (`packages/harness-mastra/src/rules/work-item-state-processor.ts`).
 
 Runtime reads the installed board's declarations for consent arming, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, sweeps, and supervisor findings; nothing name-matches phases, and custom boards inherit nothing from Work. `initialPhase` must be resting. Unknown board or phase fails closed: consent is requested, nothing is cleaned up, no seat is started or revoked.
 
@@ -81,11 +81,11 @@ Keep the remaining limits explicit: `factory-ui` still uses built-in stages and 
 
 ## Change a built-in handler
 
-Integration overrides (`rules[event]` on the GitHub constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. There is no override mechanism for board-owned handlers, including Work's `submit_plan` tool-result rule: change the installed definition itself (`packages/pipelines/src/work/board.ts`, handler in `packages/pipelines/src/work/tool-rules.ts`) or install a custom board that declares its own `tools`.
+Integration overrides (`rules[event]` on the GitHub constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. To replace a board-owned handler, set `includeDefaultBoards: false` and install a same-ID board with the desired handler. Work declares no tool-result rules; to have a tool's result move a card on your replacement `work` board, declare `tools.<tool>.onResult` there.
 
 Before changing a built-in handler:
 
-1. Find and read it: GitHub handlers live in `packages/integration-github/src/default-rules.ts`, GitLab handlers in `packages/integration-gitlab/src/default-rules.ts`, Work's tool-result handler in `packages/pipelines/src/work/tool-rules.ts`, and Work lifecycle/policy defaults in `packages/pipelines/src/work/board.ts` and `packages/pipelines/src/work/pr-review-rules.ts`. Custom handlers live in their installed definitions.
+1. Find and read it: GitHub handlers live in `packages/integration-github/src/default-rules.ts`, GitLab handlers in `packages/integration-gitlab/src/default-rules.ts`, and Work lifecycle/policy defaults in `packages/pipelines/src/work/board.ts` (Work declares no tool-result handlers). Custom handlers live in their installed definitions.
 2. Decide whether the replacement must preserve part of that behavior explicitly.
 3. Use only fields exposed by the typed context. Do not reach into Factory storage or raw webhook payloads.
 4. Return `undefined` to allow the ingress with no decision, or return a typed rejection or bounded structured decision.

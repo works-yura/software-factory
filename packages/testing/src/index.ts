@@ -34,3 +34,6 @@ type TestBackend = NonNullable<NonNullable<Parameters<typeof createStorage>[0]>[
 export function createFactoryStorageForTests<T extends TestBackend = TestBackend>(storage?: T) {
   return createStorage<T>({ boards: createDefaultBoardRegistry(), ...(storage ? { storage } : {}) });
 }
+
+
+export { commitDecisions } from '@factory/runtime/test-support';

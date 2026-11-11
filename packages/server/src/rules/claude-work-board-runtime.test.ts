@@ -351,7 +351,9 @@ describe('Work board on the Claude Code harness', () => {
       expect.arrayContaining(['--resume', CLAUDE_SESSION, '--permission-mode', 'acceptEdits']),
     );
     expect(build.stdin).toMatch(/^The plan was approved\. Implement it\./);
-    expect(build.stdin).toContain('Implement the approved plan for the work item.');
+    // Building runs factory-build; Claude Code judges no goals, so the kickoff carries Building's goal.
+    expect(build.stdin).toContain('<skill name="factory-build">');
+    expect(build.stdin).toContain('Goal of this phase (keep working until it is met): Build the plan approved in Planning');
     expect(session?.pendingPlan).toBeUndefined();
     const built = await card();
     expect(built).toMatchObject({ stages: ['execute'], sessions: { work: { sessionId } } });
@@ -365,7 +367,7 @@ describe('Work board on the Claude Code harness', () => {
       expect(text).toContain('Triage: the save handler drops the phone field.');
       expect(text).toContain('Here is the plan.');
       expect(text).toContain('Built: the phone number is saved, with a test.');
-      expect(text).toContain('Implement the approved plan for the work item.');
+      expect(text).toContain('Factory Build');
     });
     // The chat opens the session's thread under the Factory's shared memory resource.
     expect(await memory!.getThreadById({ threadId: sessionId })).toMatchObject({ resourceId: project.id });

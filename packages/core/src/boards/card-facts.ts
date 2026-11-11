@@ -1,11 +1,15 @@
-import type { ExternalWorkItemSource } from '../card.ts';
+import type { ExternalWorkItemSource, WorkItemSourceRow } from '../card.ts';
 import type { RuleFacts } from '../rules/rule-group.ts';
 import { authorTrusted } from '../rules/types.ts';
+import { openChangeRequests } from '../change-requests.ts';
+import { newestOpenPullRequestNumber } from './semantics.ts';
 
 /** The provider facts a condition reads; the stored card's `workItem` satisfies it. */
 export type CardSourceFacts = {
   readonly labels: readonly string[];
   readonly author: string | null;
+  /** The card's sources, so a condition can see an attached open pull request. */
+  readonly sources?: readonly WorkItemSourceRow[];
 };
 
 /** The card fields a condition reads; a stored card satisfies it. */
@@ -35,12 +39,16 @@ export function cardRuleFacts(item: FactsCard): RuleFacts {
   const provider = source && item.workItem ? item.workItem : undefined;
   const labels = provider ? [...provider.labels] : metadataLabels(metadata);
   const author = provider ? provider.author : typeof metadata.author === 'string' ? metadata.author : null;
+  // The open change request: the newest one Factory opened for the card, else an attached open one.
+  const pullRequest =
+    openChangeRequests(item.metadata).at(-1)?.number ?? newestOpenPullRequestNumber({ workItem: item.workItem ?? null });
   return {
     'item.labels': labels,
     'item.title': item.title,
     ...(author !== null ? { 'item.author': author } : {}),
     // Trust is Factory's stamp, so it stays on the board item.
     'author.trusted': authorTrusted(item.metadata),
+    ...(pullRequest !== null ? { 'item.pullRequest': pullRequest } : {}),
     ...(source
       ? {
           'source.kind': source.type === 'pull-request' ? 'pull_request' : source.type,

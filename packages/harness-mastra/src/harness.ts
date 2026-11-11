@@ -72,6 +72,13 @@ export function createMastraHarness(controller: MastraFactoryController): AgentH
       return requestContext;
     },
 
+    // Mastra judges a thread's goal in its run loop; the session's own model judges it.
+    goals(agentSession: AgentSession) {
+      const session = mastraSession(agentSession);
+      const judgeModelId = session.model.get() || undefined;
+      return { goals: session.machinery.getAgent(), ...(judgeModelId ? { judgeModelId } : {}) };
+    },
+
     async findSkill(agentSession: AgentSession, name: string): Promise<AgentSkill | undefined> {
       const skill = await findMastraSkill(mastraSession(agentSession), name);
       if (!skill) return undefined;

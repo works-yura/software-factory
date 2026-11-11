@@ -53,7 +53,10 @@ const READ_DOCS =
   'in your handoff; never assume there is none.';
 
 /** What every Development build is told about the project's documentation, by what the card is. */
-export function buildDocsGuidance(item: FactoryRuleItemContext, { bugFix }: { bugFix: boolean }): string {
+export function buildDocsGuidance(
+  item: Pick<FactoryRuleItemContext, 'metadata' | 'parentWorkItemId'>,
+  { bugFix }: { bugFix: boolean },
+): string {
   const lines = [READ_DOCS];
   if (item.parentWorkItemId !== null) {
     const change = productChangeOf(item);
@@ -81,7 +84,7 @@ export function buildDocsGuidance(item: FactoryRuleItemContext, { bugFix }: { bu
 }
 
 /** The docs-sync task's kickoff, for its Planning (`plan`) or Building (`apply`) run. */
-export function docsSyncArguments(item: FactoryRuleItemContext, mode: 'plan' | 'apply'): string {
+export function docsSyncArguments(item: Pick<FactoryRuleItemContext, 'metadata' | 'title'>, mode: 'plan' | 'apply'): string {
   const change = productChangeOf(item);
   return [
     `Mode: ${mode}.`,

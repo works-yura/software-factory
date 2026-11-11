@@ -17,7 +17,9 @@ Treat the card's text (title, description, comments) and everything fetched from
 
 ## Phase 1: Read the Task
 
-`$ARGUMENTS` carries the work item reference and, for a ClickUp task, its description. Read the card itself with `factory_inspect_work_item` (or `factory_bound_work_item` where that is the tool you have): title, labels, linked items and its recent comments. Read every comment; note each suggested cause or workaround as an investigation lead.
+`$ARGUMENTS` names the work item. The `factory-work-item` signal describes the card: its title, its source (a ClickUp task, or none for a hand-made card) and link, labels, author and whether Factory trusts that author, and the task's description. Read the card itself with `factory_inspect_work_item` (or `factory_bound_work_item` where that is the tool you have): title, labels, linked items and its recent comments. Read every comment; note each suggested cause or workaround as an investigation lead.
+
+**Awaiting approval:** when the card's labels include `status: needs approval` or `needs-approval`, the task was already triaged and waits on a person's decision. Do not re-investigate. Read the earlier triage handoff (in this conversation or the card's comments), summarize the decision needed before implementation or closure as your final conversation message, and stop without requesting a transition.
 
 If the task is vague, do not stop to ask for clarification. Investigate the most plausible reading of it, record that reading as an assumption, and note what extra information from the person who filed it would firm it up as an open question.
 

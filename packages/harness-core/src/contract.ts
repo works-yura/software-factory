@@ -68,7 +68,40 @@ export interface PlanDecision {
  */
 export type AgentSignalInput =
   | { id: string; type: 'user'; tagName: 'user'; contents: string }
-  | { id: string; type: 'reactive'; tagName: 'skill'; attributes: { name: string }; contents: string };
+  | { id: string; type: 'reactive'; tagName: 'skill'; attributes: { name: string }; contents: string }
+  /** Shows the thread's goal to the agent: the objective a phase's runs pursue. */
+  | {
+      id: string;
+      type: 'system-reminder';
+      contents: string;
+      attributes: { type: 'goal' };
+      metadata: { goalId?: string; goalMaxTurns?: number; judgeModelId?: string };
+    };
+
+/** A thread's goal: the objective its runs pursue, judged in-loop until met. */
+export interface AgentGoalObjective {
+  id?: string;
+  objective: string;
+  status: 'active' | 'paused' | 'done';
+  maxRuns?: number;
+  judgeModelId?: string;
+}
+
+/**
+ * A harness that judges a goal in its run loop. A phase whose runner sets a goal holds it here;
+ * a harness without one gets the objective in the kickoff instead and runs it once.
+ */
+export interface AgentGoals {
+  getObjective(input: { threadId: string }): Promise<AgentGoalObjective | undefined>;
+  setObjective(
+    objective: string,
+    options: { id: string; threadId: string; resourceId?: string; maxRuns?: number; judgeModelId?: string },
+  ): Promise<AgentGoalObjective | undefined>;
+  updateObjectiveOptions(input: {
+    threadId: string;
+    status: AgentGoalObjective['status'];
+  }): Promise<AgentGoalObjective | undefined>;
+}
 
 export interface AgentSignalResult {
   accepted: Promise<{ accepted: true; runId?: string; action?: string }>;
@@ -163,4 +196,6 @@ export interface AgentHarness {
   runContext(session: AgentSession, input: AgentRunContextInput): AgentRunContext;
   /** Looks a skill up in the session's workspace, refreshing what the harness caches. */
   findSkill(session: AgentSession, name: string): Promise<AgentSkill | undefined>;
+  /** The session's goal facet and the model that judges it; undefined when the harness has no goals. */
+  goals?(session: AgentSession): { goals: AgentGoals; judgeModelId?: string } | undefined;
 }

@@ -4,9 +4,9 @@ import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import { isWorkBoardPhase, workBoard } from './work/board.ts';
 
 export { createDefaultBoardRegistry, defaultBoards } from './defaults.ts';
-export { hasRecordedVerdict, reviewPullRequest, reviewSessionBranch } from './work/pr-review-rules.ts';
 export {
   cardOwnsBranch,
+  isSafeBranchName,
   isWorkItemBranch,
   newestOwnedOpenPullRequestNumber,
   pullRequestBranch,
@@ -42,19 +42,19 @@ export type {
   ProductDocumentType,
   ProductSectionWaiver,
 } from './product/documents.ts';
-export { isWorkBoardPhase, workBoard, workPullRequestCardRejection } from './work/board.ts';
+export { BUILD_OBJECTIVE, isWorkBoardPhase, OWN_CARD_HAND_OFF, workBoard, workPullRequestCardRejection } from './work/board.ts';
 export type { WorkBoardPhase } from './work/board.ts';
 export {
+  buildDocsGuidance,
   changeFolderOf,
   DOCS_SKILL,
+  docsSyncArguments,
   isDocsSyncCard,
   PRODUCT_CHANGE_KEY,
   PRODUCT_DOCS_SYNC_KEY,
   productChangeOf,
 } from './work/docs.ts';
 export { workLaneForRole, workStageCarries } from './work/legacy-plan-role.ts';
-export { SELF_REVIEW_ROUND_LIMIT } from './work/phase-rules.ts';
-export { openApprovedChangeRequest } from './work/tool-rules.ts';
 
 /** A registry with Work installed, plus any boards the host adds. */
 export function createPipelines(boards: readonly InstalledBoard[] = []): BoardRegistry {

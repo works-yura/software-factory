@@ -98,6 +98,8 @@ describe('resolveBoardToolRule', () => {
     });
     const boards = createBoardRegistry({ boards: [release] });
     expect(resolveBoardToolRule(boards, 'release', 'ship_it')).toBe(onResult);
+    // Work declares no tool rules: Planning's exit tool moves the card instead.
+    expect(resolveBoardToolRule(boards, 'work', 'factory_record_review_verdict')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'work', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'review', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'release', 'submit_plan')).toBeUndefined();

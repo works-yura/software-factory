@@ -177,3 +177,16 @@ export function newestOwnedOpenPullRequestNumber(item: SessionedItem & BranchedI
   );
   return (open.length ? pullRequestSourceNumber(open.at(-1)!) : undefined) ?? null;
 }
+
+/** Whether a provider-reported branch name is safe to show an agent or pass to git. */
+export function isSafeBranchName(value: string): boolean {
+  return (
+    /^[A-Za-z0-9][A-Za-z0-9._/@+-]*$/.test(value) &&
+    !value.includes('..') &&
+    !value.includes('//') &&
+    !value.includes('@{') &&
+    !value.endsWith('.') &&
+    !value.endsWith('/') &&
+    !value.endsWith('.lock')
+  );
+}

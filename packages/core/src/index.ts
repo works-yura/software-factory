@@ -6,6 +6,7 @@ export {
   DEFAULT_PHASE_CONTEXT,
   defineBoard,
   FACTORY_AGENT_ID,
+  FACTORY_PHASE_TOOLS,
   isDefinedBoard,
 } from './boards/define-board.ts';
 export type { AnyBoardConfig } from './boards/define-board.ts';
@@ -29,7 +30,14 @@ export type {
   IntakeTargetProblem,
 } from './boards/intake-routing.ts';
 export { holdsLegacyPlanner, LEGACY_PLAN_ROLE, legacyPlanRoleFor } from './boards/legacy-plan-role.ts';
-export { autoApprovedExitTool, startsInAutoPhase } from './boards/phase-automation.ts';
+export {
+  autoApprovedExitTool,
+  exitToolSucceeded,
+  PHASE_EXIT_METADATA_KEY,
+  startsInAutoPhase,
+} from './boards/phase-automation.ts';
+export { phaseRunDecision } from './boards/phase-runner.ts';
+export type { PhaseEntry } from './boards/phase-runner.ts';
 export type {
   BoardChangeRequests,
   BoardDefinition,
@@ -38,9 +46,11 @@ export type {
   BoardPhase,
   BoardPhaseDefinition,
   BoardPhaseExitTool,
+  BoardPhaseGoal,
   BoardPhaseKind,
   BoardPhaseRunner,
   BoardSourceClosed,
+  FactoryPhaseTool,
   BoardToolResultRuleHandler,
   BoardToolRule,
   BoardToolRules,
@@ -61,6 +71,7 @@ export {
   PULL_REQUEST_REVIEW_PHASE,
   pullRequestSourceNumber,
   pullRequestSources,
+  hasRecordedVerdict,
   reviewedChangeRequest,
   reviewedPullRequest,
   sourceExternalId,
@@ -106,13 +117,12 @@ export {
 } from './rules/event-rules.ts';
 export { cardRuleGroupSchema, evaluateRuleGroup, RULE_OPERATORS, ruleGroupSchema } from './rules/rule-group.ts';
 export type { RuleCondition, RuleFacts, RuleGroup, RuleOperator } from './rules/rule-group.ts';
-export { resolveFactoryStageRules } from './rules/resolve.ts';
-export type { ResolvedFactoryStageRule } from './rules/resolve.ts';
 export {
   AUTO_TRIAGED_LABEL,
   authorTrusted,
   externallyAuthored,
   externallyAuthoredWorkItem,
+  SELF_REVIEW_ROUND_LIMIT,
   changeRequestFlow,
   externalSourceForWorkItem,
   FACTORY_GITHUB_EVENTS,
@@ -138,7 +148,6 @@ export {
   workItemSource,
 } from './rules/types.ts';
 export type {
-  FactoryBoardRuleLeaf,
   FactoryBoundRuleContext,
   FactoryCommitDecision,
   FactoryDismissStaleReviewsDecision,

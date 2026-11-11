@@ -47,7 +47,7 @@ describe('defineBoard', () => {
     },
   );
 
-  it('normalizes linear and outcome transitions', () => {
+  it('normalizes linear and outcome transitions into unnamed moves', () => {
     const board = defineBoard({
       id: 'release',
       title: 'Release',
@@ -65,11 +65,12 @@ describe('defineBoard', () => {
     });
 
     expect(board.transitions.prepare).toEqual([{ outcome: null, to: 'verify' }]);
+    // Outcome names are gone: only their targets survive, as allowed moves.
     expect(board.transitions.verify).toEqual([
-      { outcome: 'approved', to: 'done' },
-      { outcome: 'rejected', to: 'prepare' },
+      { outcome: null, to: 'done' },
+      { outcome: null, to: 'prepare' },
     ]);
-    expect(board.rules).toEqual({});
+    expect(board).not.toHaveProperty('rules');
     expect(board.allowsTransition('prepare', 'verify')).toBe(true);
     expect(board.allowsTransition('prepare', 'done')).toBe(false);
     expect(board.allowsTransition('verify', 'verify')).toBe(true);
@@ -80,37 +81,28 @@ describe('defineBoard', () => {
     expect(board.allowsTransition('prepare', 'done')).toBe(false);
   });
 
-  it('clones and freezes the public phase and rule graphs', () => {
-    const originalHandler = () => undefined;
-    const replacementHandler = () => ({ type: 'notify', message: 'mutated' }) as const;
+  it('clones and freezes the public phase graph, keeping no declared handlers', () => {
     const phases = {
       start: {
         title: 'Start',
         kind: 'resting',
-        outcomes: { approved: 'done' },
-        onEnter: { manual: originalHandler },
+        nextPhases: ['done'],
+        onEnter: { manual: () => undefined },
       },
       done: { title: 'Done', kind: 'terminal' },
     } as const;
     const board = defineBoard({ id: 'immutable', title: 'Immutable', initialPhase: 'start', phases });
 
     expect(Object.isFrozen(board.phases.start)).toBe(true);
-    expect(Object.isFrozen(board.phases.start.outcomes)).toBe(true);
-    expect(Object.isFrozen(board.phases.start.onEnter)).toBe(true);
-    expect(Object.isFrozen(board.rules.start)).toBe(true);
-    expect(Object.isFrozen(board.rules.start?.manual)).toBe(true);
+    expect(Object.isFrozen(board.phases.start.nextPhases)).toBe(true);
+    expect(board.phases.start).not.toHaveProperty('onEnter');
 
-    expect(Reflect.set(phases.start.outcomes, 'approved', 'start')).toBe(true);
-    expect(Reflect.set(phases.start.onEnter, 'manual', replacementHandler)).toBe(true);
-    expect(board.phases.start.outcomes?.approved).toBe('done');
-    expect(board.phases.start.onEnter?.manual).toBe(originalHandler);
-    expect(board.rules.start?.manual?.onEnter).toBe(originalHandler);
+    expect(Reflect.set(phases.start.nextPhases, 0, 'start')).toBe(true);
+    expect(board.phases.start.nextPhases).toEqual(['done']);
 
     expect(Reflect.set(board.phases.start, 'title', 'Mutated')).toBe(false);
     expect(Reflect.set(board.phases.start, 'kind', 'working')).toBe(false);
-    expect(Reflect.set(board.phases.start.outcomes!, 'approved', 'start')).toBe(false);
-    expect(Reflect.set(board.rules.start!, 'manual', {})).toBe(false);
-    expect(Reflect.set(board.rules.start!.manual!, 'onEnter', replacementHandler)).toBe(false);
+    expect(Reflect.set(board.phases.start.nextPhases, 0, 'start')).toBe(false);
   });
 
   it('rejects definitions whose transitions target missing phases', () => {

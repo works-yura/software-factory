@@ -29,6 +29,7 @@
 
 ## Де в коді
 
-- Дошка й правила фаз: `packages/pipelines/src/work/{board,phase-rules,pr-review-rules}.ts`; документація: `packages/pipelines/src/work/docs.ts`.
+- Дошка: `packages/pipelines/src/work/board.ts` — кожна фаза запускає скіл свого виконавця (`runner`); Building — як мету (`BUILD_OBJECTIVE`). Документація: `packages/pipelines/src/work/docs.ts`.
+- Картку агент бачить у сигналі `factory-work-item` (`packages/harness-mastra/src/rules/work-item-state-processor.ts`): джерела, стан Factory, блок Docs; задача злиття документації — блок «Docs sync».
 - Intake ClickUp: `packages/integration-clickup/src/{intake,poller}.ts`.
 - Скіли: `packages/harness-mastra/factory-skills/factory-*`.

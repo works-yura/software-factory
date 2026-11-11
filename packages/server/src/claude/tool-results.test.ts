@@ -9,7 +9,7 @@ import { createInMemorySessionStore } from '@factory/harness-claude-code';
 import { fakeClaude } from '@factory/harness-claude-code/__fixtures__/fake-claude';
 import { attachClaudeSessionToUi } from '@factory/harness-claude-code-ui';
 import { FactoryPhaseStateProcessor } from '@factory/harness-mastra';
-import { createDefaultBoardRegistry } from '@factory/pipelines';
+import { createToolRuleTestRegistry } from '@factory/pipelines/testing';
 import { createFactoryStorageForTests } from '@factory/testing';
 
 import { createClaudeFactoryHarness } from './harness.ts';
@@ -79,7 +79,15 @@ async function setup(turn: string[]) {
   const processor = new FactoryPhaseStateProcessor({
     configVersion: 'claude-tool-results-v1',
     storage: workItems,
-    boards: createDefaultBoardRegistry(),
+    // Work declares no tool rules; a board's own rule for the verdict tool stands in for one.
+    boards: createToolRuleTestRegistry({
+      factory_record_review_verdict: {
+        onResult: context =>
+          context.result.status === 'success'
+            ? { type: 'invokeSkill', idempotencyKey: `${context.ingress.id}:wake`, role: 'work', prompt: 'Open it.' }
+            : undefined,
+      },
+    }),
     bareToolName: claudeFactoryToolName,
     messageReader: {
       listMessages: async input => (await chatStore.getStore('memory'))!.listMessages(input as never) as never,
@@ -116,7 +124,7 @@ async function setup(turn: string[]) {
 }
 
 describe('Board tool-result rules on a Claude Code session', () => {
-  it('wakes the builder when the self-review approves, as on a Mastra run', async () => {
+  it("runs the board's rule for a tool the Claude session called, as on a Mastra run", async () => {
     const { session, reconcile, decisions } = await setup(verdictTurn());
     await session.sendMessage({ content: 'Review it.' });
     await vi.waitFor(async () => {

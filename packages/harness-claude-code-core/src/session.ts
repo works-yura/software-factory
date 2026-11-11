@@ -1338,6 +1338,8 @@ export class ClaudeCodeSession implements AgentSession {
  * closing tag in the contents is escaped.
  */
 function signalText(input: AgentSignalInput): string {
+  // The harness exposes no goals, so the dispatcher puts a phase's goal in the kickoff instead.
+  if (input.type === 'system-reminder') throw new Error('Claude Code holds no goals: a goal reminder cannot reach it.');
   if (input.tagName !== 'skill') return input.contents;
   const contents = input.contents.replace(/<\/skill\s*>/gi, match => match.replace('<', '&lt;').replace('>', '&gt;'));
   return `<skill name="${input.attributes.name.replaceAll('"', '&quot;')}">\n${contents}\n</skill>`;

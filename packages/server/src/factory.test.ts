@@ -35,7 +35,7 @@ import { invalidateCustomProvidersSnapshots } from '@factory/api';
 import type * as projectRoutesModule from '@factory/api';
 import type * as surfaceModule from '@factory/api';
 import type * as tenantCredentialsModule from '@factory/credentials';
-import { FactoryPhaseStateProcessor } from '@factory/harness-mastra';
+import { FactoryPhaseStateProcessor, FactoryWorkItemStateProcessor } from '@factory/harness-mastra';
 import type * as runtimeModule from '@factory/runtime';
 import { DEFAULT_FACTORY_CONFIG_VERSION, defineBoard } from '@factory/core';
 import { createFactorySecretEncryption } from '@factory/store';
@@ -454,10 +454,12 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('controller', { getState: () => ({ factoryProjectId: 'fp-1' }), emitEvent: vi.fn() });
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(4);
+    expect(first).toHaveLength(5);
     expect(first[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
     expect(first[1]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(first[2]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(first[3]).toBeInstanceOf(FactoryPhaseStateProcessor);
+    expect(first[4]).toBeInstanceOf(FactoryWorkItemStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });

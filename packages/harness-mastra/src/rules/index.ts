@@ -1,5 +1,3 @@
-export { resolveFactoryStageRules } from '@factory/core';
-export type { ResolvedFactoryStageRule } from '@factory/core';
 export {
   FACTORY_GITHUB_EVENTS,
   FACTORY_RULE_BOARDS,
@@ -9,7 +7,6 @@ export {
   isFactoryRuleStage,
 } from '@factory/core';
 export type {
-  FactoryBoardRuleLeaf,
   FactoryBoundRuleContext,
   FactoryCommitDecision,
   FactoryGithubEventName,

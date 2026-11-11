@@ -1,13 +1,41 @@
 import { defineBoard } from '@factory/core';
-import type { BoardDefinition, BoardRegistry, ProviderWorkItem } from '@factory/core';
+import type {
+  BoardDefinition,
+  BoardPhaseDefinition,
+  BoardPhaseRunner,
+  BoardRegistry,
+  BoardTransitionPolicy,
+  ProviderWorkItem,
+} from '@factory/core';
 
 export { createTestBoard } from '@factory/core/testing';
 
 import { workBoard } from './work/board.ts';
+import type { WorkBoardPhase } from './work/board.ts';
 
 // Unit tests inject a registry directly to exercise Work-specific runtime policies.
 // Production installation still reserves built-in IDs and has no override API.
-export function createLifecycleTestRegistry(handlers: BoardDefinition<string, string>['rules']): BoardRegistry {
+/** The lifecycle registry's Work board with a board policy standing in for the rules a move is evaluated against. */
+export function createPolicyTestRegistry(transitionPolicy: BoardTransitionPolicy): BoardRegistry {
+  const lifecycle = createLifecycleTestRegistry().get('work')!;
+  const board = defineBoard({
+    id: 'work',
+    name: 'Work',
+    initialPhase: 'intake',
+    phases: lifecycle.phases as unknown as Record<string, BoardPhaseDefinition<string>>,
+    transitionPolicy,
+  });
+  return new Map([[board.id, board]]);
+}
+
+/**
+ * Work with every phase allowed to move to every other, and the given phases' stored fields
+ * overridden (a runner, …). Lifecycle tests jump straight to the phase they
+ * exercise; the Work board's own topology is tested against workBoard itself.
+ */
+export function createLifecycleTestRegistry(
+  overrides: Partial<Record<WorkBoardPhase, { runner?: BoardPhaseRunner }>> = {},
+): BoardRegistry {
   const board = defineBoard({
     id: 'work',
     name: 'Work lifecycle fixture',
@@ -16,36 +44,20 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
     changeRequests: workBoard.changeRequests,
     triageClassification: workBoard.triageClassification,
     phases: Object.fromEntries(
-      Object.entries(workBoard.phases).map(([stage, phase]) => {
-        const leaves = Object.entries(handlers[stage] ?? {});
-        return [
-          stage,
-          {
-            ...phase,
-            // Lifecycle tests jump straight to the phase whose handlers they exercise; the
-            // Work board's own topology is tested against workBoard itself.
-            nextPhases: Object.keys(workBoard.phases).filter(other => other !== stage),
-            onEnter: {
-              ...phase.onEnter,
-              ...Object.fromEntries(
-                leaves.filter(([, leaf]) => leaf && 'onEnter' in leaf).map(([source, leaf]) => [source, leaf?.onEnter]),
-              ),
-            },
-            onExit: {
-              ...phase.onExit,
-              ...Object.fromEntries(
-                leaves.filter(([, leaf]) => leaf && 'onExit' in leaf).map(([source, leaf]) => [source, leaf?.onExit]),
-              ),
-            },
-          },
-        ];
-      }),
+      Object.entries(workBoard.phases).map(([stage, phase]) => [
+        stage,
+        {
+          ...phase,
+          nextPhases: Object.keys(workBoard.phases).filter(other => other !== stage),
+          ...overrides[stage as WorkBoardPhase],
+        } as BoardPhaseDefinition<string>,
+      ]),
     ),
   });
   return new Map<string, BoardDefinition<string, string>>([[board.id, board]]);
 }
 
-/** Work board with its tool-result rules replaced, for exercising the processor's tool ingress. */
+/** Work board with the given tool-result rules, for exercising the processor's tool ingress. */
 export function createToolRuleTestRegistry(tools: BoardDefinition<string, string>['tools']): BoardRegistry {
   const board = defineBoard({
     id: 'work',

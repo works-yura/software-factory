@@ -56,6 +56,8 @@ import type { FactoryRunEndReporter } from './run-end-report.ts';
 import { decisionOvertaken } from './decision-applicability.ts';
 import { isStatusEventDecision } from '@factory/core';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from '@factory/store';
+import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.ts';
+import type { AgentGoalObjective } from '@factory/harness';
 import type { FactoryTransitionService } from './transition-service.ts';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from '@factory/core';
 import { authorTrusted, externalSourceForWorkItem, FACTORY_RULE_STAGES, workItemSource } from '@factory/core';
@@ -1038,6 +1040,110 @@ export class FactoryDecisionDispatcher {
     this.#reviewReplayed.add(record);
   }
 
+  /**
+   * Holds the goal a phase's run pursues on the session's thread, and names it on the card so
+   * leaving the phase ends it. Keyed on the decision: a retry finds the goal already held.
+   * Undefined when the harness judges no goals: the kickoff then carries the objective itself.
+   */
+  async #setPhaseGoal(
+    record: FactoryDeferredDecisionRecord,
+    goal: { objective: string; maxRuns?: number },
+    session: AgentSession,
+    binding: FactoryRunBindingRecord,
+  ): Promise<AgentGoalObjective | undefined> {
+    const facet = this.#harness.goals?.(session);
+    if (!facet) return undefined;
+    // The phase this run is for, read before the goal exists (the kickoff was checked against it):
+    // reading it afterwards could stamp the phase the card moved to meanwhile.
+    const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
+    const phaseKey = item?.stages.length === 1 ? item.stages[0] : undefined;
+    const objective = await startPhaseGoal(facet.goals, {
+      threadId: binding.threadId,
+      resourceId: binding.resourceId,
+      goalId: record.id,
+      objective: goal.objective,
+      maxRuns: goal.maxRuns,
+      // Factory has no judge setting of its own: the session's model judges its goal.
+      judgeModelId: facet.judgeModelId,
+    });
+    if (!objective) {
+      throw new FactoryDispatchError('run_configuration_invalid', 'The Factory session has no storage to hold a goal.');
+    }
+    if (!item || !phaseKey) return objective;
+    const stamp = { phaseKey, goalId: record.id, threadId: binding.threadId, sessionId: binding.sessionId };
+    if (phaseGoalOf(item.metadata)?.goalId !== record.id) {
+      await this.#storage.update({
+        orgId: record.orgId,
+        id: item.id,
+        userId: 'factory',
+        patch: { metadata: { [PHASE_GOAL_METADATA_KEY]: stamp } },
+      });
+    }
+    // A move that committed before the stamp landed found no goal to end: end it here instead.
+    const after = await this.#storage.get({ orgId: record.orgId, id: item.id });
+    if (after?.stages.length !== 1 || after.stages[0] !== phaseKey) {
+      await endPhaseGoal(stamp, { agentFor: async () => facet.goals, store: async () => undefined });
+      throw new FactoryDecisionSuperseded();
+    }
+    return objective;
+  }
+
+  /**
+   * Shows the goal in the thread once its run has the kickoff. A goal whose reminder never landed
+   * is paused rather than left judging a run nobody was told about; the retry resumes it.
+   */
+  async #remindPhaseGoal(
+    record: FactoryDeferredDecisionRecord,
+    goal: AgentGoalObjective,
+    session: AgentSession,
+    binding: FactoryRunBindingRecord,
+    requestContext: AgentRunContext,
+  ): Promise<void> {
+    const facet = this.#harness.goals?.(session);
+    if (!facet) return;
+    const reminderId = `${record.id}:goal`;
+    if ((await session.thread.listActiveMessages()).some(message => message.id === reminderId)) return;
+    const agent = facet.goals;
+    if (goal.status === 'paused') await agent.updateObjectiveOptions({ threadId: binding.threadId, status: 'active' });
+    try {
+      const settled = await session.sendSignal(
+        {
+          id: reminderId,
+          type: 'system-reminder',
+          contents: goal.objective,
+          attributes: { type: 'goal' },
+          metadata: {
+            ...(goal.id ? { goalId: goal.id } : {}),
+            ...(goal.maxRuns !== undefined ? { goalMaxTurns: goal.maxRuns } : {}),
+            ...(goal.judgeModelId ? { judgeModelId: goal.judgeModelId } : {}),
+          },
+        },
+        { requestContext, requireDelivery: true },
+      ).accepted;
+      if (settled.action !== 'wake' && settled.action !== 'deliver') {
+        throw new FactoryDispatchError(
+          'notification_delivery_failed',
+          `Factory goal reminder did not reach the agent (${String(settled.action)}).`,
+        );
+      }
+    } catch (error) {
+      await agent.updateObjectiveOptions({ threadId: binding.threadId, status: 'paused' });
+      throw error;
+    }
+  }
+
+  /** A retried decision whose kickoff already landed: make sure its goal is held and shown. */
+  async #startPhaseGoal(
+    record: FactoryDeferredDecisionRecord,
+    goal: { objective: string; maxRuns?: number },
+    session: AgentSession,
+    binding: FactoryRunBindingRecord,
+    requestContext: AgentRunContext,
+  ): Promise<void> {
+    const objective = await this.#setPhaseGoal(record, goal, session, binding);
+    if (objective) await this.#remindPhaseGoal(record, objective, session, binding, requestContext);
+  }
+
   async #reviewQueuedOnce(record: FactoryDeferredDecisionRecord, decision: unknown): Promise<void> {
     if (this.#reviewQueued.has(record)) return;
     this.#reviewQueued.add(record);
@@ -1267,13 +1373,19 @@ export class FactoryDecisionDispatcher {
               `Factory binding ${binding.id} changed while waiting for its open run to end.`,
             );
           }
-          if (await kickoffLanded()) return this.#replayLanded(record, decision, session, runStillActive);
+          if (await kickoffLanded()) {
+            if (decision.goal) await this.#startPhaseGoal(record, decision.goal, session, binding, requestContext);
+            return this.#replayLanded(record, decision, session, runStillActive);
+          }
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
           const kickoffContents = await withWorkItemFeed(
             this.#feedReader,
             { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
-            resolved.contents,
+            // A harness that judges no goals gets the phase's objective in the kickoff itself.
+            decision.goal && !this.#harness.goals?.(session)
+              ? `${resolved.contents}\n\nGoal of this phase (keep working until it is met): ${decision.goal.objective}`
+              : resolved.contents,
           );
           // A skill kickoff is system-generated, not something the human typed: send it
           // as a typed `skill` signal so the model sees `<skill name="…">` and traces
@@ -1287,7 +1399,10 @@ export class FactoryDecisionDispatcher {
                 }
               : { type: 'user' as const, tagName: 'user' as const };
           // The feed read is async storage I/O; the card can move while it runs.
-          if (await kickoffLanded()) return this.#replayLanded(record, decision, session, runStillActive);
+          if (await kickoffLanded()) {
+            if (decision.goal) await this.#startPhaseGoal(record, decision.goal, session, binding, requestContext);
+            return this.#replayLanded(record, decision, session, runStillActive);
+          }
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           await this.#reviewQueuedOnce(record, decision);
           if (decision.cancelInFlight && session.stream.isActive()) session.abort();
@@ -1313,6 +1428,8 @@ export class FactoryDecisionDispatcher {
             );
             if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           }
+          // Held before the kickoff lands, so the goal judge sees the objective from the run's first turn.
+          const goal = decision.goal ? await this.#setPhaseGoal(record, decision.goal, session, binding) : undefined;
           // The run's own verdict, not the delivery's. A signal can reach the
           // agent perfectly and the run still die on a provider error or be
           // cancelled mid-flight; without this the decision reports success and
@@ -1384,6 +1501,7 @@ export class FactoryDecisionDispatcher {
               run.arm();
               settled = await sendKickoff();
             }
+            if (goal) await this.#remindPhaseGoal(record, goal, session, binding, requestContext);
             await this.#recordRunStart(
               session,
               binding,

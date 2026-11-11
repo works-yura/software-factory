@@ -183,7 +183,7 @@ describe('GitHub without an App: the pull request Factory opened, by polling', (
     });
     expect(await run.decisions()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ decision: expect.objectContaining({ type: 'transition', stage: 'review' }) }),
+        expect.objectContaining({ decision: expect.objectContaining({ type: 'transition', stage: 'pr-review' }) }),
       ]),
     );
 

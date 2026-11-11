@@ -5,6 +5,8 @@ export * from './dispatcher.ts';
 export type { HarnessSessionState } from './harness-state.ts';
 export * from './board-writes.ts';
 export * from './project-boards.ts';
+export * from './phase-goal.ts';
+export * from './work-migrations.ts';
 export * from './run-audit.ts';
 export type * from './run-end-report.ts';
 export * from './skills/service.ts';

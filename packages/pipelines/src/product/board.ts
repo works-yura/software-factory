@@ -1,5 +1,5 @@
-import { compileBoardDefinition, FACTORY_RULE_SOURCES } from '@factory/core';
-import type { BoardPhaseDefinition, FactoryRuleHandler, FactoryRuleSource, FactoryStageRuleContext } from '@factory/core';
+import { compileBoardDefinition } from '@factory/core';
+import type { BoardPhaseDefinition, BoardTransitionPolicy, BoardTransitionPolicyResult } from '@factory/core';
 
 import { productChildWorkItemIds, productDocumentGateFailure } from './documents.ts';
 import type { ProductDocumentType } from './documents.ts';
@@ -32,33 +32,38 @@ export const PRODUCT_LEGACY_PHASE_RENAMES: Readonly<Record<string, ProductBoardP
  */
 export const PRODUCT_CONTEXT = 'product';
 
-type StageHandler = FactoryRuleHandler<FactoryStageRuleContext>;
+type GateCard = { readonly metadata: Record<string, unknown> | null };
 
-/** The same handler for cards from every source: a gate holds whatever the card came from. */
-function everySource(handler: StageHandler): Partial<Record<FactoryRuleSource, StageHandler>> {
-  return Object.fromEntries(FACTORY_RULE_SOURCES.map(source => [source, handler]));
-}
-
-/** Moving the card to `next` needs the document's last check, recorded on the card, to have passed. */
-function documentGate(type: ProductDocumentType, next: ProductBoardPhase): StageHandler {
-  return context => {
-    if (context.toStage !== next) return undefined;
-    const reason = productDocumentGateFailure(context.item.metadata, type);
-    return reason ? { type: 'reject', code: 'invalid_transition', reason } : undefined;
+/** The document a phase must have passed its check for before the card leaves it for `next`. */
+const DOCUMENT_GATES: Readonly<Partial<Record<ProductBoardPhase, { type: ProductDocumentType; next: ProductBoardPhase }>>> =
+  {
+    brief: { type: 'brief', next: 'client-review' },
+    'spec-review': { type: 'spec', next: 'phases' },
+    phases: { type: 'tasks', next: 'phases-review' },
   };
+
+function reject(reason: string): BoardTransitionPolicyResult {
+  return { type: 'reject', code: 'invalid_transition', reason };
 }
 
-/** Done needs the Work cards the phases were filed as. */
-const childrenGate: StageHandler = context => {
-  if (context.toStage !== 'done') return undefined;
-  return productChildWorkItemIds(context.item.metadata).length > 0
-    ? undefined
-    : {
-        type: 'reject',
-        code: 'invalid_transition',
-        reason:
-          'This card has filed no Development cards yet. Run Phases to file them (factory_create_work_item), then move it to Done.',
-      };
+/**
+ * The moves Product holds back, for every mover: a document must have passed its last check,
+ * recorded on the card, before the card goes on from the phase that writes it, and Done needs the
+ * Development cards the phases were filed as. Phases start their work from their runners alone, so
+ * these gates are the board's transition policy.
+ */
+export function productGateRejection(item: GateCard, fromStage: string, toStage: string): string | undefined {
+  const gate = DOCUMENT_GATES[fromStage as ProductBoardPhase];
+  if (gate && toStage === gate.next) return productDocumentGateFailure(item.metadata, gate.type) ?? undefined;
+  if (fromStage === 'phases-review' && toStage === 'done' && productChildWorkItemIds(item.metadata).length === 0) {
+    return 'This card has filed no Development cards yet. Run Phases to file them (factory_create_work_item), then move it to Done.';
+  }
+  return undefined;
+}
+
+const productGates: BoardTransitionPolicy = ({ item, fromStage, toStage }) => {
+  const reason = productGateRejection(item, fromStage, toStage);
+  return reason ? reject(reason) : undefined;
 };
 
 const resting = (description: string) => ({ kind: 'resting' as const, description });
@@ -85,6 +90,8 @@ export const productBoard = compileBoardDefinition<
   id: 'product',
   name: 'Product',
   initialPhase: 'intake',
+  // Product compiles itself, so it may keep a policy for the document gates phases can't say.
+  transitionPolicy: productGates,
   phases: {
     intake: {
       name: 'Intake',
@@ -107,7 +114,6 @@ export const productBoard = compileBoardDefinition<
       kind: 'working',
       runner: { context: PRODUCT_CONTEXT, skill: 'product-brief' },
       nextPhases: ['client-review', 'canceled'],
-      onExit: everySource(documentGate('brief', 'client-review')),
     },
     'client-review': {
       name: 'Approval',
@@ -128,7 +134,6 @@ export const productBoard = compileBoardDefinition<
       name: 'Spec review',
       ...resting('The team reads the spec. Back to Spec for changes, on to Phases once its check passed.'),
       nextPhases: ['spec', 'phases', 'canceled'],
-      onExit: everySource(documentGate('spec', 'phases')),
     },
     phases: {
       name: 'Phases',
@@ -137,13 +142,11 @@ export const productBoard = compileBoardDefinition<
       kind: 'working',
       runner: { context: PRODUCT_CONTEXT, skill: 'product-phases' },
       nextPhases: ['phases-review', 'canceled'],
-      onExit: everySource(documentGate('tasks', 'phases-review')),
     },
     'phases-review': {
       name: 'Phases review',
       ...resting('A person checks the filed cards. Back to Phases to fix them, Done once right.'),
       nextPhases: ['phases', 'done', 'canceled'],
-      onExit: everySource(childrenGate),
     },
     done: {
       name: 'Done',

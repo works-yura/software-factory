@@ -114,6 +114,7 @@ export const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root,
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
   'factory-docs-sync',
+  'factory-build',
   'factory-gitlab-rereview',
   'factory-gitlab-review',
   'factory-plan',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { phaseRunDecision } from '@factory/core';
 import type { FactoryStageRuleContext } from '@factory/core';
 
 import { providerWorkItemForTests } from '../testing.ts';
@@ -13,28 +14,28 @@ function entering(source: string): FactoryStageRuleContext {
       source,
       sourceKey: 'abc',
       title: 'Crash on login',
-      url: 'https://app.clickup.com/t/abc',
-      stages: ['triage'],
+      url: source === 'manual' ? null : 'https://app.clickup.com/t/abc',
+      stages: ['intake'],
       triageType: null,
       metadata: { description: 'Steps: open the app' },
       workItem: providerWorkItemForTests({ provider: 'clickup', key: 'abc', metadata: { identifier: 'abc' } }),
     },
     source: 'manual',
     stage: 'triage',
+    fromStage: 'intake',
   } as unknown as FactoryStageRuleContext;
 }
 
+// The task text reaches the agent through the factory-work-item signal; the kickoff only names the card.
 describe('Work triage entry for cards without a provider issue', () => {
-  const handler = workBoard.phases.triage.onEnter?.manual;
-
-  it('starts the triage skill for a ClickUp card, with the task text as untrusted data', async () => {
-    const decision = await handler?.(entering('clickup-task'));
+  it('starts the triage skill for a ClickUp card, naming it by its link', () => {
+    const decision = phaseRunDecision(workBoard, 'triage', entering('clickup-task'));
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
-    expect((decision as { arguments: string }).arguments).toContain('Steps: open the app');
+    expect(decision?.arguments).toBe('Work item (https://app.clickup.com/t/abc)');
   });
 
-  it('starts the triage skill for a card a person made by hand', async () => {
-    const decision = await handler?.(entering('manual'));
+  it('starts the triage skill for a card a person made by hand', () => {
+    const decision = phaseRunDecision(workBoard, 'triage', entering('manual'));
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
   });
 });

@@ -151,6 +151,21 @@ export function reviewedChangeRequest(item: {
   };
 }
 
+/**
+ * Whether a pass already recorded a verdict on `change`. An issue card can carry
+ * several pull requests, so a verdict stamped for another one doesn't count; a
+ * verdict with no number (a standalone card, or one stamped before verdicts named
+ * their pull request) covers the card.
+ */
+export function hasRecordedVerdict(
+  item: Parameters<typeof reviewedChangeRequest>[0],
+  change: Pick<ReviewedChangeRequest, 'number'> | undefined = reviewedChangeRequest(item),
+): boolean {
+  const covered = item.metadata?.reviewedPullRequestNumber;
+  const reviewedAnother = typeof covered === 'number' && change?.number !== undefined && covered !== change.number;
+  return typeof item.metadata?.reviewVerdict === 'string' && !reviewedAnother;
+}
+
 /** Whether the rule's card carries the change request the reviewer reviews. */
 export function reviewsPullRequest(context: {
   readonly board?: string;
@@ -224,7 +239,6 @@ export function rulePhaseContext(boards: BoardLookup, item: PhaseCard): FactoryR
     kind: semantics.kind,
     ...(semantics.role === undefined ? {} : { context: semantics.role, role: semantics.role }),
     nextPhases: Object.freeze([...(phase?.nextPhases ?? [])]),
-    outcomes: Object.freeze(Object.keys(phase?.outcomes ?? {})),
   });
 }
 
