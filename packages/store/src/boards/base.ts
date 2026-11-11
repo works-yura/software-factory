@@ -4,7 +4,7 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { FactoryStorageOps } from '@mastra/core/storage';
 
 import { DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '@factory/core';
-import type { FactoryPhaseTool, RuleGroup, StatusEvent } from '@factory/core';
+import type { FactoryPhaseTool, IntakeTriggerRoute, RuleGroup, StatusEvent } from '@factory/core';
 import type { RetiredAutomationSettings } from '../projects/base.ts';
 import {
   FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA,
@@ -207,6 +207,24 @@ export interface StoredIntakeRouteRecord {
   createdAt: Date;
   updatedBy: string;
   updatedAt: Date;
+}
+
+/** A stored route as the trigger-route engine reads it, or null when the route has no trigger of its own. */
+export function storedTriggerRoute(route: StoredIntakeRouteRecord): IntakeTriggerRoute | null {
+  if (!route.trigger || !route.action || !route.policyKind) return null;
+  return {
+    id: route.id,
+    orgId: route.orgId,
+    factoryProjectId: route.factoryProjectId,
+    name: route.name,
+    enabled: route.enabled,
+    trigger: route.trigger,
+    action: route.action,
+    policyKind: route.policyKind,
+    target: { boardKey: route.target.boardKey, phaseKey: route.target.phaseKey },
+    revision: route.revision,
+    createdBy: route.createdBy,
+  };
 }
 
 export type StoredBoardErrorCode =

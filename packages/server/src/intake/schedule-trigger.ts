@@ -1,12 +1,9 @@
 /**
- * The `schedule` trigger: an adapter of the core `IntakeTriggerKind` port over Mastra core
- * `Schedules`, like the environment-build schedule. One schedule row per rule; the scheduler owns
- * firing, claims across replicas and its trigger log, and the row fires the
- * `factory-intake-rule-fire` workflow, whose one step hands the fire to the sink (the engine).
- * Factory only creates, updates, resumes and deletes the row.
- *
- * The workflow run's id is the scheduler's claim id for that fire, so it is the fire key: a step
- * retried within the run is recognised by the engine and acts once.
+ * The `schedule` trigger: an adapter over Mastra core `Schedules`, like the environment-build
+ * schedule. One schedule row per trigger route; the scheduler owns firing, claiming and the trigger
+ * log, and each fire runs the `factory-intake-route-fire` workflow, whose one step hands the fire to
+ * the sink (the engine). The workflow's run id is the scheduler's claim, so it is the fire's key: a
+ * step retried after a crash fires with the same key and files nothing twice.
  */
 
 import type { AnySchedule, Schedules } from '@mastra/core/schedules';
@@ -21,16 +18,24 @@ import {
   scheduleCron,
   scheduleTriggerConfigSchema,
 } from '@factory/core';
-import type { IntakeFireSink, IntakeRuleRecord, IntakeTriggerKind, ScheduleTriggerConfig } from '@factory/core';
+import type { IntakeFireSink, IntakeTriggerKind, IntakeTriggerRoute, ScheduleTriggerConfig } from '@factory/core';
 
-export const INTAKE_RULE_FIRE_WORKFLOW_ID = 'factory-intake-rule-fire';
+export const INTAKE_ROUTE_FIRE_WORKFLOW_ID = 'factory-intake-route-fire';
 export const SCHEDULE_TRIGGER_KIND = 'schedule';
 
 export type ScheduleRows = Pick<Schedules, 'create' | 'get' | 'update' | 'pause' | 'resume' | 'delete'>;
 
-/** The rule's row id as core stores it (`schedule_<slug>`; a rule id is a lower-case uuid). */
-export function intakeRuleScheduleId(ruleId: string): string {
-  return `schedule_factory-intake-rule-${ruleId.toLowerCase()}`;
+/** The core schedule row of a trigger route. */
+export function intakeRouteScheduleId(routeId: string): string {
+  return `schedule_factory-intake-route-${routeId.toLowerCase()}`;
+}
+
+/**
+ * The row a migrated intake rule's schedule had (ADR-0021): the rule became the route with its id,
+ * so arming the route removes it and nothing fires the retired workflow.
+ */
+export function legacyIntakeRuleScheduleId(routeId: string): string {
+  return `schedule_factory-intake-rule-${routeId.toLowerCase()}`;
 }
 
 function parseScheduleConfig(config: unknown): ScheduleTriggerConfig {
@@ -43,19 +48,15 @@ function parseScheduleConfig(config: unknown): ScheduleTriggerConfig {
   return parsed;
 }
 
-const inputSchema = z.object({ ruleId: z.string().min(1) });
-const outputSchema = z.object({ ruleId: z.string() });
+const inputSchema = z.object({ routeId: z.string().min(1) });
+const outputSchema = z.object({ routeId: z.string() });
 
 export interface ScheduleTriggerOptions {
-  /** Core schedules of the booted Mastra; `undefined` until it exists or when storage has no schedules domain. */
+  /** The host's core schedules; read late, since the Mastra that owns them exists only after `prepare()`. */
   schedules: () => ScheduleRows | undefined;
   now?: () => Date;
 }
 
-/**
- * Built once per server: `workflow` is registered on the host's Mastra at prepare time, and the
- * trigger's `start` connects its fires to the engine once the engine starts.
- */
 export function createScheduleTrigger(options: ScheduleTriggerOptions) {
   let sink: IntakeFireSink | undefined;
   const now = options.now ?? (() => new Date());
@@ -65,17 +66,17 @@ export function createScheduleTrigger(options: ScheduleTriggerOptions) {
     inputSchema,
     outputSchema,
     execute: async ({ inputData, runId }) => {
-      if (!sink) throw new Error('Intake rules are not started on this server yet.');
+      if (!sink) throw new Error('Trigger routes are not started on this server yet.');
       await sink({
-        ruleId: inputData.ruleId,
+        routeId: inputData.routeId,
         firedAt: now(),
         triggerKind: SCHEDULE_TRIGGER_KIND,
         fireKey: `schedule:${runId}`,
       });
-      return { ruleId: inputData.ruleId };
+      return { routeId: inputData.routeId };
     },
   });
-  const workflow = createWorkflow({ id: INTAKE_RULE_FIRE_WORKFLOW_ID, inputSchema, outputSchema })
+  const workflow = createWorkflow({ id: INTAKE_ROUTE_FIRE_WORKFLOW_ID, inputSchema, outputSchema })
     .then(fire)
     .commit();
 
@@ -83,15 +84,20 @@ export function createScheduleTrigger(options: ScheduleTriggerOptions) {
     const schedules = options.schedules();
     if (!schedules) {
       throw new IntakeTriggerUnavailableError(
-        "Scheduled intake needs Mastra schedules, which this server's storage does not provide.",
+        "Scheduled routes need Mastra schedules, which this server's storage does not provide.",
       );
     }
     return schedules;
   };
 
+  const dropLegacy = async (schedules: ScheduleRows, routeId: string) => {
+    const legacy = legacyIntakeRuleScheduleId(routeId);
+    if (await schedules.get(legacy)) await schedules.delete(legacy);
+  };
+
   const trigger: IntakeTriggerKind<ScheduleTriggerConfig> = {
     kind: SCHEDULE_TRIGGER_KIND,
-    label: { uk: 'За розкладом', en: 'On a schedule' },
+    label: { uk: 'За розкладом (повторюється)', en: 'On a schedule (repeats)' },
     parse: parseScheduleConfig,
     describe: (config, locale) => `${describeScheduleSpec(config.spec, locale)} (${config.timezone})`,
     timeZone: config => config.timezone,
@@ -112,20 +118,21 @@ export function createScheduleTrigger(options: ScheduleTriggerOptions) {
     start: next => {
       sink = next;
     },
-    arm: async (rule: IntakeRuleRecord, config) => {
+    arm: async (route: IntakeTriggerRoute, config) => {
       const schedules = rows();
-      const id = intakeRuleScheduleId(rule.id);
+      await dropLegacy(schedules, route.id);
+      const id = intakeRouteScheduleId(route.id);
       const cron = scheduleCron(config.spec);
       const existing: AnySchedule | null = await schedules.get(id);
       if (!existing) {
         await schedules.create({
           id,
-          workflowId: INTAKE_RULE_FIRE_WORKFLOW_ID,
+          workflowId: INTAKE_ROUTE_FIRE_WORKFLOW_ID,
           cron,
           timezone: config.timezone,
-          inputData: { ruleId: rule.id },
-          resourceId: rule.factoryProjectId,
-          metadata: { intakeRuleId: rule.id },
+          inputData: { routeId: route.id },
+          resourceId: route.factoryProjectId,
+          metadata: { intakeRouteId: route.id },
         });
         return;
       }
@@ -134,10 +141,11 @@ export function createScheduleTrigger(options: ScheduleTriggerOptions) {
       }
       if (existing.status === 'paused') await schedules.resume(id);
     },
-    disarm: async ruleId => {
+    disarm: async routeId => {
       const schedules = options.schedules();
       if (!schedules) return;
-      const id = intakeRuleScheduleId(ruleId);
+      await dropLegacy(schedules, routeId);
+      const id = intakeRouteScheduleId(routeId);
       if (await schedules.get(id)) await schedules.delete(id);
     },
   };

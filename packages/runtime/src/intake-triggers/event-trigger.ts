@@ -1,6 +1,6 @@
 /**
  * A trigger kind driven by events instead of a clock (Observer). It subscribes once to an
- * `IntakeEventSource` and, for each event, fires every armed rule of the event's project whose
+ * `IntakeEventSource` and, for each event, fires every armed route of the event's project whose
  * config `matches` it. The event's id is the fire key, so a redelivered event fires once; its facts
  * become the fire's payload (`{payload.<key>}` in templates).
  *
@@ -13,8 +13,8 @@ import type {
   IntakeEvent,
   IntakeEventSource,
   IntakeFireSink,
-  IntakeRuleLocale,
-  IntakeRuleScope,
+  IntakeLocale,
+  IntakeScope,
   IntakeTriggerKind,
   LocalizedLabel,
 } from '@factory/core';
@@ -24,29 +24,29 @@ export interface EventTriggerOptions<S extends z.ZodType> {
   kind: string;
   label: LocalizedLabel;
   source: IntakeEventSource;
-  /** The rule's config: which events it takes. */
+  /** The route's config: which events it takes. */
   schema: S;
-  describe(config: z.output<S>, locale: IntakeRuleLocale): string;
+  describe(config: z.output<S>, locale: IntakeLocale): string;
   matches(config: z.output<S>, event: IntakeEvent): boolean;
 }
 
-interface ArmedRule<C> {
-  scope: IntakeRuleScope;
+interface ArmedRoute<C> {
+  scope: IntakeScope;
   config: C;
 }
 
 export function eventTriggerKind<S extends z.ZodType>(options: EventTriggerOptions<S>): IntakeTriggerKind<z.output<S>> {
-  const armed = new Map<string, ArmedRule<z.output<S>>>();
+  const armed = new Map<string, ArmedRoute<z.output<S>>>();
   let sink: IntakeFireSink | undefined;
   let unsubscribe: (() => void) | undefined;
 
   const onEvent = async (event: IntakeEvent) => {
     if (!sink) return;
-    for (const [ruleId, rule] of armed) {
-      if (rule.scope.orgId !== event.scope.orgId || rule.scope.factoryProjectId !== event.scope.factoryProjectId) continue;
-      if (!options.matches(rule.config, event)) continue;
+    for (const [routeId, route] of armed) {
+      if (route.scope.orgId !== event.scope.orgId || route.scope.factoryProjectId !== event.scope.factoryProjectId) continue;
+      if (!options.matches(route.config, event)) continue;
       await sink({
-        ruleId,
+        routeId,
         firedAt: event.occurredAt,
         triggerKind: options.kind,
         fireKey: `event:${event.id}`,
@@ -64,11 +64,11 @@ export function eventTriggerKind<S extends z.ZodType>(options: EventTriggerOptio
       sink = next;
       unsubscribe ??= options.source.subscribe(onEvent);
     },
-    arm: async (rule, config) => {
-      armed.set(rule.id, { scope: { orgId: rule.orgId, factoryProjectId: rule.factoryProjectId }, config });
+    arm: async (route, config) => {
+      armed.set(route.id, { scope: { orgId: route.orgId, factoryProjectId: route.factoryProjectId }, config });
     },
-    disarm: async ruleId => {
-      armed.delete(ruleId);
+    disarm: async routeId => {
+      armed.delete(routeId);
     },
   };
 }

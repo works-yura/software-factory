@@ -61,9 +61,9 @@ import {
   PRODUCT_LEGACY_PHASE_RENAMES,
   productBoard,
 } from '@factory/pipelines';
-import { AUDITS_BOARD_UPGRADE_ACTOR, renameIntakeRuleTargetPhases } from './intake/migrations.ts';
-import { intakeRuleRoutes } from './intake/rule-routes.ts';
-import { setupIntakeRules } from './intake/setup.ts';
+import { AUDITS_BOARD_UPGRADE_ACTOR, migrateLegacyIntakeRules } from './intake/migrations.ts';
+import { intakeTriggerRouteRepository } from './intake/repository.ts';
+import { setupIntakeTriggers } from './intake/setup.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import {
   boardForWorkItem,
@@ -242,7 +242,7 @@ import { FilesystemStorage } from '@factory/store';
 import { IntakeStorage } from '@factory/store';
 import { IntegrationStorage } from '@factory/store';
 import { factoryMemorySettingsUserId, MemorySettingsStorage, SkillOverridesStorage, StoredBoardsStorage } from '@factory/store';
-import { AttachmentService, AttachmentsStorage, IntakeRulesStorage } from '@factory/store';
+import { AttachmentService, AttachmentsStorage, IntakeRouteFiresStorage } from '@factory/store';
 import type { AttachmentBlobStore } from '@factory/store';
 import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
@@ -632,7 +632,7 @@ export class MastraFactory {
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** Intake rules' engine and the workflow their schedules fire; undefined until work items and their storage are up. */
-  #intakeRules: ReturnType<typeof setupIntakeRules> | undefined;
+  #intakeTriggers: ReturnType<typeof setupIntakeTriggers> | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
   #sessionResourceMigration: Promise<boolean> | undefined;
   #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
@@ -927,7 +927,7 @@ export class MastraFactory {
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     const attachmentsStorage = storage.registerDomain(new AttachmentsStorage());
-    const intakeRulesStorage = storage.registerDomain(new IntakeRulesStorage());
+    const intakeRouteFiresStorage = storage.registerDomain(new IntakeRouteFiresStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -1147,7 +1147,7 @@ export class MastraFactory {
       });
     }
     // Audits now starts in Intake like every board, and Done means the report is written: move
-    // stored boards, intake routes, cards and intake rules off Scheduled and Report, once.
+    // stored boards, intake routes and cards off Scheduled and Report, once.
     await timedPhase('prepare.audits.phases', async () => {
       if (storage.isDomainReady('boards')) {
         const rewritten = await storedBoardsStorage.renameStoredBoardPhases(
@@ -1162,16 +1162,23 @@ export class MastraFactory {
         const moved = await workItemsStorage.renameBoardStages(auditsBoard.id, AUDITS_LEGACY_PHASE_RENAMES);
         if (moved.length > 0) console.info(`[factory] moved ${moved.length} Audits card(s) off Scheduled/Report`);
       }
-      if (storage.isDomainReady('intake-rules')) {
-        const moved = await renameIntakeRuleTargetPhases(
-          intakeRulesStorage,
-          auditsBoard.id,
-          AUDITS_LEGACY_PHASE_RENAMES,
-          AUDITS_BOARD_UPGRADE_ACTOR,
-        );
-        if (moved > 0) console.info(`[factory] moved ${moved} intake rule target(s) off old Audits phases`);
-      }
     });
+    // Intake rules made cards before routes could (ADR-0021): each becomes a route «За розкладом»
+    // with the rule's id, creator and fires; its paired placing route goes. Once, idempotently, here
+    // at boot, before any trigger is armed. A failure stops the boot: a rule left half-moved would
+    // either fire twice or not at all.
+    if (storage.isDomainReady('intake-route-fires') && storage.isDomainReady('boards')) {
+      await timedPhase('prepare.intake.legacyRules', async () => {
+        const { migrated, removedRoutes } = await migrateLegacyIntakeRules({
+          fires: intakeRouteFiresStorage,
+          boards: storedBoardsStorage,
+          renames: { [auditsBoard.id]: AUDITS_LEGACY_PHASE_RENAMES },
+        });
+        if (migrated + removedRoutes > 0) {
+          console.info(`[factory] turned ${migrated} intake rule(s) into routes «За розкладом»; removed ${removedRoutes} paired route(s)`);
+        }
+      });
+    }
 
     // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
     // back to Intake. Move the cards the old rule left there, once.
@@ -1222,6 +1229,27 @@ export class MastraFactory {
         integration.versionControl.initialize({ storage: integrationSourceControl });
       }
     }
+    // Integration-owned data migrations (ClickUp's retired List status rules → intake routes), once
+    // per boot, before any worker reads: the poller only reads routes. Idempotent on every replica.
+    if (this.#projectBoards && storage.isDomainReady('integrations') && storage.isDomainReady('intake')) {
+      for (const integration of integrations.filter(candidate => candidate.migrate)) {
+        await timedPhase(`prepare.integration.${integration.id}.migrate`, async () => {
+          try {
+            await integration.migrate!({
+              storage: integrationStorage.forIntegration(integration.id),
+              projects: factoryProjectsStorage,
+              intake: intakeStorage,
+              intakeRoutes: storedBoardsStorage,
+              projectBoards: this.#projectBoards!,
+            });
+          } catch (error) {
+            console.error(
+              `[factory] integration "${integration.id}" migration failed; it runs again at the next boot: ${error instanceof Error ? error.message : error}`,
+            );
+          }
+        });
+      }
+    }
     // Keep the legacy GitHub partition readable even when no GitHub
     // integration is registered; existing sessions may outlive a config change.
     const sourceControlIntegrationIds = [
@@ -1249,10 +1277,18 @@ export class MastraFactory {
         // Channels resolve an inbound sender to a tenant through the reverse
         // index; without it every message would dispatch tenant-less.
         ...(integration.channels ? ['channel-identity'] : []),
+        ...(integration.requiredDomains ?? []),
       ];
+      const missing = requiredDomains.filter(domain => !storage.isDomainReady(domain));
+      if (missing.length > 0) {
+        // Loud, not fatal: this integration starts no workers or channels; the rest of the server runs.
+        console.error(
+          `[factory] integration "${integration.id}" is disabled: storage domain(s) ${missing.join(', ')} are not ready`,
+        );
+      }
       return {
         integration,
-        ready: requiredDomains.every(domain => storage.isDomainReady(domain)),
+        ready: missing.length === 0,
         ensureReady: async () => {
           for (const domain of requiredDomains) await storage.ensureDomainReady(domain);
         },
@@ -1570,23 +1606,20 @@ export class MastraFactory {
             : {}),
         })
       : undefined;
-    // Intake rules: Factory's own intake source (a schedule now, events later) filing cards through
-    // the same path as "New card", placed by the project's intake routes. Their schedules live in
-    // core `Schedules` and fire a workflow registered on the host's Mastra below. This is the only
-    // place that names the concrete kinds (`./intake/setup.ts`).
-    this.#intakeRules =
-      workItemsReady && storage.isDomainReady('intake-rules')
-        ? setupIntakeRules({
-            rules: intakeRulesStorage,
-            // A rule's cards are placed by its own intake route, made when the rule is created.
-            ...(this.#projectBoards ? { routes: intakeRuleRoutes(storedBoardsStorage) } : {}),
+    // Routes «За розкладом» (ADR-0021): intake routes with a trigger of their own file their cards
+    // themselves, through the same rule commit a provider arrival uses. Their schedules live in core
+    // `Schedules` and fire a workflow registered on the host's Mastra below. This is the only place
+    // that names the concrete trigger, action and policy kinds (`./intake/setup.ts`).
+    this.#intakeTriggers =
+      workItemsReady && storage.isDomainReady('intake-route-fires') && storage.isDomainReady('boards')
+        ? setupIntakeTriggers({
+            routes: intakeTriggerRouteRepository(storedBoardsStorage, intakeRouteFiresStorage),
             schedule: { schedules: () => this.#prepared?.base.controller.getMastra()?.schedules },
             cards: {
               workItems: workItemsStorage,
+              reader: workItemsStorage,
               boards: toBoardSource(boards),
-              ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
-              transitionService: () => transitionService,
-              auditRecorder: auditDomain,
+              configVersion,
             },
           })
         : undefined;
@@ -2856,7 +2889,9 @@ export class MastraFactory {
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
             ...(attachmentService ? { attachments: attachmentService } : {}),
-            ...(this.#intakeRules ? { intakeRules: { engine: this.#intakeRules.engine, storage: intakeRulesStorage } } : {}),
+            ...(this.#intakeTriggers
+              ? { intakeTriggers: { engine: this.#intakeTriggers.engine, fires: intakeRouteFiresStorage } }
+              : {}),
             controllerId: CONTROLLER_ID,
             controller,
             liveSessions: (liveSessionRegistry = liveSessionsTouchingTheFeed(eventBus, sourceControlSessions, controller, claudeLiveSessions)),
@@ -3332,6 +3367,28 @@ export class MastraFactory {
     // means the `channel-identity` domain's `init()` succeeded, so its link
     // table is queryable. Without it a sender can't be resolved to a tenant,
     // and attaching anyway would dispatch runs on default credentials.
+    // One integration context for every integration slot (channels, feed publishers, workers):
+    // built in one place so no slot gets a context missing what another has.
+    const integrationContextArgs = {
+      controller: prepared.base.controller,
+      publicOrigin,
+      auth: routeAuth,
+      stateSigner,
+      sandbox: sandboxConfig,
+      factoryStorage: storage,
+      integrationStorage,
+      sourceControlStorage,
+      integrations: integrationRegistrations,
+      configVersion,
+      boardRegistry: this.#projectBoards ?? this.#boards,
+      // Trackers that import tasks place them through the stored intake routes (ClickUp requires them).
+      ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage, projectBoards: this.#projectBoards } : {}),
+      factoryReady,
+      domains,
+      feed: commentsDomain,
+      ...(githubIntegration ? { sourceControlOwnerId: 'github' as const } : {}),
+    };
+    const integrationContext = (integrationId: string) => buildIntegrationContext(integrationContextArgs, integrationId);
     const channelRegistrations = integrationRegistrations.filter(
       ({ integration, ready }) => ready && integration.channels,
     );
@@ -3345,27 +3402,7 @@ export class MastraFactory {
       );
     }
     for (const { integration } of channelRegistrations) {
-      const context = buildIntegrationContext(
-        {
-          controller: prepared.base.controller,
-          publicOrigin,
-          auth: routeAuth,
-          stateSigner,
-          sandbox: sandboxConfig,
-          factoryStorage: storage,
-          integrationStorage,
-          sourceControlStorage,
-          integrations: integrationRegistrations,
-          configVersion,
-          boardRegistry: this.#projectBoards ?? this.#boards,
-          ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage, projectBoards: this.#projectBoards } : {}),
-          factoryReady,
-          domains,
-          feed: commentsDomain,
-          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-        },
-        integration.id,
-      );
+      const context = integrationContext(integration.id);
       // Integrations return a channels CONFIG; the factory owns construction.
       prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
     }
@@ -3378,28 +3415,7 @@ export class MastraFactory {
     for (const { integration } of integrationRegistrations.filter(
       ({ integration, ready }) => ready && integration.feedPublisher,
     )) {
-      const context = buildIntegrationContext(
-        {
-          controller: prepared.base.controller,
-          publicOrigin,
-          auth: routeAuth,
-          stateSigner,
-          sandbox: sandboxConfig,
-          factoryStorage: storage,
-          integrationStorage,
-          sourceControlStorage,
-          integrations: integrationRegistrations,
-          configVersion,
-          boardRegistry: this.#projectBoards ?? this.#boards,
-          ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage, projectBoards: this.#projectBoards } : {}),
-          factoryReady,
-          domains,
-          feed: commentsDomain,
-          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-        },
-        integration.id,
-      );
-      const publisher = integration.feedPublisher!(context);
+      const publisher = integration.feedPublisher!(integrationContext(integration.id));
       if (publisher) feedPublishers.push(publisher);
     }
 
@@ -3421,32 +3437,7 @@ export class MastraFactory {
         : []),
       ...integrationRegistrations
         .filter(({ integration, ready }) => ready && integration.workers)
-        .flatMap(({ integration }) =>
-          integration.workers!(
-            buildIntegrationContext(
-              {
-                controller: prepared.base.controller,
-                publicOrigin,
-                auth: routeAuth,
-                stateSigner,
-                sandbox: sandboxConfig,
-                factoryStorage: storage,
-                integrationStorage,
-                sourceControlStorage,
-                integrations: integrationRegistrations,
-                configVersion,
-                boardRegistry: this.#projectBoards ?? this.#boards,
-                // Pollers place what they import through the stored intake routes (ClickUp needs them).
-                ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage, projectBoards: this.#projectBoards } : {}),
-                factoryReady,
-                domains,
-                feed: commentsDomain,
-                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-              },
-              integration.id,
-            ),
-          ),
-        ),
+        .flatMap(({ integration }) => integration.workers!(integrationContext(integration.id))),
     ];
 
     return {
@@ -3456,11 +3447,11 @@ export class MastraFactory {
       // requests (`x-mastra-client-type: studio` routes to `studio.auth`).
       ...(auth ? { studio: { auth } } : {}),
       ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
-      ...(environmentBuilds || this.#intakeRules
+      ...(environmentBuilds || this.#intakeTriggers
         ? {
             workflows: {
               ...(environmentBuilds ? { [ENVIRONMENT_BUILD_WORKFLOW_ID]: environmentBuilds.workflow } : {}),
-              ...(this.#intakeRules?.workflows ?? {}),
+              ...(this.#intakeTriggers?.workflows ?? {}),
             },
           }
         : {}),
@@ -3478,9 +3469,9 @@ export class MastraFactory {
     }
     await timedPhase('finalize.controller', () => this.#prepared!.finalize());
     await this.#environmentBuilds?.probeSchedules();
-    if (this.#intakeRules) {
-      await this.#intakeRules.engine.start();
-      await timedPhase('finalize.intakeRules', () => this.#intakeRules!.engine.armAll());
+    if (this.#intakeTriggers) {
+      await this.#intakeTriggers.engine.start();
+      await timedPhase('finalize.intakeTriggers', () => this.#intakeTriggers!.engine.armAll());
     }
     // Results written while no process was watching are caught up by the
     // dispatcher's first tick, in the background. Awaiting that walk here held

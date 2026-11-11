@@ -157,10 +157,11 @@ export interface IntegrationContext {
      */
     boards: BoardRegistry | ProjectBoardSource;
     /**
-     * The project's intake routes, for integrations that place new cards themselves; `createIntakeRoute`
-     * lets one move its retired per-source rules into routes (ClickUp's List status rules).
+     * The project's intake routes, for integrations that import tasks themselves: the routes say
+     * which lists a project reads and where a new task lands. Present whenever the `boards` domain
+     * is ready; an integration that can't work without it lists `boards` in `requiredDomains`.
      */
-    intakeRoutes?: IntakeRoutesReader & Partial<Pick<StoredBoardsStorage, 'createIntakeRoute'>>;
+    intakeRoutes?: IntakeRoutesReader;
     /** A project's boards, stored ones included, which an intake route may name. */
     projectBoards?: { load(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> };
   };
@@ -203,6 +204,15 @@ export interface FactoryChannelsConfig extends Omit<AgentControllerChannelsConfi
  * A pluggable web integration. Implementations own their credentials
  * (validated at construction), their API surface, and their HTTP routes.
  */
+/** What an integration's `migrate` gets: its own storage, intake bindings and the intake routes to write. */
+export interface IntegrationMigrationContext {
+  storage: IntegrationStorageHandle;
+  projects: Pick<FactoryProjectsStorage, 'listAll'>;
+  intake: IntakeStorage;
+  intakeRoutes: Pick<StoredBoardsStorage, 'listIntakeRoutes' | 'createIntakeRoute' | 'updateIntakeRoute'>;
+  projectBoards: { load(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> };
+}
+
 export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'gitlab'`, custom ids for third parties. */
   readonly id: string;
@@ -210,6 +220,13 @@ export interface FactoryIntegration {
   readonly intake?: Intake;
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
+  /**
+   * Storage domains the integration can't work without, beyond the generic `integrations` domain
+   * (e.g. `boards` for an integration that imports through intake routes). The factory counts the
+   * integration ready only when they are, and logs which are missing otherwise: a not-ready
+   * integration starts no workers and no channels, and the rest of the server boots on.
+   */
+  readonly requiredDomains?: readonly string[];
   /**
    * Bind the integration's generic persistence handle. Called once by the
    * factory during `prepare()` (before routes/tools/workers are collected),
@@ -225,6 +242,13 @@ export interface FactoryIntegration {
     intake: IntakeStorage;
     sourceControl?: SourceControlStorageHandle;
   }): void;
+  /**
+   * One-off data migrations the integration owns, such as moving its retired per-source settings
+   * into intake routes. Run by the factory once per boot, in `prepare()`, after storage and the
+   * project boards are ready and before workers start; must be idempotent, since every replica
+   * runs it. A failure is logged loudly and the boot goes on.
+   */
+  migrate?(ctx: IntegrationMigrationContext): Promise<void>;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds

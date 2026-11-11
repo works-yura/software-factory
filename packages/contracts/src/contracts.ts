@@ -19,7 +19,7 @@ import {
   storedPhaseInputSchema,
 } from '@factory/store';
 
-import { INTAKE_RULE_ROUTE_CONTRACTS } from './intake-rules.ts';
+import { INTAKE_TRIGGER_ROUTE_CONTRACTS, intakeRouteTriggeredSchema, intakeRouteTriggerViewSchema } from './intake-triggers.ts';
 
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -129,6 +129,15 @@ const intakeRouteFields = {
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
     }),
 };
+/**
+ * A route that makes its own cards: «За розкладом» and, later, other triggers. Such a route takes no
+ * condition and handles no events (nothing arrives for it to test); it files cards at its target.
+ */
+const triggeredRouteRefine = (route: { triggered?: unknown; when?: unknown; on?: unknown[] }, ctx: z.RefinementCtx) => {
+  if (!route.triggered) return;
+  if (route.when) ctx.addIssue({ code: 'custom', path: ['when'], message: 'A route with a trigger of its own takes no condition.' });
+  if (route.on?.length) ctx.addIssue({ code: 'custom', path: ['on'], message: 'A route with a trigger of its own handles no events.' });
+};
 export const intakeRouteInputSchema = z
   .object({
     name: intakeRouteFields.name,
@@ -136,8 +145,11 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
+    /** Makes it a route with a trigger of its own; see `intakeRouteTriggeredSchema`. */
+    triggered: intakeRouteTriggeredSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(triggeredRouteRefine);
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
 export const intakeRoutePatchSchema = z
   .object({
@@ -146,9 +158,12 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
+    /** Changes the route's own trigger, action or policy; only on a route that has one. */
+    triggered: intakeRouteTriggeredSchema.optional(),
     expectedRevision: boardRevisionSchema,
   })
   .strict()
+  .superRefine(triggeredRouteRefine)
   .refine(({ expectedRevision: _revision, ...fields }) => Object.values(fields).some(value => value !== undefined), {
     message: 'Change at least one field.',
   });
@@ -179,6 +194,18 @@ const intakeRouteSchema = z.object({
   updatedAt: z.string(),
   /** Why the route's target can't take cards right now, such as a deleted board; such a route is skipped. */
   problems: z.array(z.string()),
+  /** The route's own trigger, for a route that makes its cards itself («За розкладом»); null otherwise. */
+  triggered: intakeRouteTriggerViewSchema.nullable(),
+  /**
+   * What made the route, when Factory wrote it, so the settings name it in the reader's language
+   * while it keeps the name Factory gave it (`generatedName`).
+   */
+  origin: z
+    .discriminatedUnion('kind', [
+      z.object({ kind: z.literal('clickup-status'), listId: z.string(), status: z.string(), generatedName: z.string() }),
+      z.object({ kind: z.literal('schedule'), generatedName: z.string() }),
+    ])
+    .nullable(),
 });
 const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
 const intakeRouteListResponseSchema = z.object({
@@ -792,7 +819,7 @@ const sessionAttachmentPathSchema = z.object({ sessionId: z.string().min(1).max(
 const attachmentPathSchema = z.object({ id: uuidSchema });
 
 export const FACTORY_ROUTE_CONTRACTS = {
-  ...INTAKE_RULE_ROUTE_CONTRACTS,
+  ...INTAKE_TRIGGER_ROUTE_CONTRACTS,
   projectList: {
     method: 'GET',
     path: '/web/factory/projects',

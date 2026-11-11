@@ -90,6 +90,6 @@ export interface IntakeTriggerRouteRepository {
   /** The fire recorded under `fireKey` for the route, if any. */
   findFire(routeId: string, fireKey: string): Promise<IntakeRouteFire | null>;
   listFires(scope: IntakeScope, routeId: string, options?: { limit?: number }): Promise<IntakeRouteFire[]>;
-  /** The last fire whose action made a card: what an overlap policy checks. */
-  lastFireWithWorkItem(routeId: string): Promise<IntakeRouteFire | null>;
+  /** The route's last fire that went ahead (`done`): what an overlap policy checks. */
+  lastDoneFire(routeId: string): Promise<IntakeRouteFire | null>;
 }

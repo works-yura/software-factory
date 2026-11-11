@@ -1,25 +1,22 @@
-/**
- * The composition root of intake rules: the only place that names concrete kinds. It builds the
- * registries — the Mastra-backed `schedule` trigger, the `create-card` action, the `skip-if-open`
- * and `always` policies, plus whatever the host adds — and the engine over the rules repository.
- * `workflows` must be registered on the host's Mastra for the schedule trigger to fire.
- */
-
 import { intakeKinds } from '@factory/core';
-import type { IntakeActionKind, IntakePolicyKind, IntakeRuleRepository, IntakeTriggerKind } from '@factory/core';
-import { alwaysPolicy, IntakeRuleEngine, skipIfOpenPolicy } from '@factory/runtime';
-import type { IntakeRuleEngineOptions } from '@factory/runtime';
+import type { IntakeActionKind, IntakePolicyKind, IntakeTriggerKind, IntakeTriggerRouteRepository } from '@factory/core';
+import { alwaysPolicy, IntakeTriggerEngine, skipIfOpenPolicy } from '@factory/runtime';
+import type { IntakeCardReader, IntakeTriggerEngineOptions } from '@factory/runtime';
 import { createCardAction } from '@factory/work-items';
 import type { CreateCardActionOptions } from '@factory/work-items';
 
 import { createScheduleTrigger } from './schedule-trigger.ts';
 import type { ScheduleTriggerOptions } from './schedule-trigger.ts';
 
-export interface IntakeRulesSetupOptions extends Omit<IntakeRuleEngineOptions, 'kinds' | 'rules'> {
-  rules: IntakeRuleRepository;
+/**
+ * The composition root of trigger routes (ADR-0021): the only place that names concrete trigger,
+ * action and policy kinds. Everything else goes through the core ports and the registries.
+ */
+export interface IntakeTriggersSetupOptions extends Omit<IntakeTriggerEngineOptions, 'kinds' | 'routes'> {
+  routes: IntakeTriggerRouteRepository;
   schedule: ScheduleTriggerOptions;
-  cards: CreateCardActionOptions;
-  /** Kinds a host adds next to the built-in ones. */
+  cards: CreateCardActionOptions & { reader: IntakeCardReader };
+  /** More kinds to register (an event trigger, a notify action, a test double). */
   extra?: {
     triggers?: IntakeTriggerKind<any>[];
     actions?: IntakeActionKind<any>[];
@@ -27,18 +24,15 @@ export interface IntakeRulesSetupOptions extends Omit<IntakeRuleEngineOptions, '
   };
 }
 
-export function setupIntakeRules(options: IntakeRulesSetupOptions) {
+export function setupIntakeTriggers(options: IntakeTriggersSetupOptions) {
   const schedule = createScheduleTrigger(options.schedule);
+  const { reader, ...cards } = options.cards;
   const kinds = intakeKinds({
     triggers: [schedule.trigger, ...(options.extra?.triggers ?? [])],
-    actions: [createCardAction(options.cards), ...(options.extra?.actions ?? [])],
-    policies: [
-      skipIfOpenPolicy({ cards: options.cards.workItems, boards: options.cards.boards }),
-      alwaysPolicy,
-      ...(options.extra?.policies ?? []),
-    ],
+    actions: [createCardAction(cards), ...(options.extra?.actions ?? [])],
+    policies: [skipIfOpenPolicy({ cards: reader, boards: cards.boards }), alwaysPolicy, ...(options.extra?.policies ?? [])],
   });
   const { schedule: _schedule, cards: _cards, extra: _extra, ...engineOptions } = options;
-  const engine = new IntakeRuleEngine({ ...engineOptions, kinds });
+  const engine = new IntakeTriggerEngine({ ...engineOptions, kinds });
   return { engine, kinds, workflows: { [schedule.workflow.id]: schedule.workflow } };
 }

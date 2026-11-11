@@ -1,20 +1,10 @@
-/**
- * The `create-card` intake action (an adapter of the core `IntakeActionKind` port): a fire files
- * one card through the same path as "New card" (`createFactoryWorkItem`). The card carries its
- * origin (`metadata.intakeRule`), so the project's intake routes decide where it lands like any
- * new card; the rule's own board and phase are the default when no route takes it. From there the
- * board's phases take it: a phase that starts on its own (`autoStart`) runs its agent.
- *
- * Idempotent per fire: a fire with a `fireKey` that already made a card (a scheduler step retried
- * after the card was filed but before the fire was recorded) returns that card instead of a second.
- */
-
 import {
   createCardActionConfigSchema,
-  INTAKE_RULE_METADATA_KEY,
-  intakeRuleOrigin,
+  INTAKE_ROUTE_CARD_SOURCE,
+  INTAKE_ROUTE_ORIGIN_METADATA_KEY,
   intakeTargetProblem,
   IntakeTargetError,
+  landingPhase,
   parseWith,
   renderIntakeTemplate,
 } from '@factory/core';
@@ -22,114 +12,106 @@ import type {
   BoardRegistry,
   CreateCardActionConfig,
   IntakeActionKind,
-  IntakeRoutesReader,
-  IntakeRuleCardOrigin,
-  IntakeRuleScope,
+  IntakeRouteCardOrigin,
+  IntakeScope,
+  IntakeTriggerRoute,
 } from '@factory/core';
-import type { AuditRecorder, FactoryTransitionService } from '@factory/runtime';
 import type { WorkItemsStorage } from '@factory/store';
 
-import { createFactoryWorkItem } from './create-work-item.ts';
-
+/** The `create-card` action of a trigger route: each fire files one card at the route's target. */
 export const CREATE_CARD_ACTION_KIND = 'create-card';
 
-/** The system actor that files and places a rule's cards. */
-export const INTAKE_RULE_ACTOR = 'factory-intake-rule';
+/** The actor a trigger route's commits are made under; the route's id follows it. */
+export const INTAKE_ROUTE_ACTOR = 'factory-intake-route';
 
 export interface CreateCardActionOptions {
-  workItems: WorkItemsStorage;
-  /** The project's boards, stored ones included. */
-  boards: { load(scope: IntakeRuleScope): Promise<BoardRegistry> };
-  /** The project's intake routes: they place the card first. */
-  intakeRoutes?: IntakeRoutesReader;
-  transitionService: () => Pick<FactoryTransitionService, 'transition'> | undefined;
-  auditRecorder: AuditRecorder;
+  workItems: Pick<WorkItemsStorage, 'commitRuleEvaluation'>;
+  boards: { load(scope: IntakeScope): Promise<BoardRegistry> };
+  configVersion: string;
+  now?: () => Date;
 }
 
-/** Why the rule's default target can't take new cards in this project, or undefined. */
-function targetProblem(registry: BoardRegistry, config: CreateCardActionConfig): string | undefined {
-  return intakeTargetProblem(registry, {
-    target: { boardKey: config.boardKey, phaseKey: config.phaseKey },
-    on: ['work_item.created'],
-  })?.message;
+function targetProblem(registry: BoardRegistry, target: IntakeTriggerRoute['target']): string | undefined {
+  return intakeTargetProblem(registry, { target, on: ['work_item.created'] })?.message;
 }
 
+/**
+ * Files the fire's card through the same rule commit a provider arrival uses, under an ingress
+ * identity of its own (`intake-route:<routeId>:<fireKey>`): the commit is atomic per identity, so a
+ * fire delivered twice — a retried workflow step, a second replica — files one card. The card is the
+ * `intake-route` source `<routeId>:<fireKey>`, so it can be found again by the fire alone. It lands
+ * where the route says (its target); the board's phase rules then take it like any new card.
+ */
 export function createCardAction(options: CreateCardActionOptions): IntakeActionKind<CreateCardActionConfig> {
-  /** The card an earlier delivery of this fire made, if any. */
-  const cardFromFire = async (scope: IntakeRuleScope, ruleId: string, fireKey: string) => {
-    for (const card of await options.workItems.listShared(scope)) {
-      const origin = intakeRuleOrigin(card.metadata);
-      if (origin?.id === ruleId && origin.fireKey === fireKey) return card;
-    }
-    return undefined;
-  };
-
+  const now = options.now ?? (() => new Date());
   return {
     kind: CREATE_CARD_ACTION_KIND,
     label: { uk: 'Створити картку', en: 'Create a card' },
     parse: config => parseWith(createCardActionConfigSchema, config),
-    describe: (config, locale) => {
-      const where = config.phaseKey ? `${config.boardKey} › ${config.phaseKey}` : config.boardKey;
-      return locale === 'uk' ? `Картка «${config.titleTemplate}» на ${where}` : `Card "${config.titleTemplate}" on ${where}`;
-    },
-    routeTarget: config => ({ boardKey: config.boardKey, phaseKey: config.phaseKey }),
-    problems: async (scope, config) => {
-      const problem = targetProblem(await options.boards.load(scope), config);
+    describe: (config, locale) => (locale === 'uk' ? `Картка «${config.titleTemplate}»` : `Card "${config.titleTemplate}"`),
+    problems: async (route, _config) => {
+      const problem = targetProblem(await options.boards.load(route), route.target);
       return problem ? [problem] : [];
     },
-    run: async ({ rule, config, fired, timeZone }) => {
-      const scope = { orgId: rule.orgId, factoryProjectId: rule.factoryProjectId };
-      if (fired.fireKey) {
-        const earlier = await cardFromFire(scope, rule.id, fired.fireKey);
-        if (earlier) return { workItemId: earlier.id, note: 'This fire had already filed its card.' };
-      }
+    run: async ({ route, config, fired, timeZone }) => {
+      const scope = { orgId: route.orgId, factoryProjectId: route.factoryProjectId };
       const registry = await options.boards.load(scope);
-      const problem = targetProblem(registry, config);
+      const problem = targetProblem(registry, route.target);
       if (problem) throw new IntakeTargetError(problem);
+      const board = registry.get(route.target.boardKey)!;
+      const fireKey = fired.fireKey ?? `manual:${fired.firedAt.toISOString()}`;
       const template = {
         firedAt: fired.firedAt,
-        ruleName: rule.name,
+        routeName: route.name,
         ...(timeZone ? { timeZone } : {}),
         ...(fired.payload ? { payload: fired.payload } : {}),
       };
       const description = renderIntakeTemplate(config.description, template).trim();
-      const origin: IntakeRuleCardOrigin = {
-        id: rule.id,
-        name: rule.name,
+      const origin: IntakeRouteCardOrigin = {
+        id: route.id,
+        name: route.name,
         triggerKind: fired.triggerKind,
         firedAt: fired.firedAt.toISOString(),
-        ...(fired.fireKey ? { fireKey: fired.fireKey } : {}),
+        fireKey,
       };
-      const created = await createFactoryWorkItem({
-        workItems: options.workItems,
-        boards: registry,
-        transitionService: options.transitionService(),
-        audit: async input => {
-          await options.auditRecorder.record({
-            orgId: rule.orgId,
-            actorId: `${INTAKE_RULE_ACTOR}:${rule.id}`,
-            actorType: 'system',
-            ...input,
-          });
-        },
-        orgId: rule.orgId,
-        // The person who set the rule up files its cards: they are its creator and consented to its runs.
-        userId: rule.createdBy,
-        factoryProjectId: rule.factoryProjectId,
-        input: {
-          title: renderIntakeTemplate(config.titleTemplate, template).slice(0, 500) || rule.name,
-          metadata: {
-            ...(description ? { description } : {}),
-            ...(config.repository ? { repository: config.repository } : {}),
-            [INTAKE_RULE_METADATA_KEY]: origin,
+      const identity = `intake-route:${route.id}:${fireKey}`;
+      const result = await options.workItems.commitRuleEvaluation({
+        ...scope,
+        workItemId: null,
+        ingress: { identity, triggerType: `intake-route.${fired.triggerKind}` },
+        configVersion: options.configVersion,
+        expectedRevision: null,
+        actor: { type: 'system', id: `${INTAKE_ROUTE_ACTOR}:${route.id}` },
+        outcome: { status: 'accepted' },
+        // The person who set the route up consented to its runs, as for a card they file themselves.
+        consentedBy: route.createdBy,
+        decisions: [
+          {
+            type: 'upsertLinkedWorkItem',
+            idempotencyKey: `${identity}:card`,
+            board: board.id,
+            source: INTAKE_ROUTE_CARD_SOURCE,
+            sourceKey: `${route.id}:${fireKey}`,
+            title: renderIntakeTemplate(config.titleTemplate, template).slice(0, 500) || route.name,
+            url: null,
+            stage: landingPhase(board, route.target.phaseKey),
+            // The route is the placement: no other route reads this card.
+            routesApplied: true,
+            metadata: {
+              ...(description ? { description } : {}),
+              ...(config.repository ? { repository: config.repository } : {}),
+              [INTAKE_ROUTE_ORIGIN_METADATA_KEY]: { ...origin },
+            },
           },
-        },
-        ...(options.intakeRoutes ? { intakeRoutes: options.intakeRoutes } : {}),
-        defaultPlacement: { board: config.boardKey, phase: config.phaseKey, actorId: INTAKE_RULE_ACTOR },
+        ],
+        causalChain: [],
+        now: now(),
       });
-      if (created.status === 'refused') throw new Error(created.message);
-      if (created.status === 'rejected') throw new Error(created.reason);
-      return { workItemId: created.item.id };
+      if (result.status === 'missing' || result.status === 'stale') {
+        throw new Error(`The card for this fire could not be filed (${result.status}).`);
+      }
+      // The card itself is filed by the dispatcher right after the commit; it is found again by its source.
+      return { workItemId: null, ...(result.status === 'replayed' ? { note: 'This fire had already filed its card.' } : {}) };
     },
   };
 }

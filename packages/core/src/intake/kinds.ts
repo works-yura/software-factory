@@ -85,7 +85,7 @@ export interface IntakeActionKind<C = unknown> extends KindBase<C> {
 export interface IntakePolicyContext {
   route: IntakeTriggerRoute;
   fired: IntakeTriggerFired;
-  /** The last fire whose action made a card, if any. */
+  /** The route's last fire that went ahead, if any. */
   lastWork: IntakeRouteFire | null;
 }
 
