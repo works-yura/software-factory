@@ -81,6 +81,7 @@ export function useSessionListRows(
       item: workItemBySessionId.get(session.sessionId)?.item,
       factoryId,
       pathname,
+      routeSessionId,
       running: runningById[session.sessionId] === true,
       pinned: pinnedSessions.has(session.sessionId),
       viewer,

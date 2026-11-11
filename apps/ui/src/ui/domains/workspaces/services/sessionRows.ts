@@ -312,6 +312,8 @@ export interface UserSessionRowInput {
   item?: WorkItem;
   factoryId: string;
   pathname: string;
+  /** The `:sessionId` of a `/workspaces/:sessionId/threads/:threadId` route, which channel and workspace links use for user sessions too. */
+  routeSessionId: string | undefined;
   running: boolean;
   pinned: boolean;
   viewer: SessionViewerProfile | undefined;
@@ -322,6 +324,7 @@ export function buildUserSessionRow({
   item,
   factoryId,
   pathname,
+  routeSessionId,
   running,
   pinned,
   viewer,
@@ -337,7 +340,7 @@ export function buildUserSessionRow({
     name: (fromSlack && !session.title?.trim() && item?.title.trim()) || getUserSessionLabel(session),
     url,
     openPath: url,
-    active: pathname === url,
+    active: pathname === url || session.sessionId === routeSessionId,
     status: sessionActivityStatus({
       initializing: sessionCheckoutPending(session),
       running,
