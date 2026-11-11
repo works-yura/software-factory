@@ -54,6 +54,7 @@ import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
 import { buildSupervisorRoutes } from '@factory/supervisor';
+import { boardSnapshot, matchesEtag } from './board-snapshot.ts';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -398,11 +399,25 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({
-            workItems: items.map(toWireWorkItem),
-            runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
-          });
+          const snapshot = boardSnapshot(
+            items,
+            toWireWorkItem,
+            sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
+            sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
+          );
+          // Every open tab refetches the whole board on each feed frame; most frames leave it unchanged.
+          const headers: Record<string, string> = {
+            ETag: snapshot.etag,
+            'Cache-Control': 'private, no-cache',
+            Vary: 'Accept-Encoding',
+          };
+          if (matchesEtag(c.req.header('if-none-match'), snapshot.etag)) return c.body(null, 304, headers);
+          headers['Content-Type'] = 'application/json; charset=UTF-8';
+          if (/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) {
+            headers['Content-Encoding'] = 'gzip';
+            return c.body(new Uint8Array(await snapshot.gzipped()), 200, headers);
+          }
+          return c.body(snapshot.json, 200, headers);
         },
       }),
 
