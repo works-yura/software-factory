@@ -397,6 +397,49 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect((await a.boards.get(scope, 'release'))!).toMatchObject({ name: 'Stored release', revision: 1 });
   });
 
+  it('reports no problem for the Review row Factory seeded and nobody edited, and never serves it', async () => {
+    const { a, scope } = await setup();
+    // What Factory stored while Review was still a seeded board (it was retired in 2fa2fed).
+    const seed: StoredBoardInput = {
+      key: 'review',
+      name: 'Review',
+      phases: [
+        { key: 'intake', name: 'Intake', kind: 'resting' },
+        { key: 'review', name: 'Reviewing', kind: 'working', runner: { context: 'review' } },
+        { key: 'done', name: 'Done', kind: 'terminal' },
+        { key: 'canceled', name: 'Canceled', kind: 'terminal' },
+      ],
+    };
+    await a.boards.insertIfMissing(scope, seed, 'factory');
+
+    const described = await new ProjectBoardCache({
+      codeRegistry: createBoardRegistry({ boards: [appBoard('release')] }),
+      storage: a.boards,
+      recheckMs: RECHECK_MS,
+    }).describe(scope);
+
+    expect(described.problems).toEqual([]);
+    expect(described.registry.get('review')).toBeUndefined();
+    expect((await a.boards.get(scope, 'review'))!.revision).toBe(1);
+  });
+
+  it('reports a non-Review board stored under the review key by Factory, and never serves it', async () => {
+    const { a, scope } = await setup();
+    // Factory's actor alone doesn't make a row the Review seed: its board isn't Review's.
+    await a.boards.insertIfMissing(scope, { ...bugsBoard(), key: 'review', name: 'Review' }, 'factory');
+
+    const described = await new ProjectBoardCache({
+      codeRegistry: createBoardRegistry({ boards: [appBoard('release')] }),
+      storage: a.boards,
+      recheckMs: RECHECK_MS,
+    }).describe(scope);
+
+    expect(described.problems).toEqual([
+      'Stored board "review" isn\'t served: the key is reserved for the retired Review board.',
+    ]);
+    expect(described.registry.get('review')).toBeUndefined();
+  });
+
   it('skips a stored board that no longer compiles and still loads the code boards and the other stored boards', async () => {
     const { a, scope } = await setup();
     await a.boards.create(scope, bugsBoard(), 'user-1');

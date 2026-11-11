@@ -4,13 +4,46 @@ import type { BoardRegistry, InstalledBoard, ProjectBoards, ProjectBoardSource, 
 export { toBoardSource } from '@factory/core';
 export type { BoardSourceKind, ProjectBoards, ProjectBoardSource, StoredBoardDetails } from '@factory/core';
 import { defaultBoards } from '@factory/pipelines';
-import { boardDefinitionOf, compileStoredBoard, mergeCodeBehaviour } from '@factory/store';
+import { boardDefinitionOf, compileStoredBoard, DEFAULT_INTAKE_ROUTE_ACTOR, mergeCodeBehaviour } from '@factory/store';
 import type { StoredBoardInput, StoredBoardRecord, StoredBoardScope, StoredBoardsStorage } from '@factory/store';
 
 import { BOARD_MIGRATIONS } from './work-migrations.ts';
 
 const DEFAULT_RECHECK_MS = 1000;
 const PRELOAD_CONCURRENCY = 8;
+/** The key of the retired Review board; projects that ran earlier releases may still store its row. */
+const LEGACY_REVIEW_BOARD = 'review';
+const RESERVED_REVIEW_ROW = `Stored board "${LEGACY_REVIEW_BOARD}" isn't served: the key is reserved for the retired Review board.`;
+/**
+ * The phases every release seeded the Review board with; only runners and tools changed between
+ * them. Frozen: the Review board was retired (2fa2fed), so its declaration is gone.
+ */
+const REVIEW_SEED_NAME = 'Review';
+const REVIEW_SEED_PHASES = [
+  { key: 'intake', name: 'Intake', kind: 'resting' },
+  { key: 'review', name: 'Reviewing', kind: 'working' },
+  { key: 'done', name: 'Done', kind: 'terminal' },
+  { key: 'canceled', name: 'Canceled', kind: 'terminal' },
+] as const;
+
+/**
+ * Whether `row` is the Review board as Factory seeded it: written once by Factory, never
+ * revised, and shaped like the seed. The actor alone is not proof, as any caller can pass it.
+ */
+function isUntouchedReviewSeed(row: StoredBoardRecord): boolean {
+  if (row.revision !== 1 || row.createdBy !== DEFAULT_INTAKE_ROUTE_ACTOR) return false;
+  if (row.updatedBy !== DEFAULT_INTAKE_ROUTE_ACTOR || row.name !== REVIEW_SEED_NAME) return false;
+  const phases = [...row.phases].sort((a, b) => a.position - b.position);
+  return (
+    phases.length === REVIEW_SEED_PHASES.length &&
+    phases.every(
+      (phase, index) =>
+        phase.key === REVIEW_SEED_PHASES[index]!.key &&
+        phase.name === REVIEW_SEED_PHASES[index]!.name &&
+        phase.kind === REVIEW_SEED_PHASES[index]!.kind,
+    )
+  );
+}
 const SNAPSHOT_ATTEMPTS = 3;
 
 interface CacheEntry {
@@ -272,6 +305,13 @@ export class ProjectBoardCache implements ProjectBoardSource {
     }
     for (const row of rows) {
       if (this.codeRegistry.has(row.key)) continue;
+      if (row.key === LEGACY_REVIEW_BOARD) {
+        // Factory seeded this row while Review was a built-in board and nobody edited it since:
+        // there is nothing in it to lose, so it is no problem. A person's edits are reported: the
+        // key is reserved, so the row is never served.
+        if (!isUntouchedReviewSeed(row)) report(row, [RESERVED_REVIEW_ROW]);
+        continue;
+      }
       let board: InstalledBoard;
       try {
         board = compileStoredBoard(row);

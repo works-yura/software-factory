@@ -1,6 +1,7 @@
 import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
 import { AUTO_TRIAGED_LABEL } from '@factory/core/rules/types';
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
+import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import {
   useGitLabIssuesQuery,
   useGitLabMergeRequestsQuery,
@@ -173,6 +174,23 @@ export function useBoardIntake({
   const routesFailed = !gitlabRepository && labelRoutesQuery.isError;
   const routesSettled = gitlabRepository || labelRoutesQuery.isSuccess;
 
+  // Provider sources are shared across factories, so one counts only once it is bound to one
+  // of this project's boards; until bindings load (or when they fail) the setup prompt waits.
+  const boundToProject = (integrationId: string, sourceIds: readonly string[] | null | undefined) =>
+    bindingsQuery.isPending ||
+    bindingsQuery.isError ||
+    (bindingsQuery.data ?? []).some(
+      binding =>
+        binding.integrationId === integrationId &&
+        binding.factoryProjectId === factoryProjectId &&
+        Boolean(binding.board) &&
+        (sourceIds?.includes(binding.sourceId) ?? false),
+    );
+  const sourceConnected =
+    (!gitlabRepository && githubEnabled && githubSelected) ||
+    (gitlabEligible && boundToProject('gitlab', config?.gitlab.sourceIds)) ||
+    // ClickUp lists file cards only through intake routes, never a feed the board browses.
+    ((config?.clickup.enabled ?? false) && boundToProject('clickup', config?.clickup.sourceIds));
   const githubIntakeActive =
     !gitlabRepository && (defaultBoard || routedHere || routesFailed) && githubEnabled && githubSelected;
   const pullRequestSource: IntakeSource = gitlabRepository ? 'gitlab-prs' : 'github-prs';
@@ -180,6 +198,25 @@ export function useBoardIntake({
     ...(githubIntakeActive ? (['github'] as const) : []),
     ...(gitlabReady ? (['gitlab'] as const) : []),
   ];
+  // A connected source files onto the default board, and onto another board only through an
+  // intake route that places its new cards there: enabled, run on `work_item.created`, and not
+  // one that only joins a pull request to an existing card (the server's `resolveIntakeRoute`).
+  const readsIntakeRoutes = !defaultBoard && sourceConnected && available.length === 0;
+  const intakeRoutesQuery = useIntakeRoutesQuery(readsIntakeRoutes ? factoryProjectId : undefined);
+  const intakeRoutesPending = readsIntakeRoutes && intakeRoutesQuery.isPending;
+  const intakeRoutesFailed = readsIntakeRoutes && intakeRoutesQuery.isError;
+  const routePlacesCardsHere = (intakeRoutesQuery.data ?? []).some(
+    route =>
+      route.enabled &&
+      route.on.includes('work_item.created') &&
+      !route.target.joinClosedIssue &&
+      route.target.boardKey === kind,
+  );
+  // Whether anything files onto this board: a feed it browses, or a connected source routed here.
+  // While routes load the column stays pending, and a failed load reports the error with a retry.
+  const fed =
+    available.length > 0 ||
+    (sourceConnected && (defaultBoard || intakeRoutesPending || intakeRoutesFailed || routePlacesCardsHere));
   // The default board also lists the pull requests of its linked repositories, but they are
   // not an issue source: a default board without one still asks to connect one.
   const feedSources: IntakeSource[] = browsesPullRequests && repository ? [...available, pullRequestSource] : available;
@@ -261,7 +298,14 @@ export function useBoardIntake({
     gitlab: gitlabFeed,
   };
   const failedSource = browsedSources.find(source => browsed[source].error);
-  const feed = combineIntakeFeeds(browsedSources.map(source => browsed[source]));
+  const feed = intakeRoutesFailed
+    ? {
+        error: intakeRoutesQuery.error,
+        isPending: false,
+        fetchNextPage: () => undefined,
+        refetch: () => intakeRoutesQuery.refetch(),
+      }
+    : combineIntakeFeeds(browsedSources.map(source => browsed[source]));
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
     [initialPhase]: feed,
@@ -272,7 +316,8 @@ export function useBoardIntake({
   const discoveringSources =
     ((config?.gitlab.enabled ?? false) && gitlabStatusQuery.isPending) ||
     bindingsPending ||
-    routesPending;
+    routesPending ||
+    intakeRoutesPending;
   const isConfigurationPending = configQuery.isPending;
   const isRoutingPending = browsesGithub && routesPending;
   const isPending =
@@ -281,6 +326,7 @@ export function useBoardIntake({
   return {
     active: failedSource ?? browsedSources[0],
     available,
+    fed,
     candidates,
     alreadyMaterialized,
     participantCandidates,

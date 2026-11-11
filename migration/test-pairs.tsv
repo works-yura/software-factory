@@ -281,7 +281,7 @@ workspace.test.ts	harness-mastra/src/workspace.test.ts	16	upstream #28838: src/m
 ../../../apps/ui/src/ui/__tests__/BoardVirtualization.msw.test.tsx	../apps/ui/src/ui/__tests__/BoardVirtualization.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/ChannelThreadRedirect.msw.test.tsx	../apps/ui/src/ui/__tests__/ChannelThreadRedirect.msw.test.tsx
 ../../../apps/ui/src/ui/__tests__/ConnectionsRedirect.msw.test.tsx	../apps/ui/src/ui/__tests__/ConnectionsRedirect.msw.test.tsx
-../../../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx	../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx
+../../../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx	../apps/ui/src/ui/__tests__/CustomBoardPage.msw.test.tsx	+4	upstream #29744: triage approval wait, stored-board intake, Review seed row (+4)
 ../../../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	../apps/ui/src/ui/__tests__/FactoryRootRoute.msw.test.tsx	-1	Linear/Jira/incident.io UI cases dropped with the vocabulary
 ../../../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	../apps/ui/src/ui/__tests__/NewPageModelGuard.msw.test.tsx	+6	Factory-routed built-in model start ported from upstream a9f392e60e (+1); Claude Code Factory needs no Mastra model (+3); a Factory without sessionless chat opens a personal draft
 ../../../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	../apps/ui/src/ui/__tests__/RulesPage.msw.test.tsx	+1	no supervisor shortcut while the supervisor chat is hidden (+1)
