@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { createDeviceModelSlot, type DeviceModelSource } from "./model.ts";
+import { createDeviceModelSlot, resolveDeviceModelId, type DeviceModelSource } from "./model.ts";
 
 const pro: DeviceModelSource = { id: "iphone-18-pro", url: "/pro.glb" };
 const max: DeviceModelSource = { id: "iphone-18-pro-max", url: "/max.glb" };
@@ -95,4 +95,21 @@ it("releases an invalid model and restores the fallback if scene preparation rej
   await Promise.resolve();
   expect(install).toHaveBeenLastCalledWith(recovered);
   slot.dispose();
+});
+
+it("gives earlier Dynamic Island devices the nearest bundled body", () => {
+  const resolve = (name: string) => resolveDeviceModelId("ios", name);
+  expect(resolve("iPhone 18 Pro")).toBe("iphone-18-pro");
+  expect(resolve("iPhone 17 Pro")).toBe("iphone-18-pro");
+  expect(resolve("iPhone 16")).toBe("iphone-18-pro");
+  expect(resolve("iPhone Air")).toBe("iphone-18-pro");
+  expect(resolve("iPhone 14 Pro")).toBe("iphone-18-pro");
+  expect(resolve("iPhone 17 Pro Max")).toBe("iphone-18-pro-max");
+  expect(resolve("iPhone 15 Plus")).toBe("iphone-18-pro-max");
+  expect(resolve("iPad Pro 13-inch (M4)")).toBe("ipad-pro-13-m5");
+  // Notch and Home-button designs keep the flat-shaded frame.
+  expect(resolve("iPhone 14")).toBeNull();
+  expect(resolve("iPhone 16e")).toBeNull();
+  expect(resolve("iPhone SE (3rd generation)")).toBeNull();
+  expect(resolveDeviceModelId("android", "iPhone 17 Pro")).toBeNull();
 });
