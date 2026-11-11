@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 import { defineBoard } from '@factory/core';
 import type { BoardEventFacts, BoardRegistry, FactoryCommitDecision, RuleGroup } from '@factory/core';
-import { createDefaultBoardRegistry as createBoardRegistry } from '@factory/pipelines';
+// Work as most projects store it, with Triage (upstream #29901 dropped it only from new projects).
+import { createTriageWorkRegistry as createBoardRegistry } from '@factory/pipelines/testing';
 import { CATCH_ALL_INTAKE_ROUTE, DEFAULT_INTAKE_ROUTE, PULL_REQUEST_INTAKE_ROUTE } from '@factory/store';
 import type { StoredIntakeRouteInput } from '@factory/store';
 import { ProjectBoardCache } from './project-boards.ts';
@@ -67,6 +68,8 @@ async function setup(
     storage: seeded.storedBoards,
     recheckMs: 0,
   });
+  // The project's first load stores Factory's boards, before any test adds its own.
+  await boards.describe(scope);
   const configVersion = 'intake-routes-v1';
   const workItems = seeded.workItems;
   const dispatcher = new FactoryDecisionDispatcher({

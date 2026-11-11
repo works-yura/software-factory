@@ -6,6 +6,7 @@ import type { FactoryRuleItemContext, FactoryStageRuleContext } from '@factory/c
 import { providerWorkItemForTests } from '../testing.ts';
 import { BUILD_OBJECTIVE, workBoard } from './board.ts';
 import { selfReviewWorkBoard } from './legacy-self-review.ts';
+import { triageWorkBoard } from './legacy-triage.ts';
 
 function entering(
   source: FactoryRuleItemContext['source'],
@@ -51,22 +52,15 @@ describe('the Work board seed', () => {
           : [],
       ),
     );
+    // New projects' Work has no Triage (upstream #29901).
     expect(working).toEqual({
-      triage: {
-        runner: { agentId: 'code-agent', skill: 'factory-triage', context: 'triage' },
-        exitTool: undefined,
-        tools: undefined,
-        autoStart: undefined,
-        autoStartWhen: undefined,
-        nextPhases: ['intake', 'planning', 'done', 'canceled'],
-      },
       planning: {
         runner: { agentId: 'code-agent', skill: 'factory-plan', context: 'work' },
         exitTool: { id: 'submit_plan', autoApprove: false },
         tools: undefined,
         autoStart: undefined,
         autoStartWhen: undefined,
-        nextPhases: ['execute', 'triage', 'intake', 'done', 'canceled'],
+        nextPhases: ['execute', 'intake', 'done', 'canceled'],
       },
       execute: {
         runner: {
@@ -142,7 +136,7 @@ describe("Work phases, and an older project's Work with its self-review phase", 
   });
 
   it('starts the triage runner for a GitLab issue, whose fetch tool the signal names', () => {
-    expect(phaseRunDecision(workBoard, 'triage', entering('gitlab-issue', 'intake', 'triage'))).toMatchObject({
+    expect(phaseRunDecision(triageWorkBoard, 'triage', entering('gitlab-issue', 'intake', 'triage'))).toMatchObject({
       role: 'triage',
       skillName: 'factory-triage',
       idempotencyKey: 'ingress-1:triage:factory-triage',

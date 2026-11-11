@@ -25,6 +25,7 @@ import {
   StoredBoardsStorage,
   WorkItemCommentsStorage,
   WorkItemsStorage,
+  workSeedWithTriage,
 } from '@factory/store';
 import type { StoredPhaseInput } from '@factory/store';
 import { BoardRoutes } from './boards.ts';
@@ -334,7 +335,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
   it('returns the Work and app boards the project stored, editable at revision 1', async () => {
     const { a, scope, base, replicaA } = await setup();
     const work = await getBoard(replicaA.send, base, 'work');
-    const { description, ...definition } = boardDefinitionOf(workBoard);
+    // A project that loads without having been created with today's Work holds Work with Triage (upstream #29901).
+    const { description, ...definition } = workSeedWithTriage();
     // Stored rows spell unset phase fields as null.
     expect(work).toMatchObject({
       ...definition,
@@ -352,13 +354,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     await getBoard(replicaA.send, base, 'work');
     expect(await a.boards.readVersion(scope)).toBe(version);
     expect(work.phases.map(phase => [phase.key, phase.name, phase.kind])).toEqual(
-      Object.entries(workBoard.phases).map(([key, phase]) => [key, phase.name, phase.kind]),
+      definition.phases.map(phase => [phase.key, phase.name, phase.kind]),
     );
     expect(work.phases.map(phase => [phase.key, phase.nextPhases])).toEqual(
-      Object.keys(workBoard.phases).map(key => [
-        key,
-        [...workBoard.phases[key as keyof typeof workBoard.phases].nextPhases],
-      ]),
+      definition.phases.map(phase => [phase.key, [...(phase.nextPhases ?? [])]]),
     );
     expect(await getBoard(replicaA.send, base, 'release')).toMatchObject({
       source: 'app',
@@ -372,9 +371,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       canEdit: true,
       board: {
         codeBehaviour: {
-          intake: { requiredNextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'] },
-          triage: { requiredNextPhases: ['intake', 'planning', 'done', 'canceled'] },
-          planning: { requiredNextPhases: ['execute', 'triage', 'intake', 'done', 'canceled'] },
+          // Today's Work code has no Triage, so the stored Triage and the moves into it are free.
+          intake: { requiredNextPhases: ['planning', 'pr-review', 'done', 'canceled'] },
+          planning: { requiredNextPhases: ['execute', 'intake', 'done', 'canceled'] },
           'pr-review': { requiredNextPhases: ['intake', 'planning', 'execute', 'done', 'canceled'] },
           canceled: { requiredNextPhases: ['intake', 'pr-review'] },
         },
@@ -482,7 +481,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     // Removing Planning also drops the moves code makes into it.
     const removal = await replicaA.send('PATCH', `${base}/work`, cases[0]);
     expect(removal.body.conflicts).toContainEqual(
-      'Phase "triage": Factory\'s code moves cards from it to "planning"; keep it in nextPhases.',
+      'Phase "intake": Factory\'s code moves cards from it to "planning"; keep it in nextPhases.',
     );
     const both = editPhase({ ...cases[1]!, revision: 1 }, 'done', phase => ({ ...phase, kind: 'resting' }));
     expect((await replicaA.send('PATCH', `${base}/work`, both)).body.conflicts).toHaveLength(2);
@@ -560,7 +559,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(reset.status).toBe(200);
     // Reset rewrites the row at the next revision; it never deletes it.
     expect(reset.body.board).toMatchObject({ revision: 3 });
-    expect(reset.body.board.phases).toMatchObject(boardDefinitionOf(workBoard).phases);
+    // An older project's Work resets to the Work it was stored with, Triage included (upstream #29901).
+    expect(reset.body.board.phases).toMatchObject(workSeedWithTriage().phases);
     expect((await catalogBoard(replicaA.send, base, 'work'))!.phases.find((p: any) => p.id === 'planning').name).toBe(
       'Planning',
     );

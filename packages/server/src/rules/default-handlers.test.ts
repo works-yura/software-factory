@@ -4,7 +4,9 @@ import { splitCardMetadata, workItemProviderAdapter } from '@factory/store';
 import { defineBoard, externalSourceForWorkItem, phaseRunDecision } from '@factory/core';
 import { createBoardRegistry } from '@factory/testing';
 import { boardFlow, intakeTarget, rulePhaseField, withBoardClosure, withBoardFlow } from '@factory/core';
-import { BUILD_OBJECTIVE, workBoard } from '@factory/pipelines';
+import { BUILD_OBJECTIVE, workBoard as todaysWorkBoard } from '@factory/pipelines';
+// Work as most projects store it, with Triage (upstream #29901 dropped it only from new projects).
+import { triageWorkBoard as workBoard } from '@factory/pipelines/testing';
 import { defaultGithubRules } from '@factory/integration-github';
 import { defaultGitLabRules } from '@factory/integration-gitlab';
 import type {
@@ -144,7 +146,8 @@ function githubContext(
 
 describe('built-in board and integration handlers', () => {
   it('ships ordinary visible default leaves', () => {
-    expect(workBoard.phases.triage.runner.skill).toBe('factory-triage');
+    expect(workBoard.phases.triage!.kind === 'working' && workBoard.phases.triage!.runner.skill).toBe('factory-triage');
+    expect(todaysWorkBoard.phases).not.toHaveProperty('triage');
     expect(workBoard.phases['pr-review'].runner.skill).toBe('factory-review');
     expect(workBoard.phases.done.kind).toBe('terminal');
     expect(defaultGithubRules.issueOpened).toBeTypeOf('function');

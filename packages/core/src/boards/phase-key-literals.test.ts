@@ -13,6 +13,8 @@ const SEED_AND_LEGACY = new Set([
   'pipelines/src/work/legacy-plan-role.ts',
   // Work as projects stored it while it had its `review` self-review phase (upstream #29724).
   'pipelines/src/work/legacy-self-review.ts',
+  // Work as projects stored it while it had Triage (upstream #29901).
+  'pipelines/src/work/legacy-triage.ts',
   'core/src/boards/legacy-plan-role.ts',
   'store/src/boards/work-routes.ts',
   'store/src/work-items/legacy-keys.ts',

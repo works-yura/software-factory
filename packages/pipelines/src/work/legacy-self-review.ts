@@ -1,7 +1,8 @@
 import { compileBoardDefinition } from '@factory/core';
 import type { BoardPhaseDefinition } from '@factory/core';
 
-import { OWN_CARD_HAND_OFF, workBoard } from './board.ts';
+import { OWN_CARD_HAND_OFF } from './board.ts';
+import { triageWorkBoard as workBoard } from './legacy-triage.ts';
 
 /** Building's goal while Work still had its self-review phase. Frozen: stored rows may hold it. */
 export const SELF_REVIEW_BUILD_OBJECTIVE =
@@ -34,7 +35,7 @@ export const LEGACY_SELF_REVIEW_PHASE: BoardPhaseDefinition<string> = {
 };
 
 /**
- * Work as projects stored it while Work still had its `review` self-review phase. Work's seed
+ * Work as projects stored it while Work still had its `review` self-review phase (and Triage). Work's seed
  * dropped that phase, but a project's stored row keeps it (the runner migration fills from this
  * shape), and other boards may declare one.
  */

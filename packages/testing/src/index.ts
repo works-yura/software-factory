@@ -4,7 +4,8 @@
  * these wrappers, which install those boards wherever a test leaves boards out.
  */
 
-import { createDefaultBoardRegistry } from '@factory/pipelines';
+// Work as most projects store it, with Triage (upstream #29901 dropped it only from new projects).
+import { createTriageWorkRegistry as createDefaultBoardRegistry } from '@factory/pipelines/testing';
 import {
   FactoryDecisionDispatcher as DecisionDispatcher,
   FactoryTransitionService as TransitionService,
@@ -14,7 +15,7 @@ import { createFactoryStorageForTests as createStorage } from '@factory/store/te
 
 export * from '@factory/store/testing';
 export * from '@factory/runtime';
-export { createDefaultBoardRegistry as createBoardRegistry } from '@factory/pipelines';
+export { createTriageWorkRegistry as createBoardRegistry } from '@factory/pipelines/testing';
 
 export class FactoryTransitionService extends TransitionService {
   constructor(options: FactoryTransitionServiceOptions) {

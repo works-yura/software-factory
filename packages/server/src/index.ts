@@ -22,6 +22,7 @@ export type {
   RuleOperator,
 } from '@factory/core';
 export { BoardWriteError } from '@factory/runtime';
+export { workSeedWithTriage } from '@factory/store';
 export type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from '@factory/store';
 export { MastraFactory } from './factory.ts';
 export { waitForPendingFilesystemCapture } from '@factory/session';

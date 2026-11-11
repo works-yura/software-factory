@@ -9,6 +9,7 @@ export * from './audit/base.ts';
 export * from './boards/base.ts';
 export * from './boards/stored-board.ts';
 export * from './boards/work-seed-with-self-review.ts';
+export * from './boards/work-seed-with-triage.ts';
 export * from './channel-identity/base.ts';
 export * from './comments/actor.ts';
 export * from './comments/base.ts';

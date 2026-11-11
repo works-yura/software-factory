@@ -54,6 +54,7 @@ export {
   SELF_REVIEW_BUILD_OBJECTIVE,
   selfReviewWorkBoard,
 } from './work/legacy-self-review.ts';
+export { LEGACY_TRIAGE_PHASE, triageWorkBoard } from './work/legacy-triage.ts';
 export {
   buildDocsGuidance,
   changeFolderOf,

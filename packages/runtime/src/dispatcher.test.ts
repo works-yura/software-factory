@@ -9,7 +9,9 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '@factory/core';
 import { createTestBoard } from '@factory/core/testing';
-import { BUILD_OBJECTIVE, createPipelines, workBoard } from '@factory/pipelines';
+import { BUILD_OBJECTIVE, workBoard } from '@factory/pipelines';
+// Work as most projects store it, with Triage (upstream #29901 dropped it only from new projects).
+import { createTriagePipelines as createPipelines } from '@factory/pipelines/testing';
 import type { WorkBoardPhase } from '@factory/pipelines';
 import type { BoardPhaseDefinition, BoardRegistry } from '@factory/core';
 import { autoStartingBoards, createLifecycleTestRegistry } from '@factory/pipelines/testing';

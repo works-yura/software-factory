@@ -14,6 +14,7 @@ import { createPipelines } from './index.ts';
 import { workBoard } from './work/board.ts';
 import type { WorkBoardPhase } from './work/board.ts';
 import { selfReviewWorkBoard } from './work/legacy-self-review.ts';
+import { LEGACY_TRIAGE_PHASE, triageWorkBoard } from './work/legacy-triage.ts';
 
 describe('factory pipelines', () => {
   const installed = createPipelines();
@@ -36,9 +37,9 @@ describe('factory pipelines', () => {
     expect(workBoard.initialPhase).toBe('intake');
     // Each phase names where a card goes next (upstream #29039); the board no longer allows every move.
     const flow: Record<WorkBoardPhase, string[]> = {
-      intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
-      triage: ['intake', 'planning', 'done', 'canceled'],
-      planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
+      // New projects' Work has no Triage (upstream #29901); older projects keep theirs (triageWorkBoard).
+      intake: ['planning', 'pr-review', 'done', 'canceled'],
+      planning: ['execute', 'intake', 'done', 'canceled'],
       // Review once the builder opened the change request; Work has no self-review phase (upstream #29724).
       execute: ['pr-review', 'planning', 'done', 'canceled'],
       // An issue card can go back to its builder for a fix; a pull request's own card can't (Work's policy).
@@ -58,7 +59,6 @@ describe('factory pipelines', () => {
     );
     expect(skills).toEqual({
       intake: null,
-      triage: 'factory-triage',
       planning: 'factory-plan',
       execute: 'factory-build',
       'pr-review': 'factory-review',
@@ -81,19 +81,38 @@ describe('factory pipelines', () => {
     expect(workBoard.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
   });
 
+  it('keeps Work with Triage for projects stored before new projects dropped it', () => {
+    // upstream #29901: a project Factory didn't create with today's Work is stored with this one.
+    expect(Object.keys(triageWorkBoard.phases)).toEqual([
+      'intake',
+      'triage',
+      'planning',
+      'execute',
+      'pr-review',
+      'done',
+      'canceled',
+    ]);
+    expect(triageWorkBoard.phases.triage).toMatchObject(LEGACY_TRIAGE_PHASE);
+    expect(triageWorkBoard.phases.intake!.nextPhases).toEqual(['triage', 'planning', 'pr-review', 'done', 'canceled']);
+    expect(triageWorkBoard.phases.planning!.nextPhases).toEqual(['execute', 'triage', 'intake', 'done', 'canceled']);
+    // The self-review shape projects stored earlier still has Triage too.
+    expect(Object.keys(selfReviewWorkBoard.phases)).toContain('triage');
+  });
+
   it('reads each part of the pull request loop from Work\'s phases', () => {
     expect(boardFlow(workBoard)).toEqual({
       initialPhase: 'intake',
       completed: { phase: 'done', title: 'Done' },
       canceled: { phase: 'canceled', title: 'Canceled' },
-      triage: 'triage',
       pullRequestReview: 'pr-review',
       build: 'execute',
       buildRole: 'work',
     });
+    // A project stored before #29901 keeps Triage, and the loop reads it.
+    expect(boardFlow(triageWorkBoard)).toMatchObject({ triage: 'triage', build: 'execute' });
     // An older project's stored Work keeps its self-review phase, and the loop reads it.
     expect(boardFlow(selfReviewWorkBoard)).toMatchObject({ selfReview: 'review', build: 'execute' });
-    expect(['triage', 'planning', 'execute', 'pr-review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
+    expect(['triage', 'planning', 'execute', 'pr-review'].map(stage => triageWorkBoard.roleForPhase(stage))).toEqual([
       'triage',
       'work',
       'work',
@@ -112,7 +131,7 @@ describe('factory pipelines', () => {
       item: { url: 'https://github.test/acme/repo/issues/7', title: 'Fix it', source: 'github-issue', metadata: null } as never,
       fromStage,
     });
-    expect(phaseRunDecision(workBoard, 'triage', rule('intake'))).toEqual({
+    expect(phaseRunDecision(triageWorkBoard, 'triage', rule('intake'))).toEqual({
       type: 'invokeSkill',
       idempotencyKey: 'ingress-1:triage:factory-triage',
       role: 'triage',

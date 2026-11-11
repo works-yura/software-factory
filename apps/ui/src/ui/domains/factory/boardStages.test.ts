@@ -1,4 +1,4 @@
-import { workBoard } from '@factory/pipelines/work/board';
+import { triageWorkBoard as workBoard } from '@factory/pipelines/work/legacy-triage';
 
 import { describe, expect, it } from 'vitest';
 

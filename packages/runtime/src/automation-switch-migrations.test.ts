@@ -7,7 +7,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { defineBoard } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import { createPipelines, workBoard } from '@factory/pipelines';
-import { boardDefinitionOf, workSeedWithSelfReview } from '@factory/store';
+import { boardDefinitionOf, workSeedWithSelfReview, workSeedWithTriage } from '@factory/store';
 import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
 import {
   createFactoryStorageForTests as createStorage,
@@ -25,7 +25,8 @@ const createFactoryStorageForTests = (storage: TestBackend) => createStorage({ b
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
 /** Work as Factory seeds it today: no phase starts on its own. */
-const WORK = boardDefinitionOf(workBoard);
+// A project that loads without having been created with today's Work is stored Work with Triage (upstream #29901).
+const WORK = workSeedWithTriage();
 const WORKING = WORK.phases.filter(phase => phase.kind === 'working').map(phase => phase.key);
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
@@ -376,7 +377,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         },
       );
 
-      it("seeds a project that stored no boards with today's Work, which has no self-review phase", async () => {
+      it("seeds a project that stored no boards with Work as older projects have it, which has no self-review phase", async () => {
         const { load, work } = await setup({ self_review_enabled: true });
 
         await load();

@@ -157,6 +157,8 @@ export class BoardWrites {
     const key = (input as { key?: unknown } | null)?.key;
     if (typeof key === 'string') this.refuseCodeBoard(key, 'create');
     const board = this.validate(input);
+    // Factory stores its boards only into a project that has none, so they go in first.
+    await this.deps.boards.describe(scope);
     const row = await stored(() => this.deps.storage.create(scope, board, writer.id));
     this.deps.boards.invalidate(scope);
     await this.#audit(scope, writer, 'created', board);
@@ -272,8 +274,12 @@ export class BoardWrites {
     }
     await boards.describe(scope);
     const row = await this.existing(scope, key);
-    await this.#checkPhasesFree(scope, row, seed.phases);
-    const reset = await stored(() => storage.resetTo(scope, key, seed, { expectedRevision, actor: writer.id }));
+    // A board the app upserts for every project resets to the app's. Factory's Work resets to the
+    // Work the project was stored with: today's for a project Factory created with it, Work with
+    // Triage for every other.
+    const definition = boards.seedFor(key, row) ?? seed;
+    await this.#checkPhasesFree(scope, row, definition.phases);
+    const reset = await stored(() => storage.resetTo(scope, key, definition, { expectedRevision, actor: writer.id }));
     boards.invalidate(scope);
     await this.#audit(scope, writer, 'reset', row);
     return reset;

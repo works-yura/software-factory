@@ -24,7 +24,7 @@ import {
   MemorySettingsStorage,
   ModelCredentialsStorage,
 } from '@factory/store';
-import type { StoredBoardInput, StoredBoardsStorage, WorkItemsStorage } from '@factory/store';
+import type { FactoryProjectsStorage, StoredBoardInput, StoredBoardsStorage, WorkItemsStorage } from '@factory/store';
 import { MastraFactory } from '../factory.ts';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -216,6 +216,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       return created.json.project.id as string;
     }
 
+    /**
+     * A project from before new projects' Work dropped Triage (upstream #29901): stored without the
+     * project route, so its first board load stores Work with Triage, as it does for older projects.
+     */
+    async function createOlderProject(replica: Awaited<ReturnType<typeof boot>>, orgId: string, name: string) {
+      const project = await replica.storage
+        .getDomain<FactoryProjectsStorage>('projects')
+        .create({ orgId, userId: 'admin-user', input: { name } });
+      // Its first load stores its boards.
+      expect((await catalog(replica, project.id)).find(board => board.id === 'work')?.phases.map(p => p.id)).toContain(
+        'triage',
+      );
+      return project.id;
+    }
+
     /** The admin's create, written straight to storage the way the boards API writes it. */
     async function addBugs(replica: Awaited<ReturnType<typeof boot>>, orgId: string, projectId: string) {
       await replica.boards.create({ orgId, factoryProjectId: projectId }, bugsBoard, 'admin-user');
@@ -271,9 +286,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         ['bugs', 'stored', true],
       ]);
       const work = boards.find(board => board.id === 'work')!;
+      // A project created now holds today's Work, without Triage (upstream #29901).
       expect(work.phases.map(phase => `${phase.id}:${phase.name}`)).toEqual([
         'intake:Intake',
-        'triage:Triage',
         'planning:Planning',
         'execute:Building',
         'pr-review:Review',
@@ -488,7 +503,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
       /** A project whose runs can start: a model, its credential, and a linked GitHub repository. */
       async function runnableProject(replica: Awaited<ReturnType<typeof boot>>, orgId: string) {
-        const projectId = await createProject(replica, 'Shipyard');
+        // Shipyard's Work is an older project's, with Triage.
+        const projectId = await createOlderProject(replica, orgId, 'Shipyard');
         const configured = await replica.send('PATCH', `/web/factory/projects/${projectId}`, {
           defaultModelId: 'openai/gpt-5.6-sol',
         });
@@ -876,9 +892,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           expect(again.updated).toEqual([]);
           expect(again.unchanged).toHaveLength(2);
 
-          // It isn't stored for you: a project created later has no board under the key.
+          // A project created later gets it too, and then no Work from Factory (upstream #29901).
           const later = await createProject(replica, 'Later');
-          expect((await catalog(replica, later)).map(board => board.id)).not.toContain('bugs');
+          const laterBoards = (await catalog(replica, later)).map(board => board.id);
+          expect(laterBoards).toContain('bugs');
+          expect(laterBoards).not.toContain('work');
 
           const audit = (projectId: string) =>
             replica.storage

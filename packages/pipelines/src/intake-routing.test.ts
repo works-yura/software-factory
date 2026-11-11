@@ -5,8 +5,10 @@ import type { RuleGroup } from '@factory/core';
 import { createTestBoard } from '@factory/core/testing';
 
 import { createDefaultBoardRegistry as createBoardRegistry } from './defaults.ts';
+import { triageWorkBoard } from './work/legacy-triage.ts';
 
-const registry = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: true });
+// Work as most projects store it: with Triage (new projects' Work has none, upstream #29901).
+const registry = createBoardRegistry({ boards: [triageWorkBoard, createTestBoard()], includeDefaultBoards: false });
 
 const DOCS: RuleGroup = {
   operator: 'AND',

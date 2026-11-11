@@ -262,8 +262,10 @@ describe('Board configuration', () => {
     const review = moves().getByRole('button', { name: 'Review', pressed: false });
     await user.click(review);
     expect(review).toHaveAttribute('aria-pressed', 'true');
-    // Moves Factory's code makes stay on; the one allowed here can be turned off again.
-    expect(moves().getByRole('button', { name: 'Triage (locked)' })).toHaveAttribute('aria-disabled', 'true');
+    // Moves Factory's code makes stay on; the one allowed here can be turned off again. The stored
+    // Work keeps its move into Triage, but today's Work code has no Triage, so that one is free.
+    expect(moves().getByRole('button', { name: 'Intake (locked)' })).toHaveAttribute('aria-disabled', 'true');
+    expect(moves().getByRole('button', { name: 'Triage', pressed: true })).not.toHaveAttribute('aria-disabled');
     expect(review).not.toHaveAttribute('aria-disabled');
 
     // New cards land in the first phase, so it stays put.

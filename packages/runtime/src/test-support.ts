@@ -7,10 +7,11 @@
 import { randomUUID } from 'node:crypto';
 
 import { validateFactoryRuleDecisions } from '@factory/core';
-import { createPipelines } from '@factory/pipelines';
+// Work as most projects store it, with Triage (upstream #29901 dropped it only from new projects).
+import { createTriagePipelines as createPipelines } from '@factory/pipelines/testing';
 import type { WorkItemsStorage } from '@factory/store';
 
-export { createDefaultBoardRegistry as createBoardRegistry } from '@factory/pipelines';
+export { createTriageWorkRegistry as createBoardRegistry } from '@factory/pipelines/testing';
 import { createFactoryStorageForTests as createStorage } from '@factory/store/testing';
 
 import { FactoryDecisionDispatcher as DecisionDispatcher } from './dispatcher.ts';

@@ -17,7 +17,8 @@ import { createMastraHarness } from '@factory/harness-mastra';
 import { GithubRules, resolveGithubRules } from '@factory/integration-github';
 import type { GithubIntegration } from '@factory/integration-github';
 import { createFactorySessionTokenSigner, FACTORY_SESSION_TOKEN_HEADER, resolveSessionTokenScope } from '@factory/mcp';
-import { createDefaultBoardRegistry } from '@factory/pipelines';
+// Work as most projects store it, with Triage (upstream #29901 dropped it only from new projects).
+import { createTriageWorkRegistry as createDefaultBoardRegistry } from '@factory/pipelines/testing';
 import { createSessionNotifier, createSourceControlSessionLookup, LiveSessions } from '@factory/session';
 import { createFactoryStorageForTests, FactoryDecisionDispatcher, FactoryTransitionService } from '@factory/testing';
 

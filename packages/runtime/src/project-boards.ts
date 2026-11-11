@@ -3,12 +3,13 @@ import type { BoardRegistry, InstalledBoard, ProjectBoards, ProjectBoardSource, 
 
 export { toBoardSource } from '@factory/core';
 export type { BoardSourceKind, ProjectBoards, ProjectBoardSource, StoredBoardDetails } from '@factory/core';
-import { defaultBoards } from '@factory/pipelines';
+import { defaultBoards, workBoard } from '@factory/pipelines';
 import {
   boardDefinitionOf,
   compileStoredBoard,
   DEFAULT_INTAKE_ROUTE_ACTOR,
   mergeCodeBehaviour,
+  workSeedWithTriage,
 } from '@factory/store';
 import type {
   BoardMigrationContext,
@@ -59,6 +60,13 @@ function isUntouchedReviewSeed(row: StoredBoardRecord): boolean {
   );
 }
 const SNAPSHOT_ATTEMPTS = 3;
+
+/**
+ * The creator Factory records on the Work board it stores in a project as the project is
+ * created: that board is today's Work, and reset gives it back. Any other Work row Factory stored
+ * is the one with Triage. Only Factory writes this id; a person's writes carry their user id.
+ */
+export const NEW_PROJECT_SEED_ACTOR = 'factory:new-project';
 
 interface CacheEntry {
   boards: ProjectBoards;
@@ -146,6 +154,8 @@ export class ProjectBoardCache implements ProjectBoardSource {
   readonly #problemsOf: NonNullable<ProjectBoardCacheOptions['skillProblems']>;
   readonly #seeded = new Set<string>();
   readonly #seeds: ReadonlyMap<string, StoredBoardInput>;
+  /** Boards the app upserted for every project, which a project with no boards gets before Factory's. */
+  readonly #appBoards = new Map<string, StoredBoardInput>();
   readonly #occupiedPhases: ProjectBoardCacheOptions['occupiedPhases'];
 
   constructor(options: ProjectBoardCacheOptions) {
@@ -172,14 +182,61 @@ export class ProjectBoardCache implements ProjectBoardSource {
     );
   }
 
-  /** The boards Factory stores in each project once, in order. */
+  /**
+   * The boards Factory stores once in a project it didn't create: Work as it was with Triage, so a
+   * project from an older release keeps the phases its cards know, then the app boards, in order.
+   */
   seeds(): StoredBoardInput[] {
-    return [...this.#seeds.values()];
+    return [...this.#seeds.values()].map(seed => (this.#isFactoryWork(seed.key) ? workSeedWithTriage() : seed));
   }
 
-  /** Factory's current definition for `key`, which reset restores; undefined when Factory has none. */
-  seedFor(key: string): StoredBoardInput | undefined {
-    return this.#seeds.get(key);
+  /**
+   * The definition reset restores for `key`; undefined when there is none. A board the app upserted
+   * for every project comes first, so reset never swaps an app's Work for Factory's. Factory's Work
+   * is today's Work for a project Factory created with it (`row` created by
+   * {@link NEW_PROJECT_SEED_ACTOR}), and Work with Triage for every other project.
+   */
+  seedFor(key: string, row?: Pick<StoredBoardRecord, 'createdBy'>): StoredBoardInput | undefined {
+    const app = this.#appBoards.get(key);
+    if (app) return app;
+    const seed = this.#seeds.get(key);
+    if (!seed || !this.#isFactoryWork(key) || row?.createdBy === NEW_PROJECT_SEED_ACTOR) return seed;
+    return workSeedWithTriage();
+  }
+
+  /**
+   * Stores Factory's boards in a project that was just created, with today's Work (no Triage).
+   * Only the project-creation route calls this; every other load stores {@link seeds}.
+   */
+  async seedNewProject(scope: StoredBoardScope): Promise<ProjectBoards> {
+    if (this.#seeds.size > 0 || this.#appBoards.size > 0) {
+      await this.#storage.seedBoards(scope, [...this.#seeds.values()], {
+        actor: NEW_PROJECT_SEED_ACTOR,
+        onlyIntoEmpty: this.#onlyIntoEmpty(),
+        intoEmpty: [...this.#appBoards.values()],
+      });
+    }
+    return this.describe(scope);
+  }
+
+  /**
+   * Remembers a board the app upserted for every project, so a project that has no boards yet (one
+   * created later, or one that never loaded) gets it on its first load before Factory's own boards;
+   * having it, the project then gets no Work from Factory. Kept for this process: an app upserts
+   * its boards at every startup.
+   */
+  rememberBoardForAllProjects(board: StoredBoardInput): void {
+    this.#appBoards.set(board.key, board);
+  }
+
+  /** Whether `key` is Factory's own Work board, rather than none or an app board under its key. */
+  #isFactoryWork(key: string): boolean {
+    return key === workBoard.id && this.codeRegistry.get(key) === workBoard;
+  }
+
+  /** Work is stored only into a project with no boards: one that has any keeps what it has. */
+  #onlyIntoEmpty(): string[] {
+    return this.#isFactoryWork(workBoard.id) ? [workBoard.id] : [];
   }
 
   async load(scope: StoredBoardScope): Promise<BoardRegistry> {
@@ -282,8 +339,15 @@ export class ProjectBoardCache implements ProjectBoardSource {
   async #seed(scope: StoredBoardScope, key: string): Promise<void> {
     if (this.#seeded.has(key)) return;
     try {
-      if (this.#seeds.size > 0) await this.#storage.seedBoards(scope, this.seeds());
-      await this.#migrate(scope);
+      // Read before seeding records Work's key: a project whose list lacked it has no Work of Factory's.
+      const seeded = await this.#storage.seededBoardKeys(scope);
+      if (this.#seeds.size > 0 || this.#appBoards.size > 0) {
+        await this.#storage.seedBoards(scope, this.seeds(), {
+          onlyIntoEmpty: this.#onlyIntoEmpty(),
+          intoEmpty: [...this.#appBoards.values()],
+        });
+      }
+      await this.#migrate(scope, seeded);
       this.#seeded.add(key);
     } catch (error) {
       this.#warnOnce(
@@ -294,14 +358,21 @@ export class ProjectBoardCache implements ProjectBoardSource {
   }
 
   /** Runs the board migrations of the boards Factory stores here that the project hasn't had yet. */
-  async #migrate(scope: StoredBoardScope): Promise<void> {
+  async #migrate(scope: StoredBoardScope, seededBefore: readonly string[] | null): Promise<void> {
     // A migration of one board rewrites Factory's own board; an app board under the same key keeps
-    // its settings. One that carries a project setting into every board rewrites them all.
+    // its settings. One that carries a project setting into every board rewrites them all. A board
+    // Factory never stored in the project (an app wrote the row first), or one the app upserts for
+    // every project, is an app's: its one-board migrations are recorded as applied without running.
     const migrations = BOARD_MIGRATIONS.filter(migration => {
       if (migration.boardKey === null) return true;
       const code = this.codeRegistry.get(migration.boardKey);
       return code !== undefined && (defaultBoards as readonly InstalledBoard[]).includes(code);
-    });
+    }).map(migration =>
+      migration.boardKey !== null &&
+      (this.#appBoards.has(migration.boardKey) || (seededBefore !== null && !seededBefore.includes(migration.boardKey)))
+        ? { ...migration, migrate: () => undefined }
+        : migration,
+    );
     const changed = await this.#storage.applyBoardMigrations(scope, migrations, ops =>
       this.#migrationContext(scope, ops),
     );

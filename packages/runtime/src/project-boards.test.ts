@@ -10,9 +10,9 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { codeBoardOf, compileBoardDefinition } from '@factory/core';
 import type { BoardPhase, BoardPhaseDefinition, BoardRegistry, InstalledBoard, RuleGroup } from '@factory/core';
 import { createDefaultBoardRegistry, workBoard } from '@factory/pipelines';
-import { boardDefinitionOf, StoredBoardsStorage } from '@factory/store';
+import { boardDefinitionOf, StoredBoardsStorage, workSeedWithTriage } from '@factory/store';
 import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
-import { ProjectBoardCache, toBoardSource } from './project-boards.ts';
+import { NEW_PROJECT_SEED_ACTOR, ProjectBoardCache, toBoardSource } from './project-boards.ts';
 import type { ProjectBoardCacheOptions } from './project-boards.ts';
 
 /**
@@ -163,6 +163,44 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect([...described.registry.keys()]).toEqual(['work', 'product', 'audits']);
     expect(described.details.get('product')).toEqual({ source: 'builtin', editable: true, problems: [] });
     expect(described.registry.get('product')!.roleForPhase('spec')).toBe('product');
+  });
+
+  it("stores today's Work, without Triage, in a project Factory creates, and resets it to that Work", async () => {
+    const { a, scope } = await setup();
+    const boards = cache(a.boards, createDefaultBoardRegistry());
+
+    const described = await boards.seedNewProject(scope);
+
+    const work = (await a.boards.get(scope, 'work'))!;
+    expect(work.createdBy).toBe(NEW_PROJECT_SEED_ACTOR);
+    expect(work.phases.map(phase => phase.key)).toEqual(boardDefinitionOf(workBoard).phases.map(phase => phase.key));
+    expect(work.phases.map(phase => phase.key)).not.toContain('triage');
+    expect([...described.registry.keys()]).toEqual(['work', 'product', 'audits']);
+    expect(boards.seedFor('work', work)).toEqual(boardDefinitionOf(workBoard));
+  });
+
+  it('stores Work with Triage in a project that loads without having been created with today\'s Work', async () => {
+    const { a, scope } = await setup();
+    const boards = cache(a.boards, createDefaultBoardRegistry());
+
+    await boards.describe(scope);
+
+    const work = (await a.boards.get(scope, 'work'))!;
+    expect(work.createdBy).toBe('factory');
+    expect(work.phases.map(phase => phase.key)).toEqual(workSeedWithTriage().phases.map(phase => phase.key));
+    // Reset gives an older project back the Work it was stored with, Triage included.
+    expect(boards.seedFor('work', work)).toEqual(workSeedWithTriage());
+  });
+
+  it('adds no Work to a project that already has boards of its own', async () => {
+    const { a, scope } = await setup();
+    await a.boards.create(scope, bugsBoard(), 'user-1');
+
+    const described = await cache(a.boards, createDefaultBoardRegistry()).describe(scope);
+
+    // Work goes only into a project with no boards; the other default boards still go in once.
+    expect((await a.boards.list(scope)).map(row => row.key)).toEqual(['bugs', 'product', 'audits']);
+    expect(described.registry.get('work')).toBeUndefined();
   });
 
   it("stores a project's Work and app boards on its first load and serves each from its row", async () => {
@@ -443,6 +481,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
 
   it('skips a stored board that no longer compiles and still loads the code boards and the other stored boards', async () => {
     const { a, scope } = await setup();
+    // The project's first load stores Factory's boards, before any are added (upstream #29901).
+    await cache(a.boards).describe(scope);
     await a.boards.create(scope, bugsBoard(), 'user-1');
     await a.boards.create(scope, { ...bugsBoard('Chores'), key: 'chores' }, 'user-1');
     // A row written outside the boards API: a terminal phase cannot be where cards start.

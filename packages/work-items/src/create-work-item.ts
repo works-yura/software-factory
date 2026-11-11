@@ -8,6 +8,7 @@ import {
   cardRuleFacts,
   DEFAULT_BOARD_ID,
   INTAKE_ROUTE_METADATA_KEY,
+  intakeTarget,
   landingPhase,
   resolveIntakePlacement,
 } from '@factory/core';
@@ -120,7 +121,8 @@ export async function createFactoryWorkItem({
           actorId: defaultPlacement!.actorId,
         }
       : undefined;
-  const boardId = placement?.board ?? input.board ?? DEFAULT_BOARD_ID;
+  // No route took it: Work, else the project's first board (a project with only an app's boards).
+  const boardId = placement?.board ?? input.board ?? intakeTarget(boards)?.board ?? DEFAULT_BOARD_ID;
   const board = boards.get(boardId);
   if (!board) return { status: 'refused', code: 'invalid_board', message: `Board '${boardId}' is not installed.` };
   const initialStages = input.stages ?? [board.initialPhase];

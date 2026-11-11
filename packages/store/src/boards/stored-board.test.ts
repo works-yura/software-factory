@@ -28,6 +28,7 @@ import {
   storedBoardInputSchema,
 } from './stored-board.ts';
 import { workSeedWithSelfReview } from './work-seed-with-self-review.ts';
+import { workSeedWithTriage } from './work-seed-with-triage.ts';
 
 const GO = {
   operator: 'AND' as const,
@@ -312,8 +313,9 @@ function entering(
 }
 
 /** The built-in Work board's stored definition with `edit` applied to one phase. */
+/** Edits Work as most projects store it: with Triage (new projects' Work has none, upstream #29901). */
 function editWork(key: string, edit: (phase: StoredPhaseInput) => StoredPhaseInput): StoredBoardInput {
-  const definition = boardDefinitionOf(workBoard);
+  const definition = workSeedWithTriage();
   return { ...definition, phases: definition.phases.map(phase => (phase.key === key ? edit(phase) : phase)) };
 }
 
@@ -335,8 +337,8 @@ describe('stored boards with code behaviour', () => {
     const decision = phaseRunDecision(edited, 'triage', entering(edited, 'triage'));
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
     expect(decision?.arguments).toContain('Shipyard: check the changelog.');
-    // The code board itself is untouched.
-    expect(phaseRunDecision(workBoard, 'triage', entering(workBoard, 'triage'))?.arguments).not.toContain('Shipyard');
+    // The code board itself is untouched: today's Work has no Triage to run.
+    expect(phaseRunDecision(workBoard, 'triage', entering(workBoard, 'triage'))).toBeUndefined();
   });
 
   it("keeps the code board's source-closed phases and runs the stored Planning runner", () => {
@@ -459,7 +461,7 @@ describe('stored boards with code behaviour', () => {
   });
 
   it('accepts every edit code behaviour can honour, including a new phase', () => {
-    const definition = boardDefinitionOf(workBoard);
+    const definition = workSeedWithTriage();
     const [intake, ...rest] = definition.phases;
     const edited: StoredBoardInput = {
       ...definition,

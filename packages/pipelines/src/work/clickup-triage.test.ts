@@ -4,7 +4,8 @@ import { phaseRunDecision } from '@factory/core';
 import type { FactoryStageRuleContext } from '@factory/core';
 
 import { providerWorkItemForTests } from '../testing.ts';
-import { workBoard } from './board.ts';
+// Projects stored before #29901 keep Work's Triage; new projects' Work has none.
+import { triageWorkBoard as workBoard } from './legacy-triage.ts';
 
 function entering(source: string): FactoryStageRuleContext {
   return {

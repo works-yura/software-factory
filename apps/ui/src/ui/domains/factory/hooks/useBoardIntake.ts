@@ -111,6 +111,8 @@ export function useBoardIntake({
   const kind = definition.id;
   const defaultBoard = kind === DEFAULT_BOARD_ID;
   const browsesPullRequests = defaultBoard;
+  // Work without Triage (a project created now) offers auto-triaged issues in Intake with the rest.
+  const triageColumn = defaultBoard && definition.phases.some(phase => phase.id === 'triage');
   const initialPhase = definition.initialPhase;
   const repository = repositories[0];
   const projectRepositoryId = repository?.projectRepositoryId;
@@ -210,9 +212,9 @@ export function useBoardIntake({
   // Fetch every configured source so person filters can include provider identities
   // even when a source filter hides its feed. Only browsed feeds affect loading.
   const issues = useProjectIssuesQuery(githubIntakeActive ? githubRepositoryIds : NO_REPOSITORIES);
-  // Auto-triaged issues land on the default board, so only it browses the triaged feed.
+  // Auto-triaged issues land in the default board's Triage, so only it browses the triaged feed.
   const triageIssues = useProjectIssuesQuery(
-    defaultBoard && browsesGithub ? githubRepositoryIds : NO_REPOSITORIES,
+    triageColumn && browsesGithub ? githubRepositoryIds : NO_REPOSITORIES,
     AUTO_TRIAGED_LABEL,
   );
   const boardIssues = issues.data ?? [];
@@ -243,10 +245,10 @@ export function useBoardIntake({
     const initialCandidates = participantCandidates
       .filter(candidate => {
         if (candidate.source !== INTAKE_CARD_SOURCES[source]) return false;
-        return source !== 'github' || candidate.column !== 'triage';
+        return source !== 'github' || !triageColumn || candidate.column !== 'triage';
       })
       .map(candidate => ({ ...candidate, column: initialPhase }));
-    if (source !== 'github') return initialCandidates;
+    if (source !== 'github' || !triageColumn) return initialCandidates;
     return [...initialCandidates, ...(triageIssues.data ?? []).map(issueCandidate)];
   });
   // A source materializes once per Factory, so items that already have a card
@@ -276,7 +278,7 @@ export function useBoardIntake({
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
     [initialPhase]: feed,
-    ...(defaultBoard && browsesGithub ? { triage: triageIssues } : {}),
+    ...(triageColumn && browsesGithub ? { triage: triageIssues } : {}),
   };
 
   // Keep an unresolved board pending while discovering its routed sources.
@@ -296,6 +298,6 @@ export function useBoardIntake({
     participantCandidates,
     feedByColumn,
     isPending,
-    isTriagePending: defaultBoard && browsesGithub && triageIssues.isPending,
+    isTriagePending: triageColumn && browsesGithub && triageIssues.isPending,
   };
 }

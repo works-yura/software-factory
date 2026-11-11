@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createBoardRegistry, defineBoard } from '@factory/core';
 import type { BoardPhaseDefinition } from '@factory/core';
 import { createInMemorySessionStore } from '@factory/harness-claude-code';
-import { workBoard } from '@factory/pipelines';
+// Work as most projects store it, with Triage, where this card starts (upstream #29901).
+import { triageWorkBoard as workBoard } from '@factory/pipelines/testing';
 import { createFactoryStorageForTests, FactoryTransitionService } from '@factory/testing';
 
 import { createClaudeFactoryHarness } from './harness.ts';
@@ -19,7 +20,7 @@ function boardsWithAutoApprovedPlanning() {
     transitionPolicy: workBoard.transitionPolicy,
     phases: {
       ...workBoard.phases,
-      planning: { ...workBoard.phases.planning, exitTool: { id: 'submit_plan', autoApprove: true } },
+      planning: { ...workBoard.phases.planning!, exitTool: { id: 'submit_plan', autoApprove: true } },
     } as Record<string, BoardPhaseDefinition<string>>,
   });
   return createBoardRegistry({ boards: [board] });

@@ -1,26 +1,47 @@
-import { codeBoardOf, compileBoardDefinition, declarationOf, defineBoard } from '@factory/core';
+import { codeBoardOf, compileBoardDefinition, createBoardRegistry, declarationOf, defineBoard } from '@factory/core';
 import type {
   BoardDefinition,
   BoardPhaseDefinition,
   BoardPhaseRunner,
   BoardRegistry,
   BoardTransitionPolicy,
+  InstalledBoard,
   ProviderWorkItem,
 } from '@factory/core';
 
 export { createTestBoard } from '@factory/core/testing';
 
-import { createDefaultBoardRegistry } from './defaults.ts';
+import { defaultBoards } from './defaults.ts';
 import { workBoard } from './work/board.ts';
 import { selfReviewWorkBoard } from './work/legacy-self-review.ts';
+import { triageWorkBoard } from './work/legacy-triage.ts';
 
-export { selfReviewWorkBoard };
+export { selfReviewWorkBoard, triageWorkBoard };
+
+/**
+ * The default boards as most projects store them: Work with its Triage phase ({@link triageWorkBoard}),
+ * which new projects' Work dropped (upstream #29901), then `boards`. Suites written against Work's
+ * Triage run on this; tests of today's Work use `createDefaultBoardRegistry()` from `@factory/pipelines`.
+ */
+export function createTriageWorkRegistry(
+  options: { boards?: readonly InstalledBoard[]; includeDefaultBoards?: boolean } = {},
+): BoardRegistry {
+  const defaults = defaultBoards.map(board => (board === workBoard ? triageWorkBoard : board));
+  return createBoardRegistry({
+    boards: [...(options.includeDefaultBoards === false ? [] : defaults), ...(options.boards ?? [])],
+  });
+}
+
+/** `createPipelines()` with Work as most projects store it (with Triage). */
+export function createTriagePipelines(boards: readonly InstalledBoard[] = []): BoardRegistry {
+  return createBoardRegistry({ boards: [triageWorkBoard, ...boards] });
+}
 
 /**
  * `boards` with every working phase starting on its own for every card: what the
  * `auto-run-switch-v1` board migration gives a project that had the retired auto-run switch on.
  */
-export function autoStartingBoards(boards: BoardRegistry = createDefaultBoardRegistry()): BoardRegistry {
+export function autoStartingBoards(boards: BoardRegistry = createTriageWorkRegistry()): BoardRegistry {
   return new Map(
     [...boards.values()].map(board => {
       const config = declarationOf(board);
