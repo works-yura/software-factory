@@ -1,5 +1,5 @@
 /**
- * A card's usage: its total over every run and each run's harness, model, tokens and cost; and a
+ * A card's usage: its total over every run and each run's role, harness, model, tokens and cost; and a
  * run's end in the card's activity says what it spent. Drives the real hook and api client through MSW.
  */
 import type { WorkItemUsage } from '@factory/harness/usage';
@@ -32,13 +32,14 @@ describe('CardUsage', () => {
       runs: [
         {
           kickoffId: 'k2',
+          role: 'reviewer',
           sessionId: 's2',
           harnessId: 'codex',
           model: 'gpt-5.1-codex',
           endedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
           ...aggregate(2, 240_000, 0.32),
         },
-        { kickoffId: 'k1', sessionId: 's1', harnessId: 'claude-code', model: null, endedAt: '2026-11-10T09:00:00.000Z', ...aggregate(3, 1_000_000, 0, 3) },
+        { kickoffId: 'k1', role: null, sessionId: 's1', harnessId: 'claude-code', model: null, endedAt: '2026-11-10T09:00:00.000Z', ...aggregate(3, 1_000_000, 0, 3) },
       ],
     };
     server.use(
@@ -52,7 +53,7 @@ describe('CardUsage', () => {
     const section = await screen.findByRole('region', { name: 'Usage' });
     expect(within(section).getByText('1.2M tokens · ≈ $1.82')).toBeInTheDocument();
     const runs = within(within(section).getByRole('list', { name: 'Runs' })).getAllByRole('listitem');
-    expect(runs[0]).toHaveTextContent('Codex · gpt-5.1-codex');
+    expect(runs[0]).toHaveTextContent('reviewer · Codex · gpt-5.1-codex');
     expect(runs[0]).toHaveTextContent('240K tokens · ≈ $0.32');
     expect(runs[1]).toHaveTextContent('Claude Code · Model not reported');
     expect(runs[1]).toHaveTextContent('1M tokens · no price');

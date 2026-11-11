@@ -142,6 +142,12 @@ export interface UsageTurn {
   workItemId: string | null;
   /** The card run (kickoff) the turn belonged to, when it was one. */
   kickoffId: string | null;
+  /**
+   * The role that run played (`implementer`, `reviewer`, …): what a run's `factory.run.ended`
+   * audit record names beside its usage. `null` outside a card run, and on turns recorded before
+   * roles were.
+   */
+  role: string | null;
   userId: string | null;
   harnessId: string;
   model: string | null;

@@ -44,7 +44,7 @@ async function settle() {
 }
 
 describe('observeSessionUsage', () => {
-  it('records each turn once, summed from its steps, with its card run, model, account and reported cost', async () => {
+  it('records each turn once, summed from its steps, with its card run and role, model, account and reported cost', async () => {
     const seed = await createFactoryStorageForTests();
     const { session, emit, entry } = fakeSession({
       [FACTORY_OPEN_RUNS_SETTING]: [
@@ -86,6 +86,7 @@ describe('observeSessionUsage', () => {
       runId: 'run-7',
       workItemId: 'card-1',
       kickoffId: 'kick-1',
+      role: 'work',
       factoryProjectId: 'factory-1',
       userId: 'user-1',
       stepCount: 2,

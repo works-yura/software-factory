@@ -23,6 +23,8 @@ export const USAGE_TURNS_SCHEMA: CollectionSchema = {
     run_id: { type: 'text', nullable: true },
     work_item_id: { type: 'text', nullable: true },
     kickoff_id: { type: 'text', nullable: true },
+    /** The card run's role; added after the table, so older rows have none. */
+    role: { type: 'text', nullable: true },
     user_id: { type: 'text', nullable: true },
     harness_id: { type: 'text' },
     model: { type: 'text', nullable: true },
@@ -69,6 +71,7 @@ interface TurnRow extends Record<string, unknown> {
   run_id: string | null;
   work_item_id: string | null;
   kickoff_id: string | null;
+  role: string | null;
   user_id: string | null;
   harness_id: string;
   model: string | null;
@@ -128,6 +131,7 @@ function toTurn(row: TurnRow): UsageTurn {
     factoryProjectId: row.factory_project_id,
     workItemId: row.work_item_id,
     kickoffId: row.kickoff_id,
+    role: row.role ?? null,
     userId: row.user_id,
     harnessId: row.harness_id,
     model: row.model,
@@ -186,6 +190,7 @@ export class UsageStorage extends FactoryStorageDomain {
       run_id: input.runId,
       work_item_id: input.workItemId,
       kickoff_id: input.kickoffId,
+      role: input.role,
       user_id: input.userId,
       harness_id: input.harnessId,
       model: input.model,

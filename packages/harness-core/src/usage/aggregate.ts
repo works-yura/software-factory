@@ -1,5 +1,6 @@
 // Usage turns summed for reading: a session's or a card's total, and the Factory's totals by day,
-// harness, model, account and Factory over a period. Pure, so the server and its tests share it.
+// harness, model, account, Factory, card-run role and session over a period. Pure, so the server
+// and its tests share it.
 import type { UsageTokenTotals, UsageTurn } from './contracts.ts';
 import { addTokenTotals, emptyTokenTotals, totalTokens } from './contracts.ts';
 import type { RateTable } from './pricing.ts';
@@ -83,7 +84,14 @@ export interface UsageSummary {
   byModel: UsageGroup[];
   byAccount: UsageGroup[];
   byFactory: UsageGroup[];
+  /** By the role of the card run a turn belonged to (`UNKNOWN_USAGE_KEY`: outside a card run). */
+  byRole: UsageGroup[];
+  /** The sessions that spent most, at most `USAGE_TOP_SESSIONS`; the rest count only in the other groups. */
+  bySession: UsageGroup[];
 }
+
+/** How many sessions a summary ranks: sessions are many, the other groups few. */
+export const USAGE_TOP_SESSIONS = 100;
 
 const DAY_MS = 86_400_000;
 
@@ -123,6 +131,8 @@ export function summarizeUsage(
     byModel: groupTurns(priced, turn => turn.model ?? UNKNOWN_USAGE_KEY),
     byAccount: groupTurns(priced, turn => turn.accountId ?? UNKNOWN_USAGE_KEY),
     byFactory: groupTurns(priced, turn => turn.factoryProjectId ?? UNKNOWN_USAGE_KEY),
+    byRole: groupTurns(priced, turn => turn.role ?? UNKNOWN_USAGE_KEY),
+    bySession: groupTurns(priced, turn => turn.sessionId).slice(0, USAGE_TOP_SESSIONS),
   };
 }
 
@@ -154,7 +164,17 @@ export function summarizeSessionUsage(
 export interface WorkItemUsage {
   workItemId: string;
   total: UsageAggregate;
-  runs: Array<UsageAggregate & { kickoffId: string | null; sessionId: string; harnessId: string; model: string | null; endedAt: string }>;
+  runs: Array<
+    UsageAggregate & {
+      kickoffId: string | null;
+      /** The role the run played; `null` for turns outside a recorded kickoff. */
+      role: string | null;
+      sessionId: string;
+      harnessId: string;
+      model: string | null;
+      endedAt: string;
+    }
+  >;
 }
 
 export function summarizeWorkItemUsage(
@@ -177,6 +197,7 @@ export function summarizeWorkItemUsage(
         const last = runTurns.reduce((latest, turn) => (turn.occurredAt > latest.occurredAt ? turn : latest));
         return {
           kickoffId: last.kickoffId,
+          role: last.role,
           sessionId: last.sessionId,
           harnessId: last.harnessId,
           model: last.model,

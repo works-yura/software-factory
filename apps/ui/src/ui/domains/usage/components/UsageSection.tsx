@@ -20,7 +20,8 @@ import { formatAggregateCost, formatTokens, formatUsd, harnessName } from '../fo
 const PERIODS = ['7', '30', '90'] as const;
 type Period = (typeof PERIODS)[number];
 type Scope = 'factory' | 'all';
-type Breakdown = 'harness' | 'model' | 'account' | 'factory';
+type Breakdown = 'harness' | 'model' | 'account' | 'factory' | 'role' | 'session';
+const BREAKDOWNS = ['harness', 'model', 'role', 'session', 'account', 'factory'] as const satisfies readonly Breakdown[];
 type DailyView = 'tokens' | 'cost';
 
 const DAY_MS = 86_400_000;
@@ -48,13 +49,17 @@ function groupsOf(summary: UsageSummaryResponse, by: Breakdown): UsageGroup[] {
   if (by === 'harness') return summary.byHarness;
   if (by === 'model') return summary.byModel;
   if (by === 'account') return summary.byAccount;
+  if (by === 'role') return summary.byRole;
+  if (by === 'session') return summary.bySession;
   return summary.byFactory;
 }
 
 /**
  * Settings › Usage: what the agents of this Factory (or every Factory) spent over a period, for
  * every harness alike: tokens, the cost at API list prices, per day, and split by harness, model,
- * account and Factory.
+ * the role a card run played, the sessions that spent most, account and Factory. The roles and
+ * sessions follow upstream's run usage (`factory.run.ended`) and Studio's Usage card (Agents,
+ * Models, Threads).
  */
 export function UsageSection({ factoryId }: { factoryId: string }) {
   const { t } = useTranslation('usage');
@@ -74,6 +79,7 @@ export function UsageSection({ factoryId }: { factoryId: string }) {
     if (by === 'harness') return harnessName(key);
     if (by === 'account') return summary?.labels.accounts[key] ?? key;
     if (by === 'factory') return summary?.labels.factories[key] ?? key;
+    if (by === 'session') return summary?.labels.sessions[key] ?? t('page.unknown.session');
     return key;
   };
 
@@ -158,7 +164,7 @@ export function UsageSection({ factoryId }: { factoryId: string }) {
                 <MetricsCard.Description>{t('page.breakdown.description')}</MetricsCard.Description>
               </MetricsCard.TitleAndDescription>
               <MetricsCard.Tabs<Breakdown> value={breakdown} onValueChange={setBreakdown}>
-                {(['harness', 'model', 'account', 'factory'] as const).map(by => (
+                {BREAKDOWNS.map(by => (
                   <MetricsCard.Tab key={by} value={by}>
                     {t(`page.breakdown.by.${by}`)}
                   </MetricsCard.Tab>

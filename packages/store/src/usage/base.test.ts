@@ -32,6 +32,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('UsageStorage on
     factoryProjectId: 'factory-1',
     workItemId: null,
     kickoffId: null,
+    role: null,
     userId: 'user-1',
     harnessId: 'claude-code',
     model: 'claude-sonnet-4-6',
@@ -55,6 +56,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('UsageStorage on
       factoryProjectId: 'factory-1',
       workItemId: null,
       kickoffId: null,
+      role: null,
       userId: 'user-1',
       harnessId: 'claude-code',
       model: 'claude-sonnet-4-6',
@@ -74,7 +76,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('UsageStorage on
     await usage.recordTurn(turn(orgId));
     await usage.recordTurn(turn(orgId, { occurredAt: '2026-11-04T08:00:00.000Z', harnessId: 'codex', model: 'gpt-5.1-codex', reportedCostUsd: null }));
     await usage.recordTurn(
-      turn(orgId, { sessionId: 'session-2', workItemId: 'card-1', kickoffId: 'kick-1', occurredAt: '2026-11-05T08:00:00.000Z' }),
+      turn(orgId, { sessionId: 'session-2', workItemId: 'card-1', kickoffId: 'kick-1', role: 'implementer', occurredAt: '2026-11-05T08:00:00.000Z' }),
     );
     await usage.recordTurn(turn(`${orgId}-other`));
 
@@ -86,7 +88,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('UsageStorage on
       '2026-11-02',
       '2026-11-04',
     ]);
-    expect((await usage.listWorkItemTurns(orgId, ['card-1', 'card-2'])).map(entry => entry.kickoffId)).toEqual(['kick-1']);
+    expect((await usage.listWorkItemTurns(orgId, ['card-1', 'card-2'])).map(entry => [entry.kickoffId, entry.role])).toEqual([['kick-1', 'implementer']]);
 
     const summary = summarizeUsage(await usage.listTurns({ orgId, days }), { from: '2026-11-01', to: '2026-11-04' });
     expect(summary.total.turns).toBe(2);

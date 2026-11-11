@@ -24,6 +24,7 @@ function turn(overrides: Partial<PricedUsageTurn>): PricedUsageTurn {
     factoryProjectId: 'f',
     workItemId: null,
     kickoffId: null,
+    role: null,
     userId: 'u',
     harnessId: 'claude-code',
     model: 'claude-sonnet-4-6',

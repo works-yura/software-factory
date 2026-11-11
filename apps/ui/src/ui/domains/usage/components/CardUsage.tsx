@@ -8,7 +8,7 @@ import { formatAggregateCost, formatTokens, harnessName } from '../format';
 /** The most runs a card lists; older ones count in its total. */
 const RUNS_SHOWN = 5;
 
-/** What a card's runs spent: its total, and each run's harness, model, tokens and estimated cost. */
+/** What a card's runs spent: its total, and each run's role, harness, model, tokens and estimated cost. */
 export function CardUsage({ workItemId, enabled }: { workItemId: string; enabled: boolean }) {
   const { t } = useTranslation('usage');
   const usageQuery = useWorkItemsUsageQuery([workItemId], { enabled });
@@ -27,7 +27,9 @@ export function CardUsage({ workItemId, enabled }: { workItemId: string; enabled
         {usage.runs.slice(0, RUNS_SHOWN).map(run => (
           <li key={run.kickoffId ?? run.sessionId} className="flex items-baseline gap-2">
             <Txt as="span" variant="meta" tone="muted" className="min-w-0 flex-1 truncate">
-              {t('card.run', { harness: harnessName(run.harnessId), model: run.model ?? t('page.unknown.model') })}
+              {run.role
+                ? t('card.runRole', { role: run.role, harness: harnessName(run.harnessId), model: run.model ?? t('page.unknown.model') })
+                : t('card.run', { harness: harnessName(run.harnessId), model: run.model ?? t('page.unknown.model') })}
             </Txt>
             <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
               {t('card.runTokens', { tokens: formatTokens(run.totalTokens) })} · {formatAggregateCost(run)}

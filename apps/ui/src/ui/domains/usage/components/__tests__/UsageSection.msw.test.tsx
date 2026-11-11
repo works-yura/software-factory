@@ -1,6 +1,6 @@
 /**
  * Settings › Usage: the period's tokens, cost, turns and cache share, per day, and split by
- * harness, model, account and Factory; this Factory or all of them, over 7, 30 or 90 days.
+ * harness, model, role, session, account and Factory; this Factory or all of them, over 7, 30 or 90 days.
  * Drives the real hook and api client through MSW.
  */
 import type { UsageAggregate } from '@factory/harness/usage';
@@ -42,7 +42,19 @@ function summary(): UsageSummaryResponse {
     ],
     byAccount: [{ key: 'acc-1', ...aggregate(3_000_000, 12.5) }],
     byFactory: [{ key: 'factory-1', ...aggregate(3_000_000, 12.5) }],
-    labels: { accounts: { 'acc-1': 'alice@example.com' }, factories: { 'factory-1': 'Payments' } },
+    byRole: [
+      { key: 'implementer', ...aggregate(2_500_000, 11) },
+      { key: '', ...aggregate(500_000, 1.5) },
+    ],
+    bySession: [
+      { key: 'session-1', ...aggregate(2_000_000, 9) },
+      { key: 'session-2', ...aggregate(1_000_000, 3.5) },
+    ],
+    labels: {
+      accounts: { 'acc-1': 'alice@example.com' },
+      factories: { 'factory-1': 'Payments' },
+      sessions: { 'session-1': 'Fix login flow' },
+    },
   };
 }
 
@@ -73,6 +85,13 @@ describe('UsageSection', () => {
     expect(await screen.findByText('claude-opus-5-5')).toBeInTheDocument();
     expect(screen.getByText('Model not reported')).toBeInTheDocument();
     expect(screen.getByText('no price')).toBeInTheDocument();
+    // By the role each card run played, and the sessions that spent most, by title.
+    await user.click(screen.getByRole('tab', { name: 'Role' }));
+    expect(await screen.findByText('implementer')).toBeInTheDocument();
+    expect(screen.getByText('Outside a card run')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Session' }));
+    expect(await screen.findByText('Fix login flow')).toBeInTheDocument();
+    expect(screen.getByText('Untitled session')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Account' }));
     expect(await screen.findByText('alice@example.com')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Factory' }));

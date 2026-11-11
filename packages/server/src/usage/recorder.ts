@@ -2,7 +2,7 @@
  * Records what every agent turn spent, whatever harness ran it: the harness's `usage_update`
  * steps are summed until the turn ends (`agent_end`, any reason, a parked turn included: its
  * tokens were spent), then written as one usage row with the session's Factory, owner, the card run
- * the turn belonged to, the model and the account. Allowance windows a turn is told
+ * the turn belonged to and the role it played, the model and the account. Allowance windows a turn is told
  * (`usage_limits_update`) are kept on the account as they arrive.
  */
 import type { AgentEvent, AgentTokenUsage } from '@factory/harness';
@@ -94,6 +94,7 @@ export function observeSessionUsage(
       factoryProjectId: cardRun?.factoryProjectId ?? source.factoryProjectId,
       workItemId: cardRun?.workItemId ?? null,
       kickoffId: cardRun?.kickoffId ?? null,
+      role: cardRun?.role ?? null,
       userId: source.userId,
       harnessId: input.harnessId,
       model: turnModel ?? null,

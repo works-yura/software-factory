@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { summarizeSessionUsage, summarizeUsage, summarizeWorkItemUsage } from './aggregate.ts';
+import { summarizeSessionUsage, summarizeUsage, summarizeWorkItemUsage, USAGE_TOP_SESSIONS } from './aggregate.ts';
 import type { UsageTurn } from './contracts.ts';
 import { isUsageLimitsUpdateEvent, mergeUsageWindows, tokenTotalsOf } from './contracts.ts';
 import { createRateTable } from './pricing.ts';
@@ -17,6 +17,7 @@ function turn(overrides: Partial<UsageTurn> = {}): UsageTurn {
     factoryProjectId: 'f1',
     workItemId: null,
     kickoffId: null,
+    role: null,
     userId: 'u1',
     harnessId: 'claude-code',
     model: 'model-a',
@@ -97,6 +98,32 @@ describe('summarizeUsage', () => {
     expect(summary.byAccount.map(group => group.key)).toEqual(['acc-1', '']);
     expect(summary.byFactory).toHaveLength(1);
   });
+
+  it('splits by the role each card run played and ranks the sessions that spent most', () => {
+    const summary = summarizeUsage(
+      [
+        turn({ id: 'a', sessionId: 's1', kickoffId: 'k1', role: 'implementer' }),
+        turn({ id: 'b', sessionId: 's1', kickoffId: 'k1', role: 'implementer' }),
+        turn({ id: 'c', sessionId: 's2', kickoffId: 'k2', role: 'reviewer', totals: { inputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, reasoningTokens: 0 } }),
+        turn({ id: 'd', sessionId: 's3' }),
+      ],
+      { from: '2026-11-02', to: '2026-11-02' },
+      table,
+    );
+    expect(summary.byRole.map(group => [group.key, group.turns])).toEqual([
+      ['implementer', 2],
+      ['', 1],
+      ['reviewer', 1],
+    ]);
+    expect(summary.bySession.map(group => group.key)).toEqual(['s1', 's3', 's2']);
+  });
+
+  it('ranks at most USAGE_TOP_SESSIONS sessions; the rest still count in the totals', () => {
+    const turns = Array.from({ length: USAGE_TOP_SESSIONS + 5 }, (_, i) => turn({ id: `t${i}`, sessionId: `s${i}` }));
+    const summary = summarizeUsage(turns, { from: '2026-11-02', to: '2026-11-02' }, table);
+    expect(summary.bySession).toHaveLength(USAGE_TOP_SESSIONS);
+    expect(summary.total.turns).toBe(USAGE_TOP_SESSIONS + 5);
+  });
 });
 
 describe('summarizeSessionUsage', () => {
@@ -121,16 +148,16 @@ describe('summarizeWorkItemUsage', () => {
     const usage = summarizeWorkItemUsage(
       'w1',
       [
-        turn({ id: '1', workItemId: 'w1', kickoffId: 'k1', occurredAt: '2026-11-02T10:00:00.000Z' }),
-        turn({ id: '2', workItemId: 'w1', kickoffId: 'k1', occurredAt: '2026-11-02T10:05:00.000Z' }),
-        turn({ id: '3', workItemId: 'w1', kickoffId: 'k2', occurredAt: '2026-11-03T10:00:00.000Z', harnessId: 'codex' }),
+        turn({ id: '1', workItemId: 'w1', kickoffId: 'k1', role: 'implementer', occurredAt: '2026-11-02T10:00:00.000Z' }),
+        turn({ id: '2', workItemId: 'w1', kickoffId: 'k1', role: 'implementer', occurredAt: '2026-11-02T10:05:00.000Z' }),
+        turn({ id: '3', workItemId: 'w1', kickoffId: 'k2', role: 'reviewer', occurredAt: '2026-11-03T10:00:00.000Z', harnessId: 'codex' }),
       ],
       table,
     );
     expect(usage.total.turns).toBe(3);
-    expect(usage.runs.map(run => [run.kickoffId, run.turns, run.harnessId])).toEqual([
-      ['k2', 1, 'codex'],
-      ['k1', 2, 'claude-code'],
+    expect(usage.runs.map(run => [run.kickoffId, run.role, run.turns, run.harnessId])).toEqual([
+      ['k2', 'reviewer', 1, 'codex'],
+      ['k1', 'implementer', 2, 'claude-code'],
     ]);
   });
 });

@@ -55,14 +55,15 @@
     "total": "{{tokens}} tokens · {{cost}}",
     "runs": "Runs",
     "run": "{{harness}} · {{model}}",
-    "runTokens": "{{tokens}} tokens"
+    "runTokens": "{{tokens}} tokens",
+    "runRole": "{{role}} · {{harness}} · {{model}}"
   },
   "activity": {
     "runTokens": "{{tokens}} tokens"
   },
   "page": {
     "title": "Usage",
-    "description": "Tokens your agents spent, and what they would cost at API list prices, by harness, model, account and Factory.",
+    "description": "Tokens your agents spent, and what they would cost at API list prices, by harness, model, role, session, account and Factory.",
     "period": "Period",
     "periods": {
       "7": "7 days",
@@ -94,6 +95,8 @@
       "by": {
         "harness": "Harness",
         "model": "Model",
+        "role": "Role",
+        "session": "Session",
         "account": "Account",
         "factory": "Factory"
       },
@@ -104,7 +107,9 @@
     "unknown": {
       "model": "Model not reported",
       "account": "No account",
-      "factory": "No Factory"
+      "factory": "No Factory",
+      "role": "Outside a card run",
+      "session": "Untitled session"
     },
     "error": "Couldn’t load usage."
   }

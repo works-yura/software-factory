@@ -11,7 +11,7 @@ import { parseUsagePeriod, UsageRoutes } from './usage.ts';
 
 const now = new Date('2026-11-11T12:00:00.000Z');
 
-type SessionRow = Pick<SourceControlSession, 'sessionId' | 'orgId' | 'userId' | 'visibility'>;
+type SessionRow = Pick<SourceControlSession, 'sessionId' | 'orgId' | 'userId' | 'visibility'> & { title?: string | null };
 
 async function setup(
   readAccountLimits?: HarnessUsage['readAccountLimits'],
@@ -21,7 +21,7 @@ async function setup(
   // Every turn the tests record runs in alice's shared session unless a test says otherwise.
   const rows = new Map<string, SessionRow>(
     (options.sessions ?? [
-      { sessionId: 'session-1', orgId: 'org1', userId: 'alice', visibility: 'org' },
+      { sessionId: 'session-1', orgId: 'org1', userId: 'alice', visibility: 'org', title: 'Fix login flow' },
       { sessionId: 'session-2', orgId: 'org1', userId: 'alice', visibility: 'org' },
     ]).map(row => [row.sessionId, row]),
   );
@@ -84,6 +84,7 @@ const turn = (overrides: Partial<RecordUsageTurnInput> = {}): RecordUsageTurnInp
   factoryProjectId: 'factory-1',
   workItemId: null,
   kickoffId: null,
+  role: null,
   userId: 'alice',
   harnessId: 'claude-code',
   model: 'claude-sonnet-4-6',
@@ -146,7 +147,7 @@ describe('usage routes', () => {
     const account = await addSignIn('alice@example.com');
     const project = await seed.projects.create({ orgId: 'org1', userId: 'alice', input: { name: 'Payments' } });
     const factoryProjectId = project.id;
-    await seed.usage.recordTurn(turn({ accountId: account.id, factoryProjectId }));
+    await seed.usage.recordTurn(turn({ accountId: account.id, factoryProjectId, kickoffId: 'kick-1', role: 'implementer' }));
     await seed.usage.recordTurn(turn({ harnessId: 'codex', model: 'gpt-5.1-codex', occurredAt: '2026-11-11T08:00:00.000Z', factoryProjectId }));
     await seed.usage.recordTurn(turn({ occurredAt: '2026-09-01T08:00:00.000Z' }));
     await seed.usage.recordTurn(turn({ orgId: 'org2' }));
@@ -164,6 +165,12 @@ describe('usage routes', () => {
     expect(body.labels.accounts[account.id]).toBe('alice@example.com');
     expect(body.labels.factories[project.id]).toBe('Payments');
     expect(body.byFactory[0].key).toBe(project.id);
+    expect(body.byRole.map((group: { key: string; turns: number }) => [group.key, group.turns])).toEqual([
+      ['implementer', 1],
+      ['', 1],
+    ]);
+    expect(body.bySession.map((group: { key: string }) => group.key)).toEqual(['session-1']);
+    expect(body.labels.sessions).toEqual({ 'session-1': 'Fix login flow' });
 
     const filtered = await get('/web/usage/summary?from=2026-11-09&to=2026-11-11&harnessId=codex');
     expect(filtered.body.total.turns).toBe(1);

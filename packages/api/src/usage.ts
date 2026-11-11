@@ -38,8 +38,8 @@ export interface AccountsUsageResponse {
 }
 
 export interface UsageSummaryResponse extends UsageSummary {
-  /** Names for the ids the groups carry: accounts by label, Factories by name. */
-  labels: { accounts: Record<string, string>; factories: Record<string, string> };
+  /** Names for the ids the groups carry: accounts by label, Factories by name, sessions by title. */
+  labels: { accounts: Record<string, string>; factories: Record<string, string>; sessions: Record<string, string> };
 }
 
 export interface SessionUsageResponse {
@@ -105,7 +105,8 @@ async function mapLimited<T, R>(items: ReadonlyArray<T>, limit: number, run: (it
  *   - `GET /web/config/providers/:provider/accounts/usage[?refresh=1]` each account's allowance
  *     windows; `refresh` asks the provider again for accounts not asked within a minute
  *   - `GET /web/usage/summary?from&to&factoryProjectId&harnessId&model&accountId` tokens and
- *     estimated cost over a period, by day, harness, model, account and Factory
+ *     estimated cost over a period, by day, harness, model, account, Factory, card-run role and
+ *     the sessions that spent most
  *   - `GET /web/usage/sessions/:sessionId` a session's turns, total and context fill
  *   - `GET /web/usage/work-items?ids=a,b` each card's total and runs
  *
@@ -205,7 +206,10 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
       ...(accountId ? { accountId } : {}),
     });
     const summary = summarizeUsage(await this.#readable(listed, viewer), period);
-    // Names only for what the caller's turns name.
+    // Names only for what the caller's turns name; a session is named by its title.
+    const sessionRows = await this.#sessionRows(summary.bySession.map(group => group.key));
+    const sessions: Record<string, string> = {};
+    for (const [id, row] of sessionRows) if (row?.title) sessions[id] = row.title;
     const accountIds = new Set(summary.byAccount.map(group => group.key));
     const factoryIds = new Set(summary.byFactory.map(group => group.key));
     const accounts: Record<string, string> = {};
@@ -218,7 +222,7 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
     for (const project of (await this.deps.projects?.list({ orgId })) ?? []) {
       if (factoryIds.has(project.id)) factories[project.id] = project.name;
     }
-    const body: UsageSummaryResponse = { ...summary, labels: { accounts, factories } };
+    const body: UsageSummaryResponse = { ...summary, labels: { accounts, factories, sessions } };
     return c.json(body);
   }
 
