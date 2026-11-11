@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { elicitationQuestions, elicitationResponse, type ElicitationPlan, type McpElicitationResponse } from '@factory/harness/elicitation';
 import { applyClaudePromptEffortPrefix } from '@factory/harness/models/model';
 import type { ModelSelection } from '@factory/harness/models/contracts';
 import type { UsageLimitsUpdateEvent } from '@factory/harness/usage';
@@ -24,6 +25,7 @@ import {
   buildClaudeArgs,
   buildClaudeEnv,
   runClaude,
+  userMessage,
   type ClaudeArgsInput,
   type ClaudePermissionMode,
   type ClaudeRun,
@@ -59,11 +61,15 @@ import { writeGateServerScript } from './gate-server.ts';
 import { claudeNotificationDecision } from './notifications.ts';
 import { claudePermissionRules, type ClaudeToolPermissions } from './permissions.ts';
 import { emptyThreadState, type ClaudePendingInput, type ClaudeSessionRecord, type ClaudeSessionStore, type ClaudeThreadState } from './store.ts';
-import { parseStreamLine } from './stream.ts';
+import { parseStreamLine, type ClaudeStreamMessage } from './stream.ts';
 import { claudeRateLimitWindows } from './usageLimits.ts';
 
 /** How many delivered signal ids and dedupe keys a thread remembers. */
 const RECENT_LIMIT = 200;
+/** How long a turn waits, in its live process, for a person to answer an MCP server's form. */
+const DEFAULT_PARK_TIMEOUT_MS = 30 * 60_000;
+/** Leads the id of the question card an MCP elicitation is asked as. */
+const ELICITATION_CALL_PREFIX = 'elicitation-';
 
 /**
  * The request-context key a person's identity travels under when they write
@@ -278,6 +284,12 @@ export interface ClaudeCodeSessionConfig
   planningDisallowedTools?: string[];
   turnTimeoutMs?: number;
   /**
+   * How long a turn waits, in its live process, for a person to answer an MCP
+   * server's elicitation (30 minutes by default). Past it the process is
+   * stopped and a later answer goes to Claude as the next turn.
+   */
+  parkTimeoutMs?: number;
+  /**
    * The environment turns inherit from; `process.env` by default. Only the
    * names in `DEFAULT_CLAUDE_ENV_ALLOWLIST` and {@link passEnv} reach the CLI,
    * never credential keys.
@@ -353,6 +365,8 @@ interface ActiveRun {
   settled: boolean;
   /** Tools the current turn asks about on every call (see `ClaudeToolPermissions.askEachTime`). */
   askEachTime?: string[];
+  /** Nobody attends the current turn and it may not park: an MCP server's question is dismissed. */
+  unattended?: boolean;
   /** Resolves once the first turn's process was spawned, rejects when it never was. */
   started: Promise<void>;
   markStarted(error?: unknown): void;
@@ -363,6 +377,51 @@ interface ActiveRun {
 }
 
 type Accepted = { action: 'deliver' | 'wake'; run: ActiveRun } | { action: 'persist' };
+
+/**
+ * A turn that waits, in its live process, for a person to answer an MCP
+ * server's elicitation (asked as a question card). Its run ended `suspended`;
+ * the answer picks the same run object up again and the turn goes on.
+ */
+interface ParkedElicitation {
+  run: ActiveRun;
+  process: ClaudeRun;
+  /** The CLI's `control_request` id the answer goes back under. */
+  requestId: string;
+  toolCallId: string;
+  plan: ElicitationPlan;
+  timer: NodeJS.Timeout;
+}
+
+/** The CLI's answer to one of its control requests. */
+function controlResponse(requestId: string, response: Record<string, unknown>): Record<string, unknown> {
+  return { type: 'control_response', response: { subtype: 'success', request_id: requestId, response } };
+}
+
+function controlError(requestId: string, error: string): Record<string, unknown> {
+  return { type: 'control_response', response: { subtype: 'error', request_id: requestId, error } };
+}
+
+function textField(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
+}
+
+/** An `elicitation` control request in the shape the question-card mapping reads. */
+function elicitationRequest(request: Record<string, unknown>) {
+  const serverName = textField(request.mcp_server_name);
+  const mode = textField(request.mode);
+  const message = textField(request.message);
+  const url = textField(request.url);
+  const elicitationId = textField(request.elicitation_id);
+  return {
+    ...(serverName ? { serverName } : {}),
+    ...(mode ? { mode } : {}),
+    ...(message ? { message } : {}),
+    ...(request.requested_schema !== undefined ? { requestedSchema: request.requested_schema } : {}),
+    ...(url ? { url } : {}),
+    ...(elicitationId ? { elicitationId } : {}),
+  };
+}
 
 const escapeAttribute = (value: string) =>
   value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -402,6 +461,15 @@ function permissionPrompt(request: PermissionRequest, approved: boolean): string
 
 function answerPrompt(request: PermissionRequest, answer: string): string {
   const prompt = askUserPrompt(request.input);
+  if (request.toolCallId.startsWith(ELICITATION_CALL_PREFIX)) {
+    // The server's request closed with the turn that asked it; Claude hears the answer instead.
+    return [
+      'An MCP server asked the person this while a tool call ran; the request closed before they answered:',
+      prompt.question,
+      `Their answer:\n${answer}`,
+      "If you still need what the server asked for, call its tool again; don't ask the person the same question.",
+    ].join('\n\n');
+  }
   return [
     `You asked the person (\`${ASK_USER_QUESTION_TOOL}\`, which does not run here):`,
     prompt.question,
@@ -438,6 +506,8 @@ export class ClaudeCodeSession implements AgentSession {
   readonly #config: ClaudeCodeSessionConfig;
   #record: ClaudeSessionRecord;
   #run: ActiveRun | undefined;
+  /** A turn waiting in its live process for a person's answer to an MCP server's form. */
+  #parked: ParkedElicitation | undefined;
   /** The last run's loop; a new turn waits for it so two processes never write one Claude session. */
   #barrier: Promise<void> = Promise.resolve();
   #listeners = new Set<AgentEventListener>();
@@ -482,6 +552,11 @@ export class ClaudeCodeSession implements AgentSession {
     return gate ? { ...gate } : undefined;
   }
 
+  /** Whether the question the thread is parked on still has its turn waiting in a live process (an MCP server's form). */
+  get hasLiveGate(): boolean {
+    return this.#parked !== undefined;
+  }
+
   /** The tool call the current thread is parked on until a person allows or denies it, if any. */
   get pendingPermission(): PermissionRequest | undefined {
     const request = this.#threadState().pendingPermission;
@@ -514,6 +589,7 @@ export class ClaudeCodeSession implements AgentSession {
     switch: async ({ threadId }: { threadId: string }): Promise<void> => {
       if (threadId === this.#record.threadId) return;
       if (this.#run) throw new Error('Cannot switch threads while a run is in flight.');
+      this.#dropParked();
       this.#record.threadId = threadId;
       this.#threadState(threadId);
       await this.#save();
@@ -583,9 +659,11 @@ export class ClaudeCodeSession implements AgentSession {
    * A person's chat message, as Mastra's session routes take one: `message`
    * starts a run or joins the one in flight (an interjection); `follow-up`
    * waits for the run in flight to end and then starts its own
-   * (`follow_up_queued` tells the chat how many wait); `steer` stops the run
-   * in flight and starts a new one with the message, keeping queued
-   * follow-ups. The message carries its author from the request context.
+   * (`follow_up_queued` tells the chat how many wait); `steer` gives the
+   * message to the turn in flight on its stdin, where Claude reads it at its
+   * next step without stopping, or, when no live turn can take it, stops the
+   * run and starts a new one with it, keeping queued follow-ups. The message
+   * carries its author from the request context.
    * Resolves once the message is taken; a run that then fails says so as an
    * `error` event.
    */
@@ -604,7 +682,10 @@ export class ClaudeCodeSession implements AgentSession {
       this.#emitFollowUpCount();
       return { action: 'queued' };
     }
-    if (delivery === 'steer') this.#abort(false);
+    if (delivery === 'steer') {
+      if (this.#steer(message)) return { action: 'deliver' };
+      this.#abort(false);
+    }
     const accepted = this.#accept([message], true);
     if (accepted.action === 'persist') throw new Error('unreachable: chat messages always wake');
     return { action: accepted.action };
@@ -728,6 +809,15 @@ export class ClaudeCodeSession implements AgentSession {
       throw new Error('This session is waiting on an answer to its question, not on a permission.');
     }
     thread.pendingPermission = undefined;
+    // Declining an MCP server's form while its turn still waits: the server hears the decline and the turn goes on.
+    const parked = this.#takeParked(request.toolCallId);
+    if (parked) {
+      const run = this.#resumeParked(parked, { action: 'decline' });
+      if (run) {
+        this.#emitTranscript({ kind: 'permission_decision', toolCallId: request.toolCallId, toolName: request.toolName, approved }, run);
+        return;
+      }
+    }
     if (approved && request.once) thread.grantedOnce = [...new Set([...(thread.grantedOnce ?? []), request.toolName])];
     else if (approved) thread.grantedTools = [...new Set([...(thread.grantedTools ?? []), request.toolName])];
     const accepted = this.#accept([{ kind: 'signal', text: permissionPrompt(request, approved), gate: true }], true, {
@@ -756,6 +846,15 @@ export class ClaudeCodeSession implements AgentSession {
     const text = (Array.isArray(answer) ? answer.join(', ') : answer).trim();
     if (!text) throw new Error('The answer is empty.');
     thread.pendingPermission = undefined;
+    // An MCP server's form whose turn still waits: the server gets the typed answers and the same turn goes on.
+    const parked = this.#takeParked(request.toolCallId);
+    if (parked) {
+      const run = this.#resumeParked(parked, elicitationResponse(parked.plan, answer));
+      if (run) {
+        this.#emitTranscript({ kind: 'question_answer', toolCallId: request.toolCallId, answer: text }, run);
+        return;
+      }
+    }
     const accepted = this.#accept([{ kind: 'signal', text: answerPrompt(request, text), gate: true }], true, {
       keepGate: true,
     });
@@ -965,6 +1064,8 @@ export class ClaudeCodeSession implements AgentSession {
       // And the permission nobody gave: Claude hears about it with the new input instead.
       const { toolCallId } = thread.pendingPermission;
       thread.pendingPermission = undefined;
+      // An MCP server's form nobody answered: its waiting turn ends, so the new run can take the session.
+      this.#dropParked();
       this.#emit({ type: 'tool_suspension_cancelled', toolCallId });
     }
     return { action: 'wake', run: this.#startRun(inputs) };
@@ -1087,6 +1188,132 @@ export class ClaudeCodeSession implements AgentSession {
     thread.followUps = [];
     this.#accept(waiting, true);
     if (hadFollowUps) this.#emitFollowUpCount();
+  }
+
+  /**
+   * Gives the turn in flight a person's message on the CLI's stdin: Claude reads it at its next
+   * step (between tool calls) within the same turn, or, when the turn has just finished, the CLI
+   * runs it as one more turn in the same process. `false` when no live turn can take it.
+   */
+  #steer(message: ClaudePendingInput): boolean {
+    const run = this.#run;
+    const process = run?.process;
+    if (!run || run.settled || !run.translator?.started || !process?.acceptsInput()) return false;
+    if (!process.send(userMessage(message.text))) return false;
+    this.#echo([message], run, true);
+    return true;
+  }
+
+  /** A `control_request` from the CLI: an MCP server's elicitation is asked as a question card; anything else is refused. */
+  #controlRequest(
+    run: ActiveRun,
+    process: ClaudeRun,
+    message: Extract<ClaudeStreamMessage, { type: 'control_request' }>,
+    stopping: boolean,
+  ) {
+    const { requestId } = message;
+    if (message.subtype !== 'elicitation') {
+      process.send(controlError(requestId, `The Factory does not answer ${message.subtype || 'this'} control requests.`));
+      return;
+    }
+    const answer = (response: McpElicitationResponse) => process.send(controlResponse(requestId, response));
+    // Nobody can answer: the run already ended (another question waits), it is being stopped, or nobody attends it.
+    if (run.settled || stopping || run.unattended || this.#parked) {
+      answer({ action: 'cancel' });
+      return;
+    }
+    const card = elicitationQuestions(elicitationRequest(message.request));
+    if (!card) {
+      answer({ action: 'decline' });
+      return;
+    }
+    const elicitationId = textField(message.request.elicitation_id);
+    const toolCallId = `${ELICITATION_CALL_PREFIX}${elicitationId ?? requestId}`;
+    const permission: PermissionRequest = { toolCallId, toolName: ASK_USER_QUESTION_TOOL, input: card.input };
+    this.#emitTranscript({ kind: 'tool_call', toolCallId, toolName: ASK_USER_QUESTION_TOOL, input: card.input }, run);
+    this.#emitTranscript({ kind: 'permission', ...permission }, run);
+    this.#reportUsage(run, false);
+    const thread = this.#threadState(run.threadId);
+    thread.pendingPermission = permission;
+    // Whatever arrived while the turn ran goes with the turn's next step.
+    thread.pendingInputs.push(...run.queue);
+    run.queue = [];
+    // The person may take a while: the turn's own budget waits with it, the park's limit applies instead.
+    process.pauseTimeout();
+    const timer = setTimeout(() => this.#dropParked(), this.#config.parkTimeoutMs ?? DEFAULT_PARK_TIMEOUT_MS);
+    timer.unref?.();
+    const parked: ParkedElicitation = { run, process, requestId, toolCallId, plan: card.plan, timer };
+    this.#parked = parked;
+    // A process that dies while it waits leaves the answer to the next turn.
+    void process.exited.then(() => {
+      if (this.#parked !== parked) return;
+      clearTimeout(parked.timer);
+      this.#parked = undefined;
+    });
+    this.#emit({ type: 'tool_suspended', toolName: ASK_USER_QUESTION_TOOL, toolCallId });
+    this.#settle(run, 'suspended');
+  }
+
+  /** The CLI withdrew the elicitation the thread waits on (the server gave up): the card goes too. */
+  #controlCancelled(requestId: string) {
+    const parked = this.#parked;
+    if (!parked || parked.requestId !== requestId) return;
+    const thread = this.#threadState(parked.run.threadId);
+    if (thread.pendingPermission?.toolCallId === parked.toolCallId) thread.pendingPermission = undefined;
+    this.#dropParked();
+    void this.#save().catch(() => {});
+    this.#emit({ type: 'tool_suspension_cancelled', toolCallId: parked.toolCallId });
+  }
+
+  /** The turn waiting on this question, still alive in its process; takes it off the shelf. */
+  #takeParked(toolCallId: string): ParkedElicitation | undefined {
+    const parked = this.#parked;
+    if (!parked || parked.toolCallId !== toolCallId || parked.run.threadId !== this.#record.threadId || !parked.process.isAlive()) {
+      this.#dropParked();
+      return undefined;
+    }
+    clearTimeout(parked.timer);
+    this.#parked = undefined;
+    return parked;
+  }
+
+  /**
+   * Answers the parked elicitation and picks its run up again: the same run object (its loop
+   * still waits on the process) under a new run id. `undefined` when the CLI cannot take the
+   * answer any more; the caller then sends it as the next turn.
+   */
+  #resumeParked(parked: ParkedElicitation, response: McpElicitationResponse): ActiveRun | undefined {
+    const { run, process } = parked;
+    if (this.#run || !process.send(controlResponse(parked.requestId, response))) {
+      process.terminate();
+      return undefined;
+    }
+    let resolveEnded!: ActiveRun['resolveEnded'];
+    run.runId = randomUUID();
+    run.queue = [];
+    run.abortRequested = false;
+    run.settled = false;
+    run.started = Promise.resolve();
+    run.markStarted = () => {};
+    run.ended = new Promise(resolve => {
+      resolveEnded = resolve;
+    });
+    run.resolveEnded = resolveEnded;
+    this.#run = run;
+    process.resumeTimeout();
+    void this.#save().catch(() => {});
+    return run;
+  }
+
+  /** Ends the turn a form waits on (nobody will answer it there); a later answer goes as the next turn. */
+  #dropParked() {
+    const parked = this.#parked;
+    if (!parked) return;
+    clearTimeout(parked.timer);
+    this.#parked = undefined;
+    parked.run.abortRequested = true;
+    parked.process.send(controlResponse(parked.requestId, { action: 'cancel' }));
+    parked.process.terminate();
   }
 
   async #cwd(): Promise<string> {
@@ -1218,6 +1445,7 @@ export class ClaudeCodeSession implements AgentSession {
         })
       : undefined;
     run.askEachTime = permissions?.yolo ? [] : (permissions?.askEachTime ?? []);
+    run.unattended = permissions?.unattended === true && permissions.parkAsks !== true;
     try {
       return await this.#attempts(run, {
         thread,
@@ -1273,7 +1501,8 @@ export class ClaudeCodeSession implements AgentSession {
     // A stale resume id (the CLI's session files were lost) gets one fresh session instead of failing forever;
     // an account that runs out of usage or is refused hands the turn to the next account.
     while (true) {
-      if (run.abortRequested) return { kind: 'aborted' };
+      // A run that ended while its process lived on (a form nobody answered) starts nothing more.
+      if (run.abortRequested || run.settled) return { kind: 'aborted' };
       const resumeSessionId = thread.claudeSessionId;
       if (credentials.accountId && credentials.accountId !== this.#record.accountId) {
         this.#record.accountId = credentials.accountId;
@@ -1298,6 +1527,7 @@ export class ClaudeCodeSession implements AgentSession {
       let processRef: ClaudeRun | undefined;
       let stopForGate = false;
       let stopForAccount = false;
+      let inputDone = false;
       const onLine = (line: string) => {
         const message = parseStreamLine(line);
         if (!message) return;
@@ -1320,6 +1550,7 @@ export class ClaudeCodeSession implements AgentSession {
         if ((translator.gate || translator.permission) && !stopForGate) {
           // The plan, or a call waiting for a person, is the turn's last word: stop before Claude goes on without the answer.
           stopForGate = true;
+          processRef?.closeInput();
           processRef?.terminate();
         }
         // A refused account never recovers by retrying, and a rate-limited one in a pool is faster to leave than to wait out.
@@ -1328,7 +1559,17 @@ export class ClaudeCodeSession implements AgentSession {
           (credentials.accountId !== undefined && translator.rateLimitRetries >= RATE_LIMIT_RETRIES_BEFORE_SWITCH);
         if (leaveAccount && !stopForAccount) {
           stopForAccount = true;
+          processRef?.closeInput();
           processRef?.terminate();
+        }
+        if (message.type === 'control_request' && processRef) {
+          this.#controlRequest(run, processRef, message, stopForGate || stopForAccount);
+        } else if (message.type === 'control_cancel_request') {
+          this.#controlCancelled(message.requestId);
+        } else if (message.type === 'result' && !(message.queuedTurns && message.queuedTurns > 0)) {
+          // Nothing more queued: closing stdin lets the CLI exit. A steer already written still runs, as its own turn.
+          inputDone = true;
+          processRef?.closeInput();
         }
       };
       const proc = runClaude({
@@ -1342,6 +1583,7 @@ export class ClaudeCodeSession implements AgentSession {
         ...(this.#config.turnTimeoutMs ? { timeoutMs: this.#config.turnTimeoutMs } : {}),
       });
       processRef = proc;
+      if (stopForGate || stopForAccount || inputDone) proc.closeInput();
       if (stopForGate || stopForAccount) proc.terminate();
       run.process = proc;
       if (run.abortRequested) proc.terminate();

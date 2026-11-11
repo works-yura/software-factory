@@ -288,7 +288,7 @@ export class ClaudeSessionUi {
       case 'GET /stream':
         return this.#stream(c, channel);
       // As Mastra's routes: a message joins the run in flight, a follow-up waits for it to end,
-      // a steer stops it and starts over with the message.
+      // a steer goes into the turn in flight (or stops the run and starts over when no live turn can take it).
       case 'POST /messages':
       case 'POST /follow-up':
       case 'POST /steer': {

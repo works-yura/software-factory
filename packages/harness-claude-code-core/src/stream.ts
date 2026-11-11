@@ -1,5 +1,5 @@
 /**
- * Parser for `claude -p --output-format stream-json --verbose` stdout.
+ * Parser for `claude -p --input-format stream-json --output-format stream-json --verbose` stdout.
  *
  * Every stdout line is one JSON object. The CLI adds message kinds between
  * releases, so anything unrecognised is kept as `unknown` instead of failing
@@ -83,7 +83,26 @@ export type ClaudeStreamMessage =
       durationMs?: number;
       numTurns?: number;
       apiErrorStatus?: number;
+      /**
+       * Messages the CLI still has queued (`queued_turn_count`): each runs as
+       * another turn, with its own result, in the same process.
+       */
+      queuedTurns?: number;
       errors: string[];
+      raw: Record<string, unknown>;
+    }
+  | {
+      /** The CLI asks its host something (`control_request`), e.g. an MCP server's elicitation; stdin answers it. */
+      type: 'control_request';
+      requestId: string;
+      subtype: string;
+      request: Record<string, unknown>;
+      raw: Record<string, unknown>;
+    }
+  | {
+      /** The CLI withdrew a control request it asked earlier (`control_cancel_request`). */
+      type: 'control_cancel_request';
+      requestId: string;
       raw: Record<string, unknown>;
     }
   | { type: 'unknown'; raw: Record<string, unknown> }
@@ -231,6 +250,16 @@ export function parseStreamLine(line: string): ClaudeStreamMessage | undefined {
       return withSession(rateLimitMessage(raw));
     case 'result':
       return withSession(resultMessage(raw));
+    case 'control_request': {
+      const request = record(raw.request);
+      const requestId = str(raw.request_id);
+      if (!request || !requestId) return { type: 'unknown', raw };
+      return { type: 'control_request', requestId, subtype: str(request.subtype) ?? '', request, raw };
+    }
+    case 'control_cancel_request': {
+      const requestId = str(raw.request_id);
+      return requestId ? { type: 'control_cancel_request', requestId, raw } : { type: 'unknown', raw };
+    }
     default:
       return { type: 'unknown', raw };
   }
@@ -290,6 +319,7 @@ function resultMessage(raw: Record<string, unknown>) {
   const durationMs = num(raw.duration_ms);
   const numTurns = num(raw.num_turns);
   const apiErrorStatus = num(raw.api_error_status);
+  const queuedTurns = num(raw.queued_turn_count);
   return {
     type: 'result' as const,
     subtype: str(raw.subtype) ?? '',
@@ -301,6 +331,7 @@ function resultMessage(raw: Record<string, unknown>) {
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(numTurns !== undefined ? { numTurns } : {}),
     ...(apiErrorStatus !== undefined ? { apiErrorStatus } : {}),
+    ...(queuedTurns !== undefined ? { queuedTurns } : {}),
     raw,
   };
 }

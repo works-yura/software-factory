@@ -217,6 +217,24 @@ describe('parseStreamLine message shapes', () => {
     expect(parseStreamLine(line(raw))).toStrictEqual({ type: 'result', subtype: '', isError: false, errors: [], raw });
   });
 
+  it('reads how many messages the CLI still has queued after a result', () => {
+    const raw = { type: 'result', subtype: 'success', queued_turn_count: 2 };
+    expect(parseStreamLine(line(raw))).toMatchObject({ type: 'result', queuedTurns: 2 });
+  });
+
+  it('reads the control requests the CLI asks its host, and their withdrawal', () => {
+    const request = { subtype: 'elicitation', mcp_server_name: 'deploy', message: 'Where?' };
+    const raw = { type: 'control_request', request_id: 'req-1', request };
+    expect(parseStreamLine(line(raw))).toStrictEqual({ type: 'control_request', requestId: 'req-1', subtype: 'elicitation', request, raw });
+    const bare = { type: 'control_request', request_id: 'req-2', request: {} };
+    expect(parseStreamLine(line(bare))).toMatchObject({ type: 'control_request', subtype: '' });
+    for (const broken of [{ type: 'control_request', request }, { type: 'control_request', request_id: 'req-3' }, { type: 'control_cancel_request' }]) {
+      expect(parseStreamLine(line(broken))).toStrictEqual({ type: 'unknown', raw: broken });
+    }
+    const cancel = { type: 'control_cancel_request', request_id: 'req-1' };
+    expect(parseStreamLine(line(cancel))).toStrictEqual({ type: 'control_cancel_request', requestId: 'req-1', raw: cancel });
+  });
+
   it('reads the numbers of an error result', () => {
     const raw = {
       type: 'result',

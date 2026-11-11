@@ -10,7 +10,7 @@ import {
   type ClaudeCodeHarness,
   type ClaudeCodeSession,
 } from '@factory/harness-claude-code';
-import { fakeClaude, fixture, type FakeTurn } from '@factory/harness-claude-code/__fixtures__/fake-claude';
+import { deferred, fakeClaude, fixture, type FakeTurn } from '@factory/harness-claude-code/__fixtures__/fake-claude';
 import { fakeRouteAuth, type TestAuthUser } from '@factory/http/testing';
 import { createSessionAccessGuard } from '@factory/session';
 
@@ -605,10 +605,10 @@ describe('Claude Code session routes: Mastra parity', () => {
     expect(last.displayState.tokenUsage).toEqual(state.tokenUsage);
   });
 
-  it('queues a follow-up sent mid-run and says how many wait; steer stops the run and starts over (A9)', async () => {
+  it('queues a follow-up sent mid-run and says how many wait; steer joins the turn in flight (A9)', async () => {
+    const hold = deferred();
     const { app, session, fake } = await setup([
-      { lines: fixture('turn-complete.jsonl').slice(0, 2), hang: true },
-      { lines: fixture('turn-complete.jsonl') },
+      { lines: fixture('turn-complete.jsonl'), holdAt: 2, hold: hold.promise },
       { lines: fixture('turn-complete.jsonl') },
     ]);
     const stream = await openStream(app);
@@ -622,16 +622,19 @@ describe('Claude Code session routes: Mastra parity', () => {
     )) as { displayState: { queuedFollowUps: number } };
     expect(state.displayState.queuedFollowUps).toBe(1);
 
+    // The CLI has started the turn (its init named the session): a steer can join it.
+    await vi.waitFor(() => expect(session.claudeSessionId).toBeDefined());
     await post(app, `${BASE}/card-1/steer`, { message: 'Actually, the tests first.' });
-    await vi.waitFor(() => expect(fake.calls).toHaveLength(3));
-    await stream.until(() => stream.events.filter(event => event.type === 'agent_end').length === 3);
+    expect(fake.calls[0]!.inputs[1]).toMatchObject({ type: 'user', message: { role: 'user', content: 'Actually, the tests first.' } });
+    hold.resolve();
+    await vi.waitFor(() => expect(fake.calls).toHaveLength(2));
+    await stream.until(() => stream.events.filter(event => event.type === 'agent_end').length === 2);
     expect(stream.events.filter(event => event.type === 'agent_end')).toEqual([
-      { type: 'agent_end', reason: 'aborted' },
       { type: 'agent_end', reason: 'complete' },
       { type: 'agent_end', reason: 'complete' },
     ]);
-    expect(fake.calls.map(call => call.stdin)).toEqual(['Take your time.', 'Actually, the tests first.', 'Then the docs.']);
-    expect(fake.calls[0]!.killed).toEqual(['SIGTERM']);
+    expect(fake.calls.map(call => call.stdin)).toEqual(['Take your time.', 'Then the docs.']);
+    expect(fake.calls[0]!.killed).toEqual([]);
   });
 
   it('names the model the last turn ran on in the session state, also after a restart (A6)', async () => {

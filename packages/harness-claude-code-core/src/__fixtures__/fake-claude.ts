@@ -23,6 +23,8 @@ export interface FakeTurn {
   linesOnKill?: string[];
   /** Deliver the output in arbitrary chunks instead of whole lines. */
   chunkSize?: number;
+  /** Told of every stream-json message the harness writes to stdin after the prompt (a steer, a control response). */
+  onInput?: (message: Record<string, unknown>) => void;
 }
 
 export interface FakeCall {
@@ -31,7 +33,12 @@ export interface FakeCall {
   cwd: string;
   env: Record<string, string>;
   detached: boolean;
+  /** The prompt: the text of the first user message written to stdin. */
   stdin?: string;
+  /** Every stream-json message written to stdin, the prompt first. */
+  inputs: Array<Record<string, unknown>>;
+  /** The harness closed stdin. */
+  inputClosed: boolean;
   killed: string[];
   /** Each `--mcp-config` value as the CLI would read it at spawn: file contents (with the file's mode) or inline JSON. */
   mcpConfigs: Array<{ path?: string; mode?: number; config: unknown }>;
@@ -76,6 +83,8 @@ export function fakeClaude(turns: FakeTurn[]) {
       cwd: options.cwd,
       env: options.env,
       detached: options.detached,
+      inputs: [],
+      inputClosed: false,
       killed: [],
       mcpConfigs: readMcpConfigs(args),
     };
@@ -113,9 +122,23 @@ export function fakeClaude(turns: FakeTurn[]) {
       stdout,
       stderr,
       stdin: {
-        end: (chunk?: string) => {
-          call.stdin = chunk;
-          void play();
+        write: (chunk: string) => {
+          if (call.inputClosed) throw new Error('write after end');
+          for (const line of chunk.split('\n').filter(Boolean)) {
+            const message = JSON.parse(line) as Record<string, unknown>;
+            call.inputs.push(message);
+            if (call.inputs.length === 1) {
+              const content = (message.message as { content?: unknown } | undefined)?.content;
+              call.stdin = typeof content === 'string' ? content : JSON.stringify(content);
+              void play();
+            } else {
+              turn.onInput?.(message);
+            }
+          }
+          return true;
+        },
+        end: () => {
+          call.inputClosed = true;
         },
       },
       kill: (signal: NodeJS.Signals = 'SIGTERM') => {
