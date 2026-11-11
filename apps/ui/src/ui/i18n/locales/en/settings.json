@@ -34,7 +34,7 @@
       "organizationRequired": "Select an organization to manage ClickUp syncing.",
       "statusUnavailable": "ClickUp status could not be loaded.",
       "rejected": "ClickUp rejected the configured API token. Ask the operator to check it.",
-      "ready": "Tasks are checked every {{seconds}} s in the Lists the intake routes below name (the «ClickUp List» condition): a route decides whether a task is imported, where its card goes and what a status change does.",
+      "ready": "Tasks are checked every {{seconds}} s in the Lists the intake routes below name (source ClickUp, the «List» condition): a route decides whether a task is imported, where its card goes and what a status change does.",
       "sync": "Import ClickUp tasks"
     },
     "sources": {
