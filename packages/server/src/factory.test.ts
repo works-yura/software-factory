@@ -873,6 +873,7 @@ describe('MastraFactory.prepare', () => {
       'skill-overrides',
       'attachments',
       'intake-route-fires',
+      'usage',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
