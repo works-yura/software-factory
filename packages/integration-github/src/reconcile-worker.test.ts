@@ -25,6 +25,15 @@ const EMPTY_SUMMARY: ReconcileSweepSummary = {
   errors: [],
 };
 
+const EMPTY_DISCOVERY_SUMMARY: GithubPullRequestDiscoverySummary = {
+  repositories: 1,
+  listed: 0,
+  created: 0,
+  repaired: 0,
+  failed: 0,
+  errors: [],
+};
+
 function repositorySource(
   overrides: Partial<{
     keys: Array<{ installationExternalId: string; repositoryExternalId: string }>;
@@ -190,6 +199,52 @@ describe('GithubReconcileWorker', () => {
 
     expect(reconcile).toHaveBeenCalledTimes(2);
     expect(reconcileIssues).toHaveBeenCalledTimes(4);
+  });
+
+  it('discovers missed pull request opens every five minutes while the per-card sweep stays hourly', async () => {
+    const reconcile = vi.fn(async () => EMPTY_SUMMARY);
+    const discover = vi.fn(async () => EMPTY_DISCOVERY_SUMMARY);
+    const worker = new GithubReconcileWorker({ reconcile, discover, sourceControl: repositorySource() });
+    await worker.init(workerDeps());
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    for (let minute = 0; minute < 60; minute += 5) await vi.advanceTimersByTimeAsync(5 * 60_000);
+    await worker.stop();
+
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(discover).toHaveBeenCalledTimes(13);
+    expect(discover.mock.calls[0]![0]).toEqual([{ id: 99, fullName: 'octo/hello', installationId: 17 }]);
+  });
+
+  it('discovers at least as often as a pull request sweep tuned below five minutes, or at an explicit interval', async () => {
+    const tunedDiscover = vi.fn(async () => EMPTY_DISCOVERY_SUMMARY);
+    const tuned = new GithubReconcileWorker({
+      reconcile: vi.fn(async () => EMPTY_SUMMARY),
+      discover: tunedDiscover,
+      sourceControl: repositorySource(),
+      intervalMs: 60_000,
+    });
+    const explicitDiscover = vi.fn(async () => EMPTY_DISCOVERY_SUMMARY);
+    const explicit = new GithubReconcileWorker({
+      reconcile: vi.fn(async () => EMPTY_SUMMARY),
+      discover: explicitDiscover,
+      sourceControl: repositorySource(),
+      discoveryIntervalMs: 30_000,
+    });
+    await tuned.init(workerDeps());
+    await explicit.init(workerDeps());
+
+    await tuned.start();
+    await explicit.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await tuned.stop();
+    await explicit.stop();
+
+    expect(tunedDiscover).toHaveBeenCalledTimes(3);
+    expect(explicitDiscover).toHaveBeenCalledTimes(5);
   });
 
   it('folds the issue reconcile into the same tick and passes the same targets', async () => {

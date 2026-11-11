@@ -59,8 +59,13 @@ import type {
 } from '../integration.ts';
 import { attachGithubIssueReconciler } from '../issue-reconciler.ts';
 import { reconcileInterval, reconciliationEnabled } from '../reconciliation-config.ts';
-import { buildGithubRoutes } from '../routes.ts';
-import { attachGithubReconciler, attachGithubRules } from '../rules.ts';
+import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from '../routes.ts';
+import {
+  attachGithubPullRequestDiscovery,
+  attachGithubReconciler,
+  attachGithubRules,
+  openPullRequestLister,
+} from '../rules.ts';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../rules.ts';
 import type { GitIdentity } from '@factory/sandbox';
 import {
@@ -257,8 +262,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #issueReconcileEnabled: boolean;
   readonly #pullRequestReconcileIntervalMs: number | undefined;
   readonly #issueReconcileIntervalMs: number | undefined;
+  readonly #pullRequestDiscoveryIntervalMs: number | undefined;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
+  #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
@@ -620,6 +627,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#issueReconcileIntervalMs =
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ??
       legacyReconcileIntervalMs;
+    this.#pullRequestDiscoveryIntervalMs = reconcileInterval(
+      process.env.MASTRACODE_PLATFORM_GITHUB_PR_DISCOVERY_INTERVAL_MS,
+    );
   }
 
   /** Commit authorship follows the Platform App's authoritative writer identity. */
@@ -687,6 +697,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   routes(ctx: IntegrationContext): ApiRoute[] {
     const ingestFactoryEvent = attachGithubRules(this, ctx);
+    this.#ingestFactoryEvent = ingestFactoryEvent;
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
@@ -711,6 +722,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           !route.path.startsWith('/auth/github/'),
       ),
     ];
+  }
+
+  /**
+   * Import a newly linked repository's open issues and pull requests onto
+   * the board. No-op until routes are mounted with rules configured.
+   */
+  async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
+    await ingestLinkedRepositoryBacklog({
+      github: this as unknown as GithubIntegration,
+      ...args,
+      ingestFactoryEvent: this.#ingestFactoryEvent,
+    });
   }
 
   #statusRoute(ctx: IntegrationContext): ApiRoute {
@@ -877,6 +900,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         reconcileFactoryState: this.#pullRequestReconcileEnabled
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
+        discoverPullRequests: this.#pullRequestReconcileEnabled
+          ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
+          : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(
               this,
@@ -889,6 +915,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         intervalMs: this.#pollingIntervalMs,
         pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
         issueReconcileIntervalMs: this.#issueReconcileIntervalMs,
+        pullRequestDiscoveryIntervalMs: this.#pullRequestDiscoveryIntervalMs,
         // Resolved lazily: workers are constructed before versionControl
         // storage is initialized, and the worker only reads these slices once
         // it is running.
@@ -1111,6 +1138,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           ...(this.#pullRequestReconcileIntervalMs === undefined
             ? {}
             : { intervalMs: this.#pullRequestReconcileIntervalMs }),
+          ...(this.#pullRequestDiscoveryIntervalMs === undefined
+            ? {}
+            : { discoveryIntervalMs: this.#pullRequestDiscoveryIntervalMs }),
         },
         issues: {
           enabled: this.#issueReconcileEnabled,

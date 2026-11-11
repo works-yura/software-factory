@@ -57,7 +57,13 @@ import type { GithubIssueReconciler } from './issue-reconciler.ts';
 import { GithubReconcileWorker } from './reconcile-worker.ts';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.ts';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.ts';
-import { attachGithubReconciler, attachGithubRules, RECONCILE_ERROR_SAMPLE_LIMIT } from './rules.ts';
+import {
+  attachGithubPullRequestDiscovery,
+  attachGithubReconciler,
+  attachGithubRules,
+  openPullRequestLister,
+  RECONCILE_ERROR_SAMPLE_LIMIT,
+} from './rules.ts';
 import type {
   GithubPullRequestReconciler,
   ReconcileIssueState,
@@ -1471,6 +1477,9 @@ export class GithubIntegration implements FactoryIntegration {
             };
           }
         : (merges ?? activity);
+    const discover = pullRequestEnabled
+      ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
+      : undefined;
     const issueSweep = issueEnabled
       ? attachGithubIssueReconciler(
           this,
@@ -1482,20 +1491,23 @@ export class GithubIntegration implements FactoryIntegration {
     const issues: GithubIssueReconciler | undefined = issueSweep
       ? async repositories => issueSweep(await this.issueSweepRepositories(ctx, repositories))
       : undefined;
-    if (!reconcile && !issues) return [];
+    if (!reconcile && !issues && !discover) return [];
 
     const legacyInterval =
       reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS) ?? this.defaultReconcileIntervalMs;
     const intervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyInterval;
     const issueIntervalMs =
       reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
+    const discoveryIntervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_DISCOVERY_INTERVAL_MS);
     return [
       new GithubReconcileWorker({
         ...(reconcile ? { reconcile } : {}),
         ...(issues ? { reconcileIssues: issues } : {}),
+        ...(discover ? { discover } : {}),
         sourceControl: ctx.storage.sourceControl,
         ...(intervalMs ? { intervalMs } : {}),
         ...(issueIntervalMs ? { issueIntervalMs } : {}),
+        ...(discoveryIntervalMs ? { discoveryIntervalMs } : {}),
       }),
     ];
   }
