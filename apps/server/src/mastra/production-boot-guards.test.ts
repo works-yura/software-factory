@@ -51,6 +51,12 @@ describe('production boot guards (src/mastra/index.ts)', () => {
       'FACTORY_CREDENTIAL_ENCRYPTION_KEY',
       'FACTORY_CREDENTIAL_ENCRYPTION_KEY_ID',
       'FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS',
+      'FACTORY_AUTH',
+      'GOOGLE_CLIENT_ID',
+      'GOOGLE_CLIENT_SECRET',
+      'FACTORY_AUTH_SECRET',
+      'FACTORY_OWNER_EMAIL',
+      'FACTORY_AUTH_IMPORT_FIREBASE_USERS',
     ]) {
       vi.stubEnv(name, '');
     }
@@ -122,5 +128,43 @@ describe('production boot guards (src/mastra/index.ts)', () => {
 
     expect(config.secretEncryption).toBeUndefined();
     expect(config.sandbox).toMatchObject({ provider: 'local' });
+  });
+
+  describe('FACTORY_AUTH=google', () => {
+    beforeEach(() => {
+      vi.stubEnv('FACTORY_CREDENTIAL_ENCRYPTION_KEY', ENCRYPTION_KEY);
+      vi.stubEnv('FACTORY_SANDBOX_PROVIDER', 'local');
+      vi.stubEnv('FACTORY_AUTH', 'google');
+      vi.stubEnv('GOOGLE_CLIENT_ID', 'client-id');
+      vi.stubEnv('GOOGLE_CLIENT_SECRET', 'client-secret');
+      vi.stubEnv('FACTORY_AUTH_SECRET', 'a-session-secret-of-at-least-32-characters');
+      vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
+    });
+
+    it('signs in with Google through better-auth', { timeout: 60_000 }, async () => {
+      const config = await bootedConfig();
+
+      expect(config.auth).toMatchObject({ name: 'better-auth' });
+    });
+
+    it('refuses to boot without the Google client', { timeout: 60_000 }, async () => {
+      vi.stubEnv('GOOGLE_CLIENT_SECRET', '');
+
+      await expect(import('./index.js')).rejects.toThrow(/FACTORY_AUTH=google needs GOOGLE_CLIENT_SECRET/);
+      expect(factoryConfigs).toHaveLength(0);
+    });
+
+    it('refuses the removed Firebase sign-in by name', { timeout: 60_000 }, async () => {
+      vi.stubEnv('FACTORY_AUTH', 'firebase');
+
+      await expect(import('./index.js')).rejects.toThrow(/FACTORY_AUTH must be unset or google, got "firebase"/);
+    });
+
+    it('refuses an unreadable Firebase export before booting', { timeout: 60_000 }, async () => {
+      vi.stubEnv('FACTORY_AUTH_IMPORT_FIREBASE_USERS', '/nonexistent/firebase-users.json');
+
+      await expect(import('./index.js')).rejects.toThrow(/FACTORY_AUTH_IMPORT_FIREBASE_USERS could not be read/);
+      expect(factoryConfigs).toHaveLength(0);
+    });
   });
 });

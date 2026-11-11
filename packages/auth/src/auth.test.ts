@@ -411,6 +411,19 @@ describe('mountFactoryAuth gate (enabled)', () => {
     });
   });
 
+  it("reads a better-auth user's picture from its image field", async () => {
+    mockAuthenticate.mockResolvedValue({
+      session: { activeOrganizationId: 'org_123' },
+      user: { id: 'user_123', email: 'user@example.com', name: 'User', image: 'https://lh3.example/photo.png' },
+    });
+    const app = new Hono();
+    mountFactoryAuth(app, { provider: activeProvider() });
+    app.get('/web/whoami', c => c.json({ avatarUrl: getFactoryAuthUser(c)?.avatarUrl }));
+
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(await res.json()).toEqual({ avatarUrl: 'https://lh3.example/photo.png' });
+  });
+
   it('names the signed-in user as the author of messages sent on this request', async () => {
     mockAuthenticate.mockResolvedValue({
       id: 'user_123',

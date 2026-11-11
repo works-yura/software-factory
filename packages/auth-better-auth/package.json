@@ -1,0 +1,27 @@
+{
+  "name": "@factory/auth-better-auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Google sign-in, organizations and invitation links on better-auth: a copy of @mastra/auth-better-auth 1.1.8 (Apache-2.0) without email/password.",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@libsql/kysely-libsql": "0.4.1",
+    "@mastra/core": "1.82.0",
+    "better-auth": "1.7.7"
+  },
+  "devDependencies": {
+    "@libsql/client": "0.18.0",
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

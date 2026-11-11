@@ -203,14 +203,16 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
   // authenticated one, and preferring it keeps the org and the id from coming
   // from two different places.
   if (record.user && typeof record.user === 'object' && record.session && typeof record.session === 'object') {
-    const user = record.user as { id?: unknown; email?: unknown; name?: unknown; avatarUrl?: unknown };
+    const user = record.user as { id?: unknown; email?: unknown; name?: unknown; avatarUrl?: unknown; image?: unknown };
     const session = record.session as { activeOrganizationId?: unknown };
     if (typeof user.id !== 'string') return null;
     return {
       id: user.id,
       email: typeof user.email === 'string' ? user.email : undefined,
       name: typeof user.name === 'string' ? user.name : undefined,
-      avatarUrl: typeof user.avatarUrl === 'string' ? user.avatarUrl : undefined,
+      // better-auth keeps the profile picture (Google's) in `image`.
+      avatarUrl:
+        typeof user.avatarUrl === 'string' ? user.avatarUrl : typeof user.image === 'string' ? user.image : undefined,
       organizationId: typeof session.activeOrganizationId === 'string' ? session.activeOrganizationId : undefined,
     };
   }

@@ -39,7 +39,7 @@ import { FirebaseIntegration } from '@factory/integration-firebase';
 import { GitLabIntegration } from '@factory/integration-gitlab';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 // Local development: loopback sign-in, credential key, and vector store.
-import { createFirebaseAuth } from './firebase/firebase-auth';
+import { createGoogleAuth, existingUsersFromEnv, moveExistingUsers } from './google/google-auth';
 import {
   createLocalDevAuth,
   createLocalVector,
@@ -72,16 +72,16 @@ function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer
 const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
 
 const authSetting = process.env.FACTORY_AUTH?.trim();
-if (authSetting && authSetting !== 'firebase') {
-  throw new Error(`FACTORY_AUTH must be unset or firebase, got ${JSON.stringify(authSetting)}.`);
+if (authSetting && authSetting !== 'google') {
+  throw new Error(`FACTORY_AUTH must be unset or google, got ${JSON.stringify(authSetting)}.`);
 }
-const firebaseAuthEnabled = authSetting === 'firebase';
+const googleAuthEnabled = authSetting === 'google';
 /**
  * The server runs on the person's own machine: local dev auth, or a development server that signs
  * in with Google. Claude and ChatGPT sign-in (which open a browser page here), device preview and
  * the machine credential key are offered only then.
  */
-const ownMachine = localDevAuthEnabled || (firebaseAuthEnabled && process.env.NODE_ENV === 'development');
+const ownMachine = localDevAuthEnabled || (googleAuthEnabled && process.env.NODE_ENV === 'development');
 
 function credentialEncryption() {
   // Local dev mode keeps a stable key in ~/.mastracode.
@@ -157,8 +157,8 @@ if (redisUrl) {
 // `factory.prepare()` refuses to boot and names the options.
 //   1. FACTORY_LOCAL_DEV_AUTH=1 — loopback-only single-user identity, checked
 //      before every other option.
-//   2. FACTORY_AUTH=firebase — Google sign-in through Firebase, limited to
-//      FACTORY_ALLOWED_EMAILS (see firebase/firebase-auth.ts).
+//   2. FACTORY_AUTH=google — Google sign-in on better-auth with organizations
+//      and invitation links (see google/google-auth.ts).
 //   3. MASTRACODE_AUTH_DISABLED=1 — explicit opt-out, auth off entirely.
 // A deployment with its own identity provider passes it to MastraFactory's
 // `auth` slot instead. Note MASTRA_PLATFORM_ACCESS_TOKEN /
@@ -166,14 +166,19 @@ if (redisUrl) {
 // slots), not identity signals.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 let auth: IMastraAuthProvider | null | undefined;
+let googleAuth: ReturnType<typeof createGoogleAuth> | undefined;
+// People of the previous sign-in to move over (FACTORY_OWNER_EMAIL, FACTORY_AUTH_IMPORT_FIREBASE_USERS);
+// read up front so a bad export file stops the boot before anything starts.
+let existingUsers: ReturnType<typeof existingUsersFromEnv>;
 
-if (localDevAuthEnabled && firebaseAuthEnabled) {
-  throw new Error('Set either FACTORY_LOCAL_DEV_AUTH=1 or FACTORY_AUTH=firebase, not both.');
+if (localDevAuthEnabled && googleAuthEnabled) {
+  throw new Error('Set either FACTORY_LOCAL_DEV_AUTH=1 or FACTORY_AUTH=google, not both.');
 }
 if (localDevAuthEnabled) {
   auth = createLocalDevAuth();
-} else if (firebaseAuthEnabled) {
-  auth = createFirebaseAuth();
+} else if (googleAuthEnabled) {
+  auth = googleAuth = createGoogleAuth();
+  existingUsers = existingUsersFromEnv();
 } else if (authDisabled) {
   auth = null;
 }
@@ -454,6 +459,10 @@ export const factory = new MastraFactory({
 });
 
 const preparedArgs = await factory.prepare();
+
+// Google sign-in: move the people of the previous sign-in over by email once the auth database is
+// ready (`prepare()` ran the provider's `init`), keeping their user ids. Idempotent.
+if (googleAuth && existingUsers) await moveExistingUsers(googleAuth, existingUsers);
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args

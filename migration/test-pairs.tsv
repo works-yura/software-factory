@@ -37,7 +37,7 @@ storage/domains/queue-health/base.test.ts	store/src/queue-health/base.test.ts
 secret-encryption.test.ts	store/src/secret-encryption.test.ts	1	upstream #29644: a key mismatch explains itself (+1)
 storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts	+1	one sandbox folder per card: sessions of a factory on a branch (+1)
 auth-seam.test.ts	server/src/auth-seam.test.ts	-7	WorkOS env fallback, isWorkOSAuth/getWorkOSProvider and Studio custom-domain cases dropped with @mastra/auth-workos and @mastra/auth-studio (-8); /auth/me provider report (+1)
-auth.test.ts	auth/src/auth.test.ts	-1	WorkOS env fallback cases replaced by explicit-provider selection (3 cases → 2)
+auth.test.ts	auth/src/auth.test.ts	0	WorkOS env fallback cases replaced by explicit-provider selection (3 cases → 2); better-auth user picture read from `image` (+1)
 environment/build-schedule.test.ts	harness-mastra/src/environment/build-schedule.test.ts
 environment/build.test.ts	harness-mastra/src/environment/build.test.ts
 environment/heads.test.ts	harness-mastra/src/environment/heads.test.ts

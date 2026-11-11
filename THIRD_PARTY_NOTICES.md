@@ -25,3 +25,5 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+`packages/auth-better-auth` is derived from `@mastra/auth-better-auth` 1.1.8 (`auth/better-auth` in the Mastra repository, https://github.com/mastra-ai/mastra), Copyright (c) Mastra AI, Inc., used under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0). Changes: email/password sign-in and sign-up removed, Google is the only provider, organizations without email invitations and without user-created organizations, invitations last 7 days, Google sign-in links to an existing user with the same verified email, a session's active organization is honored only while the user is still a member; see the header of `packages/auth-better-auth/src/index.ts` and `MIGRATION.md`.
