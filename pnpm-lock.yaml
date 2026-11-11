@@ -1948,6 +1948,9 @@ importers:
       '@octokit/rest':
         specifier: 22.0.1
         version: 22.0.1
+      '@toolbox-sdk/server':
+        specifier: 1.16.0
+        version: 1.16.0
       fetch-to-node:
         specifier: 2.1.0
         version: 2.1.0
@@ -5169,6 +5172,35 @@ packages:
     engines: {node: '>=12', npm: '>=6'}
     peerDependencies:
       '@testing-library/dom': '>=7.21.4'
+
+  '@toolbox-sdk/server-darwin-arm64@1.16.0':
+    resolution: {integrity: sha512-k0FdOxYifVbu6HT6JJXFYBTNxXo+HpEAgbffBbz7LAdRsv6WBGwIpkoel1XeC89uT/+G3fUeeZYVT8w6pBn/nQ==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@toolbox-sdk/server-darwin-x64@1.16.0':
+    resolution: {integrity: sha512-ldT4Ki7H33QGc7r/egudR2zuzaW+Octp6Tna1sotf/kUFfS1JzqZRUv0ORr/rTfKu5fv7CS6GS9Ig2b9qg8j4w==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@toolbox-sdk/server-linux-x64@1.16.0':
+    resolution: {integrity: sha512-uMvYvYxdUeCddhNBbOFdC6WPZ3T7CCI+0bBW/cjAxUySMoFog8CdCPZyyaqSt1q8yzlkpuoxeNXfvg+Ty9wAkg==}
+    cpu: [x64]
+    os: [linux]
+
+  '@toolbox-sdk/server-win32-arm64@1.16.0':
+    resolution: {integrity: sha512-5Hs11eeehExK28ujWfyR1WYG8JdskI/lmvSdRAxj1WzMJAwtKuxtb4Uq+YnIISFlawOfVSRCTc8BBWrquVrNEQ==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@toolbox-sdk/server-win32-x64@1.16.0':
+    resolution: {integrity: sha512-TRjBOcTvpuCRhngaaDw6TcjIDFV2WGwLuZ0G5PYNkciKBySTdO7BsPGBBFPXIU00ZZvKs+1BS/YEC4vyTTpQ0Q==}
+    cpu: [x64]
+    os: [win32]
+
+  '@toolbox-sdk/server@1.16.0':
+    resolution: {integrity: sha512-t7QVtVFJzGwLIzf6mgDLMIH6wtPpKA9+EGeUn8EYNBZ0nP1iuQlKfCokm+2E18QMXPpC9o0Cfq7LGqYFZvV74w==}
+    hasBin: true
 
   '@tootallnate/quickjs-emscripten@0.23.0':
     resolution: {integrity: sha512-C5Mc6rdnsaJDjO3UpGW/CQTHtCKaYlScZTly4JIu97Jxo/odCiH0ITnDXSJPTOrEKk/ycSZ0AOgTmkDtkOsvIA==}
@@ -12964,6 +12996,29 @@ snapshots:
   '@testing-library/user-event@14.6.7(@testing-library/dom@10.4.1)':
     dependencies:
       '@testing-library/dom': 10.4.1
+
+  '@toolbox-sdk/server-darwin-arm64@1.16.0':
+    optional: true
+
+  '@toolbox-sdk/server-darwin-x64@1.16.0':
+    optional: true
+
+  '@toolbox-sdk/server-linux-x64@1.16.0':
+    optional: true
+
+  '@toolbox-sdk/server-win32-arm64@1.16.0':
+    optional: true
+
+  '@toolbox-sdk/server-win32-x64@1.16.0':
+    optional: true
+
+  '@toolbox-sdk/server@1.16.0':
+    optionalDependencies:
+      '@toolbox-sdk/server-darwin-arm64': 1.16.0
+      '@toolbox-sdk/server-darwin-x64': 1.16.0
+      '@toolbox-sdk/server-linux-x64': 1.16.0
+      '@toolbox-sdk/server-win32-arm64': 1.16.0
+      '@toolbox-sdk/server-win32-x64': 1.16.0
 
   '@tootallnate/quickjs-emscripten@0.23.0': {}
 

@@ -49,18 +49,19 @@
     "@mastra/mcp": "2.8.0",
     "@octokit/auth-app": "8.2.0",
     "@octokit/rest": "22.0.1",
+    "@toolbox-sdk/server": "1.16.0",
     "fetch-to-node": "2.1.0",
     "hono": "4.13.13",
     "posthog-node": "5.52.2",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "catalog:",
     "@factory/testing": "workspace:*",
     "@mastra/libsql": "1.29.0",
     "@mastra/pg": "1.35.0",
     "@mastra/server": "1.82.0",
     "@types/node": "22.20.1",
+    "@vitest/coverage-v8": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
