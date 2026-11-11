@@ -570,6 +570,17 @@ async function resolveSourceControlSession(
   return matches[0] ?? null;
 }
 
+/** How many environment repositories one boot syncs at once. */
+const ENVIRONMENT_SYNC_CONCURRENCY = 4;
+
+async function forEachConcurrently<T>(items: T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await run(items[next++]!);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
 /** One environment repository as the sandbox context and the boot need it, in position order. */
 export interface SessionEnvironmentRepo {
   projectRepositoryId: string;
@@ -1657,11 +1668,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // other than a setup failure: its outcome is unknown, never `configured`.
       let inFlight: string | undefined;
       try {
+        const secondaries: Array<{
+          repo: SessionEnvironmentRepo;
+          entry: (typeof gate.repos)[number];
+          state: SessionEnvironmentRepositoryState;
+          synced: boolean;
+        }> = [];
         for (const repo of repos) {
-          inFlight = repo.slug;
           const entry = gate.repos.find(candidate => candidate.slug === repo.slug);
           if (!entry) continue;
-          const isPrimary = repo.projectRepositoryId === session.projectRepositoryId;
           const state: SessionEnvironmentRepositoryState = {
             slug: repo.slug,
             dir: entry.dir,
@@ -1671,23 +1686,33 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             setupStatus: repo.setupCommand ? 'ok' : 'skipped',
           };
           states.push(state);
-          if (isPrimary) {
-            try {
-              await runSessionSetup(target, primaryDir, entry.gate);
-              state.branch = session.branch;
-              if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
-                state.setupStatus = 'failed';
-                repeated.add(repo.slug);
-              }
-            } catch (error) {
-              if (!(error instanceof SetupCommandError)) throw error;
-              state.branch = session.branch;
-              state.setupStatus = 'failed';
-              failures.set(repo.slug, error.message);
-              primaryError = error;
-            }
+          if (repo.projectRepositoryId !== session.projectRepositoryId) {
+            secondaries.push({ repo, entry, state, synced: false });
             continue;
           }
+          inFlight = repo.slug;
+          try {
+            await runSessionSetup(target, primaryDir, entry.gate);
+            state.branch = session.branch;
+            if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
+              state.setupStatus = 'failed';
+              repeated.add(repo.slug);
+            }
+          } catch (error) {
+            if (!(error instanceof SetupCommandError)) throw error;
+            state.branch = session.branch;
+            state.setupStatus = 'failed';
+            failures.set(repo.slug, error.message);
+            primaryError = error;
+          }
+          inFlight = undefined;
+        }
+        // The other repositories sync side by side: each is a token mint, a
+        // clone or fetch and a branch sync in its own directory, so a boot
+        // costs the slowest repository rather than the sum. Setup commands
+        // still run one at a time below, so installs never compete.
+        await forEachConcurrently(secondaries, ENVIRONMENT_SYNC_CONCURRENCY, async secondary => {
+          const { repo, entry, state } = secondary;
           try {
             const access = await sourceControl.versionControl.getRepositoryAccess({
               orgId: session.orgId,
@@ -1721,6 +1746,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               }),
             );
             state.branch = synced.branch;
+            secondary.synced = true;
           } catch (error) {
             console.warn('[Factory] Environment repository could not be synced; continuing the boot', {
               orgId: session.orgId,
@@ -1731,14 +1757,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             // The checkout may be missing or stale and its setup never ran.
             state.setupStatus = 'failed';
             failures.set(repo.slug, error instanceof Error ? error.message : String(error));
-            continue;
           }
-          if (!repo.setupCommand || entry.gate.setupDone) continue;
+        });
+        for (const { repo, entry, state, synced } of secondaries) {
+          if (!synced || !repo.setupCommand || entry.gate.setupDone) continue;
           if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
             state.setupStatus = 'failed';
             repeated.add(repo.slug);
             continue;
           }
+          inFlight = repo.slug;
           try {
             await timedPhase(`workspace.setup(${repo.slug})`, async () =>
               runSetupCommand(target, entry.dir, repo.setupCommand!, ...(await setupEnv())),
@@ -1756,6 +1784,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               error: error.message.slice(-2000),
             });
           }
+          inFlight = undefined;
         }
         inFlight = undefined;
         const workspaceCommand = environment!.workspaceSetupCommand;
