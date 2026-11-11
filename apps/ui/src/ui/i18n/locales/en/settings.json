@@ -1115,7 +1115,7 @@
     "editName": "Change",
     "access": {
       "title": "Access",
-      "hint": "Which cards get this server. No boards or phases means every session of the Factory, chat included.",
+      "hint": "Which sessions of each Factory get this server: its chat, members’ own sessions, cards (optionally only some boards and phases).",
       "none": "No Factory yet: nobody gets this server.",
       "add": "Add Factory",
       "remove": "Remove",
@@ -1125,7 +1125,14 @@
       "boards": "Only boards:",
       "allBoards": "All boards (click to limit):",
       "phases": "Only phases:",
-      "allPhases": "All phases (click to limit):"
+      "allPhases": "All phases (click to limit):",
+      "sessions": "Sessions:",
+      "noSessions": "No sessions: pick at least one.",
+      "kind": {
+        "chat": "Factory chat",
+        "personal": "Own sessions",
+        "cards": "Cards"
+      }
     },
     "tools": {
       "default": "Tools by default",
@@ -1136,13 +1143,74 @@
       "checkFirst": "«Check» starts the server with what is entered — even before saving — and lists its tools; change what each one may do.",
       "missing": "To check, fill in: {{fields}}.",
       "writes": "changes data",
-      "policyFor": "Policy for {{tool}}"
+      "policyFor": "Policy for {{tool}}",
+      "schema": "Parameters",
+      "schemaOf": "Parameters of {{tool}}"
     },
     "policy": {
       "allow": "Allowed",
       "ask": "Ask first",
-      "deny": "Forbidden"
+      "deny": "Forbidden",
+      "review": "Needs review"
     },
+    "risk": {
+      "read": "reads",
+      "write": "writes",
+      "destructive": "deletes",
+      "unknown": "not stated"
+    },
+    "review": {
+      "badge": "needs review",
+      "hint": "A new tool that changes data, found since the last check: agents don’t get it until you choose what it may do.",
+      "found": "New tools that change data are hidden from agents until reviewed: {{tools}}."
+    },
+    "health": {
+      "tools_one": "{{count}} tool",
+      "tools_other": "{{count}} tools",
+      "checked": "checked {{ago}}",
+      "used": "used {{ago}}",
+      "state": {
+        "ok": "Running",
+        "error": "Failing",
+        "needs_auth": "Needs sign-in",
+        "disabled": "Off",
+        "unchecked": "Not checked yet"
+      }
+    },
+    "errors": {
+      "version_mismatch": "The installed package version differs from the catalog’s; update Factory’s dependencies.",
+      "missing_input": "A required field is empty.",
+      "auth_denied": "The account was refused access; give it the role the server needs.",
+      "timeout": "The server did not answer in time.",
+      "spawn_failed": "The server would not start.",
+      "other": "Something went wrong."
+    },
+    "try": {
+      "open": "Try",
+      "run": "Run",
+      "running": "Running…",
+      "arguments": "Arguments for {{tool}} (JSON)",
+      "result": "Result",
+      "ok": "Done in {{ms}} ms.",
+      "badJson": "Arguments must be a JSON object.",
+      "saveFirst": "Save the server to try its read-only tools.",
+      "adminOnly": "Only organization admins can try tools.",
+      "readOnlyOnly": "Only tools the server marks read-only can be tried here."
+    },
+    "calls": {
+      "title": "Recent calls",
+      "hint": "The last calls to this server’s tools: when, which tool, how it went. No arguments or results are kept.",
+      "none": "No calls yet.",
+      "ok": "ok",
+      "error": "failed",
+      "duration": "{{ms}} ms",
+      "tried": "tried in settings",
+      "session": "session {{id}}",
+      "open": "Open session"
+    },
+    "reconnect": "Reconnect",
+    "timeout": "Call time limit, s",
+    "timeoutHint": "A tool call longer than this fails (default 60 s).",
     "check": "Check",
     "checking": "Checking…",
     "status": {

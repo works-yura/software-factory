@@ -11,6 +11,7 @@ import { localized } from './mcp-servers/McpCatalogFields';
 import { McpServerEditor } from './mcp-servers/McpServerEditor';
 import type { McpServerStart } from './mcp-servers/McpServerEditor';
 import { SettingsSubsection } from './SettingsSubsection';
+import { McpServerHealthLine } from './mcp-servers/McpServerInspect';
 import { SourceItemCard } from './SourceItemCard';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -92,12 +93,17 @@ function ServerCard({ server, state }: { server: McpServer; state: McpServersSta
       : server.launch.transport === 'http'
         ? t('mcpServers.summary.address')
         : t('mcpServers.summary.local');
-  const summary = [
+  const details = [
     ...(server.owner ? [t('mcpServers.managed.summary', { integration: t(`mcpServers.managed.by.${server.owner.integration}`, { defaultValue: server.owner.integration }) })] : []),
     kind,
     server.assignments.length ? t('mcpServers.summary.factories', { count: server.assignments.length }) : t('mcpServers.summary.unassigned'),
-    ...(server.enabled ? [] : [t('mcpServers.summary.off')]),
   ].join(' · ');
+  const summary = (
+    <span className="flex flex-col items-end gap-0.5">
+      <McpServerHealthLine server={server} />
+      <span>{details}</span>
+    </span>
+  );
   return (
     <SourceItemCard title={server.label} summary={summary} open={open} onOpenChange={setOpen}>
       <McpServerEditor server={server} start={start} state={state} onSaved={() => {}} />

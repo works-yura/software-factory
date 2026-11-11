@@ -7,8 +7,11 @@ import {
   deleteMcpServer,
   discoverMcpChoices,
   fetchMcpServers,
+  fetchMcpServerCalls,
   fetchMcpSuggestions,
+  reconnectMcpServer,
   saveMcpServer,
+  tryMcpTool,
 } from '../ui/domains/settings/services/mcpServers';
 import type { McpDiscoveryRequest, McpServerInput } from '../ui/domains/settings/services/mcpServers';
 
@@ -27,7 +30,15 @@ export function useMcpServerMutations() {
   return {
     save: useMutation({ mutationFn: (input: McpServerInput & { id?: string }) => saveMcpServer(baseUrl, input), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (id: string) => deleteMcpServer(baseUrl, id), onSuccess: refresh }),
-    check: useMutation({ mutationFn: (id: string) => checkMcpServer(baseUrl, id) }),
+    // A check keeps what it found with the server (status line, quarantine), so the list refreshes after.
+    check: useMutation({ mutationFn: (id: string) => checkMcpServer(baseUrl, id), onSuccess: refresh }),
+    /** «Перепідключити»: stops the running instances and checks again. */
+    reconnect: useMutation({ mutationFn: (id: string) => reconnectMcpServer(baseUrl, id), onSuccess: refresh }),
+    /** «Спробувати» one read-only tool. */
+    tryTool: useMutation({
+      mutationFn: (input: { id: string; tool: string; args: Record<string, unknown> }) =>
+        tryMcpTool(baseUrl, input.id, input.tool, input.args),
+    }),
     /** «Перевірити» on the form as it is, saved or not. */
     checkDraft: useMutation({ mutationFn: (body: { id?: string; server: McpServerInput }) => checkMcpServerDraft(baseUrl, body) }),
   };
@@ -51,5 +62,15 @@ export function useMcpDiscovery(request: McpDiscoveryRequest | undefined) {
     queryFn: () => discoverMcpChoices(baseUrl, request!),
     enabled: Boolean(request),
     staleTime: 60_000,
+  });
+}
+
+/** A server's recent tool calls, from the audit trail. */
+export function useMcpServerCalls(id: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: ['mcp-servers', 'calls', baseUrl, id] as const,
+    queryFn: () => fetchMcpServerCalls(baseUrl, id!),
+    enabled: Boolean(id),
   });
 }

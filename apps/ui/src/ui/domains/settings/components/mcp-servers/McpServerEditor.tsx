@@ -31,10 +31,21 @@ import type {
   McpServersState,
   McpServerStatus,
   McpToolPolicies,
+  McpToolPolicy,
 } from '../../services/mcpServers';
+
+/** JSON with object keys sorted, to compare two configs regardless of key order. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      : item,
+  );
+}
 import { McpCatalogFields, localized } from './McpCatalogFields';
 import type { CatalogFieldValues } from './McpCatalogFields';
-import { AssignmentRow, PolicySelect } from './McpServerAccess';
+import { AssignmentRow, newAssignment, PolicySelect } from './McpServerAccess';
+import { inspectTools, mcpErrorText, McpRecentCalls, McpToolsPanel } from './McpServerInspect';
 import { integrationsPath } from '../../settingsSections';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -81,7 +92,7 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
   const managedBy = server?.owner?.integration;
   const configLocked = !canEdit || managedBy !== undefined;
   const factories = (useFactoriesQuery().data ?? []).map(factory => ({ id: factory.id, name: factory.name }));
-  const { save, remove, check, checkDraft } = useMcpServerMutations();
+  const { save, remove, check, checkDraft, reconnect } = useMcpServerMutations();
   const entry = start.kind === 'catalog' ? start.entry : undefined;
   const launch = server?.launch;
 
@@ -91,11 +102,12 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
   const [advanced, setAdvanced] = useState(false);
   // A new server opened from a Factory's settings starts with that Factory's access (removable).
   const [assignments, setAssignments] = useState<McpServerAssignment[]>(
-    server?.assignments ?? (factoryId ? [{ factoryProjectId: factoryId }] : []),
+    server?.assignments ?? (factoryId ? [{ factoryProjectId: factoryId, sessions: ['chat', 'personal', 'cards'] }] : []),
   );
   const [toolPolicies, setToolPolicies] = useState<McpToolPolicies>(server?.toolPolicies ?? { default: 'allow', tools: {} });
   const [maskPersonalData, setMask] = useState(server?.maskPersonalData ?? true);
   const [enabled, setEnabled] = useState(server?.enabled ?? true);
+  const [callTimeoutSeconds, setCallTimeoutSeconds] = useState(server?.callTimeoutMs ? String(Math.round(server.callTimeoutMs / 1000)) : '');
   const [status, setStatus] = useState<McpServerStatus>();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -125,7 +137,16 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
   const identifier = name || uniqueMcpServerSlug(label || 'server', takenNames);
 
   const buildInput = (): McpServerInput => {
-    const common = { name: identifier, label, assignments, toolPolicies, maskPersonalData, enabled };
+    const timeout = Number(callTimeoutSeconds);
+    const common = {
+      name: identifier,
+      label,
+      assignments,
+      toolPolicies,
+      maskPersonalData,
+      enabled,
+      ...(callTimeoutSeconds.trim() && Number.isFinite(timeout) && timeout > 0 ? { callTimeoutMs: Math.round(timeout * 1000) } : {}),
+    };
     if (entry && variant) {
       const keys = new Set(variant.fields.map(field => field.key));
       const inputs = Object.fromEntries(
@@ -196,15 +217,36 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
     : [];
 
   // An editor checks the form as it is, saved or not; someone who may only read checks the saved server.
+  // An editor checks the form as it is; a saved server whose launch and secrets are unchanged is
+  // checked as stored, which also keeps what was found with it (status, quarantine of new writing tools).
+  const draft = buildInput();
+  const dirty =
+    !server ||
+    stableJson(draft.launch) !== stableJson(server.launch) ||
+    Object.values(draft.secrets ?? {}).some(values => values && Object.keys(values).length > 0);
   const runCheck = () => {
     const done = { onSuccess: setStatus, onError: (error: unknown) => toast.error(errorMessage(error)) };
-    if (canEdit) checkDraft.mutate({ ...(server ? { id: server.id } : {}), server: buildInput() }, done);
-    else if (server) check.mutate(server.id, done);
+    if (server && (!canEdit || !dirty)) check.mutate(server.id, done);
+    else if (canEdit) checkDraft.mutate({ ...(server ? { id: server.id } : {}), server: buildInput() }, done);
   };
-  const checking = check.isPending || checkDraft.isPending;
+  const runReconnect = () => {
+    if (!server) return;
+    reconnect.mutate(server.id, { onSuccess: setStatus, onError: (error: unknown) => toast.error(errorMessage(error)) });
+  };
+  const checking = check.isPending || checkDraft.isPending || reconnect.isPending;
 
+  const policyOf = (tool: string) => toolPolicies.tools[tool] ?? toolPolicies.default;
+  const setToolPolicy = (tool: string, value: McpToolPolicy) =>
+    setToolPolicies(current => {
+      const tools = { ...current.tools };
+      if (value === current.default) delete tools[tool];
+      else tools[tool] = value;
+      return { ...current, tools };
+    });
   const writeTools = variant?.writeTools ?? [];
-  const toolNames = [...new Set([...(status?.tools.map(tool => tool.name) ?? []), ...Object.keys(toolPolicies.tools)])].sort();
+  const inspected = inspectTools(status, server, policyOf, writeTools);
+  const listedTools = new Set(inspected.map(tool => tool.name));
+  const toolNames = Object.keys(toolPolicies.tools).filter(tool => !listedTools.has(tool)).sort();
   const secretKind = mode === 'address' ? 'headers' : 'env';
   const ready = Boolean(label.trim()) && (entry ? Boolean(variant) : mode === 'address' ? Boolean(url.trim()) : Boolean(command.trim()));
 
@@ -320,19 +362,25 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
           )}
           {!managedBy && assignments.map((assignment, index) => (
             <AssignmentRow
-              key={index}
+              key={`${assignment.factoryProjectId}:${index}`}
               assignment={assignment}
               factories={factories}
+              usedFactoryIds={assignments.filter((_, at) => at !== index).map(item => item.factoryProjectId)}
               onChange={next => setAssignments(current => current.map((item, at) => (at === index ? next : item)))}
               onRemove={() => setAssignments(current => current.filter((_, at) => at !== index))}
             />
           ))}
-          {!configLocked && (
+          {!configLocked && newAssignment(factories, assignments.map(item => item.factoryProjectId)) && (
             <Button
               size="sm"
               variant="ghost"
               className="self-start"
-              onClick={() => setAssignments(current => [...current, { factoryProjectId: factories[0]?.id ?? '' }])}
+              onClick={() =>
+                setAssignments(current => {
+                  const next = newAssignment(factories, current.map(item => item.factoryProjectId));
+                  return next ? [...current, next] : current;
+                })
+              }
             >
               {t('mcpServers.access.add')}
             </Button>
@@ -345,11 +393,18 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
       </SettingsRow>
       <SettingsRow label={t('mcpServers.tools.title')} description={t('mcpServers.tools.checkFirst')}>
         <div className="flex w-full flex-col gap-2">
-          {(canEdit || server) && (
-            <Button size="sm" variant="ghost" className="self-start" disabled={checking || !ready || missing.length > 0} onClick={runCheck}>
-              {checking ? t('mcpServers.checking') : t('mcpServers.check')}
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {(canEdit || server) && (
+              <Button size="sm" variant="ghost" disabled={checking || !ready || missing.length > 0} onClick={runCheck}>
+                {checking ? t('mcpServers.checking') : t('mcpServers.check')}
+              </Button>
+            )}
+            {server && canEdit && (
+              <Button size="sm" variant="ghost" disabled={checking} onClick={runReconnect}>
+                {t('mcpServers.reconnect')}
+              </Button>
+            )}
+          </div>
           {canEdit && missing.length > 0 && (
             <Txt as="p" variant="caption" tone="muted">
               {t('mcpServers.tools.missing', { fields: missing.join(', ') })}
@@ -357,8 +412,18 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
           )}
           {status && (
             <Txt as="p" variant="caption" tone="muted" className={status.connected ? undefined : 'text-destructive-foreground'} role="status">
-              {status.connected ? t('mcpServers.status.connected', { count: status.toolCount }) : t('mcpServers.status.failed', { error: status.error ?? '' })}
+              {status.connected
+                ? t('mcpServers.status.connected', { count: status.toolCount })
+                : t('mcpServers.status.failed', { error: mcpErrorText(t, status.errorKind, status.error) })}
             </Txt>
+          )}
+          {status?.quarantined?.length ? (
+            <Txt as="p" variant="caption" className="text-amber-600" role="alert">
+              {t('mcpServers.review.found', { tools: status.quarantined.join(', ') })}
+            </Txt>
+          ) : null}
+          {inspected.length > 0 && (
+            <McpToolsPanel tools={inspected} {...(server ? { serverId: server.id } : {})} canEdit={canEdit} onPolicyChange={setToolPolicy} />
           )}
           {toolNames.map(tool => (
             <div key={tool} className="flex flex-wrap items-center justify-between gap-2">
@@ -370,22 +435,17 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
                   </Badge>
                 )}
               </Txt>
-              <PolicySelect
-                label={t('mcpServers.tools.policyFor', { tool })}
-                value={toolPolicies.tools[tool] ?? toolPolicies.default}
-                onChange={value =>
-                  setToolPolicies(current => {
-                    const tools = { ...current.tools };
-                    if (value === current.default) delete tools[tool];
-                    else tools[tool] = value;
-                    return { ...current, tools };
-                  })
-                }
-              />
+              <PolicySelect label={t('mcpServers.tools.policyFor', { tool })} value={policyOf(tool)} onChange={value => setToolPolicy(tool, value)} />
             </div>
           ))}
         </div>
       </SettingsRow>
+
+      {server && (
+        <SettingsRow label={t('mcpServers.calls.title')} description={t('mcpServers.calls.hint')}>
+          <McpRecentCalls serverId={server.id} />
+        </SettingsRow>
+      )}
 
       <SettingsRow label={t('mcpServers.mask')} description={t('mcpServers.maskHint')}>
         <Switch aria-label={t('mcpServers.mask')} checked={maskPersonalData} disabled={!canEdit} onCheckedChange={setMask} />
@@ -398,6 +458,19 @@ export function McpServerEditor({ server, start, state, onSaved }: Props) {
         <Button size="sm" variant="ghost" className="self-start" aria-expanded={advanced} onClick={() => setAdvanced(open => !open)}>
           {t('mcpServers.advanced')}
         </Button>
+        {advanced && (
+          <SettingsRow label={t('mcpServers.timeout')} description={t('mcpServers.timeoutHint')}>
+            <Input
+              aria-label={t('mcpServers.timeout')}
+              inputMode="numeric"
+              placeholder="60"
+              className="w-28"
+              value={callTimeoutSeconds}
+              disabled={!canEdit}
+              onChange={event => setCallTimeoutSeconds(event.target.value.replace(/[^0-9]/g, ''))}
+            />
+          </SettingsRow>
+        )}
         {advanced && (
           <SettingsRow label={t('mcpServers.name')} description={t('mcpServers.nameHint')}>
             {editingName ? (

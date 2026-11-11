@@ -62,8 +62,9 @@ function useHandlers(servers: McpServer[] = [], canEdit = true) {
     http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/boards`, () =>
       HttpResponse.json({
         boards: [
-          { id: 'work', name: 'Розробка', phases: [{ id: 'triage', name: 'Розбір', kind: 'working' }] },
-          { id: 'audits', name: 'Аудити', phases: [{ id: 'analysis', name: 'Аналіз', kind: 'working' }, { id: 'done', name: 'Готово', kind: 'terminal' }] },
+          { id: 'work', name: 'Work', phases: [{ id: 'triage', name: 'Triage', kind: 'working' }] },
+          { id: 'audits', name: 'Audits', phases: [{ id: 'analysis', name: 'Analysis', kind: 'working' }, { id: 'done', name: 'Done', kind: 'terminal' }] },
+          { id: 'custom-board', name: 'Partners', phases: [{ id: 'review', name: 'Partner review', kind: 'working' }] },
         ],
       }),
     ),
@@ -102,6 +103,7 @@ function useHandlers(servers: McpServer[] = [], canEdit = true) {
         },
       });
     }),
+    http.get(`${BASE}/:id/calls`, () => HttpResponse.json({ calls: [] })),
     http.post(`${BASE}/:id/status`, () =>
       HttpResponse.json({
         status: {
@@ -182,7 +184,7 @@ describe('McpServersSection', () => {
         inputs: { FIRESTORE_PROJECT: 'syncta-57c6a', FIRESTORE_DATABASE: '(default)' },
         credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } },
       },
-      assignments: [{ factoryProjectId: 'factory-1' }],
+      assignments: [{ factoryProjectId: 'factory-1', sessions: ['chat', 'personal', 'cards'] }],
       toolPolicies: { default: 'allow', tools: {} },
       maskPersonalData: true,
       enabled: true,
@@ -235,12 +237,17 @@ describe('McpServersSection', () => {
     expect(screen.getByText(/Firestore · 1 Factory/)).toBeInTheDocument();
 
     const access = await screen.findByRole('group', { name: 'Access for syncts' });
-    expect(within(access).getByRole('button', { name: 'Аудити', pressed: true })).toBeInTheDocument();
-    await userEvent.click(within(access).getByRole('button', { name: 'Аналіз' }));
+    // A row from before session kinds with a board limit meant cards only.
+    expect(within(access).getByRole('button', { name: 'Cards', pressed: true })).toBeInTheDocument();
+    expect(within(access).getByRole('button', { name: 'Factory chat', pressed: false })).toBeInTheDocument();
+    // Built-in boards and phases by their translated titles; a custom board by its own name.
+    expect(within(access).getByRole('button', { name: 'Audits', pressed: true })).toBeInTheDocument();
+    expect(within(access).getByRole('button', { name: 'Partners' })).toBeInTheDocument();
+    await userEvent.click(within(access).getByRole('button', { name: 'Analysis' }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Check' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Running: 2 tools.');
-    expect(screen.getByText('changes data')).toBeInTheDocument();
+    expect(within(screen.getByRole('listitem', { name: 'delete_documents' })).getByText('writes')).toBeInTheDocument();
     await pick('Policy for delete_documents', 'Forbidden');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -250,12 +257,12 @@ describe('McpServersSection', () => {
       body: {
         name: 'syncta-firestore',
         launch: { credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } } },
-        assignments: [{ factoryProjectId: 'factory-1', boards: ['audits'], phases: ['analysis'] }],
+        assignments: [{ factoryProjectId: 'factory-1', sessions: ['cards'], boards: ['audits'], phases: ['analysis'] }],
         toolPolicies: { default: 'allow', tools: { delete_documents: 'deny' } },
       },
     });
     expect(writes.find(write => write.method === 'PUT')!.body.secrets).toBeUndefined();
-    // The check ran the form as it was, with the stored server's id for its saved secrets.
+    // The form filled the database from discovery, so the check ran the form as it was, with the stored id for its secrets.
     expect(writes.find(write => write.method === 'CHECK')!.body).toMatchObject({ id: 'srv-1', server: { name: 'syncta-firestore' } });
   });
 
@@ -279,7 +286,7 @@ describe('McpServersSection', () => {
       </MemoryRouter>,
     );
 
-    const card = await screen.findByRole('button', { name: /^Firestore syncta-57c6a\s*managed by Google Cloud/ });
+    const card = await screen.findByRole('button', { name: /^Firestore syncta-57c6a.*managed by Google Cloud/ });
     await userEvent.click(card);
     expect(screen.getByRole('link', { name: 'Open in Services' })).toHaveAttribute(
       'href',
@@ -366,5 +373,147 @@ describe('McpServersSection', () => {
       assignments: [{ factoryProjectId: 'factory-1' }],
       toolPolicies: { default: 'allow', tools: { delete_documents: 'deny' } },
     }));
+  });
+
+  it('shows each server’s state in its row: tools and when checked, or the error in plain words', async () => {
+    const recent = new Date(Date.now() - 5 * 60_000).toISOString();
+    useHandlers([
+      {
+        ...stored,
+        health: {
+          state: 'ok',
+          tools: [{ name: 'a', description: '' }, { name: 'b', description: '' }],
+          checkedAt: recent,
+        },
+      },
+      {
+        ...stored,
+        id: 'srv-2',
+        name: 'broken',
+        label: 'Broken DB',
+        health: { state: 'error', tools: [], error: '7 PERMISSION_DENIED', errorKind: 'auth_denied' },
+      },
+      { ...stored, id: 'srv-3', name: 'fresh', label: 'Fresh DB' },
+    ]);
+    render();
+    const row = await screen.findByRole('button', { name: /Syncta Firestore/ });
+    expect(row).toHaveTextContent('2 tools · checked 5m');
+    expect(screen.getByRole('button', { name: /Broken DB/ })).toHaveTextContent(
+      'The account was refused access; give it the role the server needs. (7 PERMISSION_DENIED)',
+    );
+    expect(screen.getByRole('button', { name: /Fresh DB/ })).toHaveTextContent('Not checked yet');
+  });
+
+  it('inspects tools: risk from annotations, parameters, a quarantined tool highlighted, and tries a read-only one', async () => {
+    const tried: unknown[] = [];
+    useHandlers([
+      {
+        ...stored,
+        toolPolicies: { default: 'allow', tools: { add_documents: 'review' } },
+        health: {
+          state: 'ok',
+          checkedAt: new Date().toISOString(),
+          tools: [
+            {
+              name: 'list_collections',
+              description: 'Lists collections.',
+              annotations: { readOnlyHint: true },
+              inputSchema: { type: 'object', properties: { parent: { type: 'string' } } },
+            },
+            { name: 'add_documents', description: 'Adds documents.', annotations: { readOnlyHint: false } },
+            { name: 'delete_documents', description: '', annotations: { destructiveHint: true } },
+          ],
+        },
+      },
+    ]);
+    server.use(
+      http.post(`${BASE}/:id/try`, async ({ request }) => {
+        tried.push(await request.json());
+        return HttpResponse.json({ trial: { ok: true, output: { collections: ['bookings'] }, durationMs: 42 } });
+      }),
+    );
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
+
+    const list = within(screen.getByRole('listitem', { name: 'list_collections' }));
+    expect(list.getByText('reads')).toBeInTheDocument();
+    await userEvent.click(list.getByRole('button', { name: 'Parameters' }));
+    expect(list.getByLabelText('Parameters of list_collections')).toHaveTextContent('"parent"');
+
+    const add = within(screen.getByRole('listitem', { name: 'add_documents' }));
+    expect(add.getByText('needs review')).toBeInTheDocument();
+    expect(add.getByRole('combobox', { name: 'Policy for add_documents' })).toHaveTextContent('Needs review');
+    // Only read-only tools can be tried.
+    expect(add.queryByRole('button', { name: 'Try' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('listitem', { name: 'delete_documents' })).getByText('deletes')).toBeInTheDocument();
+
+    await userEvent.click(list.getByRole('button', { name: 'Try' }));
+    const args = list.getByRole('textbox', { name: 'Arguments for list_collections (JSON)' });
+    await userEvent.clear(args);
+    await userEvent.type(args, '{{"parent":"x"}');
+    await userEvent.click(list.getByRole('button', { name: 'Run' }));
+    expect(await list.findByRole('status', { name: 'Result' })).toHaveTextContent('Done in 42 ms.');
+    expect(list.getByText(/bookings/)).toBeInTheDocument();
+    expect(tried).toEqual([{ tool: 'list_collections', arguments: { parent: 'x' } }]);
+  });
+
+  it('reconnects a server and explains a failed check in plain words', async () => {
+    useHandlers([stored]);
+    server.use(
+      http.post(`${BASE}/:id/reconnect`, () =>
+        HttpResponse.json({
+          status: { connected: false, toolCount: 0, tools: [], error: 'find_user timed out after 60 s', errorKind: 'timeout', checkedAt: 'now' },
+        }),
+      ),
+    );
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Does not start: The server did not answer in time. (find_user timed out after 60 s)',
+    );
+  });
+
+  it('lists the server’s recent calls', async () => {
+    useHandlers([stored]);
+    server.use(
+      http.get(`${BASE}/:id/calls`, () =>
+        HttpResponse.json({
+          calls: [
+            { at: new Date().toISOString(), tool: 'list_collections', outcome: 'ok', durationMs: 120, sessionId: 'session-123456789', factoryProjectId: 'factory-1', tried: false },
+            { at: new Date().toISOString(), tool: 'get_documents', outcome: 'error', durationMs: 900, tried: true },
+          ],
+        }),
+      ),
+    );
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
+    const calls = await screen.findByRole('list', { name: 'Recent calls' });
+    expect(calls).toHaveTextContent('list_collections');
+    expect(calls).toHaveTextContent('ok · 120 ms · session session-');
+    expect(calls).toHaveTextContent('failed · 900 ms · tried in settings');
+    expect(within(calls).getByRole('link', { name: 'Open session' })).toHaveAttribute('href', '/factories/factory-1/workspaces/session-123456789');
+  });
+
+  it('gives access by session kind, keeps one row per Factory, and drops board limits with cards', async () => {
+    const writes = useHandlers([{ ...stored, assignments: [] }]);
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: /Syncta Firestore/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Factory' }));
+    const access = await screen.findByRole('group', { name: 'Access for syncts' });
+    // A new row reaches every kind of session; with the only Factory listed, no second row can be added.
+    for (const kind of ['Factory chat', 'Own sessions', 'Cards']) {
+      expect(within(access).getByRole('button', { name: kind, pressed: true })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole('button', { name: 'Add Factory' })).not.toBeInTheDocument();
+
+    await userEvent.click(within(access).getByRole('button', { name: 'Audits' }));
+    await userEvent.click(within(access).getByRole('button', { name: 'Own sessions' }));
+    await userEvent.click(within(access).getByRole('button', { name: 'Cards' }));
+    expect(within(access).queryByRole('button', { name: 'Audits' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(writes.filter(write => write.method === 'PUT')).toHaveLength(1));
+    expect(writes.find(write => write.method === 'PUT')!.body.assignments).toEqual([{ factoryProjectId: 'factory-1', sessions: ['chat'] }]);
   });
 });

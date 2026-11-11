@@ -3,13 +3,16 @@
  * values are sent on save and never come back — only their names.
  */
 
-import type { McpCatalogEntry } from '@factory/core';
+import type { McpCatalogEntry, McpErrorKind, McpServerHealth, McpSessionKind, McpToolInfo, McpToolRisk } from '@factory/core';
+
+export type { McpErrorKind, McpServerHealth, McpSessionKind, McpToolInfo, McpToolRisk };
 
 import { translator } from '../../../i18n/t';
 
 const tk = translator('settings');
 
-export type McpToolPolicy = 'allow' | 'ask' | 'deny';
+/** `review` is set by a check on a new writing tool (hidden from agents); people choose the other three. */
+export type McpToolPolicy = 'allow' | 'ask' | 'deny' | 'review';
 
 export interface McpToolPolicies {
   default: McpToolPolicy;
@@ -18,6 +21,8 @@ export interface McpToolPolicies {
 
 export interface McpServerAssignment {
   factoryProjectId: string;
+  /** Which sessions: the Factory chat, members' own sessions, cards. Absent on rows written before kinds. */
+  sessions?: McpSessionKind[];
   boards?: string[];
   phases?: string[];
 }
@@ -50,6 +55,9 @@ export interface McpServer {
   toolPolicies: McpToolPolicies;
   maskPersonalData: boolean;
   enabled: boolean;
+  callTimeoutMs?: number;
+  /** What the last check and session use found. */
+  health?: McpServerHealth;
   updatedAt: string;
   updatedBy: string;
 }
@@ -83,14 +91,38 @@ export interface McpServerInput {
   toolPolicies: McpToolPolicies;
   maskPersonalData: boolean;
   enabled: boolean;
+  callTimeoutMs?: number;
 }
 
 export interface McpServerStatus {
   connected: boolean;
   toolCount: number;
-  tools: Array<{ name: string; description: string; policy: McpToolPolicy }>;
+  tools: Array<McpToolInfo & { policy: McpToolPolicy; risk: McpToolRisk }>;
   error?: string;
+  errorKind?: McpErrorKind;
   checkedAt: string;
+  /** Tools this check put under review. */
+  quarantined?: string[];
+}
+
+/** One run of «Спробувати». */
+export interface McpToolTrial {
+  ok: boolean;
+  output?: unknown;
+  error?: string;
+  errorKind?: McpErrorKind;
+  durationMs: number;
+}
+
+/** One call to a server's tool, from the audit trail. */
+export interface McpServerCall {
+  at: string;
+  tool: string;
+  outcome: 'ok' | 'error';
+  durationMs?: number;
+  sessionId?: string;
+  factoryProjectId?: string;
+  tried: boolean;
 }
 
 export class McpServerRequestError extends Error {
@@ -169,6 +201,18 @@ export interface McpDiscoveryRequest {
 export const discoverMcpChoices = (baseUrl: string, body: McpDiscoveryRequest) =>
   request<DiscoveryResult>(baseUrl, '/web/mcp-servers/discover', json('POST', body));
 
+/** «Перепідключити»: stops the server's running instances and checks it again. */
+export const reconnectMcpServer = async (baseUrl: string, id: string): Promise<McpServerStatus> =>
+  (await request<{ status: McpServerStatus }>(baseUrl, `/web/mcp-servers/${encodeURIComponent(id)}/reconnect`, json('POST'))).status;
+
+/** «Спробувати»: runs one read-only tool with the given arguments. */
+export const tryMcpTool = async (baseUrl: string, id: string, tool: string, args: Record<string, unknown>): Promise<McpToolTrial> =>
+  (await request<{ trial: McpToolTrial }>(baseUrl, `/web/mcp-servers/${encodeURIComponent(id)}/try`, json('POST', { tool, arguments: args }))).trial;
+
+/** The server's recent tool calls (no payloads). */
+export const fetchMcpServerCalls = async (baseUrl: string, id: string): Promise<McpServerCall[]> =>
+  (await request<{ calls: McpServerCall[] }>(baseUrl, `/web/mcp-servers/${encodeURIComponent(id)}/calls`)).calls;
+
 /** A stored server as the form's starting point (secrets are never known: only their names). */
 export function serverToInput(server: McpServer): McpServerInput {
   return {
@@ -179,5 +223,6 @@ export function serverToInput(server: McpServer): McpServerInput {
     toolPolicies: server.toolPolicies,
     maskPersonalData: server.maskPersonalData,
     enabled: server.enabled,
+    ...(server.callTimeoutMs ? { callTimeoutMs: server.callTimeoutMs } : {}),
   };
 }

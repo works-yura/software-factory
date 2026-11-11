@@ -106,7 +106,7 @@ describe('IntegrationsSection', () => {
     useHandlers();
     renderIntegrations('?tab=mcp');
 
-    expect(await screen.findByRole('button', { name: /^Firestore syncta-57c6a\s*managed by Google Cloud/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Firestore syncta-57c6a.*managed by Google Cloud/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: 'Services' }));
     expect(screen.getByLabelText('search')).toHaveTextContent('?tab=services');
     expect(await screen.findByRole('button', { name: /^ClickUp/ })).toBeInTheDocument();
