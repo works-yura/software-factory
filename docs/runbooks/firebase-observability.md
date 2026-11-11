@@ -21,7 +21,7 @@
 
 ## 2. Factory: акаунт і прив'язка
 
-Налаштування › **Логи і креші** (`/factories/<factory>/settings/observability`), блок **Firebase**.
+Налаштування › **Інтеграції › Сервіси › Google Cloud** (`/factories/<factory>/settings/integrations?tab=services&service=google-cloud`).
 
 1. **Акаунти Google Cloud › «Додати акаунт»**: назва (напр. «Syncta»; без назви — проєкт із ключа), вставити вміст JSON або «Вибрати файл ключа» → «Зберегти ключ». У списку видно лише назву й email акаунта; файл ключа на диску після цього видаліть.
 2. **Прив'язки › «Додати прив'язку»**:

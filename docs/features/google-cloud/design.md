@@ -1,15 +1,17 @@
-# Логи й креші (observability)
+# Google Cloud: логи, креші й база
 
-Агенти читають, що повідомив працюючий продукт: логи сервера й креші застосунку. Лише читання. Рішення: [ADR-0017](../../adr/0017-observability-firebase.md) (порт, Firebase), [ADR-0019](../../adr/0019-observability-accounts-and-bindings.md) (акаунти й прив'язки).
+Агенти читають, що повідомив працюючий продукт: логи сервера, креші застосунку й Firestore проєкту. Лише читання. Рішення: [ADR-0017](../../adr/0017-observability-firebase.md) (порт, Firebase), [ADR-0019](../../adr/0019-observability-accounts-and-bindings.md) (акаунти й прив'язки), [ADR-0027](../../adr/0027-integrations-services-and-mcp.md) (розділ «Інтеграції», «База» через MCP Toolbox).
 
 ## Що бачить людина
 
-**Налаштування › Логи і креші** (`apps/ui/src/ui/domains/settings/components/ObservabilitySection.tsx`), блок **Firebase** («Для всієї організації», змінює лише адмін), побудований як ClickUp у «Надходженні задач»:
+**Налаштування › Інтеграції › Сервіси › Google Cloud** (`/settings/integrations?tab=services&service=google-cloud`; `apps/ui/src/ui/domains/settings/components/GoogleCloudService.tsx`; для всієї організації, змінює лише адмін). Стара адреса `/settings/observability` веде сюди.
 
 - **Акаунти Google Cloud** — «Додати акаунт» (назва й JSON-ключ у діалозі). Рядок: назва · email · скільки прив'язок. Розгорнутий: перейменувати, «Замінити ключ», «Відключити», де використовується. Відключення акаунта, через який читають прив'язки, спершу питає й показує, які прив'язки підуть разом із ним.
-- **Прив'язки** — «Додати прив'язку». Рядок: «syncts → syncta-57c6a · Syncta · логи». Розгорнутий: Factory, акаунт, ID і номер проєкту Google Cloud (пропонується проєкт, з якого ключ акаунта), «Логи сервера», «Креші застосунків» і застосунки, «Зберегти», «Перевірити доступ» (по одному читанню на функцію й застосунок; називає роль чи API, яких бракує), «Видалити прив'язку».
+- **Прив'язки** — «Додати прив'язку». Рядок: «syncts → syncta-57c6a · Syncta · логи». Розгорнутий: Factory, акаунт, ID і номер проєкту Google Cloud (пропонується проєкт, з якого ключ акаунта), «Логи сервера», «Креші застосунків» і застосунки, **«База (Firestore)»** і ID бази (порожньо — `(default)`), «Зберегти», «Перевірити доступ» (по одному читанню на функцію, застосунок і базу; називає роль чи API, яких бракує — для бази `roles/datastore.viewer`), «Видалити прив'язку».
 
-У сесії Factory з хоча б однією прив'язкою агент має інструменти (без підтвердження); без прив'язок — інструментів немає, і скіли кажуть про це у звіті.
+У сесії Factory з хоча б однією прив'язкою з логами чи крешами агент має інструменти observability (без підтвердження); без них — інструментів немає, і скіли кажуть про це у звіті.
+
+**«База»** — це MCP Toolbox (`--prebuilt firestore`) для проєкту прив'язки, запущений під капотом як MCP-сервер, яким керує інтеграція: `FirebaseIntegration.managedMcpServers` (`managed-mcp.ts`) дає по серверу на прив'язку з «Базою» (назва `db-<проєкт>`, акаунт прив'язки за посиланням, доступ — її Factory); Factory синхронізує їх у сховище MCP-серверів з `owner {integration: 'firebase', key: <id прив'язки>}` після кожної зміни прив'язок чи акаунтів і раз на організацію за запуск. У вкладці «MCP» він «керує Google Cloud»: змінюються лише політика інструментів і маскування. Список дозволених колекцій не підтримано (Toolbox prebuilt його не має) — обмеження дає роль акаунта.
 
 ## Шари
 
@@ -37,9 +39,9 @@
 ## Дані й безпека
 
 - **Ключі:** один рядок підключення інтеграції `firebase` на організацію (шифрується `FactorySecretEncryption`): `data = { accounts: { <id>: { serviceAccount } } }`, `metadata = { accounts: { <id>: { name, clientEmail, projectId, keyId } } }`. `token_uri` ключа мусить бути `https://oauth2.googleapis.com/token`, `universe_domain` — `googleapis.com`.
-- **Прив'язки:** налаштування інтеграції організації, `{ version: 2, bindings: [{ id, factoryProjectId, accountId, projectId, projectNumber?, logs, crashes, apps[] }] }`.
+- **Прив'язки:** налаштування інтеграції організації, `{ version: 2, bindings: [{ id, factoryProjectId, accountId, projectId, projectNumber?, logs, crashes, apps[], database?: { enabled, databaseId? } }] }`; без `database` — вимкнено (прив'язки до «Бази» лишаються як були).
 - **Перехід зі старої форми** (`{ serviceAccount }` і `{ factories }`): при першому читанні організації, ідемпотентно; ключ стає акаунтом, мапінги — прив'язками (`bnd-<factoryId>`).
-- **Токени:** `google-auth-library` `JWT` на кожен scope (`logging.read`, `firebase`), кеш токенів на ключ.
+- **Токени:** `google-auth-library` `JWT` на кожен scope (`logging.read`, `firebase`, `datastore` — лише для перевірки «Бази»), кеш токенів на ключ.
 - **Маскування** (`redact.ts`) — до виходу з адаптера: email, телефони, IPv4/IPv6, Bearer/JWT, ключі Google/Stripe/GitHub/Slack, пари `password=`/`token=`, блоки приватних ключів. З URL запитів лишається тільки шлях. `user` у подіях Crashlytics відкидається.
 - **Аудит:** `factory.observability.connected` (акаунт додано, ключ замінено, перейменовано), `disconnected` (акаунт відключено, з переліком знятих прив'язок), `mapping_updated` (прив'язку збережено чи видалено) — без ключа.
 

@@ -14,7 +14,7 @@
 | [settings](settings/design.md) | Налаштування Factory, які змінюють поведінку агентів (мова агентів) |
 | [intake](intake/design.md) | Надходження задач: ClickUp, нова картка, правила надходження (тригер → політика → дія) |
 | [audits-board](audits-board/design.md) | Дошка «Аудити»: аналіз лише на читання, звіт у docs/audits, типи аудитів як дані |
-| [observability](observability/design.md) | Логи й креші для агентів: порт, адаптер Firebase, акаунти Google Cloud і прив'язки Factory → проєкт, інструменти, маскування |
+| [google-cloud](google-cloud/design.md) | Інтеграції › Google Cloud: логи й креші для агентів (порт, адаптер Firebase), «База» Firestore через MCP Toolbox, акаунти й прив'язки Factory → проєкт, маскування |
 | [sandbox](sandbox/design.md) | Пісочниця (лише локальна), коміти й пуш, очікування рішення людини; як це в оригінальній Mastra |
 | [conversations](conversations/design.md) | Розмови з агентом поза Factory: коментарі ClickUp, прив'язка акаунта, голосові кліпи, відповідь у тред |
-| [mcp-servers](mcp-servers/design.md) | Зовнішні MCP-сервери для агентів: менеджер, доступ картки, політика інструментів, секрети, маскування; MCP Toolbox для баз |
+| [mcp-servers](mcp-servers/design.md) | Інтеграції › MCP: менеджер MCP-серверів, доступ картки, політика інструментів, секрети, маскування; сервери, якими керують сервіси |

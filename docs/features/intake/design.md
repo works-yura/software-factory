@@ -88,3 +88,7 @@ flowchart LR
 | UI | Редактор маршруту з «Коли»; форми видів із реєстру | `apps/ui/src/ui/domains/settings/components/IntakeRoutesSection.tsx`, `…/settings/intake-triggers/` |
 
 Зміни маршрутів дозволені адміністраторам організації (`canEdit`); аудит `factory.intake_route.*`. Як додати тригер, дію, політику чи трекер — у [ADR-0021](../../adr/0021-one-list-of-intake-routes.md#як-додати).
+
+## Підключення джерел — в «Інтеграціях»
+
+З [ADR-0027](../../adr/0027-integrations-services-and-mcp.md) «Надходження задач» — лише маршрути. Підключення ClickUp (стан, «Імпортувати задачі ClickUp») — у «Інтеграції › Сервіси › ClickUp» (`ClickUpService.tsx`); над маршрутами — рядок «ClickUp підключено / не підключено» з посиланням туди. GitHub і GitLab підключаються там само; вибір репозиторіїв Factory — у «Репозиторіях».
