@@ -27,7 +27,7 @@ export const AUDIT_ACTIONS = {
   observability: ['connected', 'disconnected', 'mapping_updated'],
   sandbox_env: ['set', 'updated', 'deleted', 'stages_updated', 'file_created', 'file_updated', 'file_deleted'],
   // External MCP servers: their config, and each agent call to one of their tools (no payloads).
-  mcp_server: ['created', 'updated', 'deleted', 'tool_called'],
+  mcp_server: ['created', 'updated', 'deleted', 'tool_called', 'tool_tried', 'reconnected'],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;

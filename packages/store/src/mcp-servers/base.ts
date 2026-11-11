@@ -5,6 +5,7 @@ import { DEFAULT_MCP_TOOL_POLICIES, mcpServerLaunchSchema, mcpServerOwnerSchema,
 import type {
   ManagedMcpServerSpec,
   McpServerAssignment,
+  McpServerHealth,
   McpServerInput,
   McpServerLaunch,
   McpServerSecrets,
@@ -39,6 +40,10 @@ export const MCP_SERVERS_SCHEMA: CollectionSchema = {
     enabled: { type: 'boolean' },
     /** The integration managing the server (`McpServerOwner`), or null for a person's own server. */
     owner: { type: 'json', nullable: true },
+    /** What the last check / session use found (`McpServerHealth`); null until then. */
+    health: { type: 'json', nullable: true },
+    /** One tool call's time limit in ms; null = the default. */
+    call_timeout_ms: { type: 'integer', nullable: true },
     created_by: { type: 'text' },
     updated_by: { type: 'text' },
     created_at: { type: 'timestamp' },
@@ -59,6 +64,8 @@ interface McpServerDbRow extends Record<string, unknown> {
   mask_personal_data: boolean;
   enabled: boolean;
   owner: unknown;
+  health?: unknown;
+  call_timeout_ms?: number | null;
   created_by: string;
   updated_by: string;
   created_at: Date;
@@ -161,6 +168,8 @@ export class McpServersStorage extends FactoryStorageDomain {
         mask_personal_data: input.maskPersonalData,
         enabled: input.enabled,
         owner: null,
+        health: null,
+        call_timeout_ms: input.callTimeoutMs ?? null,
         created_by: actorId,
         updated_by: actorId,
         created_at: now,
@@ -187,6 +196,7 @@ export class McpServersStorage extends FactoryStorageDomain {
           tool_policies: input.toolPolicies,
           mask_personal_data: input.maskPersonalData,
           enabled: input.enabled,
+          call_timeout_ms: input.callTimeoutMs ?? null,
           updated_by: actorId,
           updated_at: now,
         };
@@ -256,6 +266,8 @@ export class McpServersStorage extends FactoryStorageDomain {
             mask_personal_data: true,
             enabled: true,
             owner: { integration, key: spec.key },
+            health: null,
+            call_timeout_ms: null,
             created_by: actorId,
             updated_by: actorId,
             created_at: now,
@@ -293,6 +305,37 @@ export class McpServersStorage extends FactoryStorageDomain {
     return changed;
   }
 
+  /**
+   * Keeps what a check found, without touching `updated_at` (a check is not an edit, so running
+   * sessions keep their servers). Tools named in `quarantine` get the `review` policy — hidden from
+   * agents until a person decides. Returns the server, or null when it is gone.
+   */
+  async recordHealth(orgId: string, id: string, health: McpServerHealth, quarantine: readonly string[] = []): Promise<McpServerView | null> {
+    const row = await this.#db.updateAtomic<McpServerDbRow>(SERVERS, { org_id: orgId, id }, async current => {
+      const policies = (current.tool_policies as McpToolPolicies | null) ?? DEFAULT_MCP_TOOL_POLICIES;
+      const previous = current.health as McpServerHealth | null;
+      const next: McpServerHealth = { ...health, ...(previous?.lastUsedAt ? { lastUsedAt: previous.lastUsedAt } : {}) };
+      return {
+        health: next,
+        ...(quarantine.length
+          ? { tool_policies: { ...policies, tools: { ...policies.tools, ...Object.fromEntries(quarantine.map(tool => [tool, 'review'])) } } }
+          : {}),
+      };
+    });
+    return row ? this.#view(row) : null;
+  }
+
+  /** Notes that a session used the server (time only; a failure also keeps its masked error). */
+  async recordUse(orgId: string, id: string, at: Date, failure?: Pick<McpServerHealth, 'error' | 'errorKind'>): Promise<void> {
+    await this.#db.updateAtomic<McpServerDbRow>(SERVERS, { org_id: orgId, id }, async current => {
+      const previous = (current.health as McpServerHealth | null) ?? { state: 'ok' as const, tools: [] };
+      const next: McpServerHealth = failure
+        ? { ...previous, lastUsedAt: at.toISOString(), state: 'error', ...failure }
+        : { ...previous, lastUsedAt: at.toISOString() };
+      return { health: next };
+    });
+  }
+
   async delete(orgId: string, id: string): Promise<boolean> {
     return (await this.#db.deleteMany(SERVERS, { org_id: orgId, id })) > 0;
   }
@@ -318,6 +361,8 @@ export class McpServersStorage extends FactoryStorageDomain {
       toolPolicies: (row.tool_policies as McpToolPolicies | null) ?? DEFAULT_MCP_TOOL_POLICIES,
       maskPersonalData: row.mask_personal_data !== false,
       enabled: row.enabled !== false,
+      ...(typeof row.call_timeout_ms === 'number' ? { callTimeoutMs: row.call_timeout_ms } : {}),
+      ...(row.health ? { health: row.health as McpServerHealth } : {}),
       ...(row.owner ? { owner: mcpServerOwnerSchema.parse(row.owner) } : {}),
       updatedAt: new Date(row.updated_at).toISOString(),
       updatedBy: row.updated_by,

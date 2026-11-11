@@ -2894,6 +2894,7 @@ export class MastraFactory {
             credentials: mcpCredentials,
             managed: managedMcpServers,
             audit: auditDomain,
+            auditLog: auditStorage,
           }),
           ...(mcpEnabled || sessionTokens
             ? buildFactoryMcpRoutes({

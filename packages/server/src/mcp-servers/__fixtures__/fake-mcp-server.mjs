@@ -13,18 +13,21 @@ const server = new MCPServer({
       id: 'find_user',
       description: 'Finds a user.',
       inputSchema: z.object({ id: z.string() }),
+      mcp: { annotations: { readOnlyHint: true } },
       execute: async ({ id }) => ({ id, contact: 'ana@example.com, +380 67 123 4567' }),
     }),
     delete_documents: createTool({
       id: 'delete_documents',
       description: 'Deletes documents.',
       inputSchema: z.object({}),
+      mcp: { annotations: { readOnlyHint: false, destructiveHint: true } },
       execute: async () => ({ deleted: true }),
     }),
     launch_info: createTool({
       id: 'launch_info',
       description: 'Shows what the server was started with.',
       inputSchema: z.object({}),
+      mcp: { annotations: { readOnlyHint: true } },
       execute: async () => {
         const file = process.env.GOOGLE_APPLICATION_CREDENTIALS;
         return {
@@ -36,6 +39,29 @@ const server = new MCPServer({
         };
       },
     }),
+    // Answers after FAKE_SLOW_MS: a server that hangs, for the call time limit.
+    slow_read: createTool({
+      id: 'slow_read',
+      description: 'Reads slowly.',
+      inputSchema: z.object({}),
+      mcp: { annotations: { readOnlyHint: true } },
+      execute: async () => {
+        await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_SLOW_MS ?? 0)));
+        return { done: true };
+      },
+    }),
+    // Present only with FAKE_EXTRA_TOOL=1: a writing tool that appears after a first check.
+    ...(process.env.FAKE_EXTRA_TOOL === '1'
+      ? {
+          add_documents: createTool({
+            id: 'add_documents',
+            description: 'Adds documents.',
+            inputSchema: z.object({}),
+            mcp: { annotations: { readOnlyHint: false } },
+            execute: async () => ({ added: true }),
+          }),
+        }
+      : {}),
   },
 });
 

@@ -9,7 +9,7 @@ import { DEFAULT_MCP_TOOL_POLICIES } from '@factory/core';
 import type { McpToolPolicies } from '@factory/core';
 import type { McpServerRecord } from '@factory/store';
 
-import { McpServerHub } from './hub.ts';
+import { McpServerHub, mcpErrorKind } from './hub.ts';
 import { prepareMcpServer, McpServerLaunchError } from './launch.ts';
 import { catalogEntrypoint, mcpCatalogEntryById } from './catalog.ts';
 
@@ -34,7 +34,7 @@ function server(overrides: Partial<McpServerRecord> = {}): McpServerRecord {
   };
 }
 
-const session = { orgId: 'org-1', sessionId: 'session-1', factoryProjectId: 'syncts' };
+const session = { orgId: 'org-1', sessionId: 'session-1', factoryProjectId: 'syncts', kind: 'personal' as const };
 const hubs: McpServerHub[] = [];
 
 function makeHub(records: McpServerRecord[], extra: { audit?: unknown[]; tempRoot?: string } = {}) {
@@ -42,6 +42,25 @@ function makeHub(records: McpServerRecord[], extra: { audit?: unknown[]; tempRoo
     servers: {
       listRecords: async () => records,
       getRecord: async (_org, id) => records.find(record => record.id === id) ?? null,
+      // Keeps health and quarantine on the in-memory records, as the store does.
+      recordHealth: async (_org, id, health, quarantine = []) => {
+        const record = records.find(item => item.id === id);
+        if (!record) return null;
+        record.health = { ...health, ...(record.health?.lastUsedAt ? { lastUsedAt: record.health.lastUsedAt } : {}) };
+        if (quarantine.length) {
+          record.toolPolicies = {
+            ...record.toolPolicies,
+            tools: { ...record.toolPolicies.tools, ...Object.fromEntries(quarantine.map(tool => [tool, 'review' as const])) },
+          };
+        }
+        return record;
+      },
+      recordUse: async (_org, id, at, failure) => {
+        const record = records.find(item => item.id === id);
+        if (!record) return;
+        const previous = record.health ?? { state: 'ok' as const, tools: [] };
+        record.health = failure ? { ...previous, lastUsedAt: at.toISOString(), state: 'error', ...failure } : { ...previous, lastUsedAt: at.toISOString() };
+      },
     },
     ...(extra.audit ? { audit: { record: async (input: unknown) => void extra.audit!.push(input) } } : {}),
     ...(extra.tempRoot ? { tempRoot: extra.tempRoot } : {}),
@@ -72,7 +91,12 @@ describe('McpServerHub with a real stdio server', () => {
     const hub = makeHub([server()], { audit, tempRoot });
 
     const tools = await hub.toolsFor(session);
-    expect(Object.keys(tools).sort()).toEqual(['syncta-db_delete_documents', 'syncta-db_find_user', 'syncta-db_launch_info']);
+    expect(Object.keys(tools).sort()).toEqual([
+      'syncta-db_delete_documents',
+      'syncta-db_find_user',
+      'syncta-db_launch_info',
+      'syncta-db_slow_read',
+    ]);
 
     const info = (await call(tools['syncta-db_launch_info'], {})) as Record<string, unknown>;
     expect(info).toMatchObject({ project: 'syncta-57c6a', keyFileExists: true, keyFileContent: '{"type":"service_account"}' });
@@ -114,14 +138,17 @@ describe('McpServerHub with a real stdio server', () => {
     expect(await hub.askToolNames(session)).toEqual(['syncta-db_find_user']);
 
     const unasked = await hub.toolsFor(session, { askSupported: false });
-    expect(Object.keys(unasked)).toEqual(['syncta-db_launch_info']);
+    expect(Object.keys(unasked).sort()).toEqual(['syncta-db_launch_info', 'syncta-db_slow_read']);
   }, 30_000);
 
   it('gives a session only the servers its card is assigned', async () => {
     const audits = server({ id: 'srv-2', name: 'audits-db', assignments: [{ factoryProjectId: 'syncts', boards: ['audits'] }] });
     const hub = makeHub([audits]);
-    expect(await hub.toolsFor({ ...session, board: 'work', phase: 'triage' })).toEqual({});
-    expect(Object.keys(await hub.toolsFor({ ...session, sessionId: 's-2', board: 'audits', phase: 'analysis' }))).toHaveLength(3);
+    expect(await hub.toolsFor({ ...session, kind: 'card', board: 'work', phase: 'triage' })).toEqual({});
+    expect(Object.keys(await hub.toolsFor({ ...session, kind: 'card', sessionId: 's-2', board: 'audits', phase: 'analysis' }))).toHaveLength(4);
+    // A server limited to cards never reaches the Factory chat or a member's own session.
+    expect(await hub.toolsFor({ ...session, sessionId: 's-4', kind: 'chat' })).toEqual({});
+    expect(await hub.toolsFor({ ...session, sessionId: 's-5', kind: 'personal' })).toEqual({});
     expect(await hub.toolsFor({ ...session, sessionId: 's-3', factoryProjectId: 'other' })).toEqual({});
   }, 30_000);
 
@@ -135,10 +162,15 @@ describe('McpServerHub with a real stdio server', () => {
     const hub = makeHub([server({ toolPolicies: policies }), broken]);
 
     const status = await hub.status('org-1', 'srv-1');
-    expect(status).toMatchObject({ connected: true, toolCount: 3 });
-    expect(status?.tools.find(tool => tool.name === 'delete_documents')?.policy).toBe('deny');
+    expect(status).toMatchObject({ connected: true, toolCount: 4 });
+    expect(status?.tools.find(tool => tool.name === 'delete_documents')).toMatchObject({ policy: 'deny', risk: 'destructive' });
+    expect(status?.tools.find(tool => tool.name === 'find_user')).toMatchObject({ risk: 'read', annotations: { readOnlyHint: true } });
 
-    expect(await hub.status('org-1', 'srv-3')).toMatchObject({ connected: false, error: expect.stringContaining('FIRESTORE_PROJECT') });
+    expect(await hub.status('org-1', 'srv-3')).toMatchObject({
+      connected: false,
+      error: expect.stringContaining('FIRESTORE_PROJECT'),
+      errorKind: 'missing_input',
+    });
     expect(await hub.status('org-1', 'missing')).toBeNull();
   }, 30_000);
 
@@ -147,9 +179,94 @@ describe('McpServerHub with a real stdio server', () => {
     const hub = makeHub([], { tempRoot });
     const unsaved = server();
     const status = await hub.check('org-1', { name: unsaved.name, launch: unsaved.launch, secrets: unsaved.secrets, toolPolicies: unsaved.toolPolicies });
-    expect(status).toMatchObject({ connected: true, toolCount: 3 });
+    expect(status).toMatchObject({ connected: true, toolCount: 4 });
     expect(readdirSync(tempRoot)).toEqual([]);
   }, 30_000);
+
+  it('keeps what a check found with the server, and a failed check keeps the masked error', async () => {
+    const good = server();
+    const bad = server({
+      id: 'srv-bad',
+      name: 'bad',
+      launch: { transport: 'stdio', command: process.execPath, args: ['/nowhere/ana@example.com/missing.mjs'], env: {} },
+    });
+    const hub = makeHub([good, bad]);
+
+    await hub.status('org-1', 'srv-1');
+    expect(good.health).toMatchObject({ state: 'ok', checkedAt: expect.any(String) });
+    expect(good.health?.tools.map(tool => tool.name).sort()).toEqual(['delete_documents', 'find_user', 'launch_info', 'slow_read']);
+
+    await hub.status('org-1', 'srv-bad');
+    expect(bad.health).toMatchObject({ state: 'error', error: expect.any(String) });
+    expect(bad.health?.error).not.toContain('ana@example.com');
+  }, 30_000);
+
+  it('puts a new writing tool under review after a later check, hidden from agents until someone decides', async () => {
+    const record = server();
+    const hub = makeHub([record]);
+    // The first check sees the tools as they are: nothing quarantined.
+    expect((await hub.status('org-1', 'srv-1'))?.quarantined).toBeUndefined();
+
+    record.launch = { ...record.launch, env: { ...(record.launch as { env: Record<string, string> }).env, FAKE_EXTRA_TOOL: '1' } } as never;
+    const second = await hub.status('org-1', 'srv-1');
+    expect(second?.quarantined).toEqual(['add_documents']);
+    expect(second?.tools.find(tool => tool.name === 'add_documents')).toMatchObject({ policy: 'review', risk: 'write' });
+    expect(record.toolPolicies.tools.add_documents).toBe('review');
+
+    const tools = await hub.toolsFor({ ...session, sessionId: 'quarantine' });
+    expect(tools['syncta-db_add_documents']).toBeUndefined();
+    expect(tools['syncta-db_find_user']).toBeDefined();
+  }, 30_000);
+
+  it('fails a call that outlives the server’s time limit and notes the failure', async () => {
+    const record = server({
+      callTimeoutMs: 1_000,
+      launch: { transport: 'stdio', command: process.execPath, args: [FAKE], env: { FAKE_SLOW_MS: '5000' } },
+    });
+    const hub = makeHub([record]);
+    const tools = await hub.toolsFor({ ...session, sessionId: 'slow' });
+    await expect(call(tools['syncta-db_slow_read'], {})).rejects.toThrow(/timed out/);
+    expect(record.health).toMatchObject({ state: 'error', errorKind: 'timeout', lastUsedAt: expect.any(String) });
+  }, 30_000);
+
+  it('tries only read-only tools, masked and audited as the person’s', async () => {
+    const audit: unknown[] = [];
+    const hub = makeHub([server()], { audit });
+
+    const trial = await hub.tryTool('org-1', 'srv-1', 'find_user', { id: 'u1' }, 'user-1');
+    expect(trial?.ok).toBe(true);
+    expect(JSON.stringify(trial?.output)).not.toContain('ana@example.com');
+    expect(audit).toContainEqual(
+      expect.objectContaining({ action: 'factory.mcp_server.tool_tried', actorId: 'user-1', actorType: 'human' }),
+    );
+
+    await expect(hub.tryTool('org-1', 'srv-1', 'delete_documents', {}, 'user-1')).rejects.toMatchObject({ reason: 'not_read_only' });
+    await expect(hub.tryTool('org-1', 'srv-1', 'nope', {}, 'user-1')).rejects.toMatchObject({ reason: 'unknown_tool' });
+    expect(await hub.tryTool('org-1', 'missing', 'find_user', {}, 'user-1')).toBeNull();
+  }, 30_000);
+
+  it('reconnects: stops the running instances of the server, then checks it again', async () => {
+    const hub = makeHub([server()]);
+    const first = await hub.toolsFor({ ...session, sessionId: 'running' });
+    expect(first['syncta-db_find_user']).toBeDefined();
+
+    const status = await hub.reconnect('org-1', 'srv-1');
+    expect(status).toMatchObject({ connected: true });
+    // The stopped session starts the server again on its next call.
+    const again = await hub.toolsFor({ ...session, sessionId: 'running' });
+    expect(again['syncta-db_find_user']).not.toBe(first['syncta-db_find_user']);
+  }, 30_000);
+});
+
+describe('mcpErrorKind', () => {
+  it('sorts common failures into kinds the page explains', () => {
+    expect(mcpErrorKind('Installed @toolbox-sdk/server is 1.15.0 but the catalog expects version 1.16.0')).toBe('version_mismatch');
+    expect(mcpErrorKind('Syncta Firestore: find_user timed out after 60 s')).toBe('timeout');
+    expect(mcpErrorKind('7 PERMISSION_DENIED: Missing or insufficient permissions.')).toBe('auth_denied');
+    expect(mcpErrorKind('FIRESTORE_PROJECT is required')).toBe('missing_input');
+    expect(mcpErrorKind('spawn /usr/bin/toolbox ENOENT')).toBe('spawn_failed');
+    expect(mcpErrorKind('something else')).toBe('other');
+  });
 });
 
 describe('prepareMcpServer', () => {

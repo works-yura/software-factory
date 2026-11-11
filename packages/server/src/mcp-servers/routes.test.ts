@@ -6,6 +6,7 @@ import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 import type { TestAuthUser } from '@factory/http/testing';
 import { createFactorySecretEncryption, McpServersStorage } from '@factory/store';
 
+import { McpToolNotTryableError } from './hub.ts';
 import { buildMcpServerRoutes } from './routes.ts';
 
 const admin: TestAuthUser = { id: 'u1', organizationId: 'org-1' };
@@ -21,6 +22,16 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
   const checked: string[] = [];
   const dryRuns: Array<{ name: string; launch: unknown; secrets: unknown }> = [];
   const discoveries: Array<{ credential: unknown; source: string; context: unknown }> = [];
+  const reconnected: string[] = [];
+  const auditEvents: Array<{
+    actorId: string;
+    actorType: string;
+    action: string;
+    targets: Array<{ type: string; id: string }>;
+    metadata: Record<string, unknown>;
+    factoryProjectId: string | null;
+    occurredAt: Date;
+  }> = [];
   const app = new Hono();
   app.use('*', async (c, next) => {
     c.set('factoryAuthUser' as never, (options.user ?? admin) as never);
@@ -40,7 +51,16 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
           dryRuns.push({ name: record.name, launch: record.launch, secrets: record.secrets });
           return { connected: true, toolCount: 2, tools: [{ name: 'list_collections', description: '', policy: 'allow' }, { name: 'delete_documents', description: '', policy: 'allow' }], checkedAt: 'now' };
         },
+        reconnect: async (_org, id) => {
+          reconnected.push(id);
+          return { connected: true, toolCount: 1, tools: [], checkedAt: 'now' };
+        },
+        tryTool: async (_org, id, tool, args) => {
+          if (tool === 'delete_documents') throw new McpToolNotTryableError('not_read_only', 'not read-only');
+          return { ok: true, output: { id, tool, args }, durationMs: 5 };
+        },
       },
+      auditLog: { list: async () => ({ events: auditEvents }) },
       credentials: {
         options: async () => ({ 'google-cloud-account': [{ id: 'acc-1', name: 'Syncta', detail: 'factory@syncta-57c6a.iam.gserviceaccount.com' }] }),
         suggestions: async (_org, factoryProjectId) => (factoryProjectId === 'syncts' ? { 'google-cloud-project': 'syncta-57c6a' } : {}),
@@ -56,7 +76,7 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
   );
   const call = (method: string, path: string, body?: unknown) =>
     app.request(path, { method, ...(body !== undefined ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
-  return { call, audits, checked, servers, dryRuns, discoveries };
+  return { call, audits, checked, servers, dryRuns, discoveries, reconnected, auditEvents };
 }
 
 const firestore = {
@@ -71,6 +91,73 @@ const firestore = {
   },
   assignments: [{ factoryProjectId: 'syncts', boards: ['audits'] }],
 };
+
+describe('MCP server routes: status, try, reconnect, calls', () => {
+  it('tries a read-only tool for an admin, refuses a writing one and a member', async () => {
+    const { call } = await setup();
+    const { server } = await (await call('POST', '/web/mcp-servers', firestore)).json();
+    const ok = await call('POST', `/web/mcp-servers/${server.id}/try`, { tool: 'list_collections', arguments: { limit: 1 } });
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).trial).toMatchObject({ ok: true, output: { tool: 'list_collections', args: { limit: 1 } } });
+
+    const writing = await call('POST', `/web/mcp-servers/${server.id}/try`, { tool: 'delete_documents' });
+    expect(writing.status).toBe(422);
+    expect(await writing.json()).toMatchObject({ error: 'not_read_only' });
+
+    const member = await setup({ isAdmin: false });
+    const { server: other } = await (await call('POST', '/web/mcp-servers', { ...firestore, name: 'other-db' })).json();
+    expect((await member.call('POST', `/web/mcp-servers/${other.id}/try`, { tool: 'list_collections' })).status).toBe(403);
+  });
+
+  it('reconnects a server and audits it', async () => {
+    const { call, reconnected, audits } = await setup();
+    const { server } = await (await call('POST', '/web/mcp-servers', firestore)).json();
+    const res = await call('POST', `/web/mcp-servers/${server.id}/reconnect`);
+    expect(res.status).toBe(200);
+    expect(reconnected).toEqual([server.id]);
+    expect(audits.map(a => a.action)).toContain('factory.mcp_server.reconnected');
+  });
+
+  it('lists the server’s recent calls from the audit trail, newest first, without payloads', async () => {
+    const { call, auditEvents } = await setup();
+    const { server } = await (await call('POST', '/web/mcp-servers', firestore)).json();
+    const at = (minute: number) => new Date(Date.UTC(2026, 10, 12, 10, minute));
+    auditEvents.push(
+      {
+        actorId: 'session-1',
+        actorType: 'agent',
+        action: 'factory.mcp_server.tool_called',
+        targets: [{ type: 'mcp_server', id: server.id }],
+        metadata: { tool: 'list_collections', outcome: 'ok', durationMs: 120, sessionId: 'session-1' },
+        factoryProjectId: 'syncts',
+        occurredAt: at(5),
+      },
+      {
+        actorId: 'u1',
+        actorType: 'human',
+        action: 'factory.mcp_server.tool_tried',
+        targets: [{ type: 'mcp_server', id: server.id }],
+        metadata: { tool: 'get_documents', outcome: 'error', durationMs: 900 },
+        factoryProjectId: 'syncts',
+        occurredAt: at(4),
+      },
+      {
+        actorId: 'session-2',
+        actorType: 'agent',
+        action: 'factory.mcp_server.tool_called',
+        targets: [{ type: 'mcp_server', id: 'another-server' }],
+        metadata: { tool: 'x', outcome: 'ok' },
+        factoryProjectId: 'syncts',
+        occurredAt: at(3),
+      },
+    );
+    const { calls } = await (await call('GET', `/web/mcp-servers/${server.id}/calls`)).json();
+    expect(calls).toEqual([
+      { at: at(5).toISOString(), tool: 'list_collections', outcome: 'ok', durationMs: 120, sessionId: 'session-1', factoryProjectId: 'syncts', tried: false },
+      { at: at(4).toISOString(), tool: 'get_documents', outcome: 'error', durationMs: 900, factoryProjectId: 'syncts', tried: true },
+    ]);
+  });
+});
 
 describe('MCP server routes', () => {
   it('creates, lists, changes and deletes a server; secret values never come back', async () => {

@@ -18,6 +18,7 @@ import type { RouteAuth } from '@factory/http';
 import { McpServerNameTakenError, mergeMcpSecrets } from '@factory/store';
 import type { McpServersStorage } from '@factory/store';
 
+import { McpToolNotTryableError } from './hub.ts';
 import type { McpServerHub } from './hub.ts';
 import { MCP_CATALOG, mcpCatalogEntryById } from './catalog.ts';
 import type { McpCredentials } from './credentials.ts';
@@ -26,7 +27,7 @@ import type { ManagedMcpServers } from './managed.ts';
 export interface McpServerRoutesOptions {
   auth: RouteAuth;
   servers: Pick<McpServersStorage, 'list' | 'get' | 'getRecord' | 'create' | 'update' | 'delete'>;
-  hub: Pick<McpServerHub, 'status' | 'check'>;
+  hub: Pick<McpServerHub, 'status' | 'check' | 'reconnect' | 'tryTool'>;
   credentials: Pick<McpCredentials, 'options' | 'suggestions' | 'discover'>;
   /** Syncs the servers integrations manage before the organization's list is read. */
   managed?: Pick<ManagedMcpServers, 'ensure'>;
@@ -34,12 +35,44 @@ export interface McpServerRoutesOptions {
     record(input: {
       orgId: string;
       actorId: string;
-      action: 'factory.mcp_server.created' | 'factory.mcp_server.updated' | 'factory.mcp_server.deleted';
+      action:
+        | 'factory.mcp_server.created'
+        | 'factory.mcp_server.updated'
+        | 'factory.mcp_server.deleted'
+        | 'factory.mcp_server.reconnected';
       targets: Array<{ type: string; id: string; name?: string }>;
       metadata?: Record<string, unknown>;
     }): Promise<unknown>;
   };
+  /** The audit trail, read for a server's recent calls. */
+  auditLog?: {
+    list(input: { orgId: string; actions?: string[]; limit?: number }): Promise<{
+      events: Array<{
+        actorId: string;
+        actorType: string;
+        action: string;
+        targets: Array<{ type: string; id: string }>;
+        metadata: Record<string, unknown>;
+        factoryProjectId: string | null;
+        occurredAt: Date;
+      }>;
+    }>;
+  };
 }
+
+/** One call to a server's tool, as the page lists it. */
+export interface McpServerCall {
+  at: string;
+  tool: string;
+  outcome: 'ok' | 'error';
+  durationMs?: number;
+  /** The agent session that called it; absent for a person's «Спробувати». */
+  sessionId?: string;
+  factoryProjectId?: string;
+  tried: boolean;
+}
+
+const RECENT_CALLS = 20;
 
 class Refusal extends Error {
   readonly status: 400 | 401 | 403 | 404 | 409 | 422;
@@ -82,6 +115,11 @@ const discoverBodySchema = z.object({
   from: z.enum(MCP_SUGGESTION_SOURCES),
   /** The other inputs the lookup depends on, by role (`project` for a project's databases). */
   context: z.record(z.string().max(64), z.string().max(256)).default({}),
+});
+
+const tryBodySchema = z.object({
+  tool: z.string().min(1).max(200),
+  arguments: z.record(z.string(), z.unknown()).default({}),
 });
 
 const checkBodySchema = z.object({
@@ -135,7 +173,7 @@ function target(server: McpServerView) {
 }
 
 export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[] {
-  const { auth, servers, hub, audit, credentials, managed } = options;
+  const { auth, servers, hub, audit, credentials, managed, auditLog } = options;
   return [
     registerApiRoute('/web/mcp-servers', {
       method: 'GET',
@@ -243,6 +281,75 @@ export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[
         const status = await hub.status(orgId, id(c));
         if (!status) throw new Refusal(404, { error: 'not_found' });
         return c.json({ status });
+      }),
+    }),
+    // «Перепідключити»: stops every running instance (sessions restart it on their next call) and re-checks.
+    registerApiRoute('/web/mcp-servers/:id/reconnect', {
+      method: 'POST',
+      handler: handle(async c => {
+        const { orgId, userId } = await caller(c, auth, true);
+        const serverId = id(c);
+        const status = await hub.reconnect(orgId, serverId);
+        if (!status) throw new Refusal(404, { error: 'not_found' });
+        await audit?.record({
+          orgId,
+          actorId: userId,
+          action: 'factory.mcp_server.reconnected',
+          targets: [{ type: 'mcp_server', id: serverId }],
+          metadata: { connected: status.connected },
+        });
+        return c.json({ status });
+      }),
+    }),
+    // «Спробувати»: runs one read-only tool by itself. An admin's call, since it starts the server.
+    registerApiRoute('/web/mcp-servers/:id/try', {
+      method: 'POST',
+      handler: handle(async c => {
+        const { orgId, userId } = await caller(c, auth, true);
+        const body = tryBodySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!body.success) throw new Refusal(422, { error: 'invalid_trial', message: 'Name the tool to try.' });
+        try {
+          const trial = await hub.tryTool(orgId, id(c), body.data.tool, body.data.arguments, userId);
+          if (!trial) throw new Refusal(404, { error: 'not_found' });
+          return c.json({ trial });
+        } catch (error) {
+          if (error instanceof McpToolNotTryableError) {
+            throw new Refusal(422, { error: error.reason, message: error.message });
+          }
+          throw error;
+        }
+      }),
+    }),
+    // The server's last calls from the audit trail: who (session), which tool, outcome, how long. No payloads.
+    registerApiRoute('/web/mcp-servers/:id/calls', {
+      method: 'GET',
+      handler: handle(async c => {
+        const { orgId } = await caller(c, auth, false);
+        const serverId = id(c);
+        if (!(await servers.get(orgId, serverId))) throw new Refusal(404, { error: 'not_found' });
+        if (!auditLog) return c.json({ calls: [] });
+        const page = await auditLog.list({
+          orgId,
+          actions: ['factory.mcp_server.tool_called', 'factory.mcp_server.tool_tried'],
+          limit: 200,
+        });
+        const calls: McpServerCall[] = page.events
+          .filter(event => event.targets.some(target => target.type === 'mcp_server' && target.id === serverId))
+          .slice(0, RECENT_CALLS)
+          .map(event => {
+            const tried = event.action === 'factory.mcp_server.tool_tried';
+            const sessionId = typeof event.metadata.sessionId === 'string' ? event.metadata.sessionId : undefined;
+            return {
+              at: new Date(event.occurredAt).toISOString(),
+              tool: String(event.metadata.tool ?? ''),
+              outcome: event.metadata.outcome === 'error' ? 'error' : 'ok',
+              ...(typeof event.metadata.durationMs === 'number' ? { durationMs: event.metadata.durationMs } : {}),
+              ...(sessionId && !tried ? { sessionId } : {}),
+              ...(event.factoryProjectId ? { factoryProjectId: event.factoryProjectId } : {}),
+              tried,
+            };
+          });
+        return c.json({ calls });
       }),
     }),
   ];

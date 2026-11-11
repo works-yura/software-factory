@@ -58,6 +58,30 @@ describe('McpServersStorage', () => {
     await expect(domain.create('org-2', input(), 'user-1')).resolves.toMatchObject({ name: 'syncta-db' });
   });
 
+  it('keeps what a check found without counting it as an edit, quarantines new tools, and notes use', async () => {
+    const { domain } = await makeStore();
+    const created = await domain.create(ORG, input({ callTimeoutMs: 30_000 }), 'user-1');
+    expect(created.callTimeoutMs).toBe(30_000);
+    expect(created.health).toBeUndefined();
+
+    const tools = [{ name: 'list_collections', description: 'Lists.', annotations: { readOnlyHint: true } }];
+    const checked = await domain.recordHealth(ORG, created.id, { state: 'ok', tools, checkedAt: '2026-11-12T10:00:00.000Z' }, ['add_documents']);
+    expect(checked?.health).toMatchObject({ state: 'ok', tools, checkedAt: '2026-11-12T10:00:00.000Z' });
+    expect(checked?.toolPolicies.tools).toEqual({ add_documents: 'review' });
+    // A check is not an edit: running sessions keep their servers.
+    expect(checked?.updatedAt).toBe(created.updatedAt);
+
+    await domain.recordUse(ORG, created.id, new Date('2026-11-12T10:05:00.000Z'));
+    expect((await domain.get(ORG, created.id))?.health).toMatchObject({ state: 'ok', lastUsedAt: '2026-11-12T10:05:00.000Z' });
+    await domain.recordUse(ORG, created.id, new Date('2026-11-12T10:06:00.000Z'), { error: 'timed out', errorKind: 'timeout' });
+    expect((await domain.get(ORG, created.id))?.health).toMatchObject({ state: 'error', errorKind: 'timeout', tools });
+
+    // A later check keeps the last use.
+    await domain.recordHealth(ORG, created.id, { state: 'ok', tools, checkedAt: '2026-11-12T11:00:00.000Z' });
+    expect((await domain.get(ORG, created.id))?.health).toMatchObject({ state: 'ok', lastUsedAt: '2026-11-12T10:06:00.000Z' });
+    expect(await domain.recordHealth(ORG, 'missing', { state: 'ok', tools: [] })).toBeNull();
+  });
+
   it('merges secrets by kind', () => {
     expect(
       mergeMcpSecrets({ env: { A: '1' }, headers: { H: 'x' }, files: {} }, { headers: { H: null }, files: { F: 'f' } }),
