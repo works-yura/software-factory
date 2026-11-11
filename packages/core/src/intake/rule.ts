@@ -85,3 +85,21 @@ export interface IntakeRuleRepository {
   /** The last fire whose action made a card: what an overlap policy checks. */
   lastFireWithWorkItem(ruleId: string): Promise<IntakeRuleFireRecord | null>;
 }
+
+/**
+ * The intake route a rule's cards are placed by: intake routes are the one place that decides where
+ * a new card goes, so a rule that files cards gets a route of its own (`intake.rule` = its id) when
+ * it is created, which a person may then edit like any route. A port; the server implements it over
+ * the stored intake routes.
+ */
+export interface IntakeRuleRoutes {
+  /** Adds the rule's route unless a route already names the rule. */
+  ensure(rule: IntakeRuleRecord, target: { boardKey: string; phaseKey: string | null }): Promise<void>;
+  /** Removes the routes that name only this rule, when the rule is deleted. */
+  remove(rule: IntakeRuleRecord): Promise<void>;
+}
+
+/** The condition of a rule's own intake route: cards this rule filed. */
+export function intakeRuleRouteCondition(ruleId: string) {
+  return { operator: 'AND' as const, conditions: [{ field: 'intake.rule', operator: 'equals' as const, value: ruleId }] };
+}

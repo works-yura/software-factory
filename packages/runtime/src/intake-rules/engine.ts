@@ -26,6 +26,7 @@ import type {
   IntakeRuleLocale,
   IntakeRuleRecord,
   IntakeRuleRepository,
+  IntakeRuleRoutes,
   IntakeRuleScope,
   IntakeTriggerFired,
 } from '@factory/core';
@@ -33,6 +34,8 @@ import type {
 export interface IntakeRuleEngineOptions {
   rules: IntakeRuleRepository;
   kinds: IntakeKinds;
+  /** The rules' own intake routes; without it a rule's cards go to its action's target. */
+  routes?: IntakeRuleRoutes;
   logger?: { warn(message: string, meta?: Record<string, unknown>): void };
   now?: () => Date;
 }
@@ -69,6 +72,7 @@ function errorMessage(error: unknown): string {
 export class IntakeRuleEngine {
   readonly #kinds: IntakeKinds;
   readonly #rules: IntakeRuleRepository;
+  readonly #routes: IntakeRuleRoutes | undefined;
   readonly #logger: NonNullable<IntakeRuleEngineOptions['logger']>;
   readonly #now: () => Date;
   #started = false;
@@ -76,6 +80,7 @@ export class IntakeRuleEngine {
   constructor(options: IntakeRuleEngineOptions) {
     this.#kinds = options.kinds;
     this.#rules = options.rules;
+    this.#routes = options.routes;
     this.#logger = options.logger ?? { warn: (message, meta) => console.warn(`[intake-rules] ${message}`, meta ?? {}) };
     this.#now = options.now ?? (() => new Date());
   }
@@ -87,15 +92,27 @@ export class IntakeRuleEngine {
     for (const trigger of this.#kinds.triggers.list()) await trigger.start(fired => this.fire(fired).then(() => undefined));
   }
 
-  /** Arms every enabled rule's trigger and disarms the rest: what boot runs once storage is up. */
+  /**
+   * Arms every enabled rule's trigger and disarms the rest, and gives a rule that files cards its
+   * intake route when none names it yet (rules made before routes placed their cards): what boot
+   * runs once storage is up.
+   */
   async armAll(): Promise<void> {
     for (const rule of await this.#rules.listAll()) {
       try {
+        await this.ensureRoute(rule);
         await this.sync(rule);
       } catch (error) {
         this.#logger.warn('could not arm an intake rule', { ruleId: rule.id, error: errorMessage(error) });
       }
     }
+  }
+
+  /** Gives the rule its intake route, targeting where its action files cards, unless one names it. */
+  async ensureRoute(rule: IntakeRuleRecord): Promise<void> {
+    const action = this.#kinds.actions.get(rule.actionKind);
+    if (!this.#routes || !action?.routeTarget) return;
+    await this.#routes.ensure(rule, action.routeTarget(action.parse(rule.actionConfig)));
   }
 
   /** The kinds this server offers, labelled in `locale`. */
@@ -146,6 +163,7 @@ export class IntakeRuleEngine {
     await this.#triggerCall('stopped', async () => {
       await this.#kinds.triggers.get(rule.triggerKind)?.disarm(rule.id);
     });
+    await this.#routes?.remove(rule);
   }
 
   async #triggerCall(what: 'armed' | 'stopped', call: () => Promise<void>): Promise<void> {

@@ -236,6 +236,8 @@ export class IntakeRuleRoutes extends Route<IntakeRuleRoutesDeps> {
         await this.#check(input, scope);
         const rule = await storage.create(scope, input, scope.userId);
         await this.#audit(c, scope, 'created', rule);
+        // The rule's cards are placed by intake routes: it gets its own, targeting its board and phase.
+        await engine.ensureRoute(rule);
         await this.#sync(rule);
         return c.json({ intakeRule: await presentIntakeRule(engine, rule, this.#locale(c)) }, 201);
       }),
