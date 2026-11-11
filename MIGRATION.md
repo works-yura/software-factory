@@ -314,6 +314,12 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | `e2638721ef` (#30025) | Старт сервера більше не чекає звірки результатів інструментів у всіх прив'язаних тредах (`reconcileAllBoundThreads` у `finalize`): її робить перший цикл диспетчера у фоні, а після міграції ресурсів сесій звірка запускається один раз | `packages/server/src/factory.ts`; тести `server/src/factory.test.ts` (+1), `runtime/src/dispatcher.test.ts` (+1) | Запуск рушія intake rules (`finalize.intakeRules`) лишився на своєму місці. У тесті диспетчера `harness` замість `controller`. Changeset не переносили. |
 | `ab40f6ee5d` (#30029) | Репозиторії середовища на старті сесії синхронізуються паралельно (до 4 одночасно, `ENVIRONMENT_SYNC_CONCURRENCY`), а не один за одним: спершу основний репозиторій і його setup, потім решта поруч; порядок у стані сесії лишається за позицією | `packages/harness-mastra/src/workspace.ts`, тест `harness-mastra/src/workspace.test.ts` (+1) | Узято як є (кілька репозиторіїв без головного у v4 уже були). Changeset не переносили. |
 
+## Перенесено з upstream після ab40f6ee5d
+
+| Коміт | Що | Куди | Відхилення |
+| --- | --- | --- | --- |
+| `113c803cde` (#30032) | Сесії, що стартують разом, більше не мінтять кожна свій токен GitHub: одночасні запити доступу до того самого репозиторію (чи набору репозиторіїв) чекають один спільний мінт (`#mintOnce`, ключ той самий, що в кеші доступу), тож бюджет мінтів інсталяції Platform не вичерпується | `packages/integration-github/src/platform/integration.ts`, тест `integration.test.ts` (+2) | Узято як є. Changeset не переносили. |
+
 ## Власна копія playground-ui
 
 `@mastra/playground-ui` 65.0.0 більше не ставиться з реєстру з pnpm-патчем по скомпільованих файлах: його вихідники лежать у `packages/playground-ui` (приватний воркспейс-пакет з тією самою назвою, тож імпорти в `apps/ui` не змінились; `apps/ui` залежить від нього як `workspace:*`).
