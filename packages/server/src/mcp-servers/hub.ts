@@ -81,13 +81,13 @@ export class McpServerHub {
   readonly #deps: McpServerHubDeps;
   readonly #sessions = new Map<string, SessionServers>();
   readonly #starting = new Map<string, Promise<SessionServers | undefined>>();
-  readonly #sweep: NodeJS.Timeout;
+  readonly #idleMs: number;
+  /** Runs only while some session has servers running: an idle Factory holds no timer. */
+  #sweep: NodeJS.Timeout | undefined;
 
   constructor(deps: McpServerHubDeps) {
     this.#deps = deps;
-    const idleMs = deps.idleMs ?? 15 * 60_000;
-    this.#sweep = setInterval(() => void this.#evictIdle(idleMs), Math.min(idleMs, 60_000));
-    this.#sweep.unref();
+    this.#idleMs = deps.idleMs ?? 15 * 60_000;
   }
 
   /**
@@ -149,7 +149,7 @@ export class McpServerHub {
 
   /** Stops every session's servers (server shutdown, tests). */
   async dispose(): Promise<void> {
-    clearInterval(this.#sweep);
+    this.#stopSweep();
     await Promise.all([...this.#sessions.keys()].map(id => this.#close(id)));
   }
 
@@ -196,6 +196,8 @@ export class McpServerHub {
       }
       const entry: SessionServers = { fingerprint, client, prepared, records: ready, toolsets, lastUsed: Date.now() };
       this.#sessions.set(session.sessionId, entry);
+      this.#sweep ??= setInterval(() => void this.#evictIdle(this.#idleMs), Math.min(this.#idleMs, 60_000));
+      this.#sweep.unref();
       return entry;
     })().finally(() => this.#starting.delete(session.sessionId));
     this.#starting.set(session.sessionId, starting);
@@ -257,10 +259,16 @@ export class McpServerHub {
     for (const [id, entry] of this.#sessions) if (now - entry.lastUsed > idleMs) await this.#close(id);
   }
 
+  #stopSweep(): void {
+    if (this.#sweep) clearInterval(this.#sweep);
+    this.#sweep = undefined;
+  }
+
   async #close(sessionId: string): Promise<void> {
     const entry = this.#sessions.get(sessionId);
     if (!entry) return;
     this.#sessions.delete(sessionId);
+    if (this.#sessions.size === 0) this.#stopSweep();
     await entry.client.disconnect().catch(() => {});
     await Promise.all(entry.prepared.map(server => server.cleanup()));
   }
