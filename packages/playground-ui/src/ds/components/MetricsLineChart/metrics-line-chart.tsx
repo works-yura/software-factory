@@ -26,6 +26,21 @@ export type MetricsLineChartSeries = {
 const LINE_WIDTH = 1.75;
 /** Opacity at the top of the fill under a line (it fades to nothing at the base). */
 const AREA_OPACITY = 0.12;
+/**
+ * How the area under a line is painted.
+ * - `soft`: a faint wash fading to nothing, for dense grids of cards.
+ * - `glow`: a deeper gradient and a blurred halo under the line, for a chart read on its own (an
+ *   expanded KPI). Strength comes from the `--chart-area-*` and `--chart-glow-*` tokens, so it
+ *   eases off on a light background.
+ */
+export type MetricsLineChartFill = 'soft' | 'glow';
+
+/** The halo layer: a blurred copy of the line, its opacity a theme token. */
+const GLOW_LAYER = 'metrics-line-glow';
+const GLOW_SURFACE = '[&_.metrics-line-glow]:opacity-(--chart-glow-opacity) [&_.metrics-line-glow]:pointer-events-none';
+/** Blur radius of the halo, in SVG user units (pixels). */
+const GLOW_BLUR = 4;
+
 /** A series with this few points gets a dot on each: a lone point draws no line at all. */
 const SPARSE_POINTS = 12;
 
@@ -66,6 +81,10 @@ export type MetricsLineChartProps = {
   xLabels?: ChartXLabels;
   /** Row field for the tooltip heading (e.g. a longer date); defaults to the x-axis label. */
   tooltipLabelKey?: string;
+  /** How the area under each line is painted; see `MetricsLineChartFill`. */
+  fill?: MetricsLineChartFill;
+  /** Stack the series' areas (parts of one total, e.g. token categories). No halo when stacked. */
+  stacked?: boolean;
   /** Render a visible dot on every point. Series with few points get them anyway. */
   showDots?: boolean;
   /** Set to `false` to render `MetricsLineChartLegend` elsewhere, e.g. next to tabs. */
@@ -109,6 +128,8 @@ function LinePlot({
   xLabels = 'auto',
   tooltipLabelKey,
   showDots = false,
+  fill = 'soft',
+  stacked = false,
   valueFormatter,
   axisFormatter,
   showYAxis = true,
@@ -119,6 +140,7 @@ function LinePlot({
   const format = valueFormatter ?? compactNumber.format;
   const isSparse = (key: string) => data.filter(row => typeof row[key] === 'number').length <= SPARSE_POINTS;
   const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
+  const glow = fill === 'glow' && !stacked;
   const activeDot = (s: MetricsLineChartSeries) => ({
     r: 3.5,
     fill: s.color,
@@ -134,7 +156,13 @@ function LinePlot({
   });
 
   return (
-    <ChartPlot height={height} plotRef={ref} onResize={onResize} clickable={!!onBucketClick}>
+    <ChartPlot
+      height={height}
+      plotRef={ref}
+      onResize={onResize}
+      clickable={!!onBucketClick}
+      className={cn(glow && GLOW_SURFACE)}
+    >
       <ComposedChart
         data={data}
         margin={CHART_MARGIN}
@@ -145,20 +173,55 @@ function LinePlot({
         }}
       >
         <defs>
-          {series.map((s, i) => (
-            <linearGradient key={s.dataKey} id={`${id}-area-${i}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={s.color} stopOpacity={AREA_OPACITY} />
-              <stop offset="95%" stopColor={s.color} stopOpacity={0} />
-            </linearGradient>
-          ))}
+          {series.map((s, i) =>
+            fill === 'glow' ? (
+              <linearGradient key={s.dataKey} id={`${id}-area-${i}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={s.color} style={{ stopOpacity: 'var(--chart-area-top)' }} />
+                <stop offset="45%" stopColor={s.color} style={{ stopOpacity: 'var(--chart-area-mid)' }} />
+                <stop offset="100%" stopColor={s.color} stopOpacity={0} />
+              </linearGradient>
+            ) : (
+              <linearGradient key={s.dataKey} id={`${id}-area-${i}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={s.color} stopOpacity={AREA_OPACITY} />
+                <stop offset="95%" stopColor={s.color} stopOpacity={0} />
+              </linearGradient>
+            ),
+          )}
+          {glow ? (
+            // User-space region: a flat line has a zero-height bounding box, which would clip its halo away.
+            <filter id={`${id}-glow`} filterUnits="userSpaceOnUse" x="-10%" y="-10%" width="120%" height="120%">
+              <feGaussianBlur stdDeviation={GLOW_BLUR} />
+            </filter>
+          ) : null}
         </defs>
         <CartesianGrid {...CHART_GRID_PROPS} />
         {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
         {valueYAxis({ show: showYAxis, size, formatter: axisFormatter ?? format, domain: yDomain })}
         <Tooltip
-          content={<MetricsLineChartTooltip formatValue={format} labelKey={tooltipLabelKey} />}
+          content={<MetricsLineChartTooltip formatValue={format} labelKey={tooltipLabelKey} showTotal={stacked} />}
           cursor={<SmoothCursor />}
         />
+        {glow
+          ? series
+              .filter(s => !s.dashed)
+              .map(s => (
+                <Line
+                  key={`${s.dataKey}-glow`}
+                  className={GLOW_LAYER}
+                  type="monotone"
+                  dataKey={s.dataKey}
+                  stroke={s.color}
+                  strokeWidth={(s.emphasis ? LINE_WIDTH + 0.5 : LINE_WIDTH) * 2.5}
+                  filter={`url(#${id}-glow)`}
+                  dot={false}
+                  activeDot={false}
+                  legendType="none"
+                  tooltipType="none"
+                  isAnimationActive={false}
+                  connectNulls
+                />
+              ))
+          : null}
         {series.map((s, i) => {
           const common = {
             type: 'monotone' as const,
@@ -175,7 +238,13 @@ function LinePlot({
           return s.dashed ? (
             <Line key={s.dataKey} {...common} />
           ) : (
-            <Area key={s.dataKey} {...common} fill={`url(#${id}-area-${i})`} fillOpacity={1} />
+            <Area
+              key={s.dataKey}
+              {...common}
+              stackId={stacked ? 'stack' : undefined}
+              fill={`url(#${id}-area-${i})`}
+              fillOpacity={1}
+            />
           );
         })}
       </ComposedChart>

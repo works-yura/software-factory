@@ -29,6 +29,13 @@
   --chart-share-5: oklch(0.66 0.12 265);
   --chart-share-rest: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
 
+  /* Glow fill under a line chart read on its own: a gradient (opacity at the top, then midway; it
+     fades to nothing at the base) and a blurred halo under the line. Strong on near-black,
+     eased off on white, where a halo reads as smudge. */
+  --chart-area-top: 0.34;
+  --chart-area-mid: 0.1;
+  --chart-glow-opacity: 0.55;
+
   /* Queue age, fresh → critical: sequential, not categorical — lightness carries the escalation,
      hue drifts sand → red. The ramp brightens on near-black and darkens on white. */
   --queue-fresh: oklch(0.55 0.055 70);
@@ -66,6 +73,10 @@ html.light {
   --chart-share-4: oklch(0.64 0.11 190);
   --chart-share-5: oklch(0.5 0.15 265);
   --chart-share-rest: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
+
+  --chart-area-top: 0.22;
+  --chart-area-mid: 0.06;
+  --chart-glow-opacity: 0.28;
 
   --queue-fresh: oklch(0.89 0.045 70);
   --queue-aging: oklch(0.81 0.095 62);

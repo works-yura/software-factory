@@ -1,6 +1,5 @@
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
 import type { MetricsLineChartSeries } from '@mastra/playground-ui/components/MetricsLineChart';
-import { MetricsStackedBarChart } from '@mastra/playground-ui/components/MetricsStackedBarChart';
 import { MetricsReadout, MetricsTrendCard } from '@mastra/playground-ui/components/MetricsTrendCard';
 import { CircleCheck, Coins, Clock3, DatabaseZap, Layers3, MessageSquareText, Sigma } from 'lucide-react';
 
@@ -71,6 +70,7 @@ export function WorkKpis({
         <MetricsLineChart
           data={metrics.throughput.map(point => ({ time: dayLabel(point.date), done: point.count }))}
           series={series}
+          fill="glow"
           height={CHART_HEIGHT}
         />
       </MetricsTrendCard>
@@ -139,12 +139,12 @@ export function UsageKpis({ summary, expansion }: { summary: UsageSummaryRespons
         color="var(--chart-share-2)"
         chartCaption={tk('kpi.tokensChart')}
       >
-        <MetricsStackedBarChart
+        <MetricsLineChart
           data={rows}
           series={tokenSeries}
           valueFormatter={formatTokens}
-          variant="gradient"
-          xLabels="auto"
+          fill="glow"
+          stacked
           height={CHART_HEIGHT}
         />
       </MetricsTrendCard>
@@ -156,12 +156,11 @@ export function UsageKpis({ summary, expansion }: { summary: UsageSummaryRespons
         color="var(--chart-amber)"
         chartCaption={tk('kpi.costChart')}
       >
-        <MetricsStackedBarChart
+        <MetricsLineChart
           data={rows}
           series={[{ dataKey: 'cost', label: tk('kpi.costSeries'), color: 'var(--chart-amber)' }]}
           valueFormatter={formatUsd}
-          variant="capped"
-          xLabels="auto"
+          fill="glow"
           height={CHART_HEIGHT}
         />
       </MetricsTrendCard>
@@ -176,6 +175,7 @@ export function UsageKpis({ summary, expansion }: { summary: UsageSummaryRespons
         <MetricsLineChart
           data={rows}
           series={[{ dataKey: 'turns', label: tk('kpi.turnsSeries'), color: 'var(--chart-blue)' }]}
+          fill="glow"
           height={CHART_HEIGHT}
         />
       </MetricsTrendCard>
@@ -192,6 +192,7 @@ export function UsageKpis({ summary, expansion }: { summary: UsageSummaryRespons
           series={[{ dataKey: 'cacheShare', label: tk('kpi.cacheShareSeries'), color: 'var(--chart-purple)' }]}
           valueFormatter={value => `${Math.round(value)}%`}
           yDomain={[0, 100]}
+          fill="glow"
           height={CHART_HEIGHT}
         />
       </MetricsTrendCard>
