@@ -395,5 +395,15 @@
       "system": "Moved back by Factory"
     }
   },
-  "editBoard": "Edit board"
+  "editBoard": "Edit board",
+  "description": {
+    "label": "Description",
+    "editLabel": "Edit description",
+    "placeholder": "What needs doing and why",
+    "add": "Add a description",
+    "edit": "Edit description",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saveFailed": "The description could not be saved."
+  }
 }

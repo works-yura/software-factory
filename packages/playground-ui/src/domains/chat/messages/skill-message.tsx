@@ -17,7 +17,7 @@ export function SkillMessage({
   defaultOpen?: boolean;
   appearance?: ActivityAppearance;
 }) {
-  const { name, arguments: args, instructions, feed } = activation;
+  const { name, arguments: args, instructions, description, feed } = activation;
   const item = (
     <ActivityItem
       appearance={appearance}
@@ -33,12 +33,22 @@ export function SkillMessage({
     </ActivityItem>
   );
 
-  if (feed === undefined) return item;
+  if (description === undefined && feed === undefined) return item;
 
   return (
     <div className="flex flex-col">
       {item}
-      <SignalActivity kind="reactive" label={libText('Work item feed')} message={feed} appearance={appearance} />
+      {description !== undefined && (
+        <SignalActivity
+          kind="reactive"
+          label={libText('Work item description')}
+          message={description}
+          appearance={appearance}
+        />
+      )}
+      {feed !== undefined && (
+        <SignalActivity kind="reactive" label={libText('Work item feed')} message={feed} appearance={appearance} />
+      )}
     </div>
   );
 }

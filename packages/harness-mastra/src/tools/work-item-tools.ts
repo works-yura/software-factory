@@ -195,12 +195,12 @@ export function createFactoryWorkItemTools(
       inputSchema: z
         .object({
           title: z.string().trim().min(1).max(512).describe('Short title, as it should read on the card.'),
-          brief: z
+          description: z
             .string()
             .trim()
             .min(1)
             .max(8000)
-            .describe('What needs doing and why; posted as the first comment on the card.'),
+            .describe('What needs doing and why; becomes the card description its runs start from.'),
           repository: repositorySchema.optional(),
           parentWorkItem: workItemRefSchema
             .optional()
@@ -209,7 +209,7 @@ export function createFactoryWorkItemTools(
             ),
         })
         .strict(),
-      execute: async ({ title, brief, repository, parentWorkItem }) => {
+      execute: async ({ title, description, repository, parentWorkItem }) => {
         if (repository) await requireRepository(repository);
         const parent = parentWorkItem === undefined ? undefined : await requireItem(parentWorkItem);
         const created = await createFactoryWorkItem({
@@ -223,6 +223,7 @@ export function createFactoryWorkItemTools(
           ...(scope.actorProfile ? { origin: { actorProfile: scope.actorProfile } } : {}),
           input: {
             title,
+            description,
             ...(repository ? { metadata: { repository } } : {}),
             ...(parent ? { parentWorkItemId: parent.id } : {}),
           },
@@ -242,21 +243,6 @@ export function createFactoryWorkItemTools(
               `The Product card does not list it yet: ${error instanceof Error ? error.message : String(error)}`,
             );
           }
-        }
-        try {
-          const comment = await deps.feed.createComment({
-            orgId: scope.orgId,
-            workItemId: item.id,
-            author: { kind: 'user', id: scope.userId },
-            body: brief,
-          });
-          if (comment.status !== 'created') {
-            warnings.push(
-              `The brief was not posted (${comment.status === 'invalid' ? comment.message : comment.status}).`,
-            );
-          }
-        } catch (error) {
-          warnings.push(`The brief was not posted: ${error instanceof Error ? error.message : String(error)}`);
         }
         try {
           await follow(item, 'created');
@@ -318,11 +304,17 @@ export function createFactoryWorkItemTools(
     factory_update_work_item: createTool({
       id: 'factory_update_work_item',
       description:
-        "Edit a work item's fields as the person you are working with: its title, the repository its runs use, or its parent item. Move stages with factory_transition_work_item and start roles with factory_start_session; post to the card's feed for anything else.",
+        "Edit a work item's fields as the person you are working with: its title, description, the repository its runs use, or its parent item. Move stages with factory_transition_work_item and start roles with factory_start_session; post to the card's feed for anything else.",
       inputSchema: z
         .object({
           workItem: workItemRefSchema,
           title: z.string().trim().min(1).max(500).optional().describe('New card title.'),
+          description: z
+            .string()
+            .trim()
+            .max(8000)
+            .optional()
+            .describe('New card description; an empty string clears it.'),
           repository: repositorySchema.optional(),
           parentWorkItem: workItemRefSchema
             .nullable()
@@ -331,7 +323,7 @@ export function createFactoryWorkItemTools(
         })
         .strict()
         .refine(input => Object.keys(input).some(key => key !== 'workItem'), 'Pass at least one field to change.'),
-      execute: async ({ workItem, title, repository, parentWorkItem }) => {
+      execute: async ({ workItem, title, description, repository, parentWorkItem }) => {
         const item = await requireItem(workItem);
         if (repository) await requireRepository(repository, item);
         let parentWorkItemId: string | null | undefined;
@@ -339,6 +331,7 @@ export function createFactoryWorkItemTools(
         else if (parentWorkItem !== undefined) parentWorkItemId = (await requireItem(parentWorkItem)).id;
         const patch: UpdateWorkItemInput = {
           ...(title !== undefined ? { title } : {}),
+          ...(description !== undefined ? { description: description || null } : {}),
           ...(repository ? { metadata: { repository } } : {}),
           ...(parentWorkItemId !== undefined ? { parentWorkItemId } : {}),
         };
@@ -352,6 +345,7 @@ export function createFactoryWorkItemTools(
         if (!updated) throw workItemNotFound(workItem);
         const fields = [
           ...(title !== undefined ? ['title'] : []),
+          ...(description !== undefined ? ['description'] : []),
           ...(repository ? ['metadata'] : []),
           ...(parentWorkItemId !== undefined ? ['parentWorkItemId'] : []),
         ];

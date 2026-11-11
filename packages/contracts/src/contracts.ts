@@ -42,6 +42,12 @@ const rawBoundedTrimmed = (max: number) =>
     .transform(value => value.trim())
     .pipe(z.string().min(1));
 const trimmedUuidSchema = z.string().trim().regex(new RegExp(UUID_PATTERN));
+/** Card description (upstream #29062): trimmed, and blank clears it. */
+const descriptionSchema = z
+  .string()
+  .max(8000)
+  .transform(value => value.trim() || null)
+  .nullable();
 const nullableTrimmed = (max: number) =>
   z.union([
     z
@@ -473,6 +479,7 @@ const metadataSchema = z
 
 export const createWorkItemBodySchema = z.object({
   title: rawBoundedTrimmed(500),
+  description: descriptionSchema.optional(),
   board: z.string().min(1).max(128).optional(),
   externalSource: externalSourceSchema.optional(),
   parentWorkItemId: uuidSchema.nullable().optional(),
@@ -484,6 +491,7 @@ export const createWorkItemBodySchema = z.object({
 export const updateWorkItemBodySchema = z
   .object({
     title: rawBoundedTrimmed(500).optional(),
+    description: descriptionSchema.optional(),
     board: z.string().min(1).max(128).optional(),
     parentWorkItemId: uuidSchema.nullable().optional(),
     stages: stagesSchema.optional(),

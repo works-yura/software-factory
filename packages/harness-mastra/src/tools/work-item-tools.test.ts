@@ -146,7 +146,7 @@ describe('factory_create_work_item', () => {
 
     const created = await run<{ id: string }>('factory_create_work_item', {
       title: 'Fix the login redirect',
-      brief: 'Users land on /404.',
+      description: 'Users land on /404.',
     });
     await run('factory_transition_work_item', { workItem: created.id, stage: 'triage' });
 
@@ -159,12 +159,12 @@ describe('factory_create_work_item', () => {
     expect(transitionService.transition).toHaveBeenCalledTimes(2);
   });
 
-  it("files the item as the caller in the board's first phase, posts the brief and follows it", async () => {
-    const { run, workItems, comments, transitionService, auditRecorder, publish } = await setup();
+  it("files the item as the caller in the board's first phase, with its description, and follows it", async () => {
+    const { run, workItems, comments, transitionService, auditRecorder } = await setup();
 
     const created = await run<{ id: string; stage: string; title: string }>('factory_create_work_item', {
       title: 'Fix the login redirect',
-      brief: 'Users land on /404 after signing in.',
+      description: 'Users land on /404 after signing in.',
     });
 
     expect(created).toMatchObject({ title: 'Fix the login redirect', stage: 'intake' });
@@ -179,20 +179,11 @@ describe('factory_create_work_item', () => {
         actor: { type: 'human', id: 'user-1' },
       }),
     );
-    const feed = await comments.listRecent({
-      orgId: 'org-1',
-      factoryProjectId: 'project-1',
-      workItemId: created.id,
-      limit: 10,
-    });
-    expect(feed.map(comment => [comment.body, comment.author.id])).toEqual([
-      ['Users land on /404 after signing in.', 'user-1'],
-    ]);
-    // Through the comments domain: open boards get a feed touch for the new card.
-    expect(publish).toHaveBeenCalledWith(
-      feedTopic('org-1', 'project-1'),
-      expect.objectContaining({ type: 'factory.feed.touched', data: { workItemId: created.id } }),
-    );
+    // The description is the card's own (upstream #29062); nothing is posted to the feed.
+    expect(item?.description).toBe('Users land on /404 after signing in.');
+    expect(
+      await comments.listRecent({ orgId: 'org-1', factoryProjectId: 'project-1', workItemId: created.id, limit: 10 }),
+    ).toEqual([]);
     expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
       expect.objectContaining({ sessionId: 'session-1', threadId: 'thread-1', userId: 'user-1', reason: 'created' }),
     ]);
@@ -208,23 +199,6 @@ describe('factory_create_work_item', () => {
     );
   });
 
-  it('reports the item with a warning instead of failing when the brief cannot be posted', async () => {
-    const { run, workItems } = await setup({
-      feed: { createComment: vi.fn(async () => Promise.reject(new Error('feed is down'))) },
-    });
-
-    const created = await run<{ id: string; warnings?: string[] }>('factory_create_work_item', {
-      title: 'Card that exists anyway',
-      brief: 'Brief that fails to post.',
-    });
-
-    expect(created.warnings).toEqual(['The brief was not posted: feed is down']);
-    await expect(workItems.getForProject('org-1', 'project-1', created.id)).resolves.not.toBeNull();
-    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
-      expect.objectContaining({ sessionId: 'session-1', reason: 'created' }),
-    ]);
-  });
-
   it('removes the item again when the first phase refuses it', async () => {
     const { run, workItems, auditRecorder } = await setup({
       transition: async request => ({
@@ -236,7 +210,7 @@ describe('factory_create_work_item', () => {
       }),
     });
 
-    await expect(run('factory_create_work_item', { title: 'Nope', brief: 'x' })).rejects.toThrow('Intake is closed.');
+    await expect(run('factory_create_work_item', { title: 'Nope', description: 'x' })).rejects.toThrow('Intake is closed.');
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: 'project-1' })).toEqual([]);
     expect(auditRecorder.record).not.toHaveBeenCalled();
   });
@@ -248,9 +222,9 @@ describe('factory_create_work_item', () => {
         inputSchema: { safeParse(input: unknown): { success: boolean } };
       }
     ).inputSchema;
-    expect(schema.safeParse({ title: 't', brief: 'b' }).success).toBe(true);
-    expect(schema.safeParse({ title: 't', brief: 'b', stage: 'execute' }).success).toBe(false);
-    expect(schema.safeParse({ title: 't', brief: 'b', board: 'review' }).success).toBe(false);
+    expect(schema.safeParse({ title: 't', description: 'b' }).success).toBe(true);
+    expect(schema.safeParse({ title: 't', description: 'b', stage: 'execute' }).success).toBe(false);
+    expect(schema.safeParse({ title: 't', description: 'b', board: 'review' }).success).toBe(false);
   });
 });
 
@@ -260,7 +234,7 @@ describe('repositories', () => {
 
     const created = await run<{ id: string }>('factory_create_work_item', {
       title: 'Fix the login redirect',
-      brief: 'Users land on /404 after signing in.',
+      description: 'Users land on /404 after signing in.',
       repository: 'mastra-ai/platform',
     });
 
@@ -272,7 +246,7 @@ describe('repositories', () => {
     const { run, workItems } = await setup();
 
     await expect(
-      run('factory_create_work_item', { title: 'x', brief: 'y', repository: 'someone/else' }),
+      run('factory_create_work_item', { title: 'x', description: 'y', repository: 'someone/else' }),
     ).rejects.toThrow(
       'someone/else is not linked to this Factory. Linked repositories: mastra-ai/mastra, mastra-ai/platform.',
     );
@@ -589,7 +563,7 @@ describe('subscriptions', () => {
 
   it('keeps "created" when a session subscribes to an item it filed', async () => {
     const { run } = await setup();
-    const created = await run<{ id: string }>('factory_create_work_item', { title: 'Mine', brief: 'b' });
+    const created = await run<{ id: string }>('factory_create_work_item', { title: 'Mine', description: 'b' });
     await expect(run('factory_subscribe_work_item', { workItem: created.id })).resolves.toMatchObject({
       reason: 'created',
     });

@@ -14,6 +14,7 @@ export * from './channel-identity/base.ts';
 export * from './comments/actor.ts';
 export * from './comments/base.ts';
 export * from './comments/feed-context.ts';
+export * from './work-items/description-context.ts';
 export * from './credentials/base.ts';
 export * from './credentials/accounts.ts';
 export * from './custom-providers/base.ts';

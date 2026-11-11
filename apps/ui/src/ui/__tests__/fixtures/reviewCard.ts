@@ -70,6 +70,7 @@ export const reviewItem: Card = {
   },
   parentWorkItemId: null,
   title: reviewCandidate.title,
+  description: null,
   stages: ['intake'],
   stageHistory: [],
   sessions: {},

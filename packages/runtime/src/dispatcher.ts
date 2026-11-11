@@ -44,7 +44,7 @@ import {
 import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from './skills/service.ts';
 import { isAgentActor, isHumanActorId } from '@factory/store';
 import type { AuditRecorder } from './audit-recorder.ts';
-import { withWorkItemFeed } from '@factory/store';
+import { withWorkItemDescription, withWorkItemFeed } from '@factory/store';
 import type { FactoryFeedReader } from '@factory/store';
 import { FACTORY_RULE_MATERIALIZATION_KEY } from '@factory/store';
 import { externalSourceKey, WorkItemSourceConflictError, WorkItemUpdateConflictError } from '@factory/store';
@@ -1415,13 +1415,20 @@ export class FactoryDecisionDispatcher {
           }
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
+          // Re-read: the description may have been edited while the open run drained.
+          const current = record.workItemId
+            ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
+            : null;
           const kickoffContents = await withWorkItemFeed(
             this.#feedReader,
             { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
-            // A harness that judges no goals gets the phase's objective in the kickoff itself.
-            decision.goal && !this.#harness.goals?.(session)
-              ? `${resolved.contents}\n\nGoal of this phase (keep working until it is met): ${decision.goal.objective}`
-              : resolved.contents,
+            withWorkItemDescription(
+              // A harness that judges no goals gets the phase's objective in the kickoff itself.
+              decision.goal && !this.#harness.goals?.(session)
+                ? `${resolved.contents}\n\nGoal of this phase (keep working until it is met): ${decision.goal.objective}`
+                : resolved.contents,
+              current?.description,
+            ),
           );
           // A skill kickoff is system-generated, not something the human typed: send it
           // as a typed `skill` signal so the model sees `<skill name="…">` and traces

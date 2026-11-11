@@ -120,6 +120,8 @@ export interface WorkItem {
   sourceKey: string | null;
   parentWorkItemId: string | null;
   title: string;
+  /** The card's own description, which its runs start from (upstream #29062). */
+  description?: string | null;
   url: string | null;
   stages: string[];
   stageHistory: WorkItemStageEntry[];
@@ -252,6 +254,8 @@ export type FactoryTransitionResult =
 export interface UpdateWorkItemInput {
   parentWorkItemId?: string | null;
   title?: string;
+  /** Blank clears it. */
+  description?: string | null;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
 }

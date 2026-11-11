@@ -34,6 +34,7 @@ export function largeBoard(count: number, factoryProjectId = 'fp-1'): Card[] {
     externalSource: null,
     parentWorkItemId: null,
     title: `Large task ${index}`,
+    description: null,
     stages: ['triage'],
     stageHistory: [],
     sessions: {},

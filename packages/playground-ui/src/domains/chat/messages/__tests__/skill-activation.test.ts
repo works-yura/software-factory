@@ -142,3 +142,21 @@ describe('parseSkillActivation', () => {
     });
   });
 });
+
+describe('parseSkillActivation with a card description (upstream #29062)', () => {
+  it('reads the description block, then the feed block, after the envelope', () => {
+    const text =
+      '<skill name="factory-triage">\nDo it\n</skill>\n\n<work-item-description>\nWhat and why\n</work-item-description>\n\n<work-item-feed>\nA comment\n</work-item-feed>';
+    expect(parseSkillActivation(text)).toMatchObject({
+      name: 'factory-triage',
+      description: 'What and why',
+      feed: 'A comment',
+    });
+  });
+
+  it('keeps a message raw when the blocks trail in the wrong order', () => {
+    const text =
+      '<skill name="factory-triage">\nDo it\n</skill>\n\n<work-item-feed>\nA comment\n</work-item-feed>\n\n<work-item-description>\nWhat\n</work-item-description>';
+    expect(parseSkillActivation(text)).toBeUndefined();
+  });
+});

@@ -24,6 +24,7 @@ const PROJECTED_COLUMNS = new Set([
   'external_source',
   'source_key',
   'title',
+  'description',
   'comment_count',
   'feed_activity_at',
 ]);
@@ -53,7 +54,7 @@ export type CardInsert = Pick<
   | 'created_by'
   | 'created_at'
   | 'updated_at'
->;
+>& { description?: string | null };
 
 export function splitCardRows(card: WorkItemDbRow, options: { workItemId: string; revision?: number }) {
   const rows = splitLegacyWorkItem(card, options);
@@ -101,6 +102,7 @@ function joinCard(
     claim_key: null,
     parent_work_item_id: board.parent_board_item_id,
     title: work.title,
+    description: work.description ?? null,
     stages: board.stages,
     stage_history: board.stage_history as WorkItemDbRow['stage_history'],
     sessions: board.sessions as WorkItemDbRow['sessions'],
@@ -306,9 +308,13 @@ export class Cards {
         const split = splitCardRows(next, { workItemId: row.work_item_id });
         columns.metadata = split.boardItem.metadata;
       }
-      if (patch.title !== undefined && patch.title !== current.title) {
+      const titleChanged = patch.title !== undefined && patch.title !== current.title;
+      const descriptionChanged =
+        patch.description !== undefined && patch.description !== (current.description ?? null);
+      if (titleChanged || descriptionChanged) {
         await this.ops.updateAtomic<WorkItemDbRecord>(WORK_ITEMS, { id: row.work_item_id }, work => ({
-          title: patch.title,
+          ...(titleChanged ? { title: patch.title } : {}),
+          ...(descriptionChanged ? { description: patch.description ?? null } : {}),
           revision: work.revision + 1,
           updated_at: new Date(),
         }));
@@ -346,9 +352,11 @@ export class Cards {
         } else if (next) await this.ops.insertOne(SOURCES, next);
         else if (previous) await this.ops.deleteMany(SOURCES, { id: previous.id });
       }
-      const nativeTitleChanged = !current.external_source && patch.title !== undefined && patch.title !== current.title;
+      const nativeTitleChanged = !current.external_source && titleChanged;
+      // The description lives on the work item row, so the card takes a new revision for it.
       const boardChanged =
         nativeTitleChanged ||
+        descriptionChanged ||
         Object.entries(columns).some(
           ([key, value]) =>
             !['revision', 'updated_at'].includes(key) && JSON.stringify(row[key]) !== JSON.stringify(value),
@@ -359,7 +367,7 @@ export class Cards {
       }
       return {
         ...columns,
-        ...(nativeTitleChanged
+        ...(nativeTitleChanged || descriptionChanged
           ? { revision: patch.revision ?? row.revision + 1, updated_at: patch.updated_at ?? new Date() }
           : {}),
       };

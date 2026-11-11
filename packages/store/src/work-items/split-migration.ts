@@ -141,6 +141,7 @@ export function splitLegacyWorkItem(
       org_id: row.org_id,
       factory_project_id: String(row.factory_project_id),
       title: row.title,
+      description: row.description ?? null,
       parent_work_item_id: null,
       revision: 1,
       created_at: row.created_at,

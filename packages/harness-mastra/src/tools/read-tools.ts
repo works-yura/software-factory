@@ -276,7 +276,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_inspect_work_item: createTool({
       id: 'factory_inspect_work_item',
       description:
-        'Everything the Factory knows about one work item: stage history, sessions by role (with whether each is mid-run and when its thread last moved), decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
+        'Everything the Factory knows about one work item: its description, stage history, sessions by role (with whether each is mid-run and when its thread last moved), decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
       inputSchema: z.object({ workItem: workItemRefSchema }).strict(),
       execute: async ({ workItem }) => {
         const item = await findWorkItem(deps.workItems, scope, workItem);
@@ -325,6 +325,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
             url: item.workItem.url ?? null,
             revision: item.revision,
+            description: item.description,
           },
           labels,
           stageHistory: item.stageHistory.slice(-MAX_LIST).map(entry => ({

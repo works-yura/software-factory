@@ -540,6 +540,8 @@ export interface Card extends BoardItemRow {
   externalSource: ExternalWorkItemSource | null;
   parentWorkItemId: string | null;
   title: string;
+  /** The card description its runs start from (upstream #29062); null when there is none. */
+  description: string | null;
 }
 
 /**
@@ -587,6 +589,7 @@ export interface CreateWorkItemInput {
   externalSource?: ExternalWorkItemSource | null;
   parentWorkItemId?: string | null;
   title: string;
+  description?: string | null;
   stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown> | null;
@@ -596,6 +599,7 @@ export interface UpdateWorkItemInput {
   board?: string;
   parentWorkItemId?: string | null;
   title?: string;
+  description?: string | null;
   stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown> | null;
@@ -705,6 +709,7 @@ export interface WorkItemDbRow extends Record<string, unknown> {
   claim_key: string | null;
   parent_work_item_id: string | null;
   title: string;
+  description?: string | null;
   stages: WorkItemStage[];
   stage_history: WorkItemStageEntry[];
   sessions: WorkItemSessions;
@@ -790,6 +795,7 @@ function toWorkItem(row: WorkItemDbRow): Card {
     externalSource: row.external_source,
     parentWorkItemId: row.parent_work_item_id,
     title: row.title,
+    description: row.description ?? null,
     stages: row.stages,
     stageHistory: row.stage_history,
     sessions: row.sessions,
@@ -812,6 +818,7 @@ function patchColumns(changes: Partial<Card>): Partial<WorkItemDbRow> {
     ...(changes.board !== undefined ? { board: changes.board } : {}),
     ...(changes.parentWorkItemId !== undefined ? { parent_work_item_id: changes.parentWorkItemId } : {}),
     ...(changes.title !== undefined ? { title: changes.title } : {}),
+    ...(changes.description !== undefined ? { description: changes.description } : {}),
     ...(changes.stages !== undefined ? { stages: changes.stages } : {}),
     ...(changes.stageHistory !== undefined ? { stage_history: changes.stageHistory } : {}),
     ...(changes.sessions !== undefined ? { sessions: changes.sessions } : {}),
@@ -943,6 +950,7 @@ function applyUpdate({
     ...(input.board !== undefined ? { board: input.board } : {}),
     ...(input.parentWorkItemId !== undefined ? { parent_work_item_id: input.parentWorkItemId } : {}),
     ...(input.title !== undefined ? { title: input.title } : {}),
+    ...(input.description !== undefined ? { description: input.description } : {}),
     ...(input.stages !== undefined
       ? {
           stages: input.stages,
@@ -3924,6 +3932,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             source_key: externalSourceKey(create.externalSource),
             parent_work_item_id: create.parentWorkItemId ?? null,
             title: create.title,
+            description: create.description ?? null,
             stages: create.stages ?? [],
             stage_history: applyStageTransition([], [], create.stages ?? [], input.userId, now),
             sessions: stampSessions({ [input.role]: input.session }, input.userId),
@@ -4099,6 +4108,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             reuseMode === 'non-stage'
               ? {
                   title: input.title,
+                  description: input.description,
                   parentWorkItemId: input.parentWorkItemId ?? undefined,
                   metadata: input.metadata,
                 }
@@ -4142,6 +4152,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       source_key: key,
       parent_work_item_id: input.parentWorkItemId ?? null,
       title: input.title,
+      description: input.description ?? null,
       stages,
       stage_history: stages.map(stage => ({ stage, enteredAt: now.toISOString(), by: userId })),
       sessions: stampSessions(input.sessions ?? {}, userId),

@@ -16,6 +16,7 @@ export const FACTORY_WORK_ITEMS_SCHEMA: CollectionSchema = {
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
     title: { type: 'text' },
+    description: { type: 'text', nullable: true },
     parent_work_item_id: { type: 'text', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_at: { type: 'timestamp' },
@@ -108,6 +109,7 @@ export interface WorkItemDbRecord extends Record<string, unknown> {
   org_id: string;
   factory_project_id: string;
   title: string;
+  description: string | null;
   parent_work_item_id: string | null;
   revision: number;
   created_at: Date;
@@ -205,6 +207,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     claim_key: { type: 'text', nullable: true },
     parent_work_item_id: { type: 'text', nullable: true },
     title: { type: 'text' },
+    description: { type: 'text', nullable: true },
     stages: { type: 'json' },
     stage_history: { type: 'json' },
     sessions: { type: 'json' },

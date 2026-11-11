@@ -11,6 +11,7 @@ import type { WorkItem } from '../services/workItems';
 import { CardSourceDescription, useSourceDescription } from './BoardCardDetails';
 import { CardAttachments } from './CardAttachments';
 import { CardSessions } from './CardSessions';
+import { WorkItemDescription } from './WorkItemDescription';
 import { CommentComposer } from './feed/CommentComposer';
 import { CommentList } from './feed/CommentList';
 import type { FeedUser } from './feed/CommentList';
@@ -62,6 +63,7 @@ export function WorkItemTray({
             <Txt as="h3" variant="card-title" tone="ink" className="m-0 wrap-anywhere">
               {item.title}
             </Txt>
+            <WorkItemDescription item={item} factoryProjectId={factoryProjectId} />
             <CardSourceDescription
               item={item}
               projectRepositoryId={projectRepositoryId}
