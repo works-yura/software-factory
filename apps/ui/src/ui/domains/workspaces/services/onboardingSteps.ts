@@ -1,4 +1,5 @@
 import type { FactoryHarness } from './github';
+import { isTurnHarness, TURN_HARNESS_TEXT_KEY } from './turnHarness';
 import type { OnboardingDraft, OnboardingStep } from './onboardingFlow';
 import { i18n } from '../../../i18n';
 import { translator } from '../../../i18n/t';
@@ -48,8 +49,8 @@ export const STEP_META: Readonly<Record<OnboardingStep, StepMeta>> = Object.from
 ) as Record<OnboardingStep, StepMeta>;
 
 export function onboardingStepMeta(step: OnboardingStep, local = false, harness?: FactoryHarness): StepMeta {
-  if (step === 'model-provider' && (harness === 'claude-code' || harness === 'codex')) {
-    const key = harness === 'codex' ? 'codex' : 'claudeCode';
+  if (step === 'model-provider' && isTurnHarness(harness)) {
+    const key = TURN_HARNESS_TEXT_KEY[harness];
     return {
       label: STEP_META[step].label,
       title: tk(`onboarding.${key}.title`),

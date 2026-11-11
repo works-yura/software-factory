@@ -12,7 +12,7 @@ import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft
 import { factoryHomePath } from '../../services/factoryPaths';
 import { connectGithub, manageGithubConnection } from '../../services/github';
 import type { FactoryHarness } from '../../services/github';
-import { isTurnHarness } from '../../services/turnHarness';
+import { isTurnHarness, TURN_HARNESS_TEXT_KEY } from '../../services/turnHarness';
 import { CreateFactoryTurnHarnessStep } from './CreateFactoryTurnHarnessStep';
 import { CreateFactoryHarnessRows } from './CreateFactoryHarnessRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
@@ -46,8 +46,8 @@ function stepChrome(step: CreateFactoryFlowStep, harness: FactoryHarness | undef
     case 'vcs':
       return { title: tk('createFactory.steps.vcs.title'), placeholder: tk('createFactory.steps.vcs.placeholder') };
     case 'model-provider':
-      if (harness === 'claude-code' || harness === 'codex') {
-        const key = harness === 'codex' ? 'codex' : 'claudeCode';
+      if (isTurnHarness(harness)) {
+        const key = TURN_HARNESS_TEXT_KEY[harness];
         return {
           title: tk(`createFactory.steps.${key}.title`),
           placeholder: tk(`createFactory.steps.${key}.placeholder`),

@@ -15,6 +15,7 @@ import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { AccountSignInStatus } from '../../../settings/components/models/accounts/AccountSignIn';
 import { CLAUDE_CODE_ACCOUNTS, CODEX_ACCOUNTS } from '../../../settings/components/models/accounts/harnessAccounts';
 import type { HarnessAccounts } from '../../../settings/components/models/accounts/harnessAccounts';
+import { TURN_HARNESS_TEXT_KEY } from '../../services/turnHarness';
 import type { TurnHarness } from '../../services/turnHarness';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
@@ -36,9 +37,9 @@ interface ModelOption {
 }
 
 /** The texts under `workspaces:createFactory.<key>` and the accounts each harness's turns run on. */
-const TURN_HARNESS_STEP: Record<TurnHarness, { key: 'claudeCode' | 'codex'; accounts: HarnessAccounts }> = {
-  'claude-code': { key: 'claudeCode', accounts: CLAUDE_CODE_ACCOUNTS },
-  codex: { key: 'codex', accounts: CODEX_ACCOUNTS },
+const TURN_HARNESS_STEP: Record<TurnHarness, { key: (typeof TURN_HARNESS_TEXT_KEY)[TurnHarness]; accounts: HarnessAccounts }> = {
+  'claude-code': { key: TURN_HARNESS_TEXT_KEY['claude-code'], accounts: CLAUDE_CODE_ACCOUNTS },
+  codex: { key: TURN_HARNESS_TEXT_KEY.codex, accounts: CODEX_ACCOUNTS },
 };
 
 /** The models a new Factory of the harness may start on: Claude Code's CLI aliases, or Codex's catalog. */

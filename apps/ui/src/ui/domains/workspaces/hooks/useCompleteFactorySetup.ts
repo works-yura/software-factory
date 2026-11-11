@@ -2,6 +2,7 @@ import { MASTRA_INSTANCE_ID } from '@factory/credentials/mastra-models';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { translator } from '../../../i18n/t';
+import { isTurnHarness } from '../services/turnHarness';
 import { useApiConfig } from '../../../../api/config';
 import { isProviderConnected } from './useProviderConnection';
 import { queryKeys } from '../../../../api/keys';
@@ -51,8 +52,8 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       const setup = parsed.data;
       const repo = setup.repository;
       // A turn-based harness (Claude Code, Codex) signs in with the organization's accounts: no provider to check.
-      const turn = setup.harness === 'claude-code' || setup.harness === 'codex' ? { harness: setup.harness, model: setup.harnessModel } : undefined;
-      const choice = setup.harness === 'claude-code' || setup.harness === 'codex' ? undefined : setup.model;
+      const turn = 'harnessModel' in setup ? { harness: setup.harness, model: setup.harnessModel } : undefined;
+      const choice = 'model' in setup ? setup.model : undefined;
       if (choice) {
         const [providers, catalog] = await Promise.all([
           queryClient.fetchQuery({ ...providersQueryOptions(client), staleTime: 0 }),
@@ -93,7 +94,7 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       });
       if (choice) {
         // A retry may find the Factory an earlier attempt created on Claude Code or Codex.
-        if (existing && (existing.harness === 'claude-code' || existing.harness === 'codex')) {
+        if (existing && isTurnHarness(existing.harness)) {
           await updateFactoryHarness(baseUrl, factory.id, { harness: 'mastra' });
         }
         await setFactoryModelDefault(baseUrl, factory.id, MASTRA_INSTANCE_ID, { model: choice.modelId });
