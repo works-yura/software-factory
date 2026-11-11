@@ -940,7 +940,7 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('task context and external CI status must still be reported in the handoff');
     expect(gates).toContain('neither is an approval gate');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
-    expect(review).toContain('- **Task and intent**');
+    expect(review).toContain('**Task and intent** (');
     expect(review).toContain('including base-versus-head evidence for behavior-changing claims');
 
     // Task context is collected and reported, but a missing or unrelated card
@@ -1070,7 +1070,7 @@ describe('bundled Factory skill assets', () => {
 
     // The handoff carries the approach judgment and unhedged requests.
     const handoff = section('## Phase 6: Handoff & Verdict', '## Behavior Rules');
-    expect(handoff).toContain('- **Approach**');
+    expect(handoff).toContain('**Approach** (');
     expect(handoff).toContain('imperative and present tense');
     expect(handoff).toContain('No softened requests');
     expect(handoff).toContain('Preserve qualifications that express real limits of evidence');
@@ -1241,7 +1241,7 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('If any gate fails, the verdict is request changes');
 
     const handoff = section('## Phase 7: Handoff & Verdict', '## Behavior Rules');
-    expect(handoff).toContain('- **Task and intent**');
+    expect(handoff).toContain('**Task and intent** (');
     expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
     expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
 
@@ -1267,7 +1267,7 @@ describe('bundled Factory skill assets', () => {
     expect(verdict).toContain(
       'A prior-pass request that the push showed to be wrong is corrected here, not carried out of loyalty',
     );
-    expect(handoff).toContain('- **Approach**');
+    expect(handoff).toContain('**Approach** (');
     expect(handoff).toContain('No softened requests');
     expect(instructions).toContain('**Your design before theirs.**');
   });

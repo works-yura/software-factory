@@ -284,6 +284,13 @@ v4 лишає GitHub і GitLab. Linear, Jira, incident.io, Slack і WorkOS пр�
 | `b2ce66cef8` (#29898) | lint-staged для кореневих файлів і 16 пакетів без конфігу | конфігурація репозиторію upstream; у v4 свій набір перевірок (`pnpm verify`) |
 | `b87062b541` (#29866) | документація про сфокусовані тестові команди `mastracode/factory` | шляхи й команди upstream; у v4 свої (`README.md`, `scripts/run-tests.mjs`) |
 | `8015cf5a55` (#29372), `e0bbdc6066` (#29623) | Slack: розшифровка голосових кліпів, відповідь у треді, коли бота згадує незалінкований користувач | Slack у v4 прибрано. Самі можливості (розшифровка голосових, відповідь у треді користувачу без прив'язки) підуть у запланований спільний інтерфейс повідомлень, який реалізують ClickUp та інші |
+| `a3c0884445` (#29902), `c1205b357f` (#29954) | новий дизайн Switch і його повний відкат | разом нічого не змінюють: `git diff a3c0884445~1 c1205b357f -- packages/playground-ui/src/ds/components/Switch` порожній |
+
+## Перенесено з upstream після efc06290c0
+
+| Коміт | Що | Куди | Відхилення |
+| --- | --- | --- | --- |
+| `362cccd005` (#29880) | Коротші коментарі рев'ю, звіту тестів і triage. Тіло вердикту рев'ю: `## Verdict: …`, `Reviewed head:`, одне речення, таблиця знахідок (серйозність крапками, чи блокує merge, тип, де), «Required changes», «Needs a decision», згорнуті «Review notes», футер із посиланням на сесію й рантаймом; кожен `file:line` — посилання на рядок у переглянутій голові. Звіт тестів: рядок результату з ✅/❌/⚠️ і SHA, таблиця лише з того, що запускали на голові PR. Решта (Approach, Task and intent, докази знахідок, перевірка) — у «Run record» передачі в сесії. Self-review і GitLab-рев'ю — так само стисло | `harness-mastra/factory-skills/{factory-review,factory-rereview,factory-gitlab-review,factory-gitlab-rereview,factory-self-review,factory-triage}/SKILL.md`, `harness-mastra/src/workspace.test.ts` | Публікація лишилась через `source_control_*` (без `gh`): тіло — `body` для `source_control_review_change_request`, `event: "approve"`/`"request-changes"`, SHA голови з `source_control_get_change_request`, пошук попереднього вердикту через `source_control_api_read` (тепер приймає і `## Verdict:`), follow-up PR через `source_control_push_branch`/`create_change_request`, гілка re-review від `<current-head-sha>`. «Task and intent» (картка за PR) замість upstream «Issue and intent». Парсер вердикту v4 (`normalizedVerdictLine`) вже знімає `#`, тож `## Verdict:` читається. Triage v4 пише в чат простим Markdown без HTML, тож згорнутий блок Details не переносили — взяли лише «кожен рядок має заслужити місце» і посилання на `file:line` за повним SHA. Changeset не переносили. |
 
 ## Власна копія playground-ui
 
