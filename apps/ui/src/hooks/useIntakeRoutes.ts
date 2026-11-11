@@ -10,6 +10,8 @@ export interface IntakeRouteDraft {
   enabled: boolean;
   when: CardRuleGroup | null;
   target: { boardKey: string; phaseKey: string | null; joinClosedIssue?: boolean };
+  /** The events the route handles; unset keeps the route's own (a new route places new cards). */
+  on?: string[];
 }
 
 const base = (factoryProjectId: string) => `/web/factory/projects/${encodeURIComponent(factoryProjectId)}/intake-routes`;

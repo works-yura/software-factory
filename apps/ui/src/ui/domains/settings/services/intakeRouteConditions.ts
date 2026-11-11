@@ -4,7 +4,7 @@ import type { CardRuleGroup } from '../../../../api/types';
 export const ROUTE_INTEGRATIONS = ['github', 'gitlab', 'clickup'] as const;
 export type RouteIntegration = (typeof ROUTE_INTEGRATIONS)[number];
 
-/** What kind of record a card came from (`source.kind`); `intake_rule` is a card an intake rule filed. */
+/** What kind of record a card came from (`source.kind`); `intake_rule` is a card a schedule filed («За розкладом»). */
 export const ROUTE_SOURCE_KINDS = ['issue', 'pull_request', 'task', 'intake_rule'] as const;
 export type RouteSourceKind = (typeof ROUTE_SOURCE_KINDS)[number];
 
@@ -20,6 +20,8 @@ export type RouteCondition =
   | { field: 'item.title'; value: string }
   /** The intake rule a card came from (its id). */
   | { field: 'intake.rule'; value: string }
+  /** The ClickUp List a task lives in (its id): a route with this condition imports the List's tasks. */
+  | { field: 'source.list'; value: string }
   /** The trigger kind of the rule a card came from, e.g. `schedule`. */
   | { field: 'intake.trigger'; value: string }
   /** A fact the provider reports, matched whole and case-insensitively. */
@@ -41,6 +43,7 @@ export const ROUTE_CONDITION_FIELDS: readonly RouteConditionField[] = [
   'author.trusted',
   'item.labels',
   'item.title',
+  'source.list',
   'intake.rule',
   'intake.trigger',
   ...ROUTE_TEXT_FACTS,
@@ -65,7 +68,11 @@ function readCondition(condition: CardRuleGroup['conditions'][number]): RouteCon
   if ((field === 'item.labels' || field === 'item.title') && operator === 'contains' && typeof value === 'string') {
     return { field, value };
   }
-  if ((field === 'intake.rule' || field === 'intake.trigger') && operator === 'equals' && typeof value === 'string') {
+  if (
+    (field === 'intake.rule' || field === 'intake.trigger' || field === 'source.list') &&
+    operator === 'equals' &&
+    typeof value === 'string'
+  ) {
     return { field, value };
   }
   if (isTextFact(field) && operator === 'equals' && typeof value === 'string') return { field, value };
@@ -104,6 +111,7 @@ export function writeRouteConditions(conditions: readonly RouteCondition[]): Car
       }
       case 'intake.rule':
       case 'intake.trigger':
+      case 'source.list':
         return condition.value ? [{ field: condition.field, operator: 'equals', value: condition.value }] : [];
       case 'source.repository':
       case 'item.key':
@@ -139,7 +147,29 @@ export function defaultCondition(field: RouteConditionField): RouteCondition {
 export function isBlankCondition(condition: RouteCondition): boolean {
   if (condition.field === 'source.integration') return condition.value.length === 0;
   if (condition.field === 'item.labels' || condition.field === 'item.title') return !condition.value.trim();
-  if (condition.field === 'intake.rule' || condition.field === 'intake.trigger') return !condition.value;
+  if (condition.field === 'intake.rule' || condition.field === 'intake.trigger' || condition.field === 'source.list') {
+    return !condition.value;
+  }
   if (isTextFact(condition.field)) return typeof condition.value === 'string' && !condition.value.trim();
   return false;
+}
+
+/** Whether a route's condition names `field` = `value` anywhere in it. */
+function names(when: CardRuleGroup | null, field: string, value?: string): boolean {
+  if (!when) return false;
+  return when.conditions.some(member =>
+    'conditions' in member
+      ? names(member as CardRuleGroup, field, value)
+      : member.field === field && (value === undefined || member.value === value),
+  );
+}
+
+/** The routes that name this ClickUp List: they import its tasks and move their cards. */
+export function routesForList<R extends { when: CardRuleGroup | null }>(routes: readonly R[], listId: string): R[] {
+  return routes.filter(route => names(route.when, 'source.list', listId));
+}
+
+/** Whether a route places the cards of a schedule (it names an intake rule or the rule source kind). */
+export function isScheduleRoute(route: { when: CardRuleGroup | null }): boolean {
+  return names(route.when, 'intake.rule') || names(route.when, 'source.kind', 'intake_rule');
 }

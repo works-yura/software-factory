@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -12,6 +13,7 @@ import type { TFunction } from 'i18next';
 
 import type { CardRuleGroup, InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { useClickUpListsQuery, useClickUpStatusQuery } from '../../../../hooks/useClickUp';
 import { useIntakeRuleKindsQuery, useIntakeRulesQuery } from '../../../../hooks/useIntakeRules';
 import {
   useCreateIntakeRouteMutation,
@@ -27,6 +29,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import {
   defaultCondition,
   isBlankCondition,
+  isScheduleRoute,
   readRouteConditions,
   ROUTE_CONDITION_FIELDS,
   ROUTE_INTEGRATIONS,
@@ -69,9 +72,12 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
   const boards = catalog.data ?? [];
   const rulesQuery = useIntakeRulesQuery(factoryProjectId);
   const kindsQuery = useIntakeRuleKindsQuery(factoryProjectId);
+  const clickUpConnected = useClickUpStatusQuery().data?.connected === true;
+  const clickUpLists = useClickUpListsQuery(clickUpConnected).data ?? [];
   const origins: IntakeOrigins = {
     rules: (rulesQuery.data ?? []).map(rule => ({ value: rule.id, label: rule.name })),
     triggers: (kindsQuery.data?.triggers ?? []).map(trigger => ({ value: trigger.kind, label: trigger.label })),
+    lists: clickUpLists.map(list => ({ value: list.id, label: list.path ? `${list.path} / ${list.name}` : list.name })),
   };
   const busy = create.isPending || update.isPending || remove.isPending || reorder.isPending;
 
@@ -171,6 +177,11 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
                       <Txt as="span" variant="body" tone="ink" className="truncate">
                         {routeName(route, t)}
                       </Txt>
+                      {isScheduleRoute(route) && (
+                        <Badge size="xs" variant="neutral">
+                          {t('intakeRoutes.scheduleTag')}
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1" hidden={!canEdit}>
                       <Switch
@@ -252,10 +263,31 @@ type T = TFunction<'settings'>;
 interface IntakeOrigins {
   rules: { value: string; label: string }[];
   triggers: { value: string; label: string }[];
+  /** The ClickUp Lists the organization reads, for the `source.list` condition. */
+  lists: { value: string; label: string }[];
 }
 
 const originLabel = (options: IntakeOrigins['rules'], value: string) =>
   options.find(option => option.value === value)?.label ?? value;
+
+const originsFor = (origins: IntakeOrigins, field: 'intake.rule' | 'intake.trigger' | 'source.list') =>
+  field === 'intake.rule' ? origins.rules : field === 'intake.trigger' ? origins.triggers : origins.lists;
+
+/** What a route on a ClickUp List reacts to: a new task, a status change of a known one, or both. */
+type RouteEvents = 'created' | 'createdAndChanged' | 'changed' | 'other';
+const ROUTE_EVENT_SETS: Record<Exclude<RouteEvents, 'other'>, string[]> = {
+  created: ['work_item.created'],
+  createdAndChanged: ['work_item.created', 'work_item.state_changed'],
+  changed: ['work_item.state_changed'],
+};
+function routeEventsOf(on: readonly string[] | undefined): RouteEvents {
+  if (!on) return 'created';
+  const key = [...on].sort().join();
+  const match = (Object.keys(ROUTE_EVENT_SETS) as Exclude<RouteEvents, 'other'>[]).find(
+    option => [...ROUTE_EVENT_SETS[option]].sort().join() === key,
+  );
+  return match ?? 'other';
+}
 
 function describeCondition(condition: RouteCondition, origins: IntakeOrigins, t: T): string {
   switch (condition.field) {
@@ -263,6 +295,8 @@ function describeCondition(condition: RouteCondition, origins: IntakeOrigins, t:
       return t('intakeRoutes.fromRule', { rule: originLabel(origins.rules, condition.value) });
     case 'intake.trigger':
       return t('intakeRoutes.fromTrigger', { trigger: originLabel(origins.triggers, condition.value) });
+    case 'source.list':
+      return t('intakeRoutes.inList', { list: originLabel(origins.lists, condition.value) });
     case 'source.integration':
       return condition.value.map(integration => t(`intakeRoutes.integrations.${integration}`)).join(t('intakeRoutes.or'));
     case 'source.kind':
@@ -309,6 +343,7 @@ const ROUTE_EVENTS = [
   'work_item.created',
   'work_item.closed',
   'work_item.reopened',
+  'work_item.state_changed',
   'pull_request.opened',
   'pull_request.synchronized',
   'pull_request.review_requested',
@@ -395,11 +430,17 @@ function RouteEditor({
 
   const setCondition = (index: number, next: RouteCondition) =>
     setConditions(current => current.map((condition, at) => (at === index ? next : condition)));
+  const [events, setEvents] = useState<RouteEvents>(() => routeEventsOf(initial?.on));
+  const namesList = conditions.some(condition => condition.field === 'source.list');
+  // Only a route on new cards and status changes is edited here; a route with other events keeps them.
+  const editableEvents = !initial || routeEventsOf(initial.on) !== 'other';
 
   const save = () =>
     onSave({
       name: name.trim(),
       enabled: initial?.enabled ?? true,
+      // Only a route that names a ClickUp List says which events it handles here; others keep theirs.
+      ...(namesList && editableEvents && events !== 'other' ? { on: ROUTE_EVENT_SETS[events] } : {}),
       // A condition this form can't show is kept exactly as it was.
       when: readable ? writeRouteConditions(conditions.filter(condition => !isBlankCondition(condition))) : initial!.when,
       // The server replaces a route's target whole, so a joining route stays a joining one.
@@ -457,6 +498,31 @@ function RouteEditor({
           </>
         )}
       </div>
+
+      {namesList && editableEvents && (
+        <div className="flex flex-col gap-2">
+          <Txt as="span" variant="caption" tone="muted">
+            {t('intakeRoutes.listEvents.label')}
+          </Txt>
+          <Select value={events} disabled={busy} onValueChange={next => setEvents(next as RouteEvents)}>
+            <SelectTrigger size="sm" aria-label={t('intakeRoutes.listEvents.label')} className="w-auto self-start">
+              <Txt as="span" variant="caption">
+                {t(`intakeRoutes.listEvents.${events === 'other' ? 'created' : events}`)}
+              </Txt>
+            </SelectTrigger>
+            <SelectContent>
+              {(['created', 'createdAndChanged', 'changed'] as const).map(option => (
+                <SelectItem key={option} value={option}>
+                  {t(`intakeRoutes.listEvents.${option}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Txt as="p" variant="caption" tone="muted">
+            {t('intakeRoutes.listEvents.hint')}
+          </Txt>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <Txt as="span" variant="caption" tone="muted">
@@ -633,7 +699,7 @@ function ConditionRow({
           </SelectContent>
         </Select>
       )}
-      {(condition.field === 'intake.rule' || condition.field === 'intake.trigger') && (
+      {(condition.field === 'intake.rule' || condition.field === 'intake.trigger' || condition.field === 'source.list') && (
         <Select
           value={condition.value}
           disabled={busy}
@@ -641,13 +707,11 @@ function ConditionRow({
         >
           <SelectTrigger size="sm" aria-label={fieldLabel} className="w-auto">
             <Txt as="span" variant="caption">
-              {condition.value
-                ? originLabel(condition.field === 'intake.rule' ? origins.rules : origins.triggers, condition.value)
-                : t('intakeRoutes.choose')}
+              {condition.value ? originLabel(originsFor(origins, condition.field), condition.value) : t('intakeRoutes.choose')}
             </Txt>
           </SelectTrigger>
           <SelectContent>
-            {(condition.field === 'intake.rule' ? origins.rules : origins.triggers).map(option => (
+            {originsFor(origins, condition.field).map(option => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>

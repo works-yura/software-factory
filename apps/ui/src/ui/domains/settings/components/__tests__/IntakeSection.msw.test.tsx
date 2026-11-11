@@ -13,9 +13,7 @@ const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
 const BINDINGS_URL = `${TEST_BASE_URL}/web/intake/bindings`;
 const CLICKUP_STATUS_URL = `${TEST_BASE_URL}/web/clickup/status`;
 const CLICKUP_LISTS_URL = `${TEST_BASE_URL}/web/clickup/lists`;
-const CLICKUP_SETTINGS_URL = `${TEST_BASE_URL}/web/clickup/settings`;
-const CLICKUP_STATUSES_URL = `${TEST_BASE_URL}/web/clickup/lists/L1/statuses`;
-const CLICKUP_RULES_URL = `${TEST_BASE_URL}/web/clickup/lists/L1/rules`;
+const ROUTES_URL = `${TEST_BASE_URL}/web/factory/projects/:id/intake-routes`;
 
 type Binding = { integrationId: string; sourceId: string; factoryProjectId: string | null; board: string | null };
 
@@ -23,6 +21,43 @@ const readyStatus = { configured: true, connected: true, workspaces: ['Acme'], i
 const lists = [
   { id: 'L1', name: 'Backlog', path: 'Eng / Mobile', workspaceId: 'w1' },
   { id: 'L2', name: 'Inbox', path: 'Support', workspaceId: 'w1' },
+];
+/** Routes of the Factory, as moved from a List's status rules: they name the List (`source.list`). */
+const listRoutes = [
+  {
+    id: 'r-todo',
+    name: 'ClickUp: статус «to do»',
+    enabled: true,
+    position: 0,
+    when: {
+      operator: 'AND',
+      conditions: [
+        { field: 'source.list', operator: 'equals', value: 'L1' },
+        { field: 'item.state', operator: 'equals', value: 'to do' },
+      ],
+    },
+    target: { boardKey: 'bug', phaseKey: null, joinClosedIssue: false },
+    on: ['work_item.created'],
+    revision: 1,
+    problems: [],
+  },
+  {
+    id: 'r-fixed',
+    name: 'ClickUp: статус «dev fixed»',
+    enabled: true,
+    position: 1,
+    when: {
+      operator: 'AND',
+      conditions: [
+        { field: 'source.list', operator: 'equals', value: 'L1' },
+        { field: 'item.state', operator: 'equals', value: 'dev fixed' },
+      ],
+    },
+    target: { boardKey: 'bug', phaseKey: 'done', joinClosedIssue: false },
+    on: ['work_item.state_changed'],
+    revision: 1,
+    problems: [],
+  },
 ];
 const bugBoard = {
   id: 'bug',
@@ -46,21 +81,14 @@ function clickUpConfig(clickup: IntakeConfig['clickup']): IntakeConfig {
 function useClickUpHandlers({
   config = clickUpConfig({ enabled: true, sourceIds: ['L1'] }),
   bindings = [],
-  settings = {},
-  statuses = [
-    { name: 'TO DO', type: 'open' },
-    { name: 'BACKLOG', type: 'open' },
-    { name: 'DEV FIXED', type: 'closed' },
-  ],
+  routes = listRoutes,
 }: {
   config?: IntakeConfig;
   bindings?: Binding[];
-  settings?: Record<string, unknown>;
-  statuses?: { name: string; type: string }[];
+  routes?: unknown[];
 } = {}) {
   const savedConfigs: IntakeConfig[] = [];
   const savedBindings: Binding[] = [...bindings];
-  const savedRules: unknown[] = [];
   server.use(
     http.get(CONFIG_URL, () => HttpResponse.json({ config })),
     http.put(CONFIG_URL, async ({ request }) => {
@@ -84,15 +112,9 @@ function useClickUpHandlers({
       return HttpResponse.json({ bindings: savedBindings });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json({ boards: [bugBoard] })),
-    http.get(CLICKUP_SETTINGS_URL, () => HttpResponse.json({ lists: settings })),
-    http.get(CLICKUP_STATUSES_URL, () => HttpResponse.json({ statuses })),
-    http.put(CLICKUP_RULES_URL, async ({ request }) => {
-      const body = await request.json();
-      savedRules.push(body);
-      return HttpResponse.json({ lists: { L1: body } });
-    }),
+    http.get(ROUTES_URL, () => HttpResponse.json({ intakeRoutes: routes, canEdit: true })),
   );
-  return { savedConfigs, savedBindings, savedRules };
+  return { savedConfigs, savedBindings };
 }
 
 const routedToBug: Binding[] = [
@@ -142,13 +164,14 @@ describe('IntakeSection', () => {
   });
 
   describe('the page', () => {
-    it('shows only ClickUp: GitHub and GitLab have no intake settings', async () => {
+    it('lists the sources: ClickUp, the repositories and the board’s New card', async () => {
       useClickUpHandlers();
       renderIntakeSection();
 
+      expect(await screen.findByRole('heading', { name: 'Sources' })).toBeInTheDocument();
       expect(await screen.findByRole('switch', { name: 'Import ClickUp tasks' })).toBeInTheDocument();
-      expect(screen.queryByText(/GitHub/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/GitLab/)).not.toBeInTheDocument();
+      expect(screen.getByText(/GitHub and GitLab: issues and pull requests/)).toBeInTheDocument();
+      expect(screen.getByText(/By hand: the board’s “New card” button/)).toBeInTheDocument();
     });
   });
 
@@ -196,14 +219,32 @@ describe('IntakeSection', () => {
   });
 
   describe('connected Lists', () => {
-    it('shows each connected List as a card that says where it is routed', async () => {
+    it('shows each connected List as a card that says its Factory and how many routes name it', async () => {
       useClickUpHandlers({ bindings: routedToBug });
       renderIntakeSection();
 
       const card = await screen.findByRole('button', { name: /Eng \/ Mobile \/ Backlog/ });
-      await waitFor(() => expect(card).toHaveTextContent('Acme Web · Bug'));
-      // Folded: the status table is not rendered until the card opens.
-      expect(screen.queryByText('TO DO')).not.toBeInTheDocument();
+      await waitFor(() => expect(card).toHaveTextContent('Acme Web · → 2 routes'));
+    });
+
+    it('lists the routes that name the List when its card opens, the migrated status routes among them', async () => {
+      useClickUpHandlers({ bindings: routedToBug });
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+      const section = await screen.findByRole('region', { name: 'Routes of this List' });
+      expect(within(section).getByText('ClickUp: статус «to do»')).toBeInTheDocument();
+      expect(within(section).getByText('ClickUp: статус «dev fixed»')).toBeInTheDocument();
+    });
+
+    it('says the List imports nothing while no route names it', async () => {
+      useClickUpHandlers({ bindings: routedToBug, routes: [] });
+      const user = userEvent.setup();
+      renderIntakeSection();
+
+      await openCard(user, /Eng \/ Mobile \/ Backlog/);
+      expect(await screen.findByText(/No route names this List, so its tasks are not imported/)).toBeInTheDocument();
     });
 
     it('says so when no List is connected yet', async () => {
@@ -251,7 +292,7 @@ describe('IntakeSection', () => {
   });
 
   describe('routing a List', () => {
-    it('routes the List to a Factory and a board', async () => {
+    it('routes the List to a Factory; routes decide the board', async () => {
       const { savedBindings } = useClickUpHandlers();
       const user = userEvent.setup();
       renderIntakeSection();
@@ -260,107 +301,17 @@ describe('IntakeSection', () => {
       await user.click(await screen.findByRole('combobox', { name: /Factory for Eng \/ Mobile \/ Backlog/ }));
       await user.click(await screen.findByRole('option', { name: 'Acme Web' }));
       await waitFor(() => expect(savedBindings).toEqual([{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: null }]));
-
-      await user.click(await screen.findByRole('combobox', { name: /Board for Eng \/ Mobile \/ Backlog/ }));
-      await user.click(await screen.findByRole('option', { name: 'Bug' }));
-      await waitFor(() => expect(savedBindings.at(-1)).toEqual({ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: 'bug' }));
+      expect(screen.queryByRole('combobox', { name: /Board for Eng \/ Mobile \/ Backlog/ })).not.toBeInTheDocument();
     });
 
-    it('asks for a factory before offering status rules', async () => {
+    it('asks for a factory before anything else', async () => {
       useClickUpHandlers();
       const user = userEvent.setup();
       renderIntakeSection();
 
       await openCard(user, /Eng \/ Mobile \/ Backlog/);
 
-      expect(await screen.findByText(/Choose a factory for this List above/)).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Typical set' })).not.toBeInTheDocument();
-    });
-  });
-
-  describe('status rules', () => {
-    it('maps a ClickUp status to a board column and saves the rule', async () => {
-      const { savedRules } = useClickUpHandlers({ bindings: routedToBug });
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-      await user.click(await screen.findByRole('combobox', { name: 'Action for status TO DO' }));
-      await user.click(await screen.findByRole('option', { name: 'Into "Triage"' }));
-
-      await waitFor(() => expect(savedRules).toEqual([{ statuses: { 'to do': { action: 'phase', phase: 'triage' } } }]));
-    });
-
-    it('fills in a typical set: open statuses to Triage, finished ones close the card', async () => {
-      const { savedRules } = useClickUpHandlers({ bindings: routedToBug });
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-      await user.click(await screen.findByRole('button', { name: 'Typical set' }));
-
-      await waitFor(() =>
-        expect(savedRules).toEqual([
-          {
-            statuses: {
-              'to do': { action: 'phase', phase: 'triage' },
-              backlog: { action: 'phase', phase: 'triage' },
-              'dev fixed': { action: 'close' },
-            },
-          },
-        ]),
-      );
-    });
-
-    it('offers only the board’s working columns, never the terminal one', async () => {
-      useClickUpHandlers({ bindings: routedToBug });
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-      await user.click(await screen.findByRole('combobox', { name: 'Action for status TO DO' }));
-
-      expect(await screen.findByRole('option', { name: 'Into "Intake"' })).toBeInTheDocument();
-      expect(screen.queryByRole('option', { name: 'Into "Done"' })).not.toBeInTheDocument();
-      expect(screen.getByRole('option', { name: 'Close the card' })).toBeInTheDocument();
-    });
-
-    it('tells the user when the bound board is not installed', async () => {
-      useClickUpHandlers({
-        bindings: [{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: 'gone' }],
-      });
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-
-      expect(await screen.findByText(/The "gone" board is not installed/)).toBeInTheDocument();
-    });
-  });
-
-  describe('a List without a board', () => {
-    const routedWithoutBoard = [{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: null }];
-
-    it('imports nothing until a board is chosen, and offers no status rules before then', async () => {
-      useClickUpHandlers({ bindings: routedWithoutBoard });
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-      expect(await screen.findByText(/choose a board; its tasks are not imported without one/)).toBeInTheDocument();
-      expect(screen.getByText('Choose a board above: ClickUp statuses map to its columns.')).toBeInTheDocument();
-      expect(screen.queryByRole('combobox', { name: 'Action for status TO DO' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Typical set' })).not.toBeInTheDocument();
-    });
-
-    it('offers no tag routes: tags pick a board through intake routes', async () => {
-      useClickUpHandlers({ bindings: routedToBug });
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-      expect(await screen.findByText(/add an intake route with the condition “has tag”/)).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /Tag routes for/ })).not.toBeInTheDocument();
+      expect(await screen.findByText(/Choose a factory — until then this List’s tasks are not picked up/)).toBeInTheDocument();
     });
   });
 });
