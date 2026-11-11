@@ -10,12 +10,23 @@ import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { EventEmitter } from 'node:events';
 import type { Duplex } from 'node:stream';
 
+import { join } from 'node:path';
+
 import type { RouteAuth } from '@factory/http';
-import { attachDeviceHubUpgrade, createDeviceRoutes, createDeviceService } from '@factory/device/server';
+import type { IntegrationTools } from '@factory/integrations';
+import {
+  attachDeviceHubUpgrade,
+  createDeviceAgentTools,
+  createDeviceRoutes,
+  createDeviceService,
+} from '@factory/device/server';
 import type { DeviceServiceInternals } from '@factory/device/server';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { Hono } from 'hono';
+
+import { createFactoryDeviceAgentTools } from './device-agent-tools.ts';
 
 /** Where the device routes live; the hub proxy is `{DEVICE_BASE_PATH}/hub`. */
 export const DEVICE_BASE_PATH = '/web/device';
@@ -29,6 +40,8 @@ export interface FactoryDevice {
   routes: ApiRoute[];
   /** Serves the hub's WebSocket upgrades on `server`; other upgrades still reach their listeners. */
   attach(server: Server): () => void;
+  /** The session's device tools (list, open, screenshot, close), on the same device service as the panel. */
+  agentTools(requestContext: RequestContext | undefined): IntegrationTools;
   dispose(): Promise<void>;
 }
 
@@ -37,6 +50,7 @@ export async function createFactoryDevice(config: FactoryDeviceConfig, auth: Rou
     stateDir: config.stateDir,
     hubBasePath: `${DEVICE_BASE_PATH}/hub`,
   });
+  const agentTools = createDeviceAgentTools(service);
   // The device routes are relative; mounting them at the base path matches the request URLs.
   const app = new Hono().route(DEVICE_BASE_PATH, createDeviceRoutes(service, { basePath: DEVICE_BASE_PATH }));
 
@@ -90,6 +104,12 @@ export async function createFactoryDevice(config: FactoryDeviceConfig, auth: Rou
         for (const listener of others) server.on('upgrade', listener);
       };
     },
+    agentTools: requestContext =>
+      createFactoryDeviceAgentTools({
+        tools: agentTools,
+        screenshotDir: join(config.stateDir, 'screenshots'),
+        requestContext,
+      }),
     dispose: () => service.dispose(),
   };
 }

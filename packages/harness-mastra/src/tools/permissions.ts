@@ -33,6 +33,12 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'observability_query_logs',
   'observability_crash_issues',
   'observability_crash_issue',
+  // Device preview, offered only on a server that drives this machine's simulators; the person turns
+  // agent access on in the Device panel, and the device service refuses until then.
+  'device_list',
+  'device_open',
+  'device_screenshot',
+  'device_close',
 ];
 
 export interface FactoryToolPermissionsSession {

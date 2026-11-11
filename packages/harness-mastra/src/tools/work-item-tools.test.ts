@@ -451,6 +451,10 @@ describe('approval', () => {
         'observability_query_logs',
         'observability_crash_issues',
         'observability_crash_issue',
+        'device_list',
+        'device_open',
+        'device_screenshot',
+        'device_close',
       ].sort(),
     );
   });

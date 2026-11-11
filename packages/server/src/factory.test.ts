@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
@@ -1289,6 +1290,43 @@ describe('MastraFactory.prepare', () => {
     await expect(extraTools({ requestContext })).resolves.toEqual({});
   });
 
+  it('gives sessions the device tools only when device preview is on', async () => {
+    const sessionContext = () => {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
+      requestContext.set('controller', {
+        resourceId: 'resource-1',
+        sessionId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({}),
+      });
+      return requestContext;
+    };
+    type ExtraTools = (args: { requestContext: RequestContext }) => Promise<Record<string, unknown>>;
+
+    const without = await prepareFactory({ storage: fakeStorage() });
+    const plain = await (without.extraTools as ExtraTools)({ requestContext: sessionContext() });
+    expect(Object.keys(plain).filter(name => name.startsWith('device_'))).toEqual([]);
+
+    prepareMock.mockClear();
+    const stateDir = await mkdtemp(join(tmpdir(), 'factory-device-'));
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), device: { stateDir } });
+    try {
+      await factory.prepare();
+      const config = prepareMock.mock.calls[0]![0];
+      const tools = await (config.extraTools as ExtraTools)({ requestContext: sessionContext() });
+      expect(Object.keys(tools).filter(name => name.startsWith('device_')).sort()).toEqual([
+        'device_close',
+        'device_list',
+        'device_open',
+        'device_screenshot',
+      ]);
+    } finally {
+      await factory.shutdown();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   describe('Factory tools in user sessions', () => {
     async function seedUserSession(
       storage: ReturnType<typeof fakeStorage>,
@@ -1803,8 +1841,8 @@ describe('MastraFactory.prepare', () => {
       expect(
         (session.state.get() as { permissionRules?: { tools: Record<string, string> } }).permissionRules?.tools,
       ).toEqual(
-        // The attachment and observability tools are session tools (offered with an attachment store or a
-        // connected source), allowed the same way.
+        // The attachment, observability and device tools are session tools (offered with an attachment
+        // store, a connected source, or device preview on), allowed the same way.
         Object.fromEntries(
           [
             ...ALLOWED_TOOLS,
@@ -1812,6 +1850,10 @@ describe('MastraFactory.prepare', () => {
             'observability_query_logs',
             'observability_crash_issues',
             'observability_crash_issue',
+            'device_list',
+            'device_open',
+            'device_screenshot',
+            'device_close',
           ].map(name => [name, 'allow']),
         ),
       );

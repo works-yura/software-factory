@@ -2350,6 +2350,8 @@ export class MastraFactory {
           }
         }
       }
+      // Device preview: only on a server that drives this machine's simulators (local development).
+      if (device) mergeTools('device', device.agentTools(requestContext));
       for (const { integration, ready, ensureReady } of toolIntegrations) {
         if (!ready && ensureReady) {
           try {
