@@ -11,3 +11,4 @@ export * from './permissions.ts';
 export * from './gate-server.ts';
 export * from './notifications.ts';
 export * from './models.ts';
+export * from './usageLimits.ts';

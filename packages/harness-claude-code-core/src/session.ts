@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { applyClaudePromptEffortPrefix } from '@factory/harness/models/model';
 import type { ModelSelection } from '@factory/harness/models/contracts';
+import type { UsageLimitsUpdateEvent } from '@factory/harness/usage';
 import type {
   AgentEvent,
   AgentEventListener,
@@ -59,6 +60,7 @@ import { claudeNotificationDecision } from './notifications.ts';
 import { claudePermissionRules, type ClaudeToolPermissions } from './permissions.ts';
 import { emptyThreadState, type ClaudePendingInput, type ClaudeSessionRecord, type ClaudeSessionStore, type ClaudeThreadState } from './store.ts';
 import { parseStreamLine } from './stream.ts';
+import { claudeRateLimitWindows } from './usageLimits.ts';
 
 /** How many delivered signal ids and dedupe keys a thread remembers. */
 const RECENT_LIMIT = 200;
@@ -491,6 +493,11 @@ export class ClaudeCodeSession implements AgentSession {
     return [...(this.#threadState().grantedTools ?? [])];
   }
 
+  /** The account the session's last turn ran on, when its credentials named one. */
+  get accountId(): string | undefined {
+    return this.#record.accountId;
+  }
+
   /** The id of the run in flight. */
   get runId(): string | undefined {
     return this.#run?.runId;
@@ -839,6 +846,19 @@ export class ClaudeCodeSession implements AgentSession {
     // Usage after the run already ended would be billed to the next run.
     if (run.settled || !run.translator) return;
     for (const usage of run.translator.takeUsage(final)) this.#emit({ type: 'usage_update', usage });
+  }
+
+  /** Tells listeners how much of the account's allowance Claude says is used (`usage_limits_update`). */
+  #reportUsageLimits(raw: Record<string, unknown>, accountId: string | undefined) {
+    const windows = claudeRateLimitWindows(raw.rate_limit_info);
+    if (windows.length === 0) return;
+    const event: UsageLimitsUpdateEvent = {
+      type: 'usage_limits_update',
+      ...(accountId ? { accountId } : {}),
+      windows,
+      checkedAt: new Date().toISOString(),
+    };
+    this.#emit(event as unknown as AgentEvent);
   }
 
   /** Records input as the session takes it, once; `whileActive` marks input that joins a run in flight. */
@@ -1282,6 +1302,7 @@ export class ClaudeCodeSession implements AgentSession {
         const message = parseStreamLine(line);
         if (!message) return;
         const entries = translator.push(message);
+        if (message.type === 'rate_limit') this.#reportUsageLimits(message.raw, credentials.accountId);
         if (translator.sessionId && translator.sessionId !== thread.claudeSessionId) {
           thread.claudeSessionId = translator.sessionId;
           void this.#save().catch(() => {});
