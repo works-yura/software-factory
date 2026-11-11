@@ -7,7 +7,7 @@
 **Налаштування › Інтеграції › Сервіси › Google Cloud** (`/settings/integrations?tab=services&service=google-cloud`; `apps/ui/src/ui/domains/settings/components/GoogleCloudService.tsx`; для всієї організації, змінює лише адмін). Стара адреса `/settings/observability` веде сюди.
 
 - **Акаунти Google Cloud** — «Додати акаунт» (назва й JSON-ключ у діалозі). Рядок: назва · email · скільки прив'язок. Розгорнутий: перейменувати, «Замінити ключ», «Відключити», де використовується. Відключення акаунта, через який читають прив'язки, спершу питає й показує, які прив'язки підуть разом із ним.
-- **Прив'язки** — «Додати прив'язку». Рядок: «syncts → syncta-57c6a · Syncta · логи». Розгорнутий: Factory, акаунт, ID і номер проєкту Google Cloud (пропонується проєкт, з якого ключ акаунта), «Логи сервера», «Креші застосунків» і застосунки, **«База (Firestore)»** і ID бази (порожньо — `(default)`), «Зберегти», «Перевірити доступ» (по одному читанню на функцію, застосунок і базу; називає роль чи API, яких бракує — для бази `roles/datastore.viewer`), «Видалити прив'язку».
+- **Прив'язки** — «Додати прив'язку». Рядок: «syncts → syncta-57c6a · Syncta · логи». Розгорнутий: Factory, акаунт, ID і номер проєкту Google Cloud («Проєкт» — список проєктів, які бачить акаунт, або власне значення; порожній заповнюється проєктом ключа), «Логи сервера», «Креші застосунків» і застосунки, **«База (Firestore)»** і база (список баз проєкту, порожня — `(default)`; не може переглянути — підказка з роллю), «Зберегти», «Перевірити доступ» (по одному читанню на функцію, застосунок і базу; називає роль чи API, яких бракує — для бази `roles/datastore.viewer`), «Видалити прив'язку».
 
 У сесії Factory з хоча б однією прив'язкою з логами чи крешами агент має інструменти observability (без підтвердження); без них — інструментів немає, і скіли кажуть про це у звіті.
 
@@ -47,7 +47,16 @@
 
 ## Маршрути (`/web/firebase`)
 
-`GET status` (акаунти з `bindingIds` і прив'язки) · `POST accounts` · `PUT accounts/:id` (назва та/або новий ключ) · `DELETE accounts/:id[?withBindings=true]` (409 `account_in_use`, якщо прив'язки є, а прапорця немає) · `POST bindings` · `PUT bindings/:id` · `DELETE bindings/:id` · `POST bindings/check`. Кожен запис відповідає повним станом.
+`GET status` (акаунти з `bindingIds` і прив'язки) · `POST accounts` · `PUT accounts/:id` (назва та/або новий ключ) · `DELETE accounts/:id[?withBindings=true]` (409 `account_in_use`, якщо прив'язки є, а прапорця немає) · `POST bindings` · `PUT bindings/:id` · `DELETE bindings/:id` · `POST bindings/check` · `GET accounts/:id/projects` · `GET accounts/:id/databases?project=`. Кожен запис відповідає повним станом.
+
+**Що бачить акаунт** (`packages/integration-firebase/src/discovery.ts`; той самий пошук дає `CredentialProvider.discover` формі MCP-сервера). Лише читання, ключем самого акаунта; ключ і токени назад не йдуть. Відмова не ламає форму: лишаються проєкт ключа чи `(default)` і `denied { role, message }`.
+
+| Що | Виклик | Область | Право | Роль |
+| --- | --- | --- | --- | --- |
+| Проєкти | `GET cloudresourcemanager.googleapis.com/v3/projects:search` (до 300, лише `ACTIVE`) | `cloud-platform.read-only` | повертаються лише проєкти з `resourcemanager.projects.get` | `roles/datastore.viewer` дає його на своєму проєкті |
+| Бази Firestore | `GET firestore.googleapis.com/v1/projects/{p}/databases` | `datastore` | `datastore.databases.list` | `roles/datastore.viewer` |
+
+Джерела (перевірено 2026-11-12): [projects.search](https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/search), [databases.list](https://docs.cloud.google.com/firestore/docs/reference/rest/v1/projects.databases/list), [ролі Firestore](https://docs.cloud.google.com/firestore/docs/security/iam) — Cloud Datastore Viewer містить `datastore.databases.list`, `datastore.databases.get`, `datastore.databases.getMetadata`, `resourcemanager.projects.get`, `resourcemanager.projects.list`.
 
 ## Хто використовує
 
