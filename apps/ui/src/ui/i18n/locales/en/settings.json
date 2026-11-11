@@ -596,10 +596,8 @@
       "changeFailed": "Couldn’t change the agent language"
     },
     "defaults": {
-      "title": "Default models",
-      "description": "What new sessions and card runs of each harness start on until they pick their own model. A change applies from each session’s next turn.",
-      "inUse": "In use",
-      "inUseHint": "This Factory starts new sessions on this harness.",
+      "title": "Default model",
+      "description": "What new sessions and card runs of this harness start on until they pick their own model. A change applies from each session’s next turn.",
       "setForFactory": "Set for this Factory.",
       "followsCatalog": "Follows the catalog default: {{model}}.",
       "followsHarness": "Follows the harness’s own default.",
@@ -615,7 +613,9 @@
       "unavailable": "{{harness}} isn’t available on this server right now.",
       "unavailableBecause": "{{harness}} isn’t available: {{reason}}",
       "loadFailed": "The harnesses’ models couldn’t be loaded.",
-      "change": "Change"
+      "change": "Change",
+      "reasoning": "Reasoning",
+      "harnessUnavailable": "This harness isn’t running on this server, so it has no models to choose from."
     }
   },
   "memory": {

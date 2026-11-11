@@ -7,7 +7,7 @@ import { modelLabel } from './modelDefaultView';
 
 /**
  * A harness's default model, read-only, where a screen routes through it (the routing map's
- * Factory defaults card); it is set in Default models above.
+ * Factory defaults card); it is set in Default model above.
  */
 export function DefaultModelSummary({ factoryId, harnessId }: { factoryId: string; harnessId: string }) {
   const { t } = useTranslation('settings');

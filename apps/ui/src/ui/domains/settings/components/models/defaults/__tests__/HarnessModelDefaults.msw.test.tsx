@@ -1,8 +1,8 @@
 /**
- * Settings → Models → Default models: one component for every harness instance the server
- * describes. Mastra, Claude Code and a third harness (the Codex stub the harness contract tests
- * register) render through the same code and write through the same route. Drives the real hooks
- * and api client through MSW.
+ * Settings → Models → Default model: the harness the Factory runs on, through one component for
+ * every harness instance the server describes. Mastra, Claude Code and a third harness (the Codex
+ * stub the harness contract tests register) render through the same code and write through the
+ * same route. Drives the real hooks and api client through MSW.
  */
 import type { ModelCatalogEntry } from '@factory/api/config';
 import type { ModelSelection } from '@factory/harness/models/contracts';
@@ -36,10 +36,13 @@ type Write = { method: string; instanceId: string; body?: unknown };
  */
 async function stubServer(
   options: {
-    harness?: 'mastra' | 'claude-code';
+    /** The harness the Factory runs on; only its default shows. */
+    harness?: string;
     defaults?: Record<string, ModelSelection>;
     status?: number;
     mastraNeedsSetup?: boolean;
+    /** Instances the server does not run. */
+    without?: string[];
   } = {},
 ) {
   const defaults: Record<string, ModelSelection> = { ...options.defaults };
@@ -47,11 +50,13 @@ async function stubServer(
   const project = (): FactoryProjectPayload => ({
     id: 'fp-1',
     name: 'Factory',
-    harness: options.harness ?? 'mastra',
+    harness: (options.harness ?? 'mastra') as FactoryProjectPayload['harness'],
     harnessModelDefaults: { ...defaults },
   });
   const codexDefaults = { current: defaults };
-  const instances = async (): Promise<HarnessModelInstanceInfo[]> => [
+  const instances = async (): Promise<HarnessModelInstanceInfo[]> =>
+    (await allInstances()).filter(instance => !options.without?.includes(instance.instanceId));
+  const allInstances = async (): Promise<HarnessModelInstanceInfo[]> => [
     mastraTestInstance(options.mastraNeedsSetup ? [] : MASTRA_MODELS, null, {
       catalogDefaultModelId: 'openai/gpt-5.5',
       factoryDefault: defaults.mastra ?? null,
@@ -107,7 +112,7 @@ function renderSection() {
 const group = async (name: string) => screen.findByRole('region', { name: new RegExp(`^${name}`) });
 
 describe('Default models for every harness', () => {
-  it('renders every instance the server describes with the same rows, the harness in use first', async () => {
+  it('shows only the harness the Factory runs on, with the same rows as any other', async () => {
     await stubServer({
       harness: 'claude-code',
       defaults: { 'claude-code': { instanceId: 'claude-code', model: 'claude-opus-4-6', options: [{ id: 'effort', value: 'max' }] } },
@@ -116,27 +121,35 @@ describe('Default models for every harness', () => {
 
     const claude = await group('Claude Code');
     const groups = screen.getAllByRole('region').filter(region => region.hasAttribute('data-instance-id'));
-    expect(groups.map(region => region.getAttribute('data-instance-id'))).toEqual(['claude-code', 'mastra', 'codex-stub']);
-    expect(within(claude).getByText('In use')).toBeInTheDocument();
+    expect(groups.map(region => region.getAttribute('data-instance-id'))).toEqual(['claude-code']);
     expect(within(claude).getByText('Set for this Factory.')).toBeInTheDocument();
     expect(within(claude).getByRole('button', { name: /^Claude Code default model/ })).toHaveTextContent(/Opus 4\.6/);
     // The reasoning select comes from the model's `role: 'reasoning'` descriptor, whatever its id.
     expect(within(within(claude).getByRole('radiogroup', { name: 'Reasoning' })).getByRole('radio', { name: 'Max' })).toBeChecked();
+  });
+
+  it("renders a third harness's rows from its descriptors alone", async () => {
+    await stubServer({ harness: 'codex' });
+    renderSection();
 
     const codex = await group('Codex');
-    expect(within(codex).queryByText('In use')).not.toBeInTheDocument();
     expect(within(codex).getByText('Follows the catalog default: GPT-5.3 Codex.')).toBeInTheDocument();
     expect(within(codex).getByRole('button', { name: 'Use catalog default' })).toBeDisabled();
     expect(within(within(codex).getByRole('radiogroup', { name: 'Reasoning' })).getByRole('radio', { name: 'Medium' })).toBeChecked();
     // Every other descriptor gets its control: a toggle is a switch.
     expect(within(codex).getByRole('switch', { name: 'Fast' })).not.toBeChecked();
+    expect(screen.queryByRole('region', { name: /^Mastra/ })).not.toBeInTheDocument();
+  });
 
-    const mastra = await group('Mastra');
-    expect(within(mastra).getByText('Follows the catalog default: gpt-5.5.')).toBeInTheDocument();
+  it('says so when the harness the Factory runs on is not on this server', async () => {
+    await stubServer({ harness: 'claude-code', without: ['claude-code'] });
+    renderSection();
+
+    expect(await screen.findByText(/isn’t running on this server/)).toBeInTheDocument();
   });
 
   it("writes a third harness's options and model through the generic route", async () => {
-    const { writes } = await stubServer();
+    const { writes } = await stubServer({ harness: 'codex' });
     const user = userEvent.setup();
     const { client } = renderSection();
 
@@ -175,6 +188,7 @@ describe('Default models for every harness', () => {
 
   it('goes back to the catalog default', async () => {
     const { writes } = await stubServer({
+      harness: 'claude-code',
       defaults: { 'claude-code': { instanceId: 'claude-code', model: 'haiku' } },
     });
     const user = userEvent.setup();
@@ -209,15 +223,20 @@ describe('Default models for every harness', () => {
       { method: 'POST', instanceId: 'mastra' },
     ]);
     expect(await within(await group('Mastra')).findByText(/Switched 1 session/)).toBeInTheDocument();
+  });
 
-    // A harness whose sessions pick a new default up themselves asks nothing.
+  it('asks nothing for a harness whose sessions pick a new default up themselves', async () => {
+    await stubServer({ harness: 'codex' });
+    const user = userEvent.setup();
+    const { client } = renderSection();
+
     await user.click(within(await group('Codex')).getByRole('switch', { name: 'Fast' }));
     await waitForMutationsIdle(client);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('says why a write was refused, and why a harness has nothing to pick', async () => {
-    await stubServer({ status: 403, mastraNeedsSetup: true });
+  it('says why a write was refused', async () => {
+    await stubServer({ harness: 'codex', status: 403 });
     const user = userEvent.setup();
     const { client } = renderSection();
 
@@ -227,6 +246,11 @@ describe('Default models for every harness', () => {
     expect(await within(await group('Codex')).findByRole('alert')).toHaveTextContent(
       'Only organization admins can change the default model',
     );
+  });
+
+  it('says why a harness has nothing to pick', async () => {
+    await stubServer({ mastraNeedsSetup: true });
+    renderSection();
 
     expect(within(await group('Mastra')).getByText('Connect a model provider below to choose a default model.')).toBeInTheDocument();
   });
