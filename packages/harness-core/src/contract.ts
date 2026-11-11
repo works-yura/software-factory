@@ -12,6 +12,7 @@
  * harness answers a "suspension" by ending the turn and resuming the session.
  */
 import type { HarnessModels } from './models/facet.ts';
+import type { HarnessUsage } from './usage/facet.ts';
 
 /**
  * Per-run context the harness builds for a delivery and reads back while the
@@ -206,4 +207,10 @@ export interface AgentHarness {
    * agent's `factory_switch_session_model`.
    */
   readonly models?: HarnessModels;
+  /**
+   * The harness's accounts' allowances (`./usage/facet.ts`); undefined when it has no subscription
+   * accounts. The server registers it in its `HarnessUsageRegistry`, which serves the accounts' usage
+   * windows. Token counts come from `usage_update` events, not from here.
+   */
+  readonly usage?: HarnessUsage;
 }
