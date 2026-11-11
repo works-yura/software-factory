@@ -1,6 +1,7 @@
 /**
- * Firebase as an `ObservabilityProvider`: the org's service account plus a Factory's mapping make
- * one `ObservabilitySource` — Cloud Logging for logs, Crashlytics for the mapped apps' crashes.
+ * Firebase as an `ObservabilityProvider`: each binding of a Factory (an account's key plus one
+ * Google Cloud project) makes one `ObservabilitySource` — Cloud Logging for logs, Crashlytics for the
+ * bound apps' crashes.
  */
 
 import { ObservabilityUnsupportedError } from '@factory/capabilities';
@@ -12,6 +13,7 @@ import type {
   ObservabilityProvider,
   ObservabilityScope,
   ObservabilitySource,
+  ObservabilityTarget,
   QueryLogsInput,
 } from '@factory/capabilities';
 import type { IntegrationStorageHandle } from '@factory/store';
@@ -21,12 +23,16 @@ import { GoogleApiClient } from './google-api.ts';
 import { CloudLoggingReader } from './logging.ts';
 import { ServiceAccountTokens } from './service-account.ts';
 import type { FetchLike, ServiceAccountKey } from './service-account.ts';
-import { readFactoryMapping, readServiceAccount, readsCrashes } from './settings.ts';
-import type { FirebaseFactoryMapping } from './settings.ts';
+import { bindingReads, readAccountKey, readFirebaseState, readsCrashes } from './settings.ts';
+import type { FirebaseBinding } from './settings.ts';
+
+/** What one source reads: a binding's project, features and apps. */
+export type FirebaseSourceBinding = Pick<FirebaseBinding, 'projectId' | 'projectNumber' | 'logs' | 'crashes' | 'apps'> &
+  Partial<Pick<FirebaseBinding, 'id'>>;
 
 export interface FirebaseSourceOptions {
   key: ServiceAccountKey;
-  mapping: FirebaseFactoryMapping;
+  binding: FirebaseSourceBinding;
   fetch?: FetchLike;
   now?: () => Date;
   /** Reuse a token cache across sources of one key. */
@@ -35,40 +41,50 @@ export interface FirebaseSourceOptions {
 
 export class FirebaseObservabilitySource implements ObservabilitySource {
   readonly provider = 'firebase';
+  readonly target: ObservabilityTarget;
   readonly features: ObservabilityFeatures;
   readonly apps: readonly ObservabilityApp[];
   readonly #logging: CloudLoggingReader;
   readonly #crashlytics: CrashlyticsReader;
 
-  constructor({ key, mapping, fetch, now, tokens }: FirebaseSourceOptions) {
+  constructor({ key, binding, fetch, now, tokens }: FirebaseSourceOptions) {
     const client = new GoogleApiClient({
-      tokens: tokens ?? new ServiceAccountTokens(key, { ...(fetch ? { fetch } : {}), ...(now ? { now } : {}) }),
-      projectId: mapping.projectId,
+      tokens: tokens ?? new ServiceAccountTokens(key, fetch ? { fetch } : {}),
+      projectId: binding.projectId,
       ...(fetch ? { fetch } : {}),
     });
-    this.apps = mapping.apps.map(app => ({ appId: app.appId, platform: app.platform, ...(app.label ? { label: app.label } : {}) }));
-    this.features = { logs: mapping.logs, crashes: readsCrashes(mapping) };
-    this.#logging = new CloudLoggingReader(client, mapping.projectId, now);
-    this.#crashlytics = new CrashlyticsReader(client, mapping.projectNumber ?? mapping.projectId, this.apps, now);
+    this.target = { ref: binding.id ?? binding.projectId, name: binding.projectId };
+    this.apps = binding.apps.map(app => ({ appId: app.appId, platform: app.platform, ...(app.label ? { label: app.label } : {}) }));
+    this.features = { logs: binding.logs, crashes: readsCrashes(binding) };
+    this.#logging = new CloudLoggingReader(client, binding.projectId, now);
+    this.#crashlytics = new CrashlyticsReader(client, binding.projectNumber ?? binding.projectId, this.apps, now);
   }
 
   queryLogs(input: QueryLogsInput) {
-    if (!this.features.logs) return Promise.reject(new ObservabilityUnsupportedError('Logs are not enabled for this Factory.'));
+    if (!this.features.logs) {
+      return Promise.reject(new ObservabilityUnsupportedError(`Logs are not enabled for Google Cloud project ${this.target.name}.`));
+    }
     return this.#logging.query(input);
   }
 
   listCrashIssues(input: ListCrashIssuesInput) {
-    if (!this.features.crashes) return Promise.reject(new ObservabilityUnsupportedError('No app is mapped for crashes in this Factory, or crashes are switched off.'));
+    if (!this.features.crashes) return Promise.reject(this.#noCrashes());
     return this.#crashlytics.listIssues(input);
   }
 
   getCrashIssue(input: GetCrashIssueInput) {
-    if (!this.features.crashes) return Promise.reject(new ObservabilityUnsupportedError('No app is mapped for crashes in this Factory, or crashes are switched off.'));
+    if (!this.features.crashes) return Promise.reject(this.#noCrashes());
     return this.#crashlytics.getIssue(input);
+  }
+
+  #noCrashes() {
+    return new ObservabilityUnsupportedError(
+      `No app is bound for crashes in Google Cloud project ${this.target.name}, or crashes are switched off.`,
+    );
   }
 }
 
-/** Sources per Factory from the org's connection and settings; `null` when either is missing. */
+/** A Factory's sources, one per binding that reads anything and whose account still has a key. */
 export class FirebaseObservabilityProvider implements ObservabilityProvider {
   readonly provider = 'firebase';
   readonly #storage: Pick<IntegrationStorageHandle, 'connections' | 'settings'>;
@@ -80,18 +96,33 @@ export class FirebaseObservabilityProvider implements ObservabilityProvider {
     this.#fetch = options.fetch;
   }
 
-  async sourceFor(scope: ObservabilityScope): Promise<ObservabilitySource | null> {
-    const mapping = await readFactoryMapping(this.#storage, scope.orgId, scope.factoryProjectId);
-    if (!mapping || (!mapping.logs && !readsCrashes(mapping))) return null;
-    const key = await readServiceAccount(this.#storage, scope.orgId);
-    if (!key) return null;
-    // One token cache per key, so a session's several calls share a token.
-    const cacheKey = `${scope.orgId}:${key.private_key_id}`;
+  /** One token cache per key, so a session's several calls share a token. */
+  tokensFor(orgId: string, key: ServiceAccountKey): ServiceAccountTokens {
+    const cacheKey = `${orgId}:${key.client_email}:${key.private_key_id}`;
     let tokens = this.#tokens.get(cacheKey);
     if (!tokens) {
       tokens = new ServiceAccountTokens(key, this.#fetch ? { fetch: this.#fetch } : {});
       this.#tokens.set(cacheKey, tokens);
     }
-    return new FirebaseObservabilitySource({ key, mapping, tokens, ...(this.#fetch ? { fetch: this.#fetch } : {}) });
+    return tokens;
+  }
+
+  async sourcesFor(scope: ObservabilityScope): Promise<ObservabilitySource[]> {
+    const { bindings } = await readFirebaseState(this.#storage, scope.orgId);
+    const sources: ObservabilitySource[] = [];
+    for (const binding of bindings) {
+      if (binding.factoryProjectId !== scope.factoryProjectId || !bindingReads(binding)) continue;
+      const key = await readAccountKey(this.#storage, scope.orgId, binding.accountId);
+      if (!key) continue;
+      sources.push(
+        new FirebaseObservabilitySource({
+          key,
+          binding,
+          tokens: this.tokensFor(scope.orgId, key),
+          ...(this.#fetch ? { fetch: this.#fetch } : {}),
+        }),
+      );
+    }
+    return sources;
   }
 }

@@ -1,11 +1,12 @@
 /**
- * A Google service account's key, and OAuth access tokens minted from it (the JWT bearer grant,
- * RFC 7523): no Google SDK, only `node:crypto`. The key never leaves this module except into the
- * encrypted connection row; what anything else sees is `serviceAccountSummary`.
+ * A Google service account's key, and OAuth access tokens minted from it with Google's own
+ * `google-auth-library` (JWT bearer grant, token caching). The key never leaves this module except
+ * into the encrypted connection row; what anything else sees is `serviceAccountSummary`.
  */
 
-import { createPrivateKey, createSign } from 'node:crypto';
+import { createPrivateKey } from 'node:crypto';
 
+import { JWT } from 'google-auth-library';
 import { z } from 'zod';
 
 /** The only token endpoint a key may name: a key pointing elsewhere would send its signed grant there. */
@@ -29,12 +30,14 @@ export const serviceAccountKeySchema = z.object({
   private_key: z.string().includes('PRIVATE KEY'),
   client_email: z.string().email(),
   token_uri: z.string().optional(),
+  universe_domain: z.string().optional(),
 });
 export type ServiceAccountKey = z.infer<typeof serviceAccountKeySchema>;
 
 /** What may be shown about a key: never the key itself. */
 export interface ServiceAccountSummary {
   clientEmail: string;
+  /** The Google Cloud project the key was created in. */
   projectId: string;
   keyId: string;
 }
@@ -59,30 +62,19 @@ export function parseServiceAccountKey(json: string): ServiceAccountKey {
   if (parsed.data.token_uri !== undefined && parsed.data.token_uri !== GOOGLE_TOKEN_URI) {
     throw new ServiceAccountKeyError(`The key's token_uri must be ${GOOGLE_TOKEN_URI}.`);
   }
+  if (parsed.data.universe_domain !== undefined && parsed.data.universe_domain !== 'googleapis.com') {
+    throw new ServiceAccountKeyError('The key must be for googleapis.com (universe_domain).');
+  }
   try {
     createPrivateKey(parsed.data.private_key);
   } catch {
-    throw new ServiceAccountKeyError('The key\'s private_key cannot be read. Download a new key.');
+    throw new ServiceAccountKeyError("The key's private_key cannot be read. Download a new key.");
   }
   return parsed.data;
 }
 
 export function serviceAccountSummary(key: ServiceAccountKey): ServiceAccountSummary {
   return { clientEmail: key.client_email, projectId: key.project_id, keyId: key.private_key_id };
-}
-
-const base64url = (value: string | Buffer) => Buffer.from(value).toString('base64url');
-
-/** A signed JWT assertion for the token endpoint. */
-export function signServiceAccountAssertion(key: ServiceAccountKey, scope: string, now: Date): string {
-  const issuedAt = Math.floor(now.getTime() / 1000);
-  const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: key.private_key_id }));
-  const claims = base64url(
-    JSON.stringify({ iss: key.client_email, scope, aud: GOOGLE_TOKEN_URI, iat: issuedAt, exp: issuedAt + 3600 }),
-  );
-  const signer = createSign('RSA-SHA256');
-  signer.update(`${header}.${claims}`);
-  return `${header}.${claims}.${base64url(signer.sign(key.private_key))}`;
 }
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -92,46 +84,51 @@ export class GoogleAuthError extends Error {
   override name = 'GoogleAuthError';
 }
 
-/** Access tokens for one key, cached per scope until a minute before they expire. */
+/**
+ * Access tokens for one key: a Google `JWT` client per scope, which signs the assertion, calls the
+ * token endpoint and caches the token until shortly before it expires.
+ */
 export class ServiceAccountTokens {
   readonly #key: ServiceAccountKey;
-  readonly #fetch: FetchLike;
-  readonly #now: () => Date;
-  readonly #cache = new Map<string, { token: string; expiresAt: number }>();
+  readonly #fetch: FetchLike | undefined;
+  readonly #clients = new Map<string, JWT>();
 
-  constructor(key: ServiceAccountKey, options: { fetch?: FetchLike; now?: () => Date } = {}) {
+  constructor(key: ServiceAccountKey, options: { fetch?: FetchLike } = {}) {
     this.#key = key;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
-    this.#now = options.now ?? (() => new Date());
+    this.#fetch = options.fetch;
+  }
+
+  #client(scope: GoogleScope): JWT {
+    let client = this.#clients.get(scope);
+    if (!client) {
+      client = new JWT({
+        email: this.#key.client_email,
+        key: this.#key.private_key,
+        keyId: this.#key.private_key_id,
+        scopes: [scope],
+        // Tests answer for Google; production uses the library's own fetch.
+        ...(this.#fetch ? { transporterOptions: { fetchImplementation: this.#fetch as typeof fetch } } : {}),
+      });
+      this.#clients.set(scope, client);
+    }
+    return client;
   }
 
   async token(scope: GoogleScope): Promise<string> {
-    const now = this.#now();
-    const cached = this.#cache.get(scope);
-    if (cached && cached.expiresAt - 60_000 > now.getTime()) return cached.token;
-    const response = await this.#fetch(GOOGLE_TOKEN_URI, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-        assertion: signServiceAccountAssertion(this.#key, scope, now),
-      }).toString(),
-    });
-    const body = (await response.json().catch(() => ({}))) as {
-      access_token?: string;
-      expires_in?: number;
-      error?: string;
-      error_description?: string;
-    };
-    if (!response.ok || !body.access_token) {
+    let token: string | null | undefined;
+    try {
+      token = (await this.#client(scope).getAccessToken()).token;
+    } catch (error) {
       // Only Google's error code and description: the response never echoes the key.
+      const response = (error as { response?: { status?: number; data?: { error?: string; error_description?: string } } }).response;
+      const code = response?.data?.error ?? response?.status ?? 'unreachable';
+      const description = response?.data?.error_description;
       throw new GoogleAuthError(
-        `Google refused the service account key (${body.error ?? response.status}${
-          body.error_description ? `: ${body.error_description}` : ''
-        }). The key may be deleted or the account disabled; upload a new key.`,
+        `Google refused the service account key (${code}${description ? `: ${description}` : ''}). ` +
+          'The key may be deleted or the account disabled; upload a new key.',
       );
     }
-    this.#cache.set(scope, { token: body.access_token, expiresAt: now.getTime() + (body.expires_in ?? 3600) * 1000 });
-    return body.access_token;
+    if (!token) throw new GoogleAuthError('Google returned no access token for the service account key.');
+    return token;
   }
 }
