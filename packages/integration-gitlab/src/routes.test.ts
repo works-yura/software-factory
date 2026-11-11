@@ -14,17 +14,57 @@ function buildApp(
   gitlab: GitLabIntegrationBase,
   user: TestAuthUser | null,
   intake?: Parameters<typeof buildGitLabRoutes>[0]['intake'],
+  routing: Pick<Parameters<typeof buildGitLabRoutes>[0], 'intakeRoutes' | 'sourceControl'> = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app, buildGitLabRoutes({ gitlab, auth: fakeRouteAuth({ enabled: true }), intake }));
+  mountApiRoutes(app, buildGitLabRoutes({ gitlab, auth: fakeRouteAuth({ enabled: true }), intake, ...routing }));
   return app;
 }
 
 const orgUser = (): TestAuthUser => ({ id: 'u1', organizationId: 'org1' });
+
+/** GitLab projects linked to one Factory project, as GitLab's source-control partition stores them. */
+function linkedGitLabProjects(
+  factoryProjectId: string,
+  projects: Array<{ externalId: string; slug: string }>,
+  host = 'gitlab.com',
+) {
+  return {
+    connections: {
+      list: async (input: { factoryProjectId?: string }) =>
+        input.factoryProjectId === factoryProjectId ? [{ id: 'c1', integrationId: 'gitlab', installationId: 'i1' }] : [],
+    },
+    installations: { get: async () => ({ providerMetadata: { host } }) },
+    projectRepositories: { list: async () => projects.map((_, index) => ({ repositoryId: `r${index}` })) },
+    repositories: { get: async ({ id }: { id: string }) => projects[Number(id.slice(1))] ?? null },
+  } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['sourceControl']>;
+}
+
+/** The Factory project's intake routes, naming GitLab project paths. */
+function routesNaming(factoryProjectId: string, paths: string[]) {
+  return {
+    listIntakeRoutes: async (scope: { factoryProjectId: string }) =>
+      scope.factoryProjectId !== factoryProjectId
+        ? []
+        : paths.map(path => ({
+            id: path,
+            enabled: true,
+            on: ['work_item.created'],
+            when: {
+              operator: 'AND',
+              conditions: [
+                { field: 'source.integration', operator: 'equals', value: 'gitlab' },
+                { field: 'source.repository', operator: 'equals', value: path },
+              ],
+            },
+            target: { boardKey: 'work' },
+          })),
+  } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intakeRoutes']>;
+}
 
 describe('GitLab webhook auth boundary', () => {
   it('passes an unauthenticated delivery through the auth gate to GitLab token verification', async () => {
@@ -246,58 +286,10 @@ describe('GitLab UI routes', () => {
       },
     });
   });
-  it('migrates legacy connection-bound selections and bindings to canonical project identity', async () => {
-    const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
-    const legacyId = encodeSourceId({ connectionId: 'direct', projectId: '10', projectPath: 'acme/old-app' });
-    const canonicalId = encodeSourceId({ host: 'gitlab.com', projectId: '10' });
-    vi.spyOn(gitlab.versionControl, 'registerInstallation').mockResolvedValue({
-      id: 'gitlab-installation-1',
-    } as never);
-    vi.spyOn(gitlab.intake, 'listSources').mockResolvedValue([
-      {
-        id: canonicalId,
-        name: 'acme/app',
-        type: 'project',
-        metadata: {
-          connectionId: 'direct',
-          accountLabel: 'gitlab.com',
-          projectId: '10',
-          projectPath: 'acme/app',
-          defaultBranch: 'main',
-        },
-      },
-    ]);
-    const intake = {
-      ensureReady: vi.fn(),
-      getConfig: vi.fn().mockResolvedValue({
-        github: { enabled: false, sourceIds: null },
-        gitlab: { enabled: true, sourceIds: [legacyId, canonicalId] },
-      }),
-      listBindings: vi
-        .fn()
-        .mockResolvedValue([
-          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1' },
-        ]),
-      migrateSourceIds: vi.fn().mockResolvedValue({
-        migrations: [{ from: legacyId, to: canonicalId }],
-        conflicts: [],
-      }),
-    };
-
-    const response = await buildApp(gitlab, orgUser(), intake as never).request('/web/gitlab/projects');
-
-    expect(response.status).toBe(200);
-    expect(intake.migrateSourceIds).toHaveBeenCalledWith({
-      orgId: 'org1',
-      integrationId: 'gitlab',
-      migrations: [{ from: legacyId, to: canonicalId }],
-    });
-  });
-
-  it('lists only selected GitLab sources routed to the caller-owned Factory', async () => {
+  it('lists only the linked GitLab projects a route of the caller-owned Factory names', async () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
-    const sourceId = encodeSourceId({ connectionId: 'direct', projectId: '10', projectPath: 'acme/app' });
+    const sourceId = encodeSourceId({ host: 'gitlab.com', projectId: '10' });
     vi.spyOn(gitlab, 'resolveOrgId').mockResolvedValue('org1');
     vi.spyOn(gitlab.intake, 'listIssues').mockResolvedValue({
       issues: [
@@ -324,14 +316,18 @@ describe('GitLab UI routes', () => {
     });
     const intake = {
       ensureReady: vi.fn(),
-      getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId, 'other'] } }),
-      listBindings: vi.fn().mockResolvedValue([
-        { integrationId: 'gitlab', sourceId, factoryProjectId },
-        { integrationId: 'gitlab', sourceId: 'other', factoryProjectId: 'another-factory' },
-      ]),
+      getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: null } }),
     } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
+    // acme/app is linked and routed; acme/unrouted is linked but no route names it.
+    const routing = {
+      intakeRoutes: routesNaming(factoryProjectId, ['acme/app']),
+      sourceControl: linkedGitLabProjects(factoryProjectId, [
+        { externalId: '10', slug: 'acme/app' },
+        { externalId: '11', slug: 'acme/unrouted' },
+      ]),
+    };
 
-    const response = await buildApp(gitlab, orgUser(), intake).request(
+    const response = await buildApp(gitlab, orgUser(), intake, routing).request(
       '/web/gitlab/issues?factoryProjectId=' + factoryProjectId,
     );
     const body = await response.json();
@@ -341,7 +337,7 @@ describe('GitLab UI routes', () => {
     expect(gitlab.intake.listIssues).toHaveBeenCalledWith(expect.objectContaining({ sourceIds: [sourceId] }));
   });
 
-  it('loads details only for a selected GitLab source routed to the caller-owned Factory', async () => {
+  it('loads details only for a GitLab project routed to the caller-owned Factory', async () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
     const source = { host: 'gitlab.com', projectId: '10' };
@@ -370,11 +366,14 @@ describe('GitLab UI routes', () => {
     });
     const intake = {
       ensureReady: vi.fn(),
-      getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId] } }),
-      listBindings: vi.fn().mockResolvedValue([{ integrationId: 'gitlab', sourceId, factoryProjectId }]),
+      getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: null } }),
     } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
+    const routing = {
+      intakeRoutes: routesNaming(factoryProjectId, ['acme/app']),
+      sourceControl: linkedGitLabProjects(factoryProjectId, [{ externalId: '10', slug: 'acme/app' }]),
+    };
 
-    const response = await buildApp(gitlab, orgUser(), intake).request(
+    const response = await buildApp(gitlab, orgUser(), intake, routing).request(
       '/web/gitlab/issues/' + encodeURIComponent(issueId) + '?factoryProjectId=' + factoryProjectId,
     );
 
@@ -398,10 +397,14 @@ describe('GitLab UI routes', () => {
     const intake = {
       ensureReady: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId] } }),
-      listBindings: vi.fn().mockResolvedValue([]),
     } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
+    // Linked, and in the old selection, but no route of this Factory names it: not read.
+    const routing = {
+      intakeRoutes: routesNaming(factoryProjectId, []),
+      sourceControl: linkedGitLabProjects(factoryProjectId, [{ externalId: '10', slug: 'acme/app' }]),
+    };
 
-    const response = await buildApp(gitlab, orgUser(), intake).request(
+    const response = await buildApp(gitlab, orgUser(), intake, routing).request(
       '/web/gitlab/issues/' + encodeURIComponent(issueId) + '?factoryProjectId=' + factoryProjectId,
     );
 

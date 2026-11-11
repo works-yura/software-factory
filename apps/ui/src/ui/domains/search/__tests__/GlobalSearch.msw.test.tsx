@@ -385,7 +385,6 @@ describe('Global search', () => {
         const patches: unknown[] = [];
         const starts: unknown[] = [];
         server.use(
-          http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
           http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/boards`, () =>
             HttpResponse.json({ boards: [releaseBoard] }),
           ),

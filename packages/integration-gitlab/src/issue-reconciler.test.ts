@@ -6,6 +6,7 @@ import { createFactoryStorageForTests } from '@factory/testing';
 import type { IntegrationContext } from '@factory/integrations';
 import { encodeIssueReference, encodeSourceId, GitLabIntegration } from './integration.ts';
 import { attachGitLabIssueReconciler } from './issue-reconciler.ts';
+import { routeGitLabProject } from './routed-projects.test-support.ts';
 
 const PROJECT_ID = '101';
 const PROJECT_PATH = 'acme/app';
@@ -57,13 +58,7 @@ describe('GitLab issue reconciler', () => {
         orgId: project.orgId,
         config: { gitlab: { enabled: true, sourceIds: [SOURCE_ID] } },
       });
-      await seeded.intake.setBinding({
-        orgId: project.orgId,
-        userId: project.createdBy,
-        integrationId: 'gitlab',
-        sourceId: SOURCE_ID,
-        factoryProjectId: project.id,
-      });
+      await routeGitLabProject(seeded.storedBoards, { orgId: project.orgId, factoryProjectId: project.id }, PROJECT_PATH);
       await seeded.workItems.upsert({
         orgId: project.orgId,
         userId: project.createdBy,
@@ -135,6 +130,7 @@ describe('GitLab issue reconciler', () => {
           configVersion: 'gitlab-test-v1',
           workItems: seeded.workItems,
           boards: createBoardRegistry(),
+          intakeRoutes: seeded.storedBoards,
         },
       } as unknown as IntegrationContext;
       const reconcile = attachGitLabIssueReconciler(gitlab, context);

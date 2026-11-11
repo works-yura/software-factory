@@ -8,6 +8,7 @@ import type { IntegrationContext } from '@factory/integrations';
 import { resolveGitLabRules } from './default-rules.ts';
 import { encodeSourceId } from './integration.ts';
 import { attachGitLabMergeRequestReconciler } from './merge-request-reconciler.ts';
+import { routeGitLabProject } from './routed-projects.test-support.ts';
 import { mergeRequestTargetKey, subscribeToMergeRequest } from './subscriptions.ts';
 
 const PROJECT_ID = '101';
@@ -94,13 +95,7 @@ async function seedMergeRequestCard({ initialStage, initialState, missingIdentit
     orgId: project.orgId,
     config: { gitlab: { enabled: true, sourceIds: [SOURCE_ID] } },
   });
-  await seeded.intake.setBinding({
-    orgId: project.orgId,
-    userId: project.createdBy,
-    integrationId: 'gitlab',
-    sourceId: SOURCE_ID,
-    factoryProjectId: project.id,
-  });
+  await routeGitLabProject(seeded.storedBoards, { orgId: project.orgId, factoryProjectId: project.id }, PROJECT_PATH);
   const item = await seeded.workItems.upsert({
     orgId: project.orgId,
     userId: project.createdBy,
@@ -177,6 +172,7 @@ function createReconciler(
       configVersion: 'gitlab-test-v1',
       workItems: seeded.seeded.workItems,
       boards: createBoardRegistry(),
+      intakeRoutes: seeded.seeded.storedBoards,
     },
   } as unknown as IntegrationContext;
   const commitRuleEvaluation = vi.spyOn(seeded.seeded.workItems, 'commitRuleEvaluation');

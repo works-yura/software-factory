@@ -9,7 +9,7 @@ import {
   useGitLabMergeRequestsQuery,
   useGitLabStatusQuery,
 } from '../../../../hooks/useGitLabData';
-import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
+import { useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import {
   gitlabCandidate,
@@ -21,7 +21,6 @@ import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidate
 import type { BoardFilterState } from '../boardFilters';
 import { isPersistedCandidate } from '../boardItems';
 import { pickedBoardSources, PULL_REQUEST_SOURCE_FILTER } from '../boardSourceFilters';
-import type { IntakeSourceBinding } from '../services/intake';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { BoardStageId } from '../stages';
 
@@ -31,8 +30,8 @@ import type { BoardStageId } from '../stages';
  *
  * Every new card is filed on the default board before the project's intake
  * routes place it, so only the default board lists items that have no card
- * yet: GitHub issues from the selected repositories, the linked repositories'
- * pull requests, and the issues of GitLab projects bound to the project.
+ * yet: GitHub issues and GitLab project issues from the linked repositories the project's intake
+ * routes name, and the linked repositories' pull requests.
  */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 const NO_REPOSITORIES: readonly string[] = [];
@@ -43,18 +42,6 @@ const INTAKE_CARD_SOURCES: Record<IntakeSource, BoardCandidate['source']> = {
   'gitlab-prs': 'gitlab-pr',
   gitlab: 'gitlab-issue',
 };
-
-/** Keep only issues whose source is bound to the project. */
-function issuesFromBoundSources<T extends { sourceId?: unknown }>(
-  issues: readonly T[],
-  bindings: readonly IntakeSourceBinding[],
-): T[] {
-  return issues.filter(issue => {
-    const sourceId = issue.sourceId;
-    if (typeof sourceId !== 'string' || !sourceId) return false;
-    return bindings.some(binding => binding.sourceId === sourceId);
-  });
-}
 
 /** Routing failures retry discovery rather than the provider's issue list. */
 function feedWithRoutingFailure(
@@ -142,40 +129,28 @@ export function useBoardIntake({
     .map(linked => linked.projectRepositoryId);
   const githubSelected = githubRepositoryIds.length > 0;
   const gitlabConnected = Boolean(gitlabStatusQuery.data?.enabled && gitlabStatusQuery.data.configured);
-  // A provider feeds the project only through a source bound to it, so viewing
-  // a board never ingests issues nobody asked the project to take.
-  const bindingsQuery = useIntakeBindingsQuery();
-  const routedHereFor = (integrationId: string) =>
-    defaultBoard &&
-    (bindingsQuery.data ?? []).some(
-      binding => binding.integrationId === integrationId && binding.factoryProjectId === factoryProjectId,
-    );
-  const gitlabRouted = routedHereFor('gitlab');
-  const gitlabEligible =
-    (config?.gitlab.enabled ?? false) && gitlabConnected && (config?.gitlab.sourceIds?.length ?? 0) > 0;
-  // Bindings decide whether this board gets a provider feed at all, so an
-  // eligible board stays pending until they load rather than looking empty,
-  // and a failed load is shown as a feed error (with retry) rather than
-  // being mistaken for "nothing bound here".
+  // GitLab issues come, like GitHub's, only from the linked projects the project's intake routes
+  // name (a GitLab route on `source.repository`), so viewing a board never ingests issues nobody
+  // asked the project to take.
+  const gitlabEligible = (config?.gitlab.enabled ?? false) && gitlabConnected;
+  const gitlabPaths = projectRoutesQuery.data
+    ? routedSourceScopes(projectRoutesQuery.data as unknown as IntakeRoute[], 'source.repository', 'gitlab').map(path =>
+        path.toLowerCase(),
+      )
+    : [];
+  const gitlabRouted = repositories.some(
+    linked => linked.provider === 'gitlab' && gitlabPaths.includes(linked.slug.toLowerCase()),
+  );
+  // The routes decide whether this board gets the GitLab feed at all, so an eligible board stays
+  // pending until they load rather than looking empty, and a failed load is shown as a feed error
+  // (with retry) rather than being mistaken for "nothing routed here".
   const providerEligible = defaultBoard && gitlabEligible;
-  const bindingsPending = providerEligible && bindingsQuery.isPending;
-  const bindingsFailed = providerEligible && bindingsQuery.isError;
-  const gitlabReady = gitlabEligible && (gitlabRouted || bindingsFailed);
-
-  // Provider sources are shared across factories, so one counts only once it is bound to this
-  // project; until bindings load (or when they fail) the setup prompt waits.
-  const boundToProject = (integrationId: string, sourceIds: readonly string[] | null | undefined) =>
-    bindingsQuery.isPending ||
-    bindingsQuery.isError ||
-    (bindingsQuery.data ?? []).some(
-      binding =>
-        binding.integrationId === integrationId &&
-        binding.factoryProjectId === factoryProjectId &&
-        (sourceIds?.includes(binding.sourceId) ?? false),
-    );
+  const routesPending = providerEligible && projectRoutesQuery.isPending;
+  const routesFailed = providerEligible && projectRoutesQuery.isError;
+  const gitlabReady = providerEligible && (gitlabRouted || routesFailed);
   // ClickUp is read only in the Lists this project's intake routes name, and files cards only
   // through those routes, never a feed the board browses. While the routes load (or fail) the
-  // setup prompt waits, as for bindings.
+  // setup prompt waits.
   const clickupEnabled = config?.clickup.enabled ?? false;
   const clickupRouted =
     clickupEnabled &&
@@ -184,7 +159,7 @@ export function useBoardIntake({
       routedSourceScopes((projectRoutesQuery.data ?? []) as unknown as IntakeRoute[], 'source.list').length > 0);
   const sourceConnected =
     (!gitlabRepository && githubEnabled && githubSelected) ||
-    (gitlabEligible && boundToProject('gitlab', config?.gitlab.sourceIds)) ||
+    (gitlabEligible && (projectRoutesQuery.isPending || projectRoutesQuery.isError || gitlabRouted)) ||
     clickupRouted;
   const githubIntakeActive = !gitlabRepository && defaultBoard && githubEnabled && githubSelected;
   const pullRequestSource: IntakeSource = gitlabRepository ? 'gitlab-prs' : 'github-prs';
@@ -234,7 +209,6 @@ export function useBoardIntake({
     AUTO_TRIAGED_LABEL,
   );
   const boardIssues = issues.data ?? [];
-  const projectBindings = (bindingsQuery.data ?? []).filter(binding => binding.factoryProjectId === factoryProjectId);
   const pulls = useProjectPullRequestsQuery(
     browsesPullRequests && !gitlabRepository ? reviewRepositoryIds : NO_REPOSITORIES,
   );
@@ -243,10 +217,8 @@ export function useBoardIntake({
     browsesPullRequests && gitlabRepository ? projectRepositoryId : undefined,
   );
   const gitlabIssues = useGitLabIssuesQuery(gitlabReady ? factoryProjectId : undefined);
-  const boardGitLabIssues = issuesFromBoundSources(
-    gitlabIssues.data ?? [],
-    projectBindings.filter(binding => binding.integrationId === 'gitlab'),
-  );
+  // The server lists only the routed, linked projects' issues.
+  const boardGitLabIssues = gitlabIssues.data ?? [];
 
   const githubReviewCandidates = (pulls.data ?? []).map(pullRequestCandidate);
   const gitlabReviewCandidates = (mergeRequests.data ?? []).map(gitlabMergeRequestCandidate);
@@ -275,7 +247,7 @@ export function useBoardIntake({
     isPersistedCandidate(elsewhereSourceKeys, candidate),
   ).length;
 
-  const gitlabFeed = feedWithRoutingFailure(gitlabIssues, bindingsQuery, bindingsFailed);
+  const gitlabFeed = feedWithRoutingFailure(gitlabIssues, projectRoutesQuery, routesFailed);
   const browsed = {
     github: issues,
     'github-prs': pulls,
@@ -300,7 +272,7 @@ export function useBoardIntake({
   // Keep an unresolved board pending while discovering its routed sources.
   const discoveringSources =
     ((config?.gitlab.enabled ?? false) && gitlabStatusQuery.isPending) ||
-    bindingsPending ||
+    routesPending ||
     intakeRoutesPending;
   const isConfigurationPending = configQuery.isPending;
   const isPending = isConfigurationPending || discoveringSources || Boolean(feed?.isPending);

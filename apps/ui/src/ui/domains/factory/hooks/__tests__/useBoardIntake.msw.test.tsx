@@ -1,8 +1,8 @@
 /**
  * BDD coverage for the Intake swimlane's provider gating: every new card is filed
  * on the default board before the project's intake routes place it, so only Work
- * offers feeds, and a GitLab feed only once one of its sources is bound to the
- * Factory project being viewed.
+ * offers feeds, and a GitLab feed only once a route of the Factory project being
+ * viewed names one of its linked GitLab projects.
  */
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -16,11 +16,31 @@ import { queryKeys } from '../../../../../api/keys';
 import type { InstalledBoardInfo } from '../../../../../api/types';
 import type { GithubIssue } from '../../services/factory';
 import type { GitLabIssue } from '../../services/gitlab';
-import type { IntakeSourceBinding } from '../../services/intake';
 import { useBoardIntake } from '../useBoardIntake';
 import { gitlabOnlyConfig, disabledGitlab } from './fixtures/query-loading';
 
 const repository: LinkedRepositoryPayload = { projectRepositoryId: 'repo-1', slug: 'acme/app' };
+/** A GitLab project linked to the Factory project alongside the GitHub one. */
+const gitlabRepository: LinkedRepositoryPayload = { projectRepositoryId: 'repo-gl', slug: 'acme/gl', provider: 'gitlab' };
+
+/** A route of the Factory project subscribing it to the GitLab project at `path`. */
+const gitlabRoute = (path: string, position = 0) => ({
+  id: `route-${path}`,
+  name: `GitLab: ${path}`,
+  enabled: true,
+  position,
+  on: ['work_item.created'],
+  when: {
+    operator: 'AND',
+    conditions: [
+      { field: 'source.integration', operator: 'equals', value: 'gitlab' },
+      { field: 'source.repository', operator: 'equals', value: path },
+    ],
+  },
+  target: { boardKey: 'work', phaseKey: null },
+});
+
+const ROUTES_URL = `${TEST_BASE_URL}/web/factory/projects/:id/intake-routes`;
 const workBoard = builtinBoardCatalog.boards.find(board => board.id === 'work')!;
 
 const gitlabIssue = (identifier: string, sourceId: string): GitLabIssue => ({
@@ -42,7 +62,8 @@ const gitlabIssue = (identifier: string, sourceId: string): GitLabIssue => ({
 });
 
 function stubIntake(
-  bindings: IntakeSourceBinding[],
+  /** The GitLab project paths each Factory project's routes name. */
+  routed: Record<string, string[]>,
   factoryIds: string[] = ['factory-1', 'factory-2'],
   issues: GitLabIssue[] = [],
 ) {
@@ -60,7 +81,9 @@ function stubIntake(
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings })),
+    http.get(ROUTES_URL, ({ params }) =>
+      HttpResponse.json({ intakeRoutes: (routed[String(params.id)] ?? []).map(path => gitlabRoute(path)) }),
+    ),
     http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
       HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
     ),
@@ -76,23 +99,27 @@ const renderIntake = (
   elsewhereSourceKeys?: Set<string>,
 ) =>
   renderHookWithProviders(() =>
-    useBoardIntake({ factoryProjectId, repositories: [repository], definition, knownSourceKeys, elsewhereSourceKeys }),
+    useBoardIntake({
+      factoryProjectId,
+      repositories: [repository, gitlabRepository],
+      definition,
+      knownSourceKeys,
+      elsewhereSourceKeys,
+    }),
   );
 
 describe('useBoardIntake GitLab gating', () => {
-  it('given a source bound to Work on the viewed project, when the board loads, then the GitLab feed is offered', async () => {
-    stubIntake([{ integrationId: 'gitlab', sourceId: 'proj-1', factoryProjectId: 'factory-1', board: 'work' }]);
+  it('given a route of the viewed project naming a linked GitLab project, then the GitLab feed is offered', async () => {
+    stubIntake({ 'factory-1': ['acme/gl'] });
 
     const { result } = renderIntake('factory-1');
 
     await waitFor(() => expect(result.current.available).toContain('gitlab'));
   });
 
-  it('reports a failed binding load instead of treating it as nothing bound', async () => {
-    stubIntake([]);
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
-    );
+  it('reports a failed route load instead of treating it as nothing routed', async () => {
+    stubIntake({});
+    server.use(http.get(ROUTES_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));
 
     const { result } = renderIntake('factory-1');
 
@@ -102,40 +129,34 @@ describe('useBoardIntake GitLab gating', () => {
     expect(result.current.feedByColumn.intake?.error).toBeInstanceOf(Error);
   });
 
-  it('keeps a GitLab-eligible board pending until its bindings have loaded', async () => {
-    const binding: IntakeSourceBinding = {
-      integrationId: 'gitlab',
-      sourceId: 'proj-1',
-      factoryProjectId: 'factory-1',
-      board: 'work',
-    };
-    stubIntake([binding]);
-    let releaseBindings: () => void = () => {};
-    const bindingsRequested = new Promise<void>(resolve => {
+  it('keeps a GitLab-eligible board pending until its routes have loaded', async () => {
+    stubIntake({});
+    let releaseRoutes: () => void = () => {};
+    const routesRequested = new Promise<void>(resolve => {
       server.use(
-        http.get(`${TEST_BASE_URL}/web/intake/bindings`, async () => {
+        http.get(ROUTES_URL, async () => {
           resolve();
-          await new Promise<void>(release => (releaseBindings = release));
-          return HttpResponse.json({ bindings: [binding] });
+          await new Promise<void>(release => (releaseRoutes = release));
+          return HttpResponse.json({ intakeRoutes: [gitlabRoute('acme/gl')] });
         }),
       );
     });
 
     const { result } = renderIntake('factory-1');
 
-    await bindingsRequested;
-    // Config may already be in; bindings are not. Either way the board must
+    await routesRequested;
+    // Config may already be in; the routes are not. Either way the board must
     // not present itself as a settled, feed-less board.
     expect(result.current.available).not.toContain('gitlab');
     expect(result.current.isPending).toBe(true);
 
-    releaseBindings();
+    releaseRoutes();
     await waitFor(() => expect(result.current.available).toContain('gitlab'));
     await waitFor(() => expect(result.current.isPending).toBe(false));
   });
 
-  it('given the source is bound to another Factory, when the board loads, then the GitLab feed is withheld', async () => {
-    stubIntake([{ integrationId: 'gitlab', sourceId: 'proj-1', factoryProjectId: 'factory-1', board: 'work' }]);
+  it('given only another Factory routes the GitLab project, when the board loads, then the GitLab feed is withheld', async () => {
+    stubIntake({ 'factory-1': ['acme/gl'] });
 
     const { result } = renderIntake('factory-2');
 
@@ -143,19 +164,17 @@ describe('useBoardIntake GitLab gating', () => {
     expect(result.current.available).not.toContain('gitlab');
   });
 
-  it('given a source bound to the Factory without a board, when Work loads, then the GitLab feed is offered', async () => {
-    stubIntake(
-      [{ integrationId: 'gitlab', sourceId: 'proj-1', factoryProjectId: 'factory-1', board: null }],
-      ['factory-1'],
-    );
+  it('given a route naming a GitLab project that is not linked here, then the GitLab feed is withheld', async () => {
+    stubIntake({ 'factory-1': ['acme/unlinked'] }, ['factory-1']);
 
     const { result } = renderIntake('factory-1');
 
-    await waitFor(() => expect(result.current.available).toContain('gitlab'));
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.available).toEqual([]);
   });
 
-  it('given no bindings and a single Factory, when the board loads, then the GitLab feed is still withheld', async () => {
-    stubIntake([], ['factory-1']);
+  it('given no GitLab route and a single Factory, when the board loads, then the GitLab feed is still withheld', async () => {
+    stubIntake({}, ['factory-1']);
 
     const { result } = renderIntake('factory-1');
 
@@ -164,15 +183,12 @@ describe('useBoardIntake GitLab gating', () => {
   });
 });
 
-describe('useBoardIntake sources bound to the project', () => {
-  const bindings: IntakeSourceBinding[] = [
-    { integrationId: 'gitlab', sourceId: 'proj-1', factoryProjectId: 'factory-1', board: null },
-    { integrationId: 'gitlab', sourceId: 'proj-2', factoryProjectId: 'factory-1', board: null },
-  ];
+describe('useBoardIntake sources routed to the project', () => {
+  const routed = { 'factory-1': ['acme/gl'] };
   const issues = [gitlabIssue('ENG-1', 'proj-1'), gitlabIssue('REL-1', 'proj-2')];
 
-  it("offers Work every bound source's issues on its Intake: the routes place them once filed", async () => {
-    stubIntake(bindings, ['factory-1'], issues);
+  it("offers Work the routed projects' issues on its Intake: the routes place them once filed", async () => {
+    stubIntake(routed, ['factory-1'], issues);
 
     const { result } = renderIntake('factory-1');
 
@@ -182,7 +198,7 @@ describe('useBoardIntake sources bound to the project', () => {
   });
 
   it('counts feed items held back only when their card sits on another board', async () => {
-    stubIntake(bindings, ['factory-1'], issues);
+    stubIntake(routed, ['factory-1'], issues);
     const known = new Set(['gitlab-issue:REL-1']);
 
     const elsewhere = renderIntake('factory-1', workBoard, known, known);
@@ -198,7 +214,7 @@ describe('useBoardIntake sources bound to the project', () => {
   });
 
   it('offers a custom board no provider feed: new cards reach it through intake routes', async () => {
-    stubIntake(bindings, ['factory-1'], issues);
+    stubIntake(routed, ['factory-1'], issues);
 
     const { result } = renderIntake('factory-1', releaseBoard);
 
@@ -231,7 +247,6 @@ describe('useBoardIntake ClickUp through routes', () => {
           },
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
       http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
         HttpResponse.json({ enabled: false, configured: false, reauthRequired: false }),
       ),
@@ -274,11 +289,7 @@ describe('useBoardIntake GitLab routing', () => {
           },
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
-        HttpResponse.json({
-          bindings: [{ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1', board: 'work' }],
-        }),
-      ),
+      http.get(ROUTES_URL, () => HttpResponse.json({ intakeRoutes: [gitlabRoute('acme/app')] })),
       http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
         HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
       ),
@@ -304,7 +315,7 @@ describe('useBoardIntake GitLab routing', () => {
   });
 
   it('uses the GitLab MR feed for a GitLab-linked Work board and never requests GitHub PRs', async () => {
-    stubIntake([]);
+    stubIntake({});
     let githubRequests = 0;
     server.use(
       http.get(`${TEST_BASE_URL}/web/gitlab/projects/repo-1/prs`, ({ request }) => {
@@ -352,7 +363,7 @@ describe('useBoardIntake GitLab routing', () => {
     expect(githubRequests).toBe(0);
   });
 
-  it("shows a bound GitLab project's issue on Work, without naming a board", async () => {
+  it("shows a routed GitLab project's issue on Work, without naming a board", async () => {
     const sourceId = 'gitlab-project:encoded-source';
     const issue: GitLabIssue = {
       id: '42',
@@ -380,11 +391,7 @@ describe('useBoardIntake GitLab routing', () => {
           },
         }),
       ),
-      http.get(TEST_BASE_URL + '/web/intake/bindings', () =>
-        HttpResponse.json({
-          bindings: [{ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1', board: null }],
-        }),
-      ),
+      http.get(ROUTES_URL, () => HttpResponse.json({ intakeRoutes: [gitlabRoute('acme/gl')] })),
       http.get(TEST_BASE_URL + '/web/gitlab/status', () =>
         HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
       ),
@@ -411,7 +418,7 @@ describe('useBoardIntake GitLab routing', () => {
 describe('useBoardIntake query loading', () => {
   describe('when intake configuration is still loading', () => {
     it('starts GitLab status before configuration resolves', async () => {
-      stubIntake([]);
+      stubIntake({});
       let release = () => {};
       const held = new Promise<void>(resolve => {
         release = resolve;
@@ -499,7 +506,6 @@ describe('useBoardIntake across linked repositories', () => {
           canEdit: false,
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
       http.get(`${TEST_BASE_URL}/web/github/projects/:id/issues`, ({ params, request }) => {
         const id = String(params.id);
         const labelled = new URL(request.url).searchParams.get('label');

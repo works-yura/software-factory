@@ -2,142 +2,24 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { BoardRegistry } from '@factory/core';
-import { toBoardSource } from '@factory/runtime';
-import type { ProjectBoardSource } from '@factory/runtime';
-import { moveCardToBoard, placedByIntakeRoute } from '@factory/core';
-import type { Intake, IntakeItem } from '@factory/capabilities';
+import type { Intake } from '@factory/capabilities';
 import type { AuditEmitter } from '@factory/feed';
-import { FactoryProjectNotFoundError } from '@factory/store';
 import type { IntakeConfig, IntakeStorage } from '@factory/store';
-import type { WorkItemsStorage } from '@factory/store';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
 
 export interface IntakeIntegration {
   id: string;
-  intake: Pick<Intake, 'listSources' | 'listItems' | 'bindingBoard'>;
-}
-
-interface AggregatedIntakeItem extends Omit<IntakeItem, 'source'> {
-  integrationId: string;
-  externalSource: {
-    integrationId: string;
-    type: string;
-    externalId: string;
-    url?: string;
-  };
+  intake: Pick<Intake, 'listSources'>;
 }
 
 export interface IntakeRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
   /** Intake selection domain handle. */
   intake: IntakeStorage;
-  /** Factory project domain handle, used to validate binding targets. */
-  projects?: { get(input: { orgId: string; id: string }): Promise<unknown | null> };
   integrations?: IntakeIntegration[];
-  /**
-   * Installed boards, used to validate binding targets. Absent means only legacy routing is accepted.
-   * Integrations place cards with the code boards, so a target must be a code board.
-   */
-  boardRegistry?: BoardRegistry | ProjectBoardSource;
-  /** Work items domain handle; when present, rebinding a source to another board moves its resting cards. */
-  workItems?: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
 }
 
-/** Upper bound on source pages read while relocating cards, so a huge source cannot stall the request. */
-const REBIND_MAX_PAGES = 20;
-/**
- * One deadline for the whole rebind read, not one per page: the binding is already saved when we
- * get here, so the caller is only waiting on relocation and a slow provider must not hold the
- * response for pages × timeout.
- */
-const REBIND_READ_BUDGET_MS = 30_000;
-
-/**
- * Keys under which an intake item may be persisted as a work item. Providers key items by their
- * own id, while materialization uses the human identifier (`gitlab:group/project#44`), so both are accepted.
- */
-function intakeItemSourceKeys(integrationId: string, item: IntakeItem): string[] {
-  const identifier = item.metadata?.identifier;
-  return typeof identifier === 'string' && identifier.length > 0
-    ? [item.source.externalId, `${integrationId}:${identifier}`]
-    : [item.source.externalId];
-}
-
-/**
- * Move the cards that came from a rebound source onto its new board's initial phase. Terminal cards
- * stay put (they are history that belongs where it finished), as do cards with a session attached to
- * a current stage (a run owns them). Everything else moves, including cards parked in a working
- * phase that never started a run — auto-ingested issues sit in Work › Triage that way.
- */
-async function relocateSourceCards({
-  workItems,
-  integration,
-  boardRegistry,
-  orgId,
-  userId,
-  factoryProjectId,
-  sourceId,
-  targetBoard,
-  attributionSourceIds,
-}: {
-  workItems: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
-  integration: IntakeIntegration;
-  boardRegistry: BoardRegistry;
-  orgId: string;
-  userId: string;
-  factoryProjectId: string;
-  sourceId: string;
-  targetBoard: string;
-  attributionSourceIds: string[];
-}): Promise<{ moved: number; skipped: number }> {
-  if (!boardRegistry.has(targetBoard)) return { moved: 0, skipped: 0 };
-
-  const sourceKeys = new Set<string>();
-  let cursor: string | undefined;
-  const deadline = Date.now() + REBIND_READ_BUDGET_MS;
-  for (let page = 0; page < REBIND_MAX_PAGES; page += 1) {
-    const result = await withTimeout(
-      integration.id,
-      () =>
-        integration.intake.listItems({
-          orgId,
-          userId,
-          sourceIds: [sourceId],
-          attributionSourceIds,
-          cursor,
-        }),
-      deadline - Date.now(),
-    );
-    for (const item of result.items) {
-      if (item.sourceId !== sourceId) continue;
-      for (const key of intakeItemSourceKeys(integration.id, item)) sourceKeys.add(key);
-    }
-    if (!result.nextCursor) break;
-    cursor = result.nextCursor;
-  }
-  if (sourceKeys.size === 0) return { moved: 0, skipped: 0 };
-
-  let moved = 0;
-  let skipped = 0;
-  const items = await workItems.list({ orgId, factoryProjectId });
-  for (const item of items) {
-    const source = item.externalSource;
-    if (!source || source.integrationId !== integration.id || !sourceKeys.has(source.externalId)) continue;
-    // An intake route chose this card's board; a rebind doesn't override it.
-    if (placedByIntakeRoute(item)) {
-      skipped += 1;
-      continue;
-    }
-    const outcome = await moveCardToBoard({ workItems, boardRegistry, userId, item, targetBoard });
-    if (outcome === 'moved') moved += 1;
-    else if (outcome === 'skipped') skipped += 1;
-  }
-  return { moved, skipped };
-}
-
-/** One integration that failed while the rest of the aggregation succeeded. */
 export interface IntakeIntegrationFailure {
   integrationId: string;
   message: string;
@@ -193,32 +75,6 @@ async function settleByIntegration<T>(
 
 const MAX_INTAKE_SOURCE_ID_LENGTH = 1024;
 
-interface ParsedBinding {
-  integrationId: string;
-  sourceId: string;
-  factoryProjectId: string | null;
-  /** Installed board target; `null`/omitted keeps legacy source-type routing. */
-  board: string | null;
-}
-
-/** Validate a binding request body, rejecting unknown shapes. */
-export function parseIntakeBinding(body: unknown): ParsedBinding | null {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
-  const { integrationId, sourceId, factoryProjectId, board } = body as Record<string, unknown>;
-  const isId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 256;
-  const isSourceId = (value: unknown) =>
-    typeof value === 'string' && value.length > 0 && value.length <= MAX_INTAKE_SOURCE_ID_LENGTH;
-  if (!isId(integrationId) || !isSourceId(sourceId)) return null;
-  if (factoryProjectId !== null && !isId(factoryProjectId)) return null;
-  if (board !== undefined && board !== null && !isId(board)) return null;
-  return {
-    integrationId: integrationId as string,
-    sourceId: sourceId as string,
-    factoryProjectId: factoryProjectId as string | null,
-    board: (board as string | null | undefined) ?? null,
-  };
-}
-
 function loose(c: unknown): Context {
   return c as Context;
 }
@@ -260,23 +116,6 @@ export function parseIntakeConfig(body: unknown): IntakeConfig | null {
   return config;
 }
 
-function encodeCursor(cursors: Record<string, string>): string | null {
-  return Object.keys(cursors).length > 0 ? Buffer.from(JSON.stringify(cursors)).toString('base64url') : null;
-}
-
-function decodeCursor(value: string | undefined): Record<string, string> | null {
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-    const entries = Object.entries(parsed);
-    if (entries.some(([key, cursor]) => !key || typeof cursor !== 'string')) return null;
-    return Object.fromEntries(entries) as Record<string, string>;
-  } catch {
-    return null;
-  }
-}
-
 export class IntakeRoutes extends Route<IntakeRoutesDeps> {
   async #resolveTenant(c: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
     await this.deps.auth.ensureUser(c);
@@ -294,11 +133,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const { audit, intake, projects, integrations = [], workItems } = this.deps;
-    const boardSource = this.deps.boardRegistry ? toBoardSource(this.deps.boardRegistry) : undefined;
-    const projectBoards = (orgId: string, factoryProjectId: string | null) =>
-      boardSource && factoryProjectId ? boardSource.load({ orgId, factoryProjectId }) : undefined;
-    const installed = (board: string) => boardSource?.codeRegistry.has(board) === true;
+    const { audit, intake, integrations = [] } = this.deps;
     const integrationIds = integrations.map(integration => integration.id);
 
     return [
@@ -360,139 +195,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           return c.json({ config: registeredConfig });
         },
       }),
-      registerApiRoute('/web/intake/bindings', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async c => {
-          const tenant = await this.#resolveTenant(loose(c));
-          if ('response' in tenant) return tenant.response;
-          await intake.ensureReady();
-          return c.json({ bindings: await intake.listBindings({ orgId: tenant.orgId }) });
-        },
-      }),
-      registerApiRoute('/web/intake/bindings', {
-        method: 'PUT',
-        requiresAuth: false,
-        handler: async c => {
-          const tenant = await this.#resolveTenant(loose(c));
-          if ('response' in tenant) return tenant.response;
-
-          let body: unknown;
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const parsed = parseIntakeBinding(body);
-          if (!parsed || !integrationIds.includes(parsed.integrationId)) {
-            return c.json({ error: 'invalid_binding' }, 400);
-          }
-          // Only a source whose binding names the board its status rules run on (a ClickUp List)
-          // keeps a board. Any other source only feeds the project: its intake routes place the cards.
-          const binding = integrations.find(candidate => candidate.id === parsed.integrationId)?.intake.bindingBoard
-            ? parsed
-            : { ...parsed, board: null };
-          if (binding.factoryProjectId && projects) {
-            const project = await projects.get({ orgId: tenant.orgId, id: binding.factoryProjectId });
-            if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
-          }
-          if (binding.board !== null && !installed(binding.board)) {
-            return c.json({ error: 'invalid_board', message: `Board '${binding.board}' is not installed.` }, 422);
-          }
-          // Load before writing, so a failed load can't leave a saved binding with its cards unmoved.
-          const boardRegistry = await projectBoards(tenant.orgId, binding.factoryProjectId);
-
-          await intake.ensureReady();
-          let auditFactoryProjectId = binding.factoryProjectId;
-          let relocated: { moved: number; skipped: number } | null = null;
-          if (binding.factoryProjectId === null) {
-            const previousBinding = await intake.clearBinding({
-              orgId: tenant.orgId,
-              integrationId: binding.integrationId,
-              sourceId: binding.sourceId,
-            });
-            auditFactoryProjectId = previousBinding?.factoryProjectId ?? null;
-          } else {
-            const previousBinding = await intake.getBinding({
-              orgId: tenant.orgId,
-              integrationId: binding.integrationId,
-              sourceId: binding.sourceId,
-            });
-            try {
-              await intake.setBinding({
-                orgId: tenant.orgId,
-                userId: tenant.userId,
-                integrationId: binding.integrationId,
-                sourceId: binding.sourceId,
-                factoryProjectId: binding.factoryProjectId,
-                board: binding.board,
-              });
-            } catch (error) {
-              // The project was deleted after the check above; the binding transaction refused it.
-              if (error instanceof FactoryProjectNotFoundError) {
-                return c.json({ error: 'factory_project_not_found' }, 404);
-              }
-              throw error;
-            }
-            // A source that stays in the same project but is pointed at a different board
-            // takes its resting cards along. Bindings that predate persisted boards have a
-            // null board yet still fed Work/Review, so relocation compares each card's
-            // effective board rather than trusting the previous binding value.
-            const nextBoard = binding.board;
-            const integration = integrations.find(candidate => candidate.id === binding.integrationId);
-            if (
-              workItems &&
-              boardRegistry &&
-              integration &&
-              previousBinding?.factoryProjectId === binding.factoryProjectId &&
-              nextBoard !== null &&
-              previousBinding.board !== nextBoard
-            ) {
-              try {
-                const config = await intake.getConfig({
-                  orgId: tenant.orgId,
-                  integrationIds: [binding.integrationId],
-                });
-                const configuredSourceIds = config[binding.integrationId]?.sourceIds ?? [];
-                const attributionSourceIds = configuredSourceIds.includes(binding.sourceId)
-                  ? configuredSourceIds
-                  : [...configuredSourceIds, binding.sourceId];
-                relocated = await relocateSourceCards({
-                  workItems,
-                  integration,
-                  boardRegistry,
-                  orgId: tenant.orgId,
-                  userId: tenant.userId,
-                  factoryProjectId: binding.factoryProjectId,
-                  sourceId: binding.sourceId,
-                  attributionSourceIds,
-                  targetBoard: nextBoard,
-                });
-              } catch (error) {
-                // The binding is saved; the cards can be moved by hand if the provider was unreachable.
-                console.error(`[factory] intake rebind could not relocate ${binding.integrationId} cards:`, error);
-              }
-            }
-          }
-          await audit.emit({
-            context: loose(c),
-            input: {
-              action: 'factory.intake.binding_updated',
-              ...(auditFactoryProjectId ? { factoryProjectId: auditFactoryProjectId } : {}),
-              targets: [{ type: 'intake_source', id: `${binding.integrationId}:${binding.sourceId}` }],
-              metadata: {
-                factoryProjectId: binding.factoryProjectId,
-                board: binding.board,
-                ...(relocated ? { relocated } : {}),
-              },
-            },
-          });
-          return c.json({
-            bindings: await intake.listBindings({ orgId: tenant.orgId }),
-            ...(relocated ? { relocated } : {}),
-          });
-        },
-      }),
       // Label routes are gone: a project's intake routes decide where its cards land.
       ...(['GET', 'PUT'] as const).map(method =>
         registerApiRoute('/web/intake/label-routes', {
@@ -531,51 +233,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             sources: pages.flatMap(({ integrationId, value }) => value.map(source => ({ integrationId, ...source }))),
             failures,
           });
-        },
-      }),
-      registerApiRoute('/web/intake/items', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async c => {
-          const tenant = await this.#resolveTenant(loose(c));
-          if ('response' in tenant) return tenant.response;
-          const cursors = decodeCursor(c.req.query('cursor'));
-          if (!cursors) return c.json({ error: 'invalid_cursor' }, 400);
-
-          await intake.ensureReady();
-          const config = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
-          const { pages, failures } = await settleByIntegration(
-            integrations.flatMap(integration => {
-              const selection = config[integration.id];
-              if (!selection?.enabled || !selection.sourceIds?.length) return [];
-              const sourceIds = selection.sourceIds;
-              const cursor = cursors[integration.id];
-              return [
-                {
-                  integrationId: integration.id,
-                  read: () => integration.intake.listItems({ ...tenant, sourceIds, ...(cursor ? { cursor } : {}) }),
-                },
-              ];
-            }),
-          );
-
-          const items: AggregatedIntakeItem[] = [];
-          const nextCursors: Record<string, string> = {};
-          for (const { integrationId, value } of pages) {
-            items.push(
-              ...value.items.map(item => {
-                const { source, ...candidate } = item;
-                return { ...candidate, integrationId, externalSource: { integrationId, ...source } };
-              }),
-            );
-            if (value.nextCursor) nextCursors[integrationId] = value.nextCursor;
-          }
-          // Keep the cursor an unavailable integration came in with, so the next page resumes there instead of replaying it.
-          for (const { integrationId } of failures) {
-            const cursor = cursors[integrationId];
-            if (cursor) nextCursors[integrationId] = cursor;
-          }
-          return c.json({ items, nextCursor: encodeCursor(nextCursors), failures });
         },
       }),
     ];

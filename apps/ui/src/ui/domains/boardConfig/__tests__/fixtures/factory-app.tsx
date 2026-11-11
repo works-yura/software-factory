@@ -48,7 +48,6 @@ export function stubFactory(factory: Record<string, unknown> = {}) {
       HttpResponse.json({ skills: BUILT_IN_SKILLS, canEdit: true } satisfies FactorySkillsResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: {} })),
-    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),

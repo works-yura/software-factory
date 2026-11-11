@@ -941,10 +941,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           auth: deps.auth,
           audit: deps.audit,
           intake: deps.domains.intake,
-          projects: deps.domains.projects,
-          boardRegistry: deps.boardRegistry,
-          // Relocation reads and writes work items, which init fail-soft separately from intake.
-          ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),

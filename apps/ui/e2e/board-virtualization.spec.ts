@@ -50,7 +50,6 @@ test.describe('Factory board virtualization', () => {
           config: { github: { enabled: false, sourceIds: null } },
         }),
       ),
-      http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: [] })),
       http.get('*/api/agent-controller/code/sessions/fp-1/permissions', () => HttpResponse.json({ permissions: [] })),
     );
     await page.route(

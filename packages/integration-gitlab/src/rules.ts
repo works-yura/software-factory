@@ -13,7 +13,7 @@ import {
   withBoardFlow,
 } from '@factory/core';
 import { toBoardSource } from '@factory/core';
-import type { BoardRegistry, ProjectBoardSource } from '@factory/core';
+import type { BoardRegistry, IntakeRoutesReader, ProjectBoardSource } from '@factory/core';
 import { cardOwnsBranch } from '@factory/pipelines';
 import {
   changeRequestOpenedPatch,
@@ -48,7 +48,8 @@ import type { WorkItemRow, WorkItemsStorage } from '@factory/store';
 import type { IntegrationContext } from '@factory/integrations';
 import { closingIssueNumbers, recordPullRequestHead } from '@factory/integrations';
 import type { GitLabEventRules } from './default-rules.ts';
-import { decodeIssueReference, encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.ts';
+import { decodeIssueReference, encodeIssueReference, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.ts';
+import { readsGitLabProject } from './routed-projects.ts';
 import type { ParsedGitLabWebhook } from './webhook.ts';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -259,6 +260,8 @@ interface GitLabRulesOptions {
   configVersion: string;
   /** The code boards, or the per-project source so a project's stored boards run its cards. */
   boards: BoardRegistry | ProjectBoardSource;
+  /** The project's intake routes: whether it reads a GitLab project (ADR-0022). Absent reads nothing. */
+  intakeRoutes?: IntakeRoutesReader;
 }
 
 interface ProjectTarget {
@@ -350,7 +353,6 @@ export class GitLabRules {
     });
     if (!factoryProject) return { status: 'missing' };
 
-    const sourceId = encodeSourceId({ host, projectId: String(projectId) });
     const config = await this.options.intake.getConfig({
       orgId: target.target.orgId,
       integrationIds: ['gitlab'],
@@ -358,14 +360,17 @@ export class GitLabRules {
     // A project that is not an intake source still belongs to the Factory's
     // workspace: a card spanning several repositories opens merge requests in
     // it, and those must be tracked on the card even though nothing else here
-    // reacts to the project. A binding only says the project feeds this Factory
-    // project; the project's intake routes place its cards.
-    const intakeSelected = Boolean(config.gitlab?.enabled && config.gitlab.sourceIds?.includes(sourceId));
+    // reacts to the project. The project's intake routes say whether it reads
+    // the GitLab project at all; they also place its cards.
     const bound =
-      intakeSelected &&
-      (await this.options.intake.listBindings({ orgId: target.target.orgId, integrationId: 'gitlab' })).some(
-        candidate => candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
-      );
+      Boolean(config.gitlab?.enabled) &&
+      this.options.intakeRoutes !== undefined &&
+      (await readsGitLabProject({
+        orgId: target.target.orgId,
+        factoryProjectId: target.target.factoryProjectId,
+        path: projectPath,
+        intakeRoutes: this.options.intakeRoutes,
+      }));
     if (!bound && !event.startsWith('mergeRequest')) return { status: 'ignored' };
 
     const connectionIds = [
@@ -987,6 +992,7 @@ export function attachGitLabRules(
     intake: context.storage.intake,
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
+    ...(context.runtime.intakeRoutes ? { intakeRoutes: context.runtime.intakeRoutes } : {}),
   });
   return event => rules.ingest(event);
 }

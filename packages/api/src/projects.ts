@@ -185,7 +185,12 @@ export interface ProjectRoutesDeps extends RouteDependencies {
    * Fire-and-forget hook invoked after a repository is linked to a project —
    * kicks the initial base-checkpoint build. Must never throw.
    */
-  onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
+  onProjectRepositoryLinked?: (args: {
+    orgId: string;
+    /** The code host the link's connection belongs to (`github`, `gitlab`…). */
+    integrationId: string;
+    projectRepository: ProjectRepository;
+  }) => void;
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
   /** Work-items domain used by session retirement. */
@@ -968,7 +973,11 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             ...linkInput,
           });
           try {
-            this.deps.onProjectRepositoryLinked?.({ orgId: tenant.orgId, projectRepository });
+            this.deps.onProjectRepositoryLinked?.({
+              orgId: tenant.orgId,
+              integrationId: found.connection.integrationId,
+              projectRepository,
+            });
           } catch (error) {
             console.warn('[factory] onProjectRepositoryLinked failed after a successful repository link:', error);
           }

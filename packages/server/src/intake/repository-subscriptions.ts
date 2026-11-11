@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { catchesEveryNewCard, DEFAULT_BOARD_ID, routedSourceScopes } from '@factory/core';
 import type { IntakeRoute } from '@factory/core';
+import { decodeSourceId, normalizeGitLabHost } from '@factory/integration-gitlab';
 import type {
   FactoryProjectsStorage,
   IntakeStorage,
@@ -14,6 +15,9 @@ import type {
 export const REPOSITORY_SUBSCRIPTION_ACTOR = 'system:repository-subscription';
 
 const HOST_NAMES: Readonly<Record<string, string>> = { github: 'GitHub', gitlab: 'GitLab' };
+
+/** The code hosts whose linked repositories a project reads through repository routes. */
+export const REPOSITORY_HOSTS: readonly string[] = Object.keys(HOST_NAMES);
 
 /**
  * The fixed id of the route subscribing a project to a repository: the same on every replica and
@@ -132,29 +136,84 @@ export async function migrateGithubRepositorySelections({
 }
 
 /**
- * A repository just linked to a project, read from now on: when it is a GitHub repository (the
- * link's connection belongs to `sourceControl`), its route is added. A link of another host is
- * left alone. Returns whether a route was added.
+ * A repository just linked to a project, read from now on: its route is added for the link's code
+ * host (`sourceControl` is that host's partition). Returns whether a route was added.
  */
 export async function subscribeLinkedRepository({
   orgId,
+  integrationId,
   projectRepository,
   sourceControl,
   boards,
 }: {
   orgId: string;
+  integrationId: string;
   projectRepository: { connectionId: string; repositoryId: string };
   sourceControl: Pick<SourceControlStorageHandle, 'connections' | 'repositories'>;
   boards: RoutesWriter;
 }): Promise<boolean> {
   const connection = await sourceControl.connections.get({ orgId, id: projectRepository.connectionId });
-  if (!connection) return false;
+  if (!connection || connection.integrationId !== integrationId) return false;
   const repository = await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId });
   if (!repository) return false;
   return subscribeRepository({
     boards,
     scope: { orgId, factoryProjectId: connection.factoryProjectId },
-    integrationId: 'github',
+    integrationId,
     repository: repository.slug,
   });
+}
+
+/**
+ * Before routes were the one subscription model (ADR-0022), a GitLab project fed a Factory project
+ * when the org-wide GitLab selection (`sourceIds`: opaque `gitlab-project:…` ids, host + project id,
+ * or the older connection + project id + path form) named it AND a binding pointed it at that
+ * Factory project. Each such pair whose GitLab project is linked to the Factory project becomes a
+ * route on the project path (see `subscribeRepository`), so the project reads what it read before.
+ * A selected, bound project that is not linked had no GitLab connection to be read through and gets
+ * nothing. Idempotent: a project a route already names gets nothing new.
+ */
+export async function migrateGitLabProjectSelections({
+  projects,
+  intake,
+  sourceControl,
+  boards,
+}: {
+  projects: Pick<FactoryProjectsStorage, 'listAll'>;
+  intake: Pick<IntakeStorage, 'getConfig' | 'listBindings'>;
+  sourceControl: Pick<SourceControlStorageHandle, 'connections' | 'installations' | 'projectRepositories' | 'repositories'>;
+  boards: RoutesWriter;
+}): Promise<{ routes: number }> {
+  let added = 0;
+  const orgIds = new Set((await projects.listAll()).map(project => project.orgId));
+  for (const orgId of orgIds) {
+    const selected = new Set((await intake.getConfig({ orgId, integrationIds: ['gitlab'] })).gitlab?.sourceIds ?? []);
+    if (selected.size === 0) continue;
+    for (const binding of await intake.listBindings({ orgId, integrationId: 'gitlab' })) {
+      if (!selected.has(binding.sourceId)) continue;
+      const reference = decodeSourceId(binding.sourceId);
+      if (!reference) continue;
+      const scope = { orgId, factoryProjectId: binding.factoryProjectId };
+      for (const connection of await sourceControl.connections.list(scope)) {
+        if (connection.integrationId !== 'gitlab') continue;
+        const installation = await sourceControl.installations.get({ orgId, id: connection.installationId });
+        const host = installation?.providerMetadata.host;
+        if (reference.host && (typeof host !== 'string' || normalizeGitLabHost(host) !== normalizeGitLabHost(reference.host))) {
+          continue;
+        }
+        for (const link of await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id })) {
+          const repository = await sourceControl.repositories.get({ orgId, id: link.repositoryId });
+          if (!repository || repository.externalId !== reference.projectId) continue;
+          const subscribed = await subscribeRepository({
+            boards,
+            scope,
+            integrationId: 'gitlab',
+            repository: repository.slug,
+          });
+          if (subscribed) added += 1;
+        }
+      }
+    }
+  }
+  return { routes: added };
 }

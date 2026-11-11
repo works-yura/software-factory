@@ -8,6 +8,7 @@ export * from './platform/event-worker.ts';
 export * from './platform/integration.ts';
 export * from './reconciler.ts';
 export * from './reconciliation-config.ts';
+export * from './routed-projects.ts';
 export * from './routes.ts';
 export * from './rules.ts';
 export * from './session-subscriptions.ts';

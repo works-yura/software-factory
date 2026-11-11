@@ -135,7 +135,6 @@ function stubBoardEndpoints({
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
     ),
@@ -395,14 +394,38 @@ describe('Board card buttons move the card', () => {
       http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
         HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
       ),
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+      // A GitLab project linked to the Factory and named by one of its routes: Work browses its issues.
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          bindings: [
+          projects: [
             {
-              integrationId: 'gitlab',
-              sourceId: 'gitlab-source-1',
-              factoryProjectId: FACTORY_ID,
-              board: 'work',
+              id: FACTORY_ID,
+              name: 'Acme Factory',
+              repositories: [
+                listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' }),
+                listedRepository('repo-gl', 'acme/gl', { integrationId: 'gitlab' }),
+              ],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake-routes`, () =>
+        HttpResponse.json({
+          intakeRoutes: [
+            {
+              id: 'route-gl',
+              name: 'GitLab: acme/gl',
+              enabled: true,
+              position: 0,
+              on: ['work_item.created'],
+              when: {
+                operator: 'AND',
+                conditions: [
+                  { field: 'source.integration', operator: 'equals', value: 'gitlab' },
+                  { field: 'source.repository', operator: 'equals', value: 'acme/gl' },
+                ],
+              },
+              target: { boardKey: 'work', phaseKey: null },
             },
           ],
         }),

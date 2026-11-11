@@ -12,6 +12,7 @@ import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } f
 import { resolveGitLabRules } from './default-rules.ts';
 import type { GitLabRuleOverrides } from './default-rules.ts';
 import { encodeIssueReference, encodeSourceId } from './integration.ts';
+import { routeGitLabProject } from './routed-projects.test-support.ts';
 import { GitLabRules } from './rules.ts';
 import type { GitLabRulesIntegration } from './rules.ts';
 
@@ -197,13 +198,9 @@ async function setup(
       },
     },
   });
-  await seeded.intake.setBinding({
-    orgId: 'org-1',
-    integrationId: 'gitlab',
-    sourceId: SOURCE_ID,
-    factoryProjectId: project.id,
-    userId: 'user-1',
-  });
+  if (options.selected !== false) {
+    await routeGitLabProject(seeded.storedBoards, { orgId: 'org-1', factoryProjectId: project.id }, PROJECT_PATH);
+  }
 
   const gitlab: GitLabRulesIntegration = {
     rules: resolveGitLabRules(options.rules),
@@ -223,6 +220,7 @@ async function setup(
     intake: seeded.intake,
     configVersion: 'gitlab-test-v1',
     boards: options.boards ?? createBoardRegistry(),
+    intakeRoutes: seeded.storedBoards,
   });
   return { seeded, project, gitlab, service, link };
 }
@@ -1832,20 +1830,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           patch: { stages: ['pr-review'] },
         });
         // A second GitLab project on the same Factory project, whose own !17 is pushed from a branch of the same name.
-        const otherSource = encodeSourceId({ host: 'gitlab.example.com', projectId: '202' });
         await h.link('other-connection', '202', 'acme/other');
-        await h.seeded.intake.saveConfig({
-          orgId: 'org-1',
-          config: { gitlab: { enabled: true, sourceIds: [SOURCE_ID, otherSource] } },
-        });
-        await h.seeded.intake.setBinding({
-          orgId: 'org-1',
-          integrationId: 'gitlab',
-          sourceId: otherSource,
-          factoryProjectId: h.project.id,
-          board: 'work',
-          userId: 'user-1',
-        });
+        await routeGitLabProject(h.seeded.storedBoards, { orgId: 'org-1', factoryProjectId: h.project.id }, 'acme/other');
         const delivery = mergeRequest(17, 'Other work', { deliveryId: `d-other-${action}`, action, sourceBranch: branch });
         const other = {
           ...delivery,
@@ -1883,20 +1869,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           sessions: { work: { sessionId: 'sess-work', threadId: 'thread-work', branch, startedBy: 'user-1' } },
         },
       });
-      const otherSource = encodeSourceId({ host: 'gitlab.example.com', projectId: '202' });
       await h.link('other-connection', '202', 'acme/other');
-      await h.seeded.intake.saveConfig({
-        orgId: 'org-1',
-        config: { gitlab: { enabled: true, sourceIds: [SOURCE_ID, otherSource] } },
-      });
-      await h.seeded.intake.setBinding({
-        orgId: 'org-1',
-        integrationId: 'gitlab',
-        sourceId: otherSource,
-        factoryProjectId: h.project.id,
-        board: 'work',
-        userId: 'user-1',
-      });
+      await routeGitLabProject(h.seeded.storedBoards, { orgId: 'org-1', factoryProjectId: h.project.id }, 'acme/other');
       const delivery = mergeRequest(5, 'Copies the branch name.', { sourceBranch: branch });
       await h.ingest({
         ...delivery,

@@ -5,6 +5,7 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '@factory/http';
 import { sanitizeSegment } from '@factory/sandbox';
 import type { AuditEmitter } from '@factory/feed';
+import type { IntakeRoutesReader } from '@factory/core';
 import type { IntakeStorage } from '@factory/store';
 import { GitLabApiError } from './api.ts';
 import {
@@ -13,8 +14,11 @@ import {
   encodeIssueReference,
   encodeSourceId,
   gitlabConnection,
+  normalizeGitLabHost,
 } from './integration.ts';
 import type { GitLabIntegrationBase } from './integration.ts';
+import { routedGitLabProjects } from './routed-projects.ts';
+import type { RoutedProjectsSourceControl } from './routed-projects.ts';
 import { listMergeRequestSubscriptionsForThread, mergeRequestUrl } from './subscriptions.ts';
 import { handleGitLabWebhook } from './webhook.ts';
 import type { GitLabWebhookHandlerOptions, ParsedGitLabWebhook } from './webhook.ts';
@@ -29,6 +33,10 @@ export interface BuildGitLabRoutesOptions {
   gitlab?: GitLabIntegrationBase;
   auth?: RouteAuth;
   intake?: IntakeStorage;
+  /** The project's intake routes: which linked GitLab projects a Factory project reads (ADR-0022). */
+  intakeRoutes?: IntakeRoutesReader;
+  /** GitLab's source-control partition: the projects linked to each Factory project. */
+  sourceControl?: RoutedProjectsSourceControl;
   sandbox?: FactorySandbox;
   emitAudit?: AuditEmitter['emit'];
   webhookSecret?: string;
@@ -65,7 +73,6 @@ function gitlabFetchError(c: RouteContext, error: unknown) {
   return c.json({ error: 'gitlab_fetch_failed', message: error instanceof Error ? error.message : String(error) }, 502);
 }
 
-type GitLabSourceIdentityMigration = { from: string; to: string };
 
 function gitlabProjectPayload(source: { id: string; name: string; metadata?: Record<string, unknown> }) {
   const connectionId = typeof source.metadata?.connectionId === 'string' ? source.metadata.connectionId : null;
@@ -95,47 +102,9 @@ function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid:
   return `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host, projectId, mergeRequestIid }), 'utf8').toString('base64url')}`;
 }
 
-async function reconcileGitLabSourceIdentity({
-  intake,
-  orgId,
-  sources,
-}: {
-  intake: IntakeStorage;
-  orgId: string;
-  sources: Array<{ id: string; metadata?: Record<string, unknown> }>;
-}): Promise<{ migrations: GitLabSourceIdentityMigration[]; conflicts: GitLabSourceIdentityMigration[] }> {
-  await intake.ensureReady();
-  const [config, bindings] = await Promise.all([
-    intake.getConfig({ orgId }),
-    intake.listBindings({ orgId, integrationId: 'gitlab' }),
-  ]);
-  const selected = config.gitlab?.sourceIds ?? [];
-  const canonicalByProject = new Map<string, string[]>();
-  for (const source of sources) {
-    const reference = decodeSourceId(source.id);
-    if (!reference?.host) continue;
-    const ids = canonicalByProject.get(reference.projectId) ?? [];
-    ids.push(source.id);
-    canonicalByProject.set(reference.projectId, ids);
-  }
-
-  const migrations = new Map<string, string>();
-  for (const sourceId of new Set([...selected, ...bindings.map(binding => binding.sourceId)])) {
-    const reference = decodeSourceId(sourceId);
-    if (!reference || reference.host) continue;
-    const candidates = canonicalByProject.get(reference.projectId) ?? [];
-    if (candidates.length === 1) migrations.set(sourceId, candidates[0]!);
-  }
-  return intake.migrateSourceIds({
-    orgId,
-    integrationId: 'gitlab',
-    migrations: [...migrations].map(([from, to]) => ({ from, to })),
-  });
-}
-
 export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { gitlab, auth, intake, emitAudit } = options;
+  const { gitlab, auth, intake, intakeRoutes, sourceControl } = options;
   const enabled = Boolean(gitlab && auth?.enabled());
 
   if (gitlab && auth) {
@@ -197,33 +166,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           if ('response' in resolved) return resolved.response;
           try {
             const sources = await gitlab.intake.listSources(resolved.tenant);
-            if (intake) {
-              const identity = await reconcileGitLabSourceIdentity({
-                intake,
-                orgId: resolved.tenant.orgId,
-                sources,
-              });
-              if (identity.conflicts.length > 0) {
-                return c.json(
-                  {
-                    error: 'gitlab_source_identity_conflict',
-                    message: 'Conflicting routes exist for the same GitLab project. Resolve the duplicate bindings.',
-                    conflicts: identity.conflicts,
-                  },
-                  409,
-                );
-              }
-              if (identity.migrations.length > 0) {
-                await emitAudit?.({
-                  context: loose(c),
-                  input: {
-                    action: 'factory.intake.config_updated',
-                    targets: identity.migrations.map(migration => ({ type: 'intake_source', id: migration.to })),
-                    metadata: { provider: 'gitlab', migrated: identity.migrations.length },
-                  },
-                });
-              }
-            }
             return c.json({
               projects: sources.flatMap(source => {
                 const project = gitlabProjectPayload(source);
@@ -368,7 +310,7 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
     );
   }
 
-  if (gitlab && auth && intake) {
+  if (gitlab && auth && intake && intakeRoutes && sourceControl) {
     routes.push(
       registerApiRoute('/web/gitlab/issues', {
         method: 'GET',
@@ -391,12 +333,16 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
               404,
             );
           }
-          const selected = new Set(selection.sourceIds ?? []);
           const sourceIds = [
             ...new Set(
-              (await intake.listBindings({ orgId: resolved.tenant.orgId, integrationId: 'gitlab' }))
-                .filter(binding => binding.factoryProjectId === factoryProjectId && selected.has(binding.sourceId))
-                .map(binding => binding.sourceId),
+              (
+                await routedGitLabProjects({
+                  orgId: resolved.tenant.orgId,
+                  factoryProjectId,
+                  intakeRoutes,
+                  sourceControl,
+                })
+              ).map(project => project.sourceId),
             ),
           ];
           if (sourceIds.length === 0) return c.json({ issues: [], nextCursor: null });
@@ -441,19 +387,22 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           const issueReference = issueId ? decodeIssueReference(issueId) : null;
           if (!issueReference) return c.json({ error: 'invalid_gitlab_issue_id' }, 400);
 
-          const { host, connectionId, projectId, projectPath } = issueReference;
-          const sourceId = host
-            ? encodeSourceId({ host, projectId })
-            : encodeSourceId({ connectionId, projectId, projectPath });
+          const { host, projectId } = issueReference;
           await intake.ensureReady();
           const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['gitlab'] });
           const selection = config.gitlab!;
-          const selected = new Set(selection.sourceIds ?? []);
           const routed =
             selection.enabled &&
-            selected.has(sourceId) &&
-            (await intake.listBindings({ orgId: resolved.tenant.orgId, integrationId: 'gitlab' })).some(
-              binding => binding.factoryProjectId === factoryProjectId && binding.sourceId === sourceId,
+            (
+              await routedGitLabProjects({
+                orgId: resolved.tenant.orgId,
+                factoryProjectId,
+                intakeRoutes,
+                sourceControl,
+              })
+            ).some(
+              // A legacy reference has no host; the project id still names one linked project.
+              project => project.projectId === projectId && (!host || project.host === normalizeGitLabHost(host)),
             );
           if (!routed) return c.json({ error: 'gitlab_issue_not_routed' }, 404);
 

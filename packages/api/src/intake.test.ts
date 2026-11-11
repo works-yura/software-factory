@@ -1,18 +1,11 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { defineBoard } from '@factory/core';
-import { ProjectBoardCache } from '@factory/runtime';
-import type { ProjectBoardSource } from '@factory/runtime';
-import { StoredBoardsStorage } from '@factory/store';
-import { createBoardRegistry } from '@factory/testing';
 import type { Intake } from '@factory/capabilities';
 import type { AuditEmitter } from '@factory/feed';
 import { createFactoryStorageForTests } from '@factory/testing';
 import type { FactoryStorageTestSeed } from '@factory/testing';
-import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.ts';
-import { ProjectRoutes } from './projects.ts';
-import { createFactoryWorkItem } from '@factory/work-items';
+import { IntakeRoutes, parseIntakeConfig } from './intake.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
 
 const auditEvents: Array<Record<string, unknown>> = [];
@@ -26,35 +19,12 @@ const audit: AuditEmitter = {
   },
 };
 
-const github: Pick<Intake, 'listSources' | 'listItems'> = {
+const github: Pick<Intake, 'listSources'> = {
   listSources: vi.fn(async () => [{ id: 'repo-1', name: 'acme/app', type: 'repository' }]),
-  listItems: vi.fn(async () => ({
-    items: [
-      {
-        source: { type: 'issue', externalId: '17', url: 'https://github.com/acme/app/issues/17' },
-        sourceId: 'repo-1',
-        title: 'Fix login',
-      },
-    ],
-    nextCursor: 'github-next',
-  })),
 };
 
-// Its binding names a board, as a ClickUp List's does, so the binding tests can move cards between
-// boards; a source without `bindingBoard` (GitHub here) only feeds the project.
-const gitlab: Pick<Intake, 'listSources' | 'listItems' | 'bindingBoard'> = {
-  bindingBoard: true,
+const gitlab: Pick<Intake, 'listSources'> = {
   listSources: vi.fn(async () => [{ id: 'team-1', name: 'Platform', type: 'project' }]),
-  listItems: vi.fn(async () => ({
-    items: [
-      {
-        source: { type: 'issue', externalId: 'ENG-9', url: 'https://gitlab.test/acme/-/issues/ENG-9' },
-        sourceId: 'team-1',
-        title: 'Ship project model',
-      },
-    ],
-    nextCursor: null,
-  })),
 };
 
 const integrations = [
@@ -62,19 +32,7 @@ const integrations = [
   { id: 'gitlab', intake: gitlab },
 ];
 
-const githubRepositories = {
-  get: vi.fn(async ({ id }: { orgId: string; id: string }) =>
-    id === 'repo-1'
-      ? { id, installationId: 'inst-1', externalId: '10', slug: 'acme/app', defaultBranch: 'main' }
-      : null,
-  ),
-};
-
-function buildApp(
-  user: { id: string; organizationId?: string } | null,
-  intakeIntegrations = integrations,
-  boards: typeof boardRegistry | ProjectBoardSource = boardRegistry,
-) {
+function buildApp(user: { id: string; organizationId?: string } | null, intakeIntegrations = integrations) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -86,46 +44,14 @@ function buildApp(
       auth: fakeRouteAuth(),
       audit,
       intake: seed.intake,
-      projects: seed.projects,
       integrations: intakeIntegrations,
-      boardRegistry: boards,
-      workItems: seed.workItems,
-      githubRepositories,
     }).routes(),
   );
   return app;
 }
 
-const releaseBoard = defineBoard({
-  id: 'release',
-  title: 'Release',
-  initialPhase: 'queued',
-  phases: {
-    queued: { title: 'Queued', kind: 'resting' },
-    // Role deliberately differs from the phase id: sessions are keyed by role.
-    shipping: { title: 'Shipping', kind: 'working', role: 'release-publisher' },
-    shipped: { title: 'Shipped', kind: 'terminal' },
-  },
-});
-const triageBoard = defineBoard({
-  id: 'triage',
-  title: 'Triage',
-  initialPhase: 'inbox',
-  phases: { inbox: { title: 'Inbox', kind: 'resting' } },
-});
-const boardRegistry = createBoardRegistry({ boards: [releaseBoard, triageBoard] });
-
 const orgUser = { id: 'u1', organizationId: 'org1' };
 
-/** Project boards whose database can't be read: the boards domain was never attached to storage. */
-const unreadableProjectBoards = () =>
-  new ProjectBoardCache({ codeRegistry: boardRegistry, storage: new StoredBoardsStorage() });
-const putWithUnreadableBoards = (path: string, body: unknown) =>
-  buildApp(orgUser, integrations, unreadableProjectBoards()).request(path, {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
 let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
@@ -173,486 +99,6 @@ describe('intake configuration', () => {
         },
       },
     ]);
-  });
-
-  describe('source bindings', () => {
-    const put = (body: unknown, user: typeof orgUser | null = orgUser) =>
-      buildApp(user).request('/web/intake/bindings', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-    it('requires an authenticated organization', async () => {
-      expect((await buildApp(null).request('/web/intake/bindings')).status).toBe(401);
-      expect((await buildApp({ id: 'u1' }).request('/web/intake/bindings')).status).toBe(403);
-    });
-
-    it('binds a source to a Factory project and reads it back', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const response = await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id });
-
-      const bindings = [{ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id, board: null }];
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ bindings });
-      expect(await (await buildApp(orgUser).request('/web/intake/bindings')).json()).toEqual({ bindings });
-      expect(auditEvents).toEqual([
-        {
-          action: 'factory.intake.binding_updated',
-          factoryProjectId: project.id,
-          metadata: { factoryProjectId: project.id, board: null },
-        },
-      ]);
-    });
-
-    it("saves nothing when the project's boards can't be read", async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const response = await putWithUnreadableBoards('/web/intake/bindings', {
-        integrationId: 'gitlab',
-        sourceId: 'team-1',
-        factoryProjectId: project.id,
-        board: 'release',
-      });
-
-      expect(response.status).toBe(500);
-      expect(await seed.intake.getBinding({ orgId: 'org1', integrationId: 'gitlab', sourceId: 'team-1' })).toBeNull();
-      expect(auditEvents).toEqual([]);
-    });
-
-    it('binds a source to an installed board and rebinding clears the board', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const response = await put({
-        integrationId: 'gitlab',
-        sourceId: 'team-1',
-        factoryProjectId: project.id,
-        board: 'release',
-      });
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({
-        bindings: [{ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id, board: 'release' }],
-      });
-      expect(auditEvents.at(-1)?.metadata).toEqual({ factoryProjectId: project.id, board: 'release' });
-
-      await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id });
-      expect(await seed.intake.getBinding({ orgId: 'org1', integrationId: 'gitlab', sourceId: 'team-1' })).toEqual({
-        integrationId: 'gitlab',
-        sourceId: 'team-1',
-        factoryProjectId: project.id,
-        board: null,
-      });
-    });
-
-    it("keeps no board on a source whose binding doesn't name one: its project's intake routes place its cards", async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const response = await put({
-        integrationId: 'github',
-        sourceId: 'repo-1',
-        factoryProjectId: project.id,
-        board: 'release',
-      });
-      expect(response.status).toBe(200);
-      expect(await seed.intake.getBinding({ orgId: 'org1', integrationId: 'github', sourceId: 'repo-1' })).toEqual({
-        integrationId: 'github',
-        sourceId: 'repo-1',
-        factoryProjectId: project.id,
-        board: null,
-      });
-    });
-
-    it('moves the resting cards of a rebound source and leaves the rest', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const gitlabSource = (externalId: string) => ({
-        integrationId: 'gitlab',
-        type: 'issue',
-        externalId,
-        url: `https://gitlab.test/acme/-/issues/${externalId}`,
-      });
-      const create = (
-        externalId: string,
-        stages: string[],
-        sessions: Record<string, { sessionId: string; branch: string; threadId: string }> = {},
-      ) =>
-        seed.workItems.upsert({
-          orgId: 'org1',
-          userId: 'u1',
-          factoryProjectId: project.id,
-          input: { board: 'work', title: externalId, stages, sessions, externalSource: gitlabSource(externalId) },
-        });
-      const resting = (await create('gitlab:ENG-9', ['intake'])).item;
-      // Parked in a working phase with no run attached — how auto-ingested issues sit in Triage.
-      const parked = (await create('gitlab:ENG-13', ['triage'])).item;
-      const working = (
-        await create('gitlab:ENG-10', ['triage'], { triage: { sessionId: 's-1', branch: 'b', threadId: 't' } })
-      ).item;
-      const finished = (await create('gitlab:ENG-11', ['done'])).item;
-      const unrelated = (await create('gitlab:ENG-12', ['intake'])).item;
-      const sourcePage = {
-        items: [
-          {
-            source: { type: 'issue', externalId: 'uuid-9' },
-            sourceId: 'team-1',
-            title: 'a',
-            metadata: { identifier: 'ENG-9' },
-          },
-          {
-            source: { type: 'issue', externalId: 'uuid-10' },
-            sourceId: 'team-1',
-            title: 'b',
-            metadata: { identifier: 'ENG-10' },
-          },
-          {
-            source: { type: 'issue', externalId: 'uuid-11' },
-            sourceId: 'team-1',
-            title: 'c',
-            metadata: { identifier: 'ENG-11' },
-          },
-          {
-            source: { type: 'issue', externalId: 'uuid-13' },
-            sourceId: 'team-1',
-            title: 'd',
-            metadata: { identifier: 'ENG-13' },
-          },
-        ],
-        nextCursor: null,
-      };
-      // One read per rebind below; `Once` so the shared mock stays intact for other tests.
-      vi.mocked(gitlab.listItems).mockResolvedValueOnce(sourcePage).mockResolvedValueOnce(sourcePage);
-      // A legacy binding (no persisted board) still fed Work, so pointing it at a
-      // board for the first time must carry those resting cards along.
-      await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id });
-      expect(gitlab.listItems).not.toHaveBeenCalled();
-
-      const response = await put({
-        integrationId: 'gitlab',
-        sourceId: 'team-1',
-        factoryProjectId: project.id,
-        board: 'release',
-      });
-
-      expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ relocated: { moved: 2, skipped: 2 } });
-      expect(gitlab.listItems).toHaveBeenCalledWith(
-        expect.objectContaining({ orgId: 'org1', userId: 'u1', sourceIds: ['team-1'] }),
-      );
-      const byId = new Map(
-        (await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id })).map(i => [i.id, i]),
-      );
-      expect(byId.get(resting.id)).toMatchObject({ board: 'release', stages: ['queued'] });
-      expect(byId.get(parked.id)).toMatchObject({ board: 'release', stages: ['queued'] });
-      expect(byId.get(working.id)).toMatchObject({ board: 'work', stages: ['triage'] });
-      expect(byId.get(finished.id)).toMatchObject({ board: 'work', stages: ['done'] });
-      expect(byId.get(unrelated.id)).toMatchObject({ board: 'work', stages: ['intake'] });
-      expect(auditEvents.at(-1)?.metadata).toEqual({
-        factoryProjectId: project.id,
-        board: 'release',
-        relocated: { moved: 2, skipped: 2 },
-      });
-
-      // Moving back to Work returns the moved cards to Work's initial phase.
-      const back = await put({
-        integrationId: 'gitlab',
-        sourceId: 'team-1',
-        factoryProjectId: project.id,
-        board: 'work',
-      });
-      expect(await back.json()).toMatchObject({ relocated: { moved: 2, skipped: 0 } });
-      const again = await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id });
-      expect(again.find(i => i.id === resting.id)).toMatchObject({ board: 'work', stages: ['intake'] });
-    });
-
-    it('leaves a card an intake route placed when its source is rebound', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const create = (externalId: string, metadata: Record<string, unknown>) =>
-        seed.workItems.upsert({
-          orgId: 'org1',
-          userId: 'u1',
-          factoryProjectId: project.id,
-          input: {
-            board: 'work',
-            title: externalId,
-            stages: ['intake'],
-            sessions: {},
-            metadata,
-            externalSource: {
-              integrationId: 'gitlab',
-              type: 'issue',
-              externalId,
-              url: `https://gitlab.test/acme/-/issues/${externalId}`,
-            },
-          },
-        });
-      const routed = (await create('gitlab:ENG-20', { intakeRouteId: 'route-1' })).item;
-      const bound = (await create('gitlab:ENG-21', {})).item;
-      const issue = (identifier: string) => ({
-        source: { type: 'issue', externalId: `uuid-${identifier}` },
-        sourceId: 'team-1',
-        title: identifier,
-        metadata: { identifier },
-      });
-      vi.mocked(gitlab.listItems).mockResolvedValueOnce({
-        items: [issue('ENG-20'), issue('ENG-21')],
-        nextCursor: null,
-      });
-      await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id });
-
-      const response = await put({
-        integrationId: 'gitlab',
-        sourceId: 'team-1',
-        factoryProjectId: project.id,
-        board: 'release',
-      });
-
-      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 1 } });
-      const byId = new Map(
-        (await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id })).map(i => [i.id, i]),
-      );
-      expect(byId.get(routed.id)).toMatchObject({ board: 'work', stages: ['intake'] });
-      expect(byId.get(bound.id)).toMatchObject({ board: 'release', stages: ['queued'] });
-    });
-
-    it('preserves selected project precedence when rebinding an unselected team', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      await seed.intake.saveConfig({
-        orgId: 'org1',
-        userId: 'u1',
-        config: {
-          github: { enabled: true, sourceIds: null },
-          gitlab: { enabled: true, sourceIds: ['project-1'] },
-        },
-      });
-      const externalSource = (identifier: string) => ({
-        integrationId: 'gitlab',
-        type: 'issue',
-        externalId: `gitlab:${identifier}`,
-        url: `https://gitlab.test/acme/-/issues/${identifier}`,
-      });
-      const projectCard = (
-        await seed.workItems.upsert({
-          orgId: 'org1',
-          userId: 'u1',
-          factoryProjectId: project.id,
-          input: {
-            board: 'work',
-            title: 'ENG-1',
-            stages: ['intake'],
-            externalSource: externalSource('ENG-1'),
-          },
-        })
-      ).item;
-      const teamCard = (
-        await seed.workItems.upsert({
-          orgId: 'org1',
-          userId: 'u1',
-          factoryProjectId: project.id,
-          input: {
-            board: 'work',
-            title: 'ENG-2',
-            stages: ['intake'],
-            externalSource: externalSource('ENG-2'),
-          },
-        })
-      ).item;
-      vi.mocked(gitlab.listItems).mockResolvedValueOnce({
-        items: [
-          {
-            source: { type: 'issue', externalId: 'uuid-project' },
-            sourceId: 'project-1',
-            title: 'project issue',
-            metadata: { identifier: 'ENG-1' },
-          },
-          {
-            source: { type: 'issue', externalId: 'uuid-team' },
-            sourceId: 'gitlab-group:team-1',
-            title: 'projectless team issue',
-            metadata: { identifier: 'ENG-2' },
-          },
-        ],
-        nextCursor: null,
-      });
-
-      await put({
-        integrationId: 'gitlab',
-        sourceId: 'gitlab-group:team-1',
-        factoryProjectId: project.id,
-        board: 'work',
-      });
-      const response = await put({
-        integrationId: 'gitlab',
-        sourceId: 'gitlab-group:team-1',
-        factoryProjectId: project.id,
-        board: 'release',
-      });
-
-      expect(response.status).toBe(200);
-      expect(gitlab.listItems).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sourceIds: ['gitlab-group:team-1'],
-          attributionSourceIds: ['project-1', 'gitlab-group:team-1'],
-        }),
-      );
-      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 0 } });
-      const items = await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id });
-      expect(items.find(item => item.id === projectCard.id)).toMatchObject({ board: 'work', stages: ['intake'] });
-      expect(items.find(item => item.id === teamCard.id)).toMatchObject({ board: 'release', stages: ['queued'] });
-    });
-
-    it('keeps a custom-board card whose session is keyed by the phase role', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const { item: shipping } = await seed.workItems.upsert({
-        orgId: 'org1',
-        userId: 'u1',
-        factoryProjectId: project.id,
-        input: {
-          board: 'release',
-          title: 'ENG-20',
-          stages: ['shipping'],
-          sessions: { 'release-publisher': { sessionId: 's-2', branch: 'b', threadId: 't' } },
-          externalSource: {
-            integrationId: 'gitlab',
-            type: 'issue',
-            externalId: 'gitlab:ENG-20',
-            url: 'https://gitlab.test/acme/-/issues/ENG-20',
-          },
-        },
-      });
-      const sourcePage = {
-        items: [
-          {
-            source: { type: 'issue', externalId: 'uuid-20' },
-            sourceId: 'team-1',
-            title: 'a',
-            metadata: { identifier: 'ENG-20' },
-          },
-        ],
-        nextCursor: null,
-      };
-      vi.mocked(gitlab.listItems).mockResolvedValueOnce(sourcePage);
-      await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id, board: 'release' });
-
-      const back = await put({
-        integrationId: 'gitlab',
-        sourceId: 'team-1',
-        factoryProjectId: project.id,
-        board: 'work',
-      });
-      expect(await back.json()).toMatchObject({ relocated: { moved: 0, skipped: 1 } });
-      const after = await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id });
-      expect(after.find(i => i.id === shipping.id)).toMatchObject({ board: 'release', stages: ['shipping'] });
-    });
-
-    it('rejects a board that is not installed', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      const response = await put({
-        integrationId: 'gitlab',
-        sourceId: 'team-1',
-        factoryProjectId: project.id,
-        board: 'hotfix',
-      });
-      expect(response.status).toBe(422);
-      expect(await response.json()).toMatchObject({ error: 'invalid_board' });
-      expect(
-        (await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id, board: 7 })).status,
-      ).toBe(400);
-      expect(await seed.intake.listBindings({ orgId: 'org1' })).toEqual([]);
-    });
-
-    it('clears a binding when the project is null', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id });
-      auditEvents.length = 0;
-
-      const response = await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: null });
-
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ bindings: [] });
-      expect(auditEvents).toEqual([
-        {
-          action: 'factory.intake.binding_updated',
-          factoryProjectId: project.id,
-          metadata: { factoryProjectId: null, board: null },
-        },
-      ]);
-    });
-
-    it('rejects unknown integrations and malformed bodies for bindings', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      expect((await put({ integrationId: 'notion', sourceId: 's', factoryProjectId: project.id })).status).toBe(400);
-      expect((await put({ integrationId: 'gitlab', factoryProjectId: project.id })).status).toBe(400);
-      expect((await put({ integrationId: 'gitlab', sourceId: 'team-1' })).status).toBe(400);
-    });
-
-    it('refuses to bind a source to another org project', async () => {
-      const foreign = await seed.projects.create({ orgId: 'org2', userId: 'u9', input: { name: 'other' } });
-      const response = await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: foreign.id });
-
-      expect(response.status).toBe(404);
-      expect(await seed.intake.listBindings({ orgId: 'org1' })).toEqual([]);
-    });
-
-    it('refuses a binding whose factory is deleted while the request is in flight, so its successor can bind', async () => {
-      const deleted = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'deleted' } });
-      const successor = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'successor' } });
-      const projectsApp = new Hono();
-      projectsApp.use('*', async (c, next) => {
-        c.set('factoryAuthUser' as never, orgUser as never);
-        await next();
-      });
-      mountApiRoutes(
-        projectsApp as any,
-        new ProjectRoutes({
-          auth: fakeRouteAuth(),
-          projects: seed.projects,
-          sourceControl: seed.sourceControl,
-          intake: seed.intake,
-        }).routes(),
-      );
-      const write = seed.intake.setBinding.bind(seed.intake);
-      const { promise: writing, resolve: startWriting } = Promise.withResolvers<void>();
-      const { promise: deletedNow, resolve: finishDelete } = Promise.withResolvers<void>();
-      vi.spyOn(seed.intake, 'setBinding').mockImplementationOnce(async input => {
-        startWriting();
-        await deletedNow;
-        return write(input);
-      });
-      const source = { integrationId: 'gitlab', sourceId: 'team-1' };
-
-      const inFlight = put({ ...source, factoryProjectId: deleted.id });
-      await writing;
-      expect((await projectsApp.request(`/web/factory/projects/${deleted.id}`, { method: 'DELETE' })).status).toBe(
-        204,
-      );
-      finishDelete();
-
-      expect((await inFlight).status).toBe(404);
-      expect((await put({ ...source, factoryProjectId: successor.id })).status).toBe(200);
-      expect(await seed.intake.listBindings({ orgId: 'org1' })).toEqual([
-        { ...source, factoryProjectId: successor.id, board: null },
-      ]);
-    });
-
-    it('releases a deleted factory\'s sources with the project', async () => {
-      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
-      expect((await put({ integrationId: 'gitlab', sourceId: 'team-1', factoryProjectId: project.id })).status).toBe(
-        200,
-      );
-      const projectsApp = new Hono();
-      projectsApp.use('*', async (c, next) => {
-        c.set('factoryAuthUser' as never, orgUser as never);
-        await next();
-      });
-      mountApiRoutes(
-        projectsApp as any,
-        new ProjectRoutes({
-          auth: fakeRouteAuth(),
-          projects: seed.projects,
-          sourceControl: seed.sourceControl,
-          intake: seed.intake,
-        }).routes(),
-      );
-
-      expect((await projectsApp.request(`/web/factory/projects/${project.id}`, { method: 'DELETE' })).status).toBe(204);
-      expect(await seed.intake.listBindings({ orgId: 'org1' })).toEqual([]);
-    });
   });
 
   describe('label routes', () => {
@@ -759,42 +205,6 @@ describe('aggregated intake', () => {
     expect(vi.mocked(gitlab.listSources)).not.toHaveBeenCalled();
   });
 
-  it('lists selected items with generic external-source references and per-integration cursors', async () => {
-    await seed.intake.saveConfig({
-      orgId: 'org1',
-      config: {
-        github: { enabled: true, sourceIds: ['repo-1'] },
-        gitlab: { enabled: true, sourceIds: ['team-1'] },
-      },
-    });
-
-    const response = await buildApp(orgUser).request('/web/intake/items');
-    const body = await response.json();
-    expect(body.items).toEqual([
-      expect.objectContaining({
-        integrationId: 'github',
-        title: 'Fix login',
-        externalSource: {
-          integrationId: 'github',
-          type: 'issue',
-          externalId: '17',
-          url: 'https://github.com/acme/app/issues/17',
-        },
-      }),
-      expect.objectContaining({
-        integrationId: 'gitlab',
-        title: 'Ship project model',
-        externalSource: {
-          integrationId: 'gitlab',
-          type: 'issue',
-          externalId: 'ENG-9',
-          url: 'https://gitlab.test/acme/-/issues/ENG-9',
-        },
-      }),
-    ]);
-    expect(typeof body.nextCursor).toBe('string');
-  });
-
   it('keeps listing sources from the capabilities that answer when one is unavailable', async () => {
     vi.mocked(gitlab.listSources).mockRejectedValueOnce(new Error('GitLab token expired'));
 
@@ -821,43 +231,6 @@ describe('aggregated intake', () => {
       failures: [{ integrationId: 'gitlab', message: 'gitlab did not answer within 15s' }],
     });
   });
-
-  it('keeps listing items from the capabilities that answer and resumes an unavailable one at its cursor', async () => {
-    await seed.intake.saveConfig({
-      orgId: 'org1',
-      config: {
-        github: { enabled: true, sourceIds: ['repo-1'] },
-        gitlab: { enabled: true, sourceIds: ['team-1'] },
-      },
-    });
-    vi.mocked(gitlab.listItems).mockRejectedValueOnce(new Error('Bad gateway'));
-    const cursor = Buffer.from(JSON.stringify({ gitlab: 'gitlab-page-2' })).toString('base64url');
-
-    const response = await buildApp(orgUser).request(`/web/intake/items?cursor=${cursor}`);
-
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.items).toEqual([expect.objectContaining({ integrationId: 'github', title: 'Fix login' })]);
-    expect(body.failures).toEqual([{ integrationId: 'gitlab', message: 'Bad gateway' }]);
-    expect(JSON.parse(Buffer.from(body.nextCursor, 'base64url').toString('utf8'))).toEqual({
-      github: 'github-next',
-      gitlab: 'gitlab-page-2',
-    });
-  });
-
-  it('does not call disabled or unselected capabilities', async () => {
-    await seed.intake.saveConfig({
-      orgId: 'org1',
-      config: {
-        github: { enabled: false, sourceIds: ['repo-1'] },
-        gitlab: { enabled: true, sourceIds: null },
-      },
-    });
-    const response = await buildApp(orgUser).request('/web/intake/items');
-    expect(await response.json()).toEqual({ items: [], nextCursor: null, failures: [] });
-    expect(github.listItems).not.toHaveBeenCalled();
-    expect(gitlab.listItems).not.toHaveBeenCalled();
-  });
 });
 
 describe('parseIntakeConfig', () => {
@@ -868,16 +241,11 @@ describe('parseIntakeConfig', () => {
     });
   });
 
-  it('accepts encoded source ids up to the shared selection and binding limit', () => {
+  it('accepts encoded source ids up to the selection limit', () => {
     const sourceId = 'gitlab-project:' + 'a'.repeat(900);
     expect(parseIntakeConfig({ gitlab: { enabled: true, sourceIds: [sourceId] } })?.gitlab?.sourceIds).toEqual([
       sourceId,
     ]);
-    expect(
-      parseIntakeBinding({ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1', board: 'work' }),
-    ).toMatchObject({
-      sourceId,
-    });
     expect(parseIntakeConfig({ gitlab: { enabled: true, sourceIds: ['a'.repeat(1025)] } })).toBeNull();
   });
 

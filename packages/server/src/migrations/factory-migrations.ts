@@ -23,7 +23,7 @@ import type {
 } from '@factory/store';
 
 import { AUDITS_BOARD_UPGRADE_ACTOR, migrateLegacyIntakeRules } from '../intake/migrations.ts';
-import { migrateGithubRepositorySelections } from '../intake/repository-subscriptions.ts';
+import { migrateGithubRepositorySelections, migrateGitLabProjectSelections } from '../intake/repository-subscriptions.ts';
 import type { BootMigration } from './run.ts';
 
 export interface FactoryMigrationDeps {
@@ -188,6 +188,22 @@ export function factoryBootMigrations(deps: FactoryMigrationDeps): BootMigration
           boards,
         });
         return routes > 0 ? `turned the GitHub intake selection into ${routes} repository route(s)` : undefined;
+      },
+    },
+    // The same for GitLab: a selected project bound to a Factory project, and linked to it, becomes a
+    // route on its path. Nothing reads the selection or the bindings for GitLab any more.
+    {
+      id: 'intake.gitlabProjectSelections.v1',
+      ready: ready('intake') && ready('boards') && ready('source-control') && ready('projects'),
+      onFailure: 'stop-boot',
+      run: async () => {
+        const { routes } = await migrateGitLabProjectSelections({
+          projects: deps.projects,
+          intake,
+          sourceControl: deps.sourceControl.forIntegration('gitlab'),
+          boards,
+        });
+        return routes > 0 ? `turned the GitLab intake selection into ${routes} project route(s)` : undefined;
       },
     },
     // Integration-owned data (ClickUp's retired List status rules → intake routes), before any worker

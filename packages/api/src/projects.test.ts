@@ -948,6 +948,7 @@ describe('ProjectRoutes', () => {
     expect(linkResponse.status).toBe(201);
     expect(onProjectRepositoryLinked).toHaveBeenCalledWith({
       orgId: 'org-1',
+      integrationId: 'github',
       projectRepository: expect.objectContaining({ repositoryId: repository.id, connectionId: connection.id }),
     });
     warn.mockRestore();

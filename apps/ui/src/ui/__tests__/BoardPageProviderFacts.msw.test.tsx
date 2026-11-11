@@ -67,7 +67,6 @@ it.each(['board', 'list'])(
       http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
         HttpResponse.json({ config: { github: { enabled: false } } }),
       ),
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
       http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
         HttpResponse.json({ categories: {}, tools: {} }),
       ),

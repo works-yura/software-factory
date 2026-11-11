@@ -76,7 +76,7 @@ describe('GitLabIntegration', () => {
 
     expect(
       gitlab
-        .routes({ auth: fakeRouteAuth({ enabled: true }), storage: { intake: {} } } as never)
+        .routes({ auth: fakeRouteAuth({ enabled: true }), storage: { intake: {}, sourceControl: {} }, runtime: { intakeRoutes: {} } } as never)
         .map(route => ({ path: route.path, requiresAuth: route.requiresAuth })),
     ).toEqual([
       { path: '/web/gitlab/status', requiresAuth: false },
@@ -445,7 +445,7 @@ describe('PlatformGitLabIntegration', () => {
     expect(gitlab.versionControl).toBeDefined();
     expect(
       gitlab
-        .routes({ auth: fakeRouteAuth({ enabled: true }), storage: { intake: {} } } as never)
+        .routes({ auth: fakeRouteAuth({ enabled: true }), storage: { intake: {}, sourceControl: {} }, runtime: { intakeRoutes: {} } } as never)
         .map(route => route.path),
     ).toEqual([
       '/web/gitlab/status',

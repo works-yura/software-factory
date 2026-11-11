@@ -80,7 +80,6 @@ export const queryKeys = {
   ) => ['gitlab', 'pr', baseUrl, factoryProjectId ?? null, projectRepositoryId ?? null, number ?? null] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
   intakeConfig: () => ['intake', 'config'] as const,
-  intakeBindings: () => ['intake', 'bindings'] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
   intakeTriggerKinds: (factoryProjectId: string | undefined, locale: string) =>
     ['intake', 'trigger-kinds', factoryProjectId ?? null, locale] as const,
