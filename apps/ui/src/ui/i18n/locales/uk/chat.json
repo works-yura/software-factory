@@ -425,6 +425,18 @@
     "cardResumes": "Картка продовжить роботу сама, щойно ліміт скинеться, приблизно о {{time}}.",
     "cardResumesSoon": "Картка продовжить роботу сама, щойно ліміт скинеться."
   },
+  "usageLimitPark": {
+    "title": "Ліміт використання вичерпано на всіх акаунтах · продовження о {{time}}",
+    "countdown": "Сесія продовжиться сама за {{duration}} з усім, що чекає.",
+    "resumingSoon": "Продовжуємо…",
+    "hoursMinutes": "{{hours}} год {{minutes}} хв",
+    "hours": "{{hours}} год",
+    "minutes": "{{minutes}} хв",
+    "resumeNow": "Продовжити зараз",
+    "resuming": "Продовжуємо…",
+    "stillLimited": "Усі акаунти досі без доступного використання.",
+    "resumeFailed": "Не вдалося продовжити сесію. Спробуйте ще раз."
+  },
   "turnHarness": {
     "placeholder": "Запитайте {{harness}}…",
     "model": "{{harness}} · {{model}}",

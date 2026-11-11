@@ -423,6 +423,18 @@
     "cardResumes": "This card resumes on its own once usage resets, at about {{time}}.",
     "cardResumesSoon": "This card resumes on its own once usage resets."
   },
+  "usageLimitPark": {
+    "title": "Usage limit reached on every account · resumes at {{time}}",
+    "countdown": "This session resumes on its own in {{duration}}, with what is waiting.",
+    "resumingSoon": "Resuming now…",
+    "hoursMinutes": "{{hours}} h {{minutes}} min",
+    "hours": "{{hours}} h",
+    "minutes": "{{minutes}} min",
+    "resumeNow": "Resume now",
+    "resuming": "Resuming…",
+    "stillLimited": "Every account is still out of usage.",
+    "resumeFailed": "Could not resume the session. Try again."
+  },
   "turnHarness": {
     "placeholder": "Ask {{harness}}…",
     "model": "{{harness}} · {{model}}",

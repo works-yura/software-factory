@@ -1,4 +1,5 @@
 import { Composer } from './Composer';
+import { UsageLimitParkBanner } from './UsageLimitParkBanner';
 
 import './chat-enter.css';
 
@@ -11,6 +12,7 @@ type ComposerPanelProps = {
 export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps) {
   return (
     <div className={composerPanelClass}>
+      <UsageLimitParkBanner />
       <Composer variant={composerVariant} />
     </div>
   );
