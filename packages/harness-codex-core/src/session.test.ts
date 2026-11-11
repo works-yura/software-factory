@@ -507,8 +507,9 @@ describe('createCodexHarness', () => {
         turnId,
         serverName: 'factory',
         mode: 'form',
-        message: 'Allow factory to retry the decision?',
-        _meta: { codex_approval_kind: 'mcp_tool_call', tool_name: 'factory_retry_decision' },
+        // As the CLI (0.166) sends it: the tool named in the message, only its title in `_meta`.
+        message: 'Allow factory to run tool "factory_retry_decision"?',
+        _meta: { codex_approval_kind: 'mcp_tool_call', persist: ['session', 'always'], tool_title: 'Retry decision', connector_name: 'Factory' },
       });
       answers.push(reply1.result);
       reply('Retried.', false)(server, { threadId, turnId, params: {} });
@@ -518,7 +519,7 @@ describe('createCodexHarness', () => {
     expect(await session.sendMessage({ content: 'retry it' })).toEqual({ reason: 'suspended' });
     expect(session.pendingPermission).toMatchObject({
       toolName: 'mcp__factory__factory_retry_decision',
-      input: { reason: 'Allow factory to retry the decision?' },
+      input: { reason: 'Allow factory to run tool "factory_retry_decision"?' },
       once: true,
     });
     await session.respondToToolApproval({ approved: true });
@@ -526,10 +527,12 @@ describe('createCodexHarness', () => {
     expect(answers).toEqual([{ action: 'accept', content: null, _meta: null }]);
     expect(session.grantedTools).toEqual([]);
 
-    // Any other elicitation (a form) is declined.
+    // A device-verification challenge cannot be answered here: declined.
     const other = scripted([
       async (server, { threadId, turnId }) => {
-        answers.push((await server.request('mcpServer/elicitation/request', { threadId, turnId, serverName: 'x', mode: 'form', message: 'Name?', _meta: null })).result);
+        answers.push(
+          (await server.request('mcpServer/elicitation/request', { threadId, turnId, serverName: 'x', mode: 'openai/userVerification', message: 'Verify', _meta: null })).result,
+        );
         reply('ok', false)(server, { threadId, turnId, params: {} });
       },
     ]);

@@ -216,6 +216,96 @@ describe('Codex sessions in the chat', () => {
     expect(answers).toEqual({ answers: { side: { answers: ['Backend'] } } });
   });
 
+  it('shows several Codex questions as one card and gives each question its own answer', async () => {
+    let answers: unknown;
+    const { app, session } = await setup([
+      async (server, { threadId, turnId }) => {
+        answers = (
+          await server.request('item/tool/requestUserInput', {
+            threadId,
+            turnId,
+            itemId: 'q-2',
+            questions: [
+              { id: 'side', header: 'Side', question: 'Which side?', options: [{ label: 'Frontend (Recommended)', description: 'UI' }, { label: 'Backend', description: '' }] },
+              { id: 'when', header: 'When', question: 'Ship when?', options: [{ label: 'Today', description: '' }, { label: 'Next week', description: '' }] },
+            ],
+          })
+        ).result;
+        reply('On it.')(server, { threadId, turnId });
+      },
+    ]);
+    const stream = await openStream(app);
+    const parked = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'Plan the fix' });
+    expect(await parked).toBe('suspended');
+    const suspended = (await stream.until(event => event.type === 'tool_suspended')) as { toolName: string; args: { questions: Array<Record<string, unknown>> } };
+    expect(suspended.toolName).toBe('ask_user');
+    expect(suspended.args.questions.map(question => question.question)).toEqual(['Which side?', 'Ship when?']);
+    // As the chat's card sends several answers (`formatQuestionAnswers`).
+    const resumed = nextEnd(session);
+    const reply2 = '1. Which side?\n   → Frontend\n2. Ship when?\n   → After the release';
+    expect(await (await post(app, `${BASE}/card-1/tool-suspension`, { toolCallId: 'q-2', resumeData: reply2 })).json()).toEqual({ ok: true });
+    expect(await resumed).toBe('complete');
+    expect(answers).toEqual({ answers: { side: { answers: ['Frontend'] }, when: { answers: ['After the release'] } } });
+  });
+
+  it("asks an MCP server's form as the question card and sends the server typed content", async () => {
+    let response: unknown;
+    const { app, session } = await setup([
+      async (server, { threadId, turnId }) => {
+        response = (
+          await server.request('mcpServer/elicitation/request', {
+            threadId,
+            turnId,
+            serverName: 'tracker',
+            mode: 'form',
+            message: 'Which priority?',
+            requestedSchema: { type: 'object', properties: { priority: { type: 'string', enum: ['low', 'high'] } }, required: ['priority'] },
+          })
+        ).result;
+        reply('Filed.')(server, { threadId, turnId });
+      },
+    ]);
+    const stream = await openStream(app);
+    const parked = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'File it' });
+    expect(await parked).toBe('suspended');
+    const suspended = (await stream.until(event => event.type === 'tool_suspended')) as { toolCallId: string; toolName: string; args: Record<string, unknown> };
+    expect(suspended).toMatchObject({ toolName: 'ask_user', args: { question: 'Which priority?\n\npriority', options: [{ label: 'low' }, { label: 'high' }] } });
+    const resumed = nextEnd(session);
+    await post(app, `${BASE}/card-1/tool-suspension`, { toolCallId: suspended.toolCallId, resumeData: 'high' });
+    expect(await resumed).toBe('complete');
+    expect(response).toEqual({ action: 'accept', content: { priority: 'high' } });
+  });
+
+  it("follows a Codex subagent as the chat's subagent card", async () => {
+    const { app, session } = await setup([
+      (server, { threadId, turnId }) => {
+        const child = { threadId: 'child-1', turnId: 'child-turn' };
+        server.notify('item/completed', {
+          threadId,
+          turnId,
+          item: { type: 'collabAgentToolCall', id: 'exec-1', tool: 'spawnAgent', status: 'completed', senderThreadId: threadId, receiverThreadIds: ['child-1'], prompt: 'Read package.json', agentsStates: {} },
+        });
+        server.notify('item/started', { ...child, item: { type: 'commandExecution', id: 'c1', command: 'cat package.json', cwd: '/w', status: 'inProgress' } });
+        server.notify('item/completed', { ...child, item: { type: 'commandExecution', id: 'c1', command: 'cat package.json', cwd: '/w', status: 'completed', aggregatedOutput: '{}', exitCode: 0 } });
+        server.notify('item/completed', { ...child, item: { type: 'agentMessage', id: 'm1', text: 'It is empty.' } });
+        server.notify('turn/completed', { threadId: 'child-1', turn: { id: 'child-turn', status: 'completed' } });
+        reply('The subagent says it is empty.')(server, { threadId, turnId });
+      },
+    ]);
+    const stream = await openStream(app);
+    const ended = nextEnd(session);
+    await post(app, `${BASE}/card-1/messages`, { message: 'Delegate it' });
+    expect(await ended).toBe('complete');
+    expect(await stream.until(event => event.type === 'subagent_start')).toMatchObject({ toolCallId: 'exec-1', agentType: 'codex', task: 'Read package.json' });
+    expect(await stream.until(event => event.type === 'subagent_tool_start')).toMatchObject({ toolCallId: 'exec-1', subToolName: 'execute_command' });
+    expect(await stream.until(event => event.type === 'subagent_end')).toMatchObject({ toolCallId: 'exec-1', result: 'It is empty.', isError: false });
+    // Only the Agent call is stored; the subagent's own work stays out of the thread.
+    const parts = (await history(app)).filter(message => message.role === 'assistant').flatMap(message => message.content.parts);
+    expect(parts.filter(part => part.type === 'tool-invocation').map(part => part.toolInvocation.toolName)).toEqual(['Agent']);
+  });
+
   it("shows Codex's plan list as the task panel", async () => {
     const { app, session } = await setup([
       (server, { threadId, turnId }) => {

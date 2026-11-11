@@ -26,6 +26,7 @@ import {
 
 import { buildCodexEnv } from './env.ts';
 import { CodexError } from './errors.ts';
+import { elicitationQuestions, elicitationResponse, splitQuestionAnswers, type ElicitationPlan, type McpElicitationResponse } from './elicitation.ts';
 import { CodexTurnTranslator, type CodexTurnOutcome } from './events.ts';
 import { CODEX_FILE_CREDENTIALS_ARGS, codexAppServerArgs, resolveCodexLaunchArgs } from './launchArgs.ts';
 import type { CodexTurnModelSelection } from './models/harness-models.ts';
@@ -40,6 +41,8 @@ import type {
   SandboxMode,
   SandboxPolicy,
   ThreadStartParams,
+  McpServerElicitationRequestParams,
+  ThreadItem,
   ToolRequestUserInputParams,
   TurnStartParams,
 } from './protocol/schema.ts';
@@ -111,11 +114,16 @@ export function codexRuntimeModeTurnDefaults(
   }
 }
 
-/** Every thread's config: the plan list tool on, MCP servers given time to start, reasoning summaries not holding tool calls. */
+/**
+ * Every thread's config: the plan list tool on, MCP servers given time to start, reasoning
+ * summaries not holding tool calls, and the question tool (`request_user_input`) offered in every
+ * mode, not only in plan mode: every question to a person goes through it, as a question card.
+ */
 export const CODEX_THREAD_CONFIG: Readonly<Record<string, JsonValue>> = {
   'tools.update_plan.enabled': true,
   mcp_optional_startup_grace_ms: 10_000,
   'features.concurrent_reasoning_summaries': true,
+  'features.default_mode_request_user_input': true,
 };
 
 /** An MCP server Codex reaches for the session (`mcp_servers.<name>` of the thread's config). */
@@ -243,6 +251,11 @@ export interface CodexSessionConfig {
   onCredentialFailure?: (session: CodexSession, failure: { accountId: string; error: CodexError }) => void | Promise<void>;
   /** The model fields of the session's next turn (the harness's model facet), asked before each turn. */
   turnSelectionFor?: (session: CodexSession) => CodexTurnModelSelection | undefined | Promise<CodexTurnModelSelection | undefined>;
+  /**
+   * An image Codex generated (its `imageGeneration` item, saved under the session's home): the host
+   * keeps it as the session's attachment. Errors are logged, never the turn's.
+   */
+  onImageGenerated?: (session: CodexSession, image: { path: string; prompt?: string; itemId: string }) => void | Promise<void>;
   /** The thread's developer instructions (the Factory's playbook); asked when the run opens its thread. */
   developerInstructions?: string;
   developerInstructionsFor?: (session: CodexSession) => string | undefined | Promise<string | undefined>;
@@ -285,6 +298,8 @@ interface ActiveRun {
   policy?: CodexTurnPolicy;
   /** A parked turn this run picked up again; its process is the run's. */
   adopted?: ParkedTurn;
+  /** The `turn/start` of the turn in flight, so it can go on under another account. */
+  turnParams?: TurnStartParams;
   started: Promise<void>;
   markStarted(error?: unknown): void;
   ended: Promise<AgentRunEndReason>;
@@ -301,9 +316,25 @@ interface TurnWatch {
 
 type TurnResult =
   | CodexTurnOutcome
-  | { kind: 'permission'; request: PermissionRequest; respond: (answer: ParkAnswer) => void; question?: ToolRequestUserInputParams };
+  | { kind: 'permission'; request: PermissionRequest; respond: (answer: ParkAnswer) => void; ask?: ParkedAsk };
 
-type ParkAnswer = { decision: ApprovalDecision } | { answers: Record<string, { answers: string[] }> };
+/** What a person answers on a question card: Codex's own question, or an MCP server's form or link. */
+type ParkedAsk = { kind: 'userInput'; params: ToolRequestUserInputParams } | { kind: 'elicitation'; plan: ElicitationPlan };
+
+type ParkAnswer =
+  | { decision: ApprovalDecision }
+  | { answers: Record<string, { answers: string[] }> }
+  | { elicitation: McpElicitationResponse };
+
+/** The answer a question card's request takes from the person's reply. */
+function askAnswer(ask: ParkedAsk, answer: string | string[]): ParkAnswer {
+  return ask.kind === 'userInput' ? { answers: questionAnswers(ask.params, answer) } : { elicitation: elicitationResponse(ask.plan, answer) };
+}
+
+/** The answer a question card's request takes when nobody answers it. */
+function askDismissed(ask: ParkedAsk): ParkAnswer {
+  return ask.kind === 'userInput' ? { answers: {} } : { elicitation: { action: 'cancel' } };
+}
 
 /** A turn that waits, in its live process, for a person's answer. */
 interface ParkedTurn {
@@ -311,10 +342,12 @@ interface ParkedTurn {
   watch: TurnWatch;
   request: PermissionRequest;
   respond: (answer: ParkAnswer) => void;
-  question?: ToolRequestUserInputParams;
+  ask?: ParkedAsk;
   codexThreadId: string;
   threadId: string;
   timer: NodeJS.Timeout;
+  /** The parked turn's own `turn/start`, so it can go on under another account after a usage limit. */
+  turnParams?: TurnStartParams;
 }
 
 type Accepted = { action: 'deliver' | 'wake'; run: ActiveRun } | { action: 'persist' };
@@ -378,25 +411,38 @@ function signalText(input: AgentSignalInput): string {
   return `<skill name="${input.attributes.name.replaceAll('"', '&quot;')}">\n${contents}\n</skill>`;
 }
 
-/** The answers a `request_user_input` takes from a person's answer to its question card. */
-function questionAnswers(params: ToolRequestUserInputParams | undefined, answer: string | string[]): Record<string, { answers: string[] }> {
-  const values = (Array.isArray(answer) ? answer : [answer]).map(value => value.trim()).filter(Boolean);
+/**
+ * The answers a `request_user_input` takes from a person's answer to its question card. The chat
+ * sends a card of several questions as one text, each answer under its numbered question; it is
+ * split back so each question gets its own.
+ */
+export function questionAnswers(params: ToolRequestUserInputParams | undefined, answer: string | string[]): Record<string, { answers: string[] }> {
   const questions = params?.questions ?? [];
-  if (questions.length <= 1) return questions[0] ? { [questions[0].id]: { answers: values } } : {};
-  // Several questions answered together: each gets the whole answer, as the chat sends it as one text.
-  return Object.fromEntries(questions.map(question => [question.id, { answers: [values.join('\n')] }]));
+  if (questions.length <= 1) {
+    const values = (Array.isArray(answer) ? answer : [answer]).map(value => value.trim()).filter(Boolean);
+    return questions[0] ? { [questions[0].id]: { answers: values } } : {};
+  }
+  const answers = splitQuestionAnswers(
+    questions.map(question => question.question),
+    answer,
+  );
+  return Object.fromEntries(questions.map((question, index) => [question.id, { answers: answers[index] ? [answers[index]] : [] }]));
 }
 
 /**
  * The tool an MCP elicitation asks a person to allow, when it is Codex's `mcp_tool_call` approval
- * (`_meta.codex_approval_kind`); `undefined` for any other elicitation.
+ * (`_meta.codex_approval_kind`); `undefined` for any other elicitation. The CLI (0.166) names the
+ * tool in its message (`Allow <server> to run tool "<tool>"?`) and puts only its title, connector
+ * and parameters in `_meta` (`tool_title`, `connector_*`, `tool_params`), so the message is read
+ * first: the tool's own name is what Factory grants and asks-each-time lists match.
  */
 export function codexMcpToolApproval(params: { serverName?: string; message?: string; _meta?: JsonValue | null }):
   | { server: string; tool: string; message?: string }
   | undefined {
   const meta = params._meta && typeof params._meta === 'object' && !Array.isArray(params._meta) ? params._meta : undefined;
   if (meta?.codex_approval_kind !== 'mcp_tool_call' || !params.serverName) return undefined;
-  const tool = [meta.tool_name, meta.tool_title, meta.tool].find((value): value is string => typeof value === 'string' && value.trim() !== '');
+  const named = params.message ? /run tool ["“`']([^"”`']+)["”`']/.exec(params.message)?.[1] : undefined;
+  const tool = [named, meta.tool_name, meta.tool, meta.tool_title].find((value): value is string => typeof value === 'string' && value.trim() !== '');
   return {
     server: params.serverName,
     tool: tool ?? 'tool',
@@ -593,7 +639,11 @@ export class CodexSession implements AgentSession {
       this.#emitFollowUpCount();
       return { action: 'queued' };
     }
-    if (delivery === 'steer') this.#abort(false);
+    if (delivery === 'steer') {
+      // Codex takes the message into the turn in flight (`turn/steer`): it reads it at its next step, nothing is stopped.
+      if (await this.#steer(message)) return { action: 'deliver' };
+      this.#abort(false);
+    }
     const accepted = this.#accept([message], true);
     if (accepted.action === 'persist') throw new Error('unreachable: chat messages always wake');
     return { action: accepted.action };
@@ -706,7 +756,7 @@ export class CodexSession implements AgentSession {
     const entry = { kind: 'question_answer' as const, toolCallId: request.toolCallId, answer: text };
     const parked = this.#takeParked(request.toolCallId);
     if (parked) {
-      const run = this.#adopt(parked, { answers: questionAnswers(parked.question, answer) });
+      const run = this.#adopt(parked, parked.ask ? askAnswer(parked.ask, answer) : { answers: {} });
       this.#emitTranscript(entry, run);
       await run.started;
       return;
@@ -732,6 +782,25 @@ export class CodexSession implements AgentSession {
   }
 
   // -- internals ------------------------------------------------------------
+
+  /** Gives the turn in flight the message (`turn/steer`); `false` when no turn of this run can take it. */
+  async #steer(message: CodexPendingInput): Promise<boolean> {
+    const run = this.#run;
+    const server = run?.server;
+    const translator = run?.watch?.translator;
+    if (!run || run.settled || !server?.isAlive() || !run.codexThreadId || !translator?.turnId || translator.completed) return false;
+    try {
+      await server.client.request('turn/steer', { threadId: run.codexThreadId, expectedTurnId: translator.turnId, input: [{ type: 'text', text: message.text }] });
+    } catch {
+      // The turn ended (or moved on) before Codex took it: the caller stops the run and starts over with it.
+      return false;
+    }
+    if (run.settled) return false;
+    this.#echo([message], run, true);
+    if (message.id) this.#markDelivered([message]);
+    void this.#save().catch(() => {});
+    return true;
+  }
 
   #notificationRecord(thread: CodexThreadState, input: CodexNotificationInput): NotificationRecord {
     const fresh: NotificationRecord = {
@@ -919,6 +988,7 @@ export class CodexSession implements AgentSession {
     run.codexThreadId = parked.codexThreadId;
     run.adopted = parked;
     run.begun = true;
+    if (parked.turnParams) run.turnParams = parked.turnParams;
     this.#run = run;
     const previous = this.#barrier;
     run.loopDone = this.#loop(run, previous, { parked, answer });
@@ -942,7 +1012,8 @@ export class CodexSession implements AgentSession {
         run.watch = watch;
         run.markStarted();
         start.parked.respond(start.answer);
-        result = await this.#awaitTurn(run, watch);
+        // A usage limit after the answer moves the turn to another account, as a fresh turn's does.
+        result = await this.#switchAccounts(run, await this.#awaitTurn(run, watch));
       } else {
         result = await this.#turn(run, start.inputs);
       }
@@ -1056,10 +1127,11 @@ export class CodexSession implements AgentSession {
       watch,
       request: result.request,
       respond: result.respond,
-      ...(result.question ? { question: result.question } : {}),
+      ...(result.ask ? { ask: result.ask } : {}),
       codexThreadId: run.codexThreadId,
       threadId: run.threadId,
       timer,
+      ...(run.turnParams ? { turnParams: run.turnParams } : {}),
     };
     // A process that dies while it waits leaves the answer to the next turn.
     server.client.onTerminated(() => {
@@ -1088,7 +1160,7 @@ export class CodexSession implements AgentSession {
     this.#parked = undefined;
     clearTimeout(parked.timer);
     try {
-      parked.respond(parked.question ? { answers: {} } : { decision });
+      parked.respond(parked.ask ? askDismissed(parked.ask) : { decision });
     } catch {
       // The process may already be gone.
     }
@@ -1229,9 +1301,16 @@ export class CodexSession implements AgentSession {
   /** Routes a process's notifications and requests to the turn in flight. */
   #wire(server: CodexAppServerProcess) {
     const client = server.client;
+    const current = () => (this.#run?.server === server ? this.#run.watch : this.#parked?.server === server ? this.#parked.watch : undefined);
+    /** The turn a notification of the turn's own thread belongs to. */
     const watchFor = (payload: { threadId?: string; turnId?: string }) => {
-      const watch = this.#run?.server === server ? this.#run.watch : this.#parked?.server === server ? this.#parked.watch : undefined;
+      const watch = current();
       return watch && watch.translator.owns(payload) ? watch : undefined;
+    };
+    /** The turn an item, delta or request belongs to: of its own thread, or of a subagent it started. */
+    const workOf = (payload: { threadId?: string; turnId?: string | null }) => {
+      const watch = current();
+      return watch && watch.translator.accepts(payload) ? watch : undefined;
     };
     const emit = (entries: TranscriptEntry[]) => {
       const run = this.#run;
@@ -1243,19 +1322,21 @@ export class CodexSession implements AgentSession {
       if (watch && !watch.translator.turnId) watch.translator.begin(payload.turn.id);
     });
     client.handleServerNotification('item/started', payload => {
-      const watch = watchFor(payload);
+      const watch = workOf(payload);
       if (watch) emit(watch.translator.itemStarted(payload));
     });
     client.handleServerNotification('item/completed', payload => {
-      const watch = watchFor(payload);
-      if (watch) emit(watch.translator.itemCompleted(payload));
+      const watch = workOf(payload);
+      if (!watch) return;
+      emit(watch.translator.itemCompleted(payload));
+      if (payload.item.type === 'imageGeneration') this.#imageGenerated(payload.item as Extract<ThreadItem, { type: 'imageGeneration' }>);
     });
     client.handleServerNotification('item/agentMessage/delta', payload => {
-      const watch = watchFor(payload);
+      const watch = workOf(payload);
       if (watch) emit(watch.translator.agentMessageDelta(payload));
     });
     client.handleServerNotification('item/reasoning/summaryTextDelta', payload => {
-      const watch = watchFor(payload);
+      const watch = workOf(payload);
       if (watch) emit(watch.translator.reasoningDelta(payload));
     });
     client.handleServerNotification('turn/plan/updated', payload => {
@@ -1278,6 +1359,12 @@ export class CodexSession implements AgentSession {
       watchFor(payload)?.translator.error(payload);
     });
     client.handleServerNotification('turn/completed', payload => {
+      // A subagent's turn ended: its `Agent` call settles; the turn that started it goes on.
+      const parent = current();
+      if (parent?.translator.isSubagent(payload.threadId)) {
+        emit(parent.translator.subagentTurnCompleted(payload));
+        return;
+      }
       const watch = watchFor({ threadId: payload.threadId, turnId: payload.turn.id });
       if (!watch) return;
       emit(watch.translator.complete(payload));
@@ -1286,12 +1373,13 @@ export class CodexSession implements AgentSession {
     client.handleUnknownServerNotification(() => {});
 
     const park = async (
-      payload: { threadId: string; turnId?: string },
+      payload: { threadId: string; turnId?: string | null },
       build: (translator: CodexTurnTranslator) => { entries: TranscriptEntry[]; permission: PermissionRequest },
-      question?: ToolRequestUserInputParams,
+      ask?: ParkedAsk,
     ): Promise<ParkAnswer> => {
-      const watch = watchFor(payload);
-      if (!watch) return question ? { answers: {} } : { decision: 'cancel' };
+      const question = ask;
+      const watch = workOf(payload);
+      if (!watch) return ask ? askDismissed(ask) : { decision: 'cancel' };
       const policy = this.#run?.policy;
       const built = build(watch.translator);
       // A tool asked about on every call: its Allow is for this call alone.
@@ -1307,11 +1395,11 @@ export class CodexSession implements AgentSession {
       // Nobody watches a card run that may not park: what it would ask about is refused.
       if (policy?.unattended && !policy.parkAsks) {
         emit(calls);
-        return question ? { answers: {} } : { decision: 'decline' };
+        return ask ? askDismissed(ask) : { decision: 'decline' };
       }
       emit(entries);
       return new Promise<ParkAnswer>(resolve => {
-        watch.finish({ kind: 'permission', request: permission, respond: resolve, ...(question ? { question } : {}) });
+        watch.finish({ kind: 'permission', request: permission, respond: resolve, ...(ask ? { ask } : {}) });
       });
     };
     client.handleServerRequest('item/commandExecution/requestApproval', async params => {
@@ -1329,7 +1417,7 @@ export class CodexSession implements AgentSession {
       return { permissions: params.permissions, scope: decision === 'acceptForSession' ? 'session' : 'turn' };
     });
     client.handleServerRequest('item/tool/requestUserInput', async params => {
-      const answer = await park(params, translator => translator.question(params), params);
+      const answer = await park(params, translator => translator.question(params), { kind: 'userInput', params });
       return { answers: 'answers' in answer ? answer.answers : {} };
     });
     // The backend refused the access token: the host refreshes the account (under its lock) and hands the new one over.
@@ -1345,19 +1433,48 @@ export class CodexSession implements AgentSession {
       return codexTokensResponse(tokens);
     });
     // An MCP tool call Codex asks a person to allow (a tool the host marked `approval_mode = "prompt"`):
-    // parked like a command approval. Any other MCP elicitation is declined: the Factory's tools never
-    // ask for input, and a person cannot answer a form here.
+    // parked like a command approval. Any other elicitation (an MCP server's form, or a link to open)
+    // is asked as a question card and its answers go back as the content the server asked for.
     client.handleServerRequest('mcpServer/elicitation/request', async params => {
+      if (!params.threadId) return { action: 'decline' };
+      const where = { threadId: params.threadId, ...(params.turnId ? { turnId: params.turnId } : {}) };
       const approval = codexMcpToolApproval(params);
-      if (!approval || !params.threadId) return { action: 'decline' };
-      const answer = await park({ threadId: params.threadId, ...(params.turnId ? { turnId: params.turnId } : {}) }, translator =>
-        translator.mcpApproval({ id: `mcp-approval-${randomUUID()}`, ...approval }),
-      );
-      const decision = 'decision' in answer ? answer.decision : 'cancel';
-      if (decision === 'acceptForSession') return { action: 'accept', content: null, _meta: { persist: 'session' } };
-      if (decision === 'accept') return { action: 'accept', content: null, _meta: null };
-      return { action: 'decline' };
+      if (approval) {
+        const answer = await park(where, translator => translator.mcpApproval({ id: `mcp-approval-${randomUUID()}`, threadId: params.threadId, ...approval }));
+        const decision = 'decision' in answer ? answer.decision : 'cancel';
+        if (decision === 'acceptForSession') return { action: 'accept', content: null, _meta: { persist: 'session' } };
+        if (decision === 'accept') return { action: 'accept', content: null, _meta: null };
+        return { action: 'decline' };
+      }
+      return this.#elicit(params, where, park);
     });
+  }
+
+  /** An MCP server's form or link as a question card; declined when a person cannot answer it here. */
+  async #elicit(
+    params: McpServerElicitationRequestParams,
+    where: { threadId: string; turnId?: string },
+    park: (
+      payload: { threadId: string; turnId?: string | null },
+      build: (translator: CodexTurnTranslator) => { entries: TranscriptEntry[]; permission: PermissionRequest },
+      ask?: ParkedAsk,
+    ) => Promise<ParkAnswer>,
+  ): Promise<McpElicitationResponse> {
+    const card = elicitationQuestions(params);
+    if (!card) return { action: 'decline' };
+    const id = `elicitation-${params.elicitationId ?? randomUUID()}`;
+    const answer = await park(where, translator => translator.elicitation({ id, threadId: params.threadId, ...card }), { kind: 'elicitation', plan: card.plan });
+    if ('elicitation' in answer) return answer.elicitation;
+    return { action: 'decision' in answer && answer.decision === 'cancel' ? 'cancel' : 'decline' };
+  }
+
+  /** Hands an image Codex generated to the host, which keeps it with the session. */
+  #imageGenerated(item: Extract<ThreadItem, { type: 'imageGeneration' }>) {
+    const hook = this.#config.onImageGenerated;
+    if (!hook || !item.savedPath || item.failure) return;
+    void Promise.resolve()
+      .then(() => hook(this, { path: item.savedPath!, itemId: item.id, ...(item.revisedPrompt ? { prompt: item.revisedPrompt } : {}) }))
+      .catch(error => console.warn('[codex harness] Could not keep a generated image.', error));
   }
 
   /** Waits for the turn to end, park, time out, or lose its process. */
@@ -1441,33 +1558,47 @@ export class CodexSession implements AgentSession {
         ? { collaborationMode: { mode: planning ? 'plan' : 'default', settings: { model, ...(selection?.effort ? { reasoning_effort: selection.effort } : {}) } } }
         : {}),
     };
-    // A new account picks up in the same thread: the prompt is already there, so it is told to go on instead.
     const held = this.#processCredentials.get(server);
     if (held) held.tried = [];
-    let attempt = { params, translator, watch };
-    for (;;) {
-      try {
-        const started = await server.client.request('turn/start', attempt.params);
-        if (!attempt.translator.turnId) attempt.translator.begin(started.turn.id);
-      } catch (error) {
-        return { kind: 'error', error: error instanceof CodexError ? error : new CodexError('process', `Codex refused the turn: ${error instanceof Error ? error.message : String(error)}`, { cause: error }) };
-      }
-      // Codex has the prompt: from here on the input counts as delivered.
-      if (run.unsent) {
-        this.#markDelivered(run.unsent);
-        run.unsent = undefined;
-        void this.#save().catch(() => {});
-      }
-      const result = await this.#awaitTurn(run, attempt.watch);
-      if (result.kind !== 'error' || !(await this.#nextAccount(run, result.error))) return result;
-      const nextTranslator = new CodexTurnTranslator({ threadId: codexThreadId, usage: this.#usage });
-      const nextWatch = newTurnWatch(nextTranslator);
-      run.watch = nextWatch;
-      attempt = {
-        params: { ...attempt.params, input: [{ type: 'text', text: CODEX_ACCOUNT_SWITCH_PROMPT }] },
-        translator: nextTranslator,
-        watch: nextWatch,
-      };
+    run.turnParams = params;
+    const failed = await this.#startTurn(run, server, params, translator);
+    if (failed) return failed;
+    // Codex has the prompt: from here on the input counts as delivered.
+    if (run.unsent) {
+      this.#markDelivered(run.unsent);
+      run.unsent = undefined;
+      void this.#save().catch(() => {});
     }
+    return this.#switchAccounts(run, await this.#awaitTurn(run, watch));
+  }
+
+  async #startTurn(run: ActiveRun, server: CodexAppServerProcess, params: TurnStartParams, translator: CodexTurnTranslator): Promise<TurnResult | undefined> {
+    try {
+      const started = await server.client.request('turn/start', params);
+      if (!translator.turnId) translator.begin(started.turn.id);
+      return undefined;
+    } catch (error) {
+      return { kind: 'error', error: error instanceof CodexError ? error : new CodexError('process', `Codex refused the turn: ${error instanceof Error ? error.message : String(error)}`, { cause: error }) };
+    }
+  }
+
+  /**
+   * A turn that ran out of usage (or was refused) goes on under the next account, in the same
+   * thread: the prompt is already there, so the new turn tells Codex to go on instead. Whether the
+   * turn was fresh or a parked one the person's answer resumed, it switches the same way.
+   */
+  async #switchAccounts(run: ActiveRun, first: TurnResult): Promise<TurnResult> {
+    let result = first;
+    while (result.kind === 'error' && run.server && run.codexThreadId && run.turnParams && (await this.#nextAccount(run, result.error))) {
+      const server = run.server;
+      const translator = new CodexTurnTranslator({ threadId: run.codexThreadId, usage: this.#usage });
+      const watch = newTurnWatch(translator);
+      run.watch = watch;
+      const params: TurnStartParams = { ...run.turnParams, input: [{ type: 'text', text: CODEX_ACCOUNT_SWITCH_PROMPT }] };
+      const failed = await this.#startTurn(run, server, params, translator);
+      if (failed) return failed;
+      result = await this.#awaitTurn(run, watch);
+    }
+    return result;
   }
 }
