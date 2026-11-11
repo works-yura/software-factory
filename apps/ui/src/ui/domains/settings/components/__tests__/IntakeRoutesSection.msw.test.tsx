@@ -62,12 +62,12 @@ const clickUpTriage = route({
 });
 
 /** A project's routes behind the real API paths; returns what the UI wrote. */
-function useRouteHandlers(initial: IntakeRouteInfo[]) {
+function useRouteHandlers(initial: IntakeRouteInfo[], { canEdit = true } = {}) {
   let routes = [...initial];
   const written = { created: [] as unknown[], patched: [] as unknown[], deleted: [] as string[], reordered: [] as string[][] };
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json({ boards: [workBoard] })),
-    http.get(ROUTES_URL, () => HttpResponse.json({ intakeRoutes: routes })),
+    http.get(ROUTES_URL, () => HttpResponse.json({ intakeRoutes: routes, canEdit })),
     http.post(ROUTES_URL, async ({ request }) => {
       const body = (await request.json()) as Pick<IntakeRouteInfo, 'name' | 'enabled' | 'when' | 'target'>;
       written.created.push(body);
@@ -90,7 +90,7 @@ function useRouteHandlers(initial: IntakeRouteInfo[]) {
       const { ids } = (await request.json()) as { ids: string[] };
       written.reordered.push(ids);
       routes = ids.map((id, position) => ({ ...routes.find(entry => entry.id === id)!, position }));
-      return HttpResponse.json({ intakeRoutes: routes });
+      return HttpResponse.json({ intakeRoutes: routes, canEdit });
     }),
   );
   return written;
@@ -263,6 +263,16 @@ describe('IntakeRoutesSection', () => {
     const [closed, reopened] = routeRows();
     expect(within(closed!).getByText('When: issue closed · as not planned → Development › Done')).toBeTruthy();
     expect(within(reopened!).getByText('When: issue reopened → Development › Intake')).toBeTruthy();
+  });
+
+  it("shows the routes read-only to someone who isn't an organization admin", async () => {
+    useRouteHandlers([clickUpTriage], { canEdit: false });
+    renderSection();
+
+    expect(await screen.findByText('Only an organization admin can change these routes.')).toBeInTheDocument();
+    expect(routeRows()).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Add route' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
 
   it('shows why a route is skipped', async () => {

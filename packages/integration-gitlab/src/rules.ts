@@ -7,7 +7,6 @@ import {
   eventBoardId,
   isTerminalWorkItem,
   pullRequestSources,
-  DEFAULT_BOARD_ID,
   intakeTarget,
   rulePhaseField,
   withBoardClosure,
@@ -359,16 +358,15 @@ export class GitLabRules {
     // A project that is not an intake source still belongs to the Factory's
     // workspace: a card spanning several repositories opens merge requests in
     // it, and those must be tracked on the card even though nothing else here
-    // reacts to the project.
+    // reacts to the project. A binding only says the project feeds this Factory
+    // project; the project's intake routes place its cards.
     const intakeSelected = Boolean(config.gitlab?.enabled && config.gitlab.sourceIds?.includes(sourceId));
-    const binding = intakeSelected
-      ? (await this.options.intake.listBindings({ orgId: target.target.orgId, integrationId: 'gitlab' })).find(
-          candidate =>
-            candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
-        )
-      : undefined;
-    const board = binding ? this.#boards(target.target).get(binding.board ?? DEFAULT_BOARD_ID) : undefined;
-    if (!board && !event.startsWith('mergeRequest')) return { status: 'ignored' };
+    const bound =
+      intakeSelected &&
+      (await this.options.intake.listBindings({ orgId: target.target.orgId, integrationId: 'gitlab' })).some(
+        candidate => candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
+      );
+    if (!bound && !event.startsWith('mergeRequest')) return { status: 'ignored' };
 
     const connectionIds = [
       ...new Set(
@@ -484,7 +482,7 @@ export class GitLabRules {
         ownedByCard: trackedItem.id !== attachedItem?.id || cardOwnsBranch(trackedItem, headBranch),
       });
     };
-    if (!board) {
+    if (!bound) {
       await trackAuthoringMergeRequest();
       return { status: 'ignored' };
     }
@@ -621,7 +619,7 @@ export class GitLabRules {
           orgId: target.target.orgId,
           factoryProjectId: target.target.factoryProjectId,
           factoryProject,
-          board: intakeTarget(this.#boards(target.target), board),
+          board: intakeTarget(this.#boards(target.target)),
           issue,
           issueAuthor,
           issueAuthorTrusted,

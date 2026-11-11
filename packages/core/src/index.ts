@@ -12,8 +12,10 @@ export {
 } from './boards/define-board.ts';
 export { DEFAULT_BOARD_ID } from './boards/default-board.ts';
 export type { AnyBoardConfig } from './boards/define-board.ts';
-export { cardRuleFacts } from './boards/card-facts.ts';
+export { cardRuleFacts, sourceRepository } from './boards/card-facts.ts';
+export type { CardSourceFacts } from './boards/card-facts.ts';
 export {
+  catchesEveryNewCard,
   closedIssueRuleFacts,
   INTAKE_ROUTE_METADATA_KEY,
   intakeTargetProblem,
@@ -26,6 +28,7 @@ export {
   routesHandleEvent,
 } from './boards/intake-routing.ts';
 export type {
+  IntakePlacementOptions,
   IntakeRoute,
   IntakeRouteResolution,
   IntakeRoutesReader,

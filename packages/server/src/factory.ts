@@ -1018,18 +1018,25 @@ export class MastraFactory {
       await timedPhase('prepare.migrate.workItemSplit', () => workItemsStorage.migrateOpenLegacyCards(isTerminal));
     }
 
-    // ClickUp tag routes became intake routes: move each one into its project's routes, once.
-    // A failure stops the boot: the poller no longer reads tag routes, so they would go unapplied.
+    // Label routes (ClickUp tags, GitHub and GitLab labels) became intake routes: move each one into
+    // its project's routes, once. A failure stops the boot: nothing reads label routes any more, so
+    // they would go unapplied.
     if (storage.isDomainReady('intake') && storage.isDomainReady('boards')) {
-      await timedPhase('prepare.intake.clickupTagRoutes', async () => {
-        const moved = await migrateLabelRoutesToIntakeRoutes({
-          integrationId: 'clickup',
-          routeName: label => `ClickUp tag "${label}"`,
-          intake: intakeStorage,
-          boards: storedBoardsStorage,
+      for (const [integrationId, routeName] of [
+        ['clickup', (label: string) => `ClickUp tag "${label}"`],
+        ['github', (label: string) => `GitHub label "${label}"`],
+        ['gitlab', (label: string) => `GitLab label "${label}"`],
+      ] as const) {
+        await timedPhase(`prepare.intake.${integrationId}LabelRoutes`, async () => {
+          const moved = await migrateLabelRoutesToIntakeRoutes({
+            integrationId,
+            routeName,
+            intake: intakeStorage,
+            boards: storedBoardsStorage,
+          });
+          if (moved > 0) console.info(`[factory] moved ${moved} ${integrationId} label route(s) into intake routes`);
         });
-        if (moved > 0) console.info(`[factory] moved ${moved} ClickUp tag route(s) into intake routes`);
-      });
+      }
     }
 
     // The Review board was retired: pull and merge requests are reviewed in Work › PR review.

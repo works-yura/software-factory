@@ -21,7 +21,17 @@ export type RouteCondition =
   /** The intake rule a card came from (its id). */
   | { field: 'intake.rule'; value: string }
   /** The trigger kind of the rule a card came from, e.g. `schedule`. */
-  | { field: 'intake.trigger'; value: string };
+  | { field: 'intake.trigger'; value: string }
+  /** A fact the provider reports, matched whole and case-insensitively. */
+  | { field: RouteTextFact; value: string };
+
+/**
+ * Provider facts matched whole: where an item lives (`acme/app`, `acme/platform/api`), its key
+ * (`acme/app#42`), its state (`open`), and who it is assigned to (any one assignee).
+ */
+export const ROUTE_TEXT_FACTS = ['source.repository', 'item.key', 'item.state', 'item.assignees'] as const;
+export type RouteTextFact = (typeof ROUTE_TEXT_FACTS)[number];
+const isTextFact = (field: string): field is RouteTextFact => (ROUTE_TEXT_FACTS as readonly string[]).includes(field);
 
 export type RouteConditionField = RouteCondition['field'];
 
@@ -33,6 +43,7 @@ export const ROUTE_CONDITION_FIELDS: readonly RouteConditionField[] = [
   'item.title',
   'intake.rule',
   'intake.trigger',
+  ...ROUTE_TEXT_FACTS,
 ];
 
 const isIntegration = (value: unknown): value is RouteIntegration =>
@@ -57,6 +68,7 @@ function readCondition(condition: CardRuleGroup['conditions'][number]): RouteCon
   if ((field === 'intake.rule' || field === 'intake.trigger') && operator === 'equals' && typeof value === 'string') {
     return { field, value };
   }
+  if (isTextFact(field) && operator === 'equals' && typeof value === 'string') return { field, value };
   return undefined;
 }
 
@@ -93,6 +105,13 @@ export function writeRouteConditions(conditions: readonly RouteCondition[]): Car
       case 'intake.rule':
       case 'intake.trigger':
         return condition.value ? [{ field: condition.field, operator: 'equals', value: condition.value }] : [];
+      case 'source.repository':
+      case 'item.key':
+      case 'item.state':
+      case 'item.assignees': {
+        const value = condition.value.trim();
+        return value ? [{ field: condition.field, operator: 'equals', value }] : [];
+      }
       default:
         return [{ field: condition.field, operator: 'equals', value: condition.value }];
     }
@@ -121,5 +140,6 @@ export function isBlankCondition(condition: RouteCondition): boolean {
   if (condition.field === 'source.integration') return condition.value.length === 0;
   if (condition.field === 'item.labels' || condition.field === 'item.title') return !condition.value.trim();
   if (condition.field === 'intake.rule' || condition.field === 'intake.trigger') return !condition.value;
+  if (isTextFact(condition.field)) return typeof condition.value === 'string' && !condition.value.trim();
   return false;
 }

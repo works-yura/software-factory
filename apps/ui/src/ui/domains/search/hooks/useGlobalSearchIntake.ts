@@ -39,10 +39,7 @@ export function useGlobalSearchIntake(
     gitlab ? factoryProjectId : undefined,
     gitlab ? projectRepositoryId : undefined,
   );
-  const gitlabIssues = useGitLabIssuesQuery(
-    gitlab ? factoryProjectId : undefined,
-    gitlab ? DEFAULT_BOARD_ID : undefined,
-  );
+  const gitlabIssues = useGitLabIssuesQuery(gitlab ? factoryProjectId : undefined);
   const queries = gitlab ? [mergeRequests, gitlabIssues] : [pullRequests, issues];
 
   return {

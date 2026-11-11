@@ -54,6 +54,7 @@ export type {
 export * from './work-items/split-migration.ts';
 export { backfillUntilDone, splitBackfillRetry } from './work-items/split-backfill.ts';
 export {
+  arrivalSourceFacts,
   BOARD_METADATA_KEYS,
   SHARED_PROVIDER_METADATA_KEYS,
   splitCardMetadata,

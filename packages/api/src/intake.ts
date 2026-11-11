@@ -1,25 +1,22 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
-import { z } from 'zod';
 
 import type { BoardRegistry } from '@factory/core';
 import { toBoardSource } from '@factory/runtime';
 import type { ProjectBoardSource } from '@factory/runtime';
-import { cardLabels, DEFAULT_BOARD_ID, moveCardToBoard, placedByIntakeRoute } from '@factory/core';
+import { moveCardToBoard, placedByIntakeRoute } from '@factory/core';
 import type { Intake, IntakeItem } from '@factory/capabilities';
 import type { AuditEmitter } from '@factory/feed';
-import { FactoryProjectNotFoundError, normalizeIntakeLabel, resolveIntakeLabelRoute } from '@factory/store';
-import type { IntakeConfig, IntakeLabelRoute, IntakeStorage } from '@factory/store';
-import type { SourceControlStorageHandle } from '@factory/store';
-import type { Card } from '@factory/store';
+import { FactoryProjectNotFoundError } from '@factory/store';
+import type { IntakeConfig, IntakeStorage } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
 
 export interface IntakeIntegration {
   id: string;
-  intake: Pick<Intake, 'listSources' | 'listItems'>;
+  intake: Pick<Intake, 'listSources' | 'listItems' | 'bindingBoard'>;
 }
 
 interface AggregatedIntakeItem extends Omit<IntakeItem, 'source'> {
@@ -46,8 +43,6 @@ export interface IntakeRoutesDeps extends RouteDependencies {
   boardRegistry?: BoardRegistry | ProjectBoardSource;
   /** Work items domain handle; when present, rebinding a source to another board moves its resting cards. */
   workItems?: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
-  /** GitHub repositories, used to match a card to the repository binding its source id names. */
-  githubRepositories?: Pick<SourceControlStorageHandle['repositories'], 'get'>;
 }
 
 /** Upper bound on source pages read while relocating cards, so a huge source cannot stall the request. */
@@ -142,111 +137,6 @@ async function relocateSourceCards({
   return { moved, skipped };
 }
 
-/**
- * After a label route changes, every issue card in the project that carries `label` is re-routed
- * under the project's current routes: to the board its labels now select, or — when none of them is
- * routed any more — to its GitHub repository binding's board, falling back to Work.
- */
-async function relocateLabeledCards({
-  workItems,
-  boardRegistry,
-  orgId,
-  userId,
-  factoryProjectId,
-  integrationId,
-  label,
-  routes,
-  intake,
-  githubRepositories,
-}: {
-  workItems: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
-  boardRegistry: BoardRegistry;
-  orgId: string;
-  userId: string;
-  factoryProjectId: string;
-  integrationId: string;
-  label: string;
-  routes: readonly IntakeLabelRoute[];
-  intake: Pick<IntakeStorage, 'listBindings'>;
-  githubRepositories?: Pick<SourceControlStorageHandle['repositories'], 'get'>;
-}): Promise<{ moved: number; skipped: number }> {
-  const changed = normalizeIntakeLabel(label);
-  const repositoryBoards =
-    integrationId === 'github'
-      ? await githubRepositoryBoards({ intake, githubRepositories, boardRegistry, orgId, factoryProjectId })
-      : [];
-  let moved = 0;
-  let skipped = 0;
-  for (const item of await workItems.list({ orgId, factoryProjectId })) {
-    const source = item.externalSource;
-    if (!source || source.integrationId !== integrationId || source.type !== 'issue') continue;
-    const labels = cardLabels(item);
-    if (!labels.some(candidate => normalizeIntakeLabel(candidate) === changed)) continue;
-    // An intake route chose this card's board; a label route change doesn't override it.
-    if (placedByIntakeRoute(item)) {
-      skipped += 1;
-      continue;
-    }
-    const targetBoard =
-      resolveIntakeLabelRoute(routes, labels)?.board ??
-      repositoryBoards.find(candidate => cardInRepository(item, candidate))?.board ??
-      DEFAULT_BOARD_ID;
-    const outcome = await moveCardToBoard({ workItems, boardRegistry, userId, item, targetBoard });
-    if (outcome === 'moved') moved += 1;
-    else if (outcome === 'skipped') skipped += 1;
-  }
-  return { moved, skipped };
-}
-
-interface GithubRepositoryBoard {
-  board: string;
-  slug: string;
-  externalId?: string;
-}
-
-/**
- * The project's GitHub repository bindings that name an installed board. A binding's source id is
- * the internal repository id or the repository slug, so ids are resolved to the slug and external id
- * a card carries.
- */
-async function githubRepositoryBoards({
-  intake,
-  githubRepositories,
-  boardRegistry,
-  orgId,
-  factoryProjectId,
-}: {
-  intake: Pick<IntakeStorage, 'listBindings'>;
-  githubRepositories?: Pick<SourceControlStorageHandle['repositories'], 'get'>;
-  boardRegistry: BoardRegistry;
-  orgId: string;
-  factoryProjectId: string;
-}): Promise<GithubRepositoryBoard[]> {
-  const boards: GithubRepositoryBoard[] = [];
-  for (const binding of await intake.listBindings({ orgId, integrationId: 'github' })) {
-    if (binding.factoryProjectId !== factoryProjectId || !binding.board || !boardRegistry.has(binding.board)) continue;
-    const repository = await githubRepositories?.get({ orgId, id: binding.sourceId });
-    boards.push(
-      repository
-        ? { board: binding.board, slug: repository.slug.toLowerCase(), externalId: repository.externalId }
-        : { board: binding.board, slug: binding.sourceId.toLowerCase() },
-    );
-  }
-  return boards;
-}
-
-function cardInRepository(item: Card, repository: GithubRepositoryBoard): boolean {
-  const repositoryId = item.workItem.metadata?.githubRepositoryId;
-  if (
-    repository.externalId !== undefined &&
-    repositoryId !== undefined &&
-    String(repositoryId) === repository.externalId
-  )
-    return true;
-  const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(item.externalSource?.url ?? '');
-  return match?.[1]?.toLowerCase() === repository.slug;
-}
-
 /** One integration that failed while the rest of the aggregation succeeded. */
 export interface IntakeIntegrationFailure {
   integrationId: string;
@@ -329,26 +219,6 @@ export function parseIntakeBinding(body: unknown): ParsedBinding | null {
   };
 }
 
-const identifier = z.string().min(1).max(256);
-const labelRouteBodySchema = z.object({
-  factoryProjectId: identifier,
-  integrationId: identifier,
-  label: z
-    .string()
-    .max(256)
-    .transform(normalizeIntakeLabel)
-    .refine(label => label.length > 0, 'label must not be blank'),
-  /** Installed board target; `null` removes the route so the label falls back to Work. */
-  board: identifier.nullish().transform(board => board ?? null),
-});
-type ParsedLabelRoute = z.output<typeof labelRouteBodySchema>;
-
-/** Validate a label-route request body, rejecting unknown shapes. */
-export function parseIntakeLabelRoute(body: unknown): ParsedLabelRoute | null {
-  const parsed = labelRouteBodySchema.safeParse(body);
-  return parsed.success ? parsed.data : null;
-}
-
 function loose(c: unknown): Context {
   return c as Context;
 }
@@ -424,7 +294,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const { audit, intake, projects, integrations = [], workItems, githubRepositories } = this.deps;
+    const { audit, intake, projects, integrations = [], workItems } = this.deps;
     const boardSource = this.deps.boardRegistry ? toBoardSource(this.deps.boardRegistry) : undefined;
     const projectBoards = (orgId: string, factoryProjectId: string | null) =>
       boardSource && factoryProjectId ? boardSource.load({ orgId, factoryProjectId }) : undefined;
@@ -513,10 +383,15 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const binding = parseIntakeBinding(body);
-          if (!binding || !integrationIds.includes(binding.integrationId)) {
+          const parsed = parseIntakeBinding(body);
+          if (!parsed || !integrationIds.includes(parsed.integrationId)) {
             return c.json({ error: 'invalid_binding' }, 400);
           }
+          // Only a source whose binding names the board its status rules run on (a ClickUp List)
+          // keeps a board. Any other source only feeds the project: its intake routes place the cards.
+          const binding = integrations.find(candidate => candidate.id === parsed.integrationId)?.intake.bindingBoard
+            ? parsed
+            : { ...parsed, board: null };
           if (binding.factoryProjectId && projects) {
             const project = await projects.get({ orgId: tenant.orgId, id: binding.factoryProjectId });
             if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
@@ -618,105 +493,25 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           });
         },
       }),
-      registerApiRoute('/web/intake/label-routes', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async c => {
-          const tenant = await this.#resolveTenant(loose(c));
-          if ('response' in tenant) return tenant.response;
-          const factoryProjectId = c.req.query('factoryProjectId');
-          await intake.ensureReady();
-          return c.json({
-            routes: await intake.listLabelRoutes({
-              orgId: tenant.orgId,
-              ...(factoryProjectId ? { factoryProjectId } : {}),
-            }),
-          });
-        },
-      }),
-      registerApiRoute('/web/intake/label-routes', {
-        method: 'PUT',
-        requiresAuth: false,
-        handler: async c => {
-          const tenant = await this.#resolveTenant(loose(c));
-          if ('response' in tenant) return tenant.response;
-
-          let body: unknown;
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const route = parseIntakeLabelRoute(body);
-          if (!route || !integrationIds.includes(route.integrationId)) {
-            return c.json({ error: 'invalid_label_route' }, 400);
-          }
-          if (route.integrationId === 'clickup') {
+      // Label routes are gone: a project's intake routes decide where its cards land.
+      ...(['GET', 'PUT'] as const).map(method =>
+        registerApiRoute('/web/intake/label-routes', {
+          method,
+          requiresAuth: false,
+          handler: async c => {
+            const tenant = await this.#resolveTenant(loose(c));
+            if ('response' in tenant) return tenant.response;
             return c.json(
-              { error: 'invalid_label_route', message: 'ClickUp tags are routed by intake routes, not label routes.' },
-              400,
+              {
+                error: 'label_routes_removed',
+                message:
+                  "Label routes were removed. Add an intake route on the project instead: POST /web/factory/projects/:id/intake-routes with a condition on 'item.labels'.",
+              },
+              410,
             );
-          }
-          if (projects) {
-            const project = await projects.get({ orgId: tenant.orgId, id: route.factoryProjectId });
-            if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
-          }
-          if (route.board !== null && !installed(route.board)) {
-            return c.json({ error: 'invalid_board', message: `Board '${route.board}' is not installed.` }, 422);
-          }
-          // Load before writing, so a failed load can't leave a saved route with its cards unmoved.
-          const boardRegistry = await projectBoards(tenant.orgId, route.factoryProjectId);
-
-          await intake.ensureReady();
-          const scope = {
-            orgId: tenant.orgId,
-            factoryProjectId: route.factoryProjectId,
-            integrationId: route.integrationId,
-          };
-          const previous = (await intake.listLabelRoutes(scope)).find(existing => existing.label === route.label);
-          if (route.board === null) {
-            await intake.clearLabelRoute({ ...scope, label: route.label });
-          } else {
-            await intake.setLabelRoute({ ...scope, label: route.label, board: route.board, userId: tenant.userId });
-          }
-
-          // Cards already carrying the label follow the route: onto the new board, or — when the
-          // label is no longer routed anywhere — to the repository binding's board or Work.
-          let relocated: { moved: number; skipped: number } | null = null;
-          if (workItems && boardRegistry && (previous?.board ?? null) !== route.board) {
-            try {
-              relocated = await relocateLabeledCards({
-                workItems,
-                boardRegistry,
-                orgId: tenant.orgId,
-                userId: tenant.userId,
-                factoryProjectId: route.factoryProjectId,
-                integrationId: route.integrationId,
-                label: route.label,
-                routes: await intake.listLabelRoutes(scope),
-                intake,
-                githubRepositories,
-              });
-            } catch (error) {
-              // The route is saved; the cards can be moved by hand.
-              console.error(`[factory] intake label route could not relocate ${route.integrationId} cards:`, error);
-            }
-          }
-          await audit.emit({
-            context: loose(c),
-            input: {
-              action: 'factory.intake.label_route_updated',
-              factoryProjectId: route.factoryProjectId,
-              targets: [{ type: 'intake_label_route', id: `${route.integrationId}:${route.label}` }],
-              metadata: { board: route.board, ...(relocated ? { relocated } : {}) },
-            },
-          });
-          return c.json({
-            routes: await intake.listLabelRoutes({ orgId: tenant.orgId, factoryProjectId: route.factoryProjectId }),
-            ...(relocated ? { relocated } : {}),
-          });
-        },
-      }),
+          },
+        }),
+      ),
       registerApiRoute('/web/intake/sources', {
         method: 'GET',
         requiresAuth: false,

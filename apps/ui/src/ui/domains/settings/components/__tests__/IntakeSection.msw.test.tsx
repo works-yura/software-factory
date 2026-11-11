@@ -11,7 +11,6 @@ import { IntakeSection } from '../IntakeSection';
 
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
 const BINDINGS_URL = `${TEST_BASE_URL}/web/intake/bindings`;
-const LABEL_ROUTES_URL = `${TEST_BASE_URL}/web/intake/label-routes`;
 const CLICKUP_STATUS_URL = `${TEST_BASE_URL}/web/clickup/status`;
 const CLICKUP_LISTS_URL = `${TEST_BASE_URL}/web/clickup/lists`;
 const CLICKUP_SETTINGS_URL = `${TEST_BASE_URL}/web/clickup/settings`;
@@ -85,7 +84,6 @@ function useClickUpHandlers({
       return HttpResponse.json({ bindings: savedBindings });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json({ boards: [bugBoard] })),
-    http.get(LABEL_ROUTES_URL, () => HttpResponse.json({ routes: [] })),
     http.get(CLICKUP_SETTINGS_URL, () => HttpResponse.json({ lists: settings })),
     http.get(CLICKUP_STATUSES_URL, () => HttpResponse.json({ statuses })),
     http.put(CLICKUP_RULES_URL, async ({ request }) => {

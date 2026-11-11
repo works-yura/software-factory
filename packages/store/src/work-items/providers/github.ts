@@ -1,3 +1,4 @@
+import { sourceRepository } from '@factory/core';
 import { externalAdapter, mergedState } from './base.ts';
 
 const GITHUB_URL = /^https?:\/\/[^/]+\/([^/]+\/[^/]+)\/(?:issues|pull)\/(\d+)/;
@@ -26,4 +27,5 @@ export const githubWorkItemAdapter = externalAdapter('github', {
     return typeof number === 'number' ? `#${number}` : null;
   },
   state: mergedState,
+  repository: ({ key }) => sourceRepository('github', key),
 });

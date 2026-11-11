@@ -171,7 +171,6 @@ function stubWorkBoard() {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-    http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, async ({ request }) => {
       const params = new URL(request.url).searchParams;
       if (!params.has('label')) return HttpResponse.json({ issues: [], nextPage: null });

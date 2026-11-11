@@ -34,8 +34,29 @@ export function placesNewCards(route: Pick<IntakeRoute, 'on'>): boolean {
 }
 
 /**
- * Card metadata naming the intake route that placed the card. Label routes, repository
- * bindings and replayed arrivals leave such a card where the route put it.
+ * Whether the route places every new card that reaches it: enabled, no condition, places new cards
+ * and joins nothing, as the seeded "Everything else" route does. Such a route is the project's
+ * default board as a route; a source with its own target (an intake rule's board, a ClickUp List's
+ * board) is placed there before the catch-all is tried.
+ */
+export function catchesEveryNewCard(
+  route: Pick<IntakeRoute, 'enabled' | 'when' | 'on'> & { readonly target: { readonly joinClosedIssue?: boolean } },
+): boolean {
+  return route.enabled && route.when === null && placesNewCards(route) && !route.target.joinClosedIssue;
+}
+
+/** How placement reads the routes. */
+export interface IntakePlacementOptions {
+  /**
+   * Skip the routes that take every new card: the caller has its own target for what no specific
+   * route places, and falls back to the catch-all itself.
+   */
+  readonly skipCatchAll?: boolean;
+}
+
+/**
+ * Card metadata naming the intake route that placed the card. Label changes, rebinding its
+ * source and replayed arrivals leave such a card where the route put it.
  */
 export const INTAKE_ROUTE_METADATA_KEY = 'intakeRouteId';
 
@@ -156,9 +177,11 @@ export function resolveIntakeRoute(
   facts: RuleFacts,
   registry: BoardRegistry,
   closedIssue?: Pick<ClosedIssueCard, 'board'>,
+  options: IntakePlacementOptions = {},
 ): IntakeRouteResolution | undefined {
   for (const route of routes) {
     if (!route.enabled || !placesNewCards(route) || !evaluateRuleGroup(route.when, facts)) continue;
+    if (options.skipCatchAll && catchesEveryNewCard(route)) continue;
     const board = registry.get(route.target.boardKey);
     if (!board) continue;
     if (route.target.joinClosedIssue) {
@@ -183,8 +206,9 @@ export function resolveIntakePlacement(
   routes: readonly IntakeRoute[],
   facts: RuleFacts,
   registry: BoardRegistry,
+  options: IntakePlacementOptions = {},
 ): { board: string; phase: string; routeId: string } | undefined {
-  const resolution = resolveIntakeRoute(routes, facts, registry);
+  const resolution = resolveIntakeRoute(routes, facts, registry, undefined, options);
   return resolution?.type === 'place'
     ? { board: resolution.board, phase: resolution.phase, routeId: resolution.routeId }
     : undefined;

@@ -297,6 +297,18 @@ describe('createClickUpPoller', () => {
       expect(decision.metadata).not.toHaveProperty('intakeRouteId');
     });
 
+    it("places a task only the catch-all route would take on the List's board, and tells the dispatcher it applied the routes", async () => {
+      const { poll, commitRuleEvaluation } = setup({
+        tasks: [task({ tags: ['bug'] })],
+        binding: { board: 'bug' },
+        intakeRoutes: [docsRoute, { ...docsRoute, id: 'everything-else', when: null, target: { boardKey: 'work', phaseKey: 'intake' } }],
+      });
+      await poll();
+      const decision = decisionOf(commitRuleEvaluation);
+      expect(decision).toMatchObject({ board: 'bug', stage: 'intake', routesApplied: true });
+      expect(decision.metadata).not.toHaveProperty('intakeRouteId');
+    });
+
     it("leaves a task out when its List's status rules do not import it, whatever the routes say", async () => {
       const { poll, commitRuleEvaluation } = setup({
         tasks: [task({ tags: ['docs'], status: { name: 'backlog', type: 'open' } })],

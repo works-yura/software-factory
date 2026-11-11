@@ -1,3 +1,4 @@
+import { sourceRepository } from '@factory/core';
 import { externalAdapter, mergedState } from './base.ts';
 import { stringValue } from './metadata-keys.ts';
 
@@ -30,4 +31,5 @@ export const gitlabWorkItemAdapter = externalAdapter('gitlab', {
     return typeof metadata.gitlabIssueIid === 'number' ? `#${metadata.gitlabIssueIid}` : null;
   },
   state: mergedState,
+  repository: ({ key }) => sourceRepository('gitlab', key),
 });

@@ -147,6 +147,12 @@ export interface Intake {
    * this capability from a background dispatch context.
    */
   resolveIntakeDispatch?(input: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null>;
+  /**
+   * The source's binding names a board, the one whose phases its status rules move cards between
+   * (a ClickUp List). Without it a binding only says which project a source feeds; the project's
+   * intake routes place its cards.
+   */
+  readonly bindingBoard?: boolean;
   listSources(input: ListIntakeSourcesInput): Promise<IntakeSource[]>;
   listItems(input: ListIntakeItemsInput): Promise<IntakeItemPage>;
   listIssues(input: ListIntakeIssuesInput): Promise<IntakeIssuePage>;
