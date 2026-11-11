@@ -8,7 +8,6 @@ import {
   Box,
   Brain,
   Bug,
-  ChartColumn,
   Building2,
   CircleUserRound,
   GitBranch,
@@ -138,14 +137,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         },
         icon: Activity,
         searchText: 'observability logs crashes crashlytics firebase cloud logging errors stability service account',
-      },
-      {
-        id: 'usage',
-        get label() {
-          return SETTINGS_SECTION_LABELS.usage;
-        },
-        icon: ChartColumn,
-        searchText: 'usage tokens cost spend limits billing subscription claude code codex mastra models accounts',
       },
       {
         id: 'factory',

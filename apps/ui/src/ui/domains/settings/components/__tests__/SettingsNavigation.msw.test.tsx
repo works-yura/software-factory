@@ -49,7 +49,6 @@ describe('SettingsNavigation', () => {
       'Environment',
       'Work Intake',
       'Logs and crashes',
-      'Usage',
       'Manage Factory',
       'Debug',
     ]);

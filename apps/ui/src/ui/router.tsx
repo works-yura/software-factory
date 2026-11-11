@@ -20,6 +20,7 @@ import { RootGuards } from './domains/auth/components/RootGuards';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { PULL_REQUEST_SOURCE_FILTER } from './domains/factory/boardSourceFilters';
 import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
 import { BoardConfigPage } from './pages/BoardConfigPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { FactorySkillsPage } from './pages/FactorySkillsPage';
@@ -198,9 +199,11 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'work/skills', element: <FactorySkillsPage /> },
                 { path: 'boards/:boardId/skills', element: <FactorySkillsPage /> },
                 { path: 'activity', element: <FactoryHomeRedirect /> },
-                { path: 'overview', element: <FactoryHomeRedirect /> },
+                // Upstream's Overview and Metrics became Analytics.
+                { path: 'analytics', element: <AnalyticsPage /> },
+                { path: 'overview', element: <Navigate to="../analytics" relative="path" replace /> },
                 { path: 'attention', element: <FactoryHomeRedirect /> },
-                { path: 'metrics', element: <FactoryHomeRedirect /> },
+                { path: 'metrics', element: <Navigate to="../analytics" relative="path" replace /> },
                 { path: 'audit', element: <FactoryHomeRedirect /> },
                 { path: 'rules', element: <RulesPage /> },
                 { path: 'knowledge', element: <KnowledgeRoute /> },
@@ -210,6 +213,8 @@ export function createAppRoutes(): RouteObject[] {
                     { index: true, element: <Navigate to="preferences" replace /> },
                     { path: 'board', element: <BoardSettingsRedirect /> },
                     { path: 'skills', element: <SkillsSettingsRedirect /> },
+                    // Usage moved to the Factory's Analytics page.
+                    { path: 'usage', element: <Navigate to="../../analytics" relative="path" replace /> },
                     { path: ':section', element: <SettingsPage /> },
                   ],
                 },

@@ -120,6 +120,10 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
+  factoryMetrics: (factoryProjectId: string | undefined, from: string, to: string) =>
+    ['factory', 'metrics', factoryProjectId ?? null, from, to] as const,
+  factoryHealthThresholds: (factoryProjectId: string | undefined) =>
+    ['factory', 'health', 'thresholds', factoryProjectId ?? null] as const,
   factorySupervisorHealth: (factoryProjectId: string | undefined) =>
     ['factory', 'supervisor', 'health', factoryProjectId ?? null] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>

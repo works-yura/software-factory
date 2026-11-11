@@ -1,6 +1,7 @@
 import 'i18next';
 
 import type activity from './locales/en/activity.json';
+import type analytics from './locales/en/analytics.json';
 import type app from './locales/en/app.json';
 import type auth from './locales/en/auth.json';
 import type board from './locales/en/board.json';
@@ -22,6 +23,7 @@ declare module 'i18next' {
     defaultNS: 'common';
     resources: {
       activity: typeof activity;
+      analytics: typeof analytics;
       app: typeof app;
       auth: typeof auth;
       board: typeof board;

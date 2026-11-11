@@ -11,6 +11,7 @@
   "boardsError": "Не вдалося завантажити дошки.",
   "noBoards": "Дошки не встановлено.",
   "knowledge": "Знання",
+  "analytics": "Аналітика",
   "activity": "Активність",
   "activityUnread_one": "Активність, {{count}} непрочитане",
   "activityUnread_few": "Активність, {{count}} непрочитані",

@@ -21,7 +21,6 @@ import { FactoryManagementSection } from './FactoryManagementSection';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
 import { IntakeSection } from './IntakeSection';
 import { ObservabilitySection } from './ObservabilitySection';
-import { UsageSection } from '../../usage/components/UsageSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
@@ -75,7 +74,6 @@ export function SettingsPanel() {
       {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
       {section === 'observability' && <ObservabilitySection />}
-      {section === 'usage' && factoryId && <UsageSection factoryId={factoryId} />}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} />}
       {section === 'debug' && <DebugSection />}

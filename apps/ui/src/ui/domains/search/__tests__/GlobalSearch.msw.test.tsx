@@ -476,7 +476,8 @@ describe('Global search', () => {
     expect(screen.getByRole('combobox', { name: 'Search Factory' })).toHaveFocus();
   });
 
-  it.each(['activity', 'overview', 'attention', 'metrics', 'audit'])(
+  // `/overview` and `/metrics` open Analytics now (AnalyticsPage.msw.test.tsx).
+  it.each(['activity', 'attention', 'audit'])(
     'opens the same Factory board from the retired %s URL',
     async page => {
       stubSearchApi();

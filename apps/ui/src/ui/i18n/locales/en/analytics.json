@@ -1,0 +1,167 @@
+{
+  "title": "Analytics",
+  "description": "How the Factory’s work flowed, and what its agents spent doing it.",
+  "loading": "Loading Factory analytics",
+  "range": {
+    "label": "Date range: {{range}}",
+    "selected": "Selected",
+    "presets": {
+      "7": "Last 7 days",
+      "30": "Last 30 days",
+      "90": "Last 90 days",
+      "365": "Last 12 months"
+    }
+  },
+  "scope": {
+    "label": "Factories",
+    "factory": "This Factory",
+    "all": "All Factories",
+    "workNote": "Work counts this Factory’s board; usage counts every Factory you can see."
+  },
+  "sections": {
+    "work": "Work",
+    "usage": "Usage",
+    "workBreakdowns": "Work breakdowns",
+    "usageBreakdowns": "Usage breakdowns"
+  },
+  "kpi": {
+    "completed": "Completed",
+    "perDay": "{{value}} per day",
+    "completedToggle": "Completed: {{count}}, {{perDay}}. {{action}} the daily completions chart",
+    "completedChart": "Daily completions over {{count}} days",
+    "completedSeries": "Completed work",
+    "leadTime": "Median lead time",
+    "leadTimeDetail": "p90 {{p90}} · {{count}} samples",
+    "leadTimeSamples": "{{count}} completed samples",
+    "inFlight": "In flight",
+    "inFlightDetail_one": "{{count}} agent running now",
+    "inFlightDetail_other": "{{count}} agents running now",
+    "tokens": "Tokens",
+    "tokensDetail": "{{value}} per day",
+    "tokensChart": "Tokens per day: input, cache reads, cache writes and output",
+    "cost": "Est. cost",
+    "costDetail": "{{value}} per day",
+    "costChart": "Cost per day, estimated at API list prices",
+    "costSeries": "Cost",
+    "turns": "Turns",
+    "turnsDetail": "{{value}} per day",
+    "turnsChart": "Agent turns per day",
+    "turnsSeries": "Turns",
+    "cacheShare": "Cache share",
+    "cacheShareDetail": "of input read from cache",
+    "cacheShareChart": "Share of each day’s input read from cache",
+    "cacheShareSeries": "From cache",
+    "toggle": "{{label}}: {{value}}. {{action}} the daily chart",
+    "show": "Show",
+    "hide": "Hide"
+  },
+  "views": {
+    "queue": {
+      "label": "Queue health",
+      "short": "Queue",
+      "description": "Live snapshot of in-flight work by time in its current stage — not scoped to the date range."
+    },
+    "intake": {
+      "label": "Work intake",
+      "short": "Intake",
+      "description": "Where new work entered during this period."
+    },
+    "coverage": {
+      "label": "Automation coverage",
+      "short": "Automation",
+      "description": "First pass through each stage, finished by an agent rather than a person."
+    },
+    "harness": {
+      "label": "Harness",
+      "description": "Tokens by the harness that ran each turn."
+    },
+    "model": {
+      "label": "Model",
+      "description": "Tokens by the model that answered."
+    },
+    "role": {
+      "label": "Role",
+      "description": "Tokens by the role a card run played."
+    },
+    "session": {
+      "label": "Session",
+      "description": "The sessions that spent most."
+    },
+    "account": {
+      "label": "Account",
+      "description": "Tokens by the sign-in or key that paid for them."
+    },
+    "factory": {
+      "label": "Factory",
+      "description": "Tokens by Factory."
+    }
+  },
+  "queue": {
+    "buckets": {
+      "green": "Fresh",
+      "amber": "Aging",
+      "orange": "Stale",
+      "red": "Critical"
+    },
+    "loading": "Loading queue health",
+    "empty": "Nothing in flight",
+    "emptyDescription": "The queue is clear.",
+    "tasks_one": "{{count}} task",
+    "tasks_other": "{{count}} tasks",
+    "cohortTasks": "{{cohort}} tasks",
+    "inStage": "In stage {{age}}",
+    "agentRunning": "Agent running",
+    "active": "{{stage}}: {{count}} active",
+    "agents_one": "{{count}} agent running",
+    "agents_other": "{{count}} agents running",
+    "justNow": "just now",
+    "units": {
+      "m": "{{value}}m",
+      "h": "{{value}}h",
+      "d": "{{value}}d"
+    }
+  },
+  "intake": {
+    "sources": {
+      "githubIssue": "GitHub issues",
+      "githubPullRequest": "GitHub PRs",
+      "gitlabIssue": "GitLab issues",
+      "gitlabMergeRequest": "GitLab merge requests",
+      "linearIssue": "Linear issues",
+      "clickupTask": "ClickUp tasks",
+      "manual": "Manual"
+    },
+    "items_one": "{{count}} item",
+    "items_other": "{{count}} items",
+    "empty": "No new work",
+    "emptyDescription": "Nothing entered the board in this window."
+  },
+  "coverage": {
+    "empty": "No completed stage passes",
+    "emptyDescription": "Stages show up here once a card finishes its first pass through them.",
+    "describe": "{{stage}}: {{pct}}% agent-run, {{byAgent}} of {{passes}} passes",
+    "describeNone": "{{stage}}: no completed passes",
+    "tooltip": "{{byAgent}} of {{passes}} passes run by an agent",
+    "tooltipNone": "No completed passes",
+    "outcomes": {
+      "done": "{{count}} done",
+      "canceled": "{{count}} canceled",
+      "reworked": "{{count}} reworked",
+      "inFlight": "{{count}} in flight"
+    }
+  },
+  "usage": {
+    "tokens": "{{value}} tokens",
+    "empty": "No usage",
+    "emptyDescription": "No agent spent tokens in this window."
+  },
+  "empty": {
+    "title": "Your analytics start here",
+    "description": "Start work on the board: completions, queue health and the tokens agents spend show up here.",
+    "rangeTitle": "Nothing happened in the last {{count}} days",
+    "rangeDescription": "Try a wider range, or start work on the board.",
+    "wider": "Show the last 12 months",
+    "openBoard": "Open board"
+  },
+  "error": "Couldn’t load analytics: {{message}}"
+}

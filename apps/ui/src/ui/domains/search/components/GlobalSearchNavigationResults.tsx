@@ -1,7 +1,7 @@
 import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
-import { Brain, GitPullRequest, ListChecks, Settings, SquareKanban } from 'lucide-react';
+import { Brain, ChartColumn, GitPullRequest, ListChecks, Settings, SquareKanban } from 'lucide-react';
 
 import { PULL_REQUEST_SOURCE_FILTER } from '../../factory/boardSourceFilters';
 import { rememberedBoardPath } from '../../factory/services/boardViews';
@@ -53,6 +53,17 @@ export function GlobalSearchNavigationResults({
         subtitle={t('subtitles.factory')}
         value={searchValue(t('navigation.rules'), t('subtitles.factory'), `Rules Factory navigation /factories/${factoryId}/rules`)}
         onSelect={() => onSelect(`/factories/${factoryId}/rules`, false)}
+      />
+      <CommandPaletteItem
+        icon={<ChartColumn />}
+        title={t('navigation.analytics')}
+        subtitle={t('subtitles.factory')}
+        value={searchValue(
+          t('navigation.analytics'),
+          t('subtitles.factory'),
+          `Analytics metrics usage tokens cost overview Factory navigation /factories/${factoryId}/analytics`,
+        )}
+        onSelect={() => onSelect(`/factories/${factoryId}/analytics`, false)}
       />
       <CommandPaletteItem
         icon={<Brain />}

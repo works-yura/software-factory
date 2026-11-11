@@ -1,0 +1,175 @@
+{
+  "title": "Аналітика",
+  "description": "Як рухалася робота фабрики і скільки на неї витратили агенти.",
+  "loading": "Завантаження аналітики фабрики",
+  "range": {
+    "label": "Період: {{range}}",
+    "selected": "Вибрано",
+    "presets": {
+      "7": "Останні 7 днів",
+      "30": "Останні 30 днів",
+      "90": "Останні 90 днів",
+      "365": "Останні 12 місяців"
+    }
+  },
+  "scope": {
+    "label": "Фабрики",
+    "factory": "Ця фабрика",
+    "all": "Усі фабрики",
+    "workNote": "Робота рахується за дошкою цієї фабрики; використання — за всіма фабриками, які ви бачите."
+  },
+  "sections": {
+    "work": "Робота",
+    "usage": "Використання",
+    "workBreakdowns": "Розподіл роботи",
+    "usageBreakdowns": "Розподіл використання"
+  },
+  "kpi": {
+    "completed": "Завершено",
+    "perDay": "{{value}} за день",
+    "completedToggle": "Завершено: {{count}}, {{perDay}}. {{action}} графік завершень за днями",
+    "completedChart": "Завершення за день, {{count}} дн",
+    "completedSeries": "Завершена робота",
+    "leadTime": "Медіанний час виконання",
+    "leadTimeDetail": "p90 {{p90}} · вибірок: {{count}}",
+    "leadTimeSamples": "Завершених вибірок: {{count}}",
+    "inFlight": "У роботі",
+    "inFlightDetail_one": "Зараз працює {{count}} агент",
+    "inFlightDetail_few": "Зараз працюють {{count}} агенти",
+    "inFlightDetail_many": "Зараз працюють {{count}} агентів",
+    "inFlightDetail_other": "Зараз працюють {{count}} агента",
+    "tokens": "Токени",
+    "tokensDetail": "{{value}} за день",
+    "tokensChart": "Токени за день: вхід, читання й запис кешу, вихід",
+    "cost": "Орієнт. вартість",
+    "costDetail": "{{value}} за день",
+    "costChart": "Вартість за день, оцінка за цінами API",
+    "costSeries": "Вартість",
+    "turns": "Ходи",
+    "turnsDetail": "{{value}} за день",
+    "turnsChart": "Ходи агентів за день",
+    "turnsSeries": "Ходи",
+    "cacheShare": "Частка кешу",
+    "cacheShareDetail": "входу прочитано з кешу",
+    "cacheShareChart": "Частка входу, прочитаного з кешу, за день",
+    "cacheShareSeries": "З кешу",
+    "toggle": "{{label}}: {{value}}. {{action}} графік за днями",
+    "show": "Показати",
+    "hide": "Сховати"
+  },
+  "views": {
+    "queue": {
+      "label": "Стан черги",
+      "short": "Черга",
+      "description": "Знімок роботи в процесі за часом у поточному етапі — не залежить від періоду."
+    },
+    "intake": {
+      "label": "Надходження роботи",
+      "short": "Надходження",
+      "description": "Звідки нова робота прийшла за цей період."
+    },
+    "coverage": {
+      "label": "Покриття автоматизацією",
+      "short": "Автоматизація",
+      "description": "Перший прохід кожного етапу, який завершив агент, а не людина."
+    },
+    "harness": {
+      "label": "Harness",
+      "description": "Токени за harness, що виконав кожен хід."
+    },
+    "model": {
+      "label": "Модель",
+      "description": "Токени за моделлю, яка відповідала."
+    },
+    "role": {
+      "label": "Роль",
+      "description": "Токени за роллю, яку зіграв запуск картки."
+    },
+    "session": {
+      "label": "Сесія",
+      "description": "Сесії, що витратили найбільше."
+    },
+    "account": {
+      "label": "Акаунт",
+      "description": "Токени за входом або ключем, який за них заплатив."
+    },
+    "factory": {
+      "label": "Фабрика",
+      "description": "Токени за фабрикою."
+    }
+  },
+  "queue": {
+    "buckets": {
+      "green": "Свіжі",
+      "amber": "Старіють",
+      "orange": "Застарілі",
+      "red": "Критичні"
+    },
+    "loading": "Завантаження стану черги",
+    "empty": "Нічого в роботі",
+    "emptyDescription": "Черга порожня.",
+    "tasks_one": "{{count}} завдання",
+    "tasks_few": "{{count}} завдання",
+    "tasks_many": "{{count}} завдань",
+    "tasks_other": "{{count}} завдання",
+    "cohortTasks": "Завдання: {{cohort}}",
+    "inStage": "В етапі {{age}}",
+    "agentRunning": "Агент працює",
+    "active": "{{stage}}: активних {{count}}",
+    "agents_one": "Працює {{count}} агент",
+    "agents_few": "Працюють {{count}} агенти",
+    "agents_many": "Працюють {{count}} агентів",
+    "agents_other": "Працюють {{count}} агента",
+    "justNow": "щойно",
+    "units": {
+      "m": "{{value}} хв",
+      "h": "{{value}} год",
+      "d": "{{value}} дн"
+    }
+  },
+  "intake": {
+    "sources": {
+      "githubIssue": "Задачі GitHub",
+      "githubPullRequest": "PR GitHub",
+      "gitlabIssue": "Задачі GitLab",
+      "gitlabMergeRequest": "Merge request GitLab",
+      "linearIssue": "Задачі Linear",
+      "clickupTask": "Задачі ClickUp",
+      "manual": "Вручну"
+    },
+    "items_one": "{{count}} картка",
+    "items_few": "{{count}} картки",
+    "items_many": "{{count}} карток",
+    "items_other": "{{count}} картки",
+    "empty": "Нової роботи немає",
+    "emptyDescription": "За цей період на дошку нічого не надійшло."
+  },
+  "coverage": {
+    "empty": "Завершених проходів немає",
+    "emptyDescription": "Етапи з’являться тут, щойно картка завершить перший прохід через них.",
+    "describe": "{{stage}}: {{pct}}% агентом, {{byAgent}} з {{passes}} проходів",
+    "describeNone": "{{stage}}: завершених проходів немає",
+    "tooltip": "{{byAgent}} з {{passes}} проходів виконав агент",
+    "tooltipNone": "Завершених проходів немає",
+    "outcomes": {
+      "done": "готово: {{count}}",
+      "canceled": "скасовано: {{count}}",
+      "reworked": "перероблено: {{count}}",
+      "inFlight": "у роботі: {{count}}"
+    }
+  },
+  "usage": {
+    "tokens": "{{value}} токенів",
+    "empty": "Використання немає",
+    "emptyDescription": "За цей період агенти не витратили токенів."
+  },
+  "empty": {
+    "title": "Ваша аналітика починається тут",
+    "description": "Почніть роботу на дошці: завершення, стан черги й токени агентів з’являться тут.",
+    "rangeTitle": "За останні {{count}} дн нічого не відбулося",
+    "rangeDescription": "Спробуйте ширший період або почніть роботу на дошці.",
+    "wider": "Показати останні 12 місяців",
+    "openBoard": "Відкрити дошку"
+  },
+  "error": "Не вдалося завантажити аналітику: {{message}}"
+}

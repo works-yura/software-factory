@@ -11,6 +11,7 @@
   "boardsError": "Unable to load boards.",
   "noBoards": "No boards installed.",
   "knowledge": "Knowledge",
+  "analytics": "Analytics",
   "activity": "Activity",
   "activityUnread_one": "Activity, {{count}} unread",
   "activityUnread_other": "Activity, {{count}} unread",

@@ -62,6 +62,7 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 // rebuilding it (and, for the set, breaking referential equality) per render.
 const selectCards = (board: BoardSnapshot) => board.workItems;
 const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
+const selectRunningSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.runningSessionIds);
 const NO_SESSIONS: ReadonlySet<string> = new Set();
 
 export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
@@ -101,6 +102,13 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
 export function useParkedSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
   const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectParkedSessions });
+  return data ?? NO_SESSIONS;
+}
+
+/** Sessions with a run in progress, read with the cards so a card and its run marker agree. */
+export function useRunningSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
+  const { baseUrl } = useApiConfig();
+  const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectRunningSessions });
   return data ?? NO_SESSIONS;
 }
 
