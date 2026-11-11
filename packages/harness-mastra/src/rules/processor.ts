@@ -346,13 +346,7 @@ export async function describeFactoryPhase(input: {
   const boards = await toBoardSource(input.boards).load(binding);
   const stage = ruleStage(boards, item);
   if (!item || !stage) return undefined;
-  const allItems = await input.storage.listShared({
-    orgId: binding.orgId,
-    factoryProjectId: binding.factoryProjectId,
-  });
-  const linked = allItems
-    .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
-    .slice(0, MAX_LINKED_ITEMS);
+  const linked = await input.storage.listLinked({ item, limit: MAX_LINKED_ITEMS });
   const board = boardForWorkItem(item);
   const baseValue: ActivePhaseSnapshotBase = {
     status: 'active',
