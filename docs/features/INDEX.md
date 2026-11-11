@@ -17,3 +17,4 @@
 | [observability](observability/design.md) | Логи й креші для агентів: порт, адаптер Firebase, акаунти Google Cloud і прив'язки Factory → проєкт, інструменти, маскування |
 | [sandbox](sandbox/design.md) | Пісочниця (лише локальна), коміти й пуш, очікування рішення людини; як це в оригінальній Mastra |
 | [conversations](conversations/design.md) | Розмови з агентом поза Factory: коментарі ClickUp, прив'язка акаунта, голосові кліпи, відповідь у тред |
+| [mcp-servers](mcp-servers/design.md) | Зовнішні MCP-сервери для агентів: менеджер, доступ картки, політика інструментів, секрети, маскування; MCP Toolbox для баз |
