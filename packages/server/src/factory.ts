@@ -3138,6 +3138,8 @@ export class MastraFactory {
                 integrations: integrationRegistrations,
                 configVersion,
                 boardRegistry: this.#projectBoards ?? this.#boards,
+                // Pollers place what they import through the stored intake routes (ClickUp needs them).
+                ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage, projectBoards: this.#projectBoards } : {}),
                 factoryReady,
                 domains,
                 feed: commentsDomain,
