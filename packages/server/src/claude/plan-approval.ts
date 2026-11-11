@@ -1,5 +1,5 @@
 import type { PlanDecision } from '@factory/harness';
-import type { ClaudeCodeSession } from '@factory/harness-claude-code';
+import type { ChatTranscriptSession } from '@factory/harness-claude-code-ui';
 import { boardForWorkItem } from '@factory/core';
 import type { FactoryTransitionService } from '@factory/runtime';
 import type { SourceControlSessionLookup } from '@factory/session';
@@ -22,7 +22,7 @@ export function createClaudePlanApproval(deps: {
   transitionService: Pick<FactoryTransitionService, 'transition'>;
 }) {
   return async (
-    session: Pick<ClaudeCodeSession, 'id' | 'thread' | 'queuePlanAnswer'>,
+    session: Pick<ChatTranscriptSession, 'id' | 'thread' | 'queuePlanAnswer'>,
     answer: { resumeData: PlanDecision; toolCallId: string; userId: string | undefined },
   ): Promise<boolean> => {
     if (answer.resumeData.action !== 'approved') return false;

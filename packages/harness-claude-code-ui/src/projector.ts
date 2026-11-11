@@ -47,6 +47,8 @@ export interface Projection {
 export interface ProjectorOptions {
   /** The memory resource the session's threads live on. */
   resourceId: string;
+  /** The provider stamped beside a reply's model id; {@link CLAUDE_MODEL_PROVIDER} by default. */
+  modelProvider?: string;
   now?: () => Date;
   newId?: () => string;
 }
@@ -78,7 +80,7 @@ interface PendingApproval {
 }
 
 /** The result a call gets once a person answered its permission request. */
-export const PERMISSION_ALLOWED = 'Allowed by a person. Claude retries the call.';
+export const PERMISSION_ALLOWED = 'Allowed by a person. The agent retries the call.';
 export const PERMISSION_DENIED = 'Denied by a person.';
 export const PERMISSION_SUPERSEDED = 'Not answered: new input came first.';
 
@@ -245,6 +247,7 @@ function notificationSignal(record: ClaudeNotificationRecord, id: string, create
  */
 export class ClaudeTranscriptProjector {
   readonly #resourceId: string;
+  readonly #modelProvider: string;
   readonly #now: () => Date;
   readonly #newId: () => string;
   #lastCreatedAt = 0;
@@ -275,6 +278,7 @@ export class ClaudeTranscriptProjector {
 
   constructor(options: ProjectorOptions) {
     this.#resourceId = options.resourceId;
+    this.#modelProvider = options.modelProvider ?? CLAUDE_MODEL_PROVIDER;
     this.#now = options.now ?? (() => new Date());
     this.#newId = options.newId ?? randomUUID;
   }
@@ -596,7 +600,7 @@ export class ClaudeTranscriptProjector {
       content: {
         format: 2,
         parts: [],
-        ...(this.#modelId ? { metadata: { modelId: this.#modelId, provider: CLAUDE_MODEL_PROVIDER, ...this.#credentialStamp() } } : {}),
+        ...(this.#modelId ? { metadata: { modelId: this.#modelId, provider: this.#modelProvider, ...this.#credentialStamp() } } : {}),
       },
     };
     this.#current = message;

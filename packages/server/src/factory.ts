@@ -75,6 +75,7 @@ import {
   workItemSource,
 } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
+import { ClaudeCodeSession } from '@factory/harness-claude-code';
 import { createHarnessModelRegistry, createRoutingHarness } from '@factory/harness';
 import { createFactorySessionTokenSigner } from '@factory/mcp';
 import {
@@ -2176,7 +2177,9 @@ export class MastraFactory {
       const claudeModels = claudeCode.models;
       if (claudeModels) {
         harnessModels.register(claudeModels);
-        this.#claudeSessionUi.setModelSelectionReader(session => claudeModels.effectiveSelection(session));
+        this.#claudeSessionUi.setModelSelectionReader(async session =>
+          session instanceof ClaudeCodeSession ? claudeModels.effectiveSelection(session) : null,
+        );
       }
       createClaudeSideSession = async ({ harness, sessionId, resourceId, title }) => {
         if (harness !== 'claude-code') return undefined;

@@ -1,0 +1,29 @@
+{
+  "name": "@factory/harness-codex-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shows Codex sessions in the chat UI: the chat channel, session routes and projector the Claude Code sessions use, given Codex sessions and their model selection.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/harness": "workspace:*",
+    "@factory/harness-claude-code-ui": "workspace:*",
+    "@factory/harness-codex": "workspace:*"
+  },
+  "devDependencies": {
+    "@factory/http": "workspace:*",
+    "@factory/session": "workspace:*",
+    "@mastra/core": "1.82.0",
+    "@types/node": "22.20.1",
+    "hono": "4.13.13",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
