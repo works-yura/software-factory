@@ -32,7 +32,7 @@ const NOT_PHASES: readonly [file: string, line: string, why: string][] = [
   ['pipelines/src/audits/board.ts', "initialPhase: 'intake'", "the Audits board's own Intake phase"],
   ['pipelines/src/audits/board.ts', "nextPhases: ['done', 'canceled']", "the Audits board's own phases"],
   ['pipelines/src/audits/board.ts', "nextPhases: ['intake']", "the Audits board's own Intake phase"],
-  ['core/src/intake/rule.ts', "INTAKE_RULE_FIRE_OUTCOMES = ['done'", "an intake rule run's outcome"],
+  ['core/src/intake/rule.ts', "INTAKE_FIRE_OUTCOMES = ['done'", "a trigger route fire's outcome"],
   // v4 retired the Review board itself (2fa2fed): these migrations rewrite its rows onto Work.
   ['store/src/boards/base.ts', "board_key: 'review'", 'Review board retirement migration'],
   ['store/src/boards/base.ts', "board_key !== 'review'", 'Review board retirement migration'],

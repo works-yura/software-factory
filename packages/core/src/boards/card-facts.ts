@@ -1,5 +1,4 @@
 import type { ExternalWorkItemSource, WorkItemSourceRow } from '../card.ts';
-import { INTAKE_RULE_SOURCE_KIND, intakeRuleOrigin } from '../intake/card-origin.ts';
 import type { RuleFacts } from '../rules/rule-group.ts';
 import { authorTrusted } from '../rules/types.ts';
 import { openChangeRequests } from '../change-requests.ts';
@@ -83,8 +82,6 @@ export function cardRuleFacts(item: FactsCard): RuleFacts {
   // The open change request: the newest one Factory opened for the card, else an attached open one.
   const pullRequest =
     openChangeRequests(item.metadata).at(-1)?.number ?? newestOpenPullRequestNumber({ workItem: item.workItem ?? null });
-  // A card an intake rule filed has no provider record; its rule stands in as the source.
-  const ruleOrigin = source ? undefined : intakeRuleOrigin(item.metadata);
   return {
     'item.labels': labels,
     'item.title': item.title,
@@ -103,12 +100,6 @@ export function cardRuleFacts(item: FactsCard): RuleFacts {
           ...(repository !== null ? { 'source.repository': repository } : {}),
           ...(list !== null ? { 'source.list': list } : {}),
         }
-      : ruleOrigin
-        ? {
-            'source.kind': INTAKE_RULE_SOURCE_KIND,
-            'intake.rule': ruleOrigin.id,
-            'intake.trigger': ruleOrigin.triggerKind,
-          }
-        : {}),
+      : {}),
   };
 }

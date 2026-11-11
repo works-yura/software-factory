@@ -1,37 +1,38 @@
 /**
- * How a card says it came from an intake rule, and what routes can test about that. The
- * `create-card` action stamps `metadata.intakeRule`; `cardRuleFacts` turns it into
- * `source.kind = intake_rule`, `intake.rule` and `intake.trigger`, so an intake route can take
- * cards from any rule, from one rule, or from one trigger kind.
+ * What a card filed by a trigger route carries about where it came from: the route and the fire.
+ * Kept on the card's metadata for its history and the settings; routing reads none of it, since a
+ * trigger route places its own cards.
  */
 
-/** Card metadata naming the rule and fire a card came from. */
-export const INTAKE_RULE_METADATA_KEY = 'intakeRule';
+/** Card metadata key holding the {@link IntakeRouteCardOrigin}. */
+export const INTAKE_ROUTE_ORIGIN_METADATA_KEY = 'intakeRouteOrigin';
 
-/** `source.kind` of a card an intake rule filed. */
-export const INTAKE_RULE_SOURCE_KIND = 'intake_rule';
+/** The work-item source a trigger route's card is filed under; its key is `<routeId>:<fireKey>`. */
+export const INTAKE_ROUTE_CARD_SOURCE = 'intake-route';
 
-export interface IntakeRuleCardOrigin {
+export interface IntakeRouteCardOrigin {
+  /** The route's id. */
   id: string;
+  /** The route's name when it fired. */
   name: string;
   triggerKind: string;
+  /** ISO time of the fire. */
   firedAt: string;
-  /** The fire's key, when its trigger gave one: how a redelivered fire finds the card it made. */
-  fireKey?: string;
+  fireKey: string;
 }
 
-/** The rule a card came from, read from its metadata; undefined for any other card. */
-export function intakeRuleOrigin(metadata: Record<string, unknown> | null | undefined): IntakeRuleCardOrigin | undefined {
-  const value = metadata?.[INTAKE_RULE_METADATA_KEY];
+export function intakeRouteOrigin(
+  metadata: Record<string, unknown> | null | undefined,
+): IntakeRouteCardOrigin | undefined {
+  const value = metadata?.[INTAKE_ROUTE_ORIGIN_METADATA_KEY];
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const origin = value as Record<string, unknown>;
   if (typeof origin.id !== 'string' || typeof origin.name !== 'string') return undefined;
   return {
     id: origin.id,
     name: origin.name,
-    // Cards filed before the trigger was stamped came from the only trigger there was.
     triggerKind: typeof origin.triggerKind === 'string' ? origin.triggerKind : 'schedule',
     firedAt: typeof origin.firedAt === 'string' ? origin.firedAt : '',
-    ...(typeof origin.fireKey === 'string' ? { fireKey: origin.fireKey } : {}),
+    fireKey: typeof origin.fireKey === 'string' ? origin.fireKey : '',
   };
 }

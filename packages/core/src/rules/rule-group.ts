@@ -40,11 +40,11 @@ export const CARD_RULE_FIELDS = [
   'source.provider',
   'source.repository',
   'item.pullRequest',
-  /** Where the item lives at a tracker that groups tasks in lists (a ClickUp List id). */
+  /**
+   * Where the item lives at a tracker that groups tasks (a ClickUp List id; a Jira project or a
+   * Linear team later). A route that names it subscribes the source to it: see `routeSubscribesSource`.
+   */
   'source.list',
-  /** The intake rule a card came from (its id), and that rule's trigger kind. */
-  'intake.rule',
-  'intake.trigger',
 ] as const;
 
 export type RuleValue = string | number | boolean | Array<string | number | boolean>;

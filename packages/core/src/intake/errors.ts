@@ -1,5 +1,5 @@
 /**
- * Intake-rule domain errors. Kinds and the engine throw these; only the HTTP layer maps them to
+ * Trigger-route domain errors. Kinds and the engine throw these; only the HTTP layer maps them to
  * status codes (`@factory/api`), and the engine records them on a fire as `failed`.
  */
 

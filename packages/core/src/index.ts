@@ -19,13 +19,17 @@ export {
   closedIssueRuleFacts,
   INTAKE_ROUTE_METADATA_KEY,
   intakeTargetProblem,
+  isTriggerRoute,
   landingPhase,
   placedByIntakeRoute,
   placesNewCards,
   resolveEventRoute,
   resolveIntakePlacement,
   resolveIntakeRoute,
+  routedSourceLists,
   routesHandleEvent,
+  routeSourceValues,
+  routeSubscribesSource,
 } from './boards/intake-routing.ts';
 export type {
   IntakePlacementOptions,

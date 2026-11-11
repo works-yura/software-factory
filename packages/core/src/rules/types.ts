@@ -8,6 +8,8 @@ export const WORK_ITEM_SOURCES = [
   'gitlab-pr',
   'clickup-task',
   'manual',
+  // A card a trigger route (an intake route with a schedule) filed; key `<routeId>:<fireKey>`.
+  'intake-route',
 ] as const;
 export type WorkItemSource = (typeof WORK_ITEM_SOURCES)[number];
 
@@ -20,6 +22,7 @@ const WORK_ITEM_SOURCE_ORIGINS: Readonly<
   'gitlab-pr': { integrationId: 'gitlab', type: 'pull-request' },
   'clickup-task': { integrationId: 'clickup', type: 'task' },
   manual: { integrationId: 'factory', type: 'manual' },
+  'intake-route': { integrationId: 'factory', type: 'intake-route' },
 };
 
 export function externalSourceForWorkItem(
@@ -60,6 +63,7 @@ export function needsApproval(
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'clickup') return 'clickup-task';
+  if (source.integrationId === 'factory' && source.type === 'intake-route') return 'intake-route';
   if (source.integrationId === 'gitlab') return source.type === 'pull-request' ? 'gitlab-pr' : 'gitlab-issue';
   // Only GitHub, GitLab and ClickUp have provider-specific sources; anything else (a Slack
   // thread, or a stored card from an integration Factory no longer supports) is
@@ -703,8 +707,9 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
     case 'gitlab-pr':
       return 'gitlabPullRequest';
     case 'clickup-task':
+    case 'intake-route':
     case 'manual':
-      // ClickUp tasks have no provider-specific phase rules; boards treat them like hand-filed cards.
+      // ClickUp tasks and trigger routes' cards have no provider-specific phase rules; boards treat them like hand-filed cards.
       return 'manual';
   }
 }

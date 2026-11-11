@@ -75,6 +75,18 @@ export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
     allow_working_phase: { type: 'boolean', nullable: true },
     // True files a pull request on the card of the issue it closes instead of a new card. Null on rows written before it.
     join_closed_issue: { type: 'boolean', nullable: true },
+    // A trigger route's own trigger (`schedule`) and its config; null on routes that wait for
+    // arriving cards. Such a route makes its cards itself, at board_key/phase_key.
+    trigger_kind: { type: 'text', nullable: true },
+    trigger_config: { type: 'json', nullable: true },
+    // What a trigger route's fire does (`create-card`) and its config; null without a trigger.
+    action_kind: { type: 'text', nullable: true },
+    action_config: { type: 'json', nullable: true },
+    // A trigger route's overlap policy (`skip-if-open`, `always`); null without a trigger.
+    policy_kind: { type: 'text', nullable: true },
+    // What made the route, for a name the settings can show in the reader's language
+    // (`IntakeRouteOrigin`); null on routes a person wrote.
+    origin: { type: 'json', nullable: true },
     // Rises on every write to the route, including a move; the compare-and-set token for edits.
     revision: { type: 'integer' },
     created_by: { type: 'text' },

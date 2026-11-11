@@ -21,6 +21,17 @@ export interface IntakeRoute {
   readonly target: { readonly boardKey: string; readonly phaseKey?: string | null; readonly joinClosedIssue?: boolean };
   /** The status events the route handles; `work_item.created` places new cards. */
   readonly on: readonly string[];
+  /**
+   * A trigger of the route's own (a schedule): the route makes its cards itself, on each fire, at
+   * its target, and takes no part in placing arriving cards or moving them on events. Null or
+   * absent: the route waits for cards from the sources.
+   */
+  readonly trigger?: { readonly kind: string } | null;
+}
+
+/** Whether the route makes cards itself on a trigger of its own, rather than placing arriving ones. */
+export function isTriggerRoute(route: Pick<IntakeRoute, 'trigger'>): boolean {
+  return Boolean(route.trigger);
 }
 
 /** Reads a project's intake routes, in order; `StoredBoardsStorage` implements it. */
@@ -29,18 +40,20 @@ export interface IntakeRoutesReader {
 }
 
 /** Whether the route places new cards, rather than only moving existing ones on later events. */
-export function placesNewCards(route: Pick<IntakeRoute, 'on'>): boolean {
-  return route.on.includes('work_item.created');
+export function placesNewCards(route: Pick<IntakeRoute, 'on' | 'trigger'>): boolean {
+  return !isTriggerRoute(route) && route.on.includes('work_item.created');
 }
 
 /**
  * Whether the route places every new card that reaches it: enabled, no condition, places new cards
  * and joins nothing, as the seeded "Everything else" route does. Such a route is the project's
- * default board as a route; a source with its own target (an intake rule's board, a ClickUp List's
+ * default board as a route; a caller with its own target for what no specific route places (a
  * board) is placed there before the catch-all is tried.
  */
 export function catchesEveryNewCard(
-  route: Pick<IntakeRoute, 'enabled' | 'when' | 'on'> & { readonly target: { readonly joinClosedIssue?: boolean } },
+  route: Pick<IntakeRoute, 'enabled' | 'when' | 'on' | 'trigger'> & {
+    readonly target: { readonly joinClosedIssue?: boolean };
+  },
 ): boolean {
   return route.enabled && route.when === null && placesNewCards(route) && !route.target.joinClosedIssue;
 }
@@ -226,11 +239,59 @@ export function landingPhase(board: InstalledBoard, phase: string | null | undef
 
 /** Whether any route on the board, enabled or not, handles the event: then the routes own it. */
 export function routesHandleEvent(
-  routes: readonly Pick<IntakeRoute, 'on' | 'target'>[],
+  routes: readonly Pick<IntakeRoute, 'on' | 'target' | 'trigger'>[],
   event: BoardEventFacts,
   board: Pick<InstalledBoard, 'id'>,
 ): boolean {
-  return routes.some(route => route.target.boardKey === board.id && route.on.includes(event.type));
+  return routes.some(
+    route => !isTriggerRoute(route) && route.target.boardKey === board.id && route.on.includes(event.type),
+  );
+}
+
+/** Whether a route condition names `field` anywhere (in any nested group). */
+function conditionNames(when: RuleGroup | null, field: string): boolean {
+  if (!when) return false;
+  return when.conditions.some(member => ('conditions' in member ? conditionNames(member, field) : member.field === field));
+}
+
+/** The values a route's condition compares `field` to with `equals` or `in` (the sources it names). */
+export function routeSourceValues(route: Pick<IntakeRoute, 'when'>, field: string): string[] {
+  const values: string[] = [];
+  const walk = (group: RuleGroup | null) => {
+    for (const member of group?.conditions ?? []) {
+      if ('conditions' in member) walk(member);
+      else if (member.field === field) {
+        const value = member.value;
+        for (const one of Array.isArray(value) ? value : [value]) {
+          if (typeof one === 'string' || typeof one === 'number') values.push(String(one));
+        }
+      }
+    }
+  };
+  walk(route.when);
+  return values;
+}
+
+/**
+ * Whether the project subscribes to an arriving task of a source grouped in lists (ClickUp now,
+ * Jira or Linear later): an enabled route that places new cards, names the task's list
+ * (`listField`, `source.list` by default) and matches the task. A tracker imports only what a
+ * route subscribes to; where the task then lands is `resolveIntakePlacement`'s call, as for any card.
+ */
+export function routeSubscribesSource(
+  routes: readonly IntakeRoute[],
+  facts: RuleFacts,
+  listField = 'source.list',
+): boolean {
+  return routes.some(
+    route =>
+      route.enabled && placesNewCards(route) && conditionNames(route.when, listField) && evaluateRuleGroup(route.when, facts),
+  );
+}
+
+/** The lists the project's routes name for `listField`, enabled or not: the lists a tracker should read. */
+export function routedSourceLists(routes: readonly IntakeRoute[], listField = 'source.list'): string[] {
+  return [...new Set(routes.filter(route => !isTriggerRoute(route)).flatMap(route => routeSourceValues(route, listField)))];
 }
 
 /**
@@ -252,7 +313,8 @@ export function resolveEventRoute(
     ...(event.reason ? { 'event.reason': event.reason } : {}),
   };
   for (const route of routes) {
-    if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
+    if (!route.enabled || isTriggerRoute(route) || !route.on.includes(event.type) || route.target.boardKey !== board.id)
+      continue;
     if (!evaluateRuleGroup(route.when, facts)) continue;
     const phase = route.target.phaseKey ?? board.initialPhase;
     if (board.phaseKind(phase) === undefined || !placementTakesCard(board, phase, facts, carriesPullRequest)) continue;

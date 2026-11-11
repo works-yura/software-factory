@@ -32,7 +32,7 @@ describe('schedule spec', () => {
     const lateUtc = new Date('2026-11-10T23:30:00Z');
     expect(calendarDay(lateUtc, 'UTC')).toBe('2026-11-10');
     expect(calendarDay(lateUtc, 'Europe/Kyiv')).toBe('2026-11-11');
-    const context = { firedAt: lateUtc, timeZone: 'Europe/Kyiv', ruleName: 'Security', payload: { pr: 42, obj: {} } };
+    const context = { firedAt: lateUtc, timeZone: 'Europe/Kyiv', routeName: 'Security', payload: { pr: 42, obj: {} } };
     expect(renderIntakeTemplate('Аудит безпеки — {date} {time}', context)).toBe('Аудит безпеки — 2026-11-11 01:30');
     expect(renderIntakeTemplate('{rule}: PR {payload.pr} {payload.obj} {payload.none} {env.SECRET} {date', context)).toBe(
       'Security: PR 42 {payload.obj} {payload.none} {env.SECRET} {date',

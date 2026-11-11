@@ -150,6 +150,29 @@ export interface IntakeRouteTarget {
   joinClosedIssue?: boolean;
 }
 
+/** A kind and its config, as a trigger route stores its trigger and its action. */
+export interface IntakeRouteKindConfig {
+  kind: string;
+  config: Record<string, unknown>;
+}
+
+/**
+ * What made a route, so the settings can name it in the reader's language: Factory writes routes
+ * of its own (a ClickUp List's status, a migrated schedule), and a name typed on the server would
+ * be in one language only. `generatedName` is the name Factory gave it; once a person renames the
+ * route, its own name shows.
+ */
+export type IntakeRouteOrigin =
+  | { kind: 'clickup-status'; listId: string; status: string; generatedName: string }
+  | { kind: 'schedule'; generatedName: string };
+
+/** The trigger-route part of a route: present together on a route that makes its own cards. */
+export interface IntakeRouteTrigger {
+  trigger: IntakeRouteKindConfig;
+  action: IntakeRouteKindConfig;
+  policyKind: string;
+}
+
 /** An intake route as it is written. */
 export interface StoredIntakeRouteInput {
   name: string;
@@ -157,8 +180,11 @@ export interface StoredIntakeRouteInput {
   /** Null matches every card. */
   when?: RuleGroup | null;
   target: IntakeRouteTarget;
-  /** The status events the route handles; unset handles new cards (`work_item.created`). */
+  /** The status events the route handles; unset handles new cards (`work_item.created`). A trigger route handles none. */
   on?: StatusEvent[];
+  /** Makes the route a trigger route: it files its own cards on each fire (see `IntakeRouteTrigger`). Null clears it. */
+  triggered?: IntakeRouteTrigger | null;
+  origin?: IntakeRouteOrigin | null;
 }
 
 export interface StoredIntakeRouteRecord {
@@ -171,6 +197,11 @@ export interface StoredIntakeRouteRecord {
   when: RuleGroup | null;
   target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean };
   on: StatusEvent[];
+  /** The route's own trigger, for a trigger route; null on a route that waits for arriving cards. */
+  trigger: IntakeRouteKindConfig | null;
+  action: IntakeRouteKindConfig | null;
+  policyKind: string | null;
+  origin: IntakeRouteOrigin | null;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -278,6 +309,12 @@ interface IntakeRouteRow extends Record<string, unknown> {
   /** Null on rows written before routes named events: they place new cards. */
   on_events: StatusEvent[] | null;
   join_closed_issue: boolean | null;
+  trigger_kind?: string | null;
+  trigger_config?: Record<string, unknown> | string | null;
+  action_kind?: string | null;
+  action_config?: Record<string, unknown> | string | null;
+  policy_kind?: string | null;
+  origin?: IntakeRouteOrigin | string | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -628,6 +665,18 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return (await readIntakeRoutes(this.ops, scope)).map(toIntakeRouteRecord);
   }
 
+  /** A route by id alone, whichever project it is in: a trigger's fire carries only the route's id. */
+  async findIntakeRouteById(id: string): Promise<StoredIntakeRouteRecord | null> {
+    const row = await this.ops.findOne<IntakeRouteRow>(INTAKE_ROUTES, { id });
+    return row ? toIntakeRouteRecord(row) : null;
+  }
+
+  /** Every trigger route (a route with a trigger of its own) in every project, to arm their triggers at boot. */
+  async listTriggerRoutes(): Promise<StoredIntakeRouteRecord[]> {
+    const rows = await this.ops.findMany<IntakeRouteRow>(INTAKE_ROUTES, {});
+    return rows.filter(row => Boolean(row.trigger_kind)).map(toIntakeRouteRecord);
+  }
+
   async getIntakeRoute(scope: StoredBoardScope, id: string): Promise<StoredIntakeRouteRecord | null> {
     const row = await this.ops.findOne<IntakeRouteRow>(INTAKE_ROUTES, { ...scopeWhere(scope), id });
     return row ? toIntakeRouteRecord(row) : null;
@@ -641,9 +690,22 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     scope: StoredBoardScope,
     input: StoredIntakeRouteInput,
     actor: string,
+    options: {
+      /**
+       * A fixed id, for a route Factory writes itself (a migration): when a route with this id
+       * already exists the call returns it and writes nothing, so a rerun, or a second replica
+       * running the same migration, never adds it twice (the id is the table's primary key).
+       */
+      id?: string;
+    } = {},
   ): Promise<StoredIntakeRouteRecord> {
-    const id = randomUUID();
-    checkRouteEvents(input.on ?? DEFAULT_ROUTE_EVENTS, input.when ?? null);
+    if (options.id) {
+      const existing = await this.ops.findOne<IntakeRouteRow>(INTAKE_ROUTES, { id: options.id });
+      if (existing) return toIntakeRouteRecord(existing);
+    }
+    const id = options.id ?? randomUUID();
+    const triggered = Boolean(input.triggered);
+    checkRouteEvents(input.on ?? (triggered ? [] : DEFAULT_ROUTE_EVENTS), input.when ?? null, triggered);
     await this.#ensureIntakeRoutes(scope);
     await this.#transact(async ops => {
       const rows = await lockIntakeRoutes(ops, scope);
@@ -655,9 +717,10 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       }
       const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
       await insertIntakeRoute(ops, scope, { id, input, position, actor });
-      const ahead = (input.on ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created')
-        ? rows.findIndex(catchesEveryNewCard)
-        : -1;
+      const ahead =
+        !triggered && (input.on ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created')
+          ? rows.findIndex(catchesEveryNewCard)
+          : -1;
       if (ahead >= 0) {
         const added = (await readIntakeRoutes(ops, scope)).find(row => row.id === id)!;
         await placeIntakeRoutes(ops, rows.toSpliced(ahead, 0, added), actor);
@@ -676,8 +739,15 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     await this.#transact(async ops => {
       const row = await findIntakeRoute(ops, scope, id);
       checkIntakeRouteRevision(row, options.expectedRevision);
-      checkRouteEvents(patch.on ?? routeEvents(row), patch.when !== undefined ? patch.when : row.when_condition);
+      const triggered = patch.triggered !== undefined ? patch.triggered !== null : Boolean(row.trigger_kind);
+      checkRouteEvents(
+        patch.on ?? (triggered ? [] : row.trigger_kind ? DEFAULT_ROUTE_EVENTS : routeEvents(row)),
+        patch.when !== undefined ? patch.when : row.when_condition,
+        triggered,
+      );
       await updateIntakeRouteRow(ops, row, {
+        ...triggerColumns(patch.triggered),
+        ...(patch.origin !== undefined && { origin: patch.origin }),
         ...(patch.on !== undefined && { on_events: patch.on }),
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.enabled !== undefined && { enabled: patch.enabled }),
@@ -1022,12 +1092,56 @@ async function writeBoard(
 }
 
 function routeEvents(row: IntakeRouteRow): StatusEvent[] {
+  if (row.trigger_kind) return [];
   return row.on_events ?? [...DEFAULT_ROUTE_EVENTS];
 }
 
-function checkRouteEvents(on: readonly string[], when: RuleGroup | null): void {
+function jsonObject(value: Record<string, unknown> | string | null | undefined): Record<string, unknown> {
+  if (value === null || value === undefined) return {};
+  return typeof value === 'string' ? (JSON.parse(value) as Record<string, unknown>) : value;
+}
+
+function parseOrigin(value: IntakeRouteOrigin | string | null | undefined): IntakeRouteOrigin | null {
+  if (value === null || value === undefined) return null;
+  const origin = (typeof value === 'string' ? JSON.parse(value) : value) as Record<string, unknown>;
+  if (typeof origin.generatedName !== 'string') return null;
+  if (origin.kind === 'clickup-status' && typeof origin.listId === 'string' && typeof origin.status === 'string') {
+    return { kind: 'clickup-status', listId: origin.listId, status: origin.status, generatedName: origin.generatedName };
+  }
+  if (origin.kind === 'schedule') return { kind: 'schedule', generatedName: origin.generatedName };
+  return null;
+}
+
+/**
+ * A route waiting for arriving cards names the events it handles; a trigger route handles none
+ * (its own trigger makes its cards) and must not name any, nor a condition: nothing arrives to test.
+ */
+function checkRouteEvents(on: readonly string[], when: RuleGroup | null, triggered = false): void {
+  if (triggered) {
+    if (on.length > 0) {
+      throw new StoredBoardError('invalid_intake_route', 'A route with a trigger of its own handles no status events.');
+    }
+    if (when) throw new StoredBoardError('invalid_intake_route', 'A route with a trigger of its own takes no condition.');
+    return;
+  }
   const problem = routeEventsProblem(on, when);
   if (problem) throw new StoredBoardError('invalid_intake_route', problem);
+}
+
+function triggerColumns(triggered: IntakeRouteTrigger | null | undefined): Partial<IntakeRouteRow> {
+  if (triggered === undefined) return {};
+  if (triggered === null) {
+    return { trigger_kind: null, trigger_config: null, action_kind: null, action_config: null, policy_kind: null };
+  }
+  return {
+    trigger_kind: triggered.trigger.kind,
+    trigger_config: triggered.trigger.config,
+    action_kind: triggered.action.kind,
+    action_config: triggered.action.config,
+    policy_kind: triggered.policyKind,
+    // A trigger route handles no events.
+    on_events: [],
+  };
 }
 
 function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
@@ -1041,6 +1155,10 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     when: row.when_condition,
     target: { boardKey: row.board_key, phaseKey: row.phase_key, joinClosedIssue: row.join_closed_issue === true },
     on: routeEvents(row),
+    trigger: row.trigger_kind ? { kind: row.trigger_kind, config: jsonObject(row.trigger_config) } : null,
+    action: row.trigger_kind && row.action_kind ? { kind: row.action_kind, config: jsonObject(row.action_config) } : null,
+    policyKind: row.trigger_kind ? (row.policy_kind ?? null) : null,
+    origin: parseOrigin(row.origin),
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -1116,6 +1234,8 @@ async function insertIntakeRoute(
     phase_key: route.input.target.phaseKey ?? null,
     on_events: route.input.on ?? null,
     join_closed_issue: route.input.target.joinClosedIssue ?? false,
+    ...triggerColumns(route.input.triggered),
+    origin: route.input.origin ?? null,
     revision: 1,
     created_by: route.actor,
     created_at: now,

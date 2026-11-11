@@ -1,55 +1,61 @@
 /**
- * The intake-rule domain: what a rule is and what one fire of it did. A rule is a trigger (when),
- * an overlap policy (whether) and an action (what), each a `kind` looked up in its registry with
- * its config kept as opaque JSON; the kinds own the config shapes. Persistence implements
- * `IntakeRuleRepository` (`@factory/store`), the engine (`@factory/runtime`) runs fires.
+ * Trigger routes: the intake routes that make cards themselves. A route is «Коли → куди»; most
+ * routes wait for a card to arrive from a source (ClickUp, GitHub, «Нова картка») and place it. A
+ * trigger route has a trigger of its own (a schedule now, events later): each fire runs its action
+ * (file a card now) at the route's own target, unless its overlap policy holds the fire back. It
+ * takes no part in placing arriving cards. Trigger, action and policy are each a `kind` looked up
+ * in its registry (`kinds.ts`), with its config kept as opaque JSON; the kinds own the shapes.
+ * Persistence implements `IntakeTriggerRouteRepository`; the engine (`@factory/runtime`) runs fires.
  */
 
-export const INTAKE_RULE_LOCALES = ['uk', 'en'] as const;
-export type IntakeRuleLocale = (typeof INTAKE_RULE_LOCALES)[number];
+export const INTAKE_LOCALES = ['uk', 'en'] as const;
+export type IntakeLocale = (typeof INTAKE_LOCALES)[number];
 
 /** A label in every locale the settings speak. */
-export type LocalizedLabel = Readonly<Record<IntakeRuleLocale, string>>;
+export type LocalizedLabel = Readonly<Record<IntakeLocale, string>>;
 
-export interface IntakeRuleScope {
+export interface IntakeScope {
   orgId: string;
   factoryProjectId: string;
 }
 
-export interface IntakeRuleRecord extends IntakeRuleScope {
-  id: string;
-  name: string;
-  triggerKind: string;
-  triggerConfig: Record<string, unknown>;
-  actionKind: string;
-  actionConfig: Record<string, unknown>;
-  /** The overlap policy's kind, e.g. `skip-if-open`. */
-  policyKind: string;
-  enabled: boolean;
-  revision: number;
-  createdBy: string;
-  createdAt: Date;
-  updatedBy: string;
-  updatedAt: Date;
+/** A kind and its config, as a route stores it. */
+export interface IntakeKindConfig {
+  kind: string;
+  config: Record<string, unknown>;
 }
 
-/** The kind-and-config part of a rule: what validation reads. */
-export type IntakeRuleKindsConfig = Pick<
-  IntakeRuleRecord,
-  'triggerKind' | 'triggerConfig' | 'actionKind' | 'actionConfig' | 'policyKind'
->;
+/** What a trigger route is, as the engine reads it: the stored route that has a trigger. */
+export interface IntakeTriggerRoute extends IntakeScope {
+  /** The intake route's id. */
+  id: string;
+  name: string;
+  enabled: boolean;
+  trigger: IntakeKindConfig;
+  action: IntakeKindConfig;
+  /** The overlap policy's kind, e.g. `skip-if-open`. */
+  policyKind: string;
+  /** Where the route's cards go. `phaseKey` null: the board's first phase. */
+  target: { boardKey: string; phaseKey: string | null };
+  revision: number;
+  /** Who set the route up: the person whose consent its cards run under. */
+  createdBy: string;
+}
+
+/** The kind-and-config part of a trigger route: what validation reads. */
+export type IntakeTriggerRouteKinds = Pick<IntakeTriggerRoute, 'trigger' | 'action' | 'policyKind' | 'target'>;
 
 /** `done`: the action ran; `skipped`: the policy held it back on purpose; `failed`: it could not run. */
-export const INTAKE_RULE_FIRE_OUTCOMES = ['done', 'skipped', 'failed'] as const;
-export type IntakeRuleFireOutcome = (typeof INTAKE_RULE_FIRE_OUTCOMES)[number];
+export const INTAKE_FIRE_OUTCOMES = ['done', 'skipped', 'failed'] as const;
+export type IntakeFireOutcome = (typeof INTAKE_FIRE_OUTCOMES)[number];
 
-export interface IntakeRuleFireRecord extends IntakeRuleScope {
+export interface IntakeRouteFire extends IntakeScope {
   id: string;
-  ruleId: string;
+  routeId: string;
   firedAt: Date;
   /** The trigger kind that fired it (`schedule`, an event kind, …). */
   triggerKind: string;
-  outcome: IntakeRuleFireOutcome;
+  outcome: IntakeFireOutcome;
   /** What the action made, when it made a card. */
   workItemId: string | null;
   reason: string | null;
@@ -60,12 +66,12 @@ export interface IntakeRuleFireRecord extends IntakeRuleScope {
   fireKey: string | null;
 }
 
-/** One fire of a rule's trigger, as the trigger emits it. */
+/** One fire of a route's trigger, as the trigger emits it. */
 export interface IntakeTriggerFired {
-  ruleId: string;
+  routeId: string;
   firedAt: Date;
   triggerKind: string;
-  /** Stable across redeliveries of this fire; see `IntakeRuleFireRecord.fireKey`. */
+  /** Stable across redeliveries of this fire; see `IntakeRouteFire.fireKey`. */
   fireKey?: string;
   /** What the trigger knows about this fire (an event's fields); template placeholders may read it. */
   payload?: Record<string, unknown>;
@@ -74,32 +80,16 @@ export interface IntakeTriggerFired {
 /** Where a trigger sends its fires; the engine is the only one listening. */
 export type IntakeFireSink = (fired: IntakeTriggerFired) => Promise<void>;
 
-/** The persistence the engine needs (a port; `IntakeRulesStorage` implements it). */
-export interface IntakeRuleRepository {
-  getById(id: string): Promise<IntakeRuleRecord | null>;
-  listAll(): Promise<IntakeRuleRecord[]>;
-  recordFire(input: Omit<IntakeRuleFireRecord, 'id'>): Promise<IntakeRuleFireRecord>;
-  /** The fire recorded under `fireKey` for the rule, if any. */
-  findFire(ruleId: string, fireKey: string): Promise<IntakeRuleFireRecord | null>;
-  listFires(scope: IntakeRuleScope, ruleId: string, options?: { limit?: number }): Promise<IntakeRuleFireRecord[]>;
+/** The persistence the engine needs (a port; the server joins the stored routes and the fire log). */
+export interface IntakeTriggerRouteRepository {
+  /** A trigger route by id alone (a fire carries only the id); null when gone or no longer a trigger route. */
+  getTriggerRoute(id: string): Promise<IntakeTriggerRoute | null>;
+  /** Every trigger route in every project, to arm their triggers at boot. */
+  listTriggerRoutes(): Promise<IntakeTriggerRoute[]>;
+  recordFire(input: Omit<IntakeRouteFire, 'id'>): Promise<IntakeRouteFire>;
+  /** The fire recorded under `fireKey` for the route, if any. */
+  findFire(routeId: string, fireKey: string): Promise<IntakeRouteFire | null>;
+  listFires(scope: IntakeScope, routeId: string, options?: { limit?: number }): Promise<IntakeRouteFire[]>;
   /** The last fire whose action made a card: what an overlap policy checks. */
-  lastFireWithWorkItem(ruleId: string): Promise<IntakeRuleFireRecord | null>;
-}
-
-/**
- * The intake route a rule's cards are placed by: intake routes are the one place that decides where
- * a new card goes, so a rule that files cards gets a route of its own (`intake.rule` = its id) when
- * it is created, which a person may then edit like any route. A port; the server implements it over
- * the stored intake routes.
- */
-export interface IntakeRuleRoutes {
-  /** Adds the rule's route unless a route already names the rule. */
-  ensure(rule: IntakeRuleRecord, target: { boardKey: string; phaseKey: string | null }): Promise<void>;
-  /** Removes the routes that name only this rule, when the rule is deleted. */
-  remove(rule: IntakeRuleRecord): Promise<void>;
-}
-
-/** The condition of a rule's own intake route: cards this rule filed. */
-export function intakeRuleRouteCondition(ruleId: string) {
-  return { operator: 'AND' as const, conditions: [{ field: 'intake.rule', operator: 'equals' as const, value: ruleId }] };
+  lastFireWithWorkItem(routeId: string): Promise<IntakeRouteFire | null>;
 }

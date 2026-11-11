@@ -6,7 +6,6 @@
 
 import { z } from 'zod';
 
-import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.ts';
 import { parseScheduleSpec } from './schedule.ts';
 import type { ScheduleSpec } from './schedule.ts';
 
@@ -26,14 +25,11 @@ export const scheduleTriggerConfigSchema = z.object({
 export type ScheduleTriggerConfig = z.output<typeof scheduleTriggerConfigSchema>;
 
 /**
- * The `create-card` action: what card a fire files. Where it lands is the project's intake routes'
- * call, like any new card; `boardKey`/`phaseKey` are the default target used when no route takes it.
+ * The `create-card` action: what card a fire files. The route it belongs to says where it lands
+ * (its target), so the action holds only the card itself.
  */
 export const createCardActionConfigSchema = z.object({
-  boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH),
-  /** `null`: the board's first phase. */
-  phaseKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).nullable(),
-  /** May use the intake template placeholders (`{date}`, `{time}`, `{rule}`, `{payload.<key>}`). */
+  /** May use the intake template placeholders (`{date}`, `{time}`, `{route}`, `{payload.<key>}`). */
   titleTemplate: z.string().trim().min(1).max(200),
   /** The card's description: what the board's agent is asked to do. Same placeholders. */
   description: z.string().max(8_000),

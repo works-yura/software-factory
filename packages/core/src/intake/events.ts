@@ -6,7 +6,7 @@
  * one trigger kind whose config says which events it takes.
  */
 
-import type { IntakeRuleScope } from './rule.ts';
+import type { IntakeScope } from './rule.ts';
 
 export interface IntakeEvent {
   /** The provider's own id for this event: a redelivered event keeps it, so its fire runs once. */
@@ -14,7 +14,7 @@ export interface IntakeEvent {
   /** What happened, e.g. `pull_request.merged`, `work_item.created`. */
   type: string;
   /** The Factory project it happened in. */
-  scope: IntakeRuleScope;
+  scope: IntakeScope;
   occurredAt: Date;
   /** Text and number facts a trigger's config may test and templates may read as `{payload.<key>}`. */
   facts: Readonly<Record<string, string | number | boolean | null>>;

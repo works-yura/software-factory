@@ -15,7 +15,7 @@ import { onTestFinished } from 'vitest';
 import { createBoardRegistry, workItemPhaseSemantics } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import { AttachmentsStorage } from './attachments/base.ts';
-import { IntakeRulesStorage } from './intake-rules/base.ts';
+import { IntakeRouteFiresStorage } from './intake-route-fires/base.ts';
 import { AuditStorage } from './audit/base.ts';
 import { StoredBoardsStorage } from './boards/base.ts';
 import { ChannelIdentityStorage } from './channel-identity/base.ts';
@@ -138,7 +138,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   storedBoards: StoredBoardsStorage;
   skillOverrides: SkillOverridesStorage;
   attachments: AttachmentsStorage;
-  intakeRules: IntakeRulesStorage;
+  intakeRouteFires: IntakeRouteFiresStorage;
   sandboxEnvs: SandboxEnvsStorage;
 }
 
@@ -175,7 +175,7 @@ export async function createFactoryStorageForTests<T extends FactoryStorage = Fa
   const storedBoards = storage.registerDomain(new StoredBoardsStorage());
   const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
   const attachments = storage.registerDomain(new AttachmentsStorage());
-  const intakeRules = storage.registerDomain(new IntakeRulesStorage());
+  const intakeRouteFires = storage.registerDomain(new IntakeRouteFiresStorage());
   const sandboxEnvs = storage.registerDomain(new SandboxEnvsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
@@ -197,7 +197,7 @@ export async function createFactoryStorageForTests<T extends FactoryStorage = Fa
     storedBoards,
     skillOverrides,
     attachments,
-    intakeRules,
+    intakeRouteFires,
     sandboxEnvs,
   };
 }
