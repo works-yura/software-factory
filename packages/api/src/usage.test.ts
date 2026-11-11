@@ -142,6 +142,55 @@ describe('usage routes', () => {
     expect((await get('/web/config/providers/anthropic/accounts/usage', null)).status).toBe(401);
   });
 
+  it('lists every harness’s sign-ins with their windows in one place, and puts right a reading in the wrong unit', async () => {
+    let answer: AccountUsageLimits = {
+      checkedAt: '2026-11-11T11:00:00.000Z',
+      source: 'probe',
+      windows: [
+        { id: 'five_hour', kind: 'session', usedPercent: 54, resetsAt: '2026-11-11T15:00:00.000Z' },
+        { id: 'seven_day_opus', kind: 'model', label: 'Opus', usedPercent: 12 },
+        { id: 'monthly_spend', kind: 'spend', usedPercent: 9 },
+      ],
+    };
+    const read = vi.fn(async () => answer);
+    const { seed, get, addSignIn } = await setup(read);
+    const alice = await addSignIn('alice@example.com');
+    const unread = await addSignIn('bob@example.com');
+    await seed.usage.saveAccountLimits('org1', alice.id, answer);
+    await seed.usage.saveAccountLimits('org2', unread.id, answer);
+
+    // Without refresh: what is stored, with whose it is; an account never read is left out.
+    const stored = await get('/web/usage/limits');
+    expect(stored.status).toBe(200);
+    expect(read).not.toHaveBeenCalled();
+    expect(stored.body.accounts).toEqual([
+      {
+        accountId: alice.id,
+        label: 'alice@example.com',
+        harnessId: 'claude-code',
+        harnessName: 'Claude Code',
+        provider: 'anthropic',
+        disabled: false,
+        usage: expect.objectContaining({ windows: answer.windows }),
+      },
+    ]);
+
+    // The provider answers 0.55 for the 5-hour window it said 54 of in the same period: a fraction.
+    answer = {
+      checkedAt: now.toISOString(),
+      source: 'probe',
+      windows: [{ id: 'five_hour', kind: 'session', usedPercent: 0.55, resetsAt: '2026-11-11T15:00:00.000Z' }],
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const refreshed = await get('/web/usage/limits?refresh=1');
+    expect(read).toHaveBeenCalledTimes(2);
+    const aliceView = refreshed.body.accounts.find((entry: { accountId: string }) => entry.accountId === alice.id);
+    expect(aliceView.usage.windows).toEqual([{ id: 'five_hour', kind: 'session', usedPercent: 55, resetsAt: '2026-11-11T15:00:00.000Z' }]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('five_hour'));
+    warn.mockRestore();
+    expect((await get('/web/usage/limits', null)).status).toBe(401);
+  });
+
   it('sums a period by day, harness, model, account and Factory, with names for accounts and Factories', async () => {
     const { seed, get, addSignIn } = await setup();
     const account = await addSignIn('alice@example.com');

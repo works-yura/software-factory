@@ -3,7 +3,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { AccountUsageLimits, HarnessUsageRegistry, SessionUsage, UsageSummary, UsageTurn, WorkItemUsage } from '@factory/harness/usage';
-import { daysBetween, summarizeSessionUsage, summarizeUsage, summarizeWorkItemUsage, utcDay } from '@factory/harness/usage';
+import type { HarnessUsage } from '@factory/harness/usage';
+import { daysBetween, reconcileUsageWindows, summarizeSessionUsage, summarizeUsage, summarizeWorkItemUsage, utcDay } from '@factory/harness/usage';
 import { Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
 import { canViewSourceControlSession } from '@factory/session';
@@ -35,6 +36,28 @@ export interface AccountUsageView extends AccountUsageLimits {
 
 export interface AccountsUsageResponse {
   accounts: Record<string, AccountUsageView>;
+}
+
+/** One sign-in's allowance beside whose it is, as the limits overview reads it. */
+export interface UsageLimitsAccount {
+  accountId: string;
+  label: string;
+  /** The harness whose sessions run on it (`claude-code`, `codex`) and its name. */
+  harnessId: string;
+  harnessName: string;
+  /** The credential-account provider it is filed under (`anthropic`, `openai-codex`). */
+  provider: string;
+  disabled: boolean;
+  usage: AccountUsageView;
+}
+
+/**
+ * Every sign-in of every harness that reports allowances, in one list: what the status line, the
+ * Analytics limits card and anything else that shows limits read, without knowing the harness.
+ * Accounts with no reading yet are left out.
+ */
+export interface UsageLimitsResponse {
+  accounts: UsageLimitsAccount[];
 }
 
 export interface UsageSummaryResponse extends UsageSummary {
@@ -104,6 +127,8 @@ async function mapLimited<T, R>(items: ReadonlyArray<T>, limit: number, run: (it
  *
  *   - `GET /web/config/providers/:provider/accounts/usage[?refresh=1]` each account's allowance
  *     windows; `refresh` asks the provider again for accounts not asked within a minute
+ *   - `GET /web/usage/limits[?refresh=1]` every harness's sign-ins with their allowance windows, in
+ *     one list (the status line and the Analytics limits card); `refresh` as above
  *   - `GET /web/usage/summary?from&to&factoryProjectId&harnessId&model&accountId` tokens and
  *     estimated cost over a period, by day, harness, model, account, Factory, card-run role and
  *     the sessions that spent most
@@ -158,30 +183,77 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
     };
   }
 
+  /**
+   * The facet's sign-ins and their allowances: what was stored, or with `refresh` read from the
+   * provider again for accounts not asked within a minute. A reading in a unit its source does not
+   * use is put right against the stored one (`reconcileUsageWindows`).
+   */
+  async #readAccounts(
+    orgId: string,
+    facet: HarnessUsage,
+    refresh: boolean,
+  ): Promise<Array<{ account: { id: string; label: string; disabled: boolean }; usage: AccountUsageView | undefined }>> {
+    const accounts = (await this.deps.modelCredentials?.listAccounts(orgId, facet.accountProvider)) ?? [];
+    const signIns = accounts.filter(account => isSignInCredentialKind(account.kind));
+    const stored = await this.deps.usage.listAccountLimits(orgId, signIns.map(account => account.id));
+    const now = this.#now();
+    return mapLimited(signIns, PROBE_CONCURRENCY, async account => {
+      const entry = { id: account.id, label: account.label, disabled: Boolean(account.disabled) };
+      const known = stored.get(account.id);
+      const fresh = known !== undefined && now.getTime() - Date.parse(known.checkedAt) < ACCOUNT_USAGE_PROBE_INTERVAL_MS;
+      if (!refresh || fresh || account.disabled || !facet.readAccountLimits) {
+        return { account: entry, usage: known ? { ...known, ...(refresh ? { stale: true } : {}) } : undefined };
+      }
+      const read = await facet.readAccountLimits({ orgId, accountId: account.id });
+      // A failed probe keeps the windows last seen and says why they are not newer.
+      if (read.unavailable && known && known.windows.length > 0) {
+        return { account: entry, usage: { ...known, stale: true, unavailable: read.unavailable } };
+      }
+      const reconciled = reconcileUsageWindows(known?.windows ?? [], read.windows);
+      if (reconciled.suspectedUnitChange.length > 0) {
+        console.warn(
+          `[Factory usage] ${facet.displayName} reported ${reconciled.suspectedUnitChange.join(', ')} as a fraction; read as a percentage.`,
+        );
+      }
+      return { account: entry, usage: await this.deps.usage.saveAccountLimits(orgId, account.id, { ...read, windows: reconciled.windows }) };
+    });
+  }
+
+  #refreshRequested(c: Context): boolean {
+    return c.req.query('refresh') === '1' || c.req.query('refresh') === 'true';
+  }
+
   async #accountsUsage(c: Context): Promise<Response> {
     const { orgId } = await this.#tenant(c);
     const provider = c.req.param('provider') ?? '';
     const facet = this.deps.harnesses.forProvider(provider);
     if (!facet) throw new Refusal(404, { error: 'unsupported_provider', provider });
-    const accounts = (await this.deps.modelCredentials?.listAccounts(orgId, provider)) ?? [];
-    const signIns = accounts.filter(account => isSignInCredentialKind(account.kind));
-    const stored = await this.deps.usage.listAccountLimits(orgId, signIns.map(account => account.id));
-    const refresh = c.req.query('refresh') === '1' || c.req.query('refresh') === 'true';
-    const now = this.#now();
-    const views = await mapLimited(signIns, PROBE_CONCURRENCY, async (account): Promise<[string, AccountUsageView] | undefined> => {
-      const known = stored.get(account.id);
-      const fresh = known !== undefined && now.getTime() - Date.parse(known.checkedAt) < ACCOUNT_USAGE_PROBE_INTERVAL_MS;
-      if (!refresh || fresh || account.disabled || !facet.readAccountLimits) {
-        return known ? [account.id, { ...known, ...(refresh ? { stale: true } : {}) }] : undefined;
+    const read = await this.#readAccounts(orgId, facet, this.#refreshRequested(c));
+    const accounts: Record<string, AccountUsageView> = {};
+    for (const { account, usage } of read) if (usage) accounts[account.id] = usage;
+    const body: AccountsUsageResponse = { accounts };
+    return c.json(body);
+  }
+
+  async #limits(c: Context): Promise<Response> {
+    const { orgId } = await this.#tenant(c);
+    const refresh = this.#refreshRequested(c);
+    const accounts: UsageLimitsAccount[] = [];
+    for (const facet of this.deps.harnesses.all()) {
+      for (const { account, usage } of await this.#readAccounts(orgId, facet, refresh)) {
+        if (!usage) continue;
+        accounts.push({
+          accountId: account.id,
+          label: account.label,
+          harnessId: facet.harnessId,
+          harnessName: facet.displayName,
+          provider: facet.accountProvider,
+          disabled: account.disabled,
+          usage,
+        });
       }
-      const read = await facet.readAccountLimits({ orgId, accountId: account.id });
-      // A failed probe keeps the windows last seen and says why they are not newer.
-      if (read.unavailable && known && known.windows.length > 0) {
-        return [account.id, { ...known, stale: true, unavailable: read.unavailable }];
-      }
-      return [account.id, await this.deps.usage.saveAccountLimits(orgId, account.id, read)];
-    });
-    const body: AccountsUsageResponse = { accounts: Object.fromEntries(views.filter(view => view !== undefined)) };
+    }
+    const body: UsageLimitsResponse = { accounts };
     return c.json(body);
   }
 
@@ -265,6 +337,7 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
         requiresAuth: false,
         handler: this.#handle(c => this.#accountsUsage(c)),
       }),
+      registerApiRoute('/web/usage/limits', { method: 'GET', requiresAuth: false, handler: this.#handle(c => this.#limits(c)) }),
       registerApiRoute('/web/usage/summary', { method: 'GET', requiresAuth: false, handler: this.#handle(c => this.#summary(c)) }),
       registerApiRoute('/web/usage/sessions/:sessionId', {
         method: 'GET',
