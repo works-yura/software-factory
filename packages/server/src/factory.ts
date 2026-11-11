@@ -164,6 +164,7 @@ import {
 import { ProjectRoutes } from '@factory/api';
 import { createModelSwitchRoute, createSessionAccessGuard } from '@factory/session';
 import { McpServerHub } from './mcp-servers/hub.ts';
+import { buildMcpServerRoutes } from './mcp-servers/routes.ts';
 import { mcpSessionCoordinates, resolveMcpSessionScope } from './mcp-servers/scope.ts';
 import { FactoryModelSwitchProcessor } from '@factory/session';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from '@factory/api';
@@ -2858,6 +2859,8 @@ export class MastraFactory {
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
+          // Settings › MCP-сервери: the organization's external MCP servers, their access and tool policy.
+          ...buildMcpServerRoutes({ auth: routeAuth, servers: mcpServersStorage, hub: mcpServerHub, audit: auditDomain }),
           ...(mcpEnabled || sessionTokens
             ? buildFactoryMcpRoutes({
                 auth: routeAuth,
