@@ -189,6 +189,8 @@ export class TurnTranslator {
         return this.#resultEntry(message);
       case 'invalid':
         return [{ kind: 'stdout', text: message.line }];
+      case 'control_request':
+      case 'control_cancel_request':
       case 'unknown':
         return [];
     }

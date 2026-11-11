@@ -53,11 +53,25 @@ export interface ClaudeArgsInput {
   extraArgs?: string[];
 }
 
-/** Arguments for one non-interactive turn; the prompt goes on stdin (`-p -`). */
+/**
+ * Arguments for one non-interactive turn. Input is stream-json on stdin (see
+ * {@link runClaude}): the prompt is the first user message, and stdin stays
+ * open while the turn runs, so a person's steer joins the turn in flight and
+ * the CLI's control requests (an MCP server's elicitation) can be answered.
+ */
 export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
   // `-p` defaults thinking to `display: "omitted"`: blocks arrive with empty text
   // (signature only). Ask for summaries so the UI can show the reasoning.
-  const args = ['-p', '-', '--output-format', 'stream-json', '--verbose', '--thinking-display', 'summarized'];
+  const args = [
+    '-p',
+    '--input-format',
+    'stream-json',
+    '--output-format',
+    'stream-json',
+    '--verbose',
+    '--thinking-display',
+    'summarized',
+  ];
   if (input.includePartialMessages) args.push('--include-partial-messages');
   if (input.resumeSessionId) args.push('--resume', input.resumeSessionId);
   if (input.model) args.push('--model', input.model);
@@ -169,7 +183,11 @@ export function buildClaudeEnv(
 /** The slice of a Node child process the runner uses, so tests can hand in a fake. */
 export interface ClaudeChildProcess {
   readonly pid?: number | undefined;
-  readonly stdin: { end(chunk?: string): unknown; on?(event: 'error', listener: (error: Error) => void): unknown } | null;
+  readonly stdin: {
+    write(chunk: string): unknown;
+    end(chunk?: string): unknown;
+    on?(event: 'error', listener: (error: Error) => void): unknown;
+  } | null;
   readonly stdout: { setEncoding?(encoding: 'utf8'): unknown; on(event: 'data', listener: (chunk: string | Buffer) => void): unknown } | null;
   readonly stderr: { setEncoding?(encoding: 'utf8'): unknown; on(event: 'data', listener: (chunk: string | Buffer) => void): unknown } | null;
   kill(signal?: NodeJS.Signals): boolean;
@@ -200,6 +218,24 @@ export interface ClaudeRun {
   isAlive(): boolean;
   /** Stops the turn: SIGTERM to the process group, SIGKILL after a grace period. */
   terminate(): void;
+  /**
+   * Writes one stream-json message to the CLI's stdin (a user message, a
+   * control response); `false` when the process is gone or its input closed.
+   */
+  send(message: Record<string, unknown>): boolean;
+  /** Whether {@link send} can still reach the CLI. */
+  acceptsInput(): boolean;
+  /** Closes stdin: the CLI finishes what it has queued and exits. */
+  closeInput(): void;
+  /** Stops the turn's time budget, e.g. while it waits for a person. */
+  pauseTimeout(): void;
+  /** Starts the turn's time budget again, from the full budget. */
+  resumeTimeout(): void;
+}
+
+/** A user message as the CLI's stream-json input takes it. */
+export function userMessage(text: string): Record<string, unknown> {
+  return { type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null };
 }
 
 export interface RunClaudeInput {
@@ -207,6 +243,7 @@ export interface RunClaudeInput {
   args: string[];
   cwd: string;
   env: Record<string, string>;
+  /** The turn's first user message, written to stdin as stream-json; stdin stays open after it. */
   prompt: string;
   onLine: (line: string) => void;
   spawn?: ClaudeSpawn;
@@ -255,7 +292,18 @@ export function runClaude(input: RunClaudeInput): ClaudeRun {
       terminated: false,
       spawnError: error instanceof Error ? error : new Error(String(error)),
     });
-    return { pid: undefined, exited, isAlive: () => false, terminate: () => {} };
+    const none = () => {};
+    return {
+      pid: undefined,
+      exited,
+      isAlive: () => false,
+      terminate: none,
+      send: () => false,
+      acceptsInput: () => false,
+      closeInput: none,
+      pauseTimeout: none,
+      resumeTimeout: none,
+    };
   }
 
   const signal = (sig: NodeJS.Signals) => {
@@ -300,17 +348,47 @@ export function runClaude(input: RunClaudeInput): ClaudeRun {
   });
   child.on('error', (error: Error) => finish({ exitCode: null, signal: null, spawnError: error }));
   child.on('close', (code: number | null, sig: NodeJS.Signals | null) => finish({ exitCode: code, signal: sig }));
-  // The CLI may exit before reading stdin; a broken pipe is not the turn's failure.
-  child.stdin?.on?.('error', () => {});
-  child.stdin?.end(input.prompt);
+  // The CLI may exit before reading stdin; a broken pipe is not the turn's failure, it only ends the input.
+  let inputOpen = !!child.stdin;
+  child.stdin?.on?.('error', () => {
+    inputOpen = false;
+  });
+  const acceptsInput = () => alive && inputOpen;
+  const send = (message: Record<string, unknown>) => {
+    if (!acceptsInput()) return false;
+    try {
+      child.stdin!.write(`${JSON.stringify(message)}\n`);
+      return true;
+    } catch {
+      inputOpen = false;
+      return false;
+    }
+  };
+  const closeInput = () => {
+    if (!inputOpen) return;
+    inputOpen = false;
+    try {
+      child.stdin!.end();
+    } catch {
+      // Already closed.
+    }
+  };
+  send(userMessage(input.prompt));
 
-  if (input.timeoutMs && input.timeoutMs > 0) {
+  const pauseTimeout = () => {
+    clearTimeout(timeoutTimer);
+    timeoutTimer = undefined;
+  };
+  const resumeTimeout = () => {
+    pauseTimeout();
+    if (!alive || !input.timeoutMs || input.timeoutMs <= 0) return;
     timeoutTimer = setTimeout(() => {
       timedOut = true;
       terminate();
     }, input.timeoutMs);
     timeoutTimer.unref?.();
-  }
+  };
+  resumeTimeout();
 
-  return { pid: child.pid, exited, isAlive: () => alive, terminate };
+  return { pid: child.pid, exited, isAlive: () => alive, terminate, send, acceptsInput, closeInput, pauseTimeout, resumeTimeout };
 }

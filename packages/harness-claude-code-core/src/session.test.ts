@@ -97,7 +97,7 @@ describe('ClaudeCodeSession', () => {
     expect(session.stream.isActive()).toBe(false);
 
     const [call] = fake.calls;
-    expect(call!.args.slice(0, 5)).toEqual(['-p', '-', '--output-format', 'stream-json', '--verbose']);
+    expect(call!.args.slice(0, 6)).toEqual(['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose']);
     expect(call!.args).not.toContain('--resume');
     expect(call!.stdin).toBe('Update the README.');
     expect(call!.cwd).toBe('/work/card-1');
@@ -1497,11 +1497,13 @@ function eagerClaude(turns: FakeTurn[], early: string[][]) {
     const lines = early[fake.calls.length - 1] ?? [];
     const stdout = child.stdout as unknown as EventEmitter;
     const stdin = child.stdin!;
-    const end = stdin.end.bind(stdin);
+    const write = stdin.write.bind(stdin);
+    let first = true;
     Object.assign(stdin, {
-      end: (chunk?: string) => {
-        for (const line of lines) stdout.emit('data', `${line}\n`);
-        return end(chunk);
+      write: (chunk: string) => {
+        if (first) for (const line of lines) stdout.emit('data', `${line}\n`);
+        first = false;
+        return write(chunk);
       },
     });
     return child;
@@ -2378,7 +2380,30 @@ describe('ClaudeCodeSession parity with a Mastra session', () => {
       expect(fake.calls[0]!.stdin).toBe('hello');
     });
 
-    it('steers: stops the run in flight and starts a new one with the message', async () => {
+    it('steers: gives the turn in flight the message on stdin, without stopping it', async () => {
+      const hold = deferred();
+      const { fake, session, signal, events, transcript } = await setup([
+        { lines: fixture('turn-complete.jsonl'), holdAt: 5, hold: hold.promise },
+      ]);
+      const end = nextEnd(session);
+      await signal('one', 'the wrong thing');
+      await vi.waitFor(() => expect(transcript.some(entry => entry.kind === 'tool_call')).toBe(true));
+      expect(await session.sendChatMessage({ content: 'do the right thing', delivery: 'steer' })).toEqual({ action: 'deliver' });
+      expect(fake.calls[0]!.inputs[1]).toEqual({
+        type: 'user',
+        message: { role: 'user', content: 'do the right thing' },
+        parent_tool_use_id: null,
+      });
+      expect(transcript).toContainEqual({ kind: 'input', source: 'signal', text: 'do the right thing', delivery: 'while-active' });
+      expect(fake.calls[0]!.inputClosed).toBe(false);
+      hold.resolve();
+      expect(await end).toBe('complete');
+      expect(fake.calls).toHaveLength(1);
+      expect(fake.calls[0]!.inputClosed).toBe(true);
+      expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'complete' }]);
+    });
+
+    it('steers by stopping the run and starting a new one when the turn has not started yet', async () => {
       const { fake, session, signal, events } = await setup([{ lines: [], hang: true }, COMPLETE]);
       await signal('one', 'the wrong thing');
       expect(await session.sendChatMessage({ content: 'do the right thing', delivery: 'steer' })).toEqual({ action: 'wake' });
@@ -2388,6 +2413,37 @@ describe('ClaudeCodeSession parity with a Mastra session', () => {
         { type: 'agent_end', reason: 'complete' },
       ]);
       expect(fake.calls.map(call => call.stdin)).toEqual(['the wrong thing', 'do the right thing']);
+    });
+
+    it('steers by stopping the run when the turn already finished and its stdin is closed', async () => {
+      const { fake, session, signal, events } = await setup([{ lines: fixture('turn-complete.jsonl'), hang: true }, COMPLETE]);
+      await signal('one', 'the wrong thing');
+      await vi.waitFor(() => expect(fake.calls[0]!.inputClosed).toBe(true));
+      expect(await session.sendChatMessage({ content: 'do the right thing', delivery: 'steer' })).toEqual({ action: 'wake' });
+      await vi.waitFor(() => expect(events.filter(event => event.type === 'agent_end')).toHaveLength(2));
+      expect(fake.calls[0]!.inputs).toHaveLength(1);
+      expect(fake.calls[0]!.killed).toEqual(['SIGTERM']);
+      expect(fake.calls[1]!.stdin).toBe('do the right thing');
+    });
+
+    it('keeps stdin open while the CLI still has messages queued, and closes it after the last result', async () => {
+      const lines = fixture('turn-complete.jsonl');
+      const result = JSON.parse(lines[5]!) as Record<string, unknown>;
+      const hold = deferred();
+      const { fake, session, signal } = await setup([
+        {
+          lines: [...lines.slice(0, 5), JSON.stringify({ ...result, queued_turn_count: 1 }), lines[4]!, JSON.stringify({ ...result, queued_turn_count: 0 })],
+          holdAt: 6,
+          hold: hold.promise,
+        },
+      ]);
+      const end = nextEnd(session);
+      await signal('one', 'go');
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(fake.calls[0]!.inputClosed).toBe(false);
+      hold.resolve();
+      expect(await end).toBe('complete');
+      expect(fake.calls[0]!.inputClosed).toBe(true);
     });
   });
 
@@ -2415,5 +2471,193 @@ describe('ClaudeCodeSession parity with a Mastra session', () => {
       expect(events.map(event => event.type)).toEqual(['usage_update', 'usage_update', 'agent_end']);
       hold.resolve();
     });
+  });
+});
+
+describe('ClaudeCodeSession MCP elicitations', () => {
+  const lines = fixture('turn-complete.jsonl');
+  const FORM = {
+    subtype: 'elicitation',
+    mcp_server_name: 'deploy',
+    message: 'Where should it deploy?',
+    mode: 'form',
+    elicitation_id: 'el-1',
+    requested_schema: {
+      type: 'object',
+      properties: { env: { type: 'string', title: 'Environment', enum: ['staging', 'prod'] } },
+      required: ['env'],
+    },
+  };
+  const CARD_CALL = 'elicitation-el-1';
+  const request = (body: Record<string, unknown> = FORM, id = 'req-1') =>
+    JSON.stringify({ type: 'control_request', request_id: id, request: body });
+  /** A turn whose MCP tool call asks a form, then goes on once the harness writes something back on stdin. */
+  const asking = (body: Record<string, unknown> = FORM, extra: Partial<FakeTurn> = {}) => {
+    const answered = deferred();
+    const responses: Array<Record<string, unknown>> = [];
+    const turn: FakeTurn = {
+      lines: [lines[0]!, lines[2]!, request(body), lines[3]!, lines[4]!, lines[5]!],
+      holdAt: 3,
+      hold: answered.promise,
+      onInput: message => {
+        if (message.type !== 'control_response') return;
+        responses.push(message.response as Record<string, unknown>);
+        answered.resolve();
+      },
+      ...extra,
+    };
+    return { turn, responses };
+  };
+
+  it('asks an MCP server’s form as a question card, parks with the process alive and answers it in the same turn', async () => {
+    const { turn, responses } = asking();
+    const { fake, session, signal, events, transcript } = await setup([turn]);
+    const parked = nextEnd(session);
+    await signal('one', 'Deploy it.');
+    expect(await parked).toBe('suspended');
+    const input = {
+      questions: [
+        {
+          id: 'env',
+          header: 'Environment',
+          question: 'Where should it deploy?\n\nEnvironment',
+          options: [{ label: 'staging' }, { label: 'prod' }],
+        },
+      ],
+    };
+    expect(transcript).toContainEqual({ kind: 'tool_call', toolCallId: CARD_CALL, toolName: 'AskUserQuestion', input });
+    expect(transcript).toContainEqual({ kind: 'permission', toolCallId: CARD_CALL, toolName: 'AskUserQuestion', input });
+    expect(events).toContainEqual({ type: 'tool_suspended', toolName: 'AskUserQuestion', toolCallId: CARD_CALL });
+    expect(session.pendingPermission).toEqual({ toolCallId: CARD_CALL, toolName: 'AskUserQuestion', input });
+    expect(session.suspensions.hasPending()).toBe(true);
+    expect(session.hasLiveGate).toBe(true);
+    expect(fake.calls[0]!.killed).toEqual([]);
+    expect(responses).toEqual([]);
+
+    const end = nextEnd(session);
+    await session.answerQuestion({ answer: 'prod', toolCallId: CARD_CALL });
+    expect(session.run.isRunning()).toBe(true);
+    expect(await end).toBe('complete');
+    expect(responses).toEqual([{ subtype: 'success', request_id: 'req-1', response: { action: 'accept', content: { env: 'prod' } } }]);
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0]!.inputClosed).toBe(true);
+    expect(transcript).toContainEqual({ kind: 'question_answer', toolCallId: CARD_CALL, answer: 'prod' });
+    expect(transcript.some(entry => entry.kind === 'result')).toBe(true);
+    expect(session.pendingPermission).toBeUndefined();
+    expect(session.hasLiveGate).toBe(false);
+  });
+
+  it('declines the form when the person declines the card', async () => {
+    const { turn, responses } = asking();
+    const { session, signal, transcript } = await setup([turn]);
+    const parked = nextEnd(session);
+    await signal('one', 'Deploy it.');
+    expect(await parked).toBe('suspended');
+    await expect(session.respondToToolApproval({ approved: true })).rejects.toThrow('waiting on an answer');
+    const end = nextEnd(session);
+    await session.respondToToolApproval({ approved: false, toolCallId: CARD_CALL });
+    expect(await end).toBe('complete');
+    expect(responses).toEqual([{ subtype: 'success', request_id: 'req-1', response: { action: 'decline' } }]);
+    expect(transcript).toContainEqual({ kind: 'permission_decision', toolCallId: CARD_CALL, toolName: 'AskUserQuestion', approved: false });
+  });
+
+  it('asks a link to open as a Done / Decline card', async () => {
+    const { turn, responses } = asking({ subtype: 'elicitation', mcp_server_name: 'auth', message: 'Sign in', mode: 'url', url: 'https://example.test/login', elicitation_id: 'el-1' });
+    const { session, signal } = await setup([turn]);
+    const parked = nextEnd(session);
+    await signal('one', 'Go.');
+    expect(await parked).toBe('suspended');
+    expect(session.pendingPermission?.input).toMatchObject({ questions: [{ question: 'Sign in\n\nhttps://example.test/login' }] });
+    const end = nextEnd(session);
+    await session.answerQuestion({ answer: 'Done' });
+    expect(await end).toBe('complete');
+    expect(responses).toEqual([{ subtype: 'success', request_id: 'req-1', response: { action: 'accept' } }]);
+  });
+
+  it('cancels at once in a run nobody attends, and the turn goes on', async () => {
+    const { turn, responses } = asking();
+    const { session, signal, events } = await setup([turn], { permissions: () => ({ unattended: true }) });
+    const end = nextEnd(session);
+    await signal('one', 'Deploy it.');
+    expect(await end).toBe('complete');
+    expect(responses).toEqual([{ subtype: 'success', request_id: 'req-1', response: { action: 'cancel' } }]);
+    expect(events.some(event => event.type === 'tool_suspended')).toBe(false);
+  });
+
+  it('declines a request no card can ask, and refuses control requests it does not handle', async () => {
+    const { turn, responses } = asking({ subtype: 'elicitation', mcp_server_name: 'x', mode: 'url', message: 'no link' });
+    const { session, signal } = await setup([turn]);
+    let end = nextEnd(session);
+    await signal('one', 'Go.');
+    expect(await end).toBe('complete');
+    expect(responses).toEqual([{ subtype: 'success', request_id: 'req-1', response: { action: 'decline' } }]);
+
+    const other = asking({ subtype: 'can_use_tool', tool_name: 'Bash' });
+    const second = await setup([other.turn]);
+    end = nextEnd(second.session);
+    await second.signal('two', 'Go.');
+    expect(await end).toBe('complete');
+    expect(other.responses).toEqual([
+      { subtype: 'error', request_id: 'req-1', error: 'The Factory does not answer can_use_tool control requests.' },
+    ]);
+  });
+
+  it('drops the card when the CLI withdraws the request', async () => {
+    const { turn } = asking();
+    turn.lines.splice(3, 0, JSON.stringify({ type: 'control_cancel_request', request_id: 'req-1' }));
+    turn.holdAt = 4;
+    const { fake, session, signal, events } = await setup([turn]);
+    const parked = nextEnd(session);
+    await signal('one', 'Deploy it.');
+    expect(await parked).toBe('suspended');
+    await vi.waitFor(() => expect(events).toContainEqual({ type: 'tool_suspension_cancelled', toolCallId: CARD_CALL }));
+    expect(session.pendingPermission).toBeUndefined();
+    expect(session.hasLiveGate).toBe(false);
+    expect(fake.calls[0]!.killed).toEqual(['SIGTERM']);
+  });
+
+  it('ends the waiting turn when new work comes instead of an answer', async () => {
+    const { turn, responses } = asking();
+    const { fake, session, signal, events } = await setup([turn, COMPLETE]);
+    const parked = nextEnd(session);
+    await signal('one', 'Deploy it.');
+    expect(await parked).toBe('suspended');
+    const end = nextEnd(session);
+    await signal('two', 'Never mind, do something else.');
+    expect(await end).toBe('complete');
+    expect(responses).toEqual([{ subtype: 'success', request_id: 'req-1', response: { action: 'cancel' } }]);
+    expect(fake.calls[0]!.killed).toEqual(['SIGTERM']);
+    expect(fake.calls).toHaveLength(2);
+    expect(events).toContainEqual({ type: 'tool_suspension_cancelled', toolCallId: CARD_CALL });
+    expect(session.hasLiveGate).toBe(false);
+  });
+
+  it('sends a late answer as the next turn once the waiting turn timed out', async () => {
+    const { turn } = asking();
+    const { fake, session, signal } = await setup([turn, COMPLETE], { parkTimeoutMs: 10 });
+    const parked = nextEnd(session);
+    await signal('one', 'Deploy it.');
+    expect(await parked).toBe('suspended');
+    await vi.waitFor(() => expect(fake.calls[0]!.killed).toEqual(['SIGTERM']));
+    expect(session.hasLiveGate).toBe(false);
+    expect(session.pendingPermission?.toolCallId).toBe(CARD_CALL);
+    const end = nextEnd(session);
+    await session.answerQuestion({ answer: 'prod' });
+    expect(await end).toBe('complete');
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls[1]!.stdin).toContain('An MCP server asked the person this while a tool call ran');
+    expect(fake.calls[1]!.stdin).toContain('Their answer:\nprod');
+  });
+
+  it('cancels a second form while the first one waits', async () => {
+    const { turn, responses } = asking();
+    turn.lines.splice(3, 0, request({ ...FORM, elicitation_id: 'el-2' }, 'req-2'));
+    turn.holdAt = 4;
+    const { session, signal } = await setup([turn]);
+    const parked = nextEnd(session);
+    await signal('one', 'Deploy it.');
+    expect(await parked).toBe('suspended');
+    await vi.waitFor(() => expect(responses).toEqual([{ subtype: 'success', request_id: 'req-2', response: { action: 'cancel' } }]));
+    expect(session.pendingPermission?.toolCallId).toBe(CARD_CALL);
   });
 });

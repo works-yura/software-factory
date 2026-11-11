@@ -6,7 +6,16 @@ import { fakeClaude } from './__fixtures__/fake-claude.ts';
 import { buildClaudeArgs, buildClaudeEnv, runClaude } from './cli.ts';
 import type { ClaudeChildProcess, ClaudeSpawn } from './cli.ts';
 
-const BASE_ARGS = ['-p', '-', '--output-format', 'stream-json', '--verbose', '--thinking-display', 'summarized'];
+const BASE_ARGS = [
+  '-p',
+  '--input-format',
+  'stream-json',
+  '--output-format',
+  'stream-json',
+  '--verbose',
+  '--thinking-display',
+  'summarized',
+];
 
 /** A hand-driven child process: the test decides when it prints, fails and exits. */
 function scriptedChild(options: { exitOn?: NodeJS.Signals[]; pipes?: boolean } = {}) {
@@ -14,9 +23,16 @@ function scriptedChild(options: { exitOn?: NodeJS.Signals[]; pipes?: boolean } =
   const stdout = Object.assign(new EventEmitter(), { encodings: [] as string[] });
   const stderr = Object.assign(new EventEmitter(), { encodings: [] as string[] });
   const stdin = Object.assign(new EventEmitter(), {
-    written: undefined as string | undefined,
-    end(chunk?: string) {
-      stdin.written = chunk;
+    written: [] as string[],
+    ended: false,
+    failWrites: false,
+    write(chunk: string) {
+      if (stdin.failWrites) throw new Error('EPIPE');
+      stdin.written.push(chunk);
+      return true;
+    },
+    end() {
+      stdin.ended = true;
     },
   });
   const killed: string[] = [];
@@ -56,13 +72,7 @@ describe('buildClaudeArgs', () => {
         includePartialMessages: true,
       }),
     ).toEqual([
-      '-p',
-      '-',
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      '--thinking-display',
-      'summarized',
+      ...BASE_ARGS,
       '--include-partial-messages',
       '--resume',
       'abc',
@@ -331,7 +341,79 @@ describe('runClaude process handling', () => {
     expect(lines).toEqual(['{"a":1}', '{"b":2}']);
     expect(scripted.stdout.encodings).toEqual(['utf8']);
     expect(scripted.stderr.encodings).toEqual(['utf8']);
-    expect(scripted.stdin.written).toBe('hi');
+    expect(scripted.stdin.written).toEqual([
+      `${JSON.stringify({ type: 'user', message: { role: 'user', content: 'hi' }, parent_tool_use_id: null })}\n`,
+    ]);
+    expect(scripted.stdin.ended).toBe(false);
+  });
+
+  it('keeps stdin open for more stream-json messages until the input is closed', async () => {
+    const scripted = scriptedChild();
+    const turn = run(scripted.spawn);
+    expect(turn.acceptsInput()).toBe(true);
+    expect(turn.send({ type: 'user', message: { role: 'user', content: 'steer' } })).toBe(true);
+    expect(scripted.stdin.written[1]).toBe('{"type":"user","message":{"role":"user","content":"steer"}}\n');
+    turn.closeInput();
+    turn.closeInput();
+    expect(scripted.stdin.ended).toBe(true);
+    expect(turn.acceptsInput()).toBe(false);
+    expect(turn.send({ type: 'user' })).toBe(false);
+    expect(scripted.stdin.written).toHaveLength(2);
+    scripted.child.emit('close', 0, null);
+    await turn.exited;
+  });
+
+  it('takes no more input once the process exited, its pipe broke or a write failed', async () => {
+    const exited = scriptedChild();
+    const done = run(exited.spawn);
+    exited.child.emit('close', 0, null);
+    await done.exited;
+    expect(done.send({ type: 'user' })).toBe(false);
+
+    const broken = scriptedChild();
+    const piped = run(broken.spawn);
+    broken.stdin.emit('error', new Error('EPIPE'));
+    expect(piped.acceptsInput()).toBe(false);
+    expect(piped.send({ type: 'user' })).toBe(false);
+    piped.terminate();
+
+    const failing = scriptedChild();
+    const throwing = run(failing.spawn);
+    failing.stdin.failWrites = true;
+    expect(throwing.send({ type: 'user' })).toBe(false);
+    expect(throwing.acceptsInput()).toBe(false);
+    throwing.terminate();
+
+    const noPipes = run(scriptedChild({ pipes: false }).spawn);
+    expect(noPipes.acceptsInput()).toBe(false);
+    noPipes.closeInput();
+    noPipes.terminate();
+
+    const never = run(() => {
+      throw new Error('ENOENT');
+    });
+    expect([never.send({}), never.acceptsInput()]).toEqual([false, false]);
+    never.closeInput();
+    never.pauseTimeout();
+    never.resumeTimeout();
+  });
+
+  it('pauses the time budget while a turn waits and restarts it in full', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const scripted = scriptedChild();
+    const turn = run(scripted.spawn, { timeoutMs: 100 });
+    vi.advanceTimersByTime(90);
+    turn.pauseTimeout();
+    vi.advanceTimersByTime(1_000);
+    expect(turn.isAlive()).toBe(true);
+    turn.resumeTimeout();
+    vi.advanceTimersByTime(99);
+    expect(scripted.killed).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(scripted.killed).toEqual(['SIGTERM']);
+    expect(await turn.exited).toMatchObject({ timedOut: true, terminated: true });
+    turn.resumeTimeout();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('ignores a broken stdin pipe', async () => {
