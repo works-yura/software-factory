@@ -154,6 +154,11 @@ export interface ClaudeFactoryHarnessOptions {
     threadId: string;
     resourceId: string;
   }) => Promise<string[] | undefined>;
+  /**
+   * The session's external MCP tools that wait for a person (Settings › MCP-сервери, «з підтвердженням»),
+   * by their Factory tool names; they reach the CLI through the Factory MCP endpoint and are asked about each time.
+   */
+  mcpAskToolsFor?: (session: { orgId: string; factoryProjectId: string; sessionId: string }) => Promise<string[]>;
   phaseFor?: (session: {
     orgId: string;
     factoryProjectId: string;
@@ -406,9 +411,18 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     // for a person, as a chat does. The Factory chat asks before every repair.
     permissions: async (session: ClaudeCodeSession) => {
       const tenant = await tenantOf(session);
-      const permissions =
+      const settings =
         (await options.permissions?.({ orgId: tenant.orgId, factoryProjectId: tenant.factoryProjectId })) ?? {};
-      if (tenant.supervisor) return { ...permissions, askEachTime: [...CLAUDE_SUPERVISOR_ASK_TOOLS] };
+      if (tenant.supervisor) return { ...settings, askEachTime: [...CLAUDE_SUPERVISOR_ASK_TOOLS] };
+      // An external MCP tool set to «ask» waits for a person every time, as the Factory chat's repairs do.
+      const mcpAsk = options.mcpAskToolsFor
+        ? (await options.mcpAskToolsFor({ orgId: tenant.orgId, factoryProjectId: tenant.factoryProjectId, sessionId: session.id })).map(
+            tool => `mcp__${CLAUDE_FACTORY_MCP_SERVER}__${tool}`,
+          )
+        : [];
+      const permissions = mcpAsk.length
+        ? { ...settings, askEachTime: [...new Set([...(settings.askEachTime ?? []), ...mcpAsk])] }
+        : settings;
       if (await isCardRun(session, tenant)) {
         const allowTools =
           options.allowToolsFor && session.thread.getId()

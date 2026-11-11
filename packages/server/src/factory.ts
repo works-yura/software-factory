@@ -163,6 +163,8 @@ import {
 } from '@factory/api';
 import { ProjectRoutes } from '@factory/api';
 import { createModelSwitchRoute, createSessionAccessGuard } from '@factory/session';
+import { McpServerHub } from './mcp-servers/hub.ts';
+import { mcpSessionCoordinates, resolveMcpSessionScope } from './mcp-servers/scope.ts';
 import { FactoryModelSwitchProcessor } from '@factory/session';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from '@factory/api';
 import type { FactoryApiRoutesDeps } from '@factory/api';
@@ -248,7 +250,7 @@ import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
 import { FactoryProjectsStorage } from '@factory/store';
 import { QueueHealthStorage } from '@factory/store';
-import { SandboxEnvsStorage } from '@factory/store';
+import { McpServersStorage, SandboxEnvsStorage } from '@factory/store';
 import { SourceControlStorage } from '@factory/store';
 import { WorkItemsStorage } from '@factory/store';
 import type { FactoryRunBindingRecord, WorkItemRow } from '@factory/store';
@@ -635,6 +637,7 @@ export class MastraFactory {
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
+  #mcpServers: McpServerHub | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
@@ -925,6 +928,8 @@ export class MastraFactory {
       return undefined;
     });
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
+    // External MCP servers the agents use (Settings › MCP-сервери); secrets encrypted like the other secret domains.
+    const mcpServersStorage = storage.registerDomain(new McpServersStorage(secretEncryption));
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage(secretEncryption));
@@ -967,6 +972,9 @@ export class MastraFactory {
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });
+    // The MCP manager: runs the external MCP servers a session's card is assigned, through one tool policy and mask.
+    const mcpServerHub = new McpServerHub({ servers: mcpServersStorage, audit: auditDomain });
+    this.#mcpServers = mcpServerHub;
     // Held by reference: the channel attach below pushes into it, long after this.
     const feedPublishers: WorkItemFeedPublisher[] = [];
     const commentsDomain = new CommentsDomain({
@@ -2149,6 +2157,12 @@ export class MastraFactory {
             async sessionId => this.#prepared?.base.controller.getSession(sessionId),
             factoryProjectsStorage,
           ),
+          // External MCP tools set to «ask» (Settings › MCP-сервери) wait for a person on Claude Code too.
+          mcpAskToolsFor: async ({ orgId, factoryProjectId, sessionId }) => {
+            if (!storage.isDomainReady('mcp-servers')) return [];
+            const scope = await resolveMcpSessionScope({ orgId, factoryProjectId, sessionId }, workItemsStorage);
+            return scope ? mcpServerHub.askToolNames(scope) : [];
+          },
           // A session that ever ran a card's role is a card run: nobody is there to answer a permission prompt.
           cardRun: ({ orgId, factoryProjectId, sessionId }) =>
             workItemsReady
@@ -2475,6 +2489,14 @@ export class MastraFactory {
           'source-control',
           await sourceControlToolsFor(requestContext),
         );
+      }
+      if (storage.isDomainReady('mcp-servers')) {
+        const mcpScope = await resolveMcpSessionScope(mcpSessionCoordinates(requestContext), workItemsStorage);
+        if (mcpScope) {
+          // Codex has no way to ask a person mid-turn: its «ask» tools are left out rather than run unasked.
+          const askSupported = !(codex && (await codex.harness.getSession(mcpScope.sessionId)));
+          mergeTools('mcp-servers', await mcpServerHub.toolsFor(mcpScope, { askSupported }));
+        }
       }
       if (attachmentService && workItemsStorage) {
         mergeTools(
@@ -3554,6 +3576,7 @@ export class MastraFactory {
     await Promise.all([
       this.#dispatcher?.stop(),
       this.#device?.dispose(),
+      this.#mcpServers?.dispose(),
       // Stops between cards; failures are already logged.
       backfill?.promise,
     ]);

@@ -868,6 +868,7 @@ describe('MastraFactory.prepare', () => {
       'custom-providers',
       'sandbox-envs',
       'queue-health',
+      'mcp-servers',
       'integrations',
       'projects',
       'filesystem',

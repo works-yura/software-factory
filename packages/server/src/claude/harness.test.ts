@@ -486,6 +486,37 @@ describe('createClaudeFactoryHarness', () => {
     });
   });
 
+  describe('external MCP tools set to ask', () => {
+    it('asks about them every time through the Factory MCP server, on a chat and on a card run', async () => {
+      const mcpAskToolsFor = vi.fn(async () => ['syncta-db_add_documents']);
+      const { factory, config } = setup(
+        { permissions: async () => ({ askEachTime: ['Bash'] }), cardRun: async ({ sessionId }) => sessionId === 'session-card', mcpAskToolsFor },
+        {
+          'session-chat': { orgId: 'org-a', userId: 'user-a', factoryProjectId: 'factory-a' },
+          'session-card': { orgId: 'org-a', userId: 'user-a', factoryProjectId: 'factory-a' },
+        },
+      );
+      const chat = await factory.harness.createSession({ sessionId: 'session-chat', threadId: 'session-chat' });
+      const card = await factory.harness.createSession({ sessionId: 'session-card', threadId: 'session-card' });
+
+      await expect(config.permissions!(chat)).resolves.toEqual({
+        askEachTime: ['Bash', 'mcp__factory__syncta-db_add_documents'],
+      });
+      await expect(config.permissions!(card)).resolves.toMatchObject({
+        askEachTime: ['Bash', 'mcp__factory__syncta-db_add_documents'],
+        unattended: true,
+        parkAsks: true,
+      });
+      expect(mcpAskToolsFor).toHaveBeenCalledWith({ orgId: 'org-a', factoryProjectId: 'factory-a', sessionId: 'session-chat' });
+      // The CLI rules: asked even though the Factory server is trusted.
+      const rules = claudeCode.claudePermissionRules((await config.permissions!(chat))!, {
+        mcpServers: ['factory'],
+        trustedMcpServers: ['factory'],
+      });
+      expect(rules.ask).toContain('mcp__factory__syncta-db_add_documents');
+    });
+  });
+
   describe('per-card allowed tools', () => {
     it("lets a card run use the card's extra tools (a Product card's web reads); other runs and chats get none", async () => {
       const allowToolsFor = vi.fn(async ({ sessionId }: { sessionId: string }) =>
