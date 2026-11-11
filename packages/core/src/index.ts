@@ -259,3 +259,5 @@ export * from './intake/kinds.ts';
 export * from './intake/events.ts';
 export * from './intake/configs.ts';
 export * from './intake/card-origin.ts';
+
+export * from './mcp-servers/model.ts';
