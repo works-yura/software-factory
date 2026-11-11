@@ -332,7 +332,7 @@
   },
   "customProviders": {
     "description": "Ендпоінти, сумісні з OpenAI.",
-    "add": "Додати провайдера",
+    "add": "Додати власного провайдера",
     "nameAndUrlRequired": "Потрібно вказати назву й URL.",
     "name": "Назва",
     "namePlaceholder": "напр. my-llm",

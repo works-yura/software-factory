@@ -53,7 +53,7 @@ beforeEach(() => {
 });
 
 describe('Settings ownership', () => {
-  it('writes organization credentials from Factory defaults', async () => {
+  it('writes organization credentials from Providers', async () => {
     let keyBody: unknown;
     server.use(
       http.put(`${PROVIDERS_URL}/openai/key`, async ({ request }) => {
@@ -64,7 +64,7 @@ describe('Settings ownership', () => {
     const user = userEvent.setup();
     renderSettings('models');
 
-    const factoryDefaults = await screen.findByRole('region', { name: 'Factory defaults' });
+    const factoryDefaults = await screen.findByRole('region', { name: 'Providers' });
     expect(screen.queryByRole('region', { name: 'Personal defaults' })).not.toBeInTheDocument();
     await user.click(await within(factoryDefaults).findByRole('button', { name: 'OpenAI actions' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Update key' }));
@@ -77,7 +77,7 @@ describe('Settings ownership', () => {
     server.use(http.get(PROVIDERS_URL, () => HttpResponse.json({ ...settingsProviders, orgKeyAdmin: false })));
     renderSettings('models');
 
-    const factoryDefaults = await screen.findByRole('region', { name: 'Factory defaults' });
+    const factoryDefaults = await screen.findByRole('region', { name: 'Providers' });
     expect(
       await within(factoryDefaults).findByText('Only organization admins can manage org-wide credentials.'),
     ).toBeInTheDocument();
@@ -117,7 +117,7 @@ describe('Settings ownership', () => {
   ])('sends $section$hash to Models #factory-defaults, keeping search and return state', async ({ section, hash }) => {
     const router = renderSettings(section, { hash, search: '?from=chat' });
 
-    expect(await screen.findByRole('region', { name: 'Factory defaults' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Providers' })).toBeInTheDocument();
     expect(router.state.location).toMatchObject({
       pathname: '/factories/fp-1/settings/models',
       hash: '#factory-defaults',

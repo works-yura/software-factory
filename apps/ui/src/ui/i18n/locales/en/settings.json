@@ -328,7 +328,7 @@
   },
   "customProviders": {
     "description": "OpenAI-compatible endpoints.",
-    "add": "Add provider",
+    "add": "Add custom provider",
     "nameAndUrlRequired": "Name and URL are required.",
     "name": "Name",
     "namePlaceholder": "e.g. my-llm",

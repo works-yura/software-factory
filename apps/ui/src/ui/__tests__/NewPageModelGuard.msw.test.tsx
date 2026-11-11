@@ -148,7 +148,7 @@ describe('NewPage credential guard', () => {
     renderNewPage();
 
     expect(await screen.findByRole('heading', { name: "You don't have access to Anthropic" })).toBeInTheDocument();
-    expect(screen.getByText(/Ask an org admin to add one under Factory defaults in Models settings/)).toBeInTheDocument();
+    expect(screen.getByText(/Ask an org admin to add one under Providers in Models settings/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/models#factory-defaults',

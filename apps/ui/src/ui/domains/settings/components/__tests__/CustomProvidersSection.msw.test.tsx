@@ -63,7 +63,7 @@ describe('CustomProvidersSection', () => {
       await waitFor(() =>
         expect(screen.queryByRole('status', { name: 'Loading custom providers' })).not.toBeInTheDocument(),
       );
-      expect(screen.getByRole('button', { name: 'Add provider' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Add custom provider' })).toBeInTheDocument();
       expect(screen.queryByRole('list')).not.toBeInTheDocument();
     });
   });
@@ -84,7 +84,7 @@ describe('CustomProvidersSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<CustomProvidersSection />);
 
-      await user.click(await screen.findByRole('button', { name: 'Add provider' }));
+      await user.click(await screen.findByRole('button', { name: 'Add custom provider' }));
       await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
       await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
       await user.type(screen.getByPlaceholderText('model-a, model-b'), 'model-a, model-b');
@@ -111,7 +111,7 @@ describe('CustomProvidersSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<CustomProvidersSection />);
 
-      await user.click(await screen.findByRole('button', { name: 'Add provider' }));
+      await user.click(await screen.findByRole('button', { name: 'Add custom provider' }));
       await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
       await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'bad');
       await user.click(screen.getByRole('button', { name: 'Add' }));

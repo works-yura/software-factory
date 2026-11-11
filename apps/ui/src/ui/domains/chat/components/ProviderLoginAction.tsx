@@ -6,7 +6,7 @@ import { Link, useLocation } from 'react-router';
 import { MODEL_DEFAULTS_ANCHORS, settingsSectionPath } from '../../settings/settingsSections';
 import { useChatModelCatalog } from '../context/useChatModelCatalog';
 
-/** Sends the user to the Factory defaults on the Models page, which own the credentials every session runs on. */
+/** Sends the user to Providers on the Models page, which hold the credentials every session runs on. */
 export function ProviderLoginAction() {
   const { t } = useTranslation('chat');
   const location = useLocation();
