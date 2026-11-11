@@ -1,0 +1,25 @@
+{
+  "name": "@factory/harness-codex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Codex harness: Factory sessions run as threads of the `codex app-server` JSON-RPC process, resumed per session, with Codex's approvals and questions parked as the Factory's human gates.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory/harness": "workspace:*",
+    "@factory/harness-claude-code": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
