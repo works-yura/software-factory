@@ -129,6 +129,14 @@ export class McpServerHub {
   async status(orgId: string, id: string): Promise<McpServerStatus | null> {
     const record = await this.#deps.servers.getRecord(orgId, id);
     if (!record) return null;
+    return this.check(orgId, record);
+  }
+
+  /**
+   * Starts a server from a config that need not be saved (the form's «Перевірити» before saving),
+   * lists its tools and stops it. Nothing is stored; secret files are removed when it stops.
+   */
+  async check(orgId: string, record: Pick<McpServerRecord, 'name' | 'launch' | 'secrets' | 'toolPolicies'>): Promise<McpServerStatus> {
     const checkedAt = new Date().toISOString();
     let prepared: PreparedMcpServer | undefined;
     let client: McpClientLike | undefined;

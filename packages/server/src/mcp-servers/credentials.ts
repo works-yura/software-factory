@@ -1,4 +1,11 @@
-import type { CredentialKind, CredentialOption, CredentialProvider, CredentialSuggestion } from '@factory/capabilities';
+import type {
+  CredentialKind,
+  CredentialOption,
+  CredentialProvider,
+  CredentialSuggestion,
+  DiscoveryResult,
+  DiscoverySource,
+} from '@factory/capabilities';
 import type { McpCredentialRef } from '@factory/core';
 
 /**
@@ -30,6 +37,21 @@ export class McpCredentials {
     const provider = this.#providers.get(ref.kind);
     if (!provider) throw new Error(`No integration provides ${ref.kind} accounts; connect it first.`);
     return provider.readSecret(orgId, ref.id);
+  }
+
+  /**
+   * Choices found with one of the organization's accounts (its projects, a project's databases).
+   * A kind or provider that cannot look anything up answers with no items, never an error.
+   */
+  async discover(
+    orgId: string,
+    ref: McpCredentialRef,
+    source: DiscoverySource,
+    context: Record<string, string>,
+  ): Promise<DiscoveryResult> {
+    const provider = this.#providers.get(ref.kind);
+    if (!provider?.discover) return { items: [] };
+    return provider.discover(orgId, ref.id, source, context);
   }
 
   /** Values a Factory's own bindings suggest (its Google Cloud project). */

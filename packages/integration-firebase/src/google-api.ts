@@ -40,6 +40,15 @@ export const FIRESTORE_API: GoogleApiSpec = {
   role: 'roles/datastore.viewer',
 };
 
+export const RESOURCE_MANAGER_API: GoogleApiSpec = {
+  label: 'Cloud Resource Manager',
+  service: 'cloudresourcemanager.googleapis.com',
+  scope: 'https://www.googleapis.com/auth/cloud-platform.read-only',
+  // `resourcemanager.projects.get` decides which projects a search returns; Cloud Datastore Viewer
+  // includes it on the project it is granted on.
+  role: 'roles/datastore.viewer',
+};
+
 interface GoogleErrorBody {
   error?: {
     code?: number;

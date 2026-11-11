@@ -45,12 +45,13 @@
     },
     "FIRESTORE_PROJECT": {
       "label": { "uk": "Проєкт Google Cloud", "en": "Google Cloud project" },
-      "description": { "uk": "ID проєкту з базою, напр. syncta-57c6a.", "en": "The project id holding the database, e.g. syncta-57c6a." },
-      "suggest": "google-cloud-project"
+      "description": { "uk": "Проєкт з базою: зі списку проєктів, які бачить акаунт, або впишіть ID.", "en": "The project holding the database: from the projects the account sees, or type its id." },
+      "suggest": { "from": "google-cloud-projects", "dependsOn": "GOOGLE_APPLICATION_CREDENTIALS" }
     },
     "FIRESTORE_DATABASE": {
       "label": { "uk": "База Firestore", "en": "Firestore database" },
-      "description": { "uk": "Порожньо — база (default).", "en": "Empty for the (default) database." }
+      "description": { "uk": "Бази цього проєкту; зазвичай (default).", "en": "This project's databases; usually (default)." },
+      "suggest": { "from": "firestore-databases", "dependsOn": ["GOOGLE_APPLICATION_CREDENTIALS", "FIRESTORE_PROJECT"] }
     },
     "POSTGRES_HOST": { "label": { "uk": "Хост", "en": "Host" } },
     "POSTGRES_PORT": { "label": { "uk": "Порт", "en": "Port" } },

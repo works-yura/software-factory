@@ -19,6 +19,8 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
   onTestFinished(() => backend.close());
   const audits: Array<{ action: string }> = [];
   const checked: string[] = [];
+  const dryRuns: Array<{ name: string; launch: unknown; secrets: unknown }> = [];
+  const discoveries: Array<{ credential: unknown; source: string; context: unknown }> = [];
   const app = new Hono();
   app.use('*', async (c, next) => {
     c.set('factoryAuthUser' as never, (options.user ?? admin) as never);
@@ -34,17 +36,27 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
           checked.push(id);
           return { connected: true, toolCount: 1, tools: [{ name: 'list_collections', description: '', policy: 'allow' }], checkedAt: 'now' };
         },
+        check: async (_org, record) => {
+          dryRuns.push({ name: record.name, launch: record.launch, secrets: record.secrets });
+          return { connected: true, toolCount: 2, tools: [{ name: 'list_collections', description: '', policy: 'allow' }, { name: 'delete_documents', description: '', policy: 'allow' }], checkedAt: 'now' };
+        },
       },
       credentials: {
         options: async () => ({ 'google-cloud-account': [{ id: 'acc-1', name: 'Syncta', detail: 'factory@syncta-57c6a.iam.gserviceaccount.com' }] }),
         suggestions: async (_org, factoryProjectId) => (factoryProjectId === 'syncts' ? { 'google-cloud-project': 'syncta-57c6a' } : {}),
+        discover: async (_org, credential, source, context) => {
+          discoveries.push({ credential, source, context });
+          return source === 'google-cloud-projects'
+            ? { items: [{ value: 'syncta-57c6a' }], default: 'syncta-57c6a', denied: { role: 'roles/datastore.viewer', message: 'refused' } }
+            : { items: [{ value: '(default)' }], default: '(default)' };
+        },
       },
       audit: { record: async input => void audits.push({ action: input.action }) },
     }),
   );
   const call = (method: string, path: string, body?: unknown) =>
     app.request(path, { method, ...(body !== undefined ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
-  return { call, audits, checked, servers };
+  return { call, audits, checked, servers, dryRuns, discoveries };
 }
 
 const firestore = {
@@ -187,5 +199,46 @@ describe('MCP server routes', () => {
     const deleted = await call('DELETE', `/web/mcp-servers/${managed!.id}`);
     expect(deleted.status).toBe(409);
     expect(await deleted.json()).toMatchObject({ error: 'managed_by_integration', integration: 'firebase' });
+  });
+
+  it('looks up an input’s choices with the picked account, passing a refusal on as a hint', async () => {
+    const { call, discoveries } = await setup({ isAdmin: false });
+    const projects = await call('POST', '/web/mcp-servers/discover', {
+      credential: { kind: 'google-cloud-account', id: 'acc-1' },
+      from: 'google-cloud-projects',
+    });
+    expect(projects.status).toBe(200);
+    expect(await projects.json()).toEqual({ items: [{ value: 'syncta-57c6a' }], default: 'syncta-57c6a', denied: { role: 'roles/datastore.viewer', message: 'refused' } });
+    const databases = await call('POST', '/web/mcp-servers/discover', {
+      credential: { kind: 'google-cloud-account', id: 'acc-1' },
+      from: 'firestore-databases',
+      context: { project: 'syncta-57c6a' },
+    });
+    expect((await databases.json()).default).toBe('(default)');
+    expect(discoveries[1]).toEqual({ credential: { kind: 'google-cloud-account', id: 'acc-1' }, source: 'firestore-databases', context: { project: 'syncta-57c6a' } });
+    expect((await call('POST', '/web/mcp-servers/discover', { credential: { kind: 'google-cloud-account', id: 'acc-1' }, from: 'nowhere' })).status).toBe(422);
+  });
+
+  it('checks a server before it is saved, with the stored secrets of the one being edited, storing nothing', async () => {
+    const { call, dryRuns, servers } = await setup();
+    const unsaved = await call('POST', '/web/mcp-servers/check', { server: firestore });
+    expect(unsaved.status).toBe(200);
+    expect((await unsaved.json()).status.tools.map((tool: { name: string }) => tool.name)).toEqual(['list_collections', 'delete_documents']);
+    expect(dryRuns[0]).toMatchObject({ name: 'syncta-db', launch: { credentials: { GOOGLE_APPLICATION_CREDENTIALS: { id: 'acc-1' } } } });
+    expect(await servers.list('org-1')).toEqual([]);
+
+    const custom = { name: 'own', label: 'Own', launch: { transport: 'stdio', command: 'node', args: [], env: {} }, assignments: [] };
+    const { server } = await (await call('POST', '/web/mcp-servers', { ...custom, secrets: { env: { TOKEN: 'saved-secret' } } })).json();
+    await call('POST', '/web/mcp-servers/check', { id: server.id, server: custom });
+    expect(dryRuns[1]).toMatchObject({ secrets: { env: { TOKEN: 'saved-secret' } } });
+    await call('POST', '/web/mcp-servers/check', { id: server.id, server: { ...custom, secrets: { env: { TOKEN: 'typed-now' } } } });
+    expect(dryRuns[2]).toMatchObject({ secrets: { env: { TOKEN: 'typed-now' } } });
+    expect((await call('POST', '/web/mcp-servers/check', { id: 'missing', server: custom })).status).toBe(404);
+    expect((await call('POST', '/web/mcp-servers/check', { server: { name: 'BAD NAME' } })).status).toBe(422);
+  });
+
+  it('refuses a member the pre-save check: it starts a process', async () => {
+    const { call } = await setup({ isAdmin: false });
+    expect((await call('POST', '/web/mcp-servers/check', { server: firestore })).status).toBe(403);
   });
 });

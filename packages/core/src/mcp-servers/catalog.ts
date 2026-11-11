@@ -73,9 +73,26 @@ export type McpLocalized = z.infer<typeof localizedSchema>;
 export const MCP_CREDENTIAL_KINDS = ['google-cloud-account'] as const;
 export type McpCredentialKind = (typeof MCP_CREDENTIAL_KINDS)[number];
 
-/** Values a binding the Factory already has can suggest (the Factory's Google Cloud project). */
-export const MCP_SUGGESTIONS = ['google-cloud-project'] as const;
-export type McpSuggestion = (typeof MCP_SUGGESTIONS)[number];
+/**
+ * Where an input's choices come from: looked up with the account another input picked (the
+ * projects that account sees; a project's Firestore databases). The form offers them and prefills
+ * the obvious one; a person may still type any value.
+ */
+export const MCP_SUGGESTION_SOURCES = ['google-cloud-projects', 'firestore-databases'] as const;
+export type McpSuggestionSource = (typeof MCP_SUGGESTION_SOURCES)[number];
+
+/** An input's choices: their source, and the inputs (by key) the lookup needs — the account first. */
+export interface McpSuggestion {
+  from: McpSuggestionSource;
+  dependsOn: string[];
+}
+
+const suggestionSchema = z.object({
+  from: z.enum(MCP_SUGGESTION_SOURCES),
+  dependsOn: z
+    .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
+    .transform(value => (Array.isArray(value) ? value : [value])),
+});
 
 /** The Factory overlay of one catalog entry: what upstream's `server.json` has no field for. */
 export const mcpCatalogOverlaySchema = z.object({
@@ -110,7 +127,7 @@ export const mcpCatalogOverlaySchema = z.object({
       label: localizedSchema,
       description: localizedSchema.optional(),
       credential: z.enum(MCP_CREDENTIAL_KINDS).optional(),
-      suggest: z.enum(MCP_SUGGESTIONS).optional(),
+      suggest: suggestionSchema.optional(),
     }),
   ),
 });
@@ -192,6 +209,11 @@ export function mcpCatalogEntry(manifest: unknown, overlay: unknown): McpCatalog
       const text = extra.data.inputs[key];
       if (!text) throw new McpCatalogError(`${server.data.name}: input ${key} has no label in the overlay.`);
       const { input, kind } = found;
+      for (const dependency of text.suggest?.dependsOn ?? []) {
+        if (!variant.inputs.includes(dependency)) {
+          throw new McpCatalogError(`${server.data.name} variant ${variant.id}: ${key} suggests from ${dependency}, which this variant does not ask for.`);
+        }
+      }
       return {
         key,
         kind,

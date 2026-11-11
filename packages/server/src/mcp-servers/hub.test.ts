@@ -141,6 +141,15 @@ describe('McpServerHub with a real stdio server', () => {
     expect(await hub.status('org-1', 'srv-3')).toMatchObject({ connected: false, error: expect.stringContaining('FIRESTORE_PROJECT') });
     expect(await hub.status('org-1', 'missing')).toBeNull();
   }, 30_000);
+
+  it('checks a config that was never saved, and removes its secret files after', async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'mcp-hub-check-'));
+    const hub = makeHub([], { tempRoot });
+    const unsaved = server();
+    const status = await hub.check('org-1', { name: unsaved.name, launch: unsaved.launch, secrets: unsaved.secrets, toolPolicies: unsaved.toolPolicies });
+    expect(status).toMatchObject({ connected: true, toolCount: 3 });
+    expect(readdirSync(tempRoot)).toEqual([]);
+  }, 30_000);
 });
 
 describe('prepareMcpServer', () => {

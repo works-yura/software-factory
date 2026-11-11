@@ -16,6 +16,7 @@ import type { RouteAuth } from '@factory/http';
 import type { IntegrationHooks } from '@factory/integrations';
 import type { FactoryProjectsStorage, IntegrationStorageHandle } from '@factory/store';
 
+import { listFirestoreDatabases, listGoogleCloudProjects } from './discovery.ts';
 import { FIRESTORE_API, GoogleApiClient } from './google-api.ts';
 import { ServiceAccountKeyError, ServiceAccountTokens, parseServiceAccountKey } from './service-account.ts';
 import type { FetchLike, ServiceAccountKey } from './service-account.ts';
@@ -264,6 +265,30 @@ export function buildFirebaseRoutes(options: FirebaseRoutesOptions): ApiRoute[] 
         const account = await saveAccount(storage, orgId, userId, { name: body.name ?? key.project_id, key });
         await audit(c, 'connected', { accountId: account.id, name: account.name, clientEmail: account.clientEmail, projectId: account.projectId, keyId: account.keyId });
         return c.json({ account, ...(await view(orgId)) });
+      }),
+    }),
+    // What the account can see, for the binding form's project and database choices. Read-only;
+    // a refusal comes back as `denied` with what is still known (the key's project, `(default)`).
+    registerApiRoute('/web/firebase/accounts/:accountId/projects', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: handle(async c => {
+        const { orgId } = await caller(c, auth, false);
+        const key = await readAccountKey(storage, orgId, param(c, 'accountId'));
+        if (!key) throw new Refusal(404, { error: 'account_not_found' });
+        return c.json(await listGoogleCloudProjects(key, options.fetch ? { fetch: options.fetch } : {}));
+      }),
+    }),
+    registerApiRoute('/web/firebase/accounts/:accountId/databases', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: handle(async c => {
+        const { orgId } = await caller(c, auth, false);
+        const key = await readAccountKey(storage, orgId, param(c, 'accountId'));
+        if (!key) throw new Refusal(404, { error: 'account_not_found' });
+        const project = c.req.query('project')?.trim() || key.project_id;
+        if (project.length > 128) throw new Refusal(400, { error: 'invalid_project' });
+        return c.json(await listFirestoreDatabases(key, project, options.fetch ? { fetch: options.fetch } : {}));
       }),
     }),
     registerApiRoute('/web/firebase/accounts/:accountId', {

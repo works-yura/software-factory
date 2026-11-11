@@ -19,6 +19,28 @@ export interface CredentialOption {
   detail?: string;
 }
 
+/** What a provider can look up with one of its accounts, to offer as choices in a form. */
+export type DiscoverySource = 'google-cloud-projects' | 'firestore-databases';
+export const DISCOVERY_SOURCES: readonly DiscoverySource[] = ['google-cloud-projects', 'firestore-databases'];
+
+export interface DiscoveryItem {
+  value: string;
+  /** What a person reads (a project's display name), when it differs from the value. */
+  label?: string;
+  detail?: string;
+}
+
+/**
+ * Choices found with an account. A refusal never fails the form: `items` still carries what is known
+ * without the call (the key's own project, the `(default)` database) and `denied` says what to grant.
+ */
+export interface DiscoveryResult {
+  items: DiscoveryItem[];
+  /** The obvious pick (the key's own project, `(default)`). */
+  default?: string;
+  denied?: { role?: string; message: string };
+}
+
 export interface CredentialProvider {
   readonly kind: CredentialKind;
   list(orgId: string): Promise<CredentialOption[]>;
@@ -26,4 +48,9 @@ export interface CredentialProvider {
   readSecret(orgId: string, id: string): Promise<string | null>;
   /** Values the Factory's own binding knows, e.g. its Google Cloud project. */
   suggest?(orgId: string, factoryProjectId: string): Promise<Partial<Record<CredentialSuggestion, string>>>;
+  /**
+   * Looks up choices with one account, read-only; `context` carries the other inputs a source
+   * depends on (`project` for databases). Never returns a secret.
+   */
+  discover?(orgId: string, accountId: string, source: DiscoverySource, context: Record<string, string>): Promise<DiscoveryResult>;
 }

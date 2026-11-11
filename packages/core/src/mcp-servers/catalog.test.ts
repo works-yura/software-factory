@@ -50,7 +50,7 @@ const overlay = {
   inputs: {
     WEATHER_API_KEY: { label: { uk: 'Ключ API', en: 'API key' } },
     WEATHER_CERT: { label: { uk: 'Сертифікат', en: 'Certificate' }, credential: 'google-cloud-account' },
-    WEATHER_PROJECT: { label: { uk: 'Проєкт', en: 'Project' }, suggest: 'google-cloud-project' },
+    WEATHER_PROJECT: { label: { uk: 'Проєкт', en: 'Project' }, suggest: { from: 'google-cloud-projects', dependsOn: 'WEATHER_CERT' } },
     region: { label: { uk: 'Регіон', en: 'Region' } },
   },
 };
@@ -78,7 +78,7 @@ describe('mcpCatalogEntry', () => {
         required: true,
         secret: false,
         file: false,
-        suggest: 'google-cloud-project',
+        suggest: { from: 'google-cloud-projects', dependsOn: ['WEATHER_CERT'] },
       },
       { key: 'region', kind: 'argument', label: { uk: 'Регіон', en: 'Region' }, required: false, secret: false, file: false, default: 'eu', choices: ['eu', 'us'] },
     ]);
@@ -93,6 +93,21 @@ describe('mcpCatalogEntry', () => {
     expect(() => mcpCatalogEntry({ ...manifest, packages: [{ ...manifest.packages[0], registryType: 'pypi' }] }, overlay)).toThrow(
       /no npm stdio package/,
     );
+  });
+
+  it('reads an input’s suggestion source and refuses one that depends on an input the variant does not ask for', () => {
+    const databases = {
+      ...overlay,
+      inputs: { ...overlay.inputs, region: { label: { uk: 'Регіон', en: 'Region' }, suggest: { from: 'firestore-databases', dependsOn: ['WEATHER_CERT', 'WEATHER_PROJECT'] } } },
+    };
+    const region = mcpCatalogVariant(mcpCatalogEntry(manifest, databases), undefined)!.fields.find(field => field.key === 'region');
+    expect(region?.suggest).toEqual({ from: 'firestore-databases', dependsOn: ['WEATHER_CERT', 'WEATHER_PROJECT'] });
+    expect(() =>
+      mcpCatalogEntry(manifest, { ...overlay, inputs: { ...overlay.inputs, region: { label: { uk: 'Р', en: 'R' }, suggest: { from: 'firestore-databases', dependsOn: 'NOPE' } } } }),
+    ).toThrow(/NOPE/);
+    expect(() =>
+      mcpCatalogEntry(manifest, { ...overlay, inputs: { ...overlay.inputs, region: { label: { uk: 'Р', en: 'R' }, suggest: { from: 'nowhere', dependsOn: 'WEATHER_CERT' } } } }),
+    ).toThrow(McpCatalogError);
   });
 
   it('picks the only variant when none is named, and none when several exist', () => {

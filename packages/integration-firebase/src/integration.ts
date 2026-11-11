@@ -50,7 +50,7 @@ export class FirebaseIntegration implements FactoryIntegration {
   /** The Google Cloud accounts, for MCP servers that pick one instead of pasting its key. */
   credentialProviders(): CredentialProvider[] {
     if (!this.#storage) throw new Error('FirebaseIntegration used before initialize().');
-    return [googleCloudAccountProvider(this.#storage)];
+    return [googleCloudAccountProvider(this.#storage, this.#options.fetch ? { fetch: this.#options.fetch } : {})];
   }
 
   /** «База» bindings run MCP Toolbox for their project's Firestore, managed here (Settings › Інтеграції › MCP). */

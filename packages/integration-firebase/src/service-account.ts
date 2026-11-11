@@ -22,6 +22,8 @@ export const GOOGLE_SCOPES = {
   crashlytics: 'https://www.googleapis.com/auth/firebase',
   /** Firestore (the «База» check). Writes stay impossible while the account has only Cloud Datastore Viewer. */
   datastore: 'https://www.googleapis.com/auth/datastore',
+  /** Listing the projects an account can see (Cloud Resource Manager `projects.search`). */
+  projects: 'https://www.googleapis.com/auth/cloud-platform.read-only',
 } as const;
 export type GoogleScope = (typeof GOOGLE_SCOPES)[keyof typeof GOOGLE_SCOPES];
 

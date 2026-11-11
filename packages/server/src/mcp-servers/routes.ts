@@ -10,10 +10,12 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { mcpCatalogVariant, mcpServerInputSchema } from '@factory/core';
+import { z } from 'zod';
+
+import { MCP_SUGGESTION_SOURCES, mcpCatalogVariant, mcpCredentialRefSchema, mcpServerInputSchema } from '@factory/core';
 import type { McpServerInput, McpServerView } from '@factory/core';
 import type { RouteAuth } from '@factory/http';
-import { McpServerNameTakenError } from '@factory/store';
+import { McpServerNameTakenError, mergeMcpSecrets } from '@factory/store';
 import type { McpServersStorage } from '@factory/store';
 
 import type { McpServerHub } from './hub.ts';
@@ -23,9 +25,9 @@ import type { ManagedMcpServers } from './managed.ts';
 
 export interface McpServerRoutesOptions {
   auth: RouteAuth;
-  servers: Pick<McpServersStorage, 'list' | 'get' | 'create' | 'update' | 'delete'>;
-  hub: Pick<McpServerHub, 'status'>;
-  credentials: Pick<McpCredentials, 'options' | 'suggestions'>;
+  servers: Pick<McpServersStorage, 'list' | 'get' | 'getRecord' | 'create' | 'update' | 'delete'>;
+  hub: Pick<McpServerHub, 'status' | 'check'>;
+  credentials: Pick<McpCredentials, 'options' | 'suggestions' | 'discover'>;
   /** Syncs the servers integrations manage before the organization's list is read. */
   managed?: Pick<ManagedMcpServers, 'ensure'>;
   audit?: {
@@ -75,8 +77,25 @@ function handle(run: (c: Context) => Promise<Response>) {
   };
 }
 
+const discoverBodySchema = z.object({
+  credential: mcpCredentialRefSchema,
+  from: z.enum(MCP_SUGGESTION_SOURCES),
+  /** The other inputs the lookup depends on, by role (`project` for a project's databases). */
+  context: z.record(z.string().max(64), z.string().max(256)).default({}),
+});
+
+const checkBodySchema = z.object({
+  /** The stored server being edited: its saved secrets fill whatever the form did not retype. */
+  id: z.string().min(1).max(64).optional(),
+  server: z.unknown(),
+});
+
 async function readInput(c: Context) {
-  const parsed = mcpServerInputSchema.safeParse(await c.req.json().catch(() => undefined));
+  return parseInput(await c.req.json().catch(() => undefined));
+}
+
+function parseInput(body: unknown) {
+  const parsed = mcpServerInputSchema.safeParse(body);
   if (!parsed.success) {
     throw new Refusal(422, {
       error: 'invalid_server',
@@ -134,6 +153,33 @@ export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[
         const factoryProjectId = c.req.query('factoryProjectId');
         if (!factoryProjectId || factoryProjectId.length > 128) throw new Refusal(400, { error: 'factory_required' });
         return c.json({ suggestions: await credentials.suggestions(orgId, factoryProjectId) });
+      }),
+    }),
+    // Choices for an input from the account another input picked (projects, databases). Read-only;
+    // a refusal comes back as `denied` with what is still known, never as an error.
+    registerApiRoute('/web/mcp-servers/discover', {
+      method: 'POST',
+      handler: handle(async c => {
+        const { orgId } = await caller(c, auth, false);
+        const parsed = discoverBodySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) throw new Refusal(422, { error: 'invalid_discovery', message: parsed.error.issues[0]?.message ?? 'Invalid request.' });
+        const { credential, from, context } = parsed.data;
+        return c.json(await credentials.discover(orgId, credential, from, context));
+      }),
+    }),
+    // «Перевірити» before saving: starts the config as entered, lists its tools, stores nothing.
+    registerApiRoute('/web/mcp-servers/check', {
+      method: 'POST',
+      handler: handle(async c => {
+        const { orgId } = await caller(c, auth, true);
+        const body = checkBodySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!body.success) throw new Refusal(422, { error: 'invalid_server', message: 'Send the server to check.' });
+        const input = parseInput(body.data.server);
+        const stored = body.data.id ? await servers.getRecord(orgId, body.data.id) : null;
+        if (body.data.id && !stored) throw new Refusal(404, { error: 'not_found' });
+        const secrets = mergeMcpSecrets(stored?.secrets ?? { env: {}, headers: {}, files: {} }, input.secrets);
+        const status = await hub.check(orgId, { name: input.name, launch: input.launch, secrets, toolPolicies: input.toolPolicies });
+        return c.json({ status });
       }),
     }),
     registerApiRoute('/web/mcp-servers', {
