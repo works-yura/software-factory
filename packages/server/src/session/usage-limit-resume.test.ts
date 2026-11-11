@@ -8,7 +8,7 @@ import {
 } from '@factory/harness-claude-code';
 import type { UsageLimitPark, UsageLimitResumeResult } from '@factory/harness/usage-limit-park';
 
-import { createUsageLimitResumer, storeParkedSessions, type ParkableSession } from './usage-limit-resume.ts';
+import { createCardRunCheck, createUsageLimitResumer, storeParkedSessions, type ParkableSession } from './usage-limit-resume.ts';
 
 const T0 = Date.parse('2026-11-11T12:00:00.000Z');
 
@@ -208,5 +208,66 @@ describe('createUsageLimitResumer', () => {
     expect(record!.threads['chat-1']!.usageLimitPark).toMatchObject({ attempts: 2 });
     expect(record!.threads['chat-1']!.pendingInputs.map(input => input.text)).toEqual(['go on']);
     expect(resumer.scheduled().has('chat-1')).toBe(true);
+  });
+
+  describe('card runs', () => {
+    const rows = new Map([
+      ['card-session', { orgId: 'org-1', factoryProjectId: 'fp-1' }],
+      ['chat-session', { orgId: 'org-1', factoryProjectId: 'fp-1' }],
+    ]);
+    const check = createCardRunCheck({
+      sessions: { getBySessionId: async sessionId => rows.get(sessionId) ?? null },
+      workItems: {
+        findActiveRunBindingForSession: async ({ sessionId }) => (sessionId === 'card-session' ? { workItemId: 'wi-1' } : null),
+      },
+    });
+
+    it('tells a session bound to a card’s run from a chat session, and the Factory chat', async () => {
+      expect(await check('card-session')).toBe(true);
+      expect(await check('chat-session')).toBe(false);
+      expect(await check('supervisor:fp-1')).toBe(false);
+      expect(await createCardRunCheck({ sessions: { getBySessionId: async () => rows.get('card-session') } })('card-session')).toBe(false);
+    });
+
+    async function limitedSession(sessionId: string) {
+      const store = createInMemorySessionStore();
+      const harness = createClaudeCodeHarness({
+        store,
+        cwdFor: () => '/work',
+        parkOnUsageLimit: session => check(session.id).then(bound => !bound),
+        credentials: async () => {
+          throw new ClaudeCodeError('rate_limit', 'Every account is out of usage.', { resetsAt: new Date(Date.now() + 60 * 60_000) });
+        },
+      });
+      const session = await harness.createSession({ sessionId, threadId: sessionId, resourceId: 'fp-1' });
+      const events: Array<{ type: string }> = [];
+      session.subscribe(event => events.push(event));
+      const ended = new Promise<void>(resolve => session.subscribe(event => event.type === 'agent_end' && resolve()));
+      return { session, events, ended, store };
+    }
+
+    it('a card-bound session does not park: its run fails for the dispatcher to resume', async () => {
+      const { session, events, ended } = await limitedSession('card-session');
+      await session.sendChatMessage({ content: 'go' });
+      await ended;
+      expect(events.map(event => event.type)).toContain('error');
+      expect(events.map(event => event.type)).not.toContain('usage_limit_parked');
+      expect(session.usageLimitPark).toBeUndefined();
+    });
+
+    it('a chat session parks, keeping a delivered notification for the resume', async () => {
+      const { session, events, ended, store } = await limitedSession('chat-session');
+      const notified = await session.sendNotificationSignal(
+        { source: 'rules', kind: 'pull_request', summary: 'CI failed on #12', priority: 'high' },
+        { ifIdle: { behavior: 'wake' } },
+      );
+      await notified.accepted?.catch(() => {});
+      await ended;
+      expect(events.map(event => event.type)).toContain('usage_limit_parked');
+      expect(events.map(event => event.type)).not.toContain('error');
+      const thread = (await store.get('chat-session'))!.threads['chat-session']!;
+      expect(thread.usageLimitPark).toBeDefined();
+      expect(thread.pendingInputs.map(input => input.kind)).toEqual(['notification']);
+    });
   });
 });

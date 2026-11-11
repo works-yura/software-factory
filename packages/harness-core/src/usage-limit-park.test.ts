@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isUsageLimitFailure, nextUsageLimitPark, USAGE_LIMIT_PARK_MAX_MS } from './usage-limit-park.ts';
+import { isUsageLimitFailure, nextUsageLimitPark, USAGE_LIMIT_PARK_MAX_MS, type UsageLimitPark } from './usage-limit-park.ts';
 
 const now = new Date('2026-11-11T12:00:00.000Z');
 
@@ -18,11 +18,11 @@ describe('nextUsageLimitPark', () => {
   });
 
   it('waits a doubling cooldown when nobody said when the limit resets, at most an hour', () => {
-    const first = nextUsageLimitPark({ kind: 'rate_limit', message: 'out' }, { now });
+    const first = nextUsageLimitPark({ kind: 'rate_limit', message: 'out' }, { now }) as UsageLimitPark;
     expect(first).toMatchObject({ until: '2026-11-11T12:05:00.000Z', resetKnown: false, attempts: 1 });
-    const second = nextUsageLimitPark({ kind: 'rate_limit', message: 'out' }, { now, previous: first as never });
+    const second = nextUsageLimitPark({ kind: 'rate_limit', message: 'out' }, { now, previous: first });
     expect(second).toMatchObject({ until: '2026-11-11T12:10:00.000Z', attempts: 2, since: now.toISOString() });
-    const tenth = nextUsageLimitPark({ kind: 'rate_limit', message: 'out' }, { now, previous: { ...(first as never), attempts: 9 } });
+    const tenth = nextUsageLimitPark({ kind: 'rate_limit', message: 'out' }, { now, previous: { ...first, attempts: 9 } });
     expect(tenth).toMatchObject({ until: '2026-11-11T13:00:00.000Z' });
   });
 

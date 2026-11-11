@@ -187,3 +187,24 @@ export function storeParkedSessions(store: {
       return park ? [{ sessionId: record.sessionId, until: park.until }] : [];
     });
 }
+
+/**
+ * Whether a session is bound to a card's run (an active run binding): the dispatcher resumes such a
+ * run when the limit resets, so the session must neither park nor be resumed here. A session with
+ * no Factory row (the Factory chat) or no binding is a chat session.
+ */
+export function createCardRunCheck(deps: {
+  sessions: { getBySessionId(sessionId: string): Promise<{ orgId: string; factoryProjectId?: string | null } | null | undefined> };
+  /** Absent while the work-items domain is not ready: no session is a card run then. */
+  workItems?: {
+    findActiveRunBindingForSession(input: { orgId: string; factoryProjectId: string; sessionId: string }): Promise<unknown>;
+  };
+}): (sessionId: string) => Promise<boolean> {
+  return async sessionId => {
+    if (!deps.workItems) return false;
+    const row = await deps.sessions.getBySessionId(sessionId);
+    if (!row?.factoryProjectId) return false;
+    const binding = await deps.workItems.findActiveRunBindingForSession({ orgId: row.orgId, factoryProjectId: row.factoryProjectId, sessionId });
+    return binding !== null && binding !== undefined;
+  };
+}

@@ -282,7 +282,7 @@ import { observeSessionRunReports } from '@factory/harness-mastra';
 import { FactorySessionsStateProcessor } from '@factory/harness-mastra';
 import { assertFactorySkills, createWorkspaceFactory, FactoryWorkspaceRegistry, findBoardSkillProblems } from '@factory/harness-mastra';
 import type { FactorySandboxStart } from '@factory/harness-mastra';
-import { createUsageLimitResumer, storeParkedSessions, type ParkedSessionSource, type UsageLimitResumer } from './session/usage-limit-resume.ts';
+import { createCardRunCheck, createUsageLimitResumer, storeParkedSessions, type ParkedSessionSource, type UsageLimitResumer } from './session/usage-limit-resume.ts';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
 
@@ -2052,17 +2052,10 @@ export class MastraFactory {
     // rules, approval notices and its live-session entry.
     // A chat session (personal, side session, the Factory chat) parks when every account is out of
     // usage and resumes at the reset; a card's run is the dispatcher's to resume, so it never parks.
-    const boundToCardRun = async (sessionId: string): Promise<boolean> => {
-      if (!workItemsReady) return false;
-      const row = await sourceControlSessions.getBySessionId(sessionId);
-      if (!row?.factoryProjectId) return false;
-      const binding = await workItemsStorage.findActiveRunBindingForSession({
-        orgId: row.orgId,
-        factoryProjectId: row.factoryProjectId,
-        sessionId,
-      });
-      return binding !== null && binding !== undefined;
-    };
+    const boundToCardRun = createCardRunCheck({
+      sessions: sourceControlSessions,
+      ...(workItemsReady ? { workItems: workItemsStorage } : {}),
+    });
     const parkOnUsageLimit = async (session: { id: string }) => !(await boundToCardRun(session.id));
     const parkedSessionSources: ParkedSessionSource[] = [];
     const usageLimitResumer = createUsageLimitResumer({ sources: parkedSessionSources, handledElsewhere: boundToCardRun });
