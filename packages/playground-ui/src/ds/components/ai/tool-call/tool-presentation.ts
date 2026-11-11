@@ -206,7 +206,11 @@ export function presentTool(toolName: string, rawArgs: unknown): ToolPresentatio
   return { ...dressed, detail: withoutCdPrefix(detail), description, command: detail };
 }
 
-export type ToolEdit = { path?: string } & ({ oldText: string; newText: string } | { content: string });
+/**
+ * What an edit card draws: a replacement (Mastra's and Claude Code's edits), a written file, or a
+ * unified diff (Codex's file changes carry one).
+ */
+export type ToolEdit = { path?: string } & ({ oldText: string; newText: string } | { content: string } | { diff: string });
 
 function stringField(args: unknown, key: string): string | undefined {
   if (!args || typeof args !== 'object' || !hasProperty(args, key)) return undefined;
@@ -219,6 +223,10 @@ export function toolEdit(rawToolName: string, rawArgs: unknown): ToolEdit | unde
   const newText = stringField(args, 'new_string');
   if (/string_replace|str_replace|edit_file/i.test(toolName) && newText !== undefined) {
     return { path, oldText: stringField(args, 'old_string') ?? '', newText };
+  }
+  const diff = stringField(args, 'diff');
+  if (/string_replace|str_replace|edit_file|write_file|create_file/i.test(toolName) && diff !== undefined && diff.trim() !== '') {
+    return { path, diff };
   }
   const content = stringField(args, 'content');
   if (/write_file|create_file/i.test(toolName) && content !== undefined) return { path, content };

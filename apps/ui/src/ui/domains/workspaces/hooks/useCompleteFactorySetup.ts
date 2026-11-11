@@ -1,8 +1,8 @@
-import { CLAUDE_CODE_INSTANCE_ID } from '@factory/harness-claude-code/models/aliases';
 import { MASTRA_INSTANCE_ID } from '@factory/credentials/mastra-models';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { translator } from '../../../i18n/t';
+import { isTurnHarness } from '../services/turnHarness';
 import { useApiConfig } from '../../../../api/config';
 import { isProviderConnected } from './useProviderConnection';
 import { queryKeys } from '../../../../api/keys';
@@ -15,7 +15,7 @@ import {
   renameFactoryProject,
   unlinkRepository,
   clearFactoryModelDefault,
-  createFactoryWithClaudeModel,
+  createFactoryWithHarnessModel,
   setFactoryModelDefault,
   updateFactoryHarness,
 } from '../services/github';
@@ -51,9 +51,9 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       if (!parsed.success) throw new Error(tk('setup.incomplete'));
       const setup = parsed.data;
       const repo = setup.repository;
-      // Claude Code signs in on its own (local login or the organization's Claude Code accounts): no provider to check.
-      const claude = setup.harness === 'claude-code' ? { claudeCodeModel: setup.claudeCodeModel } : undefined;
-      const choice = setup.harness === 'claude-code' ? undefined : setup.model;
+      // A turn-based harness (Claude Code, Codex) signs in with the organization's accounts: no provider to check.
+      const turn = 'harnessModel' in setup ? { harness: setup.harness, model: setup.harnessModel } : undefined;
+      const choice = 'model' in setup ? setup.model : undefined;
       if (choice) {
         const [providers, catalog] = await Promise.all([
           queryClient.fetchQuery({ ...providersQueryOptions(client), staleTime: 0 }),
@@ -72,8 +72,8 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       const existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
       const factory =
         existing ??
-        (claude
-          ? await createFactoryWithClaudeModel(baseUrl, { name: repo.name, harness: 'claude-code', claudeCodeModel: claude.claudeCodeModel })
+        (turn
+          ? await createFactoryWithHarnessModel(baseUrl, { name: repo.name, harness: turn.harness, model: turn.model })
           : await createFactoryProject(baseUrl, repo.name));
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);
@@ -93,16 +93,16 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
         },
       });
       if (choice) {
-        // A retry may find the Factory an earlier attempt created on Claude Code.
-        if (existing && existing.harness === 'claude-code') {
+        // A retry may find the Factory an earlier attempt created on Claude Code or Codex.
+        if (existing && isTurnHarness(existing.harness)) {
           await updateFactoryHarness(baseUrl, factory.id, { harness: 'mastra' });
         }
         await setFactoryModelDefault(baseUrl, factory.id, MASTRA_INSTANCE_ID, { model: choice.modelId });
-      } else if (existing && claude) {
-        await updateFactoryHarness(baseUrl, factory.id, { harness: 'claude-code' });
-        await (claude.claudeCodeModel
-          ? setFactoryModelDefault(baseUrl, factory.id, CLAUDE_CODE_INSTANCE_ID, { model: claude.claudeCodeModel })
-          : clearFactoryModelDefault(baseUrl, factory.id, CLAUDE_CODE_INSTANCE_ID));
+      } else if (existing && turn) {
+        await updateFactoryHarness(baseUrl, factory.id, { harness: turn.harness });
+        await (turn.model
+          ? setFactoryModelDefault(baseUrl, factory.id, turn.harness, { model: turn.model })
+          : clearFactoryModelDefault(baseUrl, factory.id, turn.harness));
       }
       return factory.id;
     },

@@ -36,11 +36,11 @@ export function MemorySettings({ factoryId }: { factoryId: string }) {
       <EmptyState
         as="h2"
         iconSlot={<Brain />}
-        titleSlot={t('memory.claudeCode.title')}
-        descriptionSlot={t('memory.claudeCode.description')}
+        titleSlot={t('memory.turnHarness.title', { harness: descriptor.label })}
+        descriptionSlot={t('memory.turnHarness.description', { harness: descriptor.label })}
         actionSlot={
           <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'default' })}>
-            {t('memory.claudeCode.action')}
+            {t('memory.turnHarness.action')}
           </Link>
         }
       />

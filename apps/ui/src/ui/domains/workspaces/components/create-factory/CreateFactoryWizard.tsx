@@ -12,7 +12,8 @@ import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft
 import { factoryHomePath } from '../../services/factoryPaths';
 import { connectGithub, manageGithubConnection } from '../../services/github';
 import type { FactoryHarness } from '../../services/github';
-import { CreateFactoryClaudeCodeStep } from './CreateFactoryClaudeCodeStep';
+import { isTurnHarness, TURN_HARNESS_TEXT_KEY } from '../../services/turnHarness';
+import { CreateFactoryTurnHarnessStep } from './CreateFactoryTurnHarnessStep';
 import { CreateFactoryHarnessRows } from './CreateFactoryHarnessRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
 import { CreateFactoryNameRows } from './CreateFactoryNameRows';
@@ -45,10 +46,11 @@ function stepChrome(step: CreateFactoryFlowStep, harness: FactoryHarness | undef
     case 'vcs':
       return { title: tk('createFactory.steps.vcs.title'), placeholder: tk('createFactory.steps.vcs.placeholder') };
     case 'model-provider':
-      if (harness === 'claude-code') {
+      if (isTurnHarness(harness)) {
+        const key = TURN_HARNESS_TEXT_KEY[harness];
         return {
-          title: tk('createFactory.steps.claudeCode.title'),
-          placeholder: tk('createFactory.steps.claudeCode.placeholder'),
+          title: tk(`createFactory.steps.${key}.title`),
+          placeholder: tk(`createFactory.steps.${key}.placeholder`),
         };
       }
       return {
@@ -64,8 +66,8 @@ function errorMessage(error: unknown): string {
 
 /**
  * Name → Harness → VCS → Model provider (no harness step when the server only
- * runs Mastra; for Claude Code the last step picks a Claude model instead of a
- * provider). Every pick stays in the
+ * runs Mastra; for Claude Code or Codex the last step picks that harness's
+ * model, with its sign-in, instead of a provider). Every pick stays in the
  * draft until the model step commits it, so the Factory only exists once the
  * user finished the wizard.
  */
@@ -84,7 +86,7 @@ export function CreateFactoryWizard() {
   const features = useServerFeatures();
   // Until the server says otherwise there is nothing to choose: Factories run on Mastra.
   // A draft resumed on the harness step keeps it in view even if the flag is still loading.
-  const harnessChoice = features.data?.claudeCode === true || draft?.step === 'harness';
+  const harnessChoice = features.data?.claudeCode === true || features.data?.codex === true || draft?.step === 'harness';
   const steps = createFactorySteps({ harnessChoice });
   useGithubReposQuery(undefined, draft?.step === 'name' && githubStatus.data?.connected === true);
 
@@ -163,19 +165,20 @@ export function CreateFactoryWizard() {
             onContinue={() => void flow.confirmRepositories()}
           />
         )}
-        {step === 'model-provider' && draft.harness === 'claude-code' && (
-          <CreateFactoryClaudeCodeStep
+        {step === 'model-provider' && isTurnHarness(draft.harness) && (
+          <CreateFactoryTurnHarnessStep
+            harness={draft.harness}
             query={value}
             saving={
-              createFactory.isPending && createFactory.variables && 'claudeCodeModel' in createFactory.variables
-                ? { model: createFactory.variables.claudeCodeModel }
+              createFactory.isPending && createFactory.variables && 'harnessModel' in createFactory.variables
+                ? { model: createFactory.variables.harnessModel }
                 : undefined
             }
             error={createFactory.error ? errorMessage(createFactory.error) : undefined}
-            onPick={claudeCodeModel => createFactory.mutate({ claudeCodeModel })}
+            onPick={harnessModel => createFactory.mutate({ harnessModel })}
           />
         )}
-        {step === 'model-provider' && draft.harness !== 'claude-code' && (
+        {step === 'model-provider' && !isTurnHarness(draft.harness) && (
           <CreateFactoryModelStep
             query={value}
             savingModelId={

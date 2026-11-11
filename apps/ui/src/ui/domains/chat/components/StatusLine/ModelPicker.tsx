@@ -13,7 +13,7 @@ import { settingsSectionPath } from '../../../settings/settingsSections';
 import { ComposerEffortColumn, ComposerPickerFooter, describeComposerEffort } from '../modelPicker/ComposerModelEffort';
 import { markOpenToEffort, ProviderModelPicker } from '../modelPicker/ProviderModelPicker';
 import { useComposerSelection } from '../modelPicker/useComposerSelection';
-import { ClaudeCodeModelLabel } from './ClaudeCodeModelLabel';
+import { FactoryHarnessModelLabel } from './FactoryHarnessModelLabel';
 import { LockedModelButton } from './LockedModelButton';
 import { ModelThinkingGroup } from './ModelThinkingGroup';
 
@@ -132,7 +132,7 @@ export function ModelPicker() {
   const { t } = useTranslation('chat');
   const chatSession = useChatSessionContext();
   const { modelLockedReason, harness } = chatSession;
-  // A chat whose harness took its model from the Factory before it could pick one (Claude Code).
+  // A chat whose harness took its model from the Factory before it could pick one (Claude Code, Codex).
   const claudeCode = chatSession.claudeCode ?? (harness?.modelScope === 'factory' ? { model: null } : undefined);
   const { status } = useChatConnection();
   const { activeModelId, pendingModelId, isLoading, error } = useChatModels();
@@ -142,9 +142,9 @@ export function ModelPicker() {
   const switchable = canSwitchModel(chatSession);
   const catalogQuery = selection.catalogQuery;
 
-  // A server without the Claude Code catalog: the chat runs on the Factory's Claude model.
+  // A server without the harness's catalog: the chat runs on the Factory's model for that harness.
   if (claudeCode && !selection.lockedEntry && !catalogQuery.isPending) {
-    return <ClaudeCodeModelLabel model={claudeCode.model} factoryId={factoryId} />;
+    return <FactoryHarnessModelLabel harness={harness} model={claudeCode.model} factoryId={factoryId} />;
   }
 
   const selectedModelId = selection.selectedModel || (claudeCode ? undefined : (pendingModelId ?? activeModelId));

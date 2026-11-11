@@ -45,7 +45,19 @@ export function FactorySection() {
         <Sidebar.NavHeader
           className="mt-0"
           action={
-            configured && (
+            <div className="flex items-center gap-0.5">
+              {canAddBoard && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('newBoard')}
+                  tooltip={t('newBoard')}
+                  render={<NavLink to={newBoardPath(factoryId)} onClick={() => overlays.close('sidebar')} />}
+                >
+                  <Plus aria-hidden />
+                </Button>
+              )}
+              {configured && (
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -57,7 +69,8 @@ export function FactorySection() {
               >
                 <Settings2 aria-hidden />
               </Button>
-            )
+              )}
+            </div>
           }
         >
           {t('boards')}
@@ -93,7 +106,6 @@ export function FactorySection() {
               />
             ))
           )}
-          {canAddBoard && <FactoryLink to={newBoardPath(factoryId)} icon={Plus} label={t('newBoard')} />}
         </Sidebar.NavList>
       </section>
       {knowledge.available ? (

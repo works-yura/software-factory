@@ -21,6 +21,13 @@ export interface InitializeResponse {
   readonly platformOs?: string;
 }
 
+/** A command as Codex parsed it: reading a file, listing files, searching, or something else. */
+export type CommandAction =
+  | { readonly type: 'read'; readonly command: string; readonly name: string; readonly path: string }
+  | { readonly type: 'listFiles'; readonly command: string; readonly path: string | null }
+  | { readonly type: 'search'; readonly command: string; readonly query: string | null; readonly path: string | null }
+  | { readonly type: 'unknown'; readonly command: string };
+
 export type CodexAccount =
   | { readonly type: 'apiKey' }
   | { readonly type: 'chatgpt'; readonly email: string | null; readonly planType: string }
@@ -259,6 +266,8 @@ export type ThreadItem =
       readonly command: string;
       readonly cwd: string;
       readonly status: ItemStatus;
+      /** What Codex parsed the command as (a file read, a listing, a search), when it could. */
+      readonly commandActions?: ReadonlyArray<CommandAction> | null;
       readonly aggregatedOutput?: string | null;
       readonly exitCode?: number | null;
       readonly durationMs?: number | null;
@@ -477,7 +486,10 @@ export interface ServerRequests {
   'item/permissions/requestApproval': { params: PermissionsRequestApprovalParams; result: PermissionsRequestApprovalResponse };
   'item/tool/requestUserInput': { params: ToolRequestUserInputParams; result: ToolRequestUserInputResponse };
   'account/chatgptAuthTokens/refresh': { params: ChatgptAuthTokensRefreshParams; result: ChatgptAuthTokensRefreshResponse };
-  'mcpServer/elicitation/request': { params: { threadId?: string; turnId?: string | null; serverName?: string; message?: string }; result: { action: 'accept' | 'decline' | 'cancel'; content?: JsonValue } };
+  'mcpServer/elicitation/request': {
+    params: { threadId?: string; turnId?: string | null; serverName?: string; message?: string; mode?: string; _meta?: JsonValue | null };
+    result: { action: 'accept' | 'decline' | 'cancel'; content?: JsonValue; _meta?: JsonValue | null };
+  };
 }
 
 export type ClientRequestMethod = keyof ClientRequests;

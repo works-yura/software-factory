@@ -12,7 +12,6 @@ import { queryKeys } from '../../../../../api/keys';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { SessionsSection } from '../SessionsSection';
-import { SidebarNewSessionButton } from '../SidebarNewSessionButton';
 import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
@@ -84,13 +83,9 @@ function LocationProbe() {
   return <output data-testid="pathname">{useLocation().pathname}</output>;
 }
 
+// The "+" for a new session sits in the Sessions header.
 function SidebarSessions() {
-  return (
-    <>
-      <SidebarNewSessionButton />
-      <SessionsSection />
-    </>
-  );
+  return <SessionsSection />;
 }
 
 function renderSection() {
@@ -135,7 +130,8 @@ describe('User sessions creation', () => {
       ),
     );
     const sessionList = screen.getByRole('region', { name: 'Sessions' });
-    expect(within(sessionList).queryByRole('button', { name: 'New session' })).not.toBeInTheDocument();
+    // Only the header's "+" carries the name: the draft adds no row.
+    expect(within(sessionList).getAllByRole('button', { name: 'New session' })).toHaveLength(1);
     expect(screen.getByText('No sessions yet')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     expect(sessionPosts).toBe(0);
@@ -167,9 +163,10 @@ describe('User sessions creation', () => {
 
     expect(await screen.findByRole('button', { name: 'Fix login' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'feature-readable' })).toBeInTheDocument();
+    // The untitled UUID session's row, beside the header's "+".
     expect(
-      within(screen.getByRole('region', { name: 'Sessions' })).getByRole('button', { name: 'New session' }),
-    ).toBeInTheDocument();
+      within(screen.getByRole('region', { name: 'Sessions' })).getAllByRole('button', { name: 'New session' }),
+    ).toHaveLength(2);
     expect(screen.queryByText(opaqueSessionId)).not.toBeInTheDocument();
   });
 

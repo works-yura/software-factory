@@ -2,7 +2,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ToolCallEdit } from './tool-call-edit';
+import { ToolCallEdit, unifiedDiffLines } from './tool-call-edit';
 
 afterEach(cleanup);
 
@@ -15,6 +15,16 @@ describe('ToolCallEdit', () => {
     expect(rows[0]?.textContent).toBe('-old');
     expect(rows[1]?.textContent).toBe('+line 0');
     expect(screen.getByText('… 1 more lines')).toBeTruthy();
+  });
+
+  it('draws a unified diff with its context, hunks and both sides, without file headers', () => {
+    const diff = ['--- a/a.ts', '+++ b/a.ts', '@@ -1,3 +1,3 @@', ' keep', '-old', '+new', ' tail'].join('\n');
+    const { container } = render(<ToolCallEdit edit={{ path: 'a.ts', diff }} />);
+    const rows = [...container.querySelectorAll('[role="group"] > div')].map(row => row.textContent);
+    expect(rows).toEqual(['@@ -1,3 +1,3 @@', ' keep', '-old', '+new', ' tail']);
+    expect(container.querySelector('[data-diff-line="removed"]')?.className).toContain('bg-destructive-subtle');
+    expect(container.querySelector('[data-diff-line="added"]')?.className).toContain('bg-success-subtle');
+    expect(unifiedDiffLines('\\ No newline at end of file\n+x')).toEqual([{ kind: 'added', text: 'x' }]);
   });
 
   it('keeps every changed line available when reviewing an approval', () => {

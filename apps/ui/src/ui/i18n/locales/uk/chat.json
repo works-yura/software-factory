@@ -417,10 +417,10 @@
     "openModelSettings": "Відкрити налаштування моделей",
     "resetsAt": "Ліміт скинеться {{time}}."
   },
-  "claudeCode": {
-    "placeholder": "Запитайте Claude Code…",
-    "model": "Claude Code · {{model}}",
-    "modelHint": "Цей чат працює на Claude Code з моделлю Claude цієї Factory. Змінити її можна в Налаштування → Моделі."
+  "turnHarness": {
+    "placeholder": "Запитайте {{harness}}…",
+    "model": "{{harness}} · {{model}}",
+    "modelHint": "Цей чат працює на {{harness}} з моделлю цієї Factory для нього. Змінити її можна в Налаштування → Моделі."
   },
   "connectionNotice": {
     "reconnecting": "Перепідключення…",

@@ -164,7 +164,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     : liveRun
       ? t('composer.steerPlaceholder')
       : claudeCode
-        ? t('claudeCode.placeholder')
+        ? t('turnHarness.placeholder', { harness: harness?.label ?? '' })
         : t('composer.placeholder');
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = chatPreparing

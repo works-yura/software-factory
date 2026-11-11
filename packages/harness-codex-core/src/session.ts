@@ -90,6 +90,11 @@ export interface CodexTurnPolicy {
    */
   unattended?: boolean;
   parkAsks?: boolean;
+  /**
+   * Tools asked about on every call (transcript names, e.g. `mcp__factory__factory_retry_decision`):
+   * an Allow lets that one call through, never the rest of the session (Claude Code's `askEachTime`).
+   */
+  askEachTime?: string[];
 }
 
 export function codexRuntimeModeTurnDefaults(
@@ -115,7 +120,15 @@ export const CODEX_THREAD_CONFIG: Readonly<Record<string, JsonValue>> = {
 
 /** An MCP server Codex reaches for the session (`mcp_servers.<name>` of the thread's config). */
 export type CodexMcpServer =
-  | { url: string; http_headers?: Record<string, string>; tool_timeout_sec?: number; enabled_tools?: string[]; disabled_tools?: string[] }
+  | {
+      url: string;
+      http_headers?: Record<string, string>;
+      tool_timeout_sec?: number;
+      enabled_tools?: string[];
+      disabled_tools?: string[];
+      /** Per tool: `approval_mode = "prompt"` makes Codex ask a person before each call (see `codexMcpToolApproval`). */
+      tools?: Record<string, { approval_mode?: 'auto' | 'prompt' | 'writes' | 'approve' }>;
+    }
   | { command: string; args?: string[]; env?: Record<string, string>; tool_timeout_sec?: number };
 
 /** A Factory tool call can wait on a person for up to an hour; Codex's MCP timeout stays above that. */
@@ -241,6 +254,12 @@ export interface CodexSessionConfig {
   policyFor?: (session: CodexSession) => CodexTurnPolicy | undefined | Promise<CodexTurnPolicy | undefined>;
   /** More thread config (`-c` keys), merged over {@link CODEX_THREAD_CONFIG}. */
   threadConfig?: Record<string, JsonValue>;
+  /**
+   * More thread config for this session's run, asked when the run opens its thread (once the cwd is
+   * known); merged over {@link threadConfig}. E.g. a checkout someone outside wrote reads no
+   * project instructions.
+   */
+  threadConfigFor?: (session: CodexSession) => Record<string, JsonValue> | undefined | Promise<Record<string, JsonValue> | undefined>;
   /** Mode a new thread starts in; `planning` to start with a plan for approval. */
   mode?: CodexSessionMode;
   /** Leads every planning turn's prompt; {@link CODEX_PLANNING_PROMPT} by default. */
@@ -366,6 +385,23 @@ function questionAnswers(params: ToolRequestUserInputParams | undefined, answer:
   if (questions.length <= 1) return questions[0] ? { [questions[0].id]: { answers: values } } : {};
   // Several questions answered together: each gets the whole answer, as the chat sends it as one text.
   return Object.fromEntries(questions.map(question => [question.id, { answers: [values.join('\n')] }]));
+}
+
+/**
+ * The tool an MCP elicitation asks a person to allow, when it is Codex's `mcp_tool_call` approval
+ * (`_meta.codex_approval_kind`); `undefined` for any other elicitation.
+ */
+export function codexMcpToolApproval(params: { serverName?: string; message?: string; _meta?: JsonValue | null }):
+  | { server: string; tool: string; message?: string }
+  | undefined {
+  const meta = params._meta && typeof params._meta === 'object' && !Array.isArray(params._meta) ? params._meta : undefined;
+  if (meta?.codex_approval_kind !== 'mcp_tool_call' || !params.serverName) return undefined;
+  const tool = [meta.tool_name, meta.tool_title, meta.tool].find((value): value is string => typeof value === 'string' && value.trim() !== '');
+  return {
+    server: params.serverName,
+    tool: tool ?? 'tool',
+    ...(params.message ? { message: params.message } : {}),
+  };
 }
 
 function codexTokensResponse(tokens: CodexChatGptTokens): ChatgptAuthTokensRefreshResponse {
@@ -1151,6 +1187,7 @@ export class CodexSession implements AgentSession {
     const config: Record<string, JsonValue> = {
       ...CODEX_THREAD_CONFIG,
       ...this.#config.threadConfig,
+      ...(await this.#config.threadConfigFor?.(this)),
       ...Object.fromEntries(
         Object.entries(mcpServers).map(([name, server]) => [`mcp_servers.${name}`, { tool_timeout_sec: CODEX_MCP_TOOL_TIMEOUT_SEC, ...server } as unknown as JsonValue]),
       ),
@@ -1242,17 +1279,21 @@ export class CodexSession implements AgentSession {
     client.handleUnknownServerNotification(() => {});
 
     const park = async (
-      payload: { threadId: string; turnId: string },
+      payload: { threadId: string; turnId?: string },
       build: (translator: CodexTurnTranslator) => { entries: TranscriptEntry[]; permission: PermissionRequest },
       question?: ToolRequestUserInputParams,
     ): Promise<ParkAnswer> => {
       const watch = watchFor(payload);
       if (!watch) return question ? { answers: {} } : { decision: 'cancel' };
       const policy = this.#run?.policy;
-      const { entries, permission } = build(watch.translator);
+      const built = build(watch.translator);
+      // A tool asked about on every call: its Allow is for this call alone.
+      const once = !question && policy?.askEachTime?.includes(built.permission.toolName) === true;
+      const permission: PermissionRequest = once ? { ...built.permission, once: true } : built.permission;
+      const entries = once ? built.entries.map(entry => (entry.kind === 'permission' ? { ...entry, once: true } : entry)) : built.entries;
       const thread = this.#threadState();
       const calls = entries.filter(entry => entry.kind !== 'permission');
-      if (!question && thread.grantedTools?.includes(permission.toolName)) {
+      if (!question && !once && thread.grantedTools?.includes(permission.toolName)) {
         emit(calls);
         return { decision: 'acceptForSession' };
       }
@@ -1296,8 +1337,20 @@ export class CodexSession implements AgentSession {
       held.current = { ...held.current, tokens };
       return codexTokensResponse(tokens);
     });
-    // MCP servers asking for input: the Factory's tools never do, and a person cannot answer one here.
-    client.handleServerRequest('mcpServer/elicitation/request', async () => ({ action: 'decline' }));
+    // An MCP tool call Codex asks a person to allow (a tool the host marked `approval_mode = "prompt"`):
+    // parked like a command approval. Any other MCP elicitation is declined: the Factory's tools never
+    // ask for input, and a person cannot answer a form here.
+    client.handleServerRequest('mcpServer/elicitation/request', async params => {
+      const approval = codexMcpToolApproval(params);
+      if (!approval || !params.threadId) return { action: 'decline' };
+      const answer = await park({ threadId: params.threadId, ...(params.turnId ? { turnId: params.turnId } : {}) }, translator =>
+        translator.mcpApproval({ id: `mcp-approval-${randomUUID()}`, ...approval }),
+      );
+      const decision = 'decision' in answer ? answer.decision : 'cancel';
+      if (decision === 'acceptForSession') return { action: 'accept', content: null, _meta: { persist: 'session' } };
+      if (decision === 'accept') return { action: 'accept', content: null, _meta: null };
+      return { action: 'decline' };
+    });
   }
 
   /** Waits for the turn to end, park, time out, or lose its process. */

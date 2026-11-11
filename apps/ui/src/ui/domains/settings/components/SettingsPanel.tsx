@@ -24,7 +24,7 @@ import { ObservabilitySection } from './ObservabilitySection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
-import { ClaudeBehaviorSettings } from './ClaudeBehaviorSettings';
+import { FactoryBehaviorSettings } from './FactoryBehaviorSettings';
 import { useFactoryHarness } from './models/harness/HarnessSettings';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
@@ -78,7 +78,7 @@ export function SettingsPanel() {
       {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} />}
       {section === 'debug' && <DebugSection />}
       {section === 'behavior' && factoryId && factoryToolRules && (
-        <ClaudeBehaviorSettings factoryId={factoryId} />
+        <FactoryBehaviorSettings factoryId={factoryId} />
       )}
       {section === 'behavior' && !factoryToolRules && (
         <BehaviorSettings

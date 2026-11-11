@@ -13,6 +13,7 @@ import type {
   ItemNotification,
   PermissionsRequestApprovalParams,
   ThreadItem,
+  CommandAction,
   ThreadTokenUsageUpdatedNotification,
   ToolRequestUserInputParams,
   TurnCompletedNotification,
@@ -30,6 +31,10 @@ import {
 /** The tool names Codex's work is recorded under: the Factory's own (Mastra) tool names, so the chat draws them as usual. */
 export const CODEX_TOOL_NAMES = {
   command: 'execute_command',
+  /** A command Codex parsed as one file read, listing or search: drawn as the Factory's own file tools, as Claude Code's `Read`, `LS` and `Grep` are. */
+  readFile: 'view',
+  listFiles: 'list_files',
+  search: 'search_content',
   writeFile: 'write_file',
   editFile: 'string_replace_lsp',
   deleteFile: 'delete_file',
@@ -94,11 +99,48 @@ const TASK_STATUS: Record<string, 'pending' | 'in_progress' | 'completed'> = {
   completed: 'completed',
 };
 
-/** A file change's call: one per changed file, under the Factory's file tool for its kind. */
+/**
+ * A command's call: one Codex parsed as a single read, listing or search is drawn as the Factory's
+ * file tool for it (with the command kept), anything else as a command.
+ */
+export function codexCommandCall(command: { command: string; cwd?: string; commandActions?: ReadonlyArray<CommandAction> | null }): {
+  toolName: string;
+  input: Record<string, unknown>;
+} {
+  const base = { command: command.command, ...(command.cwd ? { cwd: command.cwd } : {}) };
+  const [action, ...more] = command.commandActions ?? [];
+  if (!action || more.length > 0) return { toolName: CODEX_TOOL_NAMES.command, input: base };
+  switch (action.type) {
+    case 'read':
+      return { toolName: CODEX_TOOL_NAMES.readFile, input: { ...base, path: action.path } };
+    case 'listFiles':
+      return { toolName: CODEX_TOOL_NAMES.listFiles, input: { ...base, ...(action.path ? { path: action.path } : {}) } };
+    case 'search':
+      return {
+        toolName: CODEX_TOOL_NAMES.search,
+        input: { ...base, ...(action.query ? { pattern: action.query } : {}), ...(action.path ? { path: action.path } : {}) },
+      };
+    default:
+      return { toolName: CODEX_TOOL_NAMES.command, input: base };
+  }
+}
+
+/** A new file's content: Codex sends the file itself, or (from older CLIs) a diff of `+` lines. */
+function addedFileContent(diff: string): string {
+  const lines = diff.split('\n');
+  const diffShaped = lines.every(line => line === '' || line.startsWith('+')) && !lines.some(line => line.startsWith('+++'));
+  return diffShaped ? lines.map(line => line.slice(1)).join('\n') : diff;
+}
+
+/**
+ * A file change's call: one per changed file, under the Factory's file tool for its kind. A new
+ * file carries its content (Codex's `diff` of an add is the file), an edit its unified diff, as
+ * the chat's edit card draws them.
+ */
 function fileChangeCall(change: FileUpdateChange): { toolName: string; input: Record<string, unknown> } {
   switch (change.kind.type) {
     case 'add':
-      return { toolName: CODEX_TOOL_NAMES.writeFile, input: { path: change.path, diff: change.diff } };
+      return { toolName: CODEX_TOOL_NAMES.writeFile, input: { path: change.path, content: addedFileContent(change.diff) } };
     case 'delete':
       return { toolName: CODEX_TOOL_NAMES.deleteFile, input: { path: change.path } };
     default:
@@ -231,7 +273,7 @@ export class CodexTurnTranslator {
     switch (item.type) {
       case 'commandExecution': {
         const command = item as Extract<ThreadItem, { type: 'commandExecution' }>;
-        return [{ kind: 'tool_call', toolCallId: this.#callId(item.id), toolName: CODEX_TOOL_NAMES.command, input: { command: command.command, cwd: command.cwd } }];
+        return [{ kind: 'tool_call', toolCallId: this.#callId(item.id), ...codexCommandCall(command) }];
       }
       case 'fileChange': {
         const change = item as Extract<ThreadItem, { type: 'fileChange' }>;
@@ -401,6 +443,20 @@ export class CodexTurnTranslator {
     const permission: PermissionRequest = { toolCallId: this.#callId(itemId), toolName, input };
     entries.push({ kind: 'permission', ...permission });
     return { entries, permission };
+  }
+
+  /**
+   * An MCP tool call Codex asks a person to allow (its `mcp_tool_call` approval, which reaches the
+   * host as an elicitation): recorded as the tool's call, `mcp__<server>__<tool>` as Claude Code
+   * names it, and a `permission` entry. `id` stands for the call when Codex names no item.
+   */
+  mcpApproval(request: { id: string; server: string; tool: string; message?: string }): { entries: TranscriptEntry[]; permission: PermissionRequest } {
+    const toolName = codexMcpToolName(request.server, request.tool);
+    const input: Record<string, unknown> = request.message ? { reason: request.message } : {};
+    const toolCallId = this.#callId(request.id);
+    const permission: PermissionRequest = { toolCallId, toolName, input };
+    const entries: TranscriptEntry[] = this.#started(request.id) ? [] : [{ kind: 'tool_call', toolCallId, toolName, input }];
+    return { entries: [...entries, { kind: 'permission', ...permission }], permission };
   }
 
   /** A question (`request_user_input`): recorded as an `AskUserQuestion` call and parked like one. */

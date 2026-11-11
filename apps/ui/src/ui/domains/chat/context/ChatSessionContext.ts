@@ -75,9 +75,9 @@ export interface ChatSessionContextApi {
   /** Why the viewer can't change the model or thinking level: set when they steer someone else's session. */
   modelLockedReason?: string;
   /**
-   * Set when this chat runs on Claude Code: a session the server created in
-   * Claude Code, or a draft in a Factory whose harness is `claude-code`. Its
-   * model is the Factory's Claude Code default (null = the catalog default), not a Mastra pick.
+   * Set when this chat runs on a harness whose model is the Factory's (Claude Code, Codex): a
+   * session the server created there, or a draft in a Factory on that harness. Its model is the
+   * Factory's default for that harness (null = the catalog default), not a Mastra pick.
    */
   claudeCode?: { model: string | null };
   /**

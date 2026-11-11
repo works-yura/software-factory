@@ -5,6 +5,8 @@ import { Boxes, GitBranch, Sparkles } from 'lucide-react';
 import { isGitLabRepository } from '../../services/github';
 import { completeOnboardingSchema } from '../../services/onboardingFlow';
 import type { OnboardingDraft, OnboardingStep } from '../../services/onboardingFlow';
+import { isTurnHarness } from '../../services/turnHarness';
+import type { TurnHarness } from '../../services/turnHarness';
 
 import { OnboardingReviewRow } from './OnboardingReviewRow';
 import { translator } from '../../../../i18n/t';
@@ -16,10 +18,17 @@ function sharedModelDetail(local: boolean) {
   return tk('review.sharedModel.factory');
 }
 
-function claudeModelTitle(model: OnboardingDraft['claudeCodeModel']) {
+/** How the review names a turn-based harness's model: Claude's alias by its title, Codex's slug as it is. */
+export function turnHarnessModelTitle(harness: TurnHarness, model: OnboardingDraft['harnessModel']) {
   if (model === undefined) return tk('review.chooseModel');
+  if (harness === 'codex') return model ?? tk('createFactory.codex.models.default.title');
   return tk(`createFactory.claudeCode.models.${model ?? 'default'}.title`);
 }
+
+const HARNESS_TITLE: Record<string, string> = {
+  'claude-code': 'createFactory.harness.claudeCode.title',
+  codex: 'createFactory.harness.codex.title',
+};
 
 export function OnboardingReviewStep({
   draft,
@@ -40,7 +49,7 @@ export function OnboardingReviewStep({
   error?: string;
 }) {
   const repo = draft.repository;
-  const claude = draft.harness === 'claude-code';
+  const turn = isTurnHarness(draft.harness) ? draft.harness : undefined;
   const readyToCreate = completeOnboardingSchema.safeParse(draft).success;
   return (
     <section aria-label={tk('review.label')} className="flex flex-col gap-5">
@@ -57,7 +66,7 @@ export function OnboardingReviewStep({
           <OnboardingReviewRow
             icon={<Boxes />}
             label={tk('review.harness')}
-            value={tk(claude ? 'createFactory.harness.claudeCode.title' : 'createFactory.harness.mastra.title')}
+            value={tk(turn ? HARNESS_TITLE[turn]! : 'createFactory.harness.mastra.title')}
             detail={tk('review.harnessDetail')}
             disabled={pending}
             onEdit={() => onEdit('harness')}
@@ -66,8 +75,8 @@ export function OnboardingReviewStep({
         <OnboardingReviewRow
           icon={<Sparkles />}
           label={tk('review.model')}
-          value={claude ? claudeModelTitle(draft.claudeCodeModel) : (draft.model?.modelId ?? tk('review.chooseModel'))}
-          detail={claude ? tk('review.claudeModelDetail') : sharedModelDetail(local)}
+          value={turn ? turnHarnessModelTitle(turn, draft.harnessModel) : (draft.model?.modelId ?? tk('review.chooseModel'))}
+          detail={turn ? tk(turn === 'codex' ? 'review.codexModelDetail' : 'review.claudeModelDetail') : sharedModelDetail(local)}
           disabled={pending}
           onEdit={() => onEdit('model-provider')}
         />

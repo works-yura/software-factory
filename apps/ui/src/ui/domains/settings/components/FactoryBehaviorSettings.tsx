@@ -2,24 +2,26 @@ import type { AgentControllerSessionSettings, PermissionPolicy, PermissionRules,
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import { useFactoryToolPermissions } from '../../../../hooks/useFactoryToolPermissions';
+import { useFactoryHarness } from './models/harness/HarnessSettings';
 import { translator } from '../../../i18n/t';
 import { BehaviorSettings } from './SettingsPanel.parts';
 
 const tk = translator('settings');
 
 /**
- * Settings → Behavior of a Factory on Claude Code. Auto-approve and the
- * per-category tool permissions are stored on the Factory (a Claude Code
- * Factory has no agent-controller session to keep them in) and the server
- * turns them into the CLI's allow, ask and deny rules for every turn.
+ * Settings → Behavior of a Factory on a turn-based harness (Claude Code, Codex). Auto-approve and
+ * the per-category tool permissions are stored on the Factory (such a Factory has no
+ * agent-controller session to keep them in) and the server turns them into the CLI's rules for
+ * every turn (Claude Code's allow, ask and deny rules; Codex's sandbox and approval policy).
  * Smart editing and completion notifications belong to Mastra's own agent and
  * UI, so they are left out.
  */
-export function ClaudeBehaviorSettings({ factoryId }: { factoryId: string }) {
+export function FactoryBehaviorSettings({ factoryId }: { factoryId: string }) {
   const { permissions, save } = useFactoryToolPermissions(factoryId);
+  const { descriptor } = useFactoryHarness(factoryId);
 
   const fail = (error: unknown): void => {
-    toast.error(error instanceof Error ? error.message : tk('behavior.claudeCode.saveFailed'));
+    toast.error(error instanceof Error ? error.message : tk('behavior.turnHarness.saveFailed'));
   };
 
   const settings = permissions
@@ -29,7 +31,7 @@ export function ClaudeBehaviorSettings({ factoryId }: { factoryId: string }) {
 
   return (
     <BehaviorSettings
-      claudeCode
+      turnHarness={descriptor.label}
       settings={settings}
       onBehaviorChange={updates =>
         permissions && updates.yolo !== undefined

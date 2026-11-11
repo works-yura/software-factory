@@ -2,7 +2,6 @@
 // model (the chat's picker, locked to the instance), its reasoning select, a control per other
 // option the model offers, and "Use catalog default". Everything comes from the instance the
 // server's model facet describes; nothing here names a harness.
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
@@ -51,12 +50,9 @@ function writeFailure(error: unknown, t: (key: 'models.defaults.adminsOnly' | 'm
 export function HarnessModelDefaults({
   factoryId,
   entry,
-  inUse,
 }: {
   factoryId: string;
   entry: ProviderInstanceEntry;
-  /** New sessions of this Factory start on this instance's harness. */
-  inUse: boolean;
 }) {
   const { t } = useTranslation('settings');
   const save = useSetFactoryModelDefaultMutation(factoryId);
@@ -118,11 +114,6 @@ export function HarnessModelDefaults({
                 iconClassName="size-4"
               />
               {entry.displayName}
-              {inUse && (
-                <Badge size="sm" variant="success" title={t('models.defaults.inUseHint')}>
-                  {t('models.defaults.inUse')}
-                </Badge>
-              )}
             </span>
           }
           description={
@@ -176,6 +167,7 @@ export function HarnessModelDefaults({
             {view.reasoning && (
               <OptionRow
                 descriptor={view.reasoning}
+                label={t('models.defaults.reasoning')}
                 description={view.reasoning.description ?? t('models.defaults.reasoningDescription')}
                 disabled={pending}
                 onChange={setOption}
@@ -224,11 +216,14 @@ export function HarnessModelDefaults({
 /** One option of the model: a switch for a toggle, side-by-side choices or a menu for a select. */
 function OptionRow({
   descriptor,
+  label = descriptor.label,
   description,
   disabled,
   onChange,
 }: {
   descriptor: SelectDescriptor | BooleanDescriptor;
+  /** The row's title; the descriptor's own label (as its harness names it) unless the UI translates it. */
+  label?: string;
   description?: string | undefined;
   disabled: boolean;
   onChange: (id: string, value: string | boolean) => void;
@@ -236,11 +231,11 @@ function OptionRow({
   if (descriptor.type === 'boolean') {
     const checked = booleanValue(descriptor);
     return (
-      <SettingsRow label={descriptor.label} description={description}>
+      <SettingsRow label={label} description={description}>
         <Switch
           checked={checked}
           disabled={disabled}
-          aria-label={descriptor.label}
+          aria-label={label}
           onCheckedChange={next => {
             if (next !== checked) onChange(descriptor.id, next);
           }}
@@ -254,9 +249,9 @@ function OptionRow({
     if (next !== value) onChange(descriptor.id, next);
   };
   return (
-    <SettingsRow label={descriptor.label} description={description}>
+    <SettingsRow label={label} description={description}>
       {choices.length <= SEGMENTED_MAX_CHOICES ? (
-        <SegmentedControl aria-label={descriptor.label} size="sm" value={value} disabled={disabled} onValueChange={pick}>
+        <SegmentedControl aria-label={label} size="sm" value={value} disabled={disabled} onValueChange={pick}>
           {choices.map(choice => (
             <SegmentedControlItem key={choice.id} value={choice.id} title={choice.description}>
               {choice.label}
@@ -265,7 +260,7 @@ function OptionRow({
         </SegmentedControl>
       ) : (
         <Select value={value} disabled={disabled} onValueChange={next => typeof next === 'string' && pick(next)}>
-          <SelectTrigger size="sm" aria-label={descriptor.label} className="w-auto">
+          <SelectTrigger size="sm" aria-label={label} className="w-auto">
             <Txt as="span" variant="caption">
               {choices.find(choice => choice.id === value)?.label ?? value}
             </Txt>

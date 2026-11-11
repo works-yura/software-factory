@@ -1,6 +1,6 @@
-// Settings → Models → Default models: one row group per harness instance the server runs, the
-// same component for each (`HarnessModelDefaults`), in the order the server lists them with the
-// harness this Factory starts new sessions on first.
+// Settings → Models → Default model of the harness this Factory runs on (chosen above it). Every
+// harness renders through the same component (`HarnessModelDefaults`); the other harnesses keep
+// their saved defaults and show them once the Factory switches to them.
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTranslation } from 'react-i18next';
 
@@ -16,11 +16,7 @@ export function HarnessModelDefaultsSection({ factoryId }: { factoryId: string }
   const catalogQuery = useModelCatalogQuery({ factoryProjectId: factoryId });
   const projectQuery = useFactoryProjectQuery(factoryId);
   const harness = projectQuery.data?.harness ?? 'mastra';
-  const entries = toProviderInstances(catalogQuery.data);
-  const ordered = [
-    ...entries.filter(entry => entry.driverKind === harness),
-    ...entries.filter(entry => entry.driverKind !== harness),
-  ];
+  const entry = toProviderInstances(catalogQuery.data).find(instance => instance.driverKind === harness);
 
   return (
     <SettingsSubsection
@@ -30,22 +26,19 @@ export function HarnessModelDefaultsSection({ factoryId }: { factoryId: string }
       description={t('models.defaults.description')}
     >
       {catalogQuery.isPending ? (
-        <SkeletonRows label={t('models.defaults.title')} rows={3} />
+        <SkeletonRows label={t('models.defaults.title')} rows={2} />
       ) : catalogQuery.isError ? (
         <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
           {t('models.defaults.loadFailed')}
         </Txt>
+      ) : entry ? (
+        <HarnessModelDefaults key={entry.instanceId} factoryId={factoryId} entry={entry} />
+      ) : projectQuery.isSuccess ? (
+        <Txt as="p" variant="caption" tone="muted" role="status">
+          {t('models.defaults.harnessUnavailable')}
+        </Txt>
       ) : (
-        <div className="flex flex-col gap-4">
-          {ordered.map(entry => (
-            <HarnessModelDefaults
-              key={entry.instanceId}
-              factoryId={factoryId}
-              entry={entry}
-              inUse={projectQuery.isSuccess && entry.driverKind === harness}
-            />
-          ))}
-        </div>
+        <SkeletonRows label={t('models.defaults.title')} rows={2} />
       )}
     </SettingsSubsection>
   );

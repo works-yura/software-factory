@@ -38,7 +38,7 @@ describe('ModelRoutingSection', () => {
 
     expect(within(region('Chats')).getByText('Uses Factory defaults')).toBeInTheDocument();
     expect(within(region('Work-item runs')).getByText('Uses Factory defaults')).toBeInTheDocument();
-    // The model is set in Default models; the card shows it and links there.
+    // The model is set in Default model; the card shows it and links there.
     expect(await within(region('Factory defaults')).findByText('gpt-5')).toBeInTheDocument();
     expect(within(region('Factory defaults')).getByRole('link', { name: 'Change' })).toHaveAttribute('href', '#model-defaults');
     expect(await within(region('Factory defaults')).findByRole('button', { name: 'Add provider' })).toBeInTheDocument();

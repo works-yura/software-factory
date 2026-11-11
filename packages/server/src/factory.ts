@@ -2236,6 +2236,14 @@ export class MastraFactory {
           onSession: observeTurnSession,
         })
       : undefined;
+    // A person's message or answer in a turn-based session's chat (Claude Code's, Codex's): the turn that carries it is
+    // theirs (interactive), and the Factory chat, shared by the Factory's organization, runs its next turn as them.
+    const turnPersonInput = async (c: unknown, session: { id: string; thread: { setSetting(input: { key: string; value: unknown }): Promise<void> } }) => {
+      await markClaudePersonTurn(c as never, session as never);
+      if (!claudeSupervisorProjectId(session.id)) return;
+      const userId = routeAuth.tenant(c as never)?.userId;
+      if (userId) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.actorUserId, value: userId });
+    };
     let claudeResolveSession: ((sessionId: string) => Promise<ChatTranscriptSession | undefined>) | undefined;
     let claudeModelSelection: ((session: ChatTranscriptSession) => Promise<ModelSelection | null>) | undefined;
     if (claudeCode) {
@@ -2272,13 +2280,7 @@ export class MastraFactory {
         return session;
       };
       // The Factory chat is shared by the Factory's organization: its next turn runs as whoever wrote or answered.
-      this.#claudeSessionUi.setPersonInputHook(async (c, session) => {
-        // A signed-in person's message or answer makes the turn that carries it theirs (interactive).
-        await markClaudePersonTurn(c as never, session);
-        if (!claudeSupervisorProjectId(session.id)) return;
-        const userId = routeAuth.tenant(c)?.userId;
-        if (userId) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.actorUserId, value: userId });
-      });
+      this.#claudeSessionUi.setPersonInputHook(turnPersonInput);
       // A person approving a card's plan in the chat moves the card on, as an approved Mastra plan does
       // (`advanceApprovedPlan`); the next stage then starts the session, which takes the answer first.
       if (workItemsReady && transitionService) {
@@ -2372,7 +2374,8 @@ export class MastraFactory {
       // Its models in the picker, Settings and `factory_switch_session_model`, through its facet: `model/list`
       // of the installed CLI, its next turn's `turn/start` carrying the pick (model, effort, service tier).
       harnessModels.register(codex.models);
-      const codexSessions = (sessionId: string) => codex.harness.getSession(sessionId);
+      // Its Factory chat is a Codex session too, created when the chat first reaches it (as a Claude Code Factory's).
+      const codexSessions = (sessionId: string) => codex.resolveSession(sessionId);
       this.#claudeSessionUi.setSessionResolver(chainSessionResolvers(claudeResolveSession, codexSessions));
       this.#claudeSessionUi.setModelSelectionReader(codexAwareModelSelectionReader(codex.models, claudeModelSelection));
       createCodexSideSession = async ({ harness, sessionId, resourceId, title }) => {
@@ -2386,7 +2389,7 @@ export class MastraFactory {
       };
       if (!claudeCode) {
         // The hooks the Claude Code block sets otherwise: whose turn a person's input makes it, and a card's plan approval.
-        this.#claudeSessionUi.setPersonInputHook(async (c, session) => markClaudePersonTurn(c as never, session));
+        this.#claudeSessionUi.setPersonInputHook(turnPersonInput);
         if (workItemsReady && transitionService) {
           const approvePlan = createClaudePlanApproval({ sessions: sourceControlSessions, workItems: workItemsStorage, transitionService });
           this.#claudeSessionUi.setPlanDecisionHook((c, session, answer) => approvePlan(session, { ...answer, userId: routeAuth.tenant(c)?.userId }));
@@ -3108,8 +3111,8 @@ export class MastraFactory {
           const uiDist = resolveUiDistDir();
           const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
           const timing = factoryTimingEnabled ? [createRequestTimingMiddleware()] : [];
-          // A Claude Code Factory's own id never becomes a Mastra chat (see `createClaudeFactoryChatGuard`).
-          const claudeFactoryChat = claudeCode
+          // A Claude Code or Codex Factory's own id never becomes a Mastra chat (see `createClaudeFactoryChatGuard`).
+          const claudeFactoryChat = claudeCode || codex
             ? [
                 createClaudeFactoryChatGuard({
                   controllerId: CONTROLLER_ID,

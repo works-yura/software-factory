@@ -657,7 +657,8 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (permission === 'forbidden') {
           return c.json({ error: "Only the session's owner or an organization admin can start its sandbox." }, 403);
         }
-        if (await options.claudeCode?.get(session.sessionId)) {
+        const turnSession = await options.claudeCode?.get(session.sessionId);
+        if (turnSession) {
           // Its checkout may already be on this host's disk (a server restart): attach it, without
           // starting, so the file panels read it. Only its first turn creates a checkout.
           if (options.attachLocalCheckout) {
@@ -673,8 +674,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           }
           return c.json(
             {
-              error:
-                'This Claude Code session has no checkout on disk yet: its first message creates it, so send it a message.',
+              error: `This ${TURN_HARNESS_LABELS[turnSession.harness ?? 'claude-code']} session has no checkout on disk yet: its first message creates it, so send it a message.`,
             },
             409,
           );
@@ -863,9 +863,10 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         ) {
           return c.json({ error: 'Only user sessions can change visibility' }, 409);
         }
-        // A Claude Code session keeps the resource it was created on in its own store; moving it is not supported yet.
-        if (await options.claudeCode?.get(sessionId)) {
-          return c.json({ error: "Claude Code sessions can't change visibility yet." }, 409);
+        // A turn-based harness's session keeps the resource it was created on in its own store; moving it is not supported yet.
+        const turnSession = await options.claudeCode?.get(sessionId);
+        if (turnSession) {
+          return c.json({ error: `${TURN_HARNESS_LABELS[turnSession.harness ?? 'claude-code']} sessions can't change visibility yet.` }, 409);
         }
         // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
         if (visibility === 'org' && !row.factoryProjectId) {

@@ -62,7 +62,7 @@ describe('Models settings per harness', () => {
       screen.getByText('Applies to new sessions; cards already running finish on their harness.'),
     ).toBeInTheDocument();
     expect(await screen.findByText('Model routing')).toBeInTheDocument();
-    expect(screen.getByText('Default models')).toBeInTheDocument();
+    expect(screen.getByText('Default model')).toBeInTheDocument();
     expect(screen.getByText('Custom providers')).toBeInTheDocument();
     expect(screen.queryByText('Claude Code accounts')).not.toBeInTheDocument();
   });
@@ -74,7 +74,7 @@ describe('Models settings per harness', () => {
     const control = await harnessSwitch();
     expect(within(control).getByRole('radio', { name: 'Claude Code' })).toBeChecked();
     expect(await screen.findByText('Claude Code accounts')).toBeInTheDocument();
-    expect(screen.getByText('Default models')).toBeInTheDocument();
+    expect(screen.getByText('Default model')).toBeInTheDocument();
     expect(screen.queryByText('Model routing')).not.toBeInTheDocument();
     expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();
   });
@@ -129,7 +129,7 @@ describe('Models settings per harness', () => {
 
     expect(patches).toEqual([{ harness: 'codex' }]);
     await waitFor(async () => expect(within(await harnessSwitch()).getByRole('radio', { name: 'Codex' })).toBeChecked());
-    expect(screen.getByText('Default models')).toBeInTheDocument();
+    expect(screen.getByText('Default model')).toBeInTheDocument();
     expect(screen.queryByText('Claude Code accounts')).not.toBeInTheDocument();
     expect(screen.queryByText('Codex isn’t available on this server: install the codex CLI there and run `codex login`.')).not.toBeInTheDocument();
   });
