@@ -1,4 +1,3 @@
-import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import { createContext } from 'react';
 import type { HarnessDescriptor } from '@factory/contracts/harnesses';
 
@@ -78,9 +77,9 @@ export interface ChatSessionContextApi {
   /**
    * Set when this chat runs on Claude Code: a session the server created in
    * Claude Code, or a draft in a Factory whose harness is `claude-code`. Its
-   * model is the Factory's Claude model (null = the CLI default), not a Mastra pick.
+   * model is the Factory's Claude Code default (null = the catalog default), not a Mastra pick.
    */
-  claudeCode?: { model: ClaudeCodeModel | null };
+  claudeCode?: { model: string | null };
   /**
    * What the harness this chat runs on can do (commands, attachments, where its
    * model is chosen). Absent while unknown; read it through `chatHarness`.

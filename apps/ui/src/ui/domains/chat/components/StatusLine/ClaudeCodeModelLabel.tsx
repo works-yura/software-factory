@@ -1,17 +1,22 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
-import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import { isClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { settingsSectionPath } from '../../../settings/settingsSections';
 
 /**
- * The model of a Claude Code chat: the Factory's Claude model, changed in
+ * The model of a Claude Code chat while its catalog loads: the Factory's Claude Code default, changed in
  * Settings → Models for every Claude Code session from its next turn.
  */
-export function ClaudeCodeModelLabel({ model, factoryId }: { model: ClaudeCodeModel | null; factoryId?: string }) {
+export function ClaudeCodeModelLabel({ model, factoryId }: { model: string | null; factoryId?: string }) {
   const { t } = useTranslation('chat');
   const { t: tw } = useTranslation('workspaces');
-  const label = t('claudeCode.model', { model: tw(`createFactory.claudeCode.models.${model ?? 'default'}.title`) });
+  const name =
+    model && !isClaudeCodeModel(model)
+      ? formatModelName(model)
+      : tw(`createFactory.claudeCode.models.${isClaudeCodeModel(model) ? model : 'default'}.title`);
+  const label = t('claudeCode.model', { model: name });
   const hint = t('claudeCode.modelHint');
   if (!factoryId) {
     return (

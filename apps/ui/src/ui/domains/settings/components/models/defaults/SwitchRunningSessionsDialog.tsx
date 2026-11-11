@@ -8,16 +8,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { useTranslation } from 'react-i18next';
 
+/** After a new default: also move the running sessions of its harness onto it? */
 export function SwitchRunningSessionsDialog({
-  modelId,
+  modelName,
   pending,
   onConfirm,
   onClose,
 }: {
-  modelId: string;
+  modelName: string;
   pending: boolean;
   onConfirm: () => void;
   onClose: () => void;
@@ -27,7 +27,7 @@ export function SwitchRunningSessionsDialog({
     <Dialog open onOpenChange={open => !open && onClose()} pending={pending}>
       <DialogContent size="sm">
         <DialogHeader>
-          <DialogTitle>{t('models.factoryDefault.confirmTitle', { model: formatModelName(modelId) })}</DialogTitle>
+          <DialogTitle>{t('models.factoryDefault.confirmTitle', { model: modelName })}</DialogTitle>
           <DialogDescription>{t('models.factoryDefault.confirmDescription')}</DialogDescription>
         </DialogHeader>
         <DialogFooter>

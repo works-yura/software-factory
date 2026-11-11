@@ -189,7 +189,7 @@ describe('NewPage in a Claude Code Factory', () => {
     id: 'fp-1',
     name: 'Mastra',
     harness: 'claude-code',
-    claudeCodeModel: 'sonnet',
+    harnessModelDefaults: { 'claude-code': { instanceId: 'claude-code', model: 'sonnet' } },
     defaultModelId: null,
   };
 

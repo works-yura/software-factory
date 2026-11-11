@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { GitLabIcon } from '../../../../../ui/icons';
-import { FactoryDefaultModel } from '../defaults/FactoryDefaultModel';
+import { MASTRA_HARNESS } from '@factory/contracts/harnesses';
+
+import { DefaultModelSummary } from '../defaults/DefaultModelSummary';
 import { ProviderList } from '../providers/ProviderList';
 import { DefaultsCard } from './DefaultsCard';
 import { LaneCard, LaneSource } from './LaneCard';
@@ -40,7 +42,7 @@ export function ModelRoutingMap({ factoryId }: { factoryId: string }) {
         <DefaultsCard
           defaults="factory"
           anchorRef={anchors.factory}
-          model={<FactoryDefaultModel factoryId={factoryId} />}
+          model={<DefaultModelSummary factoryId={factoryId} harnessId={MASTRA_HARNESS.id} />}
           providers={<ProviderList credentialScope="org" />}
         />
       }

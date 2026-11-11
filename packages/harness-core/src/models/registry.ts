@@ -30,9 +30,11 @@ export async function describeHarnessModels(models: HarnessModels, ctx: HarnessM
   const base = { instanceId: models.instanceId, harnessId: models.harnessId, displayName: models.displayName };
   try {
     const availability = (await models.availability?.(ctx)) ?? { available: true };
-    const [list, defaultSelection] = availability.available
-      ? await Promise.all([models.list(ctx), models.defaultSelection(ctx)])
-      : [[], null];
+    // The Factory's own default reads even when the harness is unavailable, so Settings still shows it.
+    const factoryDefault = (await models.factoryDefault?.(ctx)) ?? null;
+    const [list, defaultSelection, catalogDefault] = availability.available
+      ? await Promise.all([models.list(ctx), models.defaultSelection(ctx), models.catalogDefault(ctx)])
+      : [[], null, null];
     return {
       ...base,
       available: availability.available && list.length > 0,
@@ -40,6 +42,9 @@ export async function describeHarnessModels(models: HarnessModels, ctx: HarnessM
       ...(availability.reason ? { reason: availability.reason } : {}),
       defaultModel: defaultSelection?.model ?? null,
       defaultSelection,
+      factoryDefaultSelection: factoryDefault,
+      catalogDefaultSelection: catalogDefault,
+      appliesToRunningSessions: models.applyDefaultToRunningSessions !== undefined,
       models: list,
     };
   } catch (error) {
@@ -50,6 +55,9 @@ export async function describeHarnessModels(models: HarnessModels, ctx: HarnessM
       reason: error instanceof Error ? error.message : String(error),
       defaultModel: null,
       defaultSelection: null,
+      factoryDefaultSelection: null,
+      catalogDefaultSelection: null,
+      appliesToRunningSessions: false,
       models: [],
     };
   }

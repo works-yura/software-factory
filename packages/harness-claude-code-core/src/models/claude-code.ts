@@ -19,7 +19,8 @@ export function claudeCodeModels(catalog: ClaudeModelCatalog = BUNDLED_CLAUDE_MO
 const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 
 /**
- * A Factory's thinking level as a Claude Code effort. `off` has no CLI counterpart; the lowest
+ * A Mastra thinking level as a Claude Code effort (the agent tool and older clients send one; the
+ * store migrates a Factory's old thinking default with it). `off` has no CLI counterpart; the lowest
  * effort is the closest.
  */
 export function claudeEffortForThinkingLevel(level: string | null | undefined): string | undefined {
@@ -43,33 +44,22 @@ export interface ClaudeCodeTurnSelection {
 }
 
 /**
- * The CLI flags for a Claude Code turn: the session's own selection when it has one, else the
- * Factory's `claudeCodeModel`; the Factory's thinking level when the selection names no effort.
- * A CLI alias (`opus`) stays an alias on the command line, so it follows the CLI's current model,
- * unless an option (a `[1m]` context window) needs the full id.
+ * The CLI flags for a Claude Code turn: the session's own selection when it has one, else its
+ * Factory's Claude Code default (`harnessModelDefaults['claude-code']`), else nothing (the CLI's own
+ * default model and effort). A CLI alias (`opus`) stays an alias on the command line, so it follows
+ * the CLI's current model, unless an option (a `[1m]` context window) needs the full id.
  */
 export function compileClaudeCodeTurn(
   input: {
     selection?: ModelSelection | null;
-    projectModel?: string | null;
-    factoryThinkingLevel?: string | null;
+    factoryDefault?: ModelSelection | null;
   },
   catalog: ClaudeModelCatalog = BUNDLED_CLAUDE_MODEL_CATALOG,
 ): ClaudeCodeTurnSelection {
-  const model = input.selection?.model?.trim() || input.projectModel?.trim() || undefined;
-  const fallbackEffort = claudeEffortForThinkingLevel(input.factoryThinkingLevel);
-  const explicit = input.selection?.options ?? [];
-  const options: ProviderOptionSelection[] = [
-    ...explicit,
-    ...(fallbackEffort && !explicit.some(option => option.id === EFFORT_OPTION_ID)
-      ? [{ id: EFFORT_OPTION_ID, value: fallbackEffort }]
-      : []),
-  ];
-  if (!model) {
-    const effort = options.find(option => option.id === EFFORT_OPTION_ID)?.value;
-    const cliEffort = typeof effort === 'string' && CLAUDE_EFFORTS.includes(effort) ? effort : undefined;
-    return { selection: null, ...(cliEffort ? { effort: cliEffort } : {}) };
-  }
+  const chosen = input.selection?.model?.trim() ? input.selection : input.factoryDefault?.model?.trim() ? input.factoryDefault : null;
+  if (!chosen) return { selection: null };
+  const model = chosen.model.trim();
+  const options: ProviderOptionSelection[] = [...(chosen.options ?? [])];
   const selection: ModelSelection = {
     instanceId: CLAUDE_CODE_INSTANCE_ID,
     model,
@@ -85,6 +75,12 @@ export function compileClaudeCodeTurn(
     ...(compiled.promptEffort ? { promptEffort: compiled.promptEffort } : {}),
     ...(Object.keys(compiled.settings).length ? { settings: { ...compiled.settings } } : {}),
   };
+}
+
+/** The catalog's own default model, for a Factory that sets none ("Use catalog default"). */
+export function claudeCodeCatalogDefault(catalog: ClaudeModelCatalog = BUNDLED_CLAUDE_MODEL_CATALOG): ModelSelection | null {
+  const slug = catalog.models.find(entry => entry.model.isDefault)?.model.slug;
+  return slug ? { instanceId: CLAUDE_CODE_INSTANCE_ID, model: slug } : null;
 }
 
 /**

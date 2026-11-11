@@ -70,8 +70,18 @@ export function mastraServerModel(
 /** Mastra's instance in `/web/config/models`, from a catalog the route already resolved. */
 export function mastraModelInstance(
   models: ReadonlyArray<Pick<ModelCatalogEntry, 'id' | 'modelName' | 'provider' | 'capabilities'>>,
-  defaultModelId: string | null,
+  defaults: {
+    /** The Factory's own Mastra default (`harnessModelDefaults.mastra`); null when it follows the catalog's. */
+    factoryDefault: ModelSelection | null;
+    /** The model a session starts on when the Factory sets none; null when no credential runs one. */
+    catalogDefaultModelId: string | null;
+    /** In a session: what it runs, which wins over both. */
+    sessionSelection?: ModelSelection | null;
+    appliesToRunningSessions?: boolean;
+  },
 ): HarnessModelInstanceInfo {
+  const catalogDefault = defaults.catalogDefaultModelId ? mastraModelSelection(defaults.catalogDefaultModelId) : null;
+  const defaultSelection = defaults.sessionSelection ?? defaults.factoryDefault ?? catalogDefault;
   return {
     instanceId: MASTRA_INSTANCE_ID,
     harnessId: MASTRA_HARNESS_ID,
@@ -79,8 +89,12 @@ export function mastraModelInstance(
     available: models.length > 0,
     // No credential reaches any model yet: the picker offers the provider setup.
     needsSetup: models.length === 0,
-    defaultModel: defaultModelId,
-    defaultSelection: defaultModelId ? mastraModelSelection(defaultModelId) : null,
-    models: models.map(entry => mastraServerModel(entry, defaultModelId)),
+    defaultModel: defaultSelection?.model ?? null,
+    defaultSelection,
+    factoryDefaultSelection: defaults.factoryDefault,
+    catalogDefaultSelection: catalogDefault,
+    appliesToRunningSessions: defaults.appliesToRunningSessions ?? false,
+    // `isDefault` marks the catalog's default, as every harness's list does.
+    models: models.map(entry => mastraServerModel(entry, defaults.catalogDefaultModelId)),
   };
 }

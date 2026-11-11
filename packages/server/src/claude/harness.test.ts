@@ -303,11 +303,12 @@ describe('createClaudeFactoryHarness', () => {
   });
 
   describe('per-session model', () => {
-    it('reads the session Factory’s claudeCodeModel and thinking level on every turn, in the session’s own org', async () => {
-      const models: Record<string, string | null> = { 'factory-a': 'opus', 'factory-b': null };
+    it('reads the session Factory’s Claude Code default on every turn, in the session’s own org', async () => {
+      const claude = (model: string) => ({ instanceId: 'claude-code', model, options: [{ id: 'effort', value: 'high' }] });
+      const defaults: Record<string, Record<string, unknown>> = { 'factory-a': { 'claude-code': claude('opus') }, 'factory-b': {} };
       const projects = {
         get: vi.fn(async ({ id }: { orgId: string; id: string }) =>
-          id in models ? ({ id, claudeCodeModel: models[id], defaultThinkingLevel: 'high' } as never) : null,
+          id in defaults ? ({ id, harnessModelDefaults: defaults[id] } as never) : null,
         ),
       };
       const { factory, config } = setup({ projects });
@@ -316,20 +317,24 @@ describe('createClaudeFactoryHarness', () => {
 
       await expect(config.turnSelectionFor!(a)).resolves.toEqual({ model: 'opus', effort: 'high', settings: { fastMode: false } });
       expect(projects.get).toHaveBeenLastCalledWith({ orgId: 'org-a', id: 'factory-a' });
-      // No model chosen: the CLI's own default model, at the Factory's effort.
-      await expect(config.turnSelectionFor!(b)).resolves.toEqual({ effort: 'high' });
+      // No default: the CLI's own model and effort.
+      await expect(config.turnSelectionFor!(b)).resolves.toEqual({});
       // Changed in settings: the next turn picks it up, marked as a switch.
-      models['factory-a'] = 'haiku';
+      defaults['factory-a'] = { 'claude-code': claude('haiku') };
       await expect(config.turnSelectionFor!(a)).resolves.toMatchObject({
         model: 'haiku',
-        effort: 'high',
         modelSwitch: { from: { model: 'opus' }, to: { model: 'haiku' } },
       });
       await expect(config.turnSelectionFor!(a)).resolves.not.toHaveProperty('modelSwitch');
     });
 
     it('runs a session’s own pick over its Factory’s, checked against the Claude catalog', async () => {
-      const projects = { get: vi.fn(async () => ({ claudeCodeModel: 'opus', defaultThinkingLevel: 'medium' }) as never) };
+      const projects = {
+        get: vi.fn(
+          async () =>
+            ({ harnessModelDefaults: { 'claude-code': { instanceId: 'claude-code', model: 'opus', options: [{ id: 'effort', value: 'medium' }] } } }) as never,
+        ),
+      };
       const { factory, config } = setup({ projects });
       const session = await factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
       const models = factory.models!;
@@ -518,7 +523,7 @@ describe('createClaudeFactoryHarness', () => {
       workdirRoot = await mkdtemp(join(tmpdir(), 'claude-supervisor-test-'));
       const projects = {
         get: vi.fn(async ({ orgId, id }: { orgId: string; id: string }) =>
-          orgId === 'org-a' && id === FACTORY ? ({ id, orgId, claudeCodeModel: 'haiku', agentLanguage: 'en' } as never) : null,
+          orgId === 'org-a' && id === FACTORY ? ({ id, orgId, harnessModelDefaults: { 'claude-code': { instanceId: 'claude-code', model: 'haiku' } }, agentLanguage: 'en' } as never) : null,
         ),
         getById: vi.fn(async ({ id }: { id: string }) =>
           id === FACTORY ? ({ id, orgId: 'org-a', createdBy: 'creator', harness: 'claude-code' } as never) : null,

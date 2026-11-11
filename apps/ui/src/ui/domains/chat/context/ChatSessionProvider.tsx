@@ -14,7 +14,7 @@ import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentCont
 import { useHarness } from '../../../../hooks/useHarness';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
-import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import { CLAUDE_CODE_INSTANCE_ID } from '@factory/harness-claude-code/models/aliases';
 import type { FactoryProject, LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { isSessionNotFound } from '../../workspaces/services/user-sessions';
@@ -67,13 +67,17 @@ export function chatHarnessId({
 
 /**
  * A chat whose harness takes its model from the Factory (Claude Code) runs on
- * the Factory's Claude model, not on a Mastra pick.
+ * the Factory's default for that harness, not on a Mastra pick.
  */
 export function claudeCodeChat(
   harness: HarnessDescriptor,
   factory: FactoryProject | undefined,
-): { model: ClaudeCodeModel | null } | undefined {
-  return harness.modelScope === 'factory' ? { model: factory?.claudeCodeModel ?? null } : undefined;
+): { model: string | null } | undefined {
+  if (harness.modelScope !== 'factory') return undefined;
+  const instance = Object.values(factory?.harnessModelDefaults ?? {}).find(
+    selection => selection.instanceId === CLAUDE_CODE_INSTANCE_ID,
+  );
+  return { model: instance?.model ?? null };
 }
 
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */

@@ -112,7 +112,12 @@ function renderPicker({
     http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
       if (!modelScope) {
-        const instances = [mastraTestInstance(models as never, defaultModelId ?? null), ...(claudeCodeCatalog ? [claudeCodeTestInstance()] : [])];
+        // The Factory's Claude Code default is the Claude model the chat context names.
+        const claudeDefault = claudeCode?.model ? { instanceId: 'claude-code', model: claudeCode.model } : null;
+        const instances = [
+          mastraTestInstance(models as never, defaultModelId ?? null),
+          ...(claudeCodeCatalog ? [claudeCodeTestInstance(claudeDefault)] : []),
+        ];
         return HttpResponse.json({ models, defaultModelId, instances });
       }
       const params = new URL(request.url).searchParams;
@@ -351,7 +356,8 @@ describe('ModelPicker', () => {
 
   it('given no session level, when the session picks one, then it leaves the Factory default and saves it', async () => {
     const user = userEvent.setup();
-    const { client, stateUpdates } = renderPicker({ inFactory: true });
+    // The session runs the Factory's default model, so only its level can be its own.
+    const { client, stateUpdates } = renderPicker({ inFactory: true, defaultModelId: 'openai/gpt-5' });
 
     await user.click(await screen.findByRole('button', { name: 'Session model, Medium' }));
     expect(screen.getByText('Follows the Factory default.')).toBeInTheDocument();
@@ -368,15 +374,37 @@ describe('ModelPicker', () => {
 
   it('given a session level, when Use default is chosen, then the session follows the Factory default', async () => {
     const user = userEvent.setup();
-    const { client, stateUpdates } = renderPicker({ thinkingLevel: 'high', inFactory: true });
+    const { client, stateUpdates, modelSwitches } = renderPicker({
+      thinkingLevel: 'high',
+      inFactory: true,
+      defaultModelId: 'openai/gpt-5',
+    });
 
     await user.click(await screen.findByRole('button', { name: 'Session model, High' }));
     await user.click(screen.getByRole('button', { name: 'Use default' }));
     await waitForMutationsIdle(client);
 
     expect(stateUpdates).toEqual([{ thinkingLevel: null }]);
+    expect(modelSwitches).toEqual([]);
     expect(await screen.findByRole('button', { name: 'Session model, Medium' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Use default' })).not.toBeInTheDocument();
+  });
+
+  it('given a session model other than the Factory default, Use default moves it back onto that model', async () => {
+    const user = userEvent.setup();
+    const { client, stateUpdates, modelSwitches } = renderPicker({
+      inFactory: true,
+      modelId: 'openai/gpt-5',
+      defaultModelId: 'anthropic/claude-sonnet-4-6',
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Session model, Medium' }));
+    expect(screen.getByText('Set for this session.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Use default' }));
+    await waitForMutationsIdle(client);
+
+    expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-sonnet-4-6' }]);
+    expect(stateUpdates).toEqual([]);
   });
 
   it('says the thinking level failed to load instead of loading forever', async () => {

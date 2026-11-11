@@ -700,6 +700,9 @@ describe('GET /web/config/models', () => {
           needsSetup: false,
           defaultModel: null,
           defaultSelection: null,
+          factoryDefaultSelection: null,
+          catalogDefaultSelection: null,
+          appliesToRunningSessions: false,
           models: [
             { slug: 'anthropic/claude-fable-5', name: 'claude-fable-5', subProvider: 'Anthropic', isCustom: false, capabilities: fableCapabilities },
           ],
@@ -733,6 +736,47 @@ describe('GET /web/config/models', () => {
     expect(describe).toHaveBeenCalledWith({ viewer: { userId: '', orgId: '' }, factoryProjectId: 'f-1' }, [
       expect.objectContaining({ instanceId: 'mastra' }),
     ]);
+  });
+
+  it("reports each instance's Factory default beside its catalog default", async () => {
+    const seed = await createFactoryStorageForTests();
+    const pinned = { instanceId: 'mastra', model: 'openai/gpt-5.6', options: [{ id: 'effort', value: 'high' }] };
+    const project = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { name: 'Defaults', harnessModelDefaults: { mastra: pinned } },
+    });
+    const controller = {
+      listAvailableModels: async () => [{ id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: true }],
+      getDefaultMode: () => ({ defaultModelId: 'openai/gpt-5.6' }),
+    };
+    const codexDefaults = { current: { 'codex-stub': { instanceId: 'codex-stub', model: 'gpt-5-mini' } } };
+    const registry = createHarnessModelRegistry([codexStubModels(new Set(), codexDefaults)]);
+    const app = new Hono();
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth({ enabled: false }),
+        controller,
+        factoryProjects: seed.projects,
+        harnessModels: () => registry,
+      }).routes(),
+    );
+    const body = (await (await app.request(`/web/config/models?factoryId=${project.id}`)).json()) as {
+      instances: Array<Record<string, any>>;
+    };
+    expect(body.instances[0]).toMatchObject({
+      instanceId: 'mastra',
+      defaultModel: 'openai/gpt-5.6',
+      factoryDefaultSelection: pinned,
+      catalogDefaultSelection: { instanceId: 'mastra', model: 'openai/gpt-5.6' },
+    });
+    expect(body.instances[1]).toMatchObject({
+      instanceId: 'codex-stub',
+      defaultModel: 'gpt-5-mini',
+      factoryDefaultSelection: { model: 'gpt-5-mini' },
+      catalogDefaultSelection: { model: 'gpt-5.3-codex' },
+    });
   });
 
   it('includes only models reachable through tenant credentials', async () => {

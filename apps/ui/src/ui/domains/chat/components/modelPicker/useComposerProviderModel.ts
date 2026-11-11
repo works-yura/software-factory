@@ -5,8 +5,6 @@
 import type { ModelSelection, ServerProviderModel } from "@factory/harness/models/contracts";
 import { ModelSelection as ModelSelectionSchema } from "@factory/harness/models/contracts";
 import { MASTRA_HARNESS } from "@factory/contracts/harnesses";
-import { claudeEffortForThinkingLevel } from "@factory/harness-claude-code/models/claude-code";
-import { EFFORT_OPTION_ID } from "@factory/harness/models/selection";
 import { MASTRA_INSTANCE_ID, mastraModelSelection } from "@factory/credentials/mastra-models";
 
 import { useModelCatalogQuery } from "../../../../../hooks/useAvailableModels";
@@ -19,6 +17,7 @@ import { useOptionalChatThinking } from "../../context/useChatThinking";
 import { useComposerDraftModelState } from "./composerDraftStore";
 import { getComposerPromptInjectionState, getComposerProviderState } from "./composerProviderState";
 import {
+  instanceDefaultSelection,
   instanceForHarness,
   type ProviderInstanceEntry,
   toProviderInstances,
@@ -26,7 +25,10 @@ import {
 
 const NO_PROVIDER_MODELS: ReadonlyArray<ServerProviderModel> = [];
 
-/** The Factory's own pick for a harness whose sessions follow it until they pick their own. */
+/**
+ * What a session of the chat's harness follows until it picks its own: the Factory's default for
+ * that harness, else the harness's catalog default (`instanceDefaultSelection`), the same for every harness.
+ */
 export interface FactoryModelDefault {
   model: string | null;
   options: ModelSelection["options"];
@@ -40,7 +42,7 @@ function readModelSelection(value: unknown): ModelSelection | null {
 export function useComposerProviderModel() {
   const chatSession = useChatSessionContext();
   const { harness, claudeCode, draftSessionId, sessionId } = chatSession;
-  const { catalogTarget, projectQuery } = useChatModelCatalog();
+  const { catalogTarget } = useChatModelCatalog();
   const catalogQuery = useModelCatalogQuery(catalogTarget);
   const models = useChatModels();
   const thinking = useOptionalChatThinking();
@@ -55,11 +57,11 @@ export function useComposerProviderModel() {
   const lockedEntry = instanceForHarness(providerInstanceEntries, harness?.id);
   const selectedProvider = lockedEntry?.driverKind ?? harness?.id ?? MASTRA_HARNESS.id;
 
-  // The Factory's model and thinking level, which a Claude Code session follows until it picks.
-  const factoryEffort = claudeEffortForThinkingLevel(projectQuery.data?.defaultThinkingLevel);
+  // The default a session follows until it picks its own, as the harness's facet reports it.
+  const instanceDefault = lockedEntry ? instanceDefaultSelection(lockedEntry) : null;
   const factoryDefault: FactoryModelDefault = {
-    model: claudeCode?.model ?? lockedEntry?.defaultModel ?? null,
-    options: factoryEffort ? [{ id: EFFORT_OPTION_ID, value: factoryEffort }] : [],
+    model: instanceDefault?.model ?? claudeCode?.model ?? null,
+    options: instanceDefault?.options ?? [],
   };
 
   const threadModelSelection: ModelSelection | null = (() => {

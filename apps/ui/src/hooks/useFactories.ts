@@ -5,7 +5,7 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
   connectInstallation,
-  createFactoryProject,
+  createFactoryWithClaudeModel,
   deleteFactoryProject,
   isGitLabRepository,
   linkRepository,
@@ -71,7 +71,7 @@ export function useCreateFactoryMutation() {
       description?: string;
       harness?: FactoryHarness;
       claudeCodeModel?: ClaudeCodeModel | null;
-    }) => createFactoryProject(baseUrl, name, description, harness, claudeCodeModel),
+    }) => createFactoryWithClaudeModel(baseUrl, { name, description, harness, claudeCodeModel }),
     onSuccess: () => refetchFactories(queryClient),
   });
 }

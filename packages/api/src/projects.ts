@@ -7,6 +7,9 @@ import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
+import { withHarnessModelDefault } from '@factory/harness/models/defaults';
+import type { HarnessModelContext, HarnessModels } from '@factory/harness/models/facet';
+import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 import type { EnvironmentBuildRunner } from '@factory/harness-mastra';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '@factory/harness-mastra';
 import { redactCredentials } from '@factory/harness-mastra';
@@ -30,8 +33,6 @@ import type { ProjectListRepository } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
 import type { ProjectBoardCache } from '@factory/runtime';
-import { workItemPhaseSemantics } from '@factory/core';
-import { createDefaultBoardRegistry } from '@factory/pipelines';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
@@ -160,17 +161,6 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
-interface ModelApplySession {
-  thread: {
-    getById: (args: { threadId: string }) => Promise<{ metadata?: Record<string, unknown> | null } | null>;
-    setSettingOn: (args: { threadId: string; key: string; value: unknown }) => Promise<unknown> | unknown;
-  };
-}
-
-interface ModelApplyController {
-  getSession: (sessionId: string) => Promise<ModelApplySession | undefined>;
-}
-
 export interface ProjectRoutesDeps extends RouteDependencies {
   /** Factory projects domain backing the CRUD surface. */
   projects: FactoryProjectsStorage;
@@ -196,10 +186,13 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
-  /** Work-items domain used by session retirement and running-thread model updates. */
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get'>;
-  /** Controller used to reach the thread store behind each active binding. */
-  controller?: ModelApplyController;
+  /** Work-items domain used by session retirement. */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  /**
+   * The server's harness model registry: a Factory's default for an instance is checked by that
+   * harness's facet (`check`), and moved onto running sessions by it (`applyDefaultToRunningSessions`).
+   */
+  harnessModels?: () => Pick<HarnessModelRegistry, 'forInstance'> | undefined;
   /** The factory's normalized sandbox; describes and validates the environment settings. */
   sandbox?: FactorySandbox;
   /** Environment builds, present only when the sandbox has a `builds` capability. */
@@ -565,6 +558,143 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return { orgId: tenant.orgId, userId: tenant.userId };
   }
 
+  /**
+   * The tenant, the project and the instance's facet a model-default route acts on, or the
+   * response that refuses it. A Factory's default sets the model and reasoning spend of every
+   * session and run of that harness that has not picked its own, so it is admin-only.
+   */
+  async #modelDefaultTarget(
+    context: Context,
+    contract: { pathSchema: { safeParse(input: unknown): { success: true; data: { id: string; instanceId: string } } | { success: false } } },
+    adminMessage: string,
+  ): Promise<
+    | { response: Response }
+    | { tenant: { orgId: string; userId: string }; project: FactoryProject; facet: HarnessModels }
+  > {
+    const tenant = await this.#resolveTenant(context);
+    if ('response' in tenant) return tenant;
+    const parsedPath = contract.pathSchema.safeParse({
+      id: context.req.param('id'),
+      instanceId: context.req.param('instanceId'),
+    });
+    if (!parsedPath.success) return { response: context.json({ error: 'Project not found' }, 404) };
+    const project = await this.#project(tenant.orgId, parsedPath.data.id);
+    if (!project) return { response: context.json({ error: 'Project not found' }, 404) };
+    if (this.deps.auth.enabled() && !(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))) {
+      return { response: context.json({ error: 'forbidden', message: adminMessage }, 403) };
+    }
+    const facet = this.deps.harnessModels?.()?.forInstance(parsedPath.data.instanceId);
+    if (!facet) {
+      return {
+        response: context.json(
+          { error: 'unknown_instance', message: `This server runs no harness with model instance ${parsedPath.data.instanceId}.` },
+          404,
+        ),
+      };
+    }
+    return { tenant, project, facet };
+  }
+
+  /**
+   * `PUT|DELETE /web/factory/projects/:id/model-defaults/:instanceId` and its `/apply`: one route
+   * set for every harness, which its facet answers (`check`, `applyDefaultToRunningSessions`).
+   */
+  #modelDefaultRoutes(): ApiRoute[] {
+    const contextFor = (
+      tenant: { orgId: string; userId: string },
+      factoryProjectId: string,
+    ): HarnessModelContext & { factoryProjectId: string } => ({
+      viewer: { userId: tenant.userId, orgId: tenant.orgId },
+      factoryProjectId,
+    });
+    return [
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectModelDefaultSet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectModelDefaultSet.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const target = await this.#modelDefaultTarget(
+            context,
+            FACTORY_ROUTE_CONTRACTS.projectModelDefaultSet,
+            'Organization administrator access is required to change the default model.',
+          );
+          if ('response' in target) return target.response;
+          const parsedBody = FACTORY_ROUTE_CONTRACTS.projectModelDefaultSet.bodySchema.safeParse(await readJson(context));
+          if (!parsedBody.success) return context.json({ error: 'invalid_model_default' }, 400);
+          const { tenant, project, facet } = target;
+          const checked = await facet.check(
+            { model: parsedBody.data.model, ...(parsedBody.data.options ? { options: parsedBody.data.options } : {}) },
+            contextFor(tenant, project.id),
+          );
+          if (!checked.ok) return context.json({ error: 'invalid_model_default', message: checked.error }, 400);
+          const updated = await (await this.#projects()).update({
+            orgId: tenant.orgId,
+            id: project.id,
+            input: async current => ({
+              harnessModelDefaults: withHarnessModelDefault(current.harnessModelDefaults, facet.instanceId, checked.selection),
+            }),
+          });
+          if (!updated) return context.json({ error: 'Project not found' }, 404);
+          return context.json({ project: updated, selection: checked.selection });
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectModelDefaultClear.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectModelDefaultClear.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const target = await this.#modelDefaultTarget(
+            context,
+            FACTORY_ROUTE_CONTRACTS.projectModelDefaultClear,
+            'Organization administrator access is required to change the default model.',
+          );
+          if ('response' in target) return target.response;
+          const { tenant, project, facet } = target;
+          const updated = await (await this.#projects()).update({
+            orgId: tenant.orgId,
+            id: project.id,
+            input: async current => ({
+              harnessModelDefaults: withHarnessModelDefault(current.harnessModelDefaults, facet.instanceId, null),
+            }),
+          });
+          return updated ? context.json({ project: updated }) : context.json({ error: 'Project not found' }, 404);
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectModelDefaultApply.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectModelDefaultApply.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const target = await this.#modelDefaultTarget(
+            context,
+            FACTORY_ROUTE_CONTRACTS.projectModelDefaultApply,
+            'Organization administrator access is required to update running sessions.',
+          );
+          if ('response' in target) return target.response;
+          const { tenant, project, facet } = target;
+          const selection = project.harnessModelDefaults[facet.instanceId];
+          if (!selection) {
+            return context.json(
+              { error: 'default_model_not_set', message: `Set a default ${facet.displayName} model on the project first.` },
+              400,
+            );
+          }
+          if (!facet.applyDefaultToRunningSessions) {
+            return context.json(
+              {
+                error: 'model_apply_unavailable',
+                message: `${facet.displayName} sessions pick a new default up on their own, from their next turn.`,
+              },
+              409,
+            );
+          }
+          const result = await facet.applyDefaultToRunningSessions(selection, contextFor(tenant, project.id));
+          return context.json({ selection, ...result });
+        },
+      }),
+    ];
+  }
+
   routes(): ApiRoute[] {
     return [
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectList.path, {
@@ -630,16 +760,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
           const parsedBody = FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
-          // The thinking default sets the reasoning spend of every run that has not
-          // picked its own, so it is admin-only.
           // Tool permissions are shared by everyone working in the Factory and YOLO lets
-          // every call through, so they are admin-only as well.
-          const adminField =
-            parsedBody.data.defaultThinkingLevel !== undefined
-              ? 'thinking default'
-              : parsedBody.data.toolPermissions !== undefined
-                ? 'tool permissions'
-                : undefined;
+          // every call through, so they are admin-only.
+          const adminField = parsedBody.data.toolPermissions !== undefined ? 'tool permissions' : undefined;
           if (
             adminField &&
             this.deps.auth.enabled() &&
@@ -667,100 +790,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },
       }),
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.path, {
-        method: FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.method,
-        requiresAuth: false,
-        handler: async routeContext => {
-          const context = loose(routeContext);
-          const tenant = await this.#resolveTenant(context);
-          if ('response' in tenant) return tenant.response;
-          if (!(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))) {
-            return context.json(
-              {
-                error: 'forbidden',
-                message: 'Organization administrator access is required to update running sessions.',
-              },
-              403,
-            );
-          }
-          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.pathSchema.safeParse({
-            id: context.req.param('id'),
-          });
-          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
-          const project = await this.#project(tenant.orgId, parsedPath.data.id);
-          if (!project) return context.json({ error: 'Project not found' }, 404);
-          const modelId = project.defaultModelId;
-          if (!modelId) {
-            return context.json(
-              { error: 'default_model_not_set', message: 'Set a default model on the project first.' },
-              400,
-            );
-          }
-          const { workItems, controller } = this.deps;
-          if (!workItems || !controller) return context.json({ error: 'model_apply_unavailable' }, 503);
-
-          const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
-            binding => binding.status === 'active',
-          );
-          const boards =
-            (await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }))?.registry ??
-            createDefaultBoardRegistry();
-          const seen = new Set<string>();
-          const applied: string[] = [];
-          const skipped: Array<{
-            threadId: string;
-            reason:
-              | 'not-running'
-              | 'work-item-missing'
-              | 'stage-inactive'
-              | 'thread-missing'
-              | 'mode-unknown'
-              | 'apply-failed';
-          }> = [];
-
-          for (const binding of bindings) {
-            const key = `${binding.sessionId}:${binding.threadId}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-
-            const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
-            if (!item || item.factoryProjectId !== project.id) {
-              skipped.push({ threadId: binding.threadId, reason: 'work-item-missing' });
-              continue;
-            }
-            // A bound run can still act on its card anywhere short of a terminal phase.
-            const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
-            if (phaseKind === undefined || phaseKind === 'terminal') {
-              skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
-              continue;
-            }
-            const session = await controller.getSession(binding.sessionId);
-            if (!session) {
-              skipped.push({ threadId: binding.threadId, reason: 'not-running' });
-              continue;
-            }
-            const thread = await session.thread.getById({ threadId: binding.threadId });
-            if (!thread) {
-              skipped.push({ threadId: binding.threadId, reason: 'thread-missing' });
-              continue;
-            }
-            try {
-              // This route targets inactive bound threads, so persist the controller-owned key through the session gateway.
-              await session.thread.setSettingOn({
-                threadId: binding.threadId,
-                key: 'currentModelId',
-                value: modelId,
-              });
-              applied.push(binding.threadId);
-            } catch (error) {
-              console.warn('[factory] apply-default-model failed for thread', binding.threadId, error);
-              skipped.push({ threadId: binding.threadId, reason: 'apply-failed' });
-            }
-          }
-
-          return context.json({ modelId, applied, skipped });
-        },
-      }),
+      ...this.#modelDefaultRoutes(),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectDelete.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectDelete.method,
         requiresAuth: false,

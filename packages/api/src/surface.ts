@@ -161,7 +161,7 @@ export interface FactoryApiRoutesDeps {
   /** The Claude Code harness is configured, so new factories may pick `harness: 'claude-code'`. */
   claudeCodeEnabled?: boolean;
   /** Every harness's model facet: `/web/config/models` `instances` and a session's `switchModel` / `modelInstanceId`. */
-  harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forSession'> | undefined;
+  harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forSession' | 'forInstance'> | undefined;
   /** Device preview (`/web/device`) is mounted: simulators and emulators on this server's machine. */
   deviceEnabled?: boolean;
   /** Claude sign-in on this host (local development): `claude auth login`, kept as the person's account. */

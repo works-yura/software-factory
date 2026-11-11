@@ -1,6 +1,6 @@
-import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { z } from 'zod';
+
+import { ModelSelection, ProviderInstanceId, ProviderOptionSelections } from '@factory/harness/models/contracts';
 
 import {
   cardRuleGroupSchema,
@@ -20,7 +20,6 @@ import {
 } from '@factory/store';
 
 import { INTAKE_RULE_ROUTE_CONTRACTS } from './intake-rules.ts';
-const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -235,7 +234,16 @@ export const FACTORY_HARNESS_KINDS = ['mastra', 'claude-code'] as const;
 
 /** `claude --model` aliases a Claude Code Factory may pin; null means the CLI's own default. */
 export { CLAUDE_CODE_MODELS };
-const claudeCodeModelSchema = z.enum(CLAUDE_CODE_MODELS).nullable();
+
+/**
+ * A Factory's default for one harness instance (`PUT …/model-defaults/:instanceId`): a model of
+ * that harness's catalog (slug or alias) and its options, checked by the harness's model facet.
+ */
+export const setModelDefaultBodySchema = z.object({
+  model: z.string().trim().min(1).max(200),
+  options: ProviderOptionSelections.optional(),
+});
+const modelDefaultPathSchema = z.object({ id: uuidSchema, instanceId: ProviderInstanceId.max(100) });
 
 /** The language a Factory's agents write to the team in; mirrors `AGENT_LANGUAGES` in @factory/store. */
 export const AGENT_LANGUAGES = ['uk', 'en'] as const;
@@ -245,7 +253,6 @@ export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
   harness: z.enum(FACTORY_HARNESS_KINDS).optional().default('mastra'),
-  claudeCodeModel: claudeCodeModelSchema.optional().default(null),
   agentLanguage: agentLanguageSchema.optional(),
 });
 
@@ -267,10 +274,7 @@ export const updateProjectBodySchema = z
   .object({
     name: nonEmptyTrimmed(200).optional(),
     description: nullableTrimmed(2_000).optional(),
-    defaultModelId: nullableTrimmed(200).optional(),
-    defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     harness: z.enum(FACTORY_HARNESS_KINDS).optional(),
-    claudeCodeModel: claudeCodeModelSchema.optional(),
     agentLanguage: agentLanguageSchema.optional(),
     toolPermissions: toolPermissionsSchema.nullable().optional(),
     /** @deprecated Ignored. Each board phase starts its own runs with `autoStart` and `autoStartWhen`. */
@@ -802,27 +806,30 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: buildPathSchema,
     responseSchema: environmentBuildResponseSchema,
   },
-  projectApplyDefaultModel: {
+  projectModelDefaultSet: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/model-defaults/:instanceId',
+    description: "Set a Factory's default model for one harness instance, checked against that harness's catalog",
+    pathSchema: modelDefaultPathSchema,
+    bodySchema: setModelDefaultBodySchema,
+    responseSchema: z.object({ project: projectSchema, selection: ModelSelection }),
+  },
+  projectModelDefaultClear: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/model-defaults/:instanceId',
+    description: "Clear a Factory's default for one harness instance: it follows the harness's catalog default",
+    pathSchema: modelDefaultPathSchema,
+    responseSchema: projectResponseSchema,
+  },
+  projectModelDefaultApply: {
     method: 'POST',
-    path: '/web/factory/projects/:id/apply-default-model',
-    description: 'Apply the Factory default model to running work and review threads',
-    pathSchema: projectPathSchema,
+    path: '/web/factory/projects/:id/model-defaults/:instanceId/apply',
+    description: "Move the Factory's running sessions of one harness instance onto its default model",
+    pathSchema: modelDefaultPathSchema,
     responseSchema: z.object({
-      modelId: z.string(),
+      selection: ModelSelection,
       applied: z.array(z.string()),
-      skipped: z.array(
-        z.object({
-          threadId: z.string(),
-          reason: z.enum([
-            'not-running',
-            'work-item-missing',
-            'stage-inactive',
-            'thread-missing',
-            'mode-unknown',
-            'apply-failed',
-          ]),
-        }),
-      ),
+      skipped: z.array(z.object({ threadId: z.string(), reason: z.string() })),
     }),
   },
   projectDelete: {

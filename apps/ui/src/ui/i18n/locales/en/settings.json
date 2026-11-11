@@ -551,9 +551,6 @@
       "title": "Factory defaults"
     },
     "factoryDefault": {
-      "saving": "Saving default model",
-      "placeholder": "Select a model",
-      "pickerLabel": "Factory default model",
       "switched_one": "Switched {{count}} session",
       "switched_other": "Switched {{count}} sessions",
       "nothingToSwitch": "No running sessions to switch",
@@ -564,14 +561,6 @@
       "keep": "Keep them as-is",
       "switch": "Switch running sessions",
       "switching": "Switching…"
-    },
-    "thinking": {
-      "label": "Thinking",
-      "description": "Used by every session and work-item run in this Factory until it picks its own level. Each run caps it at what its model supports.",
-      "loadFailed": "The thinking level couldn't be loaded.",
-      "notLoaded": "The thinking level isn't loaded yet.",
-      "changeFailed": "Failed to change thinking level",
-      "adminsOnly": "Only organization admins can change the thinking level"
     },
     "picker": {
       "auto": "Auto",
@@ -604,18 +593,27 @@
       },
       "changeFailed": "Couldn’t change the agent language"
     },
-    "claudeCode": {
-      "title": "Claude Code",
-      "description": "How this Factory’s Claude Code sessions run.",
-      "modelLabel": "Claude model",
-      "modelDescription": "Passed to `claude --model` from each session’s next turn.",
-      "models": {
-        "default": "Claude Code default",
-        "opus": "Opus",
-        "sonnet": "Sonnet",
-        "haiku": "Haiku"
-      },
-      "changeFailed": "Couldn’t change the Claude model"
+    "defaults": {
+      "title": "Default models",
+      "description": "What new sessions and card runs of each harness start on until they pick their own model. A change applies from each session’s next turn.",
+      "inUse": "In use",
+      "inUseHint": "This Factory starts new sessions on this harness.",
+      "setForFactory": "Set for this Factory.",
+      "followsCatalog": "Follows the catalog default: {{model}}.",
+      "followsHarness": "Follows the harness’s own default.",
+      "useCatalogDefault": "Use catalog default",
+      "model": "Model",
+      "modelLabel": "{{harness}} default model",
+      "modelDescription": "New sessions start on it unless they pick their own.",
+      "reasoningDescription": "How much the model reasons before it answers. A session can still pick its own level.",
+      "saving": "Saving default model",
+      "saveFailed": "Couldn’t save the default model",
+      "adminsOnly": "Only organization admins can change the default model",
+      "needsSetup": "Connect a model provider below to choose a default model.",
+      "unavailable": "{{harness}} isn’t available on this server right now.",
+      "unavailableBecause": "{{harness}} isn’t available: {{reason}}",
+      "loadFailed": "The harnesses’ models couldn’t be loaded.",
+      "change": "Change"
     }
   },
   "memory": {
@@ -677,7 +675,6 @@
   "routing": {
     "title": "Model routing",
     "description": "Chats and work-item runs both use the Factory defaults. Running threads keep the model they already picked.",
-    "thinkingDescription": "Every chat and work-item run in this Factory starts at this level.",
     "lanes": {
       "chats": "Chats",
       "runs": "Work-item runs"

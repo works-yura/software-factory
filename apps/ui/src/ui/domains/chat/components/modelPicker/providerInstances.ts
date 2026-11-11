@@ -14,7 +14,7 @@ import type {
   ServerProviderModel,
 } from "@factory/harness/models/contracts";
 import { EFFORT_OPTION_ID } from "@factory/harness/models/selection";
-import { mastraModelCapabilities, mastraModelInstance } from "@factory/credentials/mastra-models";
+import { mastraModelCapabilities, mastraModelInstance, mastraModelSelection } from "@factory/credentials/mastra-models";
 import { getAvailableThinkingLevelsForModel } from "@mastra/code-sdk/thinking";
 import type { ThinkingLevelSetting } from "@mastra/code-sdk/thinking";
 
@@ -38,7 +38,20 @@ export interface ProviderInstanceEntry {
   /** No credential reaches any model yet: the picker offers the provider setup (Settings → Models). */
   readonly needsSetup: boolean;
   readonly defaultModel: string | null;
+  /** The Factory's own default for this instance; null when it follows `catalogDefault`. */
+  readonly factoryDefault: ModelSelection | null;
+  /** The harness's own default, what "Use catalog default" goes back to. */
+  readonly catalogDefault: ModelSelection | null;
+  /** Its facet can move running sessions onto a new Factory default. */
+  readonly appliesToRunningSessions: boolean;
+  /** Why it is unavailable, as its facet says. */
+  readonly reason?: string | undefined;
   readonly models: ReadonlyArray<ServerProviderModel>;
+}
+
+/** What a session of this instance follows until it picks its own: the Factory's default, else the catalog's. */
+export function instanceDefaultSelection(entry: Pick<ProviderInstanceEntry, "factoryDefault" | "catalogDefault">): ModelSelection | null {
+  return entry.factoryDefault ?? entry.catalogDefault;
 }
 
 /** Disabled instances may retain ready status until reconciliation. */
@@ -98,8 +111,34 @@ function withShortName(model: ServerProviderModel, displayName: string): ServerP
   return { ...model, shortName: model.name.slice(family.length + 1) };
 }
 
+/** The catalog's models with `isDefault` on `selection`'s model (by slug or alias) alone. */
+export function withDefaultMarked(
+  models: ReadonlyArray<ServerProviderModel>,
+  selection: Pick<ModelSelection, "model"> | null,
+): ServerProviderModel[] {
+  const marked = selection
+    ? (models.find((model) => model.slug === selection.model) ??
+      models.find((model) => model.aliases?.includes(selection.model)))
+    : undefined;
+  if (!marked) return [...models];
+  return models.map((model) => {
+    const { isDefault: _isDefault, ...rest } = model;
+    return model === marked ? { ...rest, isDefault: true } : rest;
+  });
+}
+
 function toEntry(instance: HarnessModelInstanceInfo): ProviderInstanceEntry {
   const displayName = HARNESSES.find((harness) => harness.id === instance.harnessId)?.label ?? instance.displayName;
+  // A server that predates the per-harness defaults reports only the effective default.
+  const factoryDefault = instance.factoryDefaultSelection ?? null;
+  const catalogDefault =
+    instance.catalogDefaultSelection !== undefined ? instance.catalogDefaultSelection : (instance.defaultSelection ?? null);
+  const models = instance.models.map((model) => {
+    const named = withShortName(model, instance.displayName);
+    return instance.harnessId === MASTRA_HARNESS.id
+      ? { ...named, capabilities: translatedThinkingLevels(model.capabilities) }
+      : named;
+  });
   return {
     instanceId: instance.instanceId,
     driverKind: instance.harnessId,
@@ -109,12 +148,12 @@ function toEntry(instance: HarnessModelInstanceInfo): ProviderInstanceEntry {
     isAvailable: instance.available,
     needsSetup: instance.needsSetup,
     defaultModel: instance.defaultModel,
-    models: instance.models.map((model) => {
-      const named = withShortName(model, instance.displayName);
-      return instance.harnessId === MASTRA_HARNESS.id
-        ? { ...named, capabilities: translatedThinkingLevels(model.capabilities) }
-        : named;
-    }),
+    factoryDefault,
+    catalogDefault,
+    appliesToRunningSessions: instance.appliesToRunningSessions ?? false,
+    ...(instance.reason ? { reason: instance.reason } : {}),
+    // "Default" in the picker is what a session follows: the Factory's default, else the catalog's.
+    models: withDefaultMarked(models, factoryDefault ?? catalogDefault),
   };
 }
 
@@ -129,7 +168,10 @@ function legacyMastraInstance(response: ModelCatalogResponse): HarnessModelInsta
       entry.capabilities ??
       mastraModelCapabilities(getAvailableThinkingLevelsForModel(entry.id, entry.reasoningOptions)),
   }));
-  return mastraModelInstance(models, response.defaultModelId ?? response.fallbackModelId ?? null);
+  return mastraModelInstance(models, {
+    factoryDefault: response.defaultModelId ? mastraModelSelection(response.defaultModelId) : null,
+    catalogDefaultModelId: response.fallbackModelId ?? null,
+  });
 }
 
 /**

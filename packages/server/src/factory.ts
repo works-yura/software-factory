@@ -1556,7 +1556,12 @@ export class MastraFactory {
       // Tools and processors read parked runs through it.
       liveSessions: () => liveSessionRegistry,
     };
-    const mastraHarnessModels = createMastraHarnessModels(factoryToolDeps);
+    const mastraHarnessModels = createMastraHarnessModels({
+      ...factoryToolDeps,
+      catalogDefaultModelId: () => this.#prepared?.base.controller.getDefaultMode?.().defaultModelId,
+      // Settings → Models moves a Factory's running runs onto a new Mastra default.
+      runningSessions: { workItems: workItemsStorage, boards: () => this.#projectBoards },
+    });
     harnessModels.register(mastraHarnessModels, { fallback: true });
     // Proactive environment builds exist only when the sandbox can build
     // templates on its own; the workflow is registered on the host's Mastra
@@ -1664,14 +1669,9 @@ export class MastraFactory {
         : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
       ...(retireWorkItemSandboxes ? { releaseWorkItemSandboxes: retireWorkItemSandboxes } : {}),
-      ...(workItemsReady
-        ? {
-            workItems: workItemsStorage,
-            controller: {
-              getSession: async (sessionId: string) => this.#prepared?.base.controller.getSession(sessionId),
-            },
-          }
-        : {}),
+      ...(workItemsReady ? { workItems: workItemsStorage } : {}),
+      // A Factory's default model per harness: checked and applied by that harness's facet.
+      harnessModels: () => harnessModels,
     });
     const loadMemorySettings = async ({
       requestContext,
@@ -2032,14 +2032,13 @@ export class MastraFactory {
                     boards,
                     configVersion,
                     binding,
-                    // What the session's next turn runs on: its own pick, else the Factory's model and thinking level.
+                    // What the session's next turn runs on: its own pick, else its Factory's Claude Code default.
                     runtime: async () => {
-                      const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                       const selection =
                         (await claudeCode?.models?.getSelection(sessionId, { viewer: { userId: '', orgId } })) ?? null;
                       const effort = selection?.options?.find(option => option.id === 'effort')?.value;
                       return {
-                        modelId: `claude-code/${selection?.model ?? project?.claudeCodeModel ?? 'default'}`,
+                        modelId: `claude-code/${selection?.model ?? 'default'}`,
                         thinkingLevel: typeof effort === 'string' ? effort : 'claude-code-default',
                       };
                     },

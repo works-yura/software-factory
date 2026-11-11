@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ServerProviderModel } from './contracts.ts';
+import type { ModelSelection, ServerProviderModel } from './contracts.ts';
+import { parseHarnessModelDefaults, resolveModelDefault, withHarnessModelDefault } from './defaults.ts';
 import type { HarnessModelContext, HarnessModels } from './facet.ts';
 import { createHarnessModelRegistry } from './registry.ts';
 import { codexStubModels } from './registry.testFixtures.ts';
@@ -19,6 +20,7 @@ function fallbackModels(): HarnessModels {
     owns: async () => true,
     list: async () => models,
     defaultSelection: async () => null,
+    catalogDefault: async () => null,
     check: async request => checkModelSelection('default', models, request),
     getSelection: async () => null,
     setSelection: async (_sessionId, selection) => ({ ok: true, modelSelection: selection, appliesFrom: 'now' }),
@@ -85,5 +87,52 @@ describe('HarnessModelRegistry', () => {
     expect(await registry.describe(ctx)).toMatchObject([{ instanceId: 'codex-stub', available: false, reason: 'codex is not installed' }]);
     expect(() => registry.register(codexStubModels(new Set()))).toThrow(/already registered/);
     expect(await registry.switchSessionModel('nobody', { model: 'x' }, ctx)).toMatchObject({ ok: false, status: 404 });
+  });
+});
+
+describe('Factory model defaults', () => {
+  it('a facet falls back from the session pick to the Factory default to the catalog default', async () => {
+    const factoryDefaults = { current: {} as Record<string, ModelSelection> };
+    const codex = codexStubModels(new Set(['s-codex']), factoryDefaults);
+    const registry = createHarnessModelRegistry([codex]);
+    const factoryCtx = { ...ctx, factoryProjectId: 'f1' };
+
+    expect(await registry.describe(factoryCtx)).toMatchObject([
+      {
+        instanceId: 'codex-stub',
+        defaultSelection: { model: 'gpt-5.3-codex' },
+        factoryDefaultSelection: null,
+        catalogDefaultSelection: { model: 'gpt-5.3-codex' },
+        appliesToRunningSessions: false,
+      },
+    ]);
+
+    const pinned = { instanceId: 'codex-stub', model: 'gpt-5-mini' };
+    factoryDefaults.current = withHarnessModelDefault(factoryDefaults.current, 'codex-stub', pinned);
+    expect(await codex.defaultSelection(factoryCtx)).toEqual(pinned);
+    expect((await registry.describe(factoryCtx))[0]).toMatchObject({ defaultModel: 'gpt-5-mini', factoryDefaultSelection: pinned });
+
+    await registry.switchSessionModel('s-codex', { model: 'gpt-5.3-codex', options: [{ id: 'fastMode', value: true }] }, ctx);
+    expect(await codex.defaultSelection({ ...ctx, sessionId: 's-codex' })).toMatchObject({ model: 'gpt-5.3-codex' });
+
+    factoryDefaults.current = withHarnessModelDefault(factoryDefaults.current, 'codex-stub', null);
+    expect(await codex.defaultSelection(factoryCtx)).toEqual({ instanceId: 'codex-stub', model: 'gpt-5.3-codex' });
+  });
+
+  it('reads stored defaults leniently: bad entries and mismatched instances are dropped', () => {
+    expect(
+      parseHarnessModelDefaults({
+        mastra: { instanceId: 'mastra', model: 'openai/gpt-5.5', options: { effort: 'high' } },
+        'claude-code': { provider: 'claude-code', model: 'opus' },
+        codex: { instanceId: 'other', model: 'x' },
+        broken: { instanceId: 'broken' },
+      }),
+    ).toEqual({
+      mastra: { instanceId: 'mastra', model: 'openai/gpt-5.5', options: [{ id: 'effort', value: 'high' }] },
+      'claude-code': { instanceId: 'claude-code', model: 'opus' },
+    });
+    expect(parseHarnessModelDefaults(null)).toEqual({});
+    expect(parseHarnessModelDefaults(['x'])).toEqual({});
+    expect(resolveModelDefault({ catalog: null })).toBeNull();
   });
 });

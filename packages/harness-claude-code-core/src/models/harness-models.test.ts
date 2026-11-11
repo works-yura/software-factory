@@ -26,12 +26,12 @@ describe('createClaudeCodeHarnessModels', () => {
     const models = createClaudeCodeHarnessModels({
       owns: async id => id === 's1',
       getSession: async id => (id === 's1' ? session : undefined),
-      defaults: async () => ({ model: 'sonnet', thinkingLevel: 'off' }),
+      defaults: async () => ({ instanceId: CLAUDE_CODE_INSTANCE_ID, model: 'sonnet', options: [{ id: 'effort', value: 'low' }] }),
       settingKeys: { selection: 'sel', lastSelection: 'last' },
     });
     const registry = createHarnessModelRegistry([models]);
 
-    // Nothing picked: the Factory's model at its thinking level (off reads as low).
+    // Nothing picked: the Factory's Claude Code default.
     expect(await models.getSelection('s1', ctx)).toEqual({
       instanceId: CLAUDE_CODE_INSTANCE_ID,
       model: 'sonnet',
@@ -59,19 +59,46 @@ describe('createClaudeCodeHarnessModels', () => {
     expect(await registry.switchSessionModel('s1', { model: null }, ctx)).toMatchObject({ ok: true, modelSelection: { model: 'sonnet' } });
   });
 
-  it('defaults a new chat to its Factory model, else the catalog default', async () => {
+  it('defaults a new chat to its Factory default, else the catalog default', async () => {
     const base = {
       owns: async () => false,
       getSession: async () => undefined,
       defaults: async () => null,
       settingKeys: { selection: 'sel', lastSelection: 'last' },
     };
-    expect(await createClaudeCodeHarnessModels(base).defaultSelection(ctx)).toEqual({
-      instanceId: CLAUDE_CODE_INSTANCE_ID,
-      model: 'claude-opus-5-5',
+    const catalogDefault = { instanceId: CLAUDE_CODE_INSTANCE_ID, model: 'claude-opus-5-5' };
+    const plain = createClaudeCodeHarnessModels(base);
+    expect(await plain.defaultSelection(ctx)).toEqual(catalogDefault);
+    expect(await plain.catalogDefault(ctx)).toEqual(catalogDefault);
+    expect(await plain.factoryDefault?.(ctx)).toBeNull();
+
+    const haiku = { instanceId: CLAUDE_CODE_INSTANCE_ID, model: 'haiku' };
+    const pinned = createClaudeCodeHarnessModels({ ...base, factoryDefaults: async () => haiku });
+    expect(await pinned.defaultSelection(ctx)).toEqual(haiku);
+    expect(await pinned.factoryDefault?.(ctx)).toEqual(haiku);
+    // The registry lists both, so Settings shows the pick and what a reset goes back to.
+    expect((await createHarnessModelRegistry([pinned]).describe(ctx))[0]).toMatchObject({
+      defaultModel: 'haiku',
+      factoryDefaultSelection: haiku,
+      catalogDefaultSelection: catalogDefault,
     });
-    expect(
-      await createClaudeCodeHarnessModels({ ...base, factoryDefaults: async () => ({ model: 'haiku' }) }).defaultSelection(ctx),
-    ).toMatchObject({ model: 'haiku' });
+  });
+
+  it('a session follows its Factory default until it picks its own', async () => {
+    const session = fakeSession();
+    let factory: { instanceId: string; model: string } | null = { instanceId: CLAUDE_CODE_INSTANCE_ID, model: 'sonnet' };
+    const models = createClaudeCodeHarnessModels({
+      owns: async () => true,
+      getSession: async () => session,
+      defaults: async () => factory,
+      settingKeys: { selection: 'sel', lastSelection: 'last' },
+    });
+    const sessionCtx = { ...ctx, sessionId: 's1' };
+    expect(await models.defaultSelection(sessionCtx)).toEqual(factory);
+    expect(await models.factoryDefault?.(sessionCtx)).toEqual(factory);
+    factory = null;
+    // No Factory default: the CLI's own model, shown as the catalog default.
+    expect(await models.turnSelection(session)).toEqual({});
+    expect(await models.defaultSelection(sessionCtx)).toEqual({ instanceId: CLAUDE_CODE_INSTANCE_ID, model: 'claude-opus-5-5' });
   });
 });

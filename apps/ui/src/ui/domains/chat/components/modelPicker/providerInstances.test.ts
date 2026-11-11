@@ -58,6 +58,9 @@ describe("toProviderInstances", () => {
           needsSetup: false,
           defaultModel: "claude-opus-5-5",
           defaultSelection: { instanceId: "claude-code", model: "claude-opus-5-5" },
+          factoryDefaultSelection: null,
+          catalogDefaultSelection: { instanceId: "claude-code", model: "claude-opus-5-5" },
+          appliesToRunningSessions: false,
           models: [
             {
               slug: "claude-opus-5-5",
@@ -90,6 +93,9 @@ describe("toProviderInstances", () => {
           needsSetup: false,
           defaultModel: "gpt-5.3-codex",
           defaultSelection: null,
+          factoryDefaultSelection: null,
+          catalogDefaultSelection: null,
+          appliesToRunningSessions: false,
           models: [{ slug: "gpt-5.3-codex", name: "GPT-5.3 Codex", isCustom: false, capabilities: { optionDescriptors: [] } }],
         },
       ],

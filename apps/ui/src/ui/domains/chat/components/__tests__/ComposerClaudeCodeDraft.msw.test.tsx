@@ -23,7 +23,7 @@ function serveClaudeCodeFactory() {
     id: FACTORY_ID,
     name: 'Preparing',
     harness: 'claude-code',
-    claudeCodeModel: 'opus',
+    harnessModelDefaults: { 'claude-code': { instanceId: 'claude-code', model: 'opus' } },
     defaultModelId: null,
   };
   server.use(

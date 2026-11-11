@@ -1,4 +1,3 @@
-import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
@@ -11,8 +10,8 @@ import type {
 } from '../ui/domains/workspaces/services/github';
 
 /**
- * Switch the harness new sessions of this Factory start on, its Claude Code
- * model, or the language its agents write in. Optimistic on the Factory project (`useFactoryProjectQuery`'s cache
+ * Switch the harness new sessions of this Factory start on, or the language its
+ * agents write in. Optimistic on the Factory project (`useFactoryProjectQuery`'s cache
  * entry), so every view of it follows the switch at once and a rejection puts
  * it back; the Factory list is refreshed too, since it carries the harness.
  */
@@ -23,7 +22,7 @@ export function useSetFactoryHarnessMutation(factoryProjectId: string | undefine
   return useMutation({
     // One write at a time, so a rollback restores the value before that write.
     scope: { id: `factory-harness:${factoryProjectId}` },
-    mutationFn: (patch: { harness?: FactoryHarness; claudeCodeModel?: ClaudeCodeModel | null; agentLanguage?: AgentLanguage }) =>
+    mutationFn: (patch: { harness?: FactoryHarness; agentLanguage?: AgentLanguage }) =>
       updateFactoryHarness(baseUrl, factoryProjectId!, patch),
     onMutate: async patch => {
       await queryClient.cancelQueries({ queryKey: key, exact: true });

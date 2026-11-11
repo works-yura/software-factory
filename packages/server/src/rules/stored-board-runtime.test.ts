@@ -24,7 +24,7 @@ import {
   MemorySettingsStorage,
   ModelCredentialsStorage,
 } from '@factory/store';
-import type { StoredBoardInput, StoredBoardsStorage, WorkItemsStorage } from '@factory/store';
+import type { FactoryProjectsStorage, StoredBoardInput, StoredBoardsStorage, WorkItemsStorage } from '@factory/store';
 import { MastraFactory } from '../factory.ts';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -489,13 +489,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       /** A project whose runs can start: a model, its credential, and a linked GitHub repository. */
       async function runnableProject(replica: Awaited<ReturnType<typeof boot>>, orgId: string) {
         const projectId = await createProject(replica, 'Shipyard');
-        const configured = await replica.send('PATCH', `/web/factory/projects/${projectId}`, {
-          defaultModelId: 'openai/gpt-5.6-sol',
-        });
-        expect(configured.status).toBe(200);
         await replica.storage
           .getDomain<ModelCredentialsStorage>('model-credentials')
           .setCredential({ orgId }, 'openai', { type: 'api_key', key: 'sk-stored-boards-test' });
+        // The stub model is no catalog model, so the default is stored as the model-defaults route would store a checked one.
+        expect(
+          await replica.storage.getDomain<FactoryProjectsStorage>('projects').update({
+            orgId,
+            id: projectId,
+            input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'openai/gpt-5.6-sol' } } },
+          }),
+        ).not.toBeNull();
         // The stubbed model answers only OpenAI; keep observational memory from calling its observer model.
         await replica.storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
           orgId,

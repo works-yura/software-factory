@@ -29,7 +29,7 @@ import { Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
 import type { HarnessModelContext, HarnessModelInstanceInfo } from '@factory/harness/models/facet';
 import type { HarnessModelRegistry } from '@factory/harness/models/registry';
-import { mastraModelInstance } from '@factory/credentials/mastra-models';
+import { MASTRA_INSTANCE_ID, mastraModelInstance } from '@factory/credentials/mastra-models';
 import { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, buildProviderAccess, buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 import type { ModelCatalog, ModelCatalogEntry } from '@factory/credentials';
 import { CLAUDE_CODE_HARNESS, HARNESSES } from '@factory/contracts';
@@ -333,7 +333,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * The server's harness model registry: every harness's instance, with its catalog, lands in
    * `/web/config/models` `instances` (Mastra's from the catalog this route resolves). Absent: Mastra's alone.
    */
-  harnessModels?: () => Pick<HarnessModelRegistry, 'describe'> | undefined;
+  harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forInstance'> | undefined;
 }
 
 /** `GET /web/config/models`: Mastra's catalog (`models`, kept for the Settings pickers) and every harness instance. */
@@ -375,10 +375,24 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       body: Omit<ModelCatalogResponseBody, 'instances'>,
       ctx: HarnessModelContext,
     ): Promise<ModelCatalogResponseBody> => {
-      const mastra = mastraModelInstance(body.models, body.defaultModelId ?? body.fallbackModelId ?? null);
       const registry = options.harnessModels?.();
+      const mastraFacet = registry?.forInstance(MASTRA_INSTANCE_ID);
+      // Mastra's instance from the catalog this route resolved; its defaults as every facet reports them.
+      const mastra = mastraModelInstance(body.models, {
+        factoryDefault: mastraFacet?.factoryDefault ? await mastraFacet.factoryDefault(ctx) : await storedMastraDefault(ctx),
+        catalogDefaultModelId:
+          body.fallbackModelId ?? controller.getDefaultMode?.().defaultModelId ?? null,
+        appliesToRunningSessions: mastraFacet?.applyDefaultToRunningSessions !== undefined,
+      });
       const instances = registry ? await registry.describe(ctx, [mastra]) : [mastra];
       return { ...body, instances };
+    };
+    // A server without the Mastra facet registered (tests, a bare config server) reads the store itself.
+    const storedMastraDefault = async (ctx: HarnessModelContext) => {
+      if (!ctx.factoryProjectId || !options.factoryProjects) return null;
+      const project = await options.factoryProjects.getById({ id: ctx.factoryProjectId }).catch(() => null);
+      if (!project || (ctx.viewer.orgId && project.orgId !== ctx.viewer.orgId)) return null;
+      return project.harnessModelDefaults[MASTRA_INSTANCE_ID] ?? null;
     };
 
     const resolveOMResponseContext = async (c: Context) => {
@@ -676,6 +690,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
             let sessionPolicy: { defaultModelId: string | null } | undefined;
+            let sessionFactoryProjectId: string | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             const sessionId = c.req.query('sessionId');
@@ -720,6 +735,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                   userId: policy.tenant.userId,
                 });
                 sessionPolicy = { defaultModelId: policy.factoryDefaultModelId ?? null };
+                sessionFactoryProjectId = policy.factoryProjectId;
               }
             }
             const customProviders = options.customProviders;
@@ -737,7 +753,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               listCustomProviders,
             });
             const viewer = { userId: tenant?.userId ?? '', orgId: tenant ? tenantOrgId(tenant) : '' };
-            const factoryProjectId = c.req.query('factoryId') || undefined;
+            // A session answers for its own Factory, whose defaults its harness follows.
+            const factoryProjectId = sessionFactoryProjectId ?? (c.req.query('factoryId') || undefined);
             const harnessContext: HarnessModelContext = {
               viewer,
               ...(sessionId ?? resourceId ? { sessionId: sessionId ?? resourceId } : {}),

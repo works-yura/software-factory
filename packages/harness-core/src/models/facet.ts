@@ -70,14 +70,41 @@ export interface HarnessModels {
   availability?(ctx: HarnessModelContext): Promise<HarnessModelAvailability>;
   /** The models a session (or a Factory, outside one) can run, with their option descriptors. */
   list(ctx: HarnessModelContext): Promise<ServerProviderModel[]>;
-  /** What a new session starts on, or the session's defaults; null when the harness picks itself. */
+  /**
+   * What a session starts on: in a session, what it runs; outside one, the Factory's default for this
+   * instance (`factoryDefault`), else the catalog's (`catalogDefault`). Null when the harness picks itself.
+   */
   defaultSelection(ctx: HarnessModelContext): Promise<ModelSelection | null>;
-  /** A request checked against the catalog `ctx` addresses: the selection to store, or why not. */
+  /** The harness's own default for `ctx`, with no Factory default set: what "Use catalog default" means. */
+  catalogDefault(ctx: HarnessModelContext): Promise<ModelSelection | null>;
+  /**
+   * The Factory's default for this instance (`harnessModelDefaults[instanceId]` of the session's or
+   * `ctx.factoryProjectId`'s Factory); null when it follows the catalog default. Absent: never set.
+   */
+  factoryDefault?(ctx: HarnessModelContext): Promise<ModelSelection | null>;
+  /**
+   * A request checked against the catalog `ctx` addresses: the selection to store, or why not.
+   * Outside a session (a Factory default from Settings) it checks against the Factory's catalog.
+   */
   check(request: ModelSwitchRequest & { readonly model: string }, ctx: HarnessModelContext): Promise<ModelSelectionCheck>;
   /** The selection the session runs now (or from its next turn); null when it follows the harness default. */
   getSelection(sessionId: string, ctx: HarnessModelContext): Promise<ModelSelection | null>;
   /** Applies a checked selection (null: clear the session's own pick). */
   setSelection(sessionId: string, selection: ModelSelection | null, ctx: HarnessModelContext): Promise<ModelSwitchResult>;
+  /**
+   * Moves the Factory's running sessions onto `selection` (Settings offers it after a new default).
+   * Absent: sessions pick a new default up on their own, from their next turn.
+   */
+  applyDefaultToRunningSessions?(
+    selection: ModelSelection,
+    ctx: HarnessModelContext & { readonly factoryProjectId: string },
+  ): Promise<RunningSessionsApplyResult>;
+}
+
+/** What `applyDefaultToRunningSessions` switched: thread ids, and the ones it left with why. */
+export interface RunningSessionsApplyResult {
+  applied: string[];
+  skipped: Array<{ threadId: string; reason: string }>;
 }
 
 /** One instance as `/web/config/models` lists it under `instances`. */
@@ -91,5 +118,11 @@ export interface HarnessModelInstanceInfo {
   /** The model a new session starts on (`defaultSelection`), when the harness names one. */
   defaultModel: string | null;
   defaultSelection: ModelSelection | null;
+  /** The Factory's own default for this instance; null when it follows `catalogDefaultSelection`. */
+  factoryDefaultSelection: ModelSelection | null;
+  /** The harness's default when the Factory sets none. */
+  catalogDefaultSelection: ModelSelection | null;
+  /** The facet can move running sessions onto a new default (`applyDefaultToRunningSessions`). */
+  appliesToRunningSessions: boolean;
   models: ServerProviderModel[];
 }

@@ -14,7 +14,7 @@ interface FactoryRow {
   id: string;
   name: string;
   harness?: string;
-  claudeCodeModel?: string | null;
+  harnessModelDefaults?: Record<string, { model: string }>;
 }
 
 async function factories(): Promise<FactoryRow[]> {
@@ -69,7 +69,7 @@ test('New Factory wizard: the Claude Code harness offers Claude models, not Mast
   await page.getByRole('option', { name: /^Haiku/ }).click();
   await expect.poll(async () => (await factories()).find(f => f.name === 'Wizard Claude Factory')).toMatchObject({
     harness: 'claude-code',
-    claudeCodeModel: 'haiku',
+    harnessModelDefaults: { 'claude-code': { model: 'haiku' } },
   });
   expect(errors).toEqual([]);
 });

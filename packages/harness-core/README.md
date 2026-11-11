@@ -74,8 +74,12 @@ To give a new harness (e.g. Codex) model choice, without touching the server, th
    `@factory/harness-claude-code/src/models/`) is the starting point, read the way
    `ClaudeModelCatalog.ts` reads the Claude one.
 2. **Facet.** Implement `HarnessModels` in the harness package: `owns` (its session store),
-   `list` / `defaultSelection`, `check` (`checkModelSelection(instanceId, models, request)` covers a
-   plain catalog; map `request.thinkingLevel` onto your reasoning option if you accept it),
+   `list`, `catalogDefault` (the harness's own default), `factoryDefault` (read the Factory's
+   `harnessModelDefaults[instanceId]` through the host, e.g. `project.harnessModelDefaults`),
+   `defaultSelection` (`resolveModelDefault({ session, factory, catalog })`: a session's own pick,
+   else its Factory's default, else the catalog's), `check` (`checkModelSelection(instanceId,
+   models, request)` covers a plain catalog; it must also answer outside a session, for a Factory
+   default; map `request.thinkingLevel` onto your reasoning option if you accept it),
    `getSelection` / `setSelection` (keep the pick where the harness reads it each turn, e.g. a
    thread setting, and compile it into the CLI flags or API params of the next turn; mark a
    changed turn with `modelSwitchBetween(last, next)` for the chat's divider).
@@ -84,8 +88,13 @@ To give a new harness (e.g. Codex) model choice, without touching the server, th
    one). Add its `HarnessDescriptor` to `@factory/contracts` `HARNESSES` for its label and
    capabilities.
 
+   Optionally `applyDefaultToRunningSessions`, when its running sessions only pick a new default up
+   if moved onto it (Settings then offers "Switch running sessions").
+
 That is all: `/web/config/models` lists its instance, the picker shows its models and descriptors
-(`toProviderInstances` reads `instances` as they come), and the chat route, the agent tool and
-`switchModel` reach its facet. `models/registry.testFixtures.ts` (`codexStubModels`) is a minimal
+(`toProviderInstances` reads `instances` as they come), Settings → Models shows its default-model
+row (`HarnessModelDefaults`: model, the `role: 'reasoning'` select, a control per other descriptor,
+"Use catalog default"), stored by `PUT/DELETE /web/factory/projects/:id/model-defaults/:instanceId`
+after its `check`, and the chat route, the agent tool and `switchModel` reach its facet. `models/registry.testFixtures.ts` (`codexStubModels`) is a minimal
 example; `models/registry.test.ts`, `@factory/session`'s `model-switch-route.test.ts` and
 `@factory/api`'s `config.test.ts` run it through the registry, the route and the catalog.

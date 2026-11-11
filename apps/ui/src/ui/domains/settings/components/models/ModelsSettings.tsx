@@ -5,13 +5,14 @@ import { CustomProvidersSection } from '../CustomProvidersSection';
 import { AgentLanguageSection } from './AgentLanguageSection';
 import { SettingsSubsection } from '../SettingsSubsection';
 import { ClaudeAccountsSection } from './accounts/ClaudeAccountsSection';
-import { ClaudeCodeModelSection, HarnessSwitchSection, useFactoryHarness } from './harness/HarnessSettings';
+import { HarnessModelDefaultsSection } from './defaults/HarnessModelDefaultsSection';
+import { HarnessSwitchSection, useFactoryHarness } from './harness/HarnessSettings';
 import { ModelRoutingSection } from './routing/ModelRoutingSection';
 
 /**
- * The harness on top, then the agents' language (both harnesses follow it); below them only the settings of the harness this Factory
- * runs on: Mastra's model routing, thinking and custom providers, or Claude
- * Code's model and accounts.
+ * The harness on top, then the agents' language (both harnesses follow it), then the default
+ * model of every harness alike (`HarnessModelDefaultsSection`); below them only what the harness
+ * this Factory runs on needs to reach its models: Mastra's providers, or Claude Code's accounts.
  */
 export function ModelsSettings({ factoryId }: { factoryId: string }) {
   const { t } = useTranslation('settings');
@@ -20,7 +21,8 @@ export function ModelsSettings({ factoryId }: { factoryId: string }) {
     <div className="flex flex-col gap-8">
       <HarnessSwitchSection factoryId={factoryId} />
       <AgentLanguageSection factoryId={factoryId} />
-      {/* Each harness's own model settings: Mastra's providers, or Claude's model and accounts. */}
+      <HarnessModelDefaultsSection factoryId={factoryId} />
+      {/* Each harness's own way to its models: Mastra's providers, or Claude's accounts. */}
       {harness !== undefined && descriptor.setup.modelProvider && (
         <>
           <ModelRoutingSection factoryId={factoryId} />
@@ -31,12 +33,7 @@ export function ModelsSettings({ factoryId }: { factoryId: string }) {
           </SettingsSubsection>
         </>
       )}
-      {harness !== undefined && descriptor.setup.claudeSignIn && (
-        <>
-          <ClaudeCodeModelSection factoryId={factoryId} />
-          <ClaudeAccountsSection />
-        </>
-      )}
+      {harness !== undefined && descriptor.setup.claudeSignIn && <ClaudeAccountsSection />}
     </div>
   );
 }

@@ -35,18 +35,31 @@ describe('Mastra descriptors', () => {
   });
 
   it('lists a catalog as the Mastra instance, offering setup when it is empty', () => {
-    const instance = mastraModelInstance(
-      [{ id: 'openai/gpt-5', provider: 'openai', modelName: 'GPT-5', capabilities: mastraModelCapabilities(['low', 'high']) }],
-      'openai/gpt-5',
-    );
+    const models = [
+      { id: 'openai/gpt-5', provider: 'openai', modelName: 'GPT-5', capabilities: mastraModelCapabilities(['low', 'high']) },
+      { id: 'openai/gpt-5-mini', provider: 'openai', modelName: 'GPT-5 mini', capabilities: mastraModelCapabilities([]) },
+    ];
+    const instance = mastraModelInstance(models, { factoryDefault: null, catalogDefaultModelId: 'openai/gpt-5' });
     expect(instance).toMatchObject({
       instanceId: 'mastra',
       harnessId: 'mastra',
       available: true,
       needsSetup: false,
       defaultModel: 'openai/gpt-5',
-      models: [{ slug: 'openai/gpt-5', name: 'GPT-5', subProvider: 'OpenAI', isDefault: true }],
+      factoryDefaultSelection: null,
+      catalogDefaultSelection: { instanceId: 'mastra', model: 'openai/gpt-5' },
+      appliesToRunningSessions: false,
+      models: [{ slug: 'openai/gpt-5', name: 'GPT-5', subProvider: 'OpenAI', isDefault: true }, { slug: 'openai/gpt-5-mini' }],
     });
-    expect(mastraModelInstance([], null)).toMatchObject({ available: false, needsSetup: true, models: [] });
+    // The Factory's default wins over the catalog's; the list still marks the catalog's.
+    const pinned = mastraModelSelection('openai/gpt-5-mini', 'high');
+    expect(
+      mastraModelInstance(models, { factoryDefault: pinned, catalogDefaultModelId: 'openai/gpt-5', appliesToRunningSessions: true }),
+    ).toMatchObject({ defaultModel: 'openai/gpt-5-mini', defaultSelection: pinned, factoryDefaultSelection: pinned, appliesToRunningSessions: true });
+    expect(mastraModelInstance([], { factoryDefault: null, catalogDefaultModelId: null })).toMatchObject({
+      available: false,
+      needsSetup: true,
+      models: [],
+    });
   });
 });

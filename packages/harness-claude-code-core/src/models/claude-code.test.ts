@@ -7,14 +7,21 @@ import { SYNTHETIC_CLAUDE_CAPABLE_MODEL, SYNTHETIC_CLAUDE_MODEL_CATALOG } from '
 import {
   CLAUDE_CODE_INSTANCE_ID,
   checkClaudeCodeModelSelection,
+  claudeCodeCatalogDefault,
   claudeCodeModels,
   claudeEffortForThinkingLevel,
   compileClaudeCodeTurn,
 } from './claude-code.ts';
 
+const factoryDefault = (model: string, effort?: string) => ({
+  instanceId: CLAUDE_CODE_INSTANCE_ID,
+  model,
+  ...(effort ? { options: [{ id: "effort", value: effort }] } : {}),
+});
+
 describe("compileClaudeCodeTurn", () => {
   it("keeps a CLI alias on the command line and resolves its effort from the catalog", () => {
-    expect(compileClaudeCodeTurn({ projectModel: "opus", factoryThinkingLevel: "high" })).toEqual({
+    expect(compileClaudeCodeTurn({ factoryDefault: factoryDefault("opus", "high") })).toEqual({
       selection: { instanceId: CLAUDE_CODE_INSTANCE_ID, model: "opus", options: [{ id: "effort", value: "high" }] },
       model: "opus",
       effort: "high",
@@ -22,7 +29,7 @@ describe("compileClaudeCodeTurn", () => {
     });
   });
 
-  it("lets the session's selection win over the Factory's model and thinking level", () => {
+  it("lets the session's selection win over the Factory's default, whole", () => {
     const turn = compileClaudeCodeTurn({
       selection: {
         instanceId: CLAUDE_CODE_INSTANCE_ID,
@@ -33,17 +40,23 @@ describe("compileClaudeCodeTurn", () => {
           { id: "fastMode", value: true },
         ],
       },
-      projectModel: "haiku",
-      factoryThinkingLevel: "low",
+      factoryDefault: factoryDefault("haiku", "low"),
     });
     expect(turn).toMatchObject({ model: "claude-opus-4-6[1m]", effort: "max", settings: { fastMode: true } });
+    // A session pick without an effort runs its model's own default, not the Factory's.
+    expect(
+      compileClaudeCodeTurn({
+        selection: { instanceId: CLAUDE_CODE_INSTANCE_ID, model: "claude-opus-4-6" },
+        factoryDefault: factoryDefault("claude-opus-4-6", "low"),
+      }).effort,
+    ).toBe("high");
   });
 
-  it("maps the Factory level onto the model's choices and Ultrathink onto the prompt", () => {
+  it("maps the default's effort onto the model's choices and Ultrathink onto the prompt", () => {
     // Opus 4.6 has no Extra High: an unknown choice falls back to the model's default.
-    expect(compileClaudeCodeTurn({ projectModel: "claude-opus-4-6", factoryThinkingLevel: "xhigh" }).effort).toBe("high");
+    expect(compileClaudeCodeTurn({ factoryDefault: factoryDefault("claude-opus-4-6", "xhigh") }).effort).toBe("high");
     // Opus 4.7 runs its Extra High as the CLI's max (its effortMap).
-    expect(compileClaudeCodeTurn({ projectModel: "claude-opus-4-7", factoryThinkingLevel: "xhigh" }).effort).toBe("max");
+    expect(compileClaudeCodeTurn({ factoryDefault: factoryDefault("claude-opus-4-7", "xhigh") }).effort).toBe("max");
     expect(
       compileClaudeCodeTurn({
         selection: { instanceId: CLAUDE_CODE_INSTANCE_ID, model: "sonnet", options: [{ id: "effort", value: "ultrathink" }] },
@@ -51,15 +64,19 @@ describe("compileClaudeCodeTurn", () => {
     ).toMatchObject({ model: "sonnet", effort: "high", promptEffort: "ultrathink" });
   });
 
-  it("passes only a known effort when nothing names a model", () => {
-    expect(compileClaudeCodeTurn({ factoryThinkingLevel: "off" })).toEqual({ selection: null, effort: "low" });
+  it("leaves the CLI its own defaults when nothing names a model", () => {
     expect(compileClaudeCodeTurn({})).toEqual({ selection: null });
+    expect(compileClaudeCodeTurn({ selection: null, factoryDefault: null })).toEqual({ selection: null });
   });
 
   it("compiles against another catalog", () => {
     expect(
-      compileClaudeCodeTurn({ projectModel: SYNTHETIC_CLAUDE_CAPABLE_MODEL }, SYNTHETIC_CLAUDE_MODEL_CATALOG),
+      compileClaudeCodeTurn({ factoryDefault: factoryDefault(SYNTHETIC_CLAUDE_CAPABLE_MODEL) }, SYNTHETIC_CLAUDE_MODEL_CATALOG),
     ).toMatchObject({ model: `${SYNTHETIC_CLAUDE_CAPABLE_MODEL}[expanded]`, effort: "high" });
+  });
+
+  it("names the catalog's default model", () => {
+    expect(claudeCodeCatalogDefault()).toEqual({ instanceId: CLAUDE_CODE_INSTANCE_ID, model: "claude-opus-5-5" });
   });
 });
 

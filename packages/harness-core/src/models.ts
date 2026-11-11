@@ -12,3 +12,4 @@ export * from './models/ModelCatalog.ts';
 export * from './models/selection.ts';
 export * from './models/facet.ts';
 export * from './models/registry.ts';
+export * from './models/defaults.ts';

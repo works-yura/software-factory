@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../testing.ts';
-import { parseFactoryToolPermissions } from './base.ts';
+import type { FactoryStorageOps } from '@mastra/core/storage';
+
+import { migrateLegacyModelDefaults, parseFactoryToolPermissions } from './base.ts';
 
 describe('FactoryProjectsStorage', () => {
   it('creates an org-owned project without any integration or repository', async () => {
@@ -37,37 +39,95 @@ describe('FactoryProjectsStorage', () => {
     expect(await seed.projects.getById({ id: project.id })).not.toHaveProperty('modelScope');
   });
 
-  it('stores the harness and Claude Code model, and switches them later', async () => {
+  it('stores the harness and the per-harness model defaults, and switches them later', async () => {
     const seed = await createFactoryStorageForTests();
     const mastra = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'M' } });
-    expect(mastra).toMatchObject({ harness: 'mastra', claudeCodeModel: null });
+    expect(mastra).toMatchObject({ harness: 'mastra', harnessModelDefaults: {}, defaultModelId: null });
 
+    const opus = { instanceId: 'claude-code', model: 'opus', options: [{ id: 'effort', value: 'high' }] };
     const claude = await seed.projects.create({
       orgId: 'org-1',
       userId: 'user-1',
-      input: { name: 'C', harness: 'claude-code', claudeCodeModel: 'opus' },
+      input: { name: 'C', harness: 'claude-code', harnessModelDefaults: { 'claude-code': opus } },
     });
-    expect(claude).toMatchObject({ harness: 'claude-code', claudeCodeModel: 'opus' });
+    expect(claude).toMatchObject({ harness: 'claude-code', harnessModelDefaults: { 'claude-code': opus } });
 
+    const gpt = { instanceId: 'mastra', model: 'openai/gpt-5.5', options: [{ id: 'effort', value: 'xhigh' }] };
     const switched = await seed.projects.update({
       orgId: 'org-1',
       id: mastra.id,
-      input: { harness: 'claude-code', claudeCodeModel: 'haiku' },
+      input: { harness: 'claude-code', harnessModelDefaults: { mastra: gpt } },
     });
-    expect(switched).toMatchObject({ harness: 'claude-code', claudeCodeModel: 'haiku' });
+    // The Mastra runtime's legacy readers see the Mastra entry.
+    expect(switched).toMatchObject({
+      harness: 'claude-code',
+      harnessModelDefaults: { mastra: gpt },
+      defaultModelId: 'openai/gpt-5.5',
+      defaultThinkingLevel: 'xhigh',
+    });
 
-    // Other updates leave both alone; null goes back to the CLI default.
+    // Other updates leave both alone; an empty map goes back to every catalog default.
     await seed.projects.update({ orgId: 'org-1', id: mastra.id, input: { name: 'Renamed' } });
     expect(await seed.projects.get({ orgId: 'org-1', id: mastra.id })).toMatchObject({
       harness: 'claude-code',
-      claudeCodeModel: 'haiku',
+      harnessModelDefaults: { mastra: gpt },
     });
     const back = await seed.projects.update({
       orgId: 'org-1',
       id: mastra.id,
-      input: { harness: 'mastra', claudeCodeModel: null },
+      input: { harness: 'mastra', harnessModelDefaults: {} },
     });
-    expect(back).toMatchObject({ harness: 'mastra', claudeCodeModel: null });
+    expect(back).toMatchObject({ harness: 'mastra', harnessModelDefaults: {}, defaultModelId: null, defaultThinkingLevel: 'medium' });
+  });
+
+  it('migrates a row from before harness_model_defaults: its legacy columns become per-harness entries', async () => {
+    const seed = await createFactoryStorageForTests();
+    const ops = (seed.projects as unknown as { ops: FactoryStorageOps }).ops;
+    const now = new Date();
+    const legacy = await ops.insertOne<Record<string, unknown> & { id: string }>('factory_projects', {
+      org_id: 'org-1',
+      created_by: 'user-1',
+      name: 'Legacy',
+      description: null,
+      default_model_id: 'anthropic/claude-opus-5',
+      default_thinking_level: 'off',
+      harness: 'claude-code',
+      claude_code_model: 'sonnet',
+      created_at: now,
+      updated_at: now,
+    });
+
+    const project = await seed.projects.get({ orgId: 'org-1', id: legacy.id });
+    expect(project?.harnessModelDefaults).toEqual({
+      mastra: { instanceId: 'mastra', model: 'anthropic/claude-opus-5', options: [{ id: 'effort', value: 'off' }] },
+      // `off` has no Claude Code counterpart: the lowest effort.
+      'claude-code': { instanceId: 'claude-code', model: 'sonnet', options: [{ id: 'effort', value: 'low' }] },
+    });
+    expect(project).toMatchObject({ defaultModelId: 'anthropic/claude-opus-5', defaultThinkingLevel: 'off' });
+
+    // The first write of the map stores it; the legacy columns are not read again.
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: legacy.id,
+      input: { harnessModelDefaults: { 'claude-code': project!.harnessModelDefaults['claude-code']! } },
+    });
+    expect((await seed.projects.getById({ id: legacy.id }))?.harnessModelDefaults).toEqual({
+      'claude-code': { instanceId: 'claude-code', model: 'sonnet', options: [{ id: 'effort', value: 'low' }] },
+    });
+  });
+
+  it('migrates legacy defaults: no model, no entry; an unknown alias is dropped', () => {
+    expect(migrateLegacyModelDefaults({ defaultModelId: null, defaultThinkingLevel: 'high', claudeCodeModel: null })).toEqual({});
+    expect(migrateLegacyModelDefaults({ defaultModelId: ' ', defaultThinkingLevel: 'bogus', claudeCodeModel: 'gpt' })).toEqual({});
+    expect(
+      migrateLegacyModelDefaults({ defaultModelId: 'openai/gpt-5.5', defaultThinkingLevel: 'bogus', claudeCodeModel: 'opus' }),
+    ).toEqual({
+      mastra: { instanceId: 'mastra', model: 'openai/gpt-5.5' },
+      'claude-code': { instanceId: 'claude-code', model: 'opus' },
+    });
+    expect(migrateLegacyModelDefaults({ defaultModelId: null, defaultThinkingLevel: 'max', claudeCodeModel: 'opus' })).toEqual({
+      'claude-code': { instanceId: 'claude-code', model: 'opus', options: [{ id: 'effort', value: 'max' }] },
+    });
   });
 
   it('stores the agent language: Ukrainian by default, switched later, kept by other updates', async () => {

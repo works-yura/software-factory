@@ -777,6 +777,9 @@ importers:
       '@factory/core':
         specifier: workspace:*
         version: link:../core
+      '@factory/harness':
+        specifier: workspace:*
+        version: link:../harness-core
       '@factory/store':
         specifier: workspace:*
         version: link:../store
@@ -1972,6 +1975,9 @@ importers:
       '@factory/core':
         specifier: workspace:*
         version: link:../core
+      '@factory/harness':
+        specifier: workspace:*
+        version: link:../harness-core
       '@factory/harness-claude-code':
         specifier: workspace:*
         version: link:../harness-claude-code-core

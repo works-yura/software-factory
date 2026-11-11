@@ -21,7 +21,7 @@ export interface ClaudeUserSessionsOptions {
  * access guard and the Claude session UI apply unchanged. Its working
  * directory comes from the harness's `cwdFor` (the repository checked out on
  * the session branch) on its first turn, and its model from the Factory's
- * `claudeCodeModel`, read before each turn.
+ * Claude Code default (`harnessModelDefaults`), read before each turn.
  */
 export function createClaudeUserSessions({ harness, checkout }: ClaudeUserSessionsOptions): ClaudeCodeUserSessions {
   const unavailableReason =

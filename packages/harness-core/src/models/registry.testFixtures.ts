@@ -2,10 +2,17 @@
 // descriptors and nothing else.
 import type { ModelSelection, ServerProviderModel } from './contracts.ts';
 import type { HarnessModels } from './facet.ts';
+import { resolveModelDefault } from './defaults.ts';
 import { checkModelSelection } from './selection.ts';
 
-/** A third harness as a Codex port would add it: its own catalog and descriptors, nothing else. */
-export function codexStubModels(owned: ReadonlySet<string>): HarnessModels & { selections: Map<string, ModelSelection | null> } {
+/**
+ * A third harness as a Codex port would add it: its own catalog and descriptors, nothing else.
+ * `factoryDefaults` stands in for the Factory's stored defaults (`harnessModelDefaults`).
+ */
+export function codexStubModels(
+  owned: ReadonlySet<string>,
+  factoryDefaults: { current: Readonly<Record<string, ModelSelection>> } = { current: {} },
+): HarnessModels & { selections: Map<string, ModelSelection | null> } {
   const models: ServerProviderModel[] = [
     {
       slug: 'gpt-5.3-codex',
@@ -32,6 +39,8 @@ export function codexStubModels(owned: ReadonlySet<string>): HarnessModels & { s
     { slug: 'gpt-5-mini', name: 'GPT-5 mini', isCustom: false, capabilities: { optionDescriptors: [] } },
   ];
   const selections = new Map<string, ModelSelection | null>();
+  const catalogDefault: ModelSelection = { instanceId: 'codex-stub', model: 'gpt-5.3-codex' };
+  const factoryDefault = async () => factoryDefaults.current['codex-stub'] ?? null;
   return {
     instanceId: 'codex-stub',
     harnessId: 'codex',
@@ -39,7 +48,14 @@ export function codexStubModels(owned: ReadonlySet<string>): HarnessModels & { s
     selections,
     owns: async sessionId => owned.has(sessionId),
     list: async () => models,
-    defaultSelection: async () => ({ instanceId: 'codex-stub', model: 'gpt-5.3-codex' }),
+    catalogDefault: async () => catalogDefault,
+    factoryDefault,
+    defaultSelection: async ctx =>
+      resolveModelDefault({
+        session: ctx.sessionId ? selections.get(ctx.sessionId) : null,
+        factory: await factoryDefault(),
+        catalog: catalogDefault,
+      }),
     check: async request => checkModelSelection('codex-stub', models, request),
     getSelection: async sessionId => selections.get(sessionId) ?? null,
     setSelection: async (sessionId, selection) => {

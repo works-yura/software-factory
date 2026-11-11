@@ -1,9 +1,11 @@
+import { CLAUDE_CODE_INSTANCE_ID } from '@factory/harness-claude-code/models/aliases';
+import { MASTRA_INSTANCE_ID } from '@factory/credentials/mastra-models';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
-import { updateFactoryDefaultModel, updateFactoryHarness } from '../services/github';
+import { clearFactoryModelDefault, setFactoryModelDefault } from '../services/github';
 import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import type { FactoryProjectPayload, SourceControlRepository } from '../services/github';
 import { repositoryKey } from './useCreateFactoryFlow';
@@ -67,9 +69,13 @@ export function useCreateFactoryFromDraft({
 
       // A Claude Code Factory got its model on create; a retry after a failed link still sends it.
       if (claude) {
-        if (draft.factoryId) await updateFactoryHarness(baseUrl, factory.id, { claudeCodeModel: pick.claudeCodeModel });
+        if (draft.factoryId) {
+          await (pick.claudeCodeModel
+            ? setFactoryModelDefault(baseUrl, factory.id, CLAUDE_CODE_INSTANCE_ID, { model: pick.claudeCodeModel })
+            : clearFactoryModelDefault(baseUrl, factory.id, CLAUDE_CODE_INSTANCE_ID));
+        }
       } else {
-        await updateFactoryDefaultModel(baseUrl, factory.id, pick.modelId);
+        await setFactoryModelDefault(baseUrl, factory.id, MASTRA_INSTANCE_ID, { model: pick.modelId });
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       await onCreated(factory);

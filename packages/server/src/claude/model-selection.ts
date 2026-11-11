@@ -1,26 +1,27 @@
 import {
+  CLAUDE_CODE_INSTANCE_ID,
   createClaudeCodeHarnessModels,
   type ClaudeCodeHarnessModels,
-  type ClaudeCodeModelDefaults,
   type ClaudeCodeSession,
 } from '@factory/harness-claude-code';
+import type { ModelSelection } from '@factory/harness/models/contracts';
 import type { FactoryProject } from '@factory/store';
 
 import { CLAUDE_THREAD_SETTINGS } from './start-coordinator.ts';
 
-/** What a Claude Code turn reads from its Factory: the pinned model and the thinking level. */
-export type ClaudeModelDefaults = Pick<FactoryProject, 'claudeCodeModel' | 'defaultThinkingLevel'> | null;
+/** What a Claude Code turn reads from its Factory: its per-harness model defaults. */
+export type ClaudeModelDefaults = Pick<FactoryProject, 'harnessModelDefaults'> | null;
 
-/** A Factory's Claude Code defaults as the harness's model facet reads them. */
-export function claudeModelDefaults(project: ClaudeModelDefaults): ClaudeCodeModelDefaults | null {
-  return project ? { model: project.claudeCodeModel ?? null, thinkingLevel: project.defaultThinkingLevel ?? null } : null;
+/** A Factory's Claude Code default (`harnessModelDefaults['claude-code']`), as the harness's model facet reads it. */
+export function claudeModelDefaults(project: ClaudeModelDefaults): ModelSelection | null {
+  return project?.harnessModelDefaults?.[CLAUDE_CODE_INSTANCE_ID] ?? null;
 }
 
 /**
  * The Claude Code harness's model facet as a Factory runs it: a session's own pick is a thread
- * setting (`factoryModelSelection`), its defaults its Factory's `claudeCodeModel` and thinking
- * level, and the selection a turn ran is remembered (`factoryLastModelSelection`) so the turn after
- * a switch carries the `modelSwitch` marker (the chat's "Opus High → Sonnet Medium" divider).
+ * setting (`factoryModelSelection`), its default its Factory's Claude Code default, and the
+ * selection a turn ran is remembered (`factoryLastModelSelection`) so the turn after a switch
+ * carries the `modelSwitch` marker (the chat's "Opus High → Sonnet Medium" divider).
  */
 export function claudeFactoryHarnessModels(options: {
   owns(sessionId: string): Promise<boolean>;

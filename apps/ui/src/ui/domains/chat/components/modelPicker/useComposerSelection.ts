@@ -3,9 +3,18 @@
 // the session at once (`useApplyThreadModelPick`); a pick on another harness gets a "Start a new
 // chat to switch providers" toast, since a chat cannot be handed over to another harness. Runtime
 // mode, worktree and branch choices stay in their own controls.
-import type { ModelSelection, ProviderInstanceId, ProviderOptionSelection } from "@factory/harness/models/contracts";
+import type {
+  ModelSelection,
+  ProviderInstanceId,
+  ProviderOptionSelection,
+  ServerProviderModel,
+} from "@factory/harness/models/contracts";
 import { MASTRA_HARNESS } from "@factory/contracts/harnesses";
-import { modelSelectionsEqual } from "@factory/harness/models/model";
+import {
+  getProviderOptionCurrentValue,
+  getProviderOptionDescriptors,
+  modelSelectionsEqual,
+} from "@factory/harness/models/model";
 import { toast } from "@mastra/playground-ui/components/Toaster";
 import { formatModelName } from "@mastra/playground-ui/utils/model";
 import { useNavigate, useParams } from "react-router";
@@ -155,33 +164,39 @@ export function useComposerSelection() {
       })
     : null;
 
+  // Where the selection comes from, against the one default every harness reports (its Factory's,
+  // else its catalog's): the footer's "Follows the Factory default" / "Set for this session".
   const origin = ((): SelectionOrigin | null => {
     const source = factoryThinkingSourceLabel();
+    const current = pendingPick ?? threadModelSelection;
+    if (!current) return null;
+    const resolve = (model: string) =>
+      findInstanceModel(providerInstanceEntries, { instanceId: current.instanceId, model })?.slug ?? model;
+    const factoryModel = factoryDefault.model ? resolve(factoryDefault.model) : null;
+    const modelDiffers = resolve(current.model) !== factoryModel;
     if (lockedEntry?.driverKind === MASTRA_HARNESS.id) {
+      // A Mastra session keeps its thinking level on its live state, which says whether it is its own.
       if (!thinking.level) return null;
-      const setForSession = thinking.level.origin === "session";
+      const thinkingOwn = thinking.level.origin === "session";
       return {
         source,
-        setForSession,
+        setForSession: modelDiffers || thinkingOwn,
         onUseDefault: () => {
-          void thinking.resetLevel().catch((cause: unknown) =>
+          const resets: Array<Promise<unknown>> = [];
+          if (pendingPick) composerDraftActions.releaseModelSelection(threadKey, pendingPick);
+          else if (modelDiffers && factoryModel && !draftSessionId) {
+            resets.push(setSessionModelSelection({ modelId: factoryModel }));
+          }
+          if (thinkingOwn) resets.push(thinking.resetLevel());
+          void Promise.all(resets).catch((cause: unknown) =>
             toast.error(cause instanceof Error ? cause.message : tk("thinking.resetFailed")),
           );
         },
       };
     }
-    const current = pendingPick ?? threadModelSelection;
-    if (!current) return null;
-    // The session follows its Factory until its selection differs from the Factory's.
-    const factoryModel = factoryDefault.model
-      ? findInstanceModel(providerInstanceEntries, {
-          instanceId: current.instanceId,
-          model: factoryDefault.model,
-        })?.slug ?? factoryDefault.model
-      : null;
-    const sessionModel = findInstanceModel(providerInstanceEntries, current)?.slug ?? current.model;
     const setForSession =
-      sessionModel !== factoryModel || !optionsEqual(current.options, factoryDefault.options);
+      modelDiffers ||
+      !optionsEqual(current.options, factoryDefault.options, findInstanceModel(providerInstanceEntries, current));
     return {
       source,
       setForSession,
@@ -219,11 +234,29 @@ export function useComposerSelection() {
   };
 }
 
+/**
+ * Whether two option lists pick the same thing on `model`: an option left out reads as the
+ * model's own default, so `[]` and an explicit default level are the same pick.
+ */
 function optionsEqual(
   left: ReadonlyArray<ProviderOptionSelection> | undefined,
   right: ReadonlyArray<ProviderOptionSelection> | undefined,
+  model: ServerProviderModel | undefined,
 ): boolean {
-  const key = (options: ReadonlyArray<ProviderOptionSelection> | undefined) =>
-    JSON.stringify([...(options ?? [])].sort((a, b) => a.id.localeCompare(b.id)));
-  return key(left) === key(right);
+  const descriptors = model?.capabilities?.optionDescriptors ?? [];
+  const resolved = (options: ReadonlyArray<ProviderOptionSelection> | undefined) => {
+    const values = new Map<string, unknown>();
+    for (const descriptor of getProviderOptionDescriptors({ caps: model?.capabilities ?? {}, selections: options ?? [] })) {
+      const value = getProviderOptionCurrentValue(descriptor);
+      values.set(descriptor.id, descriptor.type === "boolean" ? value === true : value);
+    }
+    // Options the model does not describe count as they are.
+    for (const option of options ?? []) {
+      if (!descriptors.some((descriptor) => descriptor.id === option.id)) values.set(option.id, option.value);
+    }
+    return values;
+  };
+  const a = resolved(left);
+  const b = resolved(right);
+  return a.size === b.size && [...a].every(([id, value]) => b.get(id) === value);
 }

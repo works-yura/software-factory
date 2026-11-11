@@ -1,7 +1,7 @@
 /**
- * Settings → Models per harness: the harness switch on top, and below it only
- * the settings of the harness the Factory runs on. Drives the real hooks and
- * api client through MSW.
+ * Settings → Models per harness: the harness switch on top, the default models of every harness,
+ * and below them only what the harness the Factory runs on needs to reach its models. Drives the
+ * real hooks and api client through MSW.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -52,7 +52,7 @@ function renderModels() {
 const harnessSwitch = () => screen.findByRole('radiogroup', { name: 'Agents run on' });
 
 describe('Models settings per harness', () => {
-  it('shows Mastra routing, thinking and custom providers for a Mastra Factory, no Claude Code', async () => {
+  it('shows the default models, Mastra routing and custom providers for a Mastra Factory, no Claude Code', async () => {
     stubFactory({ harness: 'mastra' });
     renderModels();
 
@@ -62,19 +62,19 @@ describe('Models settings per harness', () => {
       screen.getByText('Applies to new sessions; cards already running finish on their harness.'),
     ).toBeInTheDocument();
     expect(await screen.findByText('Model routing')).toBeInTheDocument();
+    expect(screen.getByText('Default models')).toBeInTheDocument();
     expect(screen.getByText('Custom providers')).toBeInTheDocument();
     expect(screen.queryByText('Claude Code accounts')).not.toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Claude model' })).not.toBeInTheDocument();
   });
 
-  it('shows the Claude model and Claude Code accounts for a Claude Code Factory, and no Mastra routing', async () => {
-    stubFactory({ harness: 'claude-code', claudeCodeModel: 'sonnet' });
+  it('shows the default models and Claude Code accounts for a Claude Code Factory, and no Mastra routing', async () => {
+    stubFactory({ harness: 'claude-code' });
     renderModels();
 
     const control = await harnessSwitch();
     expect(within(control).getByRole('radio', { name: 'Claude Code' })).toBeChecked();
-    expect(await screen.findByRole('combobox', { name: 'Claude model' })).toHaveTextContent('Sonnet');
-    expect(screen.getByText('Claude Code accounts')).toBeInTheDocument();
+    expect(await screen.findByText('Claude Code accounts')).toBeInTheDocument();
+    expect(screen.getByText('Default models')).toBeInTheDocument();
     expect(screen.queryByText('Model routing')).not.toBeInTheDocument();
     expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();
   });
@@ -88,7 +88,7 @@ describe('Models settings per harness', () => {
     await waitForMutationsIdle(client);
 
     expect(patches).toEqual([{ harness: 'claude-code' }]);
-    expect(await screen.findByRole('combobox', { name: 'Claude model' })).toHaveTextContent('Claude Code default');
+    expect(await screen.findByText('Claude Code accounts')).toBeInTheDocument();
     expect(screen.queryByText('Model routing')).not.toBeInTheDocument();
   });
 
@@ -116,22 +116,7 @@ describe('Models settings per harness', () => {
     await waitFor(async () =>
       expect(within(await harnessSwitch()).getByRole('radio', { name: 'Mastra' })).toBeChecked(),
     );
-    expect(screen.queryByRole('combobox', { name: 'Claude model' })).not.toBeInTheDocument();
-  });
-
-  it('saves the Claude model, and the CLI default as null', async () => {
-    const { patches } = stubFactory({ harness: 'claude-code' });
-    const user = userEvent.setup();
-    const { client } = renderModels();
-
-    await pickModel(user, 'Claude model', 'Opus');
-    await waitForMutationsIdle(client);
-    expect(await screen.findByRole('combobox', { name: 'Claude model' })).toHaveTextContent('Opus');
-
-    await pickModel(user, 'Claude model', 'Claude Code default');
-    await waitForMutationsIdle(client);
-
-    expect(patches).toEqual([{ claudeCodeModel: 'opus' }, { claudeCodeModel: null }]);
+    expect(screen.queryByText('Claude Code accounts')).not.toBeInTheDocument();
   });
 
   it('cannot switch to Claude Code where the server does not run it', async () => {

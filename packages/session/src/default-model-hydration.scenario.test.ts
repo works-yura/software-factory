@@ -50,7 +50,7 @@ async function mountController(
     { blocking: true },
   );
   const setDefaultModel = (defaultModelId: string) =>
-    seed.projects.update({ orgId: 'org-1', id: project.id, input: { defaultModelId } });
+    seed.projects.update({ orgId: 'org-1', id: project.id, input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: defaultModelId } } } });
   return { seed, storage, controller, project, setDefaultModel };
 }
 

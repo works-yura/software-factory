@@ -20,7 +20,7 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
     await seeded.projects.update({
       orgId: 'org-1',
       id: project.id,
-      input: { defaultModelId: options.defaultModelId },
+      input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: options.defaultModelId } } },
     });
   }
   const installation = await sourceControl.installations.upsert({

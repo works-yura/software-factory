@@ -982,7 +982,7 @@ describe('factory_start_session in work-item mode', () => {
     await env.seed.projects.update({
       orgId: 'org-1',
       id: env.scope.factoryProjectId,
-      input: { defaultModelId: 'deepseek/deepseek-flash' },
+      input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'deepseek/deepseek-flash' } } },
     });
     await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' });
 
@@ -1424,6 +1424,7 @@ describe('factory session tools on a Factory whose sessions another harness runs
         owns: async sessionId => sessionId === env.scope.sessionId,
         list: async () => [],
         defaultSelection: async () => null,
+        catalogDefault: async () => null,
         check: async request =>
           request.model === 'sonnet'
             ? {

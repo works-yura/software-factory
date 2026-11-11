@@ -63,9 +63,16 @@ export async function createClaudeFactory(
   const registered = await register(projectId);
 
   const { project: factory } = await api<{ project: { id: string; harness: string } }>(baseUrl, '/web/factory/projects', {
-    body: { name, harness: 'claude-code', claudeCodeModel },
+    body: { name, harness: 'claude-code' },
   });
   if (factory.harness !== 'claude-code') throw new Error(`Factory was created on ${factory.harness}`);
+  // The Factory's Claude Code default, as Settings → Models → Default models sets it.
+  if (claudeCodeModel) {
+    await api(baseUrl, `/web/factory/projects/${factory.id}/model-defaults/claude-code`, {
+      method: 'PUT',
+      body: { model: claudeCodeModel },
+    });
+  }
 
   const connections = new Map<string, string>();
   const link = async (id: number, project: Awaited<ReturnType<typeof register>>, extra: Record<string, unknown> = {}) => {

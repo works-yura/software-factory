@@ -1,9 +1,10 @@
 // Claude Code's model facet (`HarnessModels`): the bundled Claude catalog, a session's own pick kept
 // as a thread setting, and the per-turn CLI flags it compiles to. The host supplies where sessions
-// live and what a session defaults to (a Factory's `claudeCodeModel` and thinking level).
+// live and what a session defaults to (its Factory's `harnessModelDefaults['claude-code']`).
 import { ModelSelection, ProviderOptionSelections, type ProviderOptionSelection } from '@factory/harness/models/contracts';
 import type { HarnessModelContext, HarnessModels, ModelSwitchResult } from '@factory/harness/models/facet';
 import { modelSelectionsEqual } from '@factory/harness/models/model';
+import { resolveModelDefault } from '@factory/harness/models/defaults';
 import { EFFORT_OPTION_ID, modelSwitchBetween } from '@factory/harness/models/selection';
 
 import type { ClaudeTurnSelection } from '../session.ts';
@@ -11,6 +12,7 @@ import { BUNDLED_CLAUDE_MODEL_CATALOG, type ClaudeModelCatalog } from './ClaudeM
 import {
   CLAUDE_CODE_INSTANCE_ID,
   checkClaudeCodeModelSelection,
+  claudeCodeCatalogDefault,
   claudeCodeModels,
   claudeEffortForThinkingLevel,
   compileClaudeCodeTurn,
@@ -22,22 +24,19 @@ interface SelectionSettings {
   setSetting(input: { key: string; value: unknown }): Promise<void>;
 }
 
-/** What a turn defaults to when the session picked nothing: e.g. its Factory's model and thinking level. */
-export interface ClaudeCodeModelDefaults {
-  model?: string | null;
-  thinkingLevel?: string | null;
-}
-
 export interface ClaudeCodeHarnessModelsOptions<Session extends { thread: SelectionSettings }> {
   /** The harness id sessions report (`HarnessDescriptor.id`). */
   harnessId?: string;
   displayName?: string;
   owns(sessionId: string): Promise<boolean>;
   getSession(sessionId: string): Promise<Session | undefined>;
-  /** Read per turn, so a Factory's model or effort changed in Settings applies from the next turn. */
-  defaults(session: Session): Promise<ClaudeCodeModelDefaults | null>;
-  /** What a session outside any (a new chat of a Factory) starts on. */
-  factoryDefaults?(ctx: HarnessModelContext): Promise<ClaudeCodeModelDefaults | null>;
+  /**
+   * The session's Factory default (its `harnessModelDefaults['claude-code']`), read per turn, so a
+   * default changed in Settings applies from the next turn.
+   */
+  defaults(session: Session): Promise<ModelSelection | null>;
+  /** The Factory default outside a session (Settings, a new chat of a Factory). */
+  factoryDefaults?(ctx: HarnessModelContext): Promise<ModelSelection | null>;
   /** Thread-setting keys: the session's own pick, and the selection its last turn ran. */
   settingKeys: { selection: string; lastSelection: string };
   catalog?: ClaudeModelCatalog;
@@ -63,18 +62,17 @@ export function createClaudeCodeHarnessModels<Session extends { thread: Selectio
   const keys = options.settingKeys;
 
   const own = async (session: Session) => parseSelection(await session.thread.getSetting({ key: keys.selection }));
-  const compile = async (session: Session) => {
-    const defaults = await options.defaults(session);
-    return compileClaudeCodeTurn(
-      {
-        selection: await own(session),
-        projectModel: defaults?.model ?? null,
-        factoryThinkingLevel: defaults?.thinkingLevel ?? null,
-      },
-      catalog,
-    );
-  };
+  const compile = async (session: Session) =>
+    compileClaudeCodeTurn({ selection: await own(session), factoryDefault: await options.defaults(session) }, catalog);
   const effectiveSelection = async (session: Session) => (await compile(session)).selection;
+  const catalogDefault = async () => claudeCodeCatalogDefault(catalog);
+  const factoryDefault = async (ctx: HarnessModelContext): Promise<ModelSelection | null> => {
+    if (ctx.sessionId) {
+      const session = await options.getSession(ctx.sessionId);
+      if (session) return options.defaults(session);
+    }
+    return (await options.factoryDefaults?.(ctx)) ?? null;
+  };
 
   return {
     instanceId: CLAUDE_CODE_INSTANCE_ID,
@@ -82,18 +80,15 @@ export function createClaudeCodeHarnessModels<Session extends { thread: Selectio
     displayName: options.displayName ?? 'Claude Code',
     owns: sessionId => options.owns(sessionId),
     list: async () => claudeCodeModels(catalog),
+    catalogDefault,
+    factoryDefault,
     async defaultSelection(ctx) {
-      if (ctx.sessionId) {
-        const session = await options.getSession(ctx.sessionId);
-        if (session) return effectiveSelection(session);
-      }
-      const defaults = await options.factoryDefaults?.(ctx);
-      if (defaults?.model || defaults?.thinkingLevel) {
-        return compileClaudeCodeTurn({ projectModel: defaults.model ?? null, factoryThinkingLevel: defaults.thinkingLevel ?? null }, catalog)
-          .selection;
-      }
-      const fallback = catalog.models.find(entry => entry.model.isDefault)?.model.slug;
-      return fallback ? { instanceId: CLAUDE_CODE_INSTANCE_ID, model: fallback } : null;
+      const session = ctx.sessionId ? await options.getSession(ctx.sessionId) : undefined;
+      return resolveModelDefault({
+        session: session ? await effectiveSelection(session) : null,
+        factory: session ? null : await factoryDefault(ctx),
+        catalog: await catalogDefault(),
+      });
     },
     async check(request) {
       let selected: ProviderOptionSelection[] = [];

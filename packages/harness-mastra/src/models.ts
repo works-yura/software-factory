@@ -1,6 +1,8 @@
 // Mastra's model facet (`HarnessModels`): a session's catalog is the one its credentials reach
 // (`resolveSessionModelCatalog`, as the Settings picker), its options are the model's thinking
-// levels, and a pick switches the live session now or the thread's model for its next run.
+// levels, and a pick switches the live session now or the thread's model for its next run. Outside a
+// session it answers for a Factory: its default (`harnessModelDefaults.mastra`), checked against the
+// catalog its organization's credentials reach.
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 
 import { buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
@@ -13,7 +15,9 @@ import {
   mastraServerModel,
 } from '@factory/credentials/mastra-models';
 import type { ModelSelection, ProviderOptionSelection } from '@factory/harness/models/contracts';
-import type { HarnessModelContext, HarnessModels, ModelSwitchResult } from '@factory/harness/models/facet';
+import { resolveModelDefault } from '@factory/harness/models/defaults';
+import type { HarnessModelContext, HarnessModels, ModelSwitchRequest, ModelSwitchResult } from '@factory/harness/models/facet';
+import type { ModelSelectionCheck } from '@factory/harness/models/selection';
 import { getModelSelectionStringOptionValue } from '@factory/harness/models/model';
 import { checkOptionSelections, EFFORT_OPTION_ID } from '@factory/harness/models/selection';
 import { externalSessionFor } from '@factory/integrations';
@@ -21,6 +25,7 @@ import { resolveSessionModelCatalog, unrunnableModelMessage } from '@factory/ses
 import type { SessionModelCatalog, SessionModelCatalogDependencies, SourceControlSessionLookup } from '@factory/session';
 import type { FactoryProjectsStorage, WorkItemsStorage } from '@factory/store';
 
+import { applyModelToBoundThreads, type BoundThreadController, type RunningSessionsDependencies } from './running-sessions.ts';
 import { resolveSessionThread } from './tools/deliver.ts';
 import type { FactoryMessaging } from './tools/messaging-tools.ts';
 
@@ -34,6 +39,10 @@ export interface MastraHarnessModelsDependencies {
     tenantCatalog?: SessionModelCatalogDependencies['tenantCatalog'];
     authStorage?: () => AuthStorage | undefined;
   };
+  /** The model a session starts on when its Factory sets none (the controller's default mode's). */
+  catalogDefaultModelId?: () => string | undefined;
+  /** Moves a Factory's running runs onto a new default; absent, they pick it up at their next start. */
+  runningSessions?: RunningSessionsDependencies;
 }
 
 /** Thrown inside the facet and answered as a refusal with its status. */
@@ -112,12 +121,55 @@ export function createMastraHarnessModels(deps: MastraHarnessModelsDependencies)
     return mastraModelSelection(modelId, typeof state?.thinkingLevel === 'string' ? state.thinkingLevel : null);
   };
 
-  /** A session's live pick; outside one, its Factory's default model. */
-  const defaultSelection = async (ctx: HarnessModelContext): Promise<ModelSelection | null> => {
-    if (ctx.sessionId) return liveSelection(ctx.sessionId);
+  /** The Factory's Mastra default (`harnessModelDefaults.mastra`), in the viewer's organization. */
+  const factoryDefault = async (ctx: HarnessModelContext): Promise<ModelSelection | null> => {
     if (!ctx.factoryProjectId) return null;
     const project = await deps.sessionModel.projects.getById({ id: ctx.factoryProjectId });
-    return project?.defaultModelId ? mastraModelSelection(project.defaultModelId) : null;
+    if (!project || (ctx.viewer.orgId && project.orgId !== ctx.viewer.orgId)) return null;
+    return project.harnessModelDefaults[MASTRA_INSTANCE_ID] ?? null;
+  };
+
+  const catalogDefault = async (): Promise<ModelSelection | null> => {
+    const modelId = deps.catalogDefaultModelId?.();
+    return modelId ? mastraModelSelection(modelId) : null;
+  };
+
+  /** A session's live pick; outside one, its Factory's default, else the catalog's. */
+  const defaultSelection = async (ctx: HarnessModelContext): Promise<ModelSelection | null> => {
+    if (ctx.sessionId) return liveSelection(ctx.sessionId);
+    return resolveModelDefault({ factory: await factoryDefault(ctx), catalog: await catalogDefault() });
+  };
+
+  /** A request checked against a catalog: the model must be one it can run, its options its own. */
+  const checkAgainst = (
+    request: ModelSwitchRequest & { readonly model: string },
+    catalog: { models: ModelCatalogEntry[]; usable: ReadonlyArray<string> },
+    unrunnable: (modelId: string) => string,
+  ): ModelSelectionCheck => {
+    const modelId = request.model.trim();
+    if (!catalog.usable.includes(modelId)) return { ok: false, error: unrunnable(modelId) };
+    const entry = catalog.models.find(model => model.id === modelId);
+    const options: ProviderOptionSelection[] = [...(request.options ?? [])];
+    if (request.thinkingLevel && !options.some(option => option.id === EFFORT_OPTION_ID)) {
+      options.push({ id: EFFORT_OPTION_ID, value: request.thinkingLevel });
+    }
+    const effort = options.find(option => option.id === EFFORT_OPTION_ID)?.value;
+    const descriptor = entry?.capabilities?.optionDescriptors?.find(candidate => candidate.id === EFFORT_OPTION_ID);
+    const levels = descriptor?.type === 'select' ? descriptor.options.map(option => option.id) : [];
+    if (effort !== undefined && !levels.includes(String(effort))) {
+      return {
+        ok: false,
+        error: levels.length
+          ? `${modelId} has no thinking level ${String(effort)}. Levels: ${levels.join(', ')}.`
+          : `${modelId} has no thinking levels to choose from.`,
+      };
+    }
+    const checked = checkOptionSelections({ slug: modelId, capabilities: entry?.capabilities ?? null }, options);
+    if (!checked.ok) return checked;
+    return {
+      ok: true,
+      selection: { instanceId: MASTRA_INSTANCE_ID, model: modelId, ...(checked.options.length ? { options: checked.options } : {}) },
+    };
   };
 
   const refusal = (error: unknown): ModelSwitchResult => {
@@ -134,14 +186,32 @@ export function createMastraHarnessModels(deps: MastraHarnessModelsDependencies)
       return !controller || !(await externalSessionFor(controller, sessionId));
     },
     async list(ctx) {
-      const defaultModelId = (await defaultSelection(ctx))?.model ?? null;
+      // `isDefault` marks the catalog's default, as every harness's list does.
+      const catalogModelId = (await catalogDefault())?.model ?? null;
       const models = ctx.sessionId ? (await sessionCatalog(ctx.sessionId, ctx)).models : await viewerCatalog(ctx);
-      return models.map(entry => mastraServerModel(entry, defaultModelId));
+      return models.map(entry => mastraServerModel(entry, catalogModelId));
     },
     defaultSelection,
-    // A model the session's credentials run, and options among its own: its thinking level is `effort`.
+    catalogDefault,
+    factoryDefault,
+    // A model the session's (or, for a Factory default, the organization's) credentials run, and
+    // options among its own: its thinking level is `effort`.
     async check(request, ctx) {
-      if (!ctx.sessionId) return { ok: false, error: 'A Mastra model is checked against a session.' };
+      if (!ctx.sessionId) {
+        if (!ctx.factoryProjectId) return { ok: false, error: 'A Mastra model is checked against a session or a Factory.' };
+        let models: ModelCatalogEntry[];
+        try {
+          models = await viewerCatalog(ctx);
+        } catch (error) {
+          if (error instanceof MastraModelError) return { ok: false, error: error.message };
+          throw error;
+        }
+        return checkAgainst(
+          request,
+          { models, usable: models.map(model => model.id) },
+          modelId => `No credential of this Factory's organization runs ${modelId}. Add its provider in Settings → Models.`,
+        );
+      }
       let catalog: SessionModelCatalog;
       try {
         catalog = await sessionCatalog(ctx.sessionId, ctx);
@@ -149,30 +219,7 @@ export function createMastraHarnessModels(deps: MastraHarnessModelsDependencies)
         if (error instanceof MastraModelError) return { ok: false, error: error.message };
         throw error;
       }
-      const modelId = request.model.trim();
-      if (!catalog.usable.includes(modelId)) return { ok: false, error: unrunnableModelMessage(modelId, catalog) };
-      const entry = catalog.models.find(model => model.id === modelId);
-      const options: ProviderOptionSelection[] = [...(request.options ?? [])];
-      if (request.thinkingLevel && !options.some(option => option.id === EFFORT_OPTION_ID)) {
-        options.push({ id: EFFORT_OPTION_ID, value: request.thinkingLevel });
-      }
-      const effort = options.find(option => option.id === EFFORT_OPTION_ID)?.value;
-      const descriptor = entry?.capabilities?.optionDescriptors?.find(candidate => candidate.id === EFFORT_OPTION_ID);
-      const levels = descriptor?.type === 'select' ? descriptor.options.map(option => option.id) : [];
-      if (effort !== undefined && !levels.includes(String(effort))) {
-        return {
-          ok: false,
-          error: levels.length
-            ? `${modelId} has no thinking level ${String(effort)}. Levels: ${levels.join(', ')}.`
-            : `${modelId} has no thinking levels to choose from.`,
-        };
-      }
-      const checked = checkOptionSelections({ slug: modelId, capabilities: entry?.capabilities ?? null }, options);
-      if (!checked.ok) return checked;
-      return {
-        ok: true,
-        selection: { instanceId: MASTRA_INSTANCE_ID, model: modelId, ...(checked.options.length ? { options: checked.options } : {}) },
-      };
+      return checkAgainst(request, catalog, modelId => unrunnableModelMessage(modelId, catalog));
     },
     async getSelection(sessionId) {
       try {
@@ -207,5 +254,17 @@ export function createMastraHarnessModels(deps: MastraHarnessModelsDependencies)
         return refusal(error);
       }
     },
+    ...(deps.runningSessions
+      ? {
+          // Runs keep their model on their thread: the default's model, picked up at their next start.
+          async applyDefaultToRunningSessions(selection: ModelSelection, ctx: HarnessModelContext & { readonly factoryProjectId: string }) {
+            const controller = (await controllerOrThrow()) as unknown as BoundThreadController;
+            return applyModelToBoundThreads(
+              { ...deps.runningSessions!, controller },
+              { orgId: ctx.viewer.orgId, factoryProjectId: ctx.factoryProjectId, modelId: selection.model },
+            );
+          },
+        }
+      : {}),
   };
 }

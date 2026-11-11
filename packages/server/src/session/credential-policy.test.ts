@@ -366,7 +366,7 @@ describe('trusted Factory credential policy', () => {
 
     it('does not seed a default model on a thread with ambiguous bindings', async () => {
       const { seed, project, sourceSession, deps } = await setup();
-      await seed.projects.update({ orgId: ORG, id: project.id, input: { defaultModelId: 'anthropic/claude-opus-4-6' } });
+      await seed.projects.update({ orgId: ORG, id: project.id, input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'anthropic/claude-opus-4-6' } } } });
       const other = await seed.projects.create({
         orgId: ORG,
         userId: OWNER,
@@ -405,7 +405,7 @@ describe('trusted Factory credential policy', () => {
 
     it('primes the same scope at session start that the policy resolves for the session', async () => {
       const { seed, project, sourceSession, deps, context } = await setup();
-      await seed.projects.update({ orgId: ORG, id: project.id, input: { defaultModelId: 'deepseek/deepseek-flash' } });
+      await seed.projects.update({ orgId: ORG, id: project.id, input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'deepseek/deepseek-flash' } } } });
       // A personal default left in the database by an older build is never read.
       await seed.modelDefaults.set({ orgId: ORG, userId: OWNER, modelId: 'anthropic/claude-opus-4-6' });
       const { session, state } = recordingSession(sourceSession.sessionId);
@@ -424,7 +424,7 @@ describe('trusted Factory credential policy', () => {
       await seed.projects.update({
         orgId: ORG,
         id: project.id,
-        input: { defaultModelId: 'deepseek/deepseek-flash' },
+        input: { harnessModelDefaults: { mastra: { instanceId: 'mastra', model: 'deepseek/deepseek-flash' } } },
       });
       await seed.modelDefaults.set({ orgId: ORG, userId: OWNER, modelId: 'anthropic/claude-opus-4-6' });
       const { session, state } = recordingSession(sourceSession.sessionId, undefined);

@@ -22,6 +22,7 @@ import {
   createWorkItemBodySchema,
   decisionQuerySchema,
   FACTORY_ROUTE_CONTRACTS,
+  setModelDefaultBodySchema,
   transitionBodySchema,
   updateProjectBodySchema,
 } from '@factory/contracts';
@@ -116,33 +117,33 @@ describe('Factory route contracts', () => {
       name: 'Factory',
       description: null,
       harness: 'mastra',
-      claudeCodeModel: null,
     });
     expect(createProjectBodySchema.parse({ name: 'Claude', harness: 'claude-code' })).toMatchObject({
       harness: 'claude-code',
     });
-    expect(
-      createProjectBodySchema.parse({ name: 'Claude', harness: 'claude-code', claudeCodeModel: 'opus' }),
-    ).toMatchObject({ harness: 'claude-code', claudeCodeModel: 'opus' });
     expect(createProjectBodySchema.safeParse({ name: 'Other', harness: 'codex' }).success).toBe(false);
-    // Only the CLI's aliases: no full model ids, no casing variants, no empty string.
-    for (const claudeCodeModel of ['claude-opus-4-1', 'Opus', '', 'gpt-5', 1]) {
-      expect(createProjectBodySchema.safeParse({ name: 'C', claudeCodeModel }).success, String(claudeCodeModel)).toBe(
-        false,
-      );
-      expect(updateProjectBodySchema.safeParse({ claudeCodeModel }).success, String(claudeCodeModel)).toBe(false);
-    }
-    expect(updateProjectBodySchema.parse({ harness: 'claude-code', claudeCodeModel: 'sonnet' })).toEqual({
-      harness: 'claude-code',
-      claudeCodeModel: 'sonnet',
-    });
-    expect(updateProjectBodySchema.parse({ claudeCodeModel: null })).toEqual({ claudeCodeModel: null });
+    // Model defaults are set per harness instance (`setModelDefaultBodySchema`): legacy fields are stripped.
+    expect(createProjectBodySchema.parse({ name: 'Claude', harness: 'claude-code', claudeCodeModel: 'opus' })).not.toHaveProperty(
+      'claudeCodeModel',
+    );
+    expect(updateProjectBodySchema.safeParse({ claudeCodeModel: 'sonnet' }).success).toBe(false);
+    expect(updateProjectBodySchema.safeParse({ defaultModelId: 'openai/gpt-5.5', defaultThinkingLevel: 'high' }).success).toBe(false);
+    expect(updateProjectBodySchema.parse({ harness: 'claude-code' })).toEqual({ harness: 'claude-code' });
     expect(updateProjectBodySchema.safeParse({ harness: 'codex' }).success).toBe(false);
     expect(updateProjectBodySchema.safeParse({}).success).toBe(false);
-    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', reviewTestChecksEnabled: true })).toEqual({
-      defaultModelId: null,
+    expect(updateProjectBodySchema.parse({ name: 'Renamed', reviewTestChecksEnabled: true })).toEqual({
+      name: 'Renamed',
       reviewTestChecksEnabled: true,
     });
+    expect(setModelDefaultBodySchema.parse({ model: ' opus ', options: { effort: 'high', fastMode: true } })).toEqual({
+      model: 'opus',
+      options: [
+        { id: 'effort', value: 'high' },
+        { id: 'fastMode', value: true },
+      ],
+    });
+    expect(setModelDefaultBodySchema.safeParse({ model: '' }).success).toBe(false);
+    expect(setModelDefaultBodySchema.safeParse({ options: [] }).success).toBe(false);
     // There is no model scope: the field is stripped, so a body carrying only it is empty.
     expect(updateProjectBodySchema.safeParse({ modelScope: 'factory' }).success).toBe(false);
     expect(updateProjectBodySchema.parse({ name: 'Renamed', modelScope: 'user' })).toEqual({ name: 'Renamed' });

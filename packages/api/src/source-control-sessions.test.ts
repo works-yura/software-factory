@@ -1436,7 +1436,7 @@ describe('personal sessions of a Claude Code Factory', () => {
     await seeded.seed.projects.update({
       orgId: 'org-1',
       id: seeded.project.id,
-      input: { harness: 'claude-code', claudeCodeModel: 'sonnet' },
+      input: { harness: 'claude-code', harnessModelDefaults: { 'claude-code': { instanceId: 'claude-code', model: 'sonnet' } } },
     });
     return seeded;
   }

@@ -146,6 +146,15 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
       }
       return HttpResponse.json({ project });
     }),
+    // The Factory's default per harness instance, as Settings → Models sets it.
+    http.put(`${TEST_BASE_URL}/web/factory/projects/fp-1/model-defaults/:instanceId`, async ({ request, params }) => {
+      writes.push({ path: 'model', body: { instanceId: params.instanceId, ...((await request.json()) as object) } });
+      if (failure === 'model' && !failed) {
+        failed = true;
+        return HttpResponse.json({ error: 'unavailable' }, { status: 502 });
+      }
+      return HttpResponse.json({ project });
+    }),
     http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, async ({ request }) => {
       writes.push({ path: 'om', body: await request.json() });
       return HttpResponse.json({ error: 'Removed endpoint' }, { status: 404 });
@@ -206,7 +215,7 @@ describe('Draft Factory onboarding', () => {
       repository: { externalId: '42', slug: 'team/backend' },
       branch: 'develop',
     });
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
+    expect(writes.find(item => item.path === 'model')?.body).toEqual({ instanceId: 'mastra', model: 'anthropic/claude-fable-5' });
     expect(readOnboardingDraft()).toEqual({});
     expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBeNull();
   }, 20_000);
@@ -450,7 +459,7 @@ describe('Members without company access', () => {
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name });
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: model.modelId });
+    expect(writes.find(item => item.path === 'model')?.body).toEqual({ instanceId: 'mastra', model: model.modelId });
   });
 });
 
@@ -495,7 +504,7 @@ describe('Account presets', () => {
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name });
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: model.modelId });
+    expect(writes.find(item => item.path === 'model')?.body).toEqual({ instanceId: 'mastra', model: model.modelId });
   });
 
   it('creates a Factory whose company account was connected through provider sign-in', async () => {
@@ -639,10 +648,12 @@ describe('harness choice in onboarding', () => {
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(writes.filter(item => item.path === 'create')).toEqual([
-      { path: 'create', body: { name: 'hello', harness: 'claude-code', claudeCodeModel: 'sonnet' } },
+      { path: 'create', body: { name: 'hello', harness: 'claude-code' } },
     ]);
-    // No Mastra default model is written for a Claude Code Factory.
-    expect(writes.filter(item => item.path === 'model')).toEqual([]);
+    // The Claude model is the Factory's Claude Code default; no Mastra default is written.
+    expect(writes.filter(item => item.path === 'model')).toEqual([
+      { path: 'model', body: { instanceId: 'claude-code', model: 'sonnet' } },
+    ]);
   }, 20_000);
 
   it('switches back to Mastra from review and asks for a provider model again', async () => {
@@ -665,7 +676,7 @@ describe('harness choice in onboarding', () => {
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(writes.filter(item => item.path === 'create')).toEqual([{ path: 'create', body: { name: 'hello' } }]);
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: model.modelId });
+    expect(writes.find(item => item.path === 'model')?.body).toEqual({ instanceId: 'mastra', model: model.modelId });
   }, 20_000);
 
   it('has no harness step when the server does not run Claude Code', async () => {

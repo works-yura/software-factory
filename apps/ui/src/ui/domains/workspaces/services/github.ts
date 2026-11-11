@@ -13,6 +13,8 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
+import type { ModelSelection, ProviderOptionSelection } from '@factory/harness/models/contracts';
+import { CLAUDE_CODE_INSTANCE_ID } from '@factory/harness-claude-code/models/aliases';
 import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ProjectListRepository } from '@factory/contracts';
@@ -279,13 +281,16 @@ export interface FactoryProjectPayload {
    * Absent from servers that predate it (= mastra).
    */
   harness?: FactoryHarness;
-  /** `claude --model` for Claude Code sessions; null or absent = the CLI's own default. */
-  claudeCodeModel?: ClaudeCodeModel | null;
   /** The language every agent of this Factory writes to the team in; absent from servers that predate it. */
   agentLanguage?: AgentLanguage;
-  /** Org-wide default model for factory runs; null when unset. */
+  /**
+   * The Factory's default model per harness instance (`{ [instanceId]: selection }`): what its
+   * sessions of that harness start on. An instance left out follows its harness's catalog default.
+   */
+  harnessModelDefaults?: Record<string, ModelSelection>;
+  /** Read-only view of `harnessModelDefaults.mastra.model`, which the Mastra chat reads; null when unset. */
   defaultModelId?: string | null;
-  /** Thinking level every session and run uses until it picks its own. */
+  /** Read-only view of the Mastra default's thinking level (`effort`), what `/think` falls back to. */
   defaultThinkingLevel?: ThinkingLevelSetting;
   /** Settings → Behavior tool permissions of a Factory on Claude Code; null until set (every category asks). */
   toolPermissions?: FactoryToolPermissions | null;
@@ -394,7 +399,6 @@ export async function createFactoryProject(
   name: string,
   description?: string,
   harness?: FactoryHarness,
-  claudeCodeModel?: ClaudeCodeModel | null,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
     method: 'POST',
@@ -404,11 +408,23 @@ export async function createFactoryProject(
       name,
       ...(description ? { description } : {}),
       ...(harness ? { harness } : {}),
-      ...(claudeCodeModel !== undefined ? { claudeCodeModel } : {}),
     }),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.createFactory'));
   return project;
+}
+
+/**
+ * Create a Factory and, for one on Claude Code, set the `claude --model` alias picked with it as
+ * its Claude Code default (null: the catalog default).
+ */
+export async function createFactoryWithClaudeModel(
+  baseUrl: string,
+  input: { name: string; description?: string | undefined; harness?: FactoryHarness | undefined; claudeCodeModel?: ClaudeCodeModel | null | undefined },
+): Promise<FactoryProjectPayload> {
+  const project = await createFactoryProject(baseUrl, input.name, input.description, input.harness);
+  if (!input.claudeCodeModel) return project;
+  return setFactoryModelDefault(baseUrl, project.id, CLAUDE_CODE_INSTANCE_ID, { model: input.claudeCodeModel });
 }
 
 /** Fetch a single Factory project (includes its `defaultModelId`). */
@@ -421,33 +437,60 @@ export async function fetchFactoryProject(baseUrl: string, factoryProjectId: str
   return project;
 }
 
-/** Set (or clear, with null) the Factory's default model for factory runs. */
-export async function updateFactoryDefaultModel(
+function modelDefaultUrl(baseUrl: string, factoryProjectId: string, instanceId: string, suffix = '') {
+  return `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/model-defaults/${encodeURIComponent(instanceId)}${suffix}`;
+}
+
+/**
+ * Set the Factory's default for one harness instance; the server checks it against that harness's
+ * catalog. Admin-only.
+ */
+export async function setFactoryModelDefault(
   baseUrl: string,
   factoryProjectId: string,
-  defaultModelId: string | null,
+  instanceId: string,
+  selection: { model: string; options?: ReadonlyArray<ProviderOptionSelection> | undefined },
 ): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
+  const res = await fetch(modelDefaultUrl(baseUrl, factoryProjectId, instanceId), {
+    method: 'PUT',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ defaultModelId }),
+    body: JSON.stringify({ model: selection.model, ...(selection.options?.length ? { options: selection.options } : {}) }),
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    tk('errors.updateDefaultModel'),
-  );
+  if (res.status === 400) {
+    // The harness said why: a model or option its catalog does not offer.
+    const body = (await res.json().catch(() => null)) as { message?: string } | null;
+    const error = new Error(body?.message ?? tk('errors.updateDefaultModel')) as Error & { status?: number };
+    error.status = 400;
+    throw error;
+  }
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.updateDefaultModel'));
+  return project;
+}
+
+/** Clear one instance's default: its sessions follow the harness's catalog default. Admin-only. */
+export async function clearFactoryModelDefault(
+  baseUrl: string,
+  factoryProjectId: string,
+  instanceId: string,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(modelDefaultUrl(baseUrl, factoryProjectId, instanceId), {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, tk('errors.updateDefaultModel'));
   return project;
 }
 
 /**
- * Switch the harness new sessions start on, or the Claude Code model. Cards
+ * Switch the harness new sessions start on, or the agents' language. Cards
  * already running finish on the harness they started on.
  */
 export async function updateFactoryHarness(
   baseUrl: string,
   factoryProjectId: string,
-  patch: { harness?: FactoryHarness; claudeCodeModel?: ClaudeCodeModel | null; agentLanguage?: AgentLanguage },
+  patch: { harness?: FactoryHarness; agentLanguage?: AgentLanguage },
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
@@ -489,48 +532,24 @@ export async function renameFactoryProject(
   return project;
 }
 
-/** Set the thinking level this Factory's sessions and runs use until they pick their own. Admin-only. */
-export async function updateFactoryThinkingDefault(
-  baseUrl: string,
-  factoryProjectId: string,
-  defaultThinkingLevel: ThinkingLevelSetting,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ defaultThinkingLevel }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    tk('errors.updateThinkingLevel'),
-  );
-  return project;
-}
-
-export interface ApplyFactoryDefaultModelResult {
-  modelId: string;
+export interface ApplyFactoryModelDefaultResult {
+  selection: ModelSelection;
   applied: string[];
-  skipped: Array<{
-    threadId: string;
-    reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown' | 'apply-failed';
-  }>;
+  skipped: Array<{ threadId: string; reason: string }>;
 }
 
-/** Apply the Factory default model to currently running work and review sessions. */
-export async function applyFactoryDefaultModelToSessions(
+/** Move the Factory's running sessions of one harness instance onto its default (when its harness can). */
+export async function applyFactoryModelDefault(
   baseUrl: string,
   factoryProjectId: string,
-): Promise<ApplyFactoryDefaultModelResult> {
-  const res = await fetch(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/apply-default-model`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: { Accept: 'application/json' },
-    },
-  );
-  return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, tk('errors.switchSessions'));
+  instanceId: string,
+): Promise<ApplyFactoryModelDefaultResult> {
+  const res = await fetch(modelDefaultUrl(baseUrl, factoryProjectId, instanceId, '/apply'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  return readJsonOrThrow<ApplyFactoryModelDefaultResult>(res, tk('errors.switchSessions'));
 }
 
 /**

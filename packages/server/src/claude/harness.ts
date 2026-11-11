@@ -116,9 +116,9 @@ export interface ClaudeFactoryHarnessOptions {
   store?: ClaudeSessionStore;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   /**
-   * The Factories, read before each turn for the session's `claudeCodeModel`
-   * (`claude --model`) and thinking level (`--effort`), unless the session picked
-   * its own. Unset, or a Factory with neither, leaves the CLI's own defaults.
+   * The Factories, read before each turn for the session's Claude Code default
+   * (`harnessModelDefaults['claude-code']`: `--model`, `--effort`, `--settings`), unless
+   * the session picked its own. Unset, or a Factory without one, leaves the CLI's own defaults.
    */
   projects?: Pick<FactoryProjectsStorage, 'get'> & Partial<Pick<FactoryProjectsStorage, 'getById'>>;
   credentials: ClaudeCodeCredentialsHook;
