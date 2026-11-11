@@ -160,7 +160,12 @@
     "sessions": "Sessions",
     "open": "Open {{label}}",
     "openRelated": "Open {{label}}: {{title}}",
-    "cardNowIn": "card is now in {{phase}}"
+    "cardNowIn": "card is now in {{phase}}",
+    "switchSession": "Switch session",
+    "sessionCurrentPhase": "current phase",
+    "sessionRunning": "running",
+    "sessionOpen": "open",
+    "sessionCurrent": "current"
   },
   "automationSettings": {
     "title": "Automation settings",

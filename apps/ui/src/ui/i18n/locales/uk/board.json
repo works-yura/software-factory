@@ -162,7 +162,12 @@
     "sessions": "Сесії",
     "open": "Відкрити: {{label}}",
     "openRelated": "Відкрити {{label}}: {{title}}",
-    "cardNowIn": "картка зараз на етапі «{{phase}}»"
+    "cardNowIn": "картка зараз на етапі «{{phase}}»",
+    "switchSession": "Перемкнути сесію",
+    "sessionCurrentPhase": "поточна фаза",
+    "sessionRunning": "працює",
+    "sessionOpen": "відкрита",
+    "sessionCurrent": "поточна"
   },
   "automationSettings": {
     "title": "Налаштування автоматизації",

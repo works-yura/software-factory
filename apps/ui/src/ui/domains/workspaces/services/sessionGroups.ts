@@ -194,6 +194,7 @@ export type SessionListEntry =
  * first row, so each is told apart by its context. A card with one session
  * (a Product card runs every phase in one) stays a single row under its own name:
  * there is nothing to tell apart, and a heading over one row only repeats it.
+ * The sidebar lists one row per card (`oneRowPerCard`), so a card usually arrives here as one row.
  */
 export function nestCardSessions(rows: readonly SessionListRow[]): SessionListEntry[] {
   const entries: SessionListEntry[] = [];
