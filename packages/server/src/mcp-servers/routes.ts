@@ -1,6 +1,7 @@
 /**
  * Settings › MCP-сервери under `/web/mcp-servers` (upstream Mastra's stored MCP client CRUD,
- * `/stored/mcp-clients`, for the Factory): the organization's servers, the built-in presets,
+ * `/stored/mcp-clients`, for the Factory): the organization's servers, the catalog (MCP Registry
+ * `server.json` entries), the accounts a catalog input can be filled from,
  * and a check that starts a server and lists its tools. Secret values go in and never come out.
  * Writes are an organization admin's call once auth is on.
  */
@@ -9,19 +10,21 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { mcpServerInputSchema } from '@factory/core';
-import type { McpServerView } from '@factory/core';
+import { mcpCatalogVariant, mcpServerInputSchema } from '@factory/core';
+import type { McpServerInput, McpServerView } from '@factory/core';
 import type { RouteAuth } from '@factory/http';
 import { McpServerNameTakenError } from '@factory/store';
 import type { McpServersStorage } from '@factory/store';
 
 import type { McpServerHub } from './hub.ts';
-import { MCP_SERVER_PRESETS } from './presets.ts';
+import { MCP_CATALOG, mcpCatalogEntryById } from './catalog.ts';
+import type { McpCredentials } from './credentials.ts';
 
 export interface McpServerRoutesOptions {
   auth: RouteAuth;
   servers: Pick<McpServersStorage, 'list' | 'get' | 'create' | 'update' | 'delete'>;
   hub: Pick<McpServerHub, 'status'>;
+  credentials: Pick<McpCredentials, 'options' | 'suggestions'>;
   audit?: {
     record(input: {
       orgId: string;
@@ -77,7 +80,26 @@ async function readInput(c: Context) {
       message: parsed.error.issues.map(issue => (issue.path.length ? `${issue.path.join('.')}: ${issue.message}` : issue.message)).join('; '),
     });
   }
+  checkCatalogLaunch(parsed.data);
   return parsed.data;
+}
+
+/** A catalog launch names a known entry, one of its ways to run, and only inputs that way has. */
+function checkCatalogLaunch(input: McpServerInput): void {
+  const { launch } = input;
+  if (launch.transport !== 'catalog') return;
+  const entry = mcpCatalogEntryById(launch.entry);
+  if (!entry) throw new Refusal(422, { error: 'invalid_server', message: `The catalog has no server "${launch.entry}".` });
+  const variant = mcpCatalogVariant(entry, launch.variant);
+  if (!variant) throw new Refusal(422, { error: 'invalid_server', message: `Choose how to run ${entry.label.en}.` });
+  const known = new Map(variant.fields.map(field => [field.key, field]));
+  const secretKeys = [...Object.keys(input.secrets?.env ?? {}), ...Object.keys(input.secrets?.files ?? {})];
+  for (const key of [...Object.keys(launch.inputs), ...Object.keys(launch.credentials), ...secretKeys]) {
+    if (!known.has(key)) throw new Refusal(422, { error: 'invalid_server', message: `${entry.label.en} has no input ${key}.` });
+  }
+  for (const [key, ref] of Object.entries(launch.credentials)) {
+    if (known.get(key)?.credential !== ref.kind) throw new Refusal(422, { error: 'invalid_server', message: `${key} is not filled from ${ref.kind}.` });
+  }
 }
 
 function id(c: Context): string {
@@ -91,15 +113,23 @@ function target(server: McpServerView) {
 }
 
 export function buildMcpServerRoutes(options: McpServerRoutesOptions): ApiRoute[] {
-  const { auth, servers, hub, audit } = options;
-  const presets = MCP_SERVER_PRESETS.map(({ packageBin: _bin, ...preset }) => preset);
+  const { auth, servers, hub, audit, credentials } = options;
   return [
     registerApiRoute('/web/mcp-servers', {
       method: 'GET',
       handler: handle(async c => {
         const { orgId } = await caller(c, auth, false);
         const canEdit = !auth.enabled() || (await auth.isOrganizationAdmin(c, orgId));
-        return c.json({ servers: await servers.list(orgId), presets, canEdit });
+        return c.json({ servers: await servers.list(orgId), catalog: MCP_CATALOG, credentials: await credentials.options(orgId), canEdit });
+      }),
+    }),
+    registerApiRoute('/web/mcp-servers/suggestions', {
+      method: 'GET',
+      handler: handle(async c => {
+        const { orgId } = await caller(c, auth, false);
+        const factoryProjectId = c.req.query('factoryProjectId');
+        if (!factoryProjectId || factoryProjectId.length > 128) throw new Refusal(400, { error: 'factory_required' });
+        return c.json({ suggestions: await credentials.suggestions(orgId, factoryProjectId) });
       }),
     }),
     registerApiRoute('/web/mcp-servers', {

@@ -3,3 +3,4 @@ export * from './intake.ts';
 export * from './version-control.ts';
 export * from './observability.ts';
 export * from './redact.ts';
+export * from './credentials.ts';

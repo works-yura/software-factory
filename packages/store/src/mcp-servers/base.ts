@@ -186,6 +186,28 @@ export class McpServersStorage extends FactoryStorageDomain {
     }
   }
 
+  /**
+   * Rewrites stored launches across every organization (a boot migration): `change` returns the new
+   * launch and secrets, or `null` to leave a row as it is. Returns how many rows changed.
+   */
+  async rewriteLaunches(
+    change: (row: { launch: McpServerLaunch; secrets: McpServerSecrets }) => { launch: McpServerLaunch; secrets: McpServerSecrets } | null,
+  ): Promise<number> {
+    const rows = await this.#db.findMany<McpServerDbRow>(SERVERS, {});
+    let changed = 0;
+    for (const { id } of rows) {
+      let wrote = false;
+      await this.#db.updateAtomic<McpServerDbRow>(SERVERS, { id }, async row => {
+        const next = change({ launch: mcpServerLaunchSchema.parse(row.launch) as McpServerLaunch, secrets: await this.#secrets(row) });
+        if (!next) return null;
+        wrote = true;
+        return { launch: next.launch, secrets: await this.#encryption.encrypt(next.secrets) };
+      });
+      if (wrote) changed += 1;
+    }
+    return changed;
+  }
+
   async delete(orgId: string, id: string): Promise<boolean> {
     return (await this.#db.deleteMany(SERVERS, { org_id: orgId, id })) > 0;
   }

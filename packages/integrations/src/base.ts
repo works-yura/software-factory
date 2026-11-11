@@ -29,6 +29,7 @@ import type { BoardRegistry, IntakeRoutesReader, ProjectBoardSource } from '@fac
 import type { StoredBoardsStorage } from '@factory/store';
 import type { Intake } from '@factory/capabilities';
 import type { VersionControl } from '@factory/capabilities';
+import type { CredentialProvider } from '@factory/capabilities';
 import type { RouteAuth } from '@factory/http';
 import type { SessionRetirementCoordinator } from '@factory/sandbox';
 import type { StateSigner } from '@factory/auth';
@@ -242,6 +243,11 @@ export interface FactoryIntegration {
     intake: IntakeStorage;
     sourceControl?: SourceControlStorageHandle;
   }): void;
+  /**
+   * Accounts this integration keeps that other parts of the Factory may use by reference (an MCP
+   * server filled from a Google Cloud account). Called after `initialize`.
+   */
+  credentialProviders?(): CredentialProvider[];
   /**
    * One-off data migrations the integration owns, such as moving its retired per-source settings
    * into intake routes. Run by the factory once per boot, in `prepare()`, after storage and the

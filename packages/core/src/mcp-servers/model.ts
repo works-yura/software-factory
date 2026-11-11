@@ -59,11 +59,32 @@ export const mcpServerAssignmentSchema = z.object({
 /** A plain (non-secret) environment variable or header. Secret ones are written separately and never read back. */
 const plainMapSchema = z.record(z.string().regex(ENV_NAME_RE, 'Use letters, digits and _ only.'), z.string().max(4000));
 
-/** Upstream's launch shape: one of stdio (a command) or http (a URL). */
+/** An input filled from an account the organization already keeps, by reference (never a copy of its key). */
+export const mcpCredentialRefSchema = z.object({
+  kind: z.enum(['google-cloud-account']),
+  id: z.string().min(1).max(64),
+});
+export type McpCredentialRef = z.infer<typeof mcpCredentialRefSchema>;
+
+/**
+ * How a server runs: a catalog entry (a pinned package described by its MCP Registry `server.json`),
+ * a local command, or an address — upstream Mastra's stdio / http shapes plus the catalog.
+ */
 export const mcpServerLaunchSchema = z.discriminatedUnion('transport', [
   z.object({
+    transport: z.literal('catalog'),
+    /** The catalog entry's id (e.g. `mcp-toolbox`). */
+    entry: z.string().min(1).max(64),
+    /** Which way of running it (e.g. `firestore`); absent when the entry has one. */
+    variant: z.string().min(1).max(64).optional(),
+    /** Plain input values by input key (an environment variable name or an argument's value hint). */
+    inputs: plainMapSchema.default({}),
+    /** Inputs filled from the organization's accounts. */
+    credentials: z.record(z.string().regex(ENV_NAME_RE), mcpCredentialRefSchema).default({}),
+  }),
+  z.object({
     transport: z.literal('stdio'),
-    /** A built-in preset (see `MCP_SERVER_PRESETS` on the server) or `command`. */
+    /** Rows written before the catalog; the boot migration turns them into catalog launches. */
     preset: z.string().min(1).optional(),
     command: z.string().min(1).max(500).optional(),
     args: z.array(z.string().max(2000)).max(50).default([]),

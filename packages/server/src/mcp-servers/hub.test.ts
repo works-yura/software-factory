@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ import type { McpServerRecord } from '@factory/store';
 
 import { McpServerHub } from './hub.ts';
 import { prepareMcpServer, McpServerLaunchError } from './launch.ts';
-import { mcpServerPreset, presetEntrypoint } from './presets.ts';
+import { catalogEntrypoint, mcpCatalogEntryById } from './catalog.ts';
 
 const FAKE = fileURLToPath(new URL('./__fixtures__/fake-mcp-server.mjs', import.meta.url));
 
@@ -127,7 +127,11 @@ describe('McpServerHub with a real stdio server', () => {
 
   it('reports a server’s tools and policies, and why it cannot start', async () => {
     const policies: McpToolPolicies = { default: 'allow', tools: { delete_documents: 'deny' } };
-    const broken = server({ id: 'srv-3', name: 'broken', launch: { transport: 'stdio', preset: 'toolbox-firestore', args: [], env: {} } });
+    const broken = server({
+      id: 'srv-3',
+      name: 'broken',
+      launch: { transport: 'catalog', entry: 'mcp-toolbox', variant: 'firestore', inputs: {}, credentials: {} },
+    });
     const hub = makeHub([server({ toolPolicies: policies }), broken]);
 
     const status = await hub.status('org-1', 'srv-1');
@@ -140,35 +144,128 @@ describe('McpServerHub with a real stdio server', () => {
 });
 
 describe('prepareMcpServer', () => {
-  it('runs a preset from the pinned package with this Node, never npx', async () => {
-    const preset = mcpServerPreset('toolbox-firestore')!;
+  const toolbox = mcpCatalogEntryById('mcp-toolbox')!;
+
+  it('runs a catalog entry from its pinned package with this Node, never npx', async () => {
     const prepared = await prepareMcpServer(
-      { transport: 'stdio', preset: 'toolbox-firestore', args: [], env: { FIRESTORE_PROJECT: 'p' } },
+      { transport: 'catalog', entry: 'mcp-toolbox', variant: 'firestore', inputs: { FIRESTORE_PROJECT: 'p' }, credentials: {} },
       { env: {}, headers: {}, files: { GOOGLE_APPLICATION_CREDENTIALS: '{}' } },
     );
     try {
       const definition = prepared.definition as { command: string; args: string[]; env: Record<string, string> };
       expect(definition.command).toBe(process.execPath);
-      expect(definition.args).toEqual([presetEntrypoint(preset), '--prebuilt', 'firestore', '--stdio']);
-      expect(existsSync(presetEntrypoint(preset))).toBe(true);
+      expect(definition.args).toEqual([catalogEntrypoint(toolbox), '--prebuilt', 'firestore', '--stdio']);
+      expect(existsSync(catalogEntrypoint(toolbox))).toBe(true);
+      expect(definition.env.FIRESTORE_PROJECT).toBe('p');
+      // The manifest's default fills an input left empty.
+      expect(definition.env.FIRESTORE_DATABASE).toBe('');
       expect(existsSync(definition.env.GOOGLE_APPLICATION_CREDENTIALS!)).toBe(true);
     } finally {
       await prepared.cleanup();
     }
   });
 
-  it('fills ${VAR} in arguments from the server’s own variables and refuses an unset one', async () => {
+  it('fills a credential input from the organization’s account, written to a private file and removed after', async () => {
+    const reads: unknown[] = [];
     const prepared = await prepareMcpServer(
-      { transport: 'stdio', preset: 'toolbox', args: [], env: {} },
-      { env: {}, headers: {}, files: { TOOLBOX_TOOLS_FILE: 'sources: {}' } },
+      {
+        transport: 'catalog',
+        entry: 'mcp-toolbox',
+        variant: 'firestore',
+        inputs: { FIRESTORE_PROJECT: 'syncta-57c6a' },
+        credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } },
+      },
+      { env: {}, headers: {}, files: {} },
+      {
+        credentials: async ref => {
+          reads.push(ref);
+          return '{"type":"service_account","project_id":"syncta-57c6a"}';
+        },
+      },
     );
-    const definition = prepared.definition as { args: string[]; env: Record<string, string> };
-    expect(definition.args.slice(1)).toEqual(['--tools-file', definition.env.TOOLBOX_TOOLS_FILE, '--stdio']);
+    const keyPath = (prepared.definition as { env: Record<string, string> }).env.GOOGLE_APPLICATION_CREDENTIALS!;
+    expect(reads).toEqual([{ kind: 'google-cloud-account', id: 'acc-1' }]);
+    expect(readFileSync(keyPath, 'utf8')).toContain('syncta-57c6a');
+    expect(statSync(keyPath).mode & 0o777).toBe(0o600);
     await prepared.cleanup();
+    expect(existsSync(keyPath)).toBe(false);
 
+    await expect(
+      prepareMcpServer(
+        {
+          transport: 'catalog',
+          entry: 'mcp-toolbox',
+          variant: 'firestore',
+          inputs: { FIRESTORE_PROJECT: 'p' },
+          credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'gone' } },
+        },
+        { env: {}, headers: {}, files: {} },
+        { credentials: async () => null },
+      ),
+    ).rejects.toThrow(/no longer exists/);
+  });
+
+  it('refuses a missing required input and an unknown variant, naming them', async () => {
+    await expect(
+      prepareMcpServer(
+        { transport: 'catalog', entry: 'mcp-toolbox', variant: 'postgres', inputs: { POSTGRES_DATABASE: 'db' }, credentials: {} },
+        { env: {}, headers: {}, files: {} },
+      ),
+    ).rejects.toThrow(/POSTGRES_USER/);
+    await expect(
+      prepareMcpServer(
+        { transport: 'catalog', entry: 'mcp-toolbox', variant: 'mysql', inputs: {}, credentials: {} },
+        { env: {}, headers: {}, files: {} },
+      ),
+    ).rejects.toBeInstanceOf(McpServerLaunchError);
+  });
+
+  it('gives a secret input as a variable and an argument value only to the arguments', async () => {
+    const postgres = await prepareMcpServer(
+      {
+        transport: 'catalog',
+        entry: 'mcp-toolbox',
+        variant: 'postgres',
+        inputs: { POSTGRES_DATABASE: 'db', POSTGRES_USER: 'reader' },
+        credentials: {},
+      },
+      { env: { POSTGRES_PASSWORD: 'secret' }, headers: {}, files: {} },
+    );
+    expect((postgres.definition as { env: Record<string, string> }).env).toMatchObject({
+      POSTGRES_HOST: 'localhost',
+      POSTGRES_PORT: '5432',
+      POSTGRES_PASSWORD: 'secret',
+    });
+    await postgres.cleanup();
+
+    const toolsFile = await prepareMcpServer(
+      { transport: 'catalog', entry: 'mcp-toolbox', variant: 'tools-file', inputs: {}, credentials: {} },
+      { env: {}, headers: {}, files: { tools_file: 'sources: {}' } },
+    );
+    const definition = toolsFile.definition as { args: string[]; env: Record<string, string> };
+    expect(definition.args[1]).toBe('--tools-file');
+    expect(readFileSync(definition.args[2]!, 'utf8')).toBe('sources: {}');
+    expect(definition.env.tools_file).toBeUndefined();
+    await toolsFile.cleanup();
+  });
+
+  it('fills ${VAR} in a local command’s arguments from its own variables and refuses an unset one', async () => {
     await expect(
       prepareMcpServer({ transport: 'stdio', command: 'x', args: ['${MISSING}'], env: {} }, { env: {}, headers: {}, files: {} }),
     ).rejects.toBeInstanceOf(McpServerLaunchError);
+    const prepared = await prepareMcpServer(
+      { transport: 'stdio', command: 'x', args: ['--key', '${KEY_FILE}'], env: {} },
+      { env: {}, headers: {}, files: { KEY_FILE: 'k' } },
+    );
+    const definition = prepared.definition as { args: string[]; env: Record<string, string> };
+    expect(definition.args).toEqual(['--key', definition.env.KEY_FILE]);
+    await prepared.cleanup();
+  });
+
+  it('refuses a row still on a retired preset (the boot migration moves it)', async () => {
+    await expect(
+      prepareMcpServer({ transport: 'stdio', preset: 'toolbox-firestore', args: [], env: {} }, { env: {}, headers: {}, files: {} }),
+    ).rejects.toThrow(/retired preset/);
   });
 
   it('sends secret headers to an http server', async () => {

@@ -35,6 +35,10 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
           return { connected: true, toolCount: 1, tools: [{ name: 'list_collections', description: '', policy: 'allow' }], checkedAt: 'now' };
         },
       },
+      credentials: {
+        options: async () => ({ 'google-cloud-account': [{ id: 'acc-1', name: 'Syncta', detail: 'factory@syncta-57c6a.iam.gserviceaccount.com' }] }),
+        suggestions: async (_org, factoryProjectId) => (factoryProjectId === 'syncts' ? { 'google-cloud-project': 'syncta-57c6a' } : {}),
+      },
       audit: { record: async input => void audits.push({ action: input.action }) },
     }),
   );
@@ -46,8 +50,13 @@ async function setup(options: { isAdmin?: boolean; user?: TestAuthUser } = {}) {
 const firestore = {
   name: 'syncta-db',
   label: 'Syncta Firestore',
-  launch: { transport: 'stdio', preset: 'toolbox-firestore', env: { FIRESTORE_PROJECT: 'syncta-57c6a' } },
-  secrets: { files: { GOOGLE_APPLICATION_CREDENTIALS: '{"private_key":"-----BEGIN PRIVATE KEY-----x"}' } },
+  launch: {
+    transport: 'catalog',
+    entry: 'mcp-toolbox',
+    variant: 'firestore',
+    inputs: { FIRESTORE_PROJECT: 'syncta-57c6a' },
+    credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } },
+  },
   assignments: [{ factoryProjectId: 'syncts', boards: ['audits'] }],
 };
 
@@ -56,12 +65,10 @@ describe('MCP server routes', () => {
     const { call, audits } = await setup();
     const created = await call('POST', '/web/mcp-servers', firestore);
     expect(created.status).toBe(201);
-    const body = await created.text();
-    expect(body).not.toContain('PRIVATE KEY');
-    const { server } = JSON.parse(body);
+    const { server } = await created.json();
     expect(server).toMatchObject({
       name: 'syncta-db',
-      secretNames: { files: ['GOOGLE_APPLICATION_CREDENTIALS'] },
+      launch: { credentials: { GOOGLE_APPLICATION_CREDENTIALS: { kind: 'google-cloud-account', id: 'acc-1' } } },
       toolPolicies: { default: 'allow', tools: {} },
       maskPersonalData: true,
     });
@@ -70,9 +77,11 @@ describe('MCP server routes', () => {
     expect(list.headers.get('cache-control')).toBe('no-store');
     const listed = await list.json();
     expect(listed.servers).toHaveLength(1);
-    expect(listed.presets.map((preset: { id: string }) => preset.id)).toContain('toolbox-firestore');
-    expect(JSON.stringify(listed)).not.toContain('PRIVATE KEY');
-    expect(JSON.stringify(listed.presets)).not.toContain('node_modules');
+    expect(listed.catalog.map((entry: { id: string }) => entry.id)).toEqual(['mcp-toolbox']);
+    expect(listed.credentials['google-cloud-account']).toEqual([
+      { id: 'acc-1', name: 'Syncta', detail: 'factory@syncta-57c6a.iam.gserviceaccount.com' },
+    ]);
+    expect(JSON.stringify(listed.catalog)).not.toContain('node_modules');
 
     const updated = await call('PUT', `/web/mcp-servers/${server.id}`, {
       ...firestore,
@@ -81,8 +90,6 @@ describe('MCP server routes', () => {
     });
     expect((await updated.json()).server).toMatchObject({
       toolPolicies: { tools: { delete_documents: 'deny' } },
-      // A write without secrets keeps the stored ones.
-      secretNames: { files: ['GOOGLE_APPLICATION_CREDENTIALS'] },
     });
 
     expect((await call('DELETE', `/web/mcp-servers/${server.id}`)).status).toBe(200);
@@ -100,6 +107,42 @@ describe('MCP server routes', () => {
     const status = await call('POST', `/web/mcp-servers/${server.id}/status`);
     expect((await status.json()).status).toMatchObject({ connected: true, toolCount: 1 });
     expect(checked).toEqual([server.id]);
+  });
+
+  it('keeps a secret input’s value and never returns it', async () => {
+    const { call } = await setup();
+    const postgres = {
+      name: 'reports-db',
+      label: 'Reports',
+      launch: { transport: 'catalog', entry: 'mcp-toolbox', variant: 'postgres', inputs: { POSTGRES_DATABASE: 'r', POSTGRES_USER: 'reader' } },
+      secrets: { env: { POSTGRES_PASSWORD: 'hunter2-secret' } },
+    };
+    const created = await call('POST', '/web/mcp-servers', postgres);
+    const body = await created.text();
+    expect(created.status).toBe(201);
+    expect(body).not.toContain('hunter2-secret');
+    expect(JSON.parse(body).server.secretNames.env).toEqual(['POSTGRES_PASSWORD']);
+  });
+
+  it('suggests the Factory’s Google Cloud project for a catalog input', async () => {
+    const { call } = await setup();
+    const response = await call('GET', '/web/mcp-servers/suggestions?factoryProjectId=syncts');
+    expect((await response.json()).suggestions).toEqual({ 'google-cloud-project': 'syncta-57c6a' });
+    expect((await call('GET', '/web/mcp-servers/suggestions')).status).toBe(400);
+  });
+
+  it('refuses a catalog launch with an unknown entry, way to run, input or credential kind', async () => {
+    const { call } = await setup();
+    const launch = firestore.launch;
+    for (const bad of [
+      { ...launch, entry: 'nope' },
+      { ...launch, variant: 'mysql' },
+      { ...launch, inputs: { NOT_AN_INPUT: 'x' } },
+      { ...launch, credentials: { FIRESTORE_PROJECT: { kind: 'google-cloud-account', id: 'acc-1' } } },
+    ]) {
+      const response = await call('POST', '/web/mcp-servers', { ...firestore, launch: bad });
+      expect(response.status).toBe(422);
+    }
   });
 
   it('refuses an invalid server, a taken name, and writes by someone who is not an admin', async () => {

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.googleapis/mcp-toolbox",
+  "title": "MCP Toolbox for Databases",
+  "description": "Google's open source MCP server for databases: prebuilt tools for Firestore, PostgreSQL and more, or your own tools.yaml.",
+  "version": "1.16.0",
+  "websiteUrl": "https://mcp-toolbox.dev",
+  "repository": { "url": "https://github.com/googleapis/genai-toolbox", "source": "github" },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@toolbox-sdk/server",
+      "version": "1.16.0",
+      "transport": { "type": "stdio" },
+      "packageArguments": [
+        { "type": "named", "name": "--prebuilt", "description": "A prebuilt tool set for one database", "valueHint": "prebuilt", "choices": ["firestore", "postgres"] },
+        { "type": "named", "name": "--tools-file", "description": "A tools.yaml describing the sources and tools", "valueHint": "tools_file", "format": "filepath", "isSecret": true },
+        { "type": "named", "name": "--stdio", "value": "", "description": "Speak MCP over standard input/output" }
+      ],
+      "environmentVariables": [
+        { "name": "FIRESTORE_PROJECT", "description": "Google Cloud project id of the Firestore database" },
+        { "name": "FIRESTORE_DATABASE", "description": "Firestore database id; empty for (default)", "default": "" },
+        { "name": "GOOGLE_APPLICATION_CREDENTIALS", "description": "Service account key file", "format": "filepath", "isSecret": true },
+        { "name": "POSTGRES_HOST", "description": "PostgreSQL host", "default": "localhost" },
+        { "name": "POSTGRES_PORT", "description": "PostgreSQL port", "default": "5432" },
+        { "name": "POSTGRES_DATABASE", "description": "PostgreSQL database" },
+        { "name": "POSTGRES_USER", "description": "PostgreSQL user" },
+        { "name": "POSTGRES_PASSWORD", "description": "PostgreSQL password", "isSecret": true },
+        { "name": "POSTGRES_QUERY_PARAMS", "description": "Extra connection query parameters", "default": "" }
+      ]
+    }
+  ]
+}

@@ -62,6 +62,7 @@ import { canonicalizeProjectRoutes } from './intake/canonical-routes.ts';
 import { REPOSITORY_HOSTS, subscribeLinkedRepository } from './intake/repository-subscriptions.ts';
 import { setupIntakeTriggers } from './intake/setup.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
+import type { CredentialProvider } from '@factory/capabilities';
 import {
   boardForWorkItem,
   boundChangeRequestNumber,
@@ -163,6 +164,7 @@ import {
 } from '@factory/api';
 import { ProjectRoutes } from '@factory/api';
 import { createModelSwitchRoute, createSessionAccessGuard } from '@factory/session';
+import { McpCredentials } from './mcp-servers/credentials.ts';
 import { McpServerHub } from './mcp-servers/hub.ts';
 import { buildMcpServerRoutes } from './mcp-servers/routes.ts';
 import { mcpSessionCoordinates, resolveMcpSessionScope } from './mcp-servers/scope.ts';
@@ -974,7 +976,10 @@ export class MastraFactory {
       },
     });
     // The MCP manager: runs the external MCP servers a session's card is assigned, through one tool policy and mask.
-    const mcpServerHub = new McpServerHub({ servers: mcpServersStorage, audit: auditDomain });
+    // Accounts integrations lend to MCP servers (a Google Cloud account), set once integrations are ready below.
+    let mcpCredentialProviders: readonly CredentialProvider[] = [];
+    const mcpCredentials = new McpCredentials(() => mcpCredentialProviders);
+    const mcpServerHub = new McpServerHub({ servers: mcpServersStorage, audit: auditDomain, credentials: mcpCredentials });
     this.#mcpServers = mcpServerHub;
     // Held by reference: the channel attach below pushes into it, long after this.
     const feedPublishers: WorkItemFeedPublisher[] = [];
@@ -1144,6 +1149,7 @@ export class MastraFactory {
         sourceControl: sourceControlStorage,
         projectBoards: this.#projectBoards,
         integrations,
+        mcpServers: mcpServersStorage,
       }),
       {
         ...(storage.isDomainReady('boot-migrations') ? { markers: bootMigrationsStorage } : {}),
@@ -1194,6 +1200,9 @@ export class MastraFactory {
         },
       };
     });
+    mcpCredentialProviders = integrationRegistrations.flatMap(({ integration, ready }) =>
+      ready ? (integration.credentialProviders?.() ?? []) : [],
+    );
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
@@ -2860,7 +2869,13 @@ export class MastraFactory {
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
           // Settings › MCP-сервери: the organization's external MCP servers, their access and tool policy.
-          ...buildMcpServerRoutes({ auth: routeAuth, servers: mcpServersStorage, hub: mcpServerHub, audit: auditDomain }),
+          ...buildMcpServerRoutes({
+            auth: routeAuth,
+            servers: mcpServersStorage,
+            hub: mcpServerHub,
+            credentials: mcpCredentials,
+            audit: auditDomain,
+          }),
           ...(mcpEnabled || sessionTokens
             ? buildFactoryMcpRoutes({
                 auth: routeAuth,

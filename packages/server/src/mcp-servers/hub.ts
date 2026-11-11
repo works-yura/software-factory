@@ -6,11 +6,11 @@ import type { Tool } from '@mastra/core/tools';
 
 import { redactDeep } from '@factory/capabilities';
 import { mcpAgentToolName, mcpServerAvailable, mcpToolPolicy } from '@factory/core';
-import type { McpSessionScope, McpToolPolicy } from '@factory/core';
+import type { McpCredentialRef, McpSessionScope, McpToolPolicy } from '@factory/core';
 import type { McpServerRecord } from '@factory/store';
 
 import { prepareMcpServer } from './launch.ts';
-import type { PreparedMcpServer } from './launch.ts';
+import type { PreparedMcpServer, PrepareMcpServerOptions } from './launch.ts';
 
 type AnyTool = Tool<any, any, any, any>;
 
@@ -54,6 +54,8 @@ export interface McpServerHubDeps {
   idleMs?: number;
   tempRoot?: string;
   log?: Pick<Console, 'warn'>;
+  /** Reads an organization's account secret for a server filled from it (a Google Cloud key). */
+  credentials?: { readSecret(orgId: string, ref: McpCredentialRef): Promise<string | null> };
 }
 
 interface SessionServers {
@@ -129,7 +131,7 @@ export class McpServerHub {
     let prepared: PreparedMcpServer | undefined;
     let client: McpClientLike | undefined;
     try {
-      prepared = await prepareMcpServer(record.launch, record.secrets, this.#tempOptions());
+      prepared = await prepareMcpServer(record.launch, record.secrets, this.#prepareOptions(orgId));
       client = (this.#deps.createClient ?? defaultClient)({ [record.name]: prepared.definition });
       const { toolsets, errors } = await client.listToolsetsWithErrors();
       const error = errors[record.name];
@@ -158,8 +160,12 @@ export class McpServerHub {
     await this.#close(sessionId);
   }
 
-  #tempOptions() {
-    return this.#deps.tempRoot ? { tempRoot: this.#deps.tempRoot } : {};
+  #prepareOptions(orgId: string): PrepareMcpServerOptions {
+    const credentials = this.#deps.credentials;
+    return {
+      ...(this.#deps.tempRoot ? { tempRoot: this.#deps.tempRoot } : {}),
+      ...(credentials ? { credentials: (ref: McpCredentialRef) => credentials.readSecret(orgId, ref) } : {}),
+    };
   }
 
   async #serversFor(session: McpHubSession): Promise<SessionServers | undefined> {
@@ -177,7 +183,7 @@ export class McpServerHub {
       const ready: McpServerRecord[] = [];
       for (const record of records) {
         try {
-          const server = await prepareMcpServer(record.launch, record.secrets, this.#tempOptions());
+          const server = await prepareMcpServer(record.launch, record.secrets, this.#prepareOptions(session.orgId));
           prepared.push(server);
           definitions[record.name] = server.definition;
           ready.push(record);

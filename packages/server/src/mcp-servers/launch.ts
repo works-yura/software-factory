@@ -2,9 +2,10 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { McpServerLaunch, McpServerSecrets } from '@factory/core';
+import { mcpCatalogVariant } from '@factory/core';
+import type { McpCredentialRef, McpServerLaunch, McpServerSecrets } from '@factory/core';
 
-import { mcpServerPreset, presetEntrypoint } from './presets.ts';
+import { catalogEntrypoint, mcpCatalogEntryById } from './catalog.ts';
 
 /** What `MCPClient` takes for one server (upstream Mastra's stdio / http definitions). */
 export type McpClientServerDefinition =
@@ -22,26 +23,64 @@ export class McpServerLaunchError extends Error {
   override name = 'McpServerLaunchError';
 }
 
+/** Reads the secret of an account the organization keeps (a Google Cloud key), for one launch. */
+export type McpCredentialReader = (ref: McpCredentialRef) => Promise<string | null>;
+
+export interface PrepareMcpServerOptions {
+  tempRoot?: string;
+  baseEnv?: NodeJS.ProcessEnv;
+  credentials?: McpCredentialReader;
+}
+
 const PLACEHOLDER = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
-/** `${VAR}` in an argument from the launch's own variables (upstream mastracode's `expandEnvVars`), never the host's. */
-function expand(value: string, env: Record<string, string>): string {
+/** `${VAR}` in an argument from the launch's own values (upstream mastracode's `expandEnvVars`), never the host's. */
+function expand(value: string, values: Record<string, string>): string {
   return value.replace(PLACEHOLDER, (_, name: string) => {
-    const resolved = env[name];
+    const resolved = values[name];
     if (resolved === undefined) throw new McpServerLaunchError(`Argument needs ${name}, which this server does not set.`);
     return resolved;
   });
 }
 
+/** A private folder (0700) for one launch's secret files (0600), removed by `cleanup`. */
+class SecretFiles {
+  #folder: string | undefined;
+  readonly #root: string;
+
+  constructor(root: string) {
+    this.#root = root;
+  }
+
+  async write(name: string, content: string): Promise<string> {
+    this.#folder ??= await mkdtemp(join(this.#root, 'factory-mcp-'));
+    const path = join(this.#folder, name.toLowerCase());
+    await writeFile(path, content, { mode: 0o600 });
+    return path;
+  }
+
+  async cleanup(): Promise<void> {
+    if (!this.#folder) return;
+    const removing = this.#folder;
+    this.#folder = undefined;
+    await rm(removing, { recursive: true, force: true });
+  }
+}
+
+function hostBase(options: PrepareMcpServerOptions): Record<string, string> {
+  const base = options.baseEnv ?? process.env;
+  return { ...(base.PATH ? { PATH: base.PATH } : {}), ...(base.HOME ? { HOME: base.HOME } : {}) };
+}
+
 /**
- * Turns a stored server into an `MCPClient` definition. Secret files are written to a private
- * folder (0700, files 0600) whose paths go into their variables; `cleanup` deletes it. A stdio
- * server sees only its own variables plus PATH/HOME, not the Factory server's environment.
+ * Turns a stored server into an `MCPClient` definition. Secret files (a key, a tools file) are
+ * written to a private folder whose paths the server gets; `cleanup` deletes it. A local server sees
+ * only its own variables plus PATH/HOME, not the Factory server's environment.
  */
 export async function prepareMcpServer(
   launch: McpServerLaunch,
   secrets: McpServerSecrets,
-  options: { tempRoot?: string; baseEnv?: NodeJS.ProcessEnv } = {},
+  options: PrepareMcpServerOptions = {},
 ): Promise<PreparedMcpServer> {
   if (launch.transport === 'http') {
     return {
@@ -49,53 +88,57 @@ export async function prepareMcpServer(
       cleanup: async () => {},
     };
   }
-
-  const preset = launch.preset ? mcpServerPreset(launch.preset) : undefined;
-  if (launch.preset && !preset) throw new McpServerLaunchError(`Unknown preset "${launch.preset}".`);
-  if (!preset && !launch.command) throw new McpServerLaunchError('A stdio server needs a command or a preset.');
-  for (const required of preset?.env.filter(entry => entry.required) ?? []) {
-    if (!launch.env[required.name] && !secrets.env[required.name]) {
-      throw new McpServerLaunchError(`${required.name} is required (${required.label}).`);
-    }
-  }
-  for (const required of preset?.secretFiles.filter(entry => entry.required) ?? []) {
-    if (!secrets.files[required.name]) throw new McpServerLaunchError(`${required.name} is required (${required.label}).`);
+  if (launch.transport === 'stdio' && launch.preset) {
+    throw new McpServerLaunchError(`This server still uses the retired preset "${launch.preset}"; the boot migration moves it to the catalog.`);
   }
 
-  let folder: string | undefined;
-  const cleanup = async () => {
-    if (!folder) return;
-    const removing = folder;
-    folder = undefined;
-    await rm(removing, { recursive: true, force: true });
-  };
-  const fileEnv: Record<string, string> = {};
+  const files = new SecretFiles(options.tempRoot ?? tmpdir());
   try {
-    const names = Object.keys(secrets.files);
-    if (names.length) {
-      folder = await mkdtemp(join(options.tempRoot ?? tmpdir(), 'factory-mcp-'));
-      for (const name of names) {
-        const path = join(folder, name.toLowerCase());
-        await writeFile(path, secrets.files[name]!, { mode: 0o600 });
-        fileEnv[name] = path;
-      }
+    if (launch.transport === 'stdio') {
+      if (!launch.command) throw new McpServerLaunchError('A local server needs a command.');
+      const env: Record<string, string> = { ...hostBase(options), ...launch.env, ...secrets.env };
+      for (const [name, content] of Object.entries(secrets.files)) env[name] = await files.write(name, content);
+      return {
+        definition: { command: expand(launch.command, env), args: launch.args.map(arg => expand(arg, env)), env },
+        cleanup: () => files.cleanup(),
+      };
     }
-    const base = options.baseEnv ?? process.env;
-    const env: Record<string, string> = {
-      ...(base.PATH ? { PATH: base.PATH } : {}),
-      ...(base.HOME ? { HOME: base.HOME } : {}),
-      ...launch.env,
-      ...secrets.env,
-      ...fileEnv,
+
+    const entry = mcpCatalogEntryById(launch.entry);
+    if (!entry) throw new McpServerLaunchError(`The catalog has no server "${launch.entry}".`);
+    const variant = mcpCatalogVariant(entry, launch.variant);
+    if (!variant) throw new McpServerLaunchError(`${entry.label.en}: choose one of ${entry.variants.map(v => v.id).join(', ')}.`);
+
+    const values: Record<string, string> = {};
+    const env: Record<string, string> = hostBase(options);
+    for (const field of variant.fields) {
+      let value: string | undefined;
+      const ref = launch.credentials[field.key];
+      if (ref) {
+        if (!options.credentials) throw new McpServerLaunchError(`${field.label.en} needs an account, and none can be read here.`);
+        const secret = await options.credentials(ref);
+        if (secret === null) throw new McpServerLaunchError(`${field.label.en}: the chosen account no longer exists.`);
+        value = field.file ? await files.write(field.key, secret) : secret;
+      } else if (field.file) {
+        const content = secrets.files[field.key];
+        if (content !== undefined) value = await files.write(field.key, content);
+      } else {
+        value = (field.secret ? secrets.env[field.key] : launch.inputs[field.key]) ?? field.default;
+      }
+      if (value === undefined || (field.required && value === '')) {
+        if (field.required) throw new McpServerLaunchError(`${field.label.en} (${field.key}) is required.`);
+        continue;
+      }
+      values[field.key] = value;
+      if (field.kind === 'env') env[field.key] = value;
+    }
+    const args = variant.args.map(arg => expand(arg, values));
+    return {
+      definition: { command: process.execPath, args: [catalogEntrypoint(entry), ...args], env },
+      cleanup: () => files.cleanup(),
     };
-    const presetArgs = preset ? preset.args : [];
-    const args = [...presetArgs, ...launch.args].map(arg => expand(arg, env));
-    const definition = preset
-      ? { command: process.execPath, args: [presetEntrypoint(preset), ...args], env }
-      : { command: expand(launch.command!, env), args, env };
-    return { definition, cleanup };
   } catch (error) {
-    await cleanup();
+    await files.cleanup();
     throw error;
   }
 }

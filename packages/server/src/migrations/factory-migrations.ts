@@ -17,6 +17,7 @@ import type {
   IntakeRouteFiresStorage,
   IntakeStorage,
   IntegrationStorage,
+  McpServersStorage,
   SourceControlStorage,
   StoredBoardsStorage,
   WorkItemsStorage,
@@ -25,6 +26,7 @@ import type {
 import { migrateCanonicalRoutes } from '../intake/canonical-routes.ts';
 import { AUDITS_BOARD_UPGRADE_ACTOR, migrateLegacyIntakeRules } from '../intake/migrations.ts';
 import { migrateGithubRepositorySelections, migrateGitLabProjectSelections } from '../intake/repository-subscriptions.ts';
+import { presetToCatalogLaunch } from '../mcp-servers/migrations.ts';
 import type { BootMigration } from './run.ts';
 
 export interface FactoryMigrationDeps {
@@ -38,6 +40,7 @@ export interface FactoryMigrationDeps {
   sourceControl: SourceControlStorage;
   projectBoards: ProjectBoardCache | undefined;
   integrations: readonly FactoryIntegration[];
+  mcpServers: Pick<McpServersStorage, 'rewriteLaunches'>;
 }
 
 const LABEL_ROUTE_NAMES = [
@@ -224,6 +227,17 @@ export function factoryBootMigrations(deps: FactoryMigrationDeps): BootMigration
         return rewritten + added > 0
           ? `named the source of ${rewritten} intake route(s)${added > 0 ? `, split into ${added} more` : ''}`
           : undefined;
+      },
+    },
+    // MCP servers saved with the first version's built-in presets become catalog launches (MCP
+    // Registry `server.json` entries). The launcher no longer knows presets, so a failure stops the boot.
+    {
+      id: 'mcpServers.presetsToCatalog.v1',
+      ready: ready('mcp-servers'),
+      onFailure: 'stop-boot',
+      run: async () => {
+        const moved = await deps.mcpServers.rewriteLaunches(presetToCatalogLaunch);
+        return moved > 0 ? `moved ${moved} MCP server(s) from presets to the catalog` : undefined;
       },
     },
     // Integration-owned data (ClickUp's retired List status rules → intake routes), before any worker

@@ -1,4 +1,5 @@
 export * from './crashlytics.ts';
+export * from './credentials.ts';
 export * from './google-api.ts';
 export * from './integration.ts';
 export * from './logging.ts';

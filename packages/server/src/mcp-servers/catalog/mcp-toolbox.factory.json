@@ -1,0 +1,75 @@
+{
+  "server": "io.github.googleapis/mcp-toolbox",
+  "id": "mcp-toolbox",
+  "label": { "uk": "База даних (MCP Toolbox)", "en": "Database (MCP Toolbox)" },
+  "summary": {
+    "uk": "Агенти читають базу через MCP Toolbox від Google: Firestore, PostgreSQL або ваш tools.yaml. Лише читання, якщо в облікового запису лише права на читання.",
+    "en": "Agents read a database through Google's MCP Toolbox: Firestore, PostgreSQL or your own tools.yaml. Read-only when its account only has read rights."
+  },
+  "entrypoint": "bin/run.js",
+  "variants": [
+    {
+      "id": "firestore",
+      "label": { "uk": "Firestore", "en": "Firestore" },
+      "summary": { "uk": "Колекції, документи, запити й правила безпеки Firestore.", "en": "Firestore collections, documents, queries and security rules." },
+      "args": ["--prebuilt", "firestore", "--stdio"],
+      "inputs": ["GOOGLE_APPLICATION_CREDENTIALS", "FIRESTORE_PROJECT", "FIRESTORE_DATABASE"],
+      "required": ["GOOGLE_APPLICATION_CREDENTIALS", "FIRESTORE_PROJECT"],
+      "writeTools": ["add_documents", "update_document", "delete_documents"]
+    },
+    {
+      "id": "postgres",
+      "label": { "uk": "PostgreSQL", "en": "PostgreSQL" },
+      "summary": { "uk": "Таблиці, схема й SQL-запити PostgreSQL.", "en": "PostgreSQL tables, schema and SQL queries." },
+      "args": ["--prebuilt", "postgres", "--stdio"],
+      "inputs": ["POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DATABASE", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_QUERY_PARAMS"],
+      "required": ["POSTGRES_DATABASE", "POSTGRES_USER", "POSTGRES_PASSWORD"]
+    },
+    {
+      "id": "tools-file",
+      "label": { "uk": "Власний tools.yaml", "en": "Own tools.yaml" },
+      "summary": { "uk": "Будь-яка база Toolbox і лише ті запити, які ви описали.", "en": "Any Toolbox database, only the queries you describe." },
+      "args": ["--tools-file", "${tools_file}", "--stdio"],
+      "inputs": ["tools_file"],
+      "required": ["tools_file"]
+    }
+  ],
+  "inputs": {
+    "GOOGLE_APPLICATION_CREDENTIALS": {
+      "label": { "uk": "Акаунт Google Cloud", "en": "Google Cloud account" },
+      "description": {
+        "uk": "Один з акаунтів у «Логи і креші». Для читання досить ролі Cloud Datastore Viewer.",
+        "en": "One of the accounts in «Logs and crashes». Cloud Datastore Viewer is enough for reading."
+      },
+      "credential": "google-cloud-account"
+    },
+    "FIRESTORE_PROJECT": {
+      "label": { "uk": "Проєкт Google Cloud", "en": "Google Cloud project" },
+      "description": { "uk": "ID проєкту з базою, напр. syncta-57c6a.", "en": "The project id holding the database, e.g. syncta-57c6a." },
+      "suggest": "google-cloud-project"
+    },
+    "FIRESTORE_DATABASE": {
+      "label": { "uk": "База Firestore", "en": "Firestore database" },
+      "description": { "uk": "Порожньо — база (default).", "en": "Empty for the (default) database." }
+    },
+    "POSTGRES_HOST": { "label": { "uk": "Хост", "en": "Host" } },
+    "POSTGRES_PORT": { "label": { "uk": "Порт", "en": "Port" } },
+    "POSTGRES_DATABASE": { "label": { "uk": "База", "en": "Database" } },
+    "POSTGRES_USER": {
+      "label": { "uk": "Користувач", "en": "User" },
+      "description": { "uk": "Користувач лише з правом читання.", "en": "A user with read rights only." }
+    },
+    "POSTGRES_PASSWORD": { "label": { "uk": "Пароль", "en": "Password" } },
+    "POSTGRES_QUERY_PARAMS": {
+      "label": { "uk": "Додаткові параметри підключення", "en": "Extra connection parameters" },
+      "description": { "uk": "Напр. sslmode=require.", "en": "E.g. sslmode=require." }
+    },
+    "tools_file": {
+      "label": { "uk": "tools.yaml", "en": "tools.yaml" },
+      "description": {
+        "uk": "Джерела й інструменти Toolbox; разом із їхніми паролями зберігається зашифровано.",
+        "en": "Toolbox sources and tools; stored encrypted with their passwords."
+      }
+    }
+  }
+}

@@ -1,10 +1,13 @@
 import type { ApiRoute } from '@mastra/core/server';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import type { CredentialProvider } from '@factory/capabilities';
+
 import { createObservabilityTools } from '@factory/integrations';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@factory/integrations';
 import type { IntegrationStorageHandle } from '@factory/store';
 
+import { googleCloudAccountProvider } from './credentials.ts';
 import { buildFirebaseRoutes } from './routes.ts';
 import type { FetchLike } from './service-account.ts';
 import { FIREBASE_INTEGRATION_ID } from './settings.ts';
@@ -25,12 +28,14 @@ export class FirebaseIntegration implements FactoryIntegration {
   readonly id = FIREBASE_INTEGRATION_ID;
   readonly #options: FirebaseIntegrationOptions;
   #provider: FirebaseObservabilityProvider | undefined;
+  #storage: IntegrationStorageHandle | undefined;
 
   constructor(options: FirebaseIntegrationOptions = {}) {
     this.#options = options;
   }
 
   initialize({ storage }: { storage: IntegrationStorageHandle }): void {
+    this.#storage = storage;
     this.#provider = new FirebaseObservabilityProvider(storage, this.#options.fetch ? { fetch: this.#options.fetch } : {});
   }
 
@@ -38,6 +43,12 @@ export class FirebaseIntegration implements FactoryIntegration {
   get observability(): FirebaseObservabilityProvider {
     if (!this.#provider) throw new Error('FirebaseIntegration used before initialize().');
     return this.#provider;
+  }
+
+  /** The Google Cloud accounts, for MCP servers that pick one instead of pasting its key. */
+  credentialProviders(): CredentialProvider[] {
+    if (!this.#storage) throw new Error('FirebaseIntegration used before initialize().');
+    return [googleCloudAccountProvider(this.#storage)];
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
