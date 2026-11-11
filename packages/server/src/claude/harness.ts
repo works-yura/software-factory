@@ -14,7 +14,7 @@ import type {
   ClaudeSpawn,
   ClaudeToolPermissions,
 } from '@factory/harness-claude-code';
-import type { HarnessRoute } from '@factory/harness';
+import type { HarnessRoute, TurnHandoffHook } from '@factory/harness';
 import { BUNDLED_FACTORY_SKILLS_PATH, resolveLocalFactorySkillsPath } from '@factory/harness-mastra';
 import { FACTORY_SESSION_TOKEN_HEADER, FACTORY_TOOL_ANNOTATIONS } from '@factory/mcp';
 import { peekSessionEnvironment, renderSessionEnvironment } from '@factory/sandbox';
@@ -112,6 +112,11 @@ export const CLAUDE_FACTORY_PLANNING_PROMPT =
   'A person approves the plan, which moves the work item on and resumes this session.\n</factory-mode>';
 
 export interface ClaudeFactoryHarnessOptions {
+  /**
+   * Context a turn carries over from another conversation: a handoff a move from another harness left
+   * pending, or the thread's history when the native conversation could not be resumed.
+   */
+  handoffContextFor?: TurnHandoffHook<ClaudeCodeSession>;
   /** Where Claude Code sessions are recorded; required unless `store` is given. */
   storeDir?: string;
   store?: ClaudeSessionStore;
@@ -418,6 +423,7 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     settingSourcesFor: async session => ((await isUntrustedCheckout(session.thread)) ? [] : undefined),
     // What a Mastra session's signals say: the repositories its workspace holds, where, on which branch;
     // and, for a card run, the bound work item's phase.
+    ...(options.handoffContextFor ? { handoffContextFor: options.handoffContextFor } : {}),
     turnContextFor: async session => {
       const environment = peekSessionEnvironment(session.id);
       const signals = environment

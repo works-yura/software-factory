@@ -235,6 +235,18 @@ export class ClaudeSessionUi {
     this.#resolve = resolve;
   }
 
+  /**
+   * Stops showing a session: it moved to another harness, whose routes answer for it from now on.
+   * Waits for what its channel recorded to be stored first.
+   */
+  async release(sessionId: string): Promise<void> {
+    const channel = this.#channels.get(sessionId);
+    if (!channel) return;
+    this.#channels.delete(sessionId);
+    await channel.flushed().catch(() => {});
+    channel.detach();
+  }
+
   channel(sessionId: string): ClaudeSessionUiChannel | undefined {
     return this.#channels.get(sessionId);
   }

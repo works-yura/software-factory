@@ -83,8 +83,13 @@ export interface PrepareSessionHandoffInput {
   readonly fromInstanceId: string;
   readonly toInstanceId: string;
   readonly reason: SessionHandoffReason;
-  /** Leaves out what was stored at or after this time: the turn being sent now. */
+  /** Leaves out what was stored at or after this time. */
   readonly before?: Date;
+  /**
+   * The request the turn being sent now carries: its own input, already recorded at the end of the
+   * thread, is that request, not history, and is left out.
+   */
+  readonly currentRequest?: string;
 }
 
 export interface TurnHandoffInput {
@@ -224,7 +229,12 @@ export function createSessionHandoffs(options: SessionHandoffsOptions): SessionH
         }),
       });
       const records = await history.getThreadRecords(input.threadId, ['runs', 'attempts', 'turnItems']);
-      const items = visibleConversationItems(records, records.turnItems);
+      const items = [...visibleConversationItems(records, records.turnItems)];
+      if (input.currentRequest !== undefined) {
+        for (let last = items.at(-1); last?.type === 'user_message' && input.currentRequest.includes(last.text); last = items.at(-1)) {
+          items.pop();
+        }
+      }
       const createdAt = now().toISOString();
       const service = makeContextHandoffService({ idAllocator: { contextHandoff: () => handoffId }, tokenCap });
       const handoff = await service.prepareProviderHandoff({

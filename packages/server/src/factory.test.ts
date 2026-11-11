@@ -1,3 +1,4 @@
+import { FactoryContextHandoffProcessor } from '@factory/harness-handoff/mastra';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -455,13 +456,14 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('controller', { getState: () => ({ factoryProjectId: 'fp-1' }), emitEvent: vi.fn() });
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(6);
+    expect(first).toHaveLength(7);
     expect(first[0]).toBeInstanceOf(FactoryModelSwitchProcessor);
     expect(first[1]).toBeInstanceOf(FactoryChannelReplyProcessor);
     expect(first[2]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(first[3]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(first[4]).toBeInstanceOf(FactoryPhaseStateProcessor);
     expect(first[5]).toBeInstanceOf(FactoryWorkItemStateProcessor);
+    expect(first[6]).toBeInstanceOf(FactoryContextHandoffProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -491,11 +493,12 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('controller', { getState: () => ({ factoryProjectId: 'fp-1' }), emitEvent: vi.fn() });
 
     const processors = await inputProcessors({ requestContext });
-    expect(processors).toHaveLength(4);
+    expect(processors).toHaveLength(5);
     expect(processors[0]).toBeInstanceOf(FactoryModelSwitchProcessor);
     expect(processors[1]).toBeInstanceOf(FactoryChannelReplyProcessor);
     expect(processors[2]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(processors[3]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(processors[4]).toBeInstanceOf(FactoryContextHandoffProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -515,11 +518,12 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('controller', { getState: () => ({ factoryProjectId: 'fp-1' }), emitEvent });
 
     const processors = await inputProcessors({ requestContext });
-    expect(processors).toHaveLength(4);
+    expect(processors).toHaveLength(5);
     expect(processors[0]).toBeInstanceOf(FactoryModelSwitchProcessor);
     expect(processors[1]).toBeInstanceOf(FactoryChannelReplyProcessor);
     expect(processors[2]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(processors[3]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(processors[4]).toBeInstanceOf(FactoryContextHandoffProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
       status: 'unavailable',
       reason: 'storage unavailable',

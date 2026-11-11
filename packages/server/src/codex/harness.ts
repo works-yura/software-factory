@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { HarnessRoute } from '@factory/harness';
+import type { HarnessRoute, TurnHandoffHook } from '@factory/harness';
 import type { ModelSelection } from '@factory/harness/models/contracts';
 import type { ClaudeToolPermissions } from '@factory/harness-claude-code';
 import {
@@ -105,6 +105,11 @@ export function codexModelDefaults(project: CodexModelDefaults): ModelSelection 
 type SessionCoordinates = { orgId: string; factoryProjectId: string; sessionId: string; threadId: string; resourceId: string };
 
 export interface CodexFactoryHarnessOptions {
+  /**
+   * Context a turn carries over from another conversation: a handoff a move from another harness left
+   * pending, or the thread's history when the native conversation could not be resumed.
+   */
+  handoffContextFor?: TurnHandoffHook<CodexSession>;
   /** Where Codex sessions are recorded; required unless `store` is given. */
   storeDir?: string;
   store?: CodexSessionStore;
@@ -402,6 +407,7 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
       return codexPolicyFromPermissions(cardRun ? { ...permissions, unattended: true, parkAsks: true } : permissions);
     },
     // What a Mastra session's signals say: its repositories and, for a card run, the bound work item.
+    ...(options.handoffContextFor ? { handoffContextFor: options.handoffContextFor } : {}),
     turnContextFor: async session => {
       const environment = peekSessionEnvironment(session.id);
       const signals = environment ? [`<factory-environment>\n${renderSessionEnvironment(environment)}\n</factory-environment>`] : [];

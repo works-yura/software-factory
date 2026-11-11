@@ -74,6 +74,9 @@ import {
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
 import { ClaudeCodeSession } from '@factory/harness-claude-code';
 import { createHarnessModelRegistry, createRoutingHarness } from '@factory/harness';
+import { createMemoryHistorySource, createSessionHandoffs, threadReadSourceFromHistory } from '@factory/harness-handoff';
+import { FactoryContextHandoffProcessor } from '@factory/harness-handoff/mastra';
+import { createHarnessSwitch, turnHandoffHook } from './handoff/harness-switch.ts';
 import { createFactorySessionTokenSigner } from '@factory/mcp';
 import {
   ClaudeStartCoordinator,
@@ -1257,6 +1260,27 @@ export class MastraFactory {
     // agent's `factory_switch_session_model` go to the harness that runs the session through it.
     // Mastra's is the fallback (registered with the tool dependencies, below); others register as they start.
     const harnessModels = createHarnessModelRegistry();
+    // A session's history lives in its memory thread whichever harness runs it: a move between harnesses
+    // (a cross-harness model pick) or a native conversation that cannot be resumed hands it on from there
+    // (`@factory/harness-handoff`), and `factory_thread_read` pages it.
+    const handoffMemory = async () => {
+      const memory = await storage.getMastraStorage().getStore('memory');
+      if (!memory) throw new Error('This Factory keeps no message store, so a session cannot hand its context on.');
+      return memory;
+    };
+    const sessionHandoffs = createSessionHandoffs({
+      memory: handoffMemory,
+      label: instanceId => harnessModels.forInstance(instanceId)?.displayName ?? instanceId,
+    });
+    const threadHistory = threadReadSourceFromHistory(
+      createMemoryHistorySource({
+        memory: handoffMemory,
+        resolve: async threadId => {
+          const instanceId = (await harnessModels.forSession(threadId))?.instanceId;
+          return instanceId ? { providerInstanceId: instanceId } : {};
+        },
+      }),
+    );
     // The server's local credential store, known once the API routes are built (`buildApiRoutes`).
     let localAuthStorage: BuildApiRoutesDeps['authStorage'];
     // Every session's run state, whichever harness runs it; assigned with the routes.
@@ -1535,6 +1559,7 @@ export class MastraFactory {
       startCoordinator: () => this.#startCoordinator,
       createHarnessSession: async input => (await createClaudeSideSession?.(input)) ?? (await createCodexSideSession?.(input)),
       harnessModels: () => harnessModels,
+      threadHistory: () => threadHistory,
       messaging: factoryMessaging,
       // The live-session registry is built with the routes; no session runs before then.
       isSessionRunning: sessionId => liveSessionRegistry?.isRunning(sessionId) ?? false,
@@ -2101,6 +2126,8 @@ export class MastraFactory {
     const claudeCode: ClaudeFactoryHarness | undefined = claudeCodeConfig
       ? createClaudeFactoryHarness({
           ...claudeCodeConfig,
+          // A move from another harness left the thread's history pending, or the CLI lost the conversation.
+          handoffContextFor: turnHandoffHook('claude-code', { handoffs: () => sessionHandoffs, memory: handoffMemory }),
           sessions: sourceControlSessions,
           projects: factoryProjectsStorage,
           // Settings → Behavior → Tool permissions: the Factory's own session keeps them.
@@ -2257,6 +2284,7 @@ export class MastraFactory {
       : false;
     const codex: CodexFactoryHarness | undefined = codexConfig
       ? createCodexFactoryHarness({
+          handoffContextFor: turnHandoffHook('codex', { handoffs: () => sessionHandoffs, memory: handoffMemory }),
           ...(codexConfig.store ? { store: codexConfig.store } : {}),
           ...(codexConfig.storeDir ? { storeDir: codexConfig.storeDir } : {}),
           ...(codexConfig.command ? { command: codexConfig.command } : {}),
@@ -2357,6 +2385,44 @@ export class MastraFactory {
           this.#claudeSessionUi.setPlanDecisionHook((c, session, answer) => approvePlan(session, { ...answer, userId: routeAuth.tenant(c)?.userId }));
         }
       }
+    }
+
+    // A model pick on another harness moves the session there (same id, chat and thread) with a context
+    // handoff: the source gives it up, the target takes it with no native conversation, and the target's
+    // first turn gets the thread's real history (`createHarnessSwitch`).
+    if (claudeCode || codex) {
+      const sessionUi = this.#claudeSessionUi;
+      const turnHarnessBinding = (harness: {
+        createSession(input: { sessionId: string; threadId: string; resourceId?: string }): Promise<{
+          thread: { setSetting(input: { key: string; value: unknown }): Promise<void> };
+        }>;
+        releaseSession(sessionId: string): Promise<void>;
+      }) => ({
+        async adopt({ sessionId, threadId, resourceId, title }: { sessionId: string; threadId: string; resourceId: string; title?: string | null }) {
+          const session = await harness.createSession({ sessionId, threadId, resourceId });
+          await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.sessionId, value: sessionId });
+          if (title) await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.title, value: title });
+        },
+        async release(sessionId: string) {
+          await sessionUi.release(sessionId);
+          await harness.releaseSession(sessionId);
+        },
+      });
+      harnessModels.setHarnessSwitch(
+        createHarnessSwitch({
+          handoffs: sessionHandoffs,
+          memory: handoffMemory,
+          sessions: sourceControlSessions,
+          isRunning: sessionId => liveSessionRegistry?.isRunning(sessionId) ?? false,
+          bindings: {
+            // Mastra holds every session no other harness does: taking one on is the other's release.
+            mastra: { adopt: async () => {}, release: async () => {} },
+            ...(claudeCode ? { 'claude-code': turnHarnessBinding(claudeCode.harness) } : {}),
+            ...(codex ? { codex: turnHarnessBinding(codex.harness) } : {}),
+          },
+          available: instanceId => instanceId !== 'codex' || codexInstalled,
+        }),
+      );
     }
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
@@ -2703,6 +2769,8 @@ export class MastraFactory {
               resolveFactoryThinkingLevel(context, { projects: factoryProjectsStorage, sourceControl: sourceControlSessions }),
           });
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
+          // The history a move from Claude Code or Codex left pending for this session's first Mastra run.
+          const handoffProcessor = new FactoryContextHandoffProcessor(() => sessionHandoffs);
           const sessionsState = factorySessionsProcessor();
           const sessionsProcessor = sessionsState ? [sessionsState] : [];
           if (factoryProcessor) {
@@ -2714,6 +2782,7 @@ export class MastraFactory {
               ...sessionsProcessor,
               factoryProcessor,
               ...(workItemProcessor ? [workItemProcessor] : []),
+              handoffProcessor,
             ];
           }
           // Without work items there is no run binding, so the caller's row applies.
@@ -2722,7 +2791,7 @@ export class MastraFactory {
           } catch (error) {
             reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
           }
-          return [modelSwitchProcessor, channelReplyProcessor, environmentProcessor, ...sessionsProcessor];
+          return [modelSwitchProcessor, channelReplyProcessor, environmentProcessor, ...sessionsProcessor, handoffProcessor];
         },
         outputProcessors: [new FactoryChannelSessionLinkProcessor(), new FactoryReplyCredentialProcessor()],
         ...(vector ? { vector } : {}),
