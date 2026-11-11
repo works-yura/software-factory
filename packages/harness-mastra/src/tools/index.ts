@@ -8,19 +8,24 @@ import type { FactoryReadToolDependencies } from './read-tools.ts';
 import type { FactoryToolScope } from './scope.ts';
 import { createFactorySessionTools } from './session-tools.ts';
 import type { FactorySessionToolDependencies } from './session-tools.ts';
+import { createFactoryThreadReadTools } from './thread-read-tool.ts';
+import type { FactoryThreadReadDependencies } from './thread-read-tool.ts';
 import { createFactoryWorkItemTools } from './work-item-tools.ts';
 import type { FactoryWorkItemToolDependencies } from './work-item-tools.ts';
 
 export { FACTORY_TOOLS_WITHOUT_APPROVAL, applyFactoryToolPermissions } from './permissions.ts';
 export { FACTORY_INTERACTIVE_KEY, resolveFactoryToolScope } from './scope.ts';
 export type { FactoryToolScope } from './scope.ts';
+export { scopedThreadReadSource } from './thread-read-tool.ts';
+export type { FactoryThreadReadDependencies } from './thread-read-tool.ts';
 
 /** Storage and services the Factory tools act through. */
 export type FactoryToolDependencies = FactoryReadToolDependencies &
   FactoryWorkItemToolDependencies &
   FactoryMessagingToolDependencies &
   FactorySessionToolDependencies &
-  FactoryApprovalToolDependencies;
+  FactoryApprovalToolDependencies &
+  FactoryThreadReadDependencies;
 
 export interface CreateFactoryToolsOptions {
   scope: FactoryToolScope;
@@ -40,7 +45,8 @@ export interface CreateFactoryToolsOptions {
  * only this session and its side sessions, and starts are side sessions only.
  */
 export function createFactoryTools({ scope, deps }: CreateFactoryToolsOptions): IntegrationTools {
-  const messagingTools = createFactoryMessagingTools(scope, deps);
+  // Every session reads threads it may open: a context handoff points it here for what it left out.
+  const messagingTools = { ...createFactoryMessagingTools(scope, deps), ...createFactoryThreadReadTools(scope, deps) };
   if (scope.kind !== 'user') return messagingTools;
   return {
     ...createFactoryReadTools(scope, deps),

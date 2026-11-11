@@ -183,6 +183,7 @@ export function createFactorySessionTools(
       "The session's harness checks the pick against its own catalog, the one the chat's model picker lists for it. A Mastra session takes a model id a connected credential of the Factory runs; a running one switches immediately, a stopped one uses it on its next run, and `thinkingLevel` needs it running.",
       'A Claude Code session takes a Claude model: an alias (opus, sonnet, haiku) or a catalog id such as claude-opus-5-5; it applies from its next turn.',
       'Pass `options` by id where the model describes them, such as { id: "effort", value: "high" }, { id: "fastMode", value: true } or { id: "contextWindow", value: "1m" }.',
+      'Pass `instanceId` (`mastra`, `claude-code`, `codex`) to move the session to another harness with that model: its next turn there gets the conversation so far (a context handoff); a running session must stop first.',
     ].join(' '),
     inputSchema: z
       .object({
@@ -197,9 +198,16 @@ export function createFactorySessionTools(
           .max(8)
           .optional()
           .describe('Model options by id, as the model catalog describes them (the model picker’s descriptors).'),
+        instanceId: z
+          .string()
+          .trim()
+          .min(1)
+          .max(64)
+          .optional()
+          .describe("The harness instance the model belongs to; another than the session's moves the session there."),
       })
       .strict(),
-    execute: async ({ sessionId, modelId, thinkingLevel, options }) => {
+    execute: async ({ sessionId, modelId, thinkingLevel, options, instanceId }) => {
       const row = await deps.sessions.getBySessionId(sessionId);
       if (
         !row ||
@@ -218,7 +226,12 @@ export function createFactorySessionTools(
       const registry = deps.harnessModels?.() ?? mastraOnly;
       const switched = await registry.switchSessionModel(
         sessionId,
-        { model: modelId, ...(thinkingLevel ? { thinkingLevel } : {}), ...(options ? { options } : {}) },
+        {
+          model: modelId,
+          ...(thinkingLevel ? { thinkingLevel } : {}),
+          ...(options ? { options } : {}),
+          ...(instanceId ? { instanceId } : {}),
+        },
         { viewer: { userId: scope.userId, orgId: scope.orgId } },
       );
       if (!switched.ok) throw new Error(switched.error);
@@ -228,6 +241,7 @@ export function createFactorySessionTools(
         modelSelection: switched.modelSelection,
         live: switched.appliesFrom === 'now',
         appliesFrom: switched.appliesFrom === 'now' ? 'now' : 'next turn',
+        ...(switched.handoff ? { movedTo: switched.handoff.harnessId, handoff: 'carried with its next turn' } : {}),
       };
     },
   });

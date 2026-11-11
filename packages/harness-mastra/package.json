@@ -21,6 +21,7 @@
     "@factory/credentials": "workspace:*",
     "@factory/feed": "workspace:*",
     "@factory/harness": "workspace:*",
+    "@factory/harness-handoff": "workspace:*",
     "@factory/http": "workspace:*",
     "@factory/integration-github": "workspace:*",
     "@factory/integrations": "workspace:*",

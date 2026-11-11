@@ -1094,6 +1094,9 @@ importers:
       '@factory/harness':
         specifier: workspace:*
         version: link:../harness-core
+      '@factory/harness-handoff':
+        specifier: workspace:*
+        version: link:../harness-handoff
       '@factory/http':
         specifier: workspace:*
         version: link:../http
@@ -1882,6 +1885,9 @@ importers:
       '@factory/harness-codex-ui':
         specifier: workspace:*
         version: link:../harness-codex-ui
+      '@factory/harness-handoff':
+        specifier: workspace:*
+        version: link:../harness-handoff
       '@factory/harness-mastra':
         specifier: workspace:*
         version: link:../harness-mastra
