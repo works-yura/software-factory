@@ -1,0 +1,113 @@
+{
+  "tokens": "{{value}} токенів",
+  "window": {
+    "session": "5 годин",
+    "weekly": "Тиждень",
+    "monthly": "Місяць",
+    "model": "Тиждень · {{label}}",
+    "modelUnnamed": "Тиждень · модель"
+  },
+  "windowUsed": "{{window}}: використано {{percent}}%",
+  "percentUsed": "{{percent}}%",
+  "resetsAt": "оновиться {{time}}",
+  "accounts": {
+    "label": "Використання {{label}}",
+    "updated": "Оновлено {{time}}",
+    "unavailable": {
+      "unsupported": "Цей вхід не повідомляє лімітів використання.",
+      "failed": "Не вдалося прочитати використання: {{message}}",
+      "failedPlain": "Не вдалося прочитати використання.",
+      "signed_out": "Увійдіть знову, щоб бачити використання."
+    },
+    "stale": "Останні відомі дані; провайдер зараз не відповів."
+  },
+  "harness": {
+    "claude-code": "Claude Code",
+    "codex": "Codex",
+    "mastra": "Mastra"
+  },
+  "category": {
+    "input": "Вхід",
+    "cacheRead": "Читання з кешу",
+    "cacheWrite": "Запис у кеш",
+    "output": "Вихід",
+    "reasoning": "з них міркування"
+  },
+  "cost": {
+    "estimate": "≈ {{cost}}",
+    "unpriced": "без ціни",
+    "note": "Оцінка за цінами API. Підписка не тарифікує токени.",
+    "partlyUnpriced": "Для моделі {{count}} ходів немає ціни, їх не враховано у вартості."
+  },
+  "session": {
+    "trigger": "Використання токенів: {{tokens}} токенів у сесії",
+    "title": "Використання сесії",
+    "lastTurn": "Останній хід",
+    "total": "Сесія",
+    "turns_one": "{{count}} хід",
+    "turns_few": "{{count}} ходи",
+    "turns_many": "{{count}} ходів",
+    "turns_other": "{{count}} ходу",
+    "context": "Контекстне вікно",
+    "contextValue": "{{tokens}} з {{window}}",
+    "contextUnknown": "{{tokens}} у контексті"
+  },
+  "card": {
+    "title": "Використання",
+    "total": "{{tokens}} токенів · {{cost}}",
+    "runs": "Запуски",
+    "run": "{{harness}} · {{model}}",
+    "runTokens": "{{tokens}} токенів"
+  },
+  "activity": {
+    "runTokens": "{{tokens}} токенів"
+  },
+  "page": {
+    "title": "Використання",
+    "description": "Скільки токенів витратили агенти і скільки це коштувало б за цінами API — за harness, моделлю, акаунтом і фабрикою.",
+    "period": "Період",
+    "periods": {
+      "7": "7 днів",
+      "30": "30 днів",
+      "90": "90 днів"
+    },
+    "scope": "Фабрики",
+    "scopes": {
+      "factory": "Ця фабрика",
+      "all": "Усі фабрики"
+    },
+    "kpi": {
+      "tokens": "Токени",
+      "cost": "Орієнтовна вартість",
+      "turns": "Ходи",
+      "cacheShare": "Вхід із кешу"
+    },
+    "daily": {
+      "title": "Токени за день",
+      "description": "Вхід, читання й запис кешу, вихід.",
+      "costTitle": "Вартість за день",
+      "costDescription": "Оцінка за цінами API.",
+      "tokensTab": "Токени",
+      "costTab": "Вартість"
+    },
+    "breakdown": {
+      "title": "Розподіл",
+      "description": "На що пішли витрати за період.",
+      "by": {
+        "harness": "Harness",
+        "model": "Модель",
+        "account": "Акаунт",
+        "factory": "Фабрика"
+      },
+      "tokens": "Токени",
+      "cost": "Вартість",
+      "empty": "За цей період використання немає."
+    },
+    "unknown": {
+      "model": "Модель не вказано",
+      "account": "Без акаунта",
+      "factory": "Без фабрики"
+    },
+    "error": "Не вдалося завантажити використання."
+  }
+}

@@ -30,6 +30,26 @@ export const server = setupServer(
       { status: 400 },
     ),
   ),
+  // Ambient usage: no allowance read yet, no turns recorded; usage tests override these with `server.use(...)`.
+  http.get('*/web/config/providers/:provider/accounts/usage', () => HttpResponse.json({ accounts: {} })),
+  http.get('*/web/usage/sessions/:sessionId', ({ params }) =>
+    HttpResponse.json({
+      usage: {
+        sessionId: params.sessionId,
+        turns: [],
+        total: {
+          turns: 0,
+          totals: { inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, reasoningTokens: 0 },
+          totalTokens: 0,
+          costUsd: 0,
+          reportedCostUsd: 0,
+          unpricedTurns: 0,
+        },
+        context: null,
+      },
+    }),
+  ),
+  http.get('*/web/usage/work-items', () => HttpResponse.json({ workItems: {} })),
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
   http.get('*/web/status', () => HttpResponse.json({ problems: [] })),

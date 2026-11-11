@@ -12,13 +12,15 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ApiRequestError } from '../../../../../../api/client';
-import type { CredentialAccountInfo } from '../../../../../../api/types';
+import type { AccountUsageView, CredentialAccountInfo } from '../../../../../../api/types';
 import {
   useCredentialAccountsQuery,
   useRemoveCredentialAccount,
   useUpdateCredentialAccount,
 } from '../../../../../../hooks/useCredentialAccounts';
 import { useServerFeatures } from '../../../../../../hooks/useServerFeatures';
+import { useAccountUsageQuery } from '../../../../../../hooks/useUsage';
+import { AccountUsageWindows } from '../../../../usage/components/AccountUsageWindows';
 import { currentLanguage } from '../../../../../i18n';
 import { translator } from '../../../../../i18n/t';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
@@ -54,6 +56,10 @@ export function HarnessAccountsSection({ accounts: harness }: { accounts: Harnes
   const [actionError, setActionError] = useState<string | null>(null);
 
   const data = accountsQuery.data;
+  // Each sign-in's 5-hour, weekly and model windows, read from the provider again as the section opens.
+  const usageQuery = useAccountUsageQuery(harness.provider, {
+    enabled: data?.accounts.some(account => account.legacy !== true) ?? false,
+  });
   const busy = updateMutation.isPending || removeMutation.isPending;
   const needsSignIn =
     accountsQuery.error instanceof ApiRequestError && accountsQuery.error.code === 'accounts_need_sign_in';
@@ -84,6 +90,7 @@ export function HarnessAccountsSection({ accounts: harness }: { accounts: Harnes
                 key={account.id}
                 accounts={harness}
                 account={account}
+                usage={usageQuery.data?.accounts[account.id]}
                 disabled={busy}
                 onToggle={() =>
                   run(updateMutation.mutateAsync({ id: account.id, disabled: account.status !== 'disabled' }))
@@ -140,6 +147,7 @@ function statusPresentation(account: CredentialAccountInfo): StatusPresentation 
 function AccountRow({
   accounts: harness,
   account,
+  usage,
   disabled,
   onToggle,
   onRename,
@@ -147,6 +155,7 @@ function AccountRow({
 }: {
   accounts: HarnessAccounts;
   account: CredentialAccountInfo;
+  usage: AccountUsageView | undefined;
   disabled: boolean;
   onToggle: () => void;
   onRename: () => void;
@@ -187,6 +196,7 @@ function AccountRow({
             ? t('accounts.lastUsed', { time: formatAccountTime(account.lastUsedAt) })
             : t('accounts.neverUsed')}
         </Txt>
+        {!legacy && usage && <AccountUsageWindows label={account.label} usage={usage} />}
       </div>
       {!legacy && (
         <Txt as="span" variant="meta" tone="muted" className="shrink-0 pt-0.5">

@@ -127,6 +127,10 @@ export const queryKeys = {
   providers: () => ['providers'] as const,
   credentialAccounts: (provider: string) => ['credential-accounts', provider] as const,
   accountSignIn: (provider: string, id: string | null) => ['account-sign-in', provider, id] as const,
+  accountUsage: (provider: string) => ['account-usage', provider] as const,
+  usageSummary: (filter: Record<string, string | undefined>) => ['usage', 'summary', filter] as const,
+  sessionUsage: (sessionId: string | undefined) => ['usage', 'session', sessionId ?? null] as const,
+  workItemsUsage: (ids: readonly string[]) => ['usage', 'work-items', [...ids].sort().join(',')] as const,
   availableModels: (filter?: AvailableModelsFilter) =>
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,

@@ -236,3 +236,11 @@ export type IntakeRouteTriggeredInfo = NonNullable<IntakeRouteInfo['triggered']>
 export type IntakeRouteFireInfo = NonNullable<IntakeRouteTriggeredInfo['lastFire']>;
 export type IntakeTriggerKindsInfo = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeTriggerKinds.responseSchema>;
 export type IntakeTriggerPreviewInfo = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeTriggerPreview.responseSchema>;
+
+export type {
+  AccountsUsageResponse,
+  AccountUsageView,
+  SessionUsageResponse,
+  UsageSummaryResponse,
+  WorkItemsUsageResponse,
+} from '@factory/api/usage';

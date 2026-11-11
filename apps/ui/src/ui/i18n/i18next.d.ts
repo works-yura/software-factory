@@ -13,6 +13,7 @@ import type onboarding from './locales/en/onboarding.json';
 import type search from './locales/en/search.json';
 import type settings from './locales/en/settings.json';
 import type supervisor from './locales/en/supervisor.json';
+import type usage from './locales/en/usage.json';
 import type workspaces from './locales/en/workspaces.json';
 
 // English catalogs are the source of truth: a key that is not in them is a type error.
@@ -33,6 +34,7 @@ declare module 'i18next' {
       search: typeof search;
       settings: typeof settings;
       supervisor: typeof supervisor;
+      usage: typeof usage;
       workspaces: typeof workspaces;
     };
   }

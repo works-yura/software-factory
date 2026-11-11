@@ -10,11 +10,12 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import type { CredentialAccountInfo, CredentialAccountsResponse } from '../../../../../../../api/types';
+import type { AccountsUsageResponse, CredentialAccountInfo, CredentialAccountsResponse } from '../../../../../../../api/types';
 import { server } from '../../../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../../e2e/ui/render';
 import { CLAUDE_CODE_ACCOUNTS, CODEX_ACCOUNTS } from '../harnessAccounts';
 import { formatAccountTime, HarnessAccountsSection } from '../HarnessAccountsSection';
+import { formatUsageTime } from '../../../../../usage/format';
 
 const ClaudeAccountsSection = () => <HarnessAccountsSection accounts={CLAUDE_CODE_ACCOUNTS} />;
 
@@ -356,5 +357,55 @@ describe('HarnessAccountsSection for Codex', () => {
     expect(await screen.findByText('Signed in as alice@example.com.', {}, { timeout: 5000 })).toBeInTheDocument();
     expect(await screen.findByRole('listitem', { name: 'alice@example.com' })).toBeInTheDocument();
     expect(within(row('alice@example.com')).getByText('Your ChatGPT sign-in')).toBeInTheDocument();
+  });
+});
+
+describe('HarnessAccountsSection usage windows', () => {
+  it("asks for each sign-in's windows as the section opens and shows a bar per window with its use and reset", async () => {
+    const resetsAt = '2026-11-11T20:00:00.000Z';
+    const checkedAt = '2026-11-11T18:00:00.000Z';
+    const refreshes: string[] = [];
+    stubAccounts([
+      account({ id: 'a1', label: 'alice@example.com' }),
+      account({ id: 'a2', label: 'bob@example.com', mine: false }),
+      account({ id: 'a3', label: 'olena@example.com', mine: false }),
+    ]);
+    server.use(
+      http.get(`${ACCOUNTS_URL}/usage`, ({ request }) => {
+        refreshes.push(new URL(request.url).searchParams.get('refresh') ?? '');
+        return HttpResponse.json({
+          accounts: {
+            a1: {
+              checkedAt,
+              source: 'probe',
+              windows: [
+                { id: 'seven_day', kind: 'weekly', usedPercent: 12.4 },
+                { id: 'five_hour', kind: 'session', usedPercent: 61, resetsAt },
+                { id: 'seven_day_opus', kind: 'model', label: 'Opus', usedPercent: 100 },
+              ],
+            },
+            a2: { checkedAt, source: 'probe', windows: [], unavailable: { reason: 'failed', message: 'The provider answered HTTP 401.' } },
+          },
+        } satisfies AccountsUsageResponse);
+      }),
+    );
+
+    renderWithProviders(<ClaudeAccountsSection />);
+
+    const alice = await screen.findByRole('group', { name: 'Usage of alice@example.com' });
+    const meters = within(alice).getAllByRole('meter');
+    expect(meters.map(meter => meter.getAttribute('aria-label'))).toEqual(['5-hour', 'Weekly', 'Weekly · Opus']);
+    expect(meters[0]).toHaveAttribute('aria-valuenow', '61');
+    expect(meters[0]).toHaveAttribute('aria-valuetext', '5-hour: 61% used');
+    expect(within(alice).getByText(`61% · resets ${formatUsageTime(resetsAt)}`)).toBeInTheDocument();
+    expect(within(alice).getByText('12%')).toBeInTheDocument();
+    expect(within(alice).getByText(`Updated ${formatUsageTime(checkedAt)}`)).toBeInTheDocument();
+
+    const bob = await screen.findByRole('group', { name: 'Usage of bob@example.com' });
+    expect(within(bob).getByText('Couldn’t read usage: The provider answered HTTP 401.')).toBeInTheDocument();
+    expect(within(bob).queryByRole('meter')).not.toBeInTheDocument();
+    // A sign-in with nothing read yet shows no usage at all.
+    expect(screen.queryByRole('group', { name: 'Usage of olena@example.com' })).not.toBeInTheDocument();
+    expect(refreshes).toEqual(['1']);
   });
 });
