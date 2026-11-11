@@ -1,6 +1,6 @@
 import { isAbsolute, join } from 'node:path';
 
-import type { AgentHarness, AgentRunContext, AgentRunContextInput, AgentSession, AgentSkill } from '@factory/harness';
+import type { AgentHarness, AgentRunContext, AgentRunContextInput, AgentSession, AgentSkill, HarnessModels } from '@factory/harness';
 
 import { ClaudeCodeSession, type ClaudeCodeSessionConfig } from './session.ts';
 import { readSkill } from './skills.ts';
@@ -17,6 +17,8 @@ export interface ClaudeCodeHarnessConfig extends ClaudeCodeSessionConfig {
    * attach observers such as the chat UI's transcript recorder.
    */
   onSession?: (session: ClaudeCodeSession) => void;
+  /** The harness's model facet (`createClaudeCodeHarnessModels`), exposed as `harness.models`. */
+  models?: HarnessModels;
 }
 
 /** The context a delivery runs with; a plain map, since Claude Code tools never read it in-process. */
@@ -86,6 +88,7 @@ export function createClaudeCodeHarness(config: ClaudeCodeHarnessConfig): Claude
   };
 
   return {
+    ...(config.models ? { models: config.models } : {}),
     getSession: load,
 
     async createSession({ sessionId, threadId, resourceId }) {

@@ -16,6 +16,8 @@ import { z } from 'zod';
 import { registerTenantCredentialResolver, resetTenantCredentialResolverForTests } from '@factory/credentials';
 import { factoryMemorySettingsUserId } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
+import { createHarnessModelRegistry } from '@factory/harness/models/registry';
+import { codexStubModels } from '@factory/harness/models/registry.testFixtures';
 import type { FactoryStorageTestSeed } from '@factory/testing';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.ts';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
@@ -642,6 +644,22 @@ describe('provider key routes with a tenant', () => {
 
 describe('GET /web/config/models', () => {
   const fableReasoning: ModelReasoningOption[] = [{ type: 'effort', values: ['low', 'high'] }];
+  /** Its reasoning as a t3code option descriptor: the thinking levels Mastra Code runs it at. */
+  const fableCapabilities = {
+    optionDescriptors: [
+      {
+        id: 'effort',
+        label: 'Reasoning',
+        type: 'select',
+        role: 'reasoning',
+        options: [
+          { id: 'off', label: 'Off' },
+          { id: 'low', label: 'Low' },
+          { id: 'high', label: 'High' },
+        ],
+      },
+    ],
+  };
 
   beforeEach(() => {
     vi.mocked(getModelReasoningOptions).mockImplementation(modelId =>
@@ -670,9 +688,51 @@ describe('GET /web/config/models', () => {
           modelName: 'claude-fable-5',
           hasApiKey: true,
           reasoningOptions: fableReasoning,
+          capabilities: fableCapabilities,
+        },
+      ],
+      instances: [
+        {
+          instanceId: 'mastra',
+          harnessId: 'mastra',
+          displayName: 'Mastra',
+          available: true,
+          needsSetup: false,
+          defaultModel: null,
+          defaultSelection: null,
+          models: [
+            { slug: 'anthropic/claude-fable-5', name: 'claude-fable-5', subProvider: 'Anthropic', isCustom: false, capabilities: fableCapabilities },
+          ],
         },
       ],
     });
+  });
+
+  it('lists every registered harness as an instance, a new one without any change here', async () => {
+    const controller = { listAvailableModels: async () => [] };
+    const registry = createHarnessModelRegistry([codexStubModels(new Set())]);
+    const describe = vi.spyOn(registry, 'describe');
+    const app = new Hono();
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({ auth: fakeRouteAuth({ enabled: false }), controller, harnessModels: () => registry }).routes(),
+    );
+    const body = (await (await app.request('/web/config/models?factoryId=f-1')).json()) as {
+      instances: Array<Record<string, any>>;
+    };
+    expect(body.instances.map(instance => instance.instanceId)).toEqual(['mastra', 'codex-stub']);
+    expect(body.instances[1]).toMatchObject({
+      harnessId: 'codex',
+      displayName: 'Codex',
+      available: true,
+      defaultModel: 'gpt-5.3-codex',
+      models: [{ slug: 'gpt-5.3-codex', capabilities: { optionDescriptors: [{ id: 'reasoningEffort' }, { id: 'fastMode' }] } }, { slug: 'gpt-5-mini' }],
+    });
+    // Mastra's catalog is the one this route resolved; nothing to set it up with yet.
+    expect(body.instances[0]).toMatchObject({ instanceId: 'mastra', available: false, needsSetup: true, models: [] });
+    expect(describe).toHaveBeenCalledWith({ viewer: { userId: '', orgId: '' }, factoryProjectId: 'f-1' }, [
+      expect.objectContaining({ instanceId: 'mastra' }),
+    ]);
   });
 
   it('includes only models reachable through tenant credentials', async () => {
@@ -702,7 +762,7 @@ describe('GET /web/config/models', () => {
 
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       models: [
         {
           id: 'anthropic/claude-fable-5',
@@ -710,6 +770,7 @@ describe('GET /web/config/models', () => {
           modelName: 'claude-fable-5',
           hasApiKey: true,
           reasoningOptions: fableReasoning,
+          capabilities: fableCapabilities,
           credentialLabel: 'Claude Pro/Max',
           credentialHolder: 'organization',
         },
@@ -835,14 +896,15 @@ describe('GET /web/config/models', () => {
       return (await app.request('/web/config/models')).json();
     };
 
-    expect(await request()).toEqual({ models: [] });
-    expect(await request(new Set(['amazon-bedrock']))).toEqual({
+    expect(await request()).toMatchObject({ models: [] });
+    expect(await request(new Set(['amazon-bedrock']))).toMatchObject({
       models: [
         {
           id: 'amazon-bedrock/anthropic.claude-x',
           provider: 'amazon-bedrock',
           modelName: 'anthropic.claude-x',
           hasApiKey: true,
+          capabilities: { optionDescriptors: [] },
           credentialHolder: 'deployment',
         },
       ],
@@ -879,9 +941,16 @@ describe('GET /web/config/models', () => {
 
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       models: [
-        { id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true, credentialHolder: 'organization' },
+        {
+          id: 'acme/fast-1',
+          provider: 'acme',
+          modelName: 'fast-1',
+          hasApiKey: true,
+          capabilities: expect.any(Object),
+          credentialHolder: 'organization',
+        },
       ],
     });
   });

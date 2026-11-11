@@ -13,6 +13,7 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ProjectListRepository } from '@factory/contracts';
 
@@ -249,14 +250,6 @@ export function isFactoryHarness(value: unknown): value is FactoryHarness {
   return FACTORY_HARNESSES.some(harness => harness === value);
 }
 
-/** `claude --model` aliases a Claude Code Factory may pin; mirrors `CLAUDE_CODE_MODELS` in @factory/contracts. */
-export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
-
-export type ClaudeCodeModel = (typeof CLAUDE_CODE_MODELS)[number];
-
-export function isClaudeCodeModel(value: unknown): value is ClaudeCodeModel {
-  return CLAUDE_CODE_MODELS.some(model => model === value);
-}
 
 /** The language a Factory's agents write to the team in; mirrors `AGENT_LANGUAGES` in @factory/contracts. */
 export const AGENT_LANGUAGES = ['uk', 'en'] as const;

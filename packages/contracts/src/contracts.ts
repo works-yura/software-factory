@@ -12,6 +12,7 @@ import {
 import { IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@factory/core';
 import {
   ATTACHMENT_SOURCES,
+  CLAUDE_CODE_MODELS,
   MAX_INTAKE_ROUTES,
   storedBoardDefinitionSchema,
   storedBoardInputSchema,
@@ -233,7 +234,7 @@ const decisionResponseSchema = z.object({ decision: entitySchema });
 export const FACTORY_HARNESS_KINDS = ['mastra', 'claude-code'] as const;
 
 /** `claude --model` aliases a Claude Code Factory may pin; null means the CLI's own default. */
-export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
+export { CLAUDE_CODE_MODELS };
 const claudeCodeModelSchema = z.enum(CLAUDE_CODE_MODELS).nullable();
 
 /** The language a Factory's agents write to the team in; mirrors `AGENT_LANGUAGES` in @factory/store. */

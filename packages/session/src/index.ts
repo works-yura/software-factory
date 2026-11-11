@@ -26,3 +26,5 @@ export * from './thread-title-mirror.ts';
 export * from './work-item-repository.ts';
 export * from './tool-permissions.ts';
 export * from './work-item-folders.ts';
+export * from './model-switch-processor.ts';
+export * from './session-model-catalog.ts';

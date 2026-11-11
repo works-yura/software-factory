@@ -11,6 +11,7 @@ import type { FactorySessionTokenClaims } from '@factory/mcp';
 
 import { CLAUDE_FACTORY_MCP_SERVER, createClaudeFactoryHarness, DEFAULT_CLAUDE_FACTORY_ALLOWED_TOOLS } from './harness.ts';
 import type { ClaudeFactoryHarnessOptions } from './harness.ts';
+import { createHarnessModelRegistry } from '@factory/harness';
 import { RequestContext } from '@mastra/core/request-context';
 import { FACTORY_INTERACTIVE_KEY } from '@factory/harness-mastra';
 
@@ -302,34 +303,91 @@ describe('createClaudeFactoryHarness', () => {
   });
 
   describe('per-session model', () => {
-    it('reads the session Factory’s claudeCodeModel on every turn, in the session’s own org', async () => {
+    it('reads the session Factory’s claudeCodeModel and thinking level on every turn, in the session’s own org', async () => {
       const models: Record<string, string | null> = { 'factory-a': 'opus', 'factory-b': null };
       const projects = {
         get: vi.fn(async ({ id }: { orgId: string; id: string }) =>
-          id in models ? ({ id, claudeCodeModel: models[id] } as never) : null,
+          id in models ? ({ id, claudeCodeModel: models[id], defaultThinkingLevel: 'high' } as never) : null,
         ),
       };
       const { factory, config } = setup({ projects });
       const a = await factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
       const b = await factory.harness.createSession({ sessionId: 'session-b', threadId: 't' });
 
-      await expect(config.modelFor!(a)).resolves.toBe('opus');
+      await expect(config.turnSelectionFor!(a)).resolves.toEqual({ model: 'opus', effort: 'high', settings: { fastMode: false } });
       expect(projects.get).toHaveBeenLastCalledWith({ orgId: 'org-a', id: 'factory-a' });
-      // No model chosen: the CLI's own default.
-      await expect(config.modelFor!(b)).resolves.toBeUndefined();
-      // Changed in settings: the next turn picks it up.
+      // No model chosen: the CLI's own default model, at the Factory's effort.
+      await expect(config.turnSelectionFor!(b)).resolves.toEqual({ effort: 'high' });
+      // Changed in settings: the next turn picks it up, marked as a switch.
       models['factory-a'] = 'haiku';
-      await expect(config.modelFor!(a)).resolves.toBe('haiku');
+      await expect(config.turnSelectionFor!(a)).resolves.toMatchObject({
+        model: 'haiku',
+        effort: 'high',
+        modelSwitch: { from: { model: 'opus' }, to: { model: 'haiku' } },
+      });
+      await expect(config.turnSelectionFor!(a)).resolves.not.toHaveProperty('modelSwitch');
+    });
+
+    it('runs a session’s own pick over its Factory’s, checked against the Claude catalog', async () => {
+      const projects = { get: vi.fn(async () => ({ claudeCodeModel: 'opus', defaultThinkingLevel: 'medium' }) as never) };
+      const { factory, config } = setup({ projects });
+      const session = await factory.harness.createSession({ sessionId: 'session-a', threadId: 't' });
+      const models = factory.models!;
+      const registry = createHarnessModelRegistry([models]);
+      const ctx = { viewer: { userId: 'user-a', orgId: 'org-a' } };
+      const set = (request: { model: string | null; thinkingLevel?: string; options?: Array<{ id: string; value: string | boolean }> }) =>
+        registry.switchSessionModel(session.id, request, ctx);
+      expect(factory.harness.models).toBe(models);
+
+      await expect(set({ model: 'gpt-5' })).resolves.toMatchObject({ ok: false, status: 400 });
+      await expect(set({ model: 'opus', thinkingLevel: 'galaxy' })).resolves.toMatchObject({ ok: false });
+      await expect(
+        set({ model: 'claude-opus-4-6', thinkingLevel: 'max', options: [{ id: 'contextWindow', value: '200k' }] }),
+      ).resolves.toEqual({
+        ok: true,
+        appliesFrom: 'next-turn',
+        modelSelection: {
+          instanceId: 'claude-code',
+          model: 'claude-opus-4-6',
+          options: [
+            { id: 'contextWindow', value: '200k' },
+            { id: 'effort', value: 'max' },
+          ],
+        },
+      });
+      await expect(config.turnSelectionFor!(session)).resolves.toEqual({
+        model: 'claude-opus-4-6',
+        effort: 'max',
+        settings: { fastMode: false },
+      });
+      // Ultrathink rides in the prompt at the model's default effort.
+      await set({ model: 'sonnet', options: [{ id: 'effort', value: 'ultrathink' }] });
+      await expect(config.turnSelectionFor!(session)).resolves.toMatchObject({
+        model: 'sonnet',
+        effort: 'high',
+        promptEffort: 'ultrathink',
+        modelSwitch: { from: { model: 'claude-opus-4-6' }, to: { model: 'sonnet' } },
+      });
+      // Cleared: back to the Factory's model and thinking level.
+      await expect(set({ model: null })).resolves.toEqual({
+        ok: true,
+        appliesFrom: 'next-turn',
+        modelSelection: { instanceId: 'claude-code', model: 'opus', options: [{ id: 'effort', value: 'medium' }] },
+      });
+      await expect(models.getSelection(session.id, ctx)).resolves.toMatchObject({ model: 'opus' });
     });
 
     it('fails a turn whose session has no Factory session row', async () => {
       const { factory, config } = setup({ projects: { get: vi.fn() } });
       const orphan = await factory.harness.createSession({ sessionId: 'session-orphan', threadId: 't' });
-      await expect(config.modelFor!(orphan)).rejects.toThrow(/has no Factory session row/);
+      await expect(config.turnSelectionFor!(orphan)).rejects.toThrow(/has no Factory session row/);
     });
 
     it('gives the CLI no model hook without the Factories', () => {
-      expect(setup().config.modelFor).toBeUndefined();
+      const { config, factory } = setup();
+      expect(config.turnSelectionFor).toBeUndefined();
+      expect(config.modelFor).toBeUndefined();
+      expect(factory.models).toBeUndefined();
     });
   });
 
@@ -523,7 +581,7 @@ describe('createClaudeFactoryHarness', () => {
       expect(config2.mcpServers.factory.url).toBe(`https://factory.test/mcp/${FACTORY}`);
       await config.credentials(session, { exclude: [] });
       expect(credentials).toHaveBeenLastCalledWith({ orgId: 'org-a', userId: 'bob' }, { exclude: [] });
-      expect(await config.modelFor!(session)).toBe('haiku');
+      expect(await config.turnSelectionFor!(session)).toMatchObject({ model: 'haiku' });
     });
 
     it('asks before every repair unless the Factory auto-approves, and never runs unattended', async () => {

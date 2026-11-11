@@ -13,6 +13,8 @@ import {
   type ClaudeCodeSession,
 } from '@factory/harness-claude-code';
 
+import type { ModelSelection } from '@factory/harness/models/contracts';
+
 import { ClaudeSessionUiChannel, type ClaudeUiStorage } from './channel.ts';
 import { runErrorIdentity } from './projector.ts';
 
@@ -54,6 +56,13 @@ export type PlanDecisionHook = (
   session: ClaudeCodeSession,
   answer: { resumeData: PlanDecision; toolCallId: string },
 ) => boolean | Promise<boolean>;
+
+/**
+ * The selection a Claude Code session's next turn runs on, Factory defaults filled in (`null` for the
+ * CLI's own), for the state route's `modelSelection`. The host reads it from the harness's model
+ * facet; switching is the host's generic `POST …/sessions/:id/model` (`HarnessModelRegistry`).
+ */
+export type ClaudeSessionModelSelectionReader = (session: ClaudeCodeSession) => Promise<ModelSelection | null>;
 
 function decode(segment: string): string {
   try {
@@ -178,6 +187,7 @@ export class ClaudeSessionUi {
   #resolve: ClaudeSessionUiOptions['resolveSession'];
   #onPersonInput: PersonInputHook | undefined;
   #onPlanDecision: PlanDecisionHook | undefined;
+  #modelSelection: ClaudeSessionModelSelectionReader | undefined;
 
   constructor(options: ClaudeSessionUiOptions) {
     this.#options = options;
@@ -188,6 +198,11 @@ export class ClaudeSessionUi {
   /** Sets the {@link ClaudeSessionUiOptions.onPersonInput} hook, once the host's auth exists. */
   setPersonInputHook(hook: PersonInputHook): void {
     this.#onPersonInput = hook;
+  }
+
+  /** Sets the {@link ClaudeSessionModelSelectionReader}, once the host's model facet exists. */
+  setModelSelectionReader(reader: ClaudeSessionModelSelectionReader): void {
+    this.#modelSelection = reader;
   }
 
   /** Sets the {@link PlanDecisionHook}, once the host's boards exist. */
@@ -374,6 +389,7 @@ export class ClaudeSessionUi {
       threadId: requested ?? channel.threadId,
       modeId: channel.session.mode ?? 'default',
       modelId: channel.modelId ?? '',
+      ...(this.#modelSelection ? { modelSelection: await this.#modelSelection(channel.session) } : {}),
       running: channel.running,
       tasks: own ? display.tasks : [],
       omProgress: {

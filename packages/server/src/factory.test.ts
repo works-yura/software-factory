@@ -40,7 +40,7 @@ import { FactoryPhaseStateProcessor, FactoryWorkItemStateProcessor } from '@fact
 import type * as runtimeModule from '@factory/runtime';
 import { DEFAULT_FACTORY_CONFIG_VERSION, defineBoard } from '@factory/core';
 import { createFactorySecretEncryption } from '@factory/store';
-import { FactoryChannelReplyProcessor } from '@factory/session';
+import { FactoryChannelReplyProcessor, FactoryModelSwitchProcessor } from '@factory/session';
 import { FactoryEnvironmentStateProcessor } from '@factory/sandbox';
 import type * as resourceMigrationModule from '@factory/session';
 import type { CustomProvidersStorage } from '@factory/store';
@@ -455,12 +455,13 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('controller', { getState: () => ({ factoryProjectId: 'fp-1' }), emitEvent: vi.fn() });
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(5);
-    expect(first[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
-    expect(first[1]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(first[2]).toBeInstanceOf(FactorySessionsStateProcessor);
-    expect(first[3]).toBeInstanceOf(FactoryPhaseStateProcessor);
-    expect(first[4]).toBeInstanceOf(FactoryWorkItemStateProcessor);
+    expect(first).toHaveLength(6);
+    expect(first[0]).toBeInstanceOf(FactoryModelSwitchProcessor);
+    expect(first[1]).toBeInstanceOf(FactoryChannelReplyProcessor);
+    expect(first[2]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(first[3]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(first[4]).toBeInstanceOf(FactoryPhaseStateProcessor);
+    expect(first[5]).toBeInstanceOf(FactoryWorkItemStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -490,10 +491,11 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('controller', { getState: () => ({ factoryProjectId: 'fp-1' }), emitEvent: vi.fn() });
 
     const processors = await inputProcessors({ requestContext });
-    expect(processors).toHaveLength(3);
-    expect(processors[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
-    expect(processors[1]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(processors[2]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(processors).toHaveLength(4);
+    expect(processors[0]).toBeInstanceOf(FactoryModelSwitchProcessor);
+    expect(processors[1]).toBeInstanceOf(FactoryChannelReplyProcessor);
+    expect(processors[2]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(processors[3]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -513,10 +515,11 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('controller', { getState: () => ({ factoryProjectId: 'fp-1' }), emitEvent });
 
     const processors = await inputProcessors({ requestContext });
-    expect(processors).toHaveLength(3);
-    expect(processors[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
-    expect(processors[1]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(processors[2]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(processors).toHaveLength(4);
+    expect(processors[0]).toBeInstanceOf(FactoryModelSwitchProcessor);
+    expect(processors[1]).toBeInstanceOf(FactoryChannelReplyProcessor);
+    expect(processors[2]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(processors[3]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
       status: 'unavailable',
       reason: 'storage unavailable',

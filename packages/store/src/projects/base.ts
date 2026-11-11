@@ -18,9 +18,12 @@ export function isFactoryHarnessKind(value: unknown): value is FactoryHarnessKin
 /**
  * Models a Claude Code Factory may pin, as the `claude` CLI's own aliases
  * (`claude --model opus`), so they follow the CLI's current Opus/Sonnet/Haiku.
+ * Defined once in @factory/harness-claude-code, next to the Claude model catalog they resolve in.
  */
-export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'] as const;
-export type ClaudeCodeModel = (typeof CLAUDE_CODE_MODELS)[number];
+export { CLAUDE_CODE_MODELS, isClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+export type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import { isClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 
 /**
  * The language a Factory's agents write in to the team: messages, plans,
@@ -58,10 +61,6 @@ export function parseFactoryToolPermissions(value: unknown): FactoryToolPermissi
     }
   }
   return { categories, yolo: raw.yolo === true };
-}
-
-export function isClaudeCodeModel(value: unknown): value is ClaudeCodeModel {
-  return typeof value === 'string' && (CLAUDE_CODE_MODELS as readonly string[]).includes(value);
 }
 
 export interface FactoryProject {

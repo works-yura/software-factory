@@ -1,3 +1,6 @@
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -8,13 +11,16 @@ import { workLaneForRole } from '@factory/pipelines';
 import { externalSessionFor } from '@factory/integrations';
 import type { IntegrationTools } from '@factory/integrations';
 import type { AgentSession } from '@factory/harness';
-import { buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 import { USER_SESSION_BRANCH_PREFIX } from '@factory/session';
 import { CardSessionRunningError, runningCardSession } from '@factory/session';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.ts';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.ts';
-import { resolveFactoryModelPolicy } from '@factory/session';
+import { resolveSessionModelCatalog, unrunnableModelMessage } from '@factory/session';
+import type { SessionModelCatalog } from '@factory/session';
+import { createHarnessModelRegistry } from '@factory/harness/models/registry';
+import type { HarnessModelRegistry } from '@factory/harness/models/registry';
+import { createMastraHarnessModels } from '../models.ts';
 import type { SourceControlSessionLookup } from '@factory/session';
 import {
   ensureFactorySourceSession,
@@ -50,15 +56,24 @@ export interface FactorySessionToolDependencies {
     projects: FactoryProjectsStorage;
     /**
      * Tenant credential stores, present when auth is on. Model switches then
-     * check the target session's credential scope, like the Settings picker;
-     * without them the server's own keys decide.
+     * check the models the session's Factory credentials run (every credential
+     * belongs to the organization; there are no personal ones), like the
+     * Settings picker; without them the server's own keys decide.
      */
     tenantCatalog?: {
       credentials: Pick<ModelCredentialsStorage, 'listCredentials'>;
       customProviders?: Pick<CustomProvidersStorage, 'ensureReady' | 'list'>;
       deploymentProviders?: ReadonlySet<string>;
     };
+    /** The server's local credential store, as the Settings picker reads it; known once the mount is up. */
+    authStorage?: () => AuthStorage | undefined;
   };
+  /**
+   * The server's harness model registry: a switch goes to the harness that runs the session, which
+   * checks the pick against its own catalog. Absent: Mastra's facet alone (sessions another harness
+   * runs refuse).
+   */
+  harnessModels?: () => Pick<HarnessModelRegistry, 'switchSessionModel'> | undefined;
   /** Resolved lazily: the controller only exists once the mount is up. */
   messaging: () => Promise<FactoryMessaging | null>;
   workItems: Pick<
@@ -98,8 +113,6 @@ export interface FactorySessionToolDependencies {
   isSessionRunning?: (sessionId: string) => boolean;
 }
 
-const LISTED_MODELS = 8;
-
 function ambiguousRepository(candidates: readonly string[]): string {
   return `This item has several repositories (${candidates.join(', ')}) and none is in the Factory's environment; turn the ones it needs on under Settings → Environment.`;
 }
@@ -117,10 +130,10 @@ function workItemLabel(item: Card): string {
   return number === null ? `"${item.title}"` : `#${number}`;
 }
 
-/** A Claude Code session runs on its Factory's Claude Code model; there is no per-session model to pick. */
+/** A side session of a Claude Code Factory starts on the Factory's Claude Code model; switch it once it runs. */
 function claudeModelError(): Error {
   return new Error(
-    "That session runs on Claude Code: it uses the Factory's Claude Code model (Settings → Models) and its model can't be switched per session.",
+    "This Factory runs on Claude Code: a side session starts on the Factory's Claude Code model (Settings → Models). Switch it afterwards with factory_switch_session_model.",
   );
 }
 
@@ -135,76 +148,58 @@ export function createFactorySessionTools(
   deps: FactorySessionToolDependencies,
 ): IntegrationTools {
   /** The models a session can switch to, resolved from the target session's owner and project policy. */
-  async function sessionModelCatalog(
+  function sessionModelCatalog(
     controller: FactoryMessaging['controller'],
     sessionId: string,
     threadId: string,
     resourceId: string,
-  ): Promise<{ usable: string[]; known: Set<string>; scopeLabel: string }> {
-    const models = await controller.listAvailableModels();
-    const known = new Set(models.flatMap(model => (typeof model.id === 'string' ? [model.id] : [])));
-    const tenantCatalog = deps.sessionModel.tenantCatalog;
-    if (!tenantCatalog) {
-      const usable = (await buildModelCatalog({ controller })).map(model => model.id);
-      return { usable, known, scopeLabel: 'server' };
-    }
-    const requestContext = new RequestContext();
-    requestContext.set('user', { id: scope.userId, organizationId: scope.orgId });
-    requestContext.set('controller', { sessionId, resourceId, threadId });
-    const policy = await resolveFactoryModelPolicy(requestContext, {
-      projects: deps.sessionModel.projects,
-      sourceControl: deps.sessions,
-      workItems: deps.workItems,
-    });
-    if (!policy) throw new Error('Session model policy is unavailable.');
-    const orgId = policy.tenant.orgId ?? scope.orgId;
-    const customProviders = tenantCatalog.customProviders;
-    const usable = (
-      await buildModelCatalog({
-        controller,
-        tenantCredentials: await listSessionScopedCredentials({
-          credentials: tenantCatalog.credentials,
-          orgId,
-          userId: policy.tenant.userId,
-        }),
-        deploymentProviders: tenantCatalog.deploymentProviders,
-        listCustomProviders: customProviders
-          ? async () => {
-              await customProviders.ensureReady();
-              return customProviders.list({ orgId });
-            }
-          : undefined,
-      })
-    ).map(model => model.id);
-    for (const id of usable) known.add(id);
-    return { usable, known, scopeLabel: 'Factory' };
-  }
-
-  function unrunnableModelError(
-    modelId: string,
-    catalog: { usable: string[]; known: Set<string>; scopeLabel: string },
-  ) {
-    const options = catalog.usable.length
-      ? ` Models available to it: ${catalog.usable.slice(0, LISTED_MODELS).join(', ')}${catalog.usable.length > LISTED_MODELS ? ', …' : ''}.`
-      : ' No models are available to it; connect a provider credential first.';
-    return new Error(
-      catalog.known.has(modelId)
-        ? `Model ${modelId} exists, but this session's credential scope (${catalog.scopeLabel}) has no credential for its provider.${options}`
-        : `Unknown model ${modelId}.${options}`,
+  ): Promise<SessionModelCatalog> {
+    return resolveSessionModelCatalog(
+      controller,
+      { sessionId, threadId, resourceId },
+      { userId: scope.userId, orgId: scope.orgId },
+      {
+        projects: deps.sessionModel.projects,
+        sourceControl: deps.sessions,
+        workItems: deps.workItems,
+        ...(deps.sessionModel.authStorage ? { authStorage: deps.sessionModel.authStorage } : {}),
+        ...(deps.sessionModel.tenantCatalog ? { tenantCatalog: deps.sessionModel.tenantCatalog } : {}),
+      },
     );
   }
 
+  function unrunnableModelError(modelId: string, catalog: SessionModelCatalog) {
+    return new Error(unrunnableModelMessage(modelId, catalog));
+  }
+
+  // Mastra's own facet, for a server that registers no harness models (tests, Mastra-only hosts).
+  const mastraOnly = createHarnessModelRegistry();
+  mastraOnly.register(createMastraHarnessModels(deps), { fallback: true });
+
   const switchModel = createTool({
     id: 'factory_switch_session_model',
-    description:
-      'Switch the model of a session you own in this Factory (side, work item, or review session) without recreating it. A running session switches immediately; a stopped one uses the model on its next run. The model must be one the session credentials can run: the owner credentials for a user-scoped session, the Factory credentials for a Factory-scoped one. Use a session ID from the Factory session or work item tools.',
+    description: [
+      'Switch the model, and optionally its reasoning, of a session you own in this Factory (side, work item, or review session) without recreating it. Use a session ID from the Factory session or work item tools.',
+      "The session's harness checks the pick against its own catalog, the one the chat's model picker lists for it. A Mastra session takes a model id a connected credential of the Factory runs; a running one switches immediately, a stopped one uses it on its next run, and `thinkingLevel` needs it running.",
+      'A Claude Code session takes a Claude model: an alias (opus, sonnet, haiku) or a catalog id such as claude-opus-5-5; it applies from its next turn.',
+      'Pass `options` by id where the model describes them, such as { id: "effort", value: "high" }, { id: "fastMode", value: true } or { id: "contextWindow", value: "1m" }.',
+    ].join(' '),
     inputSchema: z
       .object({
         sessionId: z.string().trim().min(1).max(200),
         modelId: z.string().trim().min(1).max(200),
+        thinkingLevel: z
+          .enum(THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]])
+          .optional()
+          .describe('Reasoning level to run the model at; the model must offer it.'),
+        options: z
+          .array(z.object({ id: z.string().trim().min(1).max(64), value: z.union([z.string().trim().min(1).max(64), z.boolean()]) }))
+          .max(8)
+          .optional()
+          .describe('Model options by id, as the model catalog describes them (the model picker’s descriptors).'),
       })
       .strict(),
-    execute: async ({ sessionId, modelId }) => {
+    execute: async ({ sessionId, modelId, thinkingLevel, options }) => {
       const row = await deps.sessions.getBySessionId(sessionId);
       if (
         !row ||
@@ -220,22 +215,20 @@ export function createFactorySessionTools(
           'Without a person in this turn, only this session and the side sessions it started can switch models.',
         );
       }
-      const messaging = await deps.messaging();
-      if (!messaging) throw new Error('Session model switching is not available on this server.');
-      if (await externalSessionFor(messaging.controller, sessionId)) throw claudeModelError();
-      const threadId = await resolveSessionThread({
-        controller: messaging.controller,
-        sessions: deps.sessions,
-        workItems: deps.workItems,
+      const registry = deps.harnessModels?.() ?? mastraOnly;
+      const switched = await registry.switchSessionModel(
         sessionId,
-      });
-      if (!threadId) throw new Error('Session has no conversation thread yet.');
-      // The thread's resource, not the session id: sessions share their Factory's or owner's resource.
-      const resourceId = (await messaging.controller.queryThreadById({ threadId }))?.resourceId ?? sessionId;
-      const catalog = await sessionModelCatalog(messaging.controller, sessionId, threadId, resourceId);
-      if (!catalog.usable.includes(modelId)) throw unrunnableModelError(modelId, catalog);
-      const { live } = await messaging.controller.setThreadModel({ resourceId, threadId, modelId });
-      return { sessionId, threadId, modelId, live };
+        { model: modelId, ...(thinkingLevel ? { thinkingLevel } : {}), ...(options ? { options } : {}) },
+        { viewer: { userId: scope.userId, orgId: scope.orgId } },
+      );
+      if (!switched.ok) throw new Error(switched.error);
+      return {
+        sessionId,
+        modelId,
+        modelSelection: switched.modelSelection,
+        live: switched.appliesFrom === 'now',
+        appliesFrom: switched.appliesFrom === 'now' ? 'now' : 'next turn',
+      };
     },
   });
 
@@ -243,7 +236,7 @@ export function createFactorySessionTools(
     id: 'factory_start_session',
     description: [
       'Start a side session in this Factory with a prompt. It runs on its own sandbox and branch as you, and reports back to this session with `factory-session` notifications.',
-      'A side session uses this session’s model. Pass `model` to start it on another model the session credentials can run.',
+      'A side session uses this session’s model. Pass `model` to start it on another model of the Factory catalog (one a connected credential of the Factory runs).',
       'Use it for self-contained investigations; when the result should land as a pull request, file a work item instead.',
       'With `workItem` and `role` it starts that role on the work item instead, without moving the card, and this session follows the item.',
       "A role that already has a session on the item (current or past) can't be started again from here: message that session with factory_signal_session, or ask the person to use the board.",
@@ -259,7 +252,7 @@ export function createFactorySessionTools(
           .max(200)
           .optional()
           .describe(
-            'Model id for a side session. Omit it to inherit this session’s model. The session credentials must be able to run it.',
+            'Model id for a side session. Omit it to inherit this session’s model. A connected credential of the Factory must run it.',
           ),
         workItem: workItemRefSchema.optional(),
         role: z.string().trim().min(1).max(64).optional(),

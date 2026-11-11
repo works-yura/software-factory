@@ -11,8 +11,8 @@ import { useServerFeatures } from '../../../../../hooks/useServerFeatures';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { CLAUDE_ACCOUNTS_PROVIDER } from '../../../settings/components/models/accounts/accountErrors';
 import { ClaudeSignInStatus } from '../../../settings/components/models/accounts/ClaudeSignIn';
-import { CLAUDE_CODE_MODELS } from '../../services/github';
-import type { ClaudeCodeModel } from '../../services/github';
+import { CLAUDE_CODE_MODELS } from '@factory/harness-claude-code/models/aliases';
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 

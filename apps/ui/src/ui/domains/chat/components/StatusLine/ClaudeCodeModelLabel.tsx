@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
-import type { ClaudeCodeModel } from '../../../workspaces/services/github';
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import { settingsSectionPath } from '../../../settings/settingsSections';
 
 /**

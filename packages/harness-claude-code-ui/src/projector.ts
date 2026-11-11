@@ -577,6 +577,8 @@ export class ClaudeTranscriptProjector {
             });
           })();
     const message = signal.toDBMessage({ threadId, resourceId: this.#resourceId }) as MastraDBMessage;
+    // The turn this input starts runs another model or effort: the chat draws a divider above it.
+    if (entry.modelSwitch) message.content.metadata = { ...message.content.metadata, modelSwitch: entry.modelSwitch };
     out.writes.push(clone(message));
     out.events.push({ type: 'message_start', message: clone(message) }, { type: 'message_end', id: message.id });
   }

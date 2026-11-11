@@ -11,6 +11,7 @@
  * human gates). A harness without those primitives emulates them: a turn-based
  * harness answers a "suspension" by ending the turn and resuming the session.
  */
+import type { HarnessModels } from './models/facet.ts';
 
 /**
  * Per-run context the harness builds for a delivery and reads back while the
@@ -198,4 +199,11 @@ export interface AgentHarness {
   findSkill(session: AgentSession, name: string): Promise<AgentSkill | undefined>;
   /** The session's goal facet and the model that judges it; undefined when the harness has no goals. */
   goals?(session: AgentSession): { goals: AgentGoals; judgeModelId?: string } | undefined;
+  /**
+   * The harness's models and how a session's pick is checked and applied (`./models/facet.ts`);
+   * undefined when the harness offers no model choice. The server registers it in its
+   * `HarnessModelRegistry`, which serves `/web/config/models`, the chat's model switch and the
+   * agent's `factory_switch_session_model`.
+   */
+  readonly models?: HarnessModels;
 }

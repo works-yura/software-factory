@@ -1,3 +1,4 @@
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
@@ -12,7 +13,6 @@ import {
   unlinkRepository,
 } from '../ui/domains/workspaces/services/github';
 import type {
-  ClaudeCodeModel,
   FactoryHarness,
   FactoryProject,
   LinkedRepositoryPayload,

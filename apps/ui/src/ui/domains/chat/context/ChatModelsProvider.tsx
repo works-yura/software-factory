@@ -73,7 +73,7 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     pendingModelId: switching ? switchingTo?.modelId : undefined,
     isLoading: sessionModelsQuery.isPending,
     error: sessionModelsQuery.error ?? undefined,
-    setModel: modelId => switchModel({ modelId }),
+    setModel: (modelId, thinkingLevel) => switchModel({ modelId, ...(thinkingLevel ? { thinkingLevel } : {}) }),
   };
 
   return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;

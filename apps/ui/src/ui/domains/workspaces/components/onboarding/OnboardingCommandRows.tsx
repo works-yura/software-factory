@@ -1,7 +1,8 @@
 import { Command, CommandList } from '@mastra/playground-ui/components/Command';
 import type { ReactNode } from 'react';
 
-import type { ClaudeCodeModel, FactoryHarness } from '../../services/github';
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import type { FactoryHarness } from '../../services/github';
 import { CreateFactoryClaudeCodeStep } from '../create-factory/CreateFactoryClaudeCodeStep';
 import { CreateFactoryHarnessRows } from '../create-factory/CreateFactoryHarnessRows';
 

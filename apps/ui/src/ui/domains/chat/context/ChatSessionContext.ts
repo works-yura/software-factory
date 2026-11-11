@@ -1,4 +1,4 @@
-import type { ClaudeCodeModel } from '../../workspaces/services/github';
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import { createContext } from 'react';
 import type { HarnessDescriptor } from '@factory/contracts/harnesses';
 

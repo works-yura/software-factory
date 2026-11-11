@@ -6,6 +6,8 @@ import type { SourceControlSessionLookup } from './factory-session.ts';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession } from '@factory/store';
 import type { RouteAuth } from '@factory/http';
+import { ProviderOptionSelections, type ProviderOptionSelection } from '@factory/harness/models/contracts';
+import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 import { parseSupervisorResourceId } from './supervisor-session.ts';
 
 /**
@@ -260,4 +262,57 @@ async function filterActiveRuns(c: Context, canReach: (resourceId: string) => Pr
   headers.delete('content-length');
   c.res.headers.delete('content-length');
   c.res = new Response(JSON.stringify({ ...body, runs }), { status: c.res.status, headers });
+}
+
+/** Who asks for a model switch, as the harness model facets see them; empty ids without auth. */
+export type ModelSwitchViewer = (c: Context) => { userId: string; orgId: string };
+
+/**
+ * Answers `POST …/sessions/:id/model` for every harness: the pick goes to the harness that runs
+ * the session (`HarnessModelRegistry.switchSessionModel`), which checks it against the session's
+ * catalog and applies it. Body: `{ modelId: string | null, options?: [{ id, value }],
+ * thinkingLevel?, instanceId? }`; answers `{ ok: true, modelSelection, appliesFrom }` or
+ * `{ error }` with the facet's status. Mount it after the access guard (owners only), before any
+ * harness's own session routes.
+ */
+export function createModelSwitchRoute({
+  models,
+  viewer,
+}: {
+  models: () => Pick<HarnessModelRegistry, 'switchSessionModel'> | undefined;
+  viewer: ModelSwitchViewer;
+}): MiddlewareHandler {
+  return async (c, next) => {
+    const ctx = c as unknown as Context;
+    if (ctx.req.method !== 'POST' || !SWITCH_MODEL_PATH.test(ctx.req.path)) return next();
+    const registry = models();
+    if (!registry) return c.json({ error: 'Model switching is not available on this server yet.' }, 503);
+    const sessionId = decodeSegment(SESSION_PATH.exec(ctx.req.path)![1]!);
+    const body = ((await requestBody(ctx)) ?? {}) as Record<string, unknown>;
+    const modelId = body.modelId;
+    if (modelId !== null && (typeof modelId !== 'string' || !modelId.trim())) {
+      return c.json({ error: 'modelId must be a model id, or null for the session’s default' }, 400);
+    }
+    let options: ProviderOptionSelection[] | undefined;
+    if (body.options !== undefined) {
+      const parsed = ProviderOptionSelections.safeParse(body.options);
+      if (!parsed.success) return c.json({ error: 'options must be a list of { id, value }.' }, 400);
+      options = [...parsed.data];
+    }
+    if (body.thinkingLevel !== undefined && typeof body.thinkingLevel !== 'string') {
+      return c.json({ error: 'thinkingLevel must be a string' }, 400);
+    }
+    const result = await registry.switchSessionModel(
+      sessionId,
+      {
+        model: modelId === null ? null : modelId.trim(),
+        ...(options ? { options } : {}),
+        ...(typeof body.thinkingLevel === 'string' ? { thinkingLevel: body.thinkingLevel } : {}),
+        ...(typeof body.instanceId === 'string' ? { instanceId: body.instanceId } : {}),
+      },
+      { viewer: viewer(ctx) },
+    );
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ ok: true, modelSelection: result.modelSelection, appliesFrom: result.appliesFrom });
+  };
 }

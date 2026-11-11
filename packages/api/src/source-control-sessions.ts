@@ -5,6 +5,7 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
+import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 
 import { externalSessionFor } from '@factory/integrations';
 import { reclaimDeletedSessionSandbox } from '@factory/sandbox';
@@ -86,6 +87,11 @@ export interface SourceControlSessionRoutesOptions {
    * the server has no Claude Code harness.
    */
   claudeCode?: ClaudeCodeUserSessions;
+  /**
+   * The server's harness model registry: a session can switch models when the harness that runs it
+   * has a model facet, and its `modelInstanceId` tells the picker which instance's catalog applies.
+   */
+  harnessModels?: () => Pick<HarnessModelRegistry, 'forSession'> | undefined;
   /**
    * Present with a local sandbox: attaches a session's checkout already on
    * disk without starting it. Starting a Claude Code session's sandbox does
@@ -312,14 +318,17 @@ async function startPersonalSession(
   return { claude: false };
 }
 
-/** A created session as the page reads it; a Claude Code session has no Mastra model to switch. */
+/**
+ * A created session as the page reads it. A Claude Code session switches its model too: the
+ * Claude catalog's, through the same route, from its next turn; it cannot recreate a sandbox.
+ */
 function createdSessionPayload(
   options: SourceControlSessionRoutesOptions,
   session: SourceControlSession,
   claude: boolean,
 ) {
   return {
-    ...withCapabilities(session, { recreateSandbox: !claude && canRecreateSandbox(options), switchModel: !claude }),
+    ...withCapabilities(session, { recreateSandbox: !claude && canRecreateSandbox(options), switchModel: true }),
     ...(claude ? { harness: 'claude-code' as const } : {}),
   };
 }
@@ -598,14 +607,17 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           !claude &&
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
+        // The model facet of the harness that runs it decides what it switches to (`modelInstanceId`).
+        const registry = options.harnessModels?.();
+        const models = registry ? await registry.forSession(session.sessionId) : undefined;
         return c.json({
           session: {
             ...withCapabilities(withOwnerProfile(session, owners), {
               recreateSandbox,
-              // A Claude Code session runs on its Factory's Claude model, set in settings, not per session.
-              switchModel: !claude && canSwitchSessionModel(session, resolved.tenant),
+              switchModel: canSwitchSessionModel(session, resolved.tenant) && (!registry || models !== undefined),
             }),
             resourceId,
+            ...(models ? { modelInstanceId: models.instanceId } : {}),
             ...(claude ? { harness: 'claude-code' as const } : {}),
           },
         });

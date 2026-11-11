@@ -201,7 +201,7 @@ describe("a teammate's Factory session", () => {
         session: { ...wardSession, capabilities: { recreateSandbox: false, switchModel: true } },
       });
 
-      expect(await screen.findByRole('button', { name: 'Session model' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /^Session model/ })).toBeInTheDocument();
     });
   });
 

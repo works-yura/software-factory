@@ -14,7 +14,8 @@ import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentCont
 import { useHarness } from '../../../../hooks/useHarness';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
-import type { ClaudeCodeModel, FactoryProject, LinkedRepositoryPayload } from '../../workspaces/services/github';
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import type { FactoryProject, LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { isSessionNotFound } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';

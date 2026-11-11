@@ -27,6 +27,10 @@ export const CLAUDE_THREAD_SETTINGS = {
   untrustedCheckout: 'factoryUntrustedCheckout',
   /** A signed-in person's message or answer waits for the next turn, which is then theirs (interactive). */
   personTurn: 'factoryPersonTurn',
+  /** The session's own model selection (`ModelSelection`); unset, its turns follow the Factory's model and thinking level. */
+  modelSelection: 'factoryModelSelection',
+  /** The selection the thread's latest turn ran on, so the next turn can mark a switch. */
+  lastModelSelection: 'factoryLastModelSelection',
 } as const;
 
 export interface ClaudeStartCoordinatorOptions {

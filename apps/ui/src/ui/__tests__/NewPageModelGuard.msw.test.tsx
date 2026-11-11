@@ -88,7 +88,7 @@ describe('NewPage default-model guard', () => {
     renderNewPage('/factories/fp-1/user/new/draft-1');
 
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
-    expect(await screen.findByLabelText('Session model')).toHaveTextContent(/gpt-5\.5/i);
+    expect(await screen.findByRole('button', { name: /^Session model/ })).toHaveTextContent(/gpt-5\.5/i);
     expect(screen.queryByRole('heading', { name: 'No model available' })).not.toBeInTheDocument();
   });
 

@@ -17,7 +17,8 @@
     "mutate": "stryker run"
   },
   "dependencies": {
-    "@factory/harness": "workspace:*"
+    "@factory/harness": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@stryker-mutator/core": "catalog:",

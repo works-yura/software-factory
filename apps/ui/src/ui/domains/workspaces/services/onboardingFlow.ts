@@ -10,7 +10,8 @@
  * user in onboarding once a factory exists.
  */
 import { z } from 'zod';
-import { CLAUDE_CODE_MODELS, FACTORY_HARNESSES } from './github';
+import { CLAUDE_CODE_MODELS } from '@factory/harness-claude-code/models/aliases';
+import { FACTORY_HARNESSES } from './github';
 import type { SourceControlRepository } from './github';
 
 export const ONBOARDING_REVIEW_RETURN_KEY = 'mastracode.factory-onboarding.return-to-review';

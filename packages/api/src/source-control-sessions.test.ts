@@ -1451,16 +1451,16 @@ describe('personal sessions of a Claude Code Factory', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      session: { sessionId, harness: 'claude-code', capabilities: { switchModel: false, recreateSandbox: false } },
+      session: { sessionId, harness: 'claude-code', capabilities: { switchModel: true, recreateSandbox: false } },
     });
     expect(claude.started).toEqual([{ sessionId, resourceId: 'user-1', title: 'Fix the login page' }]);
     expect(controller!.createSession).not.toHaveBeenCalled();
 
-    // Opening it reports the Claude session's resource and no model switch.
+    // Opening it reports the Claude session's resource; its owner switches its model from the Claude catalog.
     const opened = await app.request(`/web/user-sessions/${sessionId}`);
     expect(opened.status).toBe(200);
     await expect(opened.json()).resolves.toMatchObject({
-      session: { sessionId, resourceId: 'user-1', harness: 'claude-code', capabilities: { switchModel: false } },
+      session: { sessionId, resourceId: 'user-1', harness: 'claude-code', capabilities: { switchModel: true } },
     });
 
     // A retried create stays on Claude Code.

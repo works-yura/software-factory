@@ -90,3 +90,8 @@ export function useChatCommands(): ChatCommandsApi {
   if (!ctx) throw new Error('useChatCommands must be used within a ChatCommandsProvider');
   return ctx;
 }
+
+/** The composer's commands where a chat has a composer; null in surfaces drawn without one. */
+export function useOptionalChatCommands(): ChatCommandsApi | null {
+  return useContext(ChatCommandsContext);
+}

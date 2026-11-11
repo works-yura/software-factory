@@ -1,10 +1,11 @@
 import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
+import { useApplyThreadModelPick } from '../components/modelPicker/useApplyThreadModelPick';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -107,6 +108,7 @@ export function useHandoffPrompt(): void {
   };
   const { mutateAsync: sendMessage } = useSendAgentControllerMessageMutation(mutationArgs);
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
+  const applyPendingPick = useEffectEvent(useApplyThreadModelPick());
   const handedOff = useRef(false);
   const recovered = useRef(false);
   const shown = useRef(false);
@@ -118,6 +120,8 @@ export function useHandoffPrompt(): void {
   useEffect(() => {
     if (handedOff.current) return;
     const startOn = async ({ modelId, thinkingLevel }: HandoffModel) => {
+      // A draft's pick on a harness with option descriptors (Claude Code) waited for its session.
+      await applyPendingPick(sessionId);
       if (!modelId) return;
       await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
         pushNotice(error instanceof Error ? error.message : tk('handoff.couldNotStartOn', { modelId }), 'error'),

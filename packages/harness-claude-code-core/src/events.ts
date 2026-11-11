@@ -1,4 +1,5 @@
 import type { AgentTokenUsage, PlanDecision } from '@factory/harness';
+import type { ModelSelection } from '@factory/harness/models/contracts';
 
 import { classifyFailure, type ClaudeCodeError } from './errors.ts';
 import { PERMISSION_PENDING_MARKER, SUBMIT_PLAN_TOOL_ID } from './gate.ts';
@@ -141,6 +142,8 @@ export type ClaudeTranscriptEntry =
       delivery?: 'while-active';
       /** The notification as the Factory sent it, for a `notification` input. */
       notification?: ClaudeNotificationRecord;
+      /** The turn this input starts runs another model or effort than the thread's last turn. */
+      modelSwitch?: { from: ModelSelection; to: ModelSelection };
     }
   /** A person answered the plan the thread was parked on; the next turn carries the answer. */
   | { kind: 'plan_decision'; toolCallId: string; decision: PlanDecision }

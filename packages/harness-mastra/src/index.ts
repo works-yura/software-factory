@@ -31,3 +31,4 @@ export * from './tools/side-sessions.ts';
 export * from './tools/source-control-tools.ts';
 export * from './tools/work-item-tools.ts';
 export * from './workspace.ts';
+export * from './models.ts';

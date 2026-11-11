@@ -53,6 +53,18 @@ function stored(writes: MastraDBMessage[]): MastraDBMessage[] {
 }
 
 describe('ClaudeTranscriptProjector', () => {
+  it('stamps the model-switch marker on the input that starts a turn on another model or effort', () => {
+    const modelSwitch = {
+      from: { instanceId: 'claude-code', model: 'opus', options: [{ id: 'effort', value: 'high' }] },
+      to: { instanceId: 'claude-code', model: 'sonnet', options: [{ id: 'effort', value: 'medium' }] },
+    };
+    const out = play(projector(), [{ kind: 'input', source: 'signal', text: 'Go on.', id: 'sig-1', modelSwitch }]);
+    expect(stored(out.writes)[0]!.content.metadata).toMatchObject({ modelSwitch, signal: { id: 'sig-1' } });
+    expect(out.events.find(event => event.type === 'message_start')).toMatchObject({
+      message: { content: { metadata: { modelSwitch } } },
+    });
+  });
+
   it('stores a turn as the person’s message and one assistant message with thinking, the tool call and its result, and text', () => {
     const p = projector();
     const out = play(p, [
@@ -407,7 +419,7 @@ describe('ClaudeTranscriptProjector', () => {
       expect(part.toolInvocation).toMatchObject({ state: 'result', result: answer, toolName: 'ask_user' });
       expect(part.toolInvocation.isError).toBeUndefined();
       expect(holder.content.metadata?.suspendedTools).toBeUndefined();
-      expect(p.pendingQuestion).toBeUndefined();
+      expect(p.pendingSuspension).toBeUndefined();
     });
 
     it('settles a request parked before a restart once the stored message is adopted', () => {

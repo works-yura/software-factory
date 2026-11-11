@@ -10,8 +10,10 @@ import { useSetFactoryHarnessMutation } from '../../../../../../hooks/useFactory
 import { useServerFeatures } from '../../../../../../hooks/useServerFeatures';
 import { translator } from '../../../../../i18n/t';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
-import { CLAUDE_CODE_MODELS, isClaudeCodeModel, isFactoryHarness } from '../../../../workspaces/services/github';
-import type { ClaudeCodeModel, FactoryHarness } from '../../../../workspaces/services/github';
+import { CLAUDE_CODE_MODELS, isClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
+import { isFactoryHarness } from '../../../../workspaces/services/github';
+import type { FactoryHarness } from '../../../../workspaces/services/github';
 import { useHarness } from '../../../../../../hooks/useHarness';
 import { SettingsSubsection } from '../../SettingsSubsection';
 

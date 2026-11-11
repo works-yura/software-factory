@@ -75,7 +75,7 @@ import {
   workItemSource,
 } from '@factory/core';
 import { createClaudeSessionUi } from '@factory/harness-claude-code-ui';
-import { createRoutingHarness } from '@factory/harness';
+import { createHarnessModelRegistry, createRoutingHarness } from '@factory/harness';
 import { createFactorySessionTokenSigner } from '@factory/mcp';
 import {
   ClaudeStartCoordinator,
@@ -147,7 +147,8 @@ import {
   registerCustomProvidersSource,
 } from '@factory/api';
 import { ProjectRoutes } from '@factory/api';
-import { createSessionAccessGuard } from '@factory/session';
+import { createModelSwitchRoute, createSessionAccessGuard } from '@factory/session';
+import { FactoryModelSwitchProcessor } from '@factory/session';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from '@factory/api';
 import type { FactoryApiRoutesDeps } from '@factory/api';
 import { TelemetryRoutes } from '@factory/api';
@@ -160,7 +161,7 @@ import { readFactorySessionScope, resolveFactorySessionAddress } from '@factory/
 import { FactoryDecisionDispatcher } from '@factory/runtime';
 import type { FactoryRuleActor } from '@factory/harness-mastra';
 import { describeFactoryPhase, FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from '@factory/harness-mastra';
-import { asAgentSession, createMastraHarness } from '@factory/harness-mastra';
+import { asAgentSession, createMastraHarness, createMastraHarnessModels } from '@factory/harness-mastra';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from '@factory/harness-mastra';
 import type { FactoryStartCoordinator } from '@factory/harness-mastra';
 import { createPhaseGoalEnder, createTerminalStageCleanup } from '@factory/runtime';
@@ -1264,6 +1265,12 @@ export class MastraFactory {
     let removeClaudeSessionConfig: ((sessionId: string) => Promise<void>) | undefined;
     // Set with it too: a side session of a Claude Code Factory is a Claude Code session.
     let createClaudeSideSession: FactoryToolDependencies['createHarnessSession'];
+    // Every harness's model facet: `/web/config/models`, the chat's `POST …/sessions/:id/model` and the
+    // agent's `factory_switch_session_model` go to the harness that runs the session through it.
+    // Mastra's is the fallback (registered with the tool dependencies, below); others register as they start.
+    const harnessModels = createHarnessModelRegistry();
+    // The server's local credential store, known once the API routes are built (`buildApiRoutes`).
+    let localAuthStorage: BuildApiRoutesDeps['authStorage'];
     // Every session's run state, whichever harness runs it; assigned with the routes.
     let liveSessionRegistry: LiveSessions | undefined;
     // One sandbox folder per card, shared by the card's role sessions: the
@@ -1529,6 +1536,7 @@ export class MastraFactory {
       sessions: sourceControlSessions,
       sessionModel: {
         projects: factoryProjectsStorage,
+        authStorage: () => localAuthStorage,
         ...(auth
           ? {
               tenantCatalog: {
@@ -1541,12 +1549,15 @@ export class MastraFactory {
       },
       startCoordinator: () => this.#startCoordinator,
       createHarnessSession: async input => createClaudeSideSession?.(input),
+      harnessModels: () => harnessModels,
       messaging: factoryMessaging,
       // The live-session registry is built with the routes; no session runs before then.
       isSessionRunning: sessionId => liveSessionRegistry?.isRunning(sessionId) ?? false,
       // Tools and processors read parked runs through it.
       liveSessions: () => liveSessionRegistry,
     };
+    const mastraHarnessModels = createMastraHarnessModels(factoryToolDeps);
+    harnessModels.register(mastraHarnessModels, { fallback: true });
     // Proactive environment builds exist only when the sandbox can build
     // templates on its own; the workflow is registered on the host's Mastra
     // and the runner reaches the booted instance through the controller.
@@ -2021,11 +2032,15 @@ export class MastraFactory {
                     boards,
                     configVersion,
                     binding,
+                    // What the session's next turn runs on: its own pick, else the Factory's model and thinking level.
                     runtime: async () => {
                       const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                      const selection =
+                        (await claudeCode?.models?.getSelection(sessionId, { viewer: { userId: '', orgId } })) ?? null;
+                      const effort = selection?.options?.find(option => option.id === 'effort')?.value;
                       return {
-                        modelId: `claude-code/${project?.claudeCodeModel ?? 'default'}`,
-                        thinkingLevel: 'claude-code-default',
+                        modelId: `claude-code/${selection?.model ?? project?.claudeCodeModel ?? 'default'}`,
+                        thinkingLevel: typeof effort === 'string' ? effort : 'claude-code-default',
                       };
                     },
                   });
@@ -2157,6 +2172,13 @@ export class MastraFactory {
       });
       this.#claudeSessionUi.setSessionResolver(sessionId => supervisorSessions.resolve(sessionId));
       removeClaudeSessionConfig = sessionId => claudeCode.removeSessionConfig(sessionId);
+      // The chat's model picker and the agent's `factory_switch_session_model` reach a Claude Code session's
+      // model through its harness's facet; its next turn passes the pick to the CLI (`--model`, `--effort`, `--settings`).
+      const claudeModels = claudeCode.models;
+      if (claudeModels) {
+        harnessModels.register(claudeModels);
+        this.#claudeSessionUi.setModelSelectionReader(session => claudeModels.effectiveSelection(session));
+      }
       createClaudeSideSession = async ({ harness, sessionId, resourceId, title }) => {
         if (harness !== 'claude-code') return undefined;
         // The Factory's thread convention, as a card's or a chat's Claude Code session: the thread is the session id.
@@ -2522,12 +2544,18 @@ export class MastraFactory {
         // items are on, come after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
           const channelReplyProcessor = new FactoryChannelReplyProcessor();
+          // Stamps the model and thinking level each turn runs on, and a switch since the last one (the chat's divider).
+          const modelSwitchProcessor = new FactoryModelSwitchProcessor({
+            thinkingLevel: context =>
+              resolveFactoryThinkingLevel(context, { projects: factoryProjectsStorage, sourceControl: sourceControlSessions }),
+          });
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
           const sessionsState = factorySessionsProcessor();
           const sessionsProcessor = sessionsState ? [sessionsState] : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
             return [
+              modelSwitchProcessor,
               channelReplyProcessor,
               environmentProcessor,
               ...sessionsProcessor,
@@ -2541,7 +2569,7 @@ export class MastraFactory {
           } catch (error) {
             reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
           }
-          return [channelReplyProcessor, environmentProcessor, ...sessionsProcessor];
+          return [modelSwitchProcessor, channelReplyProcessor, environmentProcessor, ...sessionsProcessor];
         },
         outputProcessors: [new FactoryChannelSessionLinkProcessor(), new FactoryReplyCredentialProcessor()],
         ...(vector ? { vector } : {}),
@@ -2554,7 +2582,10 @@ export class MastraFactory {
           : {}),
         postToolObserver,
         ...(pubsub ? { pubsub, crossProcessPubSub: true } : {}),
-        buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
+        buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => {
+          // The agent's model switch reads the same local credentials as the Settings picker.
+          localAuthStorage = authStorage;
+          return [
           // Public `/auth/*` routes (login/callback/logout/me). Folded in as
           // `apiRoutes` (not plain Hono routes) because the entry can't touch the
           // Hono app the deployer generates. `requiresAuth: false`; the gate
@@ -2668,6 +2699,7 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             claudeCodeEnabled: claudeCode !== undefined,
+            harnessModels: () => harnessModels,
             deviceEnabled: device !== undefined,
             // New chats of a Claude Code Factory are Claude Code sessions, checked out like a card's.
             ...(claudeCode
@@ -2729,8 +2761,11 @@ export class MastraFactory {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 // Each session runs on the harness that owns it: Claude Code sessions are in its store.
                 harness: claudeCode
-                  ? createRoutingHarness({ routes: [claudeCode.route], fallback: createMastraHarness(controller) })
-                  : createMastraHarness(controller),
+                  ? createRoutingHarness({
+                      routes: [claudeCode.route],
+                      fallback: createMastraHarness(controller, { models: mastraHarnessModels }),
+                    })
+                  : createMastraHarness(controller, { models: mastraHarnessModels }),
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
@@ -2802,7 +2837,8 @@ export class MastraFactory {
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
               })
             : []),
-        ],
+          ];
+        },
         buildServerConfig: () => {
           // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
           // read the OAuth challenge from `WWW-Authenticate`; the deployer
@@ -2837,6 +2873,14 @@ export class MastraFactory {
                 }),
               ]
             : [];
+          // `POST …/sessions/:id/model` of every session, answered by the harness that runs it.
+          const modelSwitchGuard = createModelSwitchRoute({
+            models: () => harnessModels,
+            viewer: c => {
+              const viewer = routeAuth.tenant(c);
+              return { userId: viewer?.userId ?? '', orgId: viewer?.orgId ?? '' };
+            },
+          });
           if (!auth) {
             // Auth disabled: no gate. Still prime the sentinel-local custom
             // provider snapshot so model calls see DB rows, then SPA + CORS.
@@ -2844,6 +2888,7 @@ export class MastraFactory {
               middleware: [
                 ...timing,
                 createFactoryInteractiveMarker(),
+                modelSwitchGuard,
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
                 ...claudeFactoryChat,
                 this.#claudeSessionUi.middleware(),
@@ -2884,6 +2929,7 @@ export class MastraFactory {
                 },
                 controller: () => this.#prepared?.base.controller,
               }),
+              modelSwitchGuard,
               createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
               createCustomProvidersPrimer({
                 auth: routeAuth,

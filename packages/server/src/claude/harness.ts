@@ -6,6 +6,7 @@ import {
 } from '@factory/harness-claude-code';
 import type {
   ClaudeCodeHarness,
+  ClaudeCodeHarnessModels,
   ClaudeCodeSession,
   ClaudeCredentialFailure,
   ClaudePermissionMode,
@@ -25,6 +26,8 @@ import { withAgentLanguage } from '../agent-language.ts';
 import { createClaudeSessionConfigDirs } from './config-dir.ts';
 import type { ClaudeCodeCredentialFailureHook, ClaudeCodeCredentialsHook } from './credentials.ts';
 import { CLAUDE_THREAD_SETTINGS } from './start-coordinator.ts';
+import { claudeFactoryHarnessModels, type ClaudeModelDefaults } from './model-selection.ts';
+import { createClaudeSupervisorSessions } from './supervisor.ts';
 import {
   CLAUDE_SUPERVISOR_ASK_TOOLS,
   CLAUDE_SUPERVISOR_SYSTEM_PROMPT,
@@ -114,7 +117,8 @@ export interface ClaudeFactoryHarnessOptions {
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   /**
    * The Factories, read before each turn for the session's `claudeCodeModel`
-   * (`claude --model`). Unset, or a Factory with none, leaves the CLI's own default.
+   * (`claude --model`) and thinking level (`--effort`), unless the session picked
+   * its own. Unset, or a Factory with neither, leaves the CLI's own defaults.
    */
   projects?: Pick<FactoryProjectsStorage, 'get'> & Partial<Pick<FactoryProjectsStorage, 'getById'>>;
   credentials: ClaudeCodeCredentialsHook;
@@ -218,6 +222,13 @@ export interface ClaudeFactoryHarness {
   removeSessionConfig(sessionId: string): Promise<void>;
   /** For the routing harness: a session is Claude's when its store has it. */
   route: HarnessRoute;
+  /**
+   * The harness's model facet (also `harness.models`), which the server registers in its
+   * `HarnessModelRegistry`; absent without the Factories.
+   */
+  models?: ClaudeCodeHarnessModels<ClaudeCodeSession>;
+  /** The Factory model and thinking level a session's turns default to; null without the Factories. */
+  modelDefaults(session: ClaudeCodeSession): Promise<ClaudeModelDefaults>;
 }
 
 /**
@@ -275,6 +286,12 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     };
   };
 
+  const modelDefaults = async (session: ClaudeCodeSession): Promise<ClaudeModelDefaults> => {
+    if (!options.projects) return null;
+    const tenant = await tenantOf(session);
+    return options.projects.get({ orgId: tenant.orgId, id: tenant.factoryProjectId });
+  };
+
   const isCardRun = async (session: ClaudeCodeSession, tenant: Awaited<ReturnType<typeof tenantOf>>) => {
     if (tenant.supervisor) return false;
     if (tenant.originSessionId) return true;
@@ -298,7 +315,23 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     options.supervisorWorkdirRoot ?? (options.storeDir ? `${options.storeDir.replace(/\/+$/, '')}-supervisor` : undefined),
   );
 
+  // A session's model, checked against the Claude catalog; a Factory chat's session is created when first reached.
+  const projects = options.projects;
+  const supervisors = projects?.getById
+    ? createClaudeSupervisorSessions({ harness: { getSession: id => harness.getSession(id), createSession: input => harness.createSession(input) }, projects: { getById: args => projects.getById!(args) } })
+    : undefined;
+  const models = projects
+    ? claudeFactoryHarnessModels({
+        owns: async sessionId =>
+          (await store.get(sessionId)) !== undefined ||
+          (claudeSupervisorProjectId(sessionId) !== null && (await supervisors?.resolve(sessionId)) !== undefined),
+        getSession: sessionId => (supervisors ? supervisors.resolve(sessionId) : harness.getSession(sessionId)),
+        defaultsFor: modelDefaults,
+        factoryDefaults: (id, orgId) => projects.get({ orgId, id }),
+      })
+    : undefined;
   const harness = createClaudeCodeHarness({
+    ...(models ? { models } : {}),
     store,
     // Stream text and thinking as they are written (`text_delta`/`thinking_delta`), not one block at the end.
     includePartialMessages: true,
@@ -353,12 +386,8 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
       : {}),
     ...(options.projects
       ? {
-          // Read per turn, so a model changed in settings applies from the session's next turn.
-          modelFor: async (session: ClaudeCodeSession) => {
-            const tenant = await tenantOf(session);
-            const project = await options.projects!.get({ orgId: tenant.orgId, id: tenant.factoryProjectId });
-            return project?.claudeCodeModel ?? undefined;
-          },
+          // Read per turn, so a model or effort changed in settings or for the session applies from its next turn.
+          turnSelectionFor: async (session: ClaudeCodeSession) => models!.turnSelection(session),
         }
       : {}),
     // Read per turn: the settings change between turns, and reset when the server restarts.
@@ -458,6 +487,8 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
   return {
     harness,
     store,
+    ...(models ? { models } : {}),
+    modelDefaults,
     removeSessionConfig: async sessionId => {
       await configDirs?.remove(sessionId);
     },

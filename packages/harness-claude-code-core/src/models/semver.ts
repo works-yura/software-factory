@@ -1,0 +1,141 @@
+interface ParsedSemver {
+  readonly major: number;
+  readonly minor: number;
+  readonly patch: number;
+  readonly prerelease: ReadonlyArray<string>;
+}
+
+const SEMVER_NUMBER_SEGMENT = /^\d+$/;
+
+export function normalizeSemverVersion(version: string): string {
+  const [versionWithoutBuildMetadata = ""] = version.trim().split("+", 1);
+  const [main, ...prereleaseParts] = versionWithoutBuildMetadata.split("-");
+  const prerelease = prereleaseParts.join("-");
+  const segments: string[] = [];
+  for (const segment of (main ?? "").split(".")) {
+    const trimmed = segment.trim();
+    if (trimmed.length > 0) {
+      segments.push(trimmed);
+    }
+  }
+
+  while (segments.length > 0 && segments.length < 3) {
+    segments.push("0");
+  }
+
+  return prerelease ? `${segments.join(".")}-${prerelease}` : segments.join(".");
+}
+
+export function parseSemver(value: string): ParsedSemver | null {
+  const normalized = normalizeSemverVersion(value).replace(/^v/, "");
+  const [main = "", ...prereleaseParts] = normalized.split("-");
+  const prerelease = prereleaseParts.join("-");
+  const segments = main.split(".");
+  if (segments.length !== 3) {
+    return null;
+  }
+
+  const [majorSegment, minorSegment, patchSegment] = segments;
+  if (majorSegment === undefined || minorSegment === undefined || patchSegment === undefined) {
+    return null;
+  }
+  if (
+    !SEMVER_NUMBER_SEGMENT.test(majorSegment) ||
+    !SEMVER_NUMBER_SEGMENT.test(minorSegment) ||
+    !SEMVER_NUMBER_SEGMENT.test(patchSegment)
+  ) {
+    return null;
+  }
+
+  const major = Number.parseInt(majorSegment, 10);
+  const minor = Number.parseInt(minorSegment, 10);
+  const patch = Number.parseInt(patchSegment, 10);
+  if (![major, minor, patch].every(Number.isInteger)) {
+    return null;
+  }
+
+  return {
+    major,
+    minor,
+    patch,
+    prerelease: parsePrereleaseSegments(prerelease),
+  };
+}
+
+function parsePrereleaseSegments(prerelease: string | undefined): ReadonlyArray<string> {
+  if (prerelease === undefined) {
+    return [];
+  }
+  const segments: string[] = [];
+  for (const segment of prerelease.split(".")) {
+    const trimmed = segment.trim();
+    if (trimmed.length > 0) {
+      segments.push(trimmed);
+    }
+  }
+  return segments;
+}
+
+function comparePrereleaseIdentifier(left: string, right: string): number {
+  const leftNumeric = SEMVER_NUMBER_SEGMENT.test(left);
+  const rightNumeric = SEMVER_NUMBER_SEGMENT.test(right);
+
+  if (leftNumeric && rightNumeric) {
+    return Number.parseInt(left, 10) - Number.parseInt(right, 10);
+  }
+  if (leftNumeric) {
+    return -1;
+  }
+  if (rightNumeric) {
+    return 1;
+  }
+  return left.localeCompare(right);
+}
+
+export function compareSemverVersions(left: string, right: string): number {
+  const parsedLeft = parseSemver(left);
+  const parsedRight = parseSemver(right);
+  if (!parsedLeft || !parsedRight) {
+    return left.localeCompare(right);
+  }
+
+  if (parsedLeft.major !== parsedRight.major) {
+    return parsedLeft.major - parsedRight.major;
+  }
+  if (parsedLeft.minor !== parsedRight.minor) {
+    return parsedLeft.minor - parsedRight.minor;
+  }
+  if (parsedLeft.patch !== parsedRight.patch) {
+    return parsedLeft.patch - parsedRight.patch;
+  }
+
+  if (parsedLeft.prerelease.length === 0 && parsedRight.prerelease.length === 0) {
+    return 0;
+  }
+  if (parsedLeft.prerelease.length === 0) {
+    return 1;
+  }
+  if (parsedRight.prerelease.length === 0) {
+    return -1;
+  }
+
+  const length = Math.max(parsedLeft.prerelease.length, parsedRight.prerelease.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftIdentifier = parsedLeft.prerelease[index];
+    const rightIdentifier = parsedRight.prerelease[index];
+    if (leftIdentifier === undefined) {
+      return -1;
+    }
+    if (rightIdentifier === undefined) {
+      return 1;
+    }
+    const comparison = comparePrereleaseIdentifier(leftIdentifier, rightIdentifier);
+    if (comparison !== 0) {
+      return comparison;
+    }
+  }
+
+  return 0;
+}
+
+/** Keep plain JavaScript: SSH startup stringifies this for remote Node versions without known TS support. */

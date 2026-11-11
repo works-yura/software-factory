@@ -1,3 +1,4 @@
+import type { ClaudeCodeModel } from '@factory/harness-claude-code/models/aliases';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
@@ -5,7 +6,6 @@ import { queryKeys } from '../api/keys';
 import { updateFactoryHarness } from '../ui/domains/workspaces/services/github';
 import type {
   AgentLanguage,
-  ClaudeCodeModel,
   FactoryHarness,
   FactoryProjectPayload,
 } from '../ui/domains/workspaces/services/github';

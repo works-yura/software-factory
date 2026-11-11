@@ -71,6 +71,7 @@ import {
 import type { WorkItemBranchSource } from '@factory/pipelines';
 import { buildAutomationRunRoutes } from './automation-runs.ts';
 import { ConfigRoutes } from './config.ts';
+import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 import { CredentialAccountRoutes } from './credential-accounts.ts';
 import type { ClaudeSignInFlows } from './credential-accounts.ts';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.ts';
@@ -159,6 +160,8 @@ export interface FactoryApiRoutesDeps {
   mcpEnabled: boolean;
   /** The Claude Code harness is configured, so new factories may pick `harness: 'claude-code'`. */
   claudeCodeEnabled?: boolean;
+  /** Every harness's model facet: `/web/config/models` `instances` and a session's `switchModel` / `modelInstanceId`. */
+  harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forSession'> | undefined;
   /** Device preview (`/web/device`) is mounted: simulators and emulators on this server's machine. */
   deviceEnabled?: boolean;
   /** Claude sign-in on this host (local development): `claude auth login`, kept as the person's account. */
@@ -779,6 +782,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
           ...(deps.claudeCodeUserSessions ? { claudeCode: deps.claudeCodeUserSessions } : {}),
+          ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
           ...(deps.attachLocalCheckout ? { attachLocalCheckout: deps.attachLocalCheckout } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
@@ -882,6 +886,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         claudeSignIn: deps.claudeSignIn !== undefined,
       },
       deploymentProviders: deps.deploymentModelProviders,
+      ...(deps.harnessModels ? { harnessModels: deps.harnessModels } : {}),
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),

@@ -155,11 +155,11 @@ describe('Composer on a lazy user-session draft', () => {
     const user = userEvent.setup();
     const { client } = renderDraft();
 
-    const modelPicker = await screen.findByLabelText('Session model');
-    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
+    const modelPicker = await screen.findByRole('button', { name: /^Session model/ });
+    await waitFor(() => expect(modelPicker).toHaveTextContent('gpt-4o-mini'));
     await user.click(modelPicker);
     await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
-    expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-5.4-mini'));
+    expect(modelPicker).toHaveTextContent('gpt-5.4-mini');
     expect(preparation.operations).toEqual([]);
 
     const message = screen.getByRole('textbox', { name: 'Message' });
@@ -188,7 +188,7 @@ describe('Composer on a lazy user-session draft', () => {
     const user = userEvent.setup();
     const { client } = renderDraft();
 
-    const modelPicker = await screen.findByLabelText('Session model');
+    const modelPicker = await screen.findByRole('button', { name: /^Session model/ });
     await user.click(modelPicker);
     await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
     const message = screen.getByRole('textbox', { name: 'Message' });
