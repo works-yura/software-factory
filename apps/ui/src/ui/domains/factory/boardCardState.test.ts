@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
-import { boardCardState, canMoveTo, itemAwaitsPerson } from './boardCardState';
+import { boardCardState, canMoveTo, itemAwaitsPerson, resumeTime } from './boardCardState';
 import type { BoardCardOwner, BoardCardStateInput } from './boardCardState';
 import { cardActions, retryButton } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
@@ -28,6 +28,32 @@ function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecis
 }
 
 describe('status row', () => {
+  it('shows a run waiting for a usage reset as waiting, with when it resumes, not as a failure', () => {
+    const until = '2026-08-01T14:05:00.000Z';
+    const state = boardCardState({
+      decision: decision({
+        status: 'retry',
+        attempts: 0,
+        failureCode: 'run_usage_limited',
+        lastError: 'Every Claude account this run may use is out of usage.',
+        waitingUntil: until,
+        waitingReason: 'usage_limit',
+      }),
+    });
+    expect(state.status).toEqual({
+      kind: 'paused',
+      label: `Waiting for usage reset · resumes at ${resumeTime(until)}`,
+      until,
+    });
+    expect(state.owner).toEqual({ kind: 'automation', progressLabel: 'Waiting for usage reset…' });
+  });
+
+  it('names the day when the run resumes after today', () => {
+    const now = new Date(2026, 7, 1, 10, 0);
+    expect(resumeTime(new Date(2026, 7, 1, 14, 5).toISOString(), now)).toMatch(/^\d{2}:\d{2}/);
+    expect(resumeTime(new Date(2026, 7, 3, 14, 5).toISOString(), now)).toMatch(/3/);
+  });
+
   it('announces the move the user just asked for over anything the server is doing', () => {
     expect(
       boardCardState({

@@ -32,6 +32,10 @@ export interface FactoryDecisionSummary {
   failureCode: FactoryDispatchFailureCode | null;
   canRetry: boolean;
   lastError: string | null;
+  /** When an effect waiting for a model usage limit to reset resumes on its own (older servers omit it). */
+  waitingUntil?: string | null;
+  /** Why the effect is waiting rather than failing. */
+  waitingReason?: 'usage_limit' | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;

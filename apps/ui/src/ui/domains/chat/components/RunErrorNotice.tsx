@@ -102,6 +102,20 @@ function dateOf(value: unknown): Date | undefined {
   return date && !Number.isNaN(date.getTime()) ? date : undefined;
 }
 
+/**
+ * A card's run that ran out of model usage is not over: the Factory resumes it once the limit
+ * resets. Said only for a card session (its runs are the Factory's) and a reset still ahead.
+ */
+function cardRunResumes(
+  error: MastraErrorPart['error'],
+  facts: HarnessErrorFacts,
+  sessionKind: 'factory' | 'user' | undefined,
+): boolean {
+  if (sessionKind !== 'factory') return false;
+  const limited = facts.kind === 'rate_limit' || (error as unknown as Record<string, unknown>).statusCode === 429;
+  return limited && (!facts.resetsAt || facts.resetsAt.getTime() > Date.now());
+}
+
 /** A harness's own failure kind, where it names one, decides the title and the fix; the rest is read from the provider error. */
 function describeHarnessError(
   error: MastraErrorPart['error'],
@@ -156,6 +170,7 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
   const facts = harnessErrorFacts(error, harness);
   const { title, message, recoveries, model } = describeHarnessError(error, facts, useRunErrorCopy());
   const factoryScoped = harness?.modelScope === 'factory';
+  const cardResumes = cardRunResumes(error, facts, session?.kind);
   const diagnostics = JSON.stringify(
     {
       ...error,
@@ -207,6 +222,17 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
               facts.resetsAt,
             ),
           })}
+        </Txt>
+      )}
+      {cardResumes && (
+        <Txt variant="body-sm" tone="muted">
+          {facts.resetsAt
+            ? t('runError.cardResumes', {
+                time: new Intl.DateTimeFormat(i18n.language, { hour: '2-digit', minute: '2-digit' }).format(
+                  facts.resetsAt,
+                ),
+              })
+            : t('runError.cardResumesSoon')}
         </Txt>
       )}
       {model && (

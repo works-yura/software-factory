@@ -1,5 +1,6 @@
 import type { InstalledPhaseInfo } from '../../../api/types';
 import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
+import { i18n } from '../../i18n';
 import { translator } from '../../i18n/t';
 import type { FactoryDecisionSummary } from './services/decisions';
 
@@ -12,6 +13,8 @@ export type BoardCardStatus =
   /** Triage classed the card as non-bug work, so it waits on a maintainer's call. */
   | { kind: 'held'; label: string }
   | { kind: 'busy'; label: string }
+  /** The run waits for a model usage limit to reset and resumes on its own at `until`. */
+  | { kind: 'paused'; label: string; until: string }
   | {
       kind: 'error';
       label: string;
@@ -136,6 +139,17 @@ function automationOnCard(
       owner: FREE,
     };
   }
+  // Out of model usage is not a failure: the server resumes the run once the limit resets.
+  if (decision.waitingReason === 'usage_limit' && decision.waitingUntil) {
+    return {
+      status: {
+        kind: 'paused',
+        label: tk('cardState.usageWait', { time: resumeTime(decision.waitingUntil) }),
+        until: decision.waitingUntil,
+      },
+      owner: { kind: 'automation', progressLabel: tk('cardState.usageWaitProgress') },
+    };
+  }
   // The server retries a failure on its own, so it offers no button.
   if (retriesAfterFailure(decision)) {
     return {
@@ -243,6 +257,17 @@ function runAnnouncedByWick(
   sessionStatus: SessionRowStatus | undefined,
 ): boolean {
   return decision.type === 'invokeSkill' && decision.status === 'leased' && sessionIsLive(sessionStatus);
+}
+
+/** `HH:MM` when the run resumes today, with the day when it is later than that. */
+export function resumeTime(until: string, now: Date = new Date()): string {
+  const at = new Date(until);
+  const sameDay = at.toDateString() === now.toDateString();
+  return new Intl.DateTimeFormat(i18n.language, {
+    ...(sameDay ? {} : { weekday: 'short', day: 'numeric', month: 'short' }),
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(at);
 }
 
 /**

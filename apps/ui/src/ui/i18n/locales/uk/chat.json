@@ -421,7 +421,9 @@
     },
     "reviewAccounts": "Перевірити акаунти {{harness}}",
     "openModelSettings": "Відкрити налаштування моделей",
-    "resetsAt": "Ліміт скинеться {{time}}."
+    "resetsAt": "Ліміт скинеться {{time}}.",
+    "cardResumes": "Картка продовжить роботу сама, щойно ліміт скинеться, приблизно о {{time}}.",
+    "cardResumesSoon": "Картка продовжить роботу сама, щойно ліміт скинеться."
   },
   "turnHarness": {
     "placeholder": "Запитайте {{harness}}…",

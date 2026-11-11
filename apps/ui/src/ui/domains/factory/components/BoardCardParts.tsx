@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Hand, Maximize2, MessageSquare, TriangleAlert } from 'lucide-react';
+import { Clock, Hand, Maximize2, MessageSquare, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -110,6 +110,22 @@ export function CardStatus({ status, compact = false }: { status: BoardCardStatu
       <Badge size="xs" variant="orange" icon={<Hand aria-hidden />} role="status">
         {status.label}
       </Badge>
+    );
+  }
+
+  if (status.kind === 'paused') {
+    return (
+      <Txt
+        as="span"
+        variant="meta"
+        tone="muted"
+        role="status"
+        className="flex shrink-0 items-center gap-1.5"
+        title={new Date(status.until).toLocaleString()}
+      >
+        <Clock size={11} aria-hidden />
+        {status.label}
+      </Txt>
     );
   }
 

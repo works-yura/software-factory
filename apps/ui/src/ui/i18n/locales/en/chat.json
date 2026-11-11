@@ -419,7 +419,9 @@
     },
     "reviewAccounts": "Review {{harness}} accounts",
     "openModelSettings": "Open model settings",
-    "resetsAt": "The limit resets {{time}}."
+    "resetsAt": "The limit resets {{time}}.",
+    "cardResumes": "This card resumes on its own once usage resets, at about {{time}}.",
+    "cardResumesSoon": "This card resumes on its own once usage resets."
   },
   "turnHarness": {
     "placeholder": "Ask {{harness}}…",

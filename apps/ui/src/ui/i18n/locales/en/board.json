@@ -100,7 +100,9 @@
     "starting": "Starting…",
     "retrying": "Retrying…",
     "failedRetrying": "{{failed}} — retrying…",
-    "heldWaiting": "Triaged · waiting for you"
+    "heldWaiting": "Triaged · waiting for you",
+    "usageWait": "Waiting for usage reset · resumes at {{time}}",
+    "usageWaitProgress": "Waiting for usage reset…"
   },
   "linkedSource": {
     "githubIssue": "GitHub issue",

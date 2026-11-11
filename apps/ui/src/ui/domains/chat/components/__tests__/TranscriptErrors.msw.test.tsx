@@ -41,10 +41,12 @@ function ErrorSession({
   messages,
   liveEvent,
   harness,
+  kind = 'user',
 }: {
   messages: MastraDBMessage[];
   liveEvent?: LiveEvent;
   harness?: HarnessDescriptor;
+  kind?: 'user' | 'factory';
 }) {
   const entries = liveEvent
     ? transcriptReducer(initialTranscript, { type: 'event', event: liveEvent }).entries
@@ -62,7 +64,7 @@ function ErrorSession({
           sandboxPreparing: false,
           resourceEnabled: true,
           baseUrl: TEST_BASE_URL,
-          kind: 'user',
+          kind,
           factorySessionState: { factoryProjectId: 'factory-1' },
           harness,
         }}
@@ -276,6 +278,27 @@ describe('chat run errors', () => {
       expect(screen.getByText('Claude AI usage limit reached')).toBeVisible();
       expect(screen.getByText(/^The limit resets /)).toBeVisible();
       expect(await screen.findByRole('link', { name: 'Review Claude Code accounts' })).toBeVisible();
+      // A person's own session has no card to resume.
+      expect(screen.queryByText(/This card resumes/)).toBeNull();
+    });
+
+    it('tells a card session its run resumes on its own after the reset', () => {
+      const resetsAt = new Date(Date.now() + 2 * 60 * 60_000);
+      const limited = {
+        type: 'error',
+        error: {
+          name: 'ClaudeCodeError',
+          message: 'Every Claude account this run may use is out of usage.',
+          kind: 'rate_limit',
+          resetsAt: resetsAt.toISOString(),
+        },
+      } as unknown as LiveEvent;
+      renderWithProviders(
+        <ErrorSession messages={[]} liveEvent={limited} harness={CLAUDE_CODE_HARNESS} kind="factory" />,
+      );
+
+      const time = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(resetsAt);
+      expect(screen.getByText(`This card resumes on its own once usage resets, at about ${time}.`)).toBeVisible();
     });
 
     it('reads an error without the Claude fields as before', () => {

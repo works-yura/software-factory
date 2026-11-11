@@ -102,7 +102,9 @@
     "starting": "Запускаємо…",
     "retrying": "Повторюємо…",
     "failedRetrying": "{{failed}} — повторюємо…",
-    "heldWaiting": "Розібрано · чекає на вас"
+    "heldWaiting": "Розібрано · чекає на вас",
+    "usageWait": "Чекає на скидання ліміту · продовжить о {{time}}",
+    "usageWaitProgress": "Чекає на скидання ліміту…"
   },
   "linkedSource": {
     "githubIssue": "задача GitHub",
