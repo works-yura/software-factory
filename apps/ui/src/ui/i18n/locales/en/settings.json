@@ -12,7 +12,8 @@
     "skills": "Skills",
     "behavior": "Behavior",
     "memory": "Memory",
-    "debug": "Debug"
+    "debug": "Debug",
+    "usage": "Usage"
   },
   "groups": {
     "account": "Account",
