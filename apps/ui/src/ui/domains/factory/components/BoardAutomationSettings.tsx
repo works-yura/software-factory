@@ -39,20 +39,17 @@ function AutomationSwitch({
 export function BoardAutomationSettings({
   factoryProjectId,
   autoRunEnabled,
-  reviewTestChecksEnabled,
   selfReviewEnabled,
   offersSelfReview,
 }: {
   factoryProjectId: string;
   autoRunEnabled: boolean;
-  reviewTestChecksEnabled: boolean;
   selfReviewEnabled: boolean;
   /** Whether this board has a self-review phase for the setting to turn on. */
   offersSelfReview: boolean;
 }) {
   const { t } = useTranslation('board');
   const autoRun = useSetFactoryAutomationMutation(factoryProjectId, 'autoRunEnabled');
-  const testChecks = useSetFactoryAutomationMutation(factoryProjectId, 'reviewTestChecksEnabled');
   const selfReview = useSetFactoryAutomationMutation(factoryProjectId, 'selfReviewEnabled');
 
   return (
@@ -87,12 +84,6 @@ export function BoardAutomationSettings({
               description={t('automationSettings.selfReview.description')}
             />
           )}
-          <AutomationSwitch
-            label={t('automationSettings.testChecks.label')}
-            enabled={reviewTestChecksEnabled}
-            mutation={testChecks}
-            description={t('automationSettings.testChecks.description')}
-          />
         </div>
       </PopoverContent>
     </Popover>

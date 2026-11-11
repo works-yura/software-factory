@@ -1786,18 +1786,13 @@ export class MastraFactory {
       ...(workItemFolders ? { workItemFolders } : {}),
     });
 
-    // The brokered source-control tools (push, change requests, reviews, test checks): one build for both harnesses,
+    // The brokered source-control tools (push, change requests, reviews): one build for both harnesses,
     // a Mastra session's in-process and a Claude Code session's over MCP.
     const sourceControlToolsFor = (requestContext: RequestContext) =>
       createSourceControlTools({
         requestContext,
         providers: sourceControlToolProviders,
         audit: auditDomain,
-        testChecksEnabled: async ({ orgId, factoryProjectId }) => {
-          await factoryProjectsStorage.ensureReady();
-          const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-          return project?.reviewTestChecksEnabled ?? false;
-        },
         ...(workItemsStorage
           ? {
               selfReviewApprovedHead: async ({ repository }) => {
@@ -1850,18 +1845,6 @@ export class MastraFactory {
                 if (!binding) return false;
                 const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
                 return item !== null && !namesRepository(item.metadata);
-              },
-              boundChangeRequestId: async () => {
-                const resolution = await resolveFactorySessionAddress({
-                  requestContext,
-                  storage: workItemsStorage,
-                });
-                if (!resolution) return undefined;
-                const binding =
-                  resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                if (binding?.role !== REVIEW_CONTEXT) return undefined;
-                const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                return item ? boundChangeRequestNumber(await toBoardSource(boards).load(binding), item) : undefined;
               },
             }
           : {}),

@@ -32,7 +32,7 @@ storage/domains/intake/base.test.ts	store/src/intake/base.test.ts	+2	upstream #2
 storage/domains/integrations/base.test.ts	store/src/integrations/base.test.ts
 storage/domains/memory-settings/base.test.ts	store/src/memory-settings/base.test.ts
 storage/domains/model-defaults/base.test.ts	store/src/model-defaults/base.test.ts
-storage/domains/projects/base.test.ts	store/src/projects/base.test.ts	+2	one model scope: the scope round-trip cases become one "no scope" case (-1); harness and Claude Code model round-trip (+1); stored tool permissions parse and round-trip (+2)
+storage/domains/projects/base.test.ts	store/src/projects/base.test.ts	+1	one model scope: the scope round-trip cases become one "no scope" case (-1); harness and Claude Code model round-trip (+1); stored tool permissions parse and round-trip (+2); upstream #29888: the review test check switch is gone (−1)
 storage/domains/queue-health/base.test.ts	store/src/queue-health/base.test.ts
 secret-encryption.test.ts	store/src/secret-encryption.test.ts	1	upstream #29644: a key mismatch explains itself (+1)
 storage/domains/source-control/base.test.ts	store/src/source-control/base.test.ts	+1	one sandbox folder per card: sessions of a factory on a branch (+1)
@@ -101,7 +101,7 @@ routes/intake.test.ts	api/src/intake.test.ts	+3	upstream #28877: an unreadable p
 routes/knowledge.test.ts	api/src/knowledge.test.ts	-35	Mastra 1.82 (upstream #28353, #28362): the node/record routes are replaced by the page-store routes, rewritten as upstream
 routes/oauth.test.ts	api/src/oauth.test.ts
 routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts
-routes/projects.test.ts	api/src/projects.test.ts	+4	harness and Claude Code model on create and update; upstream #29039: board transitions as phase config (+1); upstream 6650c2687c (#29322): repositories in the project list (+2)
+routes/projects.test.ts	api/src/projects.test.ts	+5	harness and Claude Code model on create and update; upstream #29039: board transitions as phase config (+1); upstream 6650c2687c (#29322): repositories in the project list (+2); upstream #29888: the retired review test check switch is accepted and ignored (+1)
 routes/session-access.test.ts	session/src/session-access.test.ts	+2	model-switch guard and multipart body cases ported from upstream 8fb8a82428
 routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts	-1	user and hybrid scope catalogs removed; one Factory-catalog case remains
 routes/skills.test.ts	api/src/skills.test.ts	+12	upstream #28823: skills catalog origin (+2); upstream #29042: frontmatter in the catalog, project skill edit routes (+10)
@@ -146,7 +146,7 @@ session/org-seed-fail-open.test.ts	server/src/session/org-seed-fail-open.test.ts
 session/reply-credential-processor.test.ts	session/src/reply-credential-processor.test.ts
 session/resource-migration.test.ts	session/src/resource-migration.test.ts
 session/session-threads.test.ts	session/src/session-threads.test.ts
-session/source-control-tools.test.ts	harness-mastra/src/tools/source-control-tools.test.ts	+7	work spanning several repositories: self-review gates every repository; no default repository; provider API reads scoped to the session, issue edits, review body edits
+session/source-control-tools.test.ts	harness-mastra/src/tools/source-control-tools.test.ts	+2	work spanning several repositories: self-review gates every repository; no default repository; provider API reads scoped to the session, issue edits, review body edits; upstream #29888: source_control_publish_test_check replaced by resolveReviewedChangeRequest (−5)
 session/thinking-default.test.ts	session/src/thinking-default.test.ts
 session/thread-title-mirror.test.ts	session/src/thread-title-mirror.test.ts
 session/work-item-repository.test.ts	session/src/work-item-repository.test.ts	+1	work spanning several repositories: a card naming no repository resolves to the environment

@@ -298,8 +298,6 @@ export interface FactoryProjectPayload {
   autoRunEnabled?: boolean;
   /** Settings → Behavior tool permissions of a Factory on Claude Code; null until set (every category asks). */
   toolPermissions?: FactoryToolPermissions | null;
-  /** Whether Review agents publish test results as a commit check. Defaults to off. */
-  reviewTestChecksEnabled?: boolean;
   /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
   selfReviewEnabled?: boolean;
 }
@@ -546,11 +544,11 @@ export async function applyFactoryDefaultModelToSessions(
   return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, tk('errors.switchSessions'));
 }
 
-/** Toggle a Factory's automation settings: rule-started runs, self-review, review test checks. */
+/** Toggle a Factory's automation settings: rule-started runs and self-review. */
 export async function updateFactoryAutomation(
   baseUrl: string,
   factoryProjectId: string,
-  patch: Pick<FactoryProjectPayload, 'autoRunEnabled' | 'reviewTestChecksEnabled' | 'selfReviewEnabled'>,
+  patch: Pick<FactoryProjectPayload, 'autoRunEnabled' | 'selfReviewEnabled'>,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',

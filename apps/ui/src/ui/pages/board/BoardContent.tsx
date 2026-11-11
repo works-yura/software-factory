@@ -399,7 +399,6 @@ export function BoardContent({
                 <BoardAutomationSettings
                   factoryProjectId={factoryProjectId}
                   autoRunEnabled={factory.autoRunEnabled ?? false}
-                  reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
                   selfReviewEnabled={factory.selfReviewEnabled ?? false}
                   offersSelfReview={boardLoop(definition)?.selfReview !== undefined}
                 />
