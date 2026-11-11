@@ -39,7 +39,14 @@ import { FirebaseIntegration } from '@factory/integration-firebase';
 import { GitLabIntegration } from '@factory/integration-gitlab';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 // Local development: loopback sign-in, credential key, and vector store.
-import { createLocalDevAuth, createLocalVector, localDevAuthEnabled, localDevCredentialKey } from './local';
+import { createFirebaseAuth } from './firebase/firebase-auth';
+import {
+  createLocalDevAuth,
+  createLocalVector,
+  localDevAuthEnabled,
+  localDevCredentialKey,
+  ownMachineCredentialKey,
+} from './local';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -64,10 +71,23 @@ function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer
 // instead of falling back. Each fallback has its own explicit opt-in.
 const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
 
+const authSetting = process.env.FACTORY_AUTH?.trim();
+if (authSetting && authSetting !== 'firebase') {
+  throw new Error(`FACTORY_AUTH must be unset or firebase, got ${JSON.stringify(authSetting)}.`);
+}
+const firebaseAuthEnabled = authSetting === 'firebase';
+/**
+ * The server runs on the person's own machine: local dev auth, or a development server that signs
+ * in with Google. Claude and ChatGPT sign-in (which open a browser page here), device preview and
+ * the machine credential key are offered only then.
+ */
+const ownMachine = localDevAuthEnabled || (firebaseAuthEnabled && process.env.NODE_ENV === 'development');
+
 function credentialEncryption() {
   // Local dev mode keeps a stable key in ~/.mastracode.
   const encodedKey =
-    process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim() || (localDevAuthEnabled ? localDevCredentialKey() : undefined);
+    process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim() ||
+    (localDevAuthEnabled ? localDevCredentialKey() : ownMachine ? ownMachineCredentialKey() : undefined);
   if (!encodedKey) {
     const plaintextOptIn = process.env.FACTORY_CREDENTIAL_ENCRYPTION?.trim() === 'plaintext';
     if (!localDevelopmentMode && !plaintextOptIn) {
@@ -137,7 +157,9 @@ if (redisUrl) {
 // `factory.prepare()` refuses to boot and names the options.
 //   1. FACTORY_LOCAL_DEV_AUTH=1 — loopback-only single-user identity, checked
 //      before every other option.
-//   2. MASTRACODE_AUTH_DISABLED=1 — explicit opt-out, auth off entirely.
+//   2. FACTORY_AUTH=firebase — Google sign-in through Firebase, limited to
+//      FACTORY_ALLOWED_EMAILS (see firebase/firebase-auth.ts).
+//   3. MASTRACODE_AUTH_DISABLED=1 — explicit opt-out, auth off entirely.
 // A deployment with its own identity provider passes it to MastraFactory's
 // `auth` slot instead. Note MASTRA_PLATFORM_ACCESS_TOKEN /
 // MASTRA_PLATFORM_SECRET_KEY are integration credentials (GitHub/GitLab
@@ -145,8 +167,13 @@ if (redisUrl) {
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 let auth: IMastraAuthProvider | null | undefined;
 
+if (localDevAuthEnabled && firebaseAuthEnabled) {
+  throw new Error('Set either FACTORY_LOCAL_DEV_AUTH=1 or FACTORY_AUTH=firebase, not both.');
+}
 if (localDevAuthEnabled) {
   auth = createLocalDevAuth();
+} else if (firebaseAuthEnabled) {
+  auth = createFirebaseAuth();
 } else if (authDisabled) {
   auth = null;
 }
@@ -358,7 +385,7 @@ export const factory = new MastraFactory({
   claudeCode: {
     storeDir:
       process.env.FACTORY_CLAUDE_CODE_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'claude-code-sessions'),
-    localDevelopment: localDevAuthEnabled,
+    localDevelopment: ownMachine,
     ...(process.env.FACTORY_CLAUDE_CODE_COMMAND?.trim() ? { command: process.env.FACTORY_CLAUDE_CODE_COMMAND.trim() } : {}),
   },
   // Factories created with `harness: 'codex'` run their agents on this machine's `codex` CLI (its
@@ -370,13 +397,13 @@ export const factory = new MastraFactory({
   // lists Codex as needing setup.
   codex: {
     storeDir: process.env.FACTORY_CODEX_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'codex-sessions'),
-    localDevelopment: localDevAuthEnabled,
+    localDevelopment: ownMachine,
     ...(process.env.FACTORY_CODEX_COMMAND?.trim() ? { command: process.env.FACTORY_CODEX_COMMAND.trim() } : {}),
   },
   ...(browser ? { browser } : {}),
   // Device preview drives simulators and emulators on this machine, so only a local development
   // server (the person's own machine) offers it. State and the device tools sit next to the database.
-  ...(localDevAuthEnabled
+  ...(ownMachine
     ? {
         device: {
           stateDir: process.env.FACTORY_DEVICE_STATE_DIR?.trim() || join(dirname(getDatabasePath()), 'factory-device'),
@@ -450,4 +477,4 @@ await factory.finalize();
 
 // The deployer creates the HTTP server itself; device preview's hub sockets attach to it on its
 // first request (the page and its API load before any device socket opens).
-if (localDevAuthEnabled) attachOnFirstRequest(server => factory.attachDevice(server));
+if (ownMachine) attachOnFirstRequest(server => factory.attachDevice(server));

@@ -30,6 +30,24 @@ vi.mock('../../services/auth', async importOriginal => {
   return { ...actual, redirectToLogin: vi.fn(), navigateAfterSignIn: vi.fn() };
 });
 
+// Firebase's popup needs a real browser; the SDK is the boundary, the server calls stay real (MSW).
+const firebasePopup = vi.hoisted(() => ({
+  signInWithPopup: vi.fn(),
+  signOut: vi.fn(async () => undefined),
+  initializeApp: vi.fn((config: unknown, name: string) => ({ name, options: config })),
+}));
+vi.mock('firebase/app', () => ({ getApps: () => [], initializeApp: firebasePopup.initializeApp }));
+vi.mock('firebase/auth', () => ({
+  getAuth: () => ({}),
+  setPersistence: async () => undefined,
+  inMemoryPersistence: {},
+  GoogleAuthProvider: class {
+    setCustomParameters() {}
+  },
+  signInWithPopup: firebasePopup.signInWithPopup,
+  signOut: firebasePopup.signOut,
+}));
+
 const AUTH_ME_URL = `${TEST_BASE_URL}/auth/me`;
 
 afterEach(() => {
@@ -212,6 +230,71 @@ describe('SignInPage', () => {
 
       expect(await screen.findByLabelText('Email')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'New here? Sign up' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('given a Firebase (Google) deploy', () => {
+    function stubFirebase(sessionResponse: () => Response) {
+      stubAuthMe({ provider: 'firebase' });
+      const posted = vi.fn();
+      server.use(
+        http.get(`${TEST_BASE_URL}/auth/api/config`, () =>
+          HttpResponse.json({ apiKey: 'web-key', authDomain: 'demo.firebaseapp.com', projectId: 'demo' }),
+        ),
+        http.post(`${TEST_BASE_URL}/auth/api/session`, async ({ request }) => {
+          posted(await request.json());
+          return sessionResponse();
+        }),
+      );
+      return posted;
+    }
+
+    afterEach(() => {
+      firebasePopup.signInWithPopup.mockReset();
+      firebasePopup.signOut.mockClear();
+      firebasePopup.initializeApp.mockClear();
+    });
+
+    it('offers only the Google button and hands the Google ID token to the server', async () => {
+      const posted = stubFirebase(() => HttpResponse.json({ ok: true }));
+      firebasePopup.signInWithPopup.mockResolvedValue({ user: { getIdToken: async () => 'google-id-token' } });
+      renderSignIn('/signin?returnTo=%2Ffactory%2Fboard');
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' }));
+
+      await waitFor(() => expect(navigateAfterSignIn).toHaveBeenCalledWith('/factory/board'));
+      expect(posted).toHaveBeenCalledWith({ idToken: 'google-id-token' });
+      expect(firebasePopup.initializeApp).toHaveBeenCalledWith(
+        { apiKey: 'web-key', authDomain: 'demo.firebaseapp.com', projectId: 'demo' },
+        'factory',
+      );
+      expect(firebasePopup.signOut).toHaveBeenCalled();
+      expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+      expect(redirectToLogin).not.toHaveBeenCalled();
+    });
+
+    it('says why the server refused the account and stays on sign-in', async () => {
+      stubFirebase(() => HttpResponse.json({ message: 'eve@example.com is not allowed to use this Factory.' }, { status: 403 }));
+      firebasePopup.signInWithPopup.mockResolvedValue({ user: { getIdToken: async () => 'google-id-token' } });
+      renderSignIn();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('eve@example.com is not allowed to use this Factory.');
+      expect(navigateAfterSignIn).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
+    });
+
+    it('lets the person try again after closing the Google popup', async () => {
+      const posted = stubFirebase(() => HttpResponse.json({ ok: true }));
+      firebasePopup.signInWithPopup.mockRejectedValue(Object.assign(new Error('closed'), { code: 'auth/popup-closed-by-user' }));
+      renderSignIn();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Google sign-in was closed before it finished.');
+      expect(posted).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
     });
   });
 

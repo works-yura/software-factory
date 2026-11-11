@@ -4,7 +4,7 @@
  * no Postgres.
  */
 export { createLocalDevAuth } from './local-dev-auth';
-export { localDevCredentialKey } from './local-dev-key';
+export { localDevCredentialKey, ownMachineCredentialKey } from './local-dev-key';
 export { createLocalVector } from './local-vector';
 
 /** Loopback-only single-user mode: no sign-in, no Mastra account. */

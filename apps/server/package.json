@@ -7,6 +7,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "dev:local": "corepack pnpm sync:skills && rm -rf .mastra/output && mkdir -p $HOME/.mastracode/factory-v4 && NODE_ENV=development HOST=127.0.0.1 FACTORY_LOCAL_DEV_AUTH=1 MASTRA_DB_PATH=${MASTRA_DB_PATH:-$HOME/.mastracode/factory-v4/mastra.db} MASTRACODE_UI_DIST=$PWD/../ui/dist PORT=${PORT:-5874} MASTRACODE_PUBLIC_URL=${MASTRACODE_PUBLIC_URL:-http://localhost:5874} varlock run -- mastra factory dev --dir src/mastra",
+    "dev:firebase": "corepack pnpm sync:skills && rm -rf .mastra/output && mkdir -p $HOME/.mastracode/factory-v4 && NODE_ENV=development HOST=${HOST:-127.0.0.1} FACTORY_AUTH=firebase MASTRA_DB_PATH=${MASTRA_DB_PATH:-$HOME/.mastracode/factory-v4/mastra.db} MASTRACODE_UI_DIST=$PWD/../ui/dist PORT=${PORT:-5874} MASTRACODE_PUBLIC_URL=${MASTRACODE_PUBLIC_URL:-http://localhost:5874} varlock run -- mastra factory dev --dir src/mastra",
     "dev:platform": "corepack pnpm sync:skills && rm -rf .mastra/output && MASTRACODE_UI_DIST=$PWD/../ui/dist varlock run -- mastra factory dev --dir src/mastra",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
@@ -22,8 +23,9 @@
     "@clack/prompts": "1.8.1",
     "@factory/api": "workspace:*",
     "@factory/http": "workspace:*",
-    "@factory/integration-github": "workspace:*",
     "@factory/integration-clickup": "workspace:*",
+    "@factory/integration-firebase": "workspace:*",
+    "@factory/integration-github": "workspace:*",
     "@factory/integration-gitlab": "workspace:*",
     "@factory/pipelines": "workspace:*",
     "@factory/server": "workspace:*",
@@ -34,7 +36,7 @@
     "@mastra/libsql": "1.29.0",
     "@mastra/pg": "1.35.0",
     "@mastra/redis-streams": "0.8.0",
-    "@factory/integration-firebase": "workspace:*"
+    "firebase-admin": "14.5.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "3.0.130",

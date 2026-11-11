@@ -8,6 +8,17 @@ export function localDevCredentialKey(): string {
   if (process.env.NODE_ENV !== 'development' || process.env.HOST !== '127.0.0.1') {
     throw new Error('Local development encryption requires NODE_ENV=development and HOST=127.0.0.1.');
   }
+  return ownMachineCredentialKey();
+}
+
+/**
+ * The same key for a development server on the person's own machine that signs people in another
+ * way (Google through Firebase), so credentials stored under local dev auth stay readable.
+ */
+export function ownMachineCredentialKey(): string {
+  if (process.env.NODE_ENV !== 'development') {
+    throw new Error('The machine credential key is for development servers only; set FACTORY_CREDENTIAL_ENCRYPTION_KEY.');
+  }
   const directory = join(homedir(), '.mastracode');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);

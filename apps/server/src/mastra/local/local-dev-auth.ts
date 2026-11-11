@@ -1,6 +1,6 @@
 import type { IMastraAuthProvider, IOrganizationsProvider } from '@mastra/core/server';
 
-const LOCAL_USER = {
+export const LOCAL_USER = {
   id: 'factory-local-developer',
   email: 'developer@localhost',
   name: 'Local developer',

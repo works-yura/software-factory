@@ -25,7 +25,7 @@ export interface FactoryAuthState {
   /** Explicit server capability; absent on older servers. */
   telemetryEnabled?: boolean;
   user?: { userId?: string; email?: string; name?: string; avatarUrl?: string; organizationId?: string };
-  /** Active identity provider: 'better-auth' | 'factory-local-dev' | custom adapter kind. */
+  /** Active identity provider: 'better-auth' | 'firebase' | 'factory-local-dev' | custom adapter kind. */
   provider?: string;
   /** True when the provider hosts credential forms and sign-up is disabled. */
   signUpDisabled?: boolean;
@@ -114,6 +114,62 @@ export function signUpWithPassword(
   input: { name: string; email: string; password: string },
 ): Promise<void> {
   return postBetterAuthCredentials(baseUrl, 'sign-up/email', input);
+}
+
+/** Thrown when the person closes the Google popup; the page just lets them try again. */
+export class SignInCancelledError extends Error {
+  constructor() {
+    super('Sign-in cancelled');
+    this.name = 'SignInCancelledError';
+  }
+}
+
+const CANCELLED_POPUP_CODES = new Set(['auth/popup-closed-by-user', 'auth/cancelled-popup-request']);
+
+/**
+ * Google sign-in through Firebase: a popup signs in, the server checks the account against its
+ * allow-list and sets the session cookie. Firebase keeps nothing in the browser afterwards; the
+ * cookie is the only session. The SDK loads only here, so the app bundle does not carry it.
+ */
+export async function signInWithGoogle(baseUrl: string): Promise<void> {
+  const configResponse = await fetch(`${baseUrl}/auth/api/config`, { credentials: 'include' });
+  if (!configResponse.ok) throw new Error(tk('errors.authenticationFailed'));
+  const config = (await configResponse.json()) as { apiKey: string; authDomain: string; projectId: string };
+
+  const [{ getApps, initializeApp }, firebaseAuth] = await Promise.all([import('firebase/app'), import('firebase/auth')]);
+  const app = getApps().find(existing => existing.name === 'factory') ?? initializeApp(config, 'factory');
+  const auth = firebaseAuth.getAuth(app);
+  await firebaseAuth.setPersistence(auth, firebaseAuth.inMemoryPersistence);
+  const google = new firebaseAuth.GoogleAuthProvider();
+  google.setCustomParameters({ prompt: 'select_account' });
+
+  let idToken: string;
+  try {
+    const result = await firebaseAuth.signInWithPopup(auth, google);
+    idToken = await result.user.getIdToken();
+  } catch (error) {
+    if (CANCELLED_POPUP_CODES.has((error as { code?: string }).code ?? '')) throw new SignInCancelledError();
+    throw error;
+  } finally {
+    await firebaseAuth.signOut(auth).catch(() => undefined);
+  }
+
+  const res = await fetch(`${baseUrl}/auth/api/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ idToken }),
+  });
+  if (!res.ok) {
+    let message = tk('errors.authenticationFailed');
+    try {
+      const data = (await res.json()) as { message?: string };
+      if (data?.message) message = data.message;
+    } catch {
+      // Non-JSON error body — keep the generic message.
+    }
+    throw new Error(message);
+  }
 }
 
 /**

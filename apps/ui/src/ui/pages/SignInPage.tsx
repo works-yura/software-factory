@@ -12,6 +12,8 @@ import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import {
   navigateAfterSignIn,
   redirectToLogin,
+  SignInCancelledError,
+  signInWithGoogle,
   signInWithPassword,
   signUpWithPassword,
 } from '../domains/auth/services/auth';
@@ -132,6 +134,44 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
   );
 }
 
+function GoogleSignInButton({ returnTo }: { returnTo: string }) {
+  const { t } = useTranslation('auth');
+  const { baseUrl } = useApiConfig();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const handleClick = async () => {
+    setError(null);
+    setPending(true);
+    try {
+      await signInWithGoogle(baseUrl);
+      navigateAfterSignIn(returnTo);
+    } catch (err) {
+      setError(
+        err instanceof SignInCancelledError
+          ? t('google.cancelled')
+          : err instanceof Error
+            ? err.message
+            : t('errors.authenticationFailed'),
+      );
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="flex w-full flex-col gap-3">
+      <Button variant="primary" size="lg" className="w-80 max-w-full" disabled={pending} onClick={() => void handleClick()}>
+        {pending ? t('google.opening') : t('google.signIn')}
+      </Button>
+      {error ? (
+        <Txt as="p" variant="caption" role="alert" className="text-destructive-foreground">
+          {error}
+        </Txt>
+      ) : null}
+    </div>
+  );
+}
+
 export function SignInPage() {
   const { t } = useTranslation('auth');
   const { baseUrl } = useApiConfig();
@@ -143,6 +183,7 @@ export function SignInPage() {
   const authErrorDescription = searchParams.get('error_description');
   const accessDenied = authError === 'access_denied';
   const credentialForm = auth.data?.provider === 'better-auth';
+  const googleSignIn = auth.data?.provider === 'firebase';
 
   // A cached signed-in result may predate the redirect here. Check the cookie
   // again before sending the user back into the protected app.
@@ -203,6 +244,8 @@ export function SignInPage() {
                 </div>
                 <CredentialSignInForm returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
               </>
+            ) : googleSignIn ? (
+              <GoogleSignInButton returnTo={returnTo} />
             ) : (
               <Button
                 variant="primary"
