@@ -18,7 +18,7 @@ import { ModelsSettings } from '../../ModelsSettings';
 const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
 
 /** A stateful Factory: GET reflects every PATCH; `reject` makes the next PATCH fail. */
-function stubFactory(initial: Partial<FactoryProjectPayload>, { claudeCode = true, reject = false } = {}) {
+function stubFactory(initial: Partial<FactoryProjectPayload>, { claudeCode = true, codex = false, reject = false } = {}) {
   let project: FactoryProjectPayload = { id: 'fp-1', name: 'Mastra', ...initial };
   const patches: unknown[] = [];
   server.use(
@@ -31,7 +31,7 @@ function stubFactory(initial: Partial<FactoryProjectPayload>, { claudeCode = tru
       return HttpResponse.json({ project });
     }),
     http.get(`${TEST_BASE_URL}/web/config/features`, () =>
-      HttpResponse.json({ knowledge: false, mcp: false, claudeCode }),
+      HttpResponse.json({ knowledge: false, mcp: false, claudeCode, codex }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
     http.get(`${TEST_BASE_URL}/web/config/providers/anthropic/accounts`, () =>
@@ -117,6 +117,29 @@ describe('Models settings per harness', () => {
       expect(within(await harnessSwitch()).getByRole('radio', { name: 'Mastra' })).toBeChecked(),
     );
     expect(screen.queryByText('Claude Code accounts')).not.toBeInTheDocument();
+  });
+
+  it('switches Mastra → Codex where the server runs it, with no Claude accounts or Mastra routing below', async () => {
+    const { patches } = stubFactory({ harness: 'mastra' }, { codex: true });
+    const user = userEvent.setup();
+    const { client } = renderModels();
+
+    await user.click(within(await harnessSwitch()).getByRole('radio', { name: 'Codex' }));
+    await waitForMutationsIdle(client);
+
+    expect(patches).toEqual([{ harness: 'codex' }]);
+    await waitFor(async () => expect(within(await harnessSwitch()).getByRole('radio', { name: 'Codex' })).toBeChecked());
+    expect(screen.getByText('Default models')).toBeInTheDocument();
+    expect(screen.queryByText('Claude Code accounts')).not.toBeInTheDocument();
+    expect(screen.queryByText('Codex isn’t available on this server: install the codex CLI there and run `codex login`.')).not.toBeInTheDocument();
+  });
+
+  it('cannot switch to Codex where its CLI is missing, and says what to set up', async () => {
+    stubFactory({ harness: 'mastra' }, { codex: false });
+    renderModels();
+
+    expect(within(await harnessSwitch()).getByRole('radio', { name: 'Codex' })).toHaveAttribute('aria-disabled', 'true');
+    expect(await screen.findByText('Codex isn’t available on this server: install the codex CLI there and run `codex login`.')).toBeInTheDocument();
   });
 
   it('cannot switch to Claude Code where the server does not run it', async () => {

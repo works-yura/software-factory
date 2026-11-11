@@ -160,6 +160,8 @@ export interface FactoryApiRoutesDeps {
   mcpEnabled: boolean;
   /** The Claude Code harness is configured, so new factories may pick `harness: 'claude-code'`. */
   claudeCodeEnabled?: boolean;
+  /** The Codex harness runs here (the `codex` CLI is installed), so factories may pick `harness: 'codex'`. */
+  codexEnabled?: boolean;
   /** Every harness's model facet: `/web/config/models` `instances` and a session's `switchModel` / `modelInstanceId`. */
   harnessModels?: () => Pick<HarnessModelRegistry, 'describe' | 'forSession' | 'forInstance'> | undefined;
   /** Device preview (`/web/device`) is mounted: simulators and emulators on this server's machine. */
@@ -882,6 +884,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         knowledge: deps.knowledgeEnabled,
         mcp: deps.mcpEnabled,
         claudeCode: deps.claudeCodeEnabled ?? false,
+        codex: deps.codexEnabled ?? false,
         device: deps.deviceEnabled ?? false,
         claudeSignIn: deps.claudeSignIn !== undefined,
       },

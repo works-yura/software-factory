@@ -7,7 +7,7 @@ export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
 export const DEFAULT_FACTORY_THINKING_LEVEL: ThinkingLevelSetting = 'medium';
 
 /** The engines a Factory can run its agents on. */
-export const FACTORY_HARNESSES = ['mastra', 'claude-code'] as const;
+export const FACTORY_HARNESSES = ['mastra', 'claude-code', 'codex'] as const;
 export type FactoryHarnessKind = (typeof FACTORY_HARNESSES)[number];
 export const DEFAULT_FACTORY_HARNESS: FactoryHarnessKind = 'mastra';
 

@@ -101,7 +101,8 @@ describe('ProjectRoutes', () => {
     const switched = await send('PATCH', path, { harness: 'mastra' });
     expect(switched.status).toBe(200);
     expect(await switched.json()).toMatchObject({ project: { harness: 'mastra' } });
-    expect((await send('PATCH', path, { harness: 'codex' })).status).toBe(400);
+    expect(await (await send('PATCH', path, { harness: 'codex' })).json()).toMatchObject({ project: { harness: 'codex' } });
+    expect((await send('PATCH', path, { harness: 'cursor' })).status).toBe(400);
     // Old clients' model fields alone change nothing: there is no field to update.
     expect((await send('PATCH', path, { defaultModelId: 'openai/gpt-5.5' })).status).toBe(400);
     expect((await send('PATCH', path, { claudeCodeModel: 'haiku' })).status).toBe(400);

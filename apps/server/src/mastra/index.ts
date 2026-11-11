@@ -361,6 +361,13 @@ export const factory = new MastraFactory({
     localDevelopment: localDevAuthEnabled,
     ...(process.env.FACTORY_CLAUDE_CODE_COMMAND?.trim() ? { command: process.env.FACTORY_CLAUDE_CODE_COMMAND.trim() } : {}),
   },
+  // Factories created with `harness: 'codex'` run their agents on this machine's `codex` CLI (its
+  // app-server), signed in with `codex login`. Without the CLI, Settings lists Codex as needing setup.
+  codex: {
+    storeDir: process.env.FACTORY_CODEX_STORE_DIR?.trim() || join(homedir(), '.mastracode', 'web', 'codex-sessions'),
+    ...(process.env.FACTORY_CODEX_COMMAND?.trim() ? { command: process.env.FACTORY_CODEX_COMMAND.trim() } : {}),
+    ...(process.env.FACTORY_CODEX_HOME?.trim() ? { codexHome: process.env.FACTORY_CODEX_HOME.trim() } : {}),
+  },
   ...(browser ? { browser } : {}),
   // Device preview drives simulators and emulators on this machine, so only a local development
   // server (the person's own machine) offers it. State and the device tools sit next to the database.

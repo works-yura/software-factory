@@ -32,7 +32,7 @@ import type { HarnessModelRegistry } from '@factory/harness/models/registry';
 import { MASTRA_INSTANCE_ID, mastraModelInstance } from '@factory/credentials/mastra-models';
 import { listProviders, DEPLOYMENT_MODEL_PROVIDERS, isDeploymentModelProvider, buildProviderAccess, buildModelCatalog, listSessionScopedCredentials } from '@factory/credentials';
 import type { ModelCatalog, ModelCatalogEntry } from '@factory/credentials';
-import { CLAUDE_CODE_HARNESS, HARNESSES } from '@factory/contracts';
+import { CLAUDE_CODE_HARNESS, CODEX_HARNESS, HARNESSES } from '@factory/contracts';
 
 import { readRunningPackages } from './running-packages.ts';
 import type { RunningPackage } from './running-packages.ts';
@@ -303,7 +303,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * `claudeSignIn`: a person can sign in to Claude from the settings, the CLI's browser page opening on
    * this machine (see `CredentialAccountRoutes`).
    */
-  features?: { knowledge: boolean; mcp?: boolean; claudeCode?: boolean; claudeSignIn?: boolean; device?: boolean };
+  features?: { knowledge: boolean; mcp?: boolean; claudeCode?: boolean; claudeSignIn?: boolean; codex?: boolean; device?: boolean };
   /** Reads the Mastra packages this server runs; defaults to the build manifest. */
   readPackages?: () => Promise<RunningPackage[]>;
   authStorage?: AuthStorage;
@@ -450,9 +450,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             mcp: options.features?.mcp ?? false,
             claudeCode: options.features?.claudeCode ?? false,
             claudeSignIn: (options.features?.claudeCode ?? false) && (options.features?.claudeSignIn ?? false),
+            codex: options.features?.codex ?? false,
             device: options.features?.device ?? false,
             // What each harness this server runs can do; the UI asks these instead of checking ids.
-            harnesses: HARNESSES.filter(harness => harness.id !== CLAUDE_CODE_HARNESS.id || options.features?.claudeCode === true),
+            harnesses: HARNESSES.filter(
+              harness =>
+                (harness.id !== CLAUDE_CODE_HARNESS.id || options.features?.claudeCode === true) &&
+                (harness.id !== CODEX_HARNESS.id || options.features?.codex === true),
+            ),
           }),
       }),
 

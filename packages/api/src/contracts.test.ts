@@ -121,7 +121,8 @@ describe('Factory route contracts', () => {
     expect(createProjectBodySchema.parse({ name: 'Claude', harness: 'claude-code' })).toMatchObject({
       harness: 'claude-code',
     });
-    expect(createProjectBodySchema.safeParse({ name: 'Other', harness: 'codex' }).success).toBe(false);
+    expect(createProjectBodySchema.parse({ name: 'Codex', harness: 'codex' })).toMatchObject({ harness: 'codex' });
+    expect(createProjectBodySchema.safeParse({ name: 'Other', harness: 'cursor' }).success).toBe(false);
     // Model defaults are set per harness instance (`setModelDefaultBodySchema`): legacy fields are stripped.
     expect(createProjectBodySchema.parse({ name: 'Claude', harness: 'claude-code', claudeCodeModel: 'opus' })).not.toHaveProperty(
       'claudeCodeModel',
@@ -129,7 +130,8 @@ describe('Factory route contracts', () => {
     expect(updateProjectBodySchema.safeParse({ claudeCodeModel: 'sonnet' }).success).toBe(false);
     expect(updateProjectBodySchema.safeParse({ defaultModelId: 'openai/gpt-5.5', defaultThinkingLevel: 'high' }).success).toBe(false);
     expect(updateProjectBodySchema.parse({ harness: 'claude-code' })).toEqual({ harness: 'claude-code' });
-    expect(updateProjectBodySchema.safeParse({ harness: 'codex' }).success).toBe(false);
+    expect(updateProjectBodySchema.safeParse({ harness: 'codex' }).success).toBe(true);
+    expect(updateProjectBodySchema.safeParse({ harness: 'cursor' }).success).toBe(false);
     expect(updateProjectBodySchema.safeParse({}).success).toBe(false);
     expect(updateProjectBodySchema.parse({ name: 'Renamed', reviewTestChecksEnabled: true })).toEqual({
       name: 'Renamed',

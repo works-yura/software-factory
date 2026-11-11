@@ -164,11 +164,11 @@ export function SettingsNavigation() {
   const { t } = useTranslation('settings');
   const { state } = useSidebar();
   const [query, setQuery] = useState('');
-  // Observational memory is Mastra's; a Factory on Claude Code has nothing to set there.
+  // Observational memory is Mastra's; a Factory on Claude Code or Codex has nothing to set there.
   const { harness } = useFactoryHarness(factoryId ?? '');
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = SETTINGS_GROUPS.map(group => {
-    const items = group.items.filter(({ id }) => id !== 'memory' || harness !== 'claude-code');
+    const items = group.items.filter(({ id }) => id !== 'memory' || (harness !== 'claude-code' && harness !== 'codex'));
     return {
       ...group,
       items: normalizedQuery ? items.filter(({ searchText }) => searchText.includes(normalizedQuery)) : items,

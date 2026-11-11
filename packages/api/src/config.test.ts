@@ -45,32 +45,37 @@ describe('GET /web/config/features', () => {
   it.each([
     {
       features: undefined,
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, device: false },
     },
     {
       features: { knowledge: true },
-      expected: { knowledge: true, mcp: false, claudeCode: false, claudeSignIn: false, device: false },
+      expected: { knowledge: true, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, device: false },
     },
     {
       features: { knowledge: false, mcp: true },
-      expected: { knowledge: false, mcp: true, claudeCode: false, claudeSignIn: false, device: false },
+      expected: { knowledge: false, mcp: true, claudeCode: false, claudeSignIn: false, codex: false, device: false },
     },
     {
       features: { knowledge: false, claudeCode: true },
-      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: false, codex: false, device: false },
     },
     {
       features: { knowledge: false, claudeCode: true, claudeSignIn: true },
-      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: true, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: true, claudeSignIn: true, codex: false, device: false },
     },
     {
       features: { knowledge: false, device: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, device: true },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, device: true },
+    },
+    // Codex where its CLI is installed.
+    {
+      features: { knowledge: false, codex: true },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: true, device: false },
     },
     // No Claude Code, no sign-in to speak of.
     {
       features: { knowledge: false, claudeSignIn: true },
-      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, device: false },
+      expected: { knowledge: false, mcp: false, claudeCode: false, claudeSignIn: false, codex: false, device: false },
     },
   ])('reports the server-side feature gates as $expected', async ({ features, expected }) => {
     const app = new Hono();
@@ -89,8 +94,12 @@ describe('GET /web/config/features', () => {
     const body = (await response.json()) as Record<string, unknown> & { harnesses: Array<{ id: string }> };
     const { harnesses, ...flags } = body;
     expect(flags).toEqual(expected);
-    // Every server runs Mastra; Claude Code only where it is configured.
-    expect(harnesses.map(harness => harness.id)).toEqual(expected.claudeCode ? ['mastra', 'claude-code'] : ['mastra']);
+    // Every server runs Mastra; Claude Code and Codex only where they are configured.
+    expect(harnesses.map(harness => harness.id)).toEqual([
+      'mastra',
+      ...(expected.claudeCode ? ['claude-code'] : []),
+      ...(expected.codex ? ['codex'] : []),
+    ]);
   });
 
   it("describes what each harness can do, so the UI asks that instead of the harness's id", async () => {

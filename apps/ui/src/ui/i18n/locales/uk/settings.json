@@ -594,6 +594,8 @@
       "mastra": "Mastra",
       "claudeCode": "Claude Code",
       "claudeUnavailable": "Claude Code не налаштовано на цьому сервері.",
+      "codex": "Codex",
+      "codexUnavailable": "Codex недоступний на цьому сервері: встановіть там codex CLI і виконайте `codex login`.",
       "changeFailed": "Не вдалося змінити харнес"
     },
     "agentLanguage": {

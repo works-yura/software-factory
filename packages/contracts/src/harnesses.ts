@@ -77,7 +77,25 @@ export const CLAUDE_CODE_HARNESS: HarnessDescriptor = {
   setup: { modelProvider: false, claudeSignIn: true },
 };
 
-export const HARNESSES: readonly HarnessDescriptor[] = [MASTRA_HARNESS, CLAUDE_CODE_HARNESS];
+/** OpenAI's Codex: the `codex` CLI's app-server on the server host, signed in with `codex login`. */
+export const CODEX_HARNESS: HarnessDescriptor = {
+  id: 'codex',
+  label: 'Codex',
+  modelScope: 'factory',
+  supports: {
+    goal: false,
+    thinkingLevel: false,
+    sessionPermissions: false,
+    imageAttachments: false,
+    memory: false,
+    knowledge: false,
+    sandboxRecreate: false,
+    sessionlessChat: false,
+  },
+  setup: { modelProvider: false, claudeSignIn: false },
+};
+
+export const HARNESSES: readonly HarnessDescriptor[] = [MASTRA_HARNESS, CLAUDE_CODE_HARNESS, CODEX_HARNESS];
 
 /** The harness with this id; an unknown or missing id is Mastra, the harness sessions ran on before there was a choice. */
 export function harnessById(id: string | null | undefined, available: readonly HarnessDescriptor[] = HARNESSES): HarnessDescriptor {

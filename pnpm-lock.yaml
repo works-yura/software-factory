@@ -1873,6 +1873,12 @@ importers:
       '@factory/harness-claude-code-ui':
         specifier: workspace:*
         version: link:../harness-claude-code-ui
+      '@factory/harness-codex':
+        specifier: workspace:*
+        version: link:../harness-codex-core
+      '@factory/harness-codex-ui':
+        specifier: workspace:*
+        version: link:../harness-codex-ui
       '@factory/harness-mastra':
         specifier: workspace:*
         version: link:../harness-mastra

@@ -25,8 +25,13 @@ imports it directly.
 | `models/registry.ts` | `createHarnessModelRegistry`: the server's harnesses by model instance |
 
 The Claude-only files (catalog, manifest, `model-manifest.json`, CLI compilation, `semver.ts`) live
-in `@factory/harness-claude-code` (`src/models/`); Mastra's descriptors from its thinking levels in
+in `@factory/harness-claude-code` (`src/models/`); Codex's (the `model/list` catalog with the
+manifest's `codex` section as fallback, its effort and service-tier descriptors, the facet) in
+`@factory/harness-codex` (`src/models/`); Mastra's descriptors from its thinking levels in
 `@factory/credentials/mastra-models`.
+
+`transcript.ts` (`@factory/harness/transcript`) is the transcript the turn-based harnesses (Claude
+Code, Codex) record and the chat's session UI projects.
 
 ### The facet
 

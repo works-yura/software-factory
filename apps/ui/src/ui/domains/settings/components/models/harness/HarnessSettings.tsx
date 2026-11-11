@@ -39,7 +39,7 @@ export function useFactoryHarness(factoryId: string) {
 }
 
 /**
- * Switch between Mastra and Claude Code. Only new sessions follow: a card
+ * Switch between Mastra, Claude Code and Codex. Only new sessions follow: a card
  * already running finishes on the harness it started on.
  */
 export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
@@ -47,6 +47,7 @@ export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
   const features = useServerFeatures();
   const { projectQuery, mutation, harness } = useFactoryHarness(factoryId);
   const claudeAvailable = features.data?.claudeCode === true;
+  const codexAvailable = features.data?.codex === true;
 
   return (
     <SettingsSubsection scope="factory" title={t('models.harness.title')} description={t('models.harness.description')}>
@@ -79,10 +80,18 @@ export function HarnessSwitchSection({ factoryId }: { factoryId: string }) {
                 <SegmentedControlItem value="claude-code" disabled={!claudeAvailable && harness !== 'claude-code'}>
                   {t('models.harness.claudeCode')}
                 </SegmentedControlItem>
+                <SegmentedControlItem value="codex" disabled={!codexAvailable && harness !== 'codex'}>
+                  {t('models.harness.codex')}
+                </SegmentedControlItem>
               </SegmentedControl>
               {features.data && !claudeAvailable && (
                 <Txt as="span" variant="caption" tone="muted">
                   {t('models.harness.claudeUnavailable')}
+                </Txt>
+              )}
+              {features.data && !codexAvailable && (
+                <Txt as="span" variant="caption" tone="muted">
+                  {t('models.harness.codexUnavailable')}
                 </Txt>
               )}
             </div>

@@ -580,6 +580,8 @@
       "mastra": "Mastra",
       "claudeCode": "Claude Code",
       "claudeUnavailable": "Claude Code isn’t configured on this server.",
+      "codex": "Codex",
+      "codexUnavailable": "Codex isn’t available on this server: install the codex CLI there and run `codex login`.",
       "changeFailed": "Couldn’t switch the harness"
     },
     "agentLanguage": {

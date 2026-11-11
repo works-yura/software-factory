@@ -244,7 +244,7 @@ export async function listGithubRepos(
 const GITHUB_INTEGRATION_ID = 'github';
 
 /** Runtimes a Factory's agents can run on; mirrors `FACTORY_HARNESS_KINDS` in @factory/contracts. */
-export const FACTORY_HARNESSES = ['mastra', 'claude-code'] as const;
+export const FACTORY_HARNESSES = ['mastra', 'claude-code', 'codex'] as const;
 
 export type FactoryHarness = (typeof FACTORY_HARNESSES)[number];
 

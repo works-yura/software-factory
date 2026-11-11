@@ -1,6 +1,8 @@
 import { autoApprovedExitTool, externallyAuthoredWorkItem } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
-import type { ClaudeCodeHarness, ClaudeCodeSession, ClaudePermissionMode } from '@factory/harness-claude-code';
+import type { PlanDecision } from '@factory/harness';
+import type { PlanGate } from '@factory/harness/transcript';
+import type { ClaudeSessionMode } from '@factory/harness-claude-code';
 import {
   commitRunStart,
   resolveSourceSession,
@@ -33,8 +35,21 @@ export const CLAUDE_THREAD_SETTINGS = {
   lastModelSelection: 'factoryLastModelSelection',
 } as const;
 
-export interface ClaudeStartCoordinatorOptions {
-  harness: Pick<ClaudeCodeHarness, 'getSession' | 'createSession'>;
+/** What a card's start needs of a turn-based harness's session (Claude Code's, Codex's). */
+export interface StartableSession<Mode extends string> {
+  readonly resourceId: string | undefined;
+  readonly mode: Mode | undefined;
+  readonly pendingPlan: PlanGate | undefined;
+  readonly thread: { requireId(): string; setSetting(input: { key: string; value: unknown }): Promise<void> };
+  setMode(mode: Mode): Promise<void>;
+  queuePlanAnswer(input: { resumeData: PlanDecision; toolCallId?: string }): Promise<void>;
+}
+
+export interface ClaudeStartCoordinatorOptions<Mode extends string = ClaudeSessionMode> {
+  harness: {
+    getSession(sessionId: string): Promise<StartableSession<Mode> | undefined>;
+    createSession(input: { sessionId: string; threadId: string; resourceId?: string }): Promise<StartableSession<Mode>>;
+  };
   storage: WorkItemsStorage;
   transitionService?: Pick<FactoryTransitionService, 'transition'>;
   sourceControl:
@@ -43,8 +58,8 @@ export interface ClaudeStartCoordinatorOptions {
         request: FactoryStartRequest,
       ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>);
   projects: Pick<FactoryProjectsStorage, 'get'>;
-  /** The mode a session leaves planning in once its plan is approved; `acceptEdits` by default. */
-  approvedPermissionMode?: ClaudePermissionMode;
+  /** The mode a session leaves planning in once its plan is approved; `acceptEdits` (Claude Code's) by default. */
+  approvedPermissionMode?: Mode;
   /**
    * The boards, for the card phase's own plan auto-approval (`autoApprovedExitTool`), as the dispatcher
    * decides it for a Mastra run. Without them every plan waits for a person.
@@ -74,10 +89,10 @@ export interface ClaudeStartCoordinatorOptions {
  * are attacker-writable and the CLI reads them from the cwd. Review of change
  * requests waits for the sandbox phase.
  */
-export class ClaudeStartCoordinator {
-  readonly #options: ClaudeStartCoordinatorOptions;
+export class ClaudeStartCoordinator<Mode extends string = ClaudeSessionMode> {
+  readonly #options: ClaudeStartCoordinatorOptions<Mode>;
 
-  constructor(options: ClaudeStartCoordinatorOptions) {
+  constructor(options: ClaudeStartCoordinatorOptions<Mode>) {
     this.#options = options;
   }
 
@@ -156,7 +171,7 @@ export class ClaudeStartCoordinator {
   }
 
   async #applyRoleMode(
-    session: ClaudeCodeSession,
+    session: StartableSession<Mode>,
     request: FactoryStartRequest,
     plansAutoApproved: boolean,
   ): Promise<void> {
@@ -164,7 +179,7 @@ export class ClaudeStartCoordinator {
     // cards planned before that still start their planner in the `plan` role.
     if (request.workItem.role === 'plan' || request.destinationStage === 'planning') {
       // Auto-approved plans need no gate: the plan skill moves the card on itself.
-      if (!plansAutoApproved && session.mode !== 'planning') await session.setMode('planning');
+      if (!plansAutoApproved && session.mode !== 'planning') await session.setMode('planning' as Mode);
       return;
     }
     if (session.pendingPlan) {
@@ -172,7 +187,7 @@ export class ClaudeStartCoordinator {
       await session.queuePlanAnswer({ resumeData: { action: 'approved' }, toolCallId: session.pendingPlan.toolCallId });
       return;
     }
-    if (session.mode === 'planning') await session.setMode(this.#options.approvedPermissionMode ?? 'acceptEdits');
+    if (session.mode === 'planning') await session.setMode(this.#options.approvedPermissionMode ?? ('acceptEdits' as Mode));
   }
 }
 
