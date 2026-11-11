@@ -910,6 +910,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       ? new UsageRoutes({
           auth: deps.auth,
           ...deps.usage,
+          sessions: sourceControlSessions,
+          workItems: deps.domains.workItems,
           modelCredentials: deps.domains.modelCredentials,
           projects: deps.domains.projects,
         }).routes()
