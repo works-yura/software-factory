@@ -3,7 +3,11 @@ import type { FactoryRuleStage } from '@factory/core/rules/types';
 
 import { phaseTitle } from '../../i18n/boardLabels';
 
-/** The default board's phases, in column order: its columns' labels and colours when no catalog names them. */
+/**
+ * The default board's phases, in column order: its columns' labels and colours when no catalog
+ * names them. `review` is the self-review phase Work held before it dropped it; projects stored
+ * then still have it.
+ */
 const WORK_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'pr-review', 'done', 'canceled'] as const;
 
 const BOARD_STAGE_LABELS = {
@@ -11,8 +15,8 @@ const BOARD_STAGE_LABELS = {
   triage: 'Triage',
   planning: 'Planning',
   execute: 'Building',
-  review: 'Review',
-  'pr-review': 'PR review',
+  review: 'Self-review',
+  'pr-review': 'Review',
   done: 'Done',
   canceled: 'Canceled',
 } satisfies Record<(typeof WORK_STAGES)[number], string>;

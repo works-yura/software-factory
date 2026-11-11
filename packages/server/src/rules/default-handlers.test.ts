@@ -12,6 +12,7 @@ import type {
   FactoryGithubRuleContext,
   FactoryGitLabRuleContext,
 } from '@factory/core';
+import { selfReviewWorkBoard } from '@factory/pipelines/testing';
 
 function ruleItem(
   input: Omit<FactoryRuleItemContext, 'workItem' | 'acceptedAt'> &
@@ -419,8 +420,8 @@ describe('built-in board and integration handlers', () => {
       },
     );
 
-    it('starts factory-self-review in the review session', () => {
-      expect(phaseRunDecision(workBoard, 'review', entering('review', 'execute'))).toMatchObject({
+    it("starts factory-self-review in the review session in an older project's Work", () => {
+      expect(phaseRunDecision(selfReviewWorkBoard, 'review', entering('review', 'execute'))).toMatchObject({
         role: 'review',
         skillName: 'factory-self-review',
         idempotencyKey: 'delivery-1:review:factory-self-review',

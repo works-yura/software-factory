@@ -1,5 +1,5 @@
 import { workBoard } from '@factory/pipelines';
-import { boardDefinitionOf } from '@factory/store';
+import { workSeedWithSelfReview } from '@factory/store';
 import type { StoredBoardMigration, StoredBoardRecord, StoredPhaseInput, StoredPhaseRecord } from '@factory/store';
 
 const MIGRATED_FIELDS = ['runner', 'exitTool', 'tools', 'autoStart', 'autoStartWhen', 'nextPhases'] as const;
@@ -119,7 +119,7 @@ function migrateRunner(
 
 export function migrateWorkPhaseRunners(
   board: StoredBoardRecord,
-  seed = boardDefinitionOf(workBoard),
+  seed = workSeedWithSelfReview(),
 ): { board: { name: string; description: string | null; phases: StoredPhaseInput[] }; filled: string[] } | undefined {
   const phaseKeys = new Set(board.phases.map(phase => phase.key));
   const filled: string[] = [];

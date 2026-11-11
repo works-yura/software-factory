@@ -11,6 +11,8 @@ const PACKAGES = fileURLToPath(new URL('../../../', import.meta.url));
 const SEED_AND_LEGACY = new Set([
   'pipelines/src/work/board.ts',
   'pipelines/src/work/legacy-plan-role.ts',
+  // Work as projects stored it while it had its `review` self-review phase (upstream #29724).
+  'pipelines/src/work/legacy-self-review.ts',
   'core/src/boards/legacy-plan-role.ts',
   'store/src/boards/work-routes.ts',
   'store/src/work-items/legacy-keys.ts',

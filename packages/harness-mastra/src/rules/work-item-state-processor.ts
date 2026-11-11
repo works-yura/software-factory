@@ -4,6 +4,7 @@ import type { ComputeStateSignalArgs, ComputeStateSignalResult, Processor } from
 import {
   authorTrusted,
   boardForWorkItem,
+  cardBoardFlow,
   hasRecordedVerdict,
   openChangeRequests,
   pullRequestSourceNumber,
@@ -182,7 +183,9 @@ export async function describeFactoryWorkItem(input: {
   if (!item) return undefined;
   const boards = await toBoardSource(input.boards).load(binding);
   if (!workItemPhaseSemantics(boards, item)) return undefined;
-  const selfReview = await selfReviewEnabled(input.projects, binding);
+  // The setting means nothing to a card whose board has no self-review phase.
+  const selfReview =
+    cardBoardFlow(boards, item).selfReview === undefined ? undefined : await selfReviewEnabled(input.projects, binding);
   return { item, contents: renderWorkItem({ item, binding, boards, selfReview }), selfReview };
 }
 

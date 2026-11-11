@@ -28,8 +28,15 @@ import { WorkItemsStorage } from '@factory/store';
 
 import { decisionOvertaken } from './decision-applicability.ts';
 import { createFactoryStorageForTests, FactoryTransitionService } from './test-support.ts';
+import { selfReviewWorkBoard } from '@factory/pipelines/testing';
+import type { BoardRegistry } from '@factory/core';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
+
+/** Work as a project stored it while Work still had its `review` self-review phase. */
+function olderWork(): BoardRegistry {
+  return new Map([['work', selfReviewWorkBoard]]);
+}
 
 function lifecycleOptions({
   version,
@@ -51,9 +58,9 @@ function lifecycleOptions({
         stage,
         {
           title: stage,
-          kind: workBoard.phaseKind(stage)!,
-          ...(workBoard.isWorking(stage)
-            ? { runner: runners[stage] ?? { context: workBoard.roleForPhase(stage) } }
+          kind: selfReviewWorkBoard.phaseKind(stage)!,
+          ...(selfReviewWorkBoard.isWorking(stage)
+            ? { runner: runners[stage] ?? { context: selfReviewWorkBoard.roleForPhase(stage) } }
             : {}),
           nextPhases: stages.filter(next => next !== stage),
         } as BoardPhaseDefinition<string>,
@@ -621,7 +628,8 @@ describe('FactoryTransitionService', () => {
     'never holds back a person or a board rule moving a card into %s',
     async stage => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const service = new FactoryTransitionService({ configVersion: 'human-approval', storage });
+      // An older project's Work enters Building from its self-review phase.
+      const service = new FactoryTransitionService({ configVersion: 'human-approval', storage, boards: olderWork() });
       for (const [actor, ingress] of [
         [
           { type: 'human', id: 'user-1' },
@@ -701,18 +709,21 @@ describe('FactoryTransitionService', () => {
   it.each([
     ['execute', 'accepted'],
     ['planning', 'rejected'],
-  ] as const)('sends a card from Review back into %s only to Building: %s', async (stage, status) => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { stages: ['review'], metadata: { authorTrusted: true } });
-    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
-    // Self-review requesting changes sends the builder back from Review; a new plan starts from Intake.
-    const result = await service.transition({
-      ...request(item, { stage }),
-      actor: { type: 'agent', bindingId: 'agent', role: 'work' },
-      ingress: { type: 'agent', identity: `review-${stage}` },
-    });
-    expect(result).toMatchObject({ status, ...(status === 'accepted' ? { stage } : { code: 'invalid_transition' }) });
-  });
+  ] as const)(
+    "sends a card from an older Work's self-review back into %s only to Building: %s",
+    async (stage, status) => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const item = await createItem(storage, { stages: ['review'], metadata: { authorTrusted: true } });
+      const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, boards: olderWork() });
+      // Self-review requesting changes sends the builder back from Review; a new plan starts from Intake.
+      const result = await service.transition({
+        ...request(item, { stage }),
+        actor: { type: 'agent', bindingId: 'agent', role: 'work' },
+        ingress: { type: 'agent', identity: `review-${stage}` },
+      });
+      expect(result).toMatchObject({ status, ...(status === 'accepted' ? { stage } : { code: 'invalid_transition' }) });
+    },
+  );
 
   it('neither opens nor closes the plan gate on a legacy acceptance stamp', async () => {
     const seed = await createFactoryStorageForTests();
@@ -1262,6 +1273,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      boards: olderWork(),
     });
 
     const result = await service.transition({ ...request(item, { stage: 'review' }), cause: 'board_drag' });
@@ -1654,7 +1666,7 @@ describe('FactoryTransitionService', () => {
 
   it('accepts a human cancel and can revive the item out of canceled', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { stages: ['review'] });
+    const item = await createItem(storage, { stages: ['execute'] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const discard = await service.transition(request(item, { stage: 'canceled', identity: 'discard-1' }));
@@ -1936,12 +1948,10 @@ describe('phase semantics', () => {
     ['triage', 'triage'],
     ['planning', 'work'],
     ['execute', 'work'],
-    // Review runs the independent reviewer, so a person's move seats the review role.
-    ['review', 'review'],
   ] as const)('seats a human kickoff into Work %s with the %s role', async (stage, role) => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    // Building is entered from Planning, its self-review from Building; every other lane from Intake.
-    const from = stage === 'execute' ? 'planning' : stage === 'review' ? 'execute' : 'intake';
+    // Building is entered from Planning; every other lane from Intake.
+    const from = stage === 'execute' ? 'planning' : 'intake';
     const item = await createItem(storage, { stages: [from] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
@@ -2544,12 +2554,13 @@ describe('pull request cards on the Work board', () => {
     expect(result).toMatchObject({ status: 'accepted' });
   });
 
-  it('still runs self-review, not the PR reviewer, for an issue card entering Review', async () => {
+  it("still runs self-review, not the PR reviewer, for an issue card entering an older Work's self-review", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { board: 'work', stages: ['execute'] });
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      boards: olderWork(),
     });
 
     await expect(service.transition(request(item, { stage: 'review' }))).resolves.toMatchObject({
@@ -2562,12 +2573,12 @@ describe('pull request cards on the Work board', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     // Building does not lead to PR review, so the board's graph alone would only say the move is undeclared.
     const item = await createItem(storage, { board: 'work', stages: ['execute'] });
-    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, boards: olderWork() });
 
     const result = await service.transition(request(item, { stage: 'pr-review' }));
     expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
     expect(result.status === 'rejected' && result.reason).toMatch(
-      /^PR review holds only cards with a pull request; this work item enters it once a pull request is attached to it\.$/,
+      /holds only cards with a pull request; this work item enters it once a pull request is attached to it\.$/,
     );
   });
 
@@ -2580,7 +2591,7 @@ describe('pull request cards on the Work board', () => {
       source: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:34' },
       metadata: { githubPullRequestNumber: 34, state: 'open' },
     }))!.item;
-    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, boards: olderWork() });
 
     await expect(service.transition(request(item, { stage: 'pr-review' }))).resolves.toMatchObject({
       status: 'accepted',
@@ -2653,7 +2664,7 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       ingress: { type: 'agent' as const, identity },
     });
 
-    async function card(stage: string, metadata: Record<string, unknown> = {}) {
+    async function card(stage: string, metadata: Record<string, unknown> = {}, boards?: BoardRegistry) {
       org = `org-${randomUUID()}`;
       const storage = await workItemsOn(backend);
       const item = await createItem(storage, {
@@ -2662,7 +2673,11 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
         stages: [stage],
         metadata: { authorTrusted: true, ...metadata },
       });
-      const service = new FactoryTransitionService({ configVersion: 'work-rules', storage });
+      const service = new FactoryTransitionService({
+        configVersion: 'work-rules',
+        storage,
+        ...(boards ? { boards } : {}),
+      });
       return { storage, item, service };
     }
 
@@ -2719,14 +2734,28 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       ['while a review requests changes', 'review', { reviewVerdict: 'request changes' }],
       ['before self-review has a verdict', 'review', {}],
     ])('lets the builder close work %s', async (_label, stage, metadata) => {
-      const { item, service } = await card(stage, metadata);
+      // Cards in `review` sit in an older project's Work self-review phase.
+      const { item, service } = await card(stage, metadata, stage === 'review' ? olderWork() : undefined);
       await expect(
         service.transition({ ...request(item, { orgId: org, stage: 'done' }), ...agent('work', 'close') }),
       ).resolves.toMatchObject({ status: 'accepted', stage: 'done' });
     });
 
-    it('lets the builder hand a pushed branch to Review', async () => {
-      const { item, service } = await card('execute');
+    it('lets the builder hand the change request it opened to Review', async () => {
+      const { storage, item: built, service } = await card('execute');
+      const item = (await storage.attachSource({
+        orgId: org,
+        id: built.id,
+        source: { integrationId: 'github', type: 'pull-request', externalId: `${org}-pr` },
+        metadata: { githubPullRequestNumber: 34, state: 'open' },
+      }))!.item;
+      await expect(
+        service.transition({ ...request(item, { orgId: org, stage: 'pr-review' }), ...agent('work', 'hand-off') }),
+      ).resolves.toMatchObject({ status: 'accepted', stage: 'pr-review' });
+    });
+
+    it("lets the builder hand a pushed branch to an older Work's self-review", async () => {
+      const { item, service } = await card('execute', {}, olderWork());
       await expect(
         service.transition({ ...request(item, { orgId: org, stage: 'review' }), ...agent('work', 'hand-off') }),
       ).resolves.toMatchObject({ status: 'accepted', stage: 'review' });
@@ -2737,8 +2766,7 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
         intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
         triage: ['intake', 'planning', 'done', 'canceled'],
         planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
-        execute: ['review', 'pr-review', 'planning', 'done', 'canceled'],
-        review: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
+        execute: ['pr-review', 'planning', 'done', 'canceled'],
         'pr-review': ['intake', 'planning', 'execute', 'done', 'canceled'],
         done: ['pr-review'],
         canceled: ['intake', 'pr-review'],

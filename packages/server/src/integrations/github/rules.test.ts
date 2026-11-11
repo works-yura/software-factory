@@ -24,6 +24,7 @@ import {
 } from '@factory/integration-github';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '@factory/integration-github';
 import { changeRequestTargetKey } from '@factory/integration-github';
+import { selfReviewWorkBoard } from '@factory/pipelines/testing';
 
 async function setup(permission: string | undefined, rules?: GithubRuleOverrides, storage?: FactoryStorage) {
   const seeded = storage ? await createFactoryStorageForTests(storage) : await createFactoryStorageForTests();
@@ -276,6 +277,9 @@ function pullRequest(
     },
   };
 }
+
+/** Work as a project stored it while Work still had its `review` self-review phase. */
+const olderWork = () => new Map([['work', selfReviewWorkBoard]]);
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -3180,6 +3184,7 @@ describe('GithubRules', () => {
 
   it('answers a pull request opening for the pull request card and the item it was authored from', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read', {
+      // The rule places the authoring card in an older project's Work self-review phase.
       pullRequestOpened: context => {
         // The arrival files the pull request's own card; the item the pull
         // request was authored from is placed in review instead.
@@ -3228,7 +3233,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: olderWork(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3292,7 +3297,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: olderWork(),
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3300,10 +3305,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: olderWork(),
       }),
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: olderWork(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });

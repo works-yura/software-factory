@@ -45,6 +45,12 @@ export type {
 export { BUILD_OBJECTIVE, OWN_CARD_HAND_OFF, workBoard } from './work/board.ts';
 export type { WorkBoardPhase } from './work/board.ts';
 export {
+  LEGACY_SELF_REVIEW_PHASE,
+  SELF_REVIEW_BUILD_NEXT_PHASES,
+  SELF_REVIEW_BUILD_OBJECTIVE,
+  selfReviewWorkBoard,
+} from './work/legacy-self-review.ts';
+export {
   buildDocsGuidance,
   changeFolderOf,
   DOCS_SKILL,

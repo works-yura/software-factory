@@ -6,10 +6,10 @@
       "triage": "Triage",
       "planning": "Planning",
       "execute": "Building",
-      "review": "Review",
+      "review": "Self-review",
       "done": "Done",
       "canceled": "Canceled",
-      "pr-review": "PR review"
+      "pr-review": "Review"
     }
   },
   "product": {

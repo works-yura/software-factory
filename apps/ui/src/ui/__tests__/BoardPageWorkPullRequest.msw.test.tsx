@@ -187,6 +187,14 @@ describe('Pull requests on the Work board', () => {
     expect(transitions).toEqual([expect.objectContaining({ board: 'work', stage: 'pr-review' })]);
   });
 
+  it('shows a card stored on the retired Review board in PR review on Work', async () => {
+    // The server reads a stored `review` row as Work, its Reviewing stage as PR review.
+    stubBoards({ items: [{ ...reviewItem, id: 'legacy-review', stages: ['pr-review'] }] });
+    renderBoard('work');
+    const prReview = await screen.findByRole('region', { name: 'Review' });
+    expect(await within(prReview).findByText(reviewItem.title)).toBeVisible();
+  });
+
   it("keeps an old Review board link's card on the way to Work", async () => {
     stubBoards({ items: [issueWithPullRequest] });
     const { router } = renderBoard('review', `?item=${issueWithPullRequest.id}`);
@@ -203,7 +211,7 @@ describe('Pull requests on the Work board', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
     expect(new URLSearchParams(router.state.location.search).getAll('source')).toEqual(['pull-request']);
-    const prReview = await screen.findByRole('region', { name: 'PR review' });
+    const prReview = await screen.findByRole('region', { name: 'Review' });
     expect(await within(prReview).findByText(issueWithPullRequest.title)).toBeVisible();
     expect(screen.queryByText(plainIssue.title)).toBeNull();
   });
@@ -214,7 +222,7 @@ describe('Pull requests on the Work board', () => {
     const { router } = renderBoard('review');
 
     await waitFor(() => expect(router.state.location.search).toBe('?source=pull-request'));
-    const prReview = await screen.findByRole('region', { name: 'PR review' });
+    const prReview = await screen.findByRole('region', { name: 'Review' });
     const card = (await within(prReview).findByText(issueWithPullRequest.title)).closest(
       '[data-testid="work-item-card"]',
     );

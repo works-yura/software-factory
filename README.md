@@ -70,11 +70,13 @@ shared/work-item-branch.ts   назви гілок і номери PR/MR для 
 | `intake` | resting | сюди потрапляє картка; нічого не запускає |
 | `triage` | working, `triage` | скіл `factory-triage`: класифікація. Баг іде в Planning сам, решта чекає людину |
 | `planning` | working, `work` | скіл `factory-plan`. Без затвердженого плану агент не перейде в `execute`, якщо не ввімкнено `autoApprovePlans` |
-| `execute` (Building) | working, `work` | промпт білдера: реалізувати план, далі PR або self-review |
-| `review` | working, `work` | self-review (`factory-self-review`), якщо ввімкнено; далі PR |
+| `execute` (Building) | working, `work` | скіл `factory-build`: реалізувати план, відкрити PR і перенести картку в Review |
+| `pr-review` (Review) | working, `review` | скіл `factory-review`: рев'ю PR картки |
 | `done` / `canceled` | terminal | `done` — після merge PR або закриття issue |
 
-Цикл PR читається з фаз дошки, а не з її id чи ключів (`boardFlow`): рев'ю PR — перша робоча фаза в контексті `review` з інструментом `factory_review_source`; self-review — інша фаза `review` лише з `factory_record_review_verdict`; будівник — остання робоча фаза, що веде в рев'ю; merge закриває картку в `sourceClosed.completed` (інакше в першій термінальній фазі). Тож цикл PR може вести будь-яка дошка. Сигнал `factory-phase` додає рядок `Board phases by part:`, за яким скіли переносять картку. Окремо дошка може оголосити `triageClassification: true`.
+Цикл PR читається з фаз дошки, а не з її id чи ключів (`boardFlow`): рев'ю PR — перша робоча фаза в контексті `review` з інструментом `factory_review_source`; self-review — інша фаза `review` лише з `factory_record_review_verdict`; будівник — остання робоча фаза, що веде в рев'ю; merge закриває картку в `sourceClosed.completed` (інакше в першій термінальній фазі). Тож цикл PR може вести будь-яка дошка.
+
+Self-review у Work за замовчуванням більше немає (upstream #29724): нова Work — Intake → Triage → Planning → Building → Review (`pr-review`) → Done. Дошка, якій він потрібен, додає робочу фазу в контексті `review`, що дає лише `factory_record_review_verdict`; перемикач self-review у проєкті й рядок `Self-review:` у сигналі є лише на таких дошках. Проєкти, збережені раніше, мають у своєму рядку Work фазу `review` і далі її запускають; щоб прибрати її, відредагуйте дошку Work. Сигнал `factory-phase` додає рядок `Board phases by part:`, за яким скіли переносять картку. Окремо дошка може оголосити `triageClassification: true`.
 
 ### Кілька репозиторіїв: одна робоча тека
 

@@ -813,7 +813,7 @@
     },
     "defaults": {
       "outsideAuthors": "Outside authors wait in Intake",
-      "pullRequests": "Pull requests go to PR review",
+      "pullRequests": "Pull requests go to Review",
       "closedCompleted": "Closed issues go to Done",
       "closedCanceled": "Issues closed as not planned go to Canceled",
       "reopened": "Reopened issues go back to Intake",
@@ -822,7 +822,7 @@
       "pullRequestClosed": "Pull requests closed unmerged go to Canceled",
       "pullRequestClosedIssue": "Issues whose pull request closed unmerged go back to Intake",
       "pullRequestUpdated": "Pushes to a reviewed pull request re-review it",
-      "pullRequestReviewRequested": "Requested reviews go to PR review"
+      "pullRequestReviewRequested": "Requested reviews go to Review"
     },
     "events": {
       "work_item.created": "new card",

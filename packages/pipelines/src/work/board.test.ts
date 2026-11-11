@@ -5,6 +5,7 @@ import type { FactoryRuleItemContext, FactoryStageRuleContext } from '@factory/c
 
 import { providerWorkItemForTests } from '../testing.ts';
 import { BUILD_OBJECTIVE, workBoard } from './board.ts';
+import { selfReviewWorkBoard } from './legacy-self-review.ts';
 
 function entering(
   source: FactoryRuleItemContext['source'],
@@ -78,15 +79,7 @@ describe('the Work board seed', () => {
         tools: undefined,
         autoStart: undefined,
         autoStartWhen: undefined,
-        nextPhases: ['review', 'pr-review', 'planning', 'done', 'canceled'],
-      },
-      review: {
-        runner: { agentId: 'code-agent', skill: 'factory-self-review', context: 'review' },
-        exitTool: undefined,
-        tools: ['factory_record_review_verdict'],
-        autoStart: true,
-        autoStartWhen: { operator: 'AND', conditions: [{ field: 'item.pullRequest', operator: 'not_exists' }] },
-        nextPhases: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
+        nextPhases: ['pr-review', 'planning', 'done', 'canceled'],
       },
       'pr-review': {
         runner: { agentId: 'code-agent', skill: 'factory-review', context: 'review' },
@@ -104,9 +97,9 @@ describe('the Work board seed', () => {
     expect(BUILD_OBJECTIVE).toContain('plan approved in Planning');
     expect(BUILD_OBJECTIVE).toContain('pushed');
     // The judge cannot see the project's self-review setting: the objective never asks it to.
-    expect(BUILD_OBJECTIVE).not.toMatch(/self-review/);
-    expect(BUILD_OBJECTIVE).toMatch(/out of Building/);
-    // A change request tracked on its own card never lets the card into PR review: that hand-off is done too.
+    expect(BUILD_OBJECTIVE).not.toMatch(/self-review/i);
+    expect(BUILD_OBJECTIVE).toMatch(/out of Building \(to Review after opening the change request/);
+    // A change request tracked on its own card never lets the card into Review: that hand-off is done too.
     expect(BUILD_OBJECTIVE).toContain('tracked on its own card');
     expect(BUILD_OBJECTIVE).toContain('says a person should confirm it is reviewed there');
     expect(BUILD_OBJECTIVE).toMatch(/[Ww]aiting/);
@@ -114,11 +107,11 @@ describe('the Work board seed', () => {
   });
 });
 
-describe('Work phases start the same run for self-review on and off', () => {
+describe("Work phases, and an older project's Work with its self-review phase", () => {
   // The project's self-review setting reaches the builder through the factory-work-item signal;
   // the run Building starts no longer depends on it.
   it('starts factory-build with its goal whether the card comes from Planning or back from Review', () => {
-    for (const fromStage of ['planning', 'review']) {
+    for (const fromStage of ['planning', 'pr-review']) {
       expect(phaseRunDecision(workBoard, 'execute', entering('github-issue', fromStage, 'execute'))).toEqual({
         type: 'invokeSkill',
         role: 'work',
@@ -131,7 +124,8 @@ describe('Work phases start the same run for self-review on and off', () => {
     }
   });
 
-  it('starts self-review on its own only while the card has no open change request', () => {
+  it("starts an older Work's self-review on its own only while the card has no open change request", () => {
+    const workBoard = selfReviewWorkBoard;
     const facts = (metadata: Record<string, unknown>) =>
       cardRuleFacts({ title: 'Fix the issue', metadata, externalSource: null });
     expect(workBoard.startsAutomatically('review', facts({}))).toBe(true);

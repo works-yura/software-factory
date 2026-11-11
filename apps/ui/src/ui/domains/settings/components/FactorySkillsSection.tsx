@@ -41,7 +41,7 @@ function displayedSkill(name: string, title: () => string): DisplayedSkill {
   };
 }
 
-// The default board runs every built-in skill: its PR review lane took over from the retired Review board.
+// The default board runs every built-in skill: its Review lane (`pr-review`) took over from the retired Review board.
 const DISPLAYED_SKILLS: DisplayedSkill[] = [
   displayedSkill('factory-triage', () => tk('skills.names.triage')),
   displayedSkill('factory-plan', () => tk('skills.names.plan')),

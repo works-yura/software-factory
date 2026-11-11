@@ -244,6 +244,8 @@ function describeCondition(condition: RouteCondition, t: T): string {
 /** Factory's own routes keep the name it gave them; show that name in the interface language. */
 const DEFAULT_ROUTE_NAMES: Readonly<Record<string, string>> = {
   'Outside authors wait in Intake': 'outsideAuthors',
+  'Pull requests go to Review': 'pullRequests',
+  // The name Factory gave the route before Work's PR review phase was renamed Review.
   'Pull requests go to PR review': 'pullRequests',
   'Closed issues go to Done': 'closedCompleted',
   'Issues closed as not planned go to Canceled': 'closedCanceled',
@@ -253,6 +255,7 @@ const DEFAULT_ROUTE_NAMES: Readonly<Record<string, string>> = {
   'Pull requests closed unmerged go to Canceled': 'pullRequestClosed',
   'Issues whose pull request closed unmerged go back to Intake': 'pullRequestClosedIssue',
   'Pushes to a reviewed pull request re-review it': 'pullRequestUpdated',
+  'Requested reviews go to Review': 'pullRequestReviewRequested',
   'Requested reviews go to PR review': 'pullRequestReviewRequested',
 };
 

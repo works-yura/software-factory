@@ -9,9 +9,10 @@
 | Вхідні | `intake` | — | — |
 | Розбір | `triage` | `triage` | `factory-triage` |
 | Планування | `planning` | `work` | `factory-plan` (вихід — `submit_plan`, людина схвалює) |
-| Збірка | `execute` | `work` | — |
-| Рев'ю | `review` | `work` | `factory-self-review` |
-| Рев'ю PR | `pr-review` | `work` | `factory-review` / `factory-rereview` (GitLab — `factory-gitlab-*`) |
+| Збірка | `execute` | `work` | `factory-build` (відкриває PR і переносить картку в Рев'ю) |
+| Рев'ю | `pr-review` | `review` | `factory-review` / `factory-rereview` (GitLab — `factory-gitlab-*`) |
+
+Самоперевірки (`review`, `factory-self-review`) у новій Work немає (upstream #29724). Проєкти, збережені раніше, зберігають її у своєму рядку дошки; будь-яка дошка може додати її як робочу фазу в контексті `review` лише з `factory_record_review_verdict`.
 | Готово / Скасовано | `done` / `canceled` | — | — |
 
 Планування і збірка ділять одну сесію, тож збирач має контекст плану.

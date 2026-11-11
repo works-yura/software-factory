@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { selfReviewWorkBoardInfo } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import {
@@ -74,7 +75,7 @@ const reviewItem = {
   id: 'review-item-1',
   createdBy: 'factory-rule-dispatcher',
   title: 'Review retry fix',
-  stages: ['review'],
+  stages: ['pr-review'],
   sessions: {
     review: {
       sessionId: 'session-review',
@@ -472,9 +473,37 @@ describe('Board work-item activity', () => {
         }),
       ),
     );
-    renderBoard('work');
+    renderBoard('work', '?source=pull-request');
 
     const row = await screen.findByRole('article', { name: reviewItem.title });
     expect(within(row).getByText('Changes requested')).toBeVisible();
+  });
+
+  it("shows the self-review verdict on a card in an older project's Work self-review lane", async () => {
+    stubBoardEndpoints();
+    server.use(
+      // Work as a project stored it while Work still had its self-review phase.
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [selfReviewWorkBoardInfo], problems: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem,
+              id: 'self-reviewed',
+              title: reviewItem.title,
+              stages: ['review'],
+              sessions: {},
+              metadata: { ...workItem.metadata, selfReviewVerdict: 'approve', selfReviewRounds: 1 },
+            },
+          ],
+        }),
+      ),
+    );
+    renderBoard('work');
+
+    const row = await screen.findByRole('article', { name: reviewItem.title });
+    expect(within(row).getByText('Self-review: approved (round 1)')).toBeVisible();
   });
 });

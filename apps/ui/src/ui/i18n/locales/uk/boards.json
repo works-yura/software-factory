@@ -6,10 +6,10 @@
       "triage": "Розбір",
       "planning": "Планування",
       "execute": "Реалізація",
-      "review": "Перевірка",
+      "review": "Самоперевірка",
       "done": "Готово",
       "canceled": "Скасовано",
-      "pr-review": "Рев’ю PR"
+      "pr-review": "Рев’ю"
     }
   },
   "product": {

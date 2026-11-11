@@ -11,7 +11,9 @@ import type {
 export { createTestBoard } from '@factory/core/testing';
 
 import { workBoard } from './work/board.ts';
-import type { WorkBoardPhase } from './work/board.ts';
+import { selfReviewWorkBoard } from './work/legacy-self-review.ts';
+
+export { selfReviewWorkBoard };
 
 // Unit tests inject a registry directly to exercise Work-specific runtime policies.
 // Production installation still reserves built-in IDs and has no override API.
@@ -29,13 +31,15 @@ export function createPolicyTestRegistry(transitionPolicy: BoardTransitionPolicy
 }
 
 /**
- * Work with every phase allowed to move to every other, and the given phases' stored fields
- * overridden (a runner, …). Lifecycle tests jump straight to the phase they
- * exercise; the Work board's own topology is tested against workBoard itself.
+ * Work (with its self-review phase, {@link selfReviewWorkBoard}) with every phase allowed to
+ * move to every other, and the given phases' stored fields overridden (a runner, …). Lifecycle
+ * tests jump straight to the phase they exercise; the Work board's own topology is tested against
+ * workBoard itself.
  */
 export function createLifecycleTestRegistry(
-  overrides: Partial<Record<WorkBoardPhase, { runner?: BoardPhaseRunner }>> = {},
+  overrides: Partial<Record<string, { runner?: BoardPhaseRunner }>> = {},
 ): BoardRegistry {
+  const lifecyclePhases = selfReviewWorkBoard.phases;
   const board = defineBoard({
     id: 'work',
     name: 'Work lifecycle fixture',
@@ -43,12 +47,12 @@ export function createLifecycleTestRegistry(
     sourceClosed: workBoard.sourceClosed,
     triageClassification: workBoard.triageClassification,
     phases: Object.fromEntries(
-      Object.entries(workBoard.phases).map(([stage, phase]) => [
+      Object.entries(lifecyclePhases).map(([stage, phase]) => [
         stage,
         {
           ...phase,
-          nextPhases: Object.keys(workBoard.phases).filter(other => other !== stage),
-          ...overrides[stage as WorkBoardPhase],
+          nextPhases: Object.keys(lifecyclePhases).filter(other => other !== stage),
+          ...overrides[stage],
         } as BoardPhaseDefinition<string>,
       ]),
     ),
@@ -62,7 +66,8 @@ export function createToolRuleTestRegistry(tools: BoardDefinition<string, string
     id: 'work',
     name: 'Work tool-rule fixture',
     initialPhase: 'intake',
-    phases: workBoard.phases,
+    // With the older self-review phase, so a reviewer's verdict tool has a phase to run in.
+    phases: selfReviewWorkBoard.phases as Record<string, BoardPhaseDefinition<string>>,
     transitionPolicy: workBoard.transitionPolicy,
     sourceClosed: workBoard.sourceClosed,
     triageClassification: workBoard.triageClassification,

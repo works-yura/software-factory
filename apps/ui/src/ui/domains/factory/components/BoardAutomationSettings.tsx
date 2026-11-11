@@ -41,11 +41,14 @@ export function BoardAutomationSettings({
   autoRunEnabled,
   reviewTestChecksEnabled,
   selfReviewEnabled,
+  offersSelfReview,
 }: {
   factoryProjectId: string;
   autoRunEnabled: boolean;
   reviewTestChecksEnabled: boolean;
   selfReviewEnabled: boolean;
+  /** Whether this board has a self-review phase for the setting to turn on. */
+  offersSelfReview: boolean;
 }) {
   const { t } = useTranslation('board');
   const autoRun = useSetFactoryAutomationMutation(factoryProjectId, 'autoRunEnabled');
@@ -76,12 +79,14 @@ export function BoardAutomationSettings({
             mutation={autoRun}
             description={t('automationSettings.autoRun.description')}
           />
-          <AutomationSwitch
-            label={t('automationSettings.selfReview.label')}
-            enabled={selfReviewEnabled}
-            mutation={selfReview}
-            description={t('automationSettings.selfReview.description')}
-          />
+          {offersSelfReview && (
+            <AutomationSwitch
+              label={t('automationSettings.selfReview.label')}
+              enabled={selfReviewEnabled}
+              mutation={selfReview}
+              description={t('automationSettings.selfReview.description')}
+            />
+          )}
           <AutomationSwitch
             label={t('automationSettings.testChecks.label')}
             enabled={reviewTestChecksEnabled}

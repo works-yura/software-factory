@@ -19,12 +19,12 @@ describe('built-in board phase fields', () => {
   it('accepts a defined board phase back as a declaration, as fixtures that extend a board do', () => {
     const copy = defineBoard({ id: 'copy', name: 'Copy', initialPhase: 'intake', phases: workBoard.phases });
     expect(copy.transitions).toEqual(workBoard.transitions);
-    expect(copy.phases.review).toMatchObject({
+    expect(copy.phases['pr-review']).toMatchObject({
       kind: 'working',
       runner: { context: 'review' },
-      tools: ['factory_record_review_verdict'],
+      tools: ['factory_record_review_verdict', 'factory_review_source'],
     });
-    expect(copy.phases.review).toMatchObject({ role: 'review' });
+    expect(copy.phases['pr-review']).toMatchObject({ role: 'review' });
   });
 
   it('lets a board that keeps the built-in Work tool rules end Planning with submit_plan', () => {

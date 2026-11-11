@@ -268,11 +268,9 @@ describe('Work board runtime: a bug', () => {
     const building = await card();
     expect(building).toMatchObject({ stages: ['execute'] });
 
-    // The fix seat moves to Review, then opens the pull request. Provenance binds it to the Work
-    // card, and the pull request joins that card as one more source (upstream #29346).
-    const work = { type: 'agent' as const, bindingId: 'binding-work', role: 'work' };
-    await expect(move('review', work)).resolves.toMatchObject({ status: 'accepted' });
-    await drain();
+    // Work has no self-review phase (upstream #29724): the builder opens the pull request from
+    // Building. Provenance binds it to the Work card, the pull request joins that card as one more
+    // source (upstream #29346), and its opening moves the card to Review (`pr-review`).
     await integrationStorage.subscriptions.create({
       orgId: 'org-1',
       targetKey: 'factory-pr-provenance:10:17',
@@ -282,7 +280,7 @@ describe('Work board runtime: a bug', () => {
     });
     await rules.ingest(pullRequest('opened', 'work-pr-opened'));
     await drain();
-    expect(await card()).toMatchObject({ stages: ['review'], metadata: expect.objectContaining({ openPullRequestNumber: 17 }) });
+    expect(await card()).toMatchObject({ stages: ['pr-review'], metadata: expect.objectContaining({ openPullRequestNumber: 17 }) });
     const cards = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(cards.map(item => item.id)).toEqual([building.id]);
     expect((await card())!.workItem.sources.map(source => source.sourceType)).toEqual(['issue', 'pull-request']);

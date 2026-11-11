@@ -13,6 +13,7 @@ import {
 import { createPipelines } from './index.ts';
 import { workBoard } from './work/board.ts';
 import type { WorkBoardPhase } from './work/board.ts';
+import { selfReviewWorkBoard } from './work/legacy-self-review.ts';
 
 describe('factory pipelines', () => {
   const installed = createPipelines();
@@ -38,10 +39,8 @@ describe('factory pipelines', () => {
       intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
       triage: ['intake', 'planning', 'done', 'canceled'],
       planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
-      // PR review once the builder opened the change request with self-review off (upstream #29707).
-      execute: ['review', 'pr-review', 'planning', 'done', 'canceled'],
-      // A maintainer's review request takes the card's open pull request to PR review (upstream #29346).
-      review: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
+      // Review once the builder opened the change request; Work has no self-review phase (upstream #29724).
+      execute: ['pr-review', 'planning', 'done', 'canceled'],
       // An issue card can go back to its builder for a fix; a pull request's own card can't (Work's policy).
       'pr-review': ['intake', 'planning', 'execute', 'done', 'canceled'],
       done: ['pr-review'],
@@ -62,7 +61,6 @@ describe('factory pipelines', () => {
       triage: 'factory-triage',
       planning: 'factory-plan',
       execute: 'factory-build',
-      review: 'factory-self-review',
       'pr-review': 'factory-review',
       done: null,
       canceled: null,
@@ -71,13 +69,12 @@ describe('factory pipelines', () => {
     // Planning holds the card until its exit tool approves the plan; Work declares no tool rules.
     expect(workBoard.phases.planning).toMatchObject({ exitTool: { id: 'submit_plan', autoApprove: false } });
     expect(workBoard.tools).toEqual({});
-    // The independent reviewer works the card in Review and PR review, with the phase tools it needs.
-    expect(workBoard.phases.review).toMatchObject({ tools: ['factory_record_review_verdict'], autoStart: true });
+    // The independent reviewer works the card in Review (`pr-review`), with the phase tools it needs.
+    expect(workBoard.phases['pr-review']).toMatchObject({ name: 'Review' });
     expect(workBoard.phases['pr-review']).toMatchObject({
       tools: ['factory_record_review_verdict', 'factory_review_source'],
     });
     expect(workBoard.roleForPhase('execute')).toBe('work');
-    expect(workBoard.roleForPhase('review')).toBe('review');
     expect(workBoard.roleForPhase('pr-review')).toBe('review');
     // The first phase of the `work` context; a run started on a resting Work card uses its role's lane instead.
     expect(workBoard.phaseForRole('work')).toBe('planning');
@@ -91,11 +88,12 @@ describe('factory pipelines', () => {
       canceled: { phase: 'canceled', title: 'Canceled' },
       triage: 'triage',
       pullRequestReview: 'pr-review',
-      selfReview: 'review',
       build: 'execute',
       buildRole: 'work',
     });
-    expect(['triage', 'planning', 'execute', 'review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
+    // An older project's stored Work keeps its self-review phase, and the loop reads it.
+    expect(boardFlow(selfReviewWorkBoard)).toMatchObject({ selfReview: 'review', build: 'execute' });
+    expect(['triage', 'planning', 'execute', 'pr-review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
       'triage',
       'work',
       'work',

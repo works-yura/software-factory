@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { workBoard } from '@factory/pipelines';
 import { defineBoard } from '@factory/core';
 import { createBoardRegistry } from '@factory/testing';
-import { createLifecycleTestRegistry, createPolicyTestRegistry } from '@factory/pipelines/testing';
+import { createLifecycleTestRegistry, createPolicyTestRegistry, selfReviewWorkBoard } from '@factory/pipelines/testing';
 import type { WorkItemsStorage } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
 import { createFactoryTransitionTools as createTools, selfReviewedHeadFor } from './tools.ts';
@@ -612,6 +612,9 @@ describe('factory_transition_work_item', () => {
   });
 
   describe('factory_record_review_verdict', () => {
+    // Work's seed has no self-review phase; a project stored before still holds one.
+    const olderWork = new Map([['work', selfReviewWorkBoard]]);
+
     async function selfReviewingItem(storage: WorkItemsStorage, metadata: Record<string, unknown> = {}) {
       const prepared = await prepareBoundItem(storage, 'github-issue', 'review');
       await storage.update({
@@ -632,6 +635,7 @@ describe('factory_transition_work_item', () => {
         requestContext: context,
         storage,
         transitionService: { transition } as never,
+        boards: olderWork,
       });
 
       await expect(
@@ -656,6 +660,7 @@ describe('factory_transition_work_item', () => {
         requestContext: context,
         storage,
         transitionService: { transition } as never,
+        boards: olderWork,
       });
 
       await expect(
@@ -693,6 +698,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
+        boards: olderWork,
         transitionService: { transition: vi.fn().mockResolvedValue({ status: 'accepted' }) } as never,
       });
       const api = 'A'.repeat(40);

@@ -130,13 +130,13 @@ function renderWorkBoard() {
 }
 
 describe('Board card rework reasons', () => {
-  it('says a card self-review sent back is back from Review, with the first finding', async () => {
+  it('says a card self-review sent back is back from Self-review, with the first finding', async () => {
     stubWorkBoard();
     renderWorkBoard();
 
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     const line = await within(card).findByText(
-      'Back from Review: The retry loop never backs off, so a flaky API is hammered.',
+      'Back from Self-review: The retry loop never backs off, so a flaky API is hammered.',
     );
     expect(line).toHaveAttribute('title', FINDINGS);
   });
@@ -150,7 +150,7 @@ describe('Board card rework reasons', () => {
 
     const details = await screen.findByRole('dialog', { name: 'Fix login bug' });
     const why = await within(details).findByRole('region', { name: 'Why it moved back' });
-    expect(why).toHaveTextContent('Why it moved back from Review');
+    expect(why).toHaveTextContent('Why it moved back from Self-review');
     expect(
       within(why)
         .getAllByRole('listitem')

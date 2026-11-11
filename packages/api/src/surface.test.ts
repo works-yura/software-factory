@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '@factory/testing';
 import { defineBoard } from '@factory/core';
-import { createTestBoard } from '@factory/pipelines/testing';
+import { createTestBoard, selfReviewWorkBoard } from '@factory/pipelines/testing';
 import type { GithubIntegration } from '@factory/integration-github';
 import { FactoryDispatchError } from '@factory/store';
 import type { FactoryBindingPreparationInput } from '@factory/testing';
@@ -77,6 +77,8 @@ function bindingInput(
 }
 
 const boards = createBoardRegistry();
+/** Work as a project stored it while Work still had its `review` self-review phase. */
+const olderWork = new Map([['work', selfReviewWorkBoard]]);
 
 describe('prepareFactoryRuleBinding', () => {
   it("starts the run on the factory's default model", async () => {
@@ -358,13 +360,17 @@ describe('prepareFactoryRuleBinding', () => {
       return { ...setup, builder };
     }
 
-    async function prepared(setup: Awaited<ReturnType<typeof seatedBuilder>>, input: FactoryBindingPreparationInput) {
+    async function prepared(
+      setup: Awaited<ReturnType<typeof seatedBuilder>>,
+      input: FactoryBindingPreparationInput,
+      registry: typeof boards = boards,
+    ) {
       const prepare = vi.fn(async () => ({}) as never);
       await prepareFactoryRuleBinding(
         setup.github,
         { prepare } as unknown as FactoryStartCoordinator,
         setup.seeded.projects,
-        boards,
+        registry,
         input,
       );
       const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
@@ -396,14 +402,14 @@ describe('prepareFactoryRuleBinding', () => {
       expect(session.branch).toBe('factory/pr-34-item1');
     });
 
-    it("keeps self-review on the builder's branch", async () => {
+    it("keeps self-review on the builder's branch in an older project's Work", async () => {
       const setup = await seatedBuilder();
       const input = withPullRequests(
         bindingInput(setup.project.id, ['review'], { role: 'review', board: 'work' }),
         [34],
       );
 
-      const session = await prepared(setup, input);
+      const session = await prepared(setup, input, olderWork);
 
       expect(session.branch).toBe('factory/issue-49-item1');
     });
@@ -488,7 +494,8 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
-      boards,
+      // An older project's Work self-review phase, the review seat right after Building.
+      olderWork,
       withPlanSession(bindingInput(project.id, ['review'], { role: 'review' })),
     );
 
