@@ -449,7 +449,7 @@ function TriggerStatus({
   const outcome = (value: string) => t(`intakeTriggers.outcomes.${value}` as never);
   const next = !route.enabled
     ? t('intakeTriggers.paused')
-    : triggered.nextFires[0]
+    : triggered.nextFires?.[0]
       ? t('intakeTriggers.nextRun', { at: format.format(new Date(triggered.nextFires[0])) })
       : t('intakeTriggers.noClock');
   return (
@@ -458,7 +458,7 @@ function TriggerStatus({
         <Txt as="span" variant="caption" tone="muted">
           {next}
         </Txt>
-        {triggered.lastFire && (
+        {triggered.lastFire?.firedAt && (
           <Txt as="span" variant="caption" tone="muted">
             {t('intakeTriggers.lastRun', {
               outcome: outcome(triggered.lastFire.outcome),

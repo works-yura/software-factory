@@ -218,100 +218,17 @@ describe('IntakeSection', () => {
     });
   });
 
-  describe('connected Lists', () => {
-    it('shows each connected List as a card that says its Factory and how many routes name it', async () => {
-      useClickUpHandlers({ bindings: routedToBug });
-      renderIntakeSection();
-
-      const card = await screen.findByRole('button', { name: /Eng \/ Mobile \/ Backlog/ });
-      await waitFor(() => expect(card).toHaveTextContent('Acme Web · → 2 routes'));
-    });
-
-    it('lists the routes that name the List when its card opens, the migrated status routes among them', async () => {
-      useClickUpHandlers({ bindings: routedToBug });
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-      const section = await screen.findByRole('region', { name: 'Routes of this List' });
-      expect(within(section).getByText('ClickUp: статус «to do»')).toBeInTheDocument();
-      expect(within(section).getByText('ClickUp: статус «dev fixed»')).toBeInTheDocument();
-    });
-
-    it('says the List imports nothing while no route names it', async () => {
-      useClickUpHandlers({ bindings: routedToBug, routes: [] });
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-      expect(await screen.findByText(/No route names this List, so its tasks are not imported/)).toBeInTheDocument();
-    });
-
-    it('says so when no List is connected yet', async () => {
-      useClickUpHandlers({ config: clickUpConfig({ enabled: true, sourceIds: null }) });
-      renderIntakeSection();
-
-      expect(await screen.findByText(/No Lists connected yet/)).toBeInTheDocument();
-    });
-
-    it('connects a List from the picker dialog and saves it', async () => {
-      const { savedConfigs } = useClickUpHandlers({ config: clickUpConfig({ enabled: true, sourceIds: null }) });
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await user.click(await screen.findByRole('button', { name: 'Add Lists' }));
-      const dialog = await screen.findByRole('dialog');
-      expect(within(dialog).getByText('Eng / Mobile')).toBeInTheDocument();
-      await user.click(within(dialog).getByRole('checkbox', { name: 'Backlog' }));
-
-      await waitFor(() => expect(savedConfigs.at(-1)?.clickup).toEqual({ enabled: true, sourceIds: ['L1'] }));
-    });
-
-    it('lists the chosen Lists as chips in the picker and removes one from there', async () => {
-      const { savedConfigs } = useClickUpHandlers();
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await user.click(await screen.findByRole('button', { name: 'Add Lists' }));
-      const dialog = await screen.findByRole('dialog');
-      await user.click(await within(dialog).findByRole('button', { name: 'Remove Backlog' }));
-
-      await waitFor(() => expect(savedConfigs.at(-1)?.clickup).toEqual({ enabled: true, sourceIds: null }));
-    });
-
-    it('disconnects a List from its card', async () => {
-      const { savedConfigs } = useClickUpHandlers({ bindings: routedToBug });
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-      await user.click(await screen.findByRole('button', { name: /Disconnect Eng \/ Mobile \/ Backlog/ }));
-
-      await waitFor(() => expect(savedConfigs.at(-1)?.clickup).toEqual({ enabled: true, sourceIds: null }));
-    });
-  });
-
-  describe('routing a List', () => {
-    it('routes the List to a Factory; routes decide the board', async () => {
-      const { savedBindings } = useClickUpHandlers();
-      const user = userEvent.setup();
-      renderIntakeSection();
-
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-      await user.click(await screen.findByRole('combobox', { name: /Factory for Eng \/ Mobile \/ Backlog/ }));
-      await user.click(await screen.findByRole('option', { name: 'Acme Web' }));
-      await waitFor(() => expect(savedBindings).toEqual([{ integrationId: 'clickup', sourceId: 'L1', factoryProjectId: 'fp-1', board: null }]));
-      expect(screen.queryByRole('combobox', { name: /Board for Eng \/ Mobile \/ Backlog/ })).not.toBeInTheDocument();
-    });
-
-    it('asks for a factory before anything else', async () => {
+  describe('no separate list of ClickUp Lists', () => {
+    it('shows only the connection and the import switch: Lists are named by intake routes', async () => {
       useClickUpHandlers();
-      const user = userEvent.setup();
       renderIntakeSection();
 
-      await openCard(user, /Eng \/ Mobile \/ Backlog/);
-
-      expect(await screen.findByText(/Choose a factory — until then this List’s tasks are not picked up/)).toBeInTheDocument();
+      expect(await screen.findByRole('switch', { name: 'Import ClickUp tasks' })).toBeInTheDocument();
+      expect(await screen.findByText(/in the Lists the intake routes below name/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Add Lists' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Connected Lists' })).not.toBeInTheDocument();
+      // Schedules are routes now: no separate rules section among the sources.
+      expect(screen.queryByRole('button', { name: 'Add rule' })).not.toBeInTheDocument();
     });
   });
 });

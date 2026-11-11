@@ -37,6 +37,8 @@ function route(overrides: Partial<IntakeRouteInfo> & Pick<IntakeRouteInfo, 'id' 
     updatedBy: 'admin',
     updatedAt: '2026-11-04T00:00:00.000Z',
     problems: [],
+    triggered: null,
+    origin: null,
     ...overrides,
   };
 }
@@ -156,38 +158,51 @@ describe('IntakeRoutesSection', () => {
     await waitFor(() => expect(routeRows()).toHaveLength(1));
   });
 
-  it('adds a route that takes the cards of one intake rule, naming the rule in the list', async () => {
+  it('adds a route «За розкладом» from the same editor: schedule, card and policy, on its own board', async () => {
     const user = userEvent.setup();
     const written = useRouteHandlers([]);
-    const RULE_ID = '00000000-0000-4000-8000-0000000000aa';
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/intake-rules`, () =>
-        HttpResponse.json({ intakeRules: [{ id: RULE_ID, name: 'Weekly security audit' }] }),
+      http.get(`${ROUTES_URL}/kinds`, () =>
+        HttpResponse.json({
+          triggers: [{ kind: 'schedule', label: 'On a schedule (repeats)' }],
+          actions: [{ kind: 'create-card', label: 'Create a card' }],
+          policies: [
+            { kind: 'skip-if-open', label: 'Skip while the last card is open' },
+            { kind: 'always', label: 'Always run' },
+          ],
+          placeholders: ['{date}', '{time}', '{route}'],
+        }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/intake-rules/kinds`, () =>
-        HttpResponse.json({ triggers: [{ kind: 'schedule', label: 'On a schedule' }], actions: [], policies: [], placeholders: [] }),
+      http.post(`${ROUTES_URL}/preview`, () =>
+        HttpResponse.json({ summary: 'Every Monday at 09:00 (Europe/Kyiv)', nextFires: ['2026-11-16T07:00:00.000Z'], problems: [] }),
       ),
     );
     renderSection();
 
     await user.click(await screen.findByRole('button', { name: 'Add route' }));
     const form = screen.getByRole('form', { name: 'New route' });
-    await user.type(within(form).getByRole('textbox', { name: 'Route name' }), 'Audits to Development');
-    await user.click(within(form).getByRole('combobox', { name: 'Add condition' }));
-    await user.click(await screen.findByRole('option', { name: 'Rule' }));
-    await user.click(within(form).getByRole('combobox', { name: 'Rule' }));
-    await user.click(await screen.findByRole('option', { name: 'Weekly security audit' }));
+    await user.type(within(form).getByRole('textbox', { name: 'Route name' }), 'Security audit');
+    await user.click(await within(form).findByRole('combobox', { name: 'When' }));
+    await user.click(await screen.findByRole('option', { name: 'On a schedule (repeats)' }));
+    // No conditions on a route that files its own cards.
+    expect(within(form).queryByRole('combobox', { name: 'Add condition' })).toBeNull();
+    await user.type(within(form).getByRole('textbox', { name: 'Card title' }), 'Аудит безпеки — {{date}');
     await user.click(within(form).getByRole('combobox', { name: 'Route board' }));
     await user.click(await screen.findByRole('option', { name: 'Development' }));
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(written.created).toHaveLength(1));
     expect(written.created[0]).toMatchObject({
-      when: { operator: 'AND', conditions: [{ field: 'intake.rule', operator: 'equals', value: RULE_ID }] },
+      name: 'Security audit',
+      when: null,
       target: { boardKey: 'work' },
+      triggered: {
+        trigger: { kind: 'schedule' },
+        action: { kind: 'create-card', config: { titleTemplate: 'Аудит безпеки — {date}' } },
+        policy: { kind: 'skip-if-open' },
+      },
     });
-    await waitFor(() => expect(routeRows()).toHaveLength(1));
-    expect(within(routeRows()[0]!).getByText(/from rule "Weekly security audit"/)).toBeTruthy();
+    expect(written.created[0]).not.toHaveProperty('on');
   });
 
   it('turns a route off, moves it, and deletes it only after a second click', async () => {
@@ -350,9 +365,17 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
       }),
       route({
         id: '00000000-0000-4000-8000-000000000022',
-        name: 'Розклад · Security audit',
+        name: 'Security audit',
         position: 1,
-        when: { operator: 'AND', conditions: [{ field: 'intake.rule', operator: 'equals', value: 'rule-1' }] },
+        on: [],
+        target: { boardKey: 'work', phaseKey: 'intake', joinClosedIssue: false },
+        triggered: {
+          trigger: { kind: 'schedule', config: {}, summary: 'Every Monday at 09:00 (Europe/Kyiv)' },
+          action: { kind: 'create-card', config: {}, summary: 'Card "Аудит безпеки"' },
+          policy: { kind: 'skip-if-open', summary: 'Skip while the last card is open' },
+          nextFires: ['2026-11-16T07:00:00.000Z'],
+          lastFire: null,
+        },
       }),
     ]);
     renderSection();
@@ -364,5 +387,57 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
     ).toBeTruthy();
     expect(within(list!).queryByText('Schedule')).toBeNull();
     expect(within(schedule!).getByText('Schedule')).toBeTruthy();
+    expect(within(schedule!).getByText(/^When: Every Monday at 09:00 \(Europe\/Kyiv\)/)).toBeTruthy();
+  });
+
+  it('names a status route Factory wrote in the reader’s language, and unfolds a schedule route’s fire history', async () => {
+    const user = userEvent.setup();
+    clickUpHandlers();
+    useRouteHandlers([
+      route({
+        id: '00000000-0000-4000-8000-000000000031',
+        name: 'ClickUp status “to do”',
+        origin: { kind: 'clickup-status', listId: 'L1', status: 'to do', generatedName: 'ClickUp status “to do”' },
+        when: {
+          operator: 'AND',
+          conditions: [
+            { field: 'source.list', operator: 'equals', value: 'L1' },
+            { field: 'item.state', operator: 'equals', value: 'to do' },
+          ],
+        },
+      }),
+      route({
+        id: '00000000-0000-4000-8000-000000000032',
+        name: 'Security audit',
+        position: 1,
+        on: [],
+        triggered: {
+          trigger: { kind: 'schedule', config: {}, summary: 'Daily at 09:00 (UTC)' },
+          action: { kind: 'create-card', config: {}, summary: 'Card' },
+          policy: { kind: 'skip-if-open', summary: 'Skip' },
+          nextFires: [],
+          lastFire: null,
+        },
+      }),
+    ]);
+    server.use(
+      http.get(`${ROUTES_URL}/:routeId/fires`, () =>
+        HttpResponse.json({
+          fires: [
+            { id: 'f2', firedAt: '2026-11-17T09:00:00.000Z', triggerKind: 'schedule', outcome: 'skipped', workItemId: null, reason: 'The last card is still open.' },
+            { id: 'f1', firedAt: '2026-11-16T09:00:00.000Z', triggerKind: 'schedule', outcome: 'done', workItemId: 'card-1', reason: null },
+          ],
+        }),
+      ),
+    );
+    renderSection();
+
+    await waitFor(() => expect(routeRows()).toHaveLength(2));
+    const [status, schedule] = routeRows();
+    expect(within(status!).getByText('ClickUp: status “to do”')).toBeTruthy();
+    await user.click(within(schedule!).getByRole('button', { name: 'History' }));
+    const history = await within(schedule!).findByRole('list', { name: 'Fire history of “Security audit”' });
+    expect(await within(history).findByText(/The last card is still open/)).toBeTruthy();
+    expect(within(history).getAllByRole('listitem')).toHaveLength(2);
   });
 });
