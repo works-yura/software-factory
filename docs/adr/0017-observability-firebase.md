@@ -1,6 +1,6 @@
 # 0017. Логи й креші для агентів: можливість observability, Firebase як перший адаптер
 
-Дата: 2026-11-11 · Статус: прийнято · Коміти: `2d130f4` (порт і адаптер), `2ace77b` (маршрути й інструменти), `fbf72c9` (UI), `952dbf8` (аудит стабільності, розбір багів)
+Дата: 2026-11-11 · Статус: прийнято; один ключ на організацію, один проєкт на Factory і ручний підпис JWT замінено в [ADR-0019](0019-observability-accounts-and-bindings.md) · Коміти: `2d130f4` (порт і адаптер), `2ace77b` (маршрути й інструменти), `fbf72c9` (UI), `952dbf8` (аудит стабільності, розбір багів)
 
 **Контекст.** Розбір бага і аудит гадають там, де продукт уже записав відповідь: у логах сервера й крешах застосунку. Клієнтські продукти (Syncta, PostAirborne) живуть на Firebase: логи — у Cloud Logging, креші — у Crashlytics. Агентам потрібно читати їх, але лише читати, без ключів у пісочниці, без персональних даних клієнтів у моделі, і так, щоб завтра можна було підключити Sentry чи Datadog без переписування агентів.
 
@@ -38,6 +38,6 @@
 - *Креші через BigQuery-експорт* — відкладено: стабільна схема, але треба вмикати експорт (синхронізація раз на добу або стрімінг), ролі BigQuery Job User і платні запити. Може стати другим адаптером.
 - *Ключ у змінних середовища сервера* — відкинуто: у кожної організації свій проєкт; ключ з UI зберігається зашифрованим.
 
-**Як додати провайдера.** 1) Пакет `integration-<провайдер>` з класом, що реалізує `ObservabilityProvider` (`sourceFor(scope)` → джерело з `features`, `apps`, трьома методами); усі рядки — через маскування, ліміти з `OBSERVABILITY_LIMITS`. 2) Тест `describeObservabilitySourceContract('<Name>', seed => …, { features })` з підробленим HTTP із `seed`. 3) `agentTools` → `createObservabilityTools({ requestContext, provider })`. 4) Маршрути підключення й секція UI. 5) Зареєструвати інтеграцію в `apps/server/src/mastra/index.ts`.
+**Як додати провайдера.** 1) Пакет `integration-<провайдер>` з класом, що реалізує `ObservabilityProvider` (`sourcesFor(scope)` → джерело на кожен прив'язаний проєкт, з `target`, `features`, `apps` і трьома методами — див. ADR-0019); усі рядки — через маскування, ліміти з `OBSERVABILITY_LIMITS`. 2) Тест `describeObservabilitySourceContract('<Name>', seed => …, { features })` з підробленим HTTP із `seed`. 3) `agentTools` → `createObservabilityTools({ requestContext, provider })`. 4) Маршрути підключення й секція UI. 5) Зареєструвати інтеграцію в `apps/server/src/mastra/index.ts`.
 
 Джерела (перевірено 2026-11-11): [Cloud Logging entries.list](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/entries/list), [Crashlytics reports.get](https://firebase.google.com/docs/reference/crashlytics/rest/v1alpha/projects.apps.reports/get), [Crashlytics events](https://firebase.google.com/docs/reference/crashlytics/rest/v1alpha/projects.apps.events/batchGet), [MCP-сервер Firebase](https://firebase.google.com/docs/cli/mcp-server), [схема BigQuery-експорту Crashlytics](https://firebase.google.com/docs/crashlytics/bigquery-dataset-schema), [ролі Crashlytics](https://docs.cloud.google.com/iam/docs/roles-permissions/firebasecrash).

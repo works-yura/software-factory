@@ -22,3 +22,4 @@
 | [0016](0016-intake-rules-ports-and-adapters.md) | Правила надходження: порти й адаптери; картку правила ставлять маршрути | 2026-11-11 |
 | [0017](0017-observability-firebase.md) | Логи й креші для агентів: можливість observability, Firebase як перший адаптер | 2026-11-11 |
 | [0018](0018-conversation-channels.md) | Розмови з агентом: один провайдер-нейтральний канал, ClickUp — перший адаптер | 2026-11-11 |
+| [0019](0019-observability-accounts-and-bindings.md) | Логи й креші: багато акаунтів Google Cloud, прив'язки Factory → проєкт | 2026-11-11 |
