@@ -220,3 +220,66 @@ describe('eventTriggerKind', () => {
     ]);
   });
 });
+
+describe('IntakeRuleEngine — the rules’ own intake routes', () => {
+  const input = (name: string) => ({
+    name,
+    triggerKind: 'test-webhook',
+    triggerConfig: { path: '/x' },
+    actionKind: 'test-note',
+    actionConfig: { text: 'audit' },
+    policyKind: 'always',
+    enabled: true,
+  });
+
+  it('gives a rule that files cards its route when created and at boot, once, and removes it with the rule', async () => {
+    const manual = manualTrigger();
+    const filing: IntakeActionKind<{ text: string }> = {
+      ...noteAction([]),
+      routeTarget: () => ({ boardKey: 'audits', phaseKey: null }),
+    };
+    const ensured: string[] = [];
+    const removed: string[] = [];
+    const named = new Set<string>();
+    const { intakeRules } = await createFactoryStorageForTests();
+    const engine = new IntakeRuleEngine({
+      rules: intakeRules,
+      kinds: intakeKinds({ triggers: [manual.trigger], actions: [filing], policies: [alwaysPolicy] }),
+      routes: {
+        ensure: async (rule, target) => {
+          if (named.has(rule.id)) return;
+          named.add(rule.id);
+          ensured.push(`${rule.id} → ${target.boardKey}`);
+        },
+        remove: async rule => {
+          named.delete(rule.id);
+          removed.push(rule.id);
+        },
+      },
+      logger: { warn: () => {} },
+    });
+    const rule = await intakeRules.create(scope, input('Weekly audit'), 'admin-1');
+
+    await engine.ensureRoute(rule);
+    await engine.armAll();
+    expect(ensured).toEqual([`${rule.id} → audits`]);
+
+    await engine.remove(rule);
+    expect(removed).toEqual([rule.id]);
+  });
+
+  it('makes no route for an action that files no card', async () => {
+    const manual = manualTrigger();
+    const ensured: string[] = [];
+    const { intakeRules } = await createFactoryStorageForTests();
+    const engine = new IntakeRuleEngine({
+      rules: intakeRules,
+      kinds: intakeKinds({ triggers: [manual.trigger], actions: [noteAction([])], policies: [alwaysPolicy] }),
+      routes: { ensure: async rule => void ensured.push(rule.id), remove: async () => {} },
+      logger: { warn: () => {} },
+    });
+    const rule = await intakeRules.create(scope, input('Note'), 'admin-1');
+    await engine.ensureRoute(rule);
+    expect(ensured).toEqual([]);
+  });
+});

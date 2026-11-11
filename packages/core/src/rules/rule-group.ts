@@ -40,6 +40,8 @@ export const CARD_RULE_FIELDS = [
   'source.provider',
   'source.repository',
   'item.pullRequest',
+  /** Where the item lives at a tracker that groups tasks in lists (a ClickUp List id). */
+  'source.list',
   /** The intake rule a card came from (its id), and that rule's trigger kind. */
   'intake.rule',
   'intake.trigger',

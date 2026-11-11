@@ -34,41 +34,24 @@
       "organizationRequired": "Select an organization to manage ClickUp syncing.",
       "statusUnavailable": "ClickUp status could not be loaded.",
       "rejected": "ClickUp rejected the configured API token. Ask the operator to check it.",
-      "ready": "Tasks from the connected Lists are checked every {{seconds}} s. What happens to each depends on its status, set in each List.",
+      "ready": "Tasks from the connected Lists are checked every {{seconds}} s. A task is imported only when an intake route names its List; where its card goes and what a status change does is decided by the routes below.",
       "sync": "Import ClickUp tasks",
       "lists": "ClickUp Lists",
       "listsFailed": "ClickUp Lists could not be loaded. Try again in a minute.",
-      "rules": {
-        "listHint": "Columns of the \"{{board}}\" board. Tasks that already existed when the server started land in the first column and start nothing; starting applies to new tasks and when you change a status in ClickUp.",
-        "boardMissing": "The \"{{board}}\" board is not installed.",
-        "unavailable": "Could not load the statuses or columns. Try again in a minute.",
-        "loading": "Loading statuses…",
-        "ignore": "Ignore",
-        "close": "Close the card",
-        "intoPhase": "Into \"{{phase}}\"",
-        "statusAction": "Action for status {{status}}",
-        "saved": "Status rules saved",
-        "saveFailed": "Could not save the status rules",
-        "typical": "Typical set",
-        "import": "Import",
-        "needsFactory": "Choose a factory for this List above to set status rules.",
-        "needsBoard": "Choose a board above: ClickUp statuses map to its columns."
-      },
       "connectedLists": "Connected Lists",
       "addLists": "Add Lists",
       "noLists": "No Lists connected yet. Add one to start importing tasks.",
       "card": {
         "notRouted": "Not routed",
-        "noBoard": "{{factory}} · choose a board; its tasks are not imported without one",
-        "routedTo": "{{factory}} · {{board}}",
         "routing": "Where tasks go",
         "routingHint": "Choose a factory — until then this List’s tasks are not picked up.",
-        "statuses": "Statuses",
         "disconnect": "Disconnect",
         "disconnectAria": "Disconnect {{name}}",
-        "mapped_one": "{{count}} status mapped",
-        "mapped_other": "{{count}} statuses mapped",
-        "boardHint": "Without a board this List's tasks are not imported. Intake routes place a new task first, and the board takes the ones no route matched; the statuses below move cards between its columns. To send tagged tasks to another board, add an intake route with the condition “has tag”."
+        "routes_one": "→ {{count}} route",
+        "routes_other": "→ {{count}} routes",
+        "routesHint": "Which tasks of this List are imported, where they go and how a status change moves the card is up to the intake routes with a “ClickUp List” condition.",
+        "listRoutes": "Routes of this List",
+        "noRoutes": "No route names this List, so its tasks are not imported. Add a route with a “ClickUp List” condition below."
       },
       "picker": {
         "title": "Choose ClickUp Lists",
@@ -79,6 +62,13 @@
         "count_one": "{{count}} chosen",
         "count_other": "{{count}} chosen"
       }
+    },
+    "sources": {
+      "title": "Sources",
+      "description": "Where cards come from. Where a card goes and what happens to it next is up to the intake routes below.",
+      "repositories": "GitHub and GitLab: issues and pull requests of this Factory's repositories.",
+      "repositoriesLink": "Set up in Repositories",
+      "manual": "By hand: the board’s “New card” button."
     }
   },
   "intakeSource": {
@@ -743,8 +733,8 @@
     }
   },
   "intakeRules": {
-    "title": "Intake rules",
-    "description": "{{name}}'s own task sources: on a schedule they file a card on a board, and the board's agents take it from there.",
+    "title": "On a schedule",
+    "description": "A task source of {{name}}: makes a card on a schedule. Where it goes is up to the route “Розклад · name” that comes with the rule.",
     "add": "Add rule",
     "loading": "Loading rules",
     "unavailable": "Intake rules are unavailable.",
@@ -833,7 +823,7 @@
   },
   "intakeRoutes": {
     "title": "Intake routes",
-    "description": "Where new cards of the Factory \"{{name}}\" land. The first enabled route that matches a card places it; a ClickUp task no route with a condition takes lands on its List’s board, and everything else goes where the last route that takes every card says. A route places a card once, when it arrives.",
+    "description": "Where new cards of the Factory \"{{name}}\" land. The first enabled route that matches a card places it; a ClickUp task is imported only by a route that names its List, and everything else goes where the last route that takes every card says. Routes with an event (task status changed, task closed, pull request merged…) move a card that already exists.",
     "add": "Add route",
     "loading": "Loading routes…",
     "unavailable": "Couldn't load intake routes.",
@@ -894,7 +884,8 @@
       "source.repository": "Repository",
       "item.key": "Key",
       "item.state": "State",
-      "item.assignees": "Assignee"
+      "item.assignees": "Assignee",
+      "source.list": "ClickUp List"
     },
     "integrations": {
       "github": "GitHub",
@@ -905,7 +896,7 @@
       "issue": "issue",
       "pull_request": "pull request",
       "task": "ClickUp task",
-      "intake_rule": "intake-rule card"
+      "intake_rule": "on a schedule"
     },
     "defaults": {
       "outsideAuthors": "Outside authors wait in Intake",
@@ -929,7 +920,8 @@
       "pull_request.synchronized": "pull request pushed",
       "pull_request.review_requested": "review requested",
       "pull_request.merged": "pull request merged",
-      "pull_request.closed": "pull request closed unmerged"
+      "pull_request.closed": "pull request closed unmerged",
+      "work_item.state_changed": "task status changed"
     },
     "closeReasons": {
       "completed": "as completed",
@@ -942,7 +934,16 @@
       "item.assignees": "login"
     },
     "factIs": "{{field}} is \"{{value}}\"",
-    "readOnly": "Only an organization admin can change these routes."
+    "readOnly": "Only an organization admin can change these routes.",
+    "scheduleTag": "Schedule",
+    "inList": "ClickUp List {{list}}",
+    "listEvents": {
+      "label": "Runs on",
+      "created": "A new task",
+      "createdAndChanged": "A new task and a status change",
+      "changed": "Only a status change",
+      "hint": "A status change moves the card while it is still where the previous status put it; into a closing phase, always."
+    }
   },
   "workBoard": {
     "description": "How cards move through this board: when each phase starts on its own, what its agent is told, when its plan is approved without a person, and where cards go next. Changes apply to this Factory only.",
@@ -1056,27 +1057,77 @@
       "ios": "iOS",
       "web": "Web"
     },
-    "connection": {
-      "roles": "In Google Cloud, create a service account with the roles Logs Viewer (roles/logging.viewer) and Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer), enable the Firebase Crashlytics API, create a JSON key and paste it here. Details: docs/runbooks/firebase-observability.md.",
+    "source": {
+      "firebase": "Firebase",
+      "checking": "Loading accounts…",
+      "ready": "Agents read server logs (Cloud Logging) and app crashes (Crashlytics) of the bound Google Cloud projects, read-only. Keys are encrypted and never reach an agent.",
+      "notConnected": "Server logs and app crashes for agents, read-only. Add a Google Cloud service account, then bind Factories to its Google Cloud projects.",
+      "accountsCount_one": "{{count}} account",
+      "accountsCount_other": "{{count}} accounts"
+    },
+    "key": {
+      "addTitle": "New Google Cloud account",
+      "replaceTitle": "New key for «{{name}}»",
+      "roles": "In the Google Cloud project, create a service account with only Logs Viewer (roles/logging.viewer) and, for crashes, Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer); enable the Firebase Crashlytics API; create a JSON key and paste it here. Steps: docs/runbooks/firebase-observability.md.",
+      "nameLabel": "Account name",
+      "namePlaceholder": "Name, e.g. Syncta (default: the key’s Google Cloud project)",
       "keyLabel": "Service account key JSON",
       "keyPlaceholder": "{ \"type\": \"service_account\", … }",
       "pickFile": "Choose the key file",
-      "save": "Save key",
-      "saved": "Key saved",
+      "save": "Save key"
+    },
+    "accounts": {
+      "title": "Google Cloud accounts",
+      "add": "Add account",
+      "none": "No account yet. Add a Google Cloud service account with read-only roles.",
+      "usedBy_one": "{{count}} binding",
+      "usedBy_other": "{{count}} bindings",
+      "unused": "not used",
+      "name": "Name",
+      "nameHint": "How this account is called in lists, e.g. «Syncta».",
+      "rename": "Rename",
+      "key": "Key",
+      "keyValue": "{{email}} · key from Google Cloud project {{project}}",
       "replace": "Replace key",
       "disconnect": "Disconnect",
-      "account": "Service account",
-      "accountValue": "{{email}} · project {{project}}",
-      "dialogTitle": "Firebase service account key"
+      "disconnectAria": "Disconnect account {{name}}",
+      "usedIn": "Used in",
+      "usedInNone": "No binding reads through this account.",
+      "confirmTitle": "Disconnect «{{name}}»?",
+      "confirmBody": "These bindings read through this account and are removed with it; their Factories’ agents stop seeing these logs and crashes.",
+      "confirmList": "Bindings removed with the account",
+      "confirm": "Disconnect with its bindings",
+      "saved": "Account saved",
+      "removed": "Account disconnected"
     },
-    "mapping": {
-      "projectId": "Project ID",
-      "projectIdHint": "Google Cloud / Firebase project id, e.g. syncta-prod. Logs are read from it.",
-      "projectNumber": "Project number",
+    "bindings": {
+      "heading": "Bindings",
+      "add": "Add binding",
+      "none": "No Factory reads logs or crashes yet. A binding: Factory → account → Google Cloud project.",
+      "needsAccount": "Add a Google Cloud account first.",
+      "title": "{{factory}} → {{project}}",
+      "newTitle": "New binding",
+      "notSaved": "not saved",
+      "logsOn": "logs",
+      "apps_one": "{{count}} app",
+      "apps_other": "{{count}} apps",
+      "nothingRead": "nothing read",
+      "noAccount": "no account",
+      "factory": "Factory",
+      "factoryHint": "Whose agents get these logs and crashes.",
+      "pickFactory": "Choose a Factory",
+      "account": "Google Cloud account",
+      "accountHint": "Which service account reads this project.",
+      "pickAccount": "Choose an account",
+      "projectId": "Google Cloud project ID",
+      "projectIdHint": "E.g. syncta-57c6a — the account’s own project is proposed. Logs are read from it.",
+      "projectNumber": "Google Cloud project number",
       "projectNumberHint": "Firebase › Project settings › Project number. Crashlytics addresses the project by it.",
       "logs": "Server logs",
       "logsHint": "Cloud Functions, Cloud Run, Hosting and the rest of Cloud Logging.",
-      "apps": "Apps (crashes)",
+      "crashes": "App crashes",
+      "crashesHint": "Crashlytics for the apps below (Android and iOS apps; web apps have no crashes).",
+      "appsTitle": "Apps (crashes)",
       "addApp": "Add app",
       "noApps": "No apps: crashes are not read.",
       "appId": "Firebase App ID {{number}}",
@@ -1086,41 +1137,19 @@
       "removeApp": "Remove app {{number}}",
       "remove": "Remove",
       "save": "Save",
-      "saved": "Saved",
-      "crashes": "App crashes",
-      "crashesHint": "Crashlytics for the apps below."
+      "saved": "Binding saved",
+      "removeBinding": "Remove binding",
+      "removeAria": "Remove binding {{title}}"
     },
     "check": {
       "run": "Check access",
       "running": "Checking…",
-      "needsKey": "Save the service account key first to check access.",
       "results": "Check results",
       "ok": "Access",
       "failed": "No access",
-      "logs": "Logs of project {{target}}",
+      "logs": "Logs of Google Cloud project {{target}}",
       "crashes": "Crashes of app {{target}}",
       "missingRole": "Missing role {{role}}."
-    },
-    "source": {
-      "firebase": "Firebase",
-      "checking": "Checking the connection…",
-      "ready": "Agents read server logs (Cloud Logging) and app crashes (Crashlytics), read-only. The key is encrypted and never reaches an agent.",
-      "notConnected": "Server logs and app crashes for agents, read-only. Needs a Google Cloud service account key.",
-      "connect": "Connect"
-    },
-    "project": {
-      "linked": "Linked projects",
-      "add": "Add project",
-      "pickFactory": "Choose a Factory",
-      "none": "No Factory is linked to a Firebase project yet.",
-      "notSaved": "not saved",
-      "projectValue": "project {{project}}",
-      "logsOn": "logs",
-      "apps_one": "{{count}} app",
-      "apps_other": "{{count}} apps",
-      "nothingRead": "nothing read",
-      "unlink": "Unlink",
-      "unlinkAria": "Unlink {{name}} from Firebase"
     }
   },
   "boards": {

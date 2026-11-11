@@ -34,43 +34,26 @@
       "organizationRequired": "Оберіть організацію, щоб керувати синхронізацією ClickUp.",
       "statusUnavailable": "Не вдалося завантажити стан ClickUp.",
       "rejected": "ClickUp відхилив налаштований API-токен. Попросіть оператора перевірити його.",
-      "ready": "Задачі з підключених Lists перевіряються кожні {{seconds}} с. Що з ними робити, залежить від статусу: це задається в кожному List.",
+      "ready": "Задачі з підключених Lists перевіряються кожні {{seconds}} с. Задача імпортується, лише коли її List названо в маршруті надходження; куди піде картка і що буде при зміні статусу, вирішують маршрути нижче.",
       "sync": "Імпортувати задачі ClickUp",
       "lists": "Lists ClickUp",
       "listsFailed": "Не вдалося завантажити Lists ClickUp. Спробуйте за хвилину.",
-      "rules": {
-        "listHint": "Колонки дошки «{{board}}». Задачі, що вже існували при запуску сервера, лягають у початкову колонку й нічого не запускають; запуск спрацьовує для нових задач і коли ви змінюєте статус у ClickUp.",
-        "boardMissing": "Дошку «{{board}}» не встановлено.",
-        "unavailable": "Не вдалося завантажити статуси або колонки. Спробуйте за хвилину.",
-        "loading": "Завантаження статусів…",
-        "ignore": "Ігнорувати",
-        "close": "Закрити картку",
-        "intoPhase": "У колонку «{{phase}}»",
-        "statusAction": "Дія для статусу {{status}}",
-        "saved": "Правила статусів збережено",
-        "saveFailed": "Не вдалося зберегти правила статусів",
-        "typical": "Типовий набір",
-        "import": "Імпортувати",
-        "needsFactory": "Спершу оберіть фабрику для цього List вище, щоб налаштувати правила статусів.",
-        "needsBoard": "Оберіть дошку вище: статуси ClickUp зіставляються з її колонками."
-      },
       "connectedLists": "Підключені Lists",
       "addLists": "Додати Lists",
       "noLists": "Жодного List ще не підключено. Додайте, щоб почати імпорт задач.",
       "card": {
         "notRouted": "Без маршруту",
-        "noBoard": "{{factory}} · оберіть дошку, без неї задачі не імпортуються",
-        "routedTo": "{{factory}} · {{board}}",
         "routing": "Куди потрапляють задачі",
         "routingHint": "Оберіть фабрику — доти задачі цього List не підхоплюються.",
-        "statuses": "Статуси",
         "disconnect": "Відключити",
         "disconnectAria": "Відключити {{name}}",
-        "mapped_one": "{{count}} статус налаштовано",
-        "mapped_few": "{{count}} статуси налаштовано",
-        "mapped_many": "{{count}} статусів налаштовано",
-        "mapped_other": "{{count}} статусу налаштовано",
-        "boardHint": "Без дошки задачі цього List не імпортуються. Нову задачу спершу ставлять маршрути надходження, а дошка бере ті, яким жоден маршрут не підійшов; статуси нижче рухають картки її колонками. Щоб відправляти задачі з тегом на іншу дошку, додайте маршрут надходження з умовою «має тег»."
+        "routes_one": "→ {{count}} маршрут",
+        "routes_few": "→ {{count}} маршрути",
+        "routes_many": "→ {{count}} маршрутів",
+        "routes_other": "→ {{count}} маршруту",
+        "routesHint": "Які задачі цього List імпортуються, куди йдуть і як зміна статусу рухає картку, вирішують маршрути надходження з умовою «ClickUp List».",
+        "listRoutes": "Маршрути цього List",
+        "noRoutes": "Жоден маршрут не називає цей List — його задачі не імпортуються. Додайте маршрут з умовою «ClickUp List» нижче."
       },
       "picker": {
         "title": "Оберіть Lists ClickUp",
@@ -83,6 +66,13 @@
         "count_many": "Обрано {{count}}",
         "count_other": "Обрано {{count}}"
       }
+    },
+    "sources": {
+      "title": "Джерела",
+      "description": "Звідки беруться картки. Куди картка піде і що з нею буде далі, вирішують маршрути надходження нижче.",
+      "repositories": "GitHub і GitLab: issues і pull requests репозиторіїв цієї Factory.",
+      "repositoriesLink": "Налаштувати в «Репозиторіях»",
+      "manual": "Вручну: кнопка «Нова картка» на дошці."
     }
   },
   "intakeSource": {
@@ -753,8 +743,8 @@
     }
   },
   "intakeRules": {
-    "title": "Правила надходження",
-    "description": "Власні джерела задач {{name}}: за розкладом створюють картку на дошці, далі її беруть агенти дошки.",
+    "title": "За розкладом",
+    "description": "Джерело задач {{name}}: за розкладом створює картку. Куди вона піде, вирішує маршрут «Розклад · назва», який з’являється разом із правилом.",
     "add": "Додати правило",
     "loading": "Завантаження правил",
     "unavailable": "Правила надходження недоступні.",
@@ -845,7 +835,7 @@
   },
   "intakeRoutes": {
     "title": "Маршрути надходження",
-    "description": "Куди потрапляють нові картки фабрики «{{name}}». Картку ставить перший увімкнений маршрут, що їй підходить; задача ClickUp, яку не взяв жоден маршрут з умовою, потрапляє на дошку свого List, а все інше — туди, куди веде останній маршрут, що бере будь-яку картку. Маршрут ставить картку лише раз, коли вона з’являється.",
+    "description": "Куди потрапляють нові картки фабрики «{{name}}». Картку ставить перший увімкнений маршрут, що їй підходить; задачу ClickUp імпортує лише маршрут, що називає її List, а все інше йде туди, куди веде останній маршрут, що бере будь-яку картку. Маршрути з подією (статус задачі змінився, задачу закрито, pull request злито…) переносять уже наявну картку.",
     "add": "Додати маршрут",
     "loading": "Завантаження маршрутів…",
     "unavailable": "Не вдалося завантажити маршрути надходження.",
@@ -906,7 +896,8 @@
       "source.repository": "Репозиторій",
       "item.key": "Ключ",
       "item.state": "Стан",
-      "item.assignees": "Виконавець"
+      "item.assignees": "Виконавець",
+      "source.list": "ClickUp List"
     },
     "integrations": {
       "github": "GitHub",
@@ -917,7 +908,7 @@
       "issue": "задача (issue)",
       "pull_request": "pull request",
       "task": "задача ClickUp",
-      "intake_rule": "картка правила надходження"
+      "intake_rule": "за розкладом"
     },
     "defaults": {
       "outsideAuthors": "Сторонні автори чекають у Вхідних",
@@ -941,7 +932,8 @@
       "pull_request.synchronized": "пуш у pull request",
       "pull_request.review_requested": "запит на рев’ю",
       "pull_request.merged": "pull request злито",
-      "pull_request.closed": "pull request закрито без злиття"
+      "pull_request.closed": "pull request закрито без злиття",
+      "work_item.state_changed": "статус задачі змінився"
     },
     "closeReasons": {
       "completed": "як виконану",
@@ -954,7 +946,16 @@
       "item.assignees": "логін"
     },
     "factIs": "{{field}}: «{{value}}»",
-    "readOnly": "Змінювати ці маршрути може лише адміністратор організації."
+    "readOnly": "Змінювати ці маршрути може лише адміністратор організації.",
+    "scheduleTag": "Розклад",
+    "inList": "ClickUp List {{list}}",
+    "listEvents": {
+      "label": "Коли спрацьовує",
+      "created": "Нова задача",
+      "createdAndChanged": "Нова задача і зміна статусу",
+      "changed": "Лише зміна статусу",
+      "hint": "Зміна статусу переносить картку, поки вона там, куди її поставив попередній статус; у завершальну фазу — завжди."
+    }
   },
   "workBoard": {
     "description": "Як картки рухаються цією дошкою: коли кожна фаза стартує сама, що каже її агентові, коли її план схвалюється без людини і куди картка йде далі. Зміни стосуються лише цієї Фабрики.",
@@ -1068,27 +1069,83 @@
       "ios": "iOS",
       "web": "Web"
     },
-    "connection": {
-      "roles": "Створіть у Google Cloud сервісний акаунт з ролями Logs Viewer (roles/logging.viewer) і Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer), увімкніть Firebase Crashlytics API, створіть JSON-ключ і вставте його сюди. Детально: docs/runbooks/firebase-observability.md.",
+    "source": {
+      "firebase": "Firebase",
+      "checking": "Завантажую акаунти…",
+      "ready": "Агенти читають логи сервера (Cloud Logging) і креші застосунків (Crashlytics) прив’язаних проєктів Google Cloud, лише читання. Ключі зашифровані й агентам не потрапляють.",
+      "notConnected": "Логи сервера й креші застосунків для агентів, лише читання. Додайте сервісний акаунт Google Cloud, потім прив’яжіть Factory до його проєктів Google Cloud.",
+      "accountsCount_one": "{{count}} акаунт",
+      "accountsCount_few": "{{count}} акаунти",
+      "accountsCount_many": "{{count}} акаунтів",
+      "accountsCount_other": "{{count}} акаунта"
+    },
+    "key": {
+      "addTitle": "Новий акаунт Google Cloud",
+      "replaceTitle": "Новий ключ для «{{name}}»",
+      "roles": "У проєкті Google Cloud створіть сервісний акаунт лише з роллю Logs Viewer (roles/logging.viewer), а для крешів — ще Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer); увімкніть Firebase Crashlytics API; створіть JSON-ключ і вставте його сюди. Кроки: docs/runbooks/firebase-observability.md.",
+      "nameLabel": "Назва акаунта",
+      "namePlaceholder": "Назва, напр. Syncta (інакше — проєкт Google Cloud із ключа)",
       "keyLabel": "JSON-ключ сервісного акаунта",
       "keyPlaceholder": "{ \"type\": \"service_account\", … }",
       "pickFile": "Вибрати файл ключа",
-      "save": "Зберегти ключ",
-      "saved": "Ключ збережено",
+      "save": "Зберегти ключ"
+    },
+    "accounts": {
+      "title": "Акаунти Google Cloud",
+      "add": "Додати акаунт",
+      "none": "Ще немає жодного акаунта. Додайте сервісний акаунт Google Cloud з ролями лише на читання.",
+      "usedBy_one": "{{count}} прив’язка",
+      "usedBy_few": "{{count}} прив’язки",
+      "usedBy_many": "{{count}} прив’язок",
+      "usedBy_other": "{{count}} прив’язки",
+      "unused": "не використовується",
+      "name": "Назва",
+      "nameHint": "Як цей акаунт називати в списках, напр. «Syncta».",
+      "rename": "Перейменувати",
+      "key": "Ключ",
+      "keyValue": "{{email}} · ключ із проєкту Google Cloud {{project}}",
       "replace": "Замінити ключ",
       "disconnect": "Відключити",
-      "account": "Сервісний акаунт",
-      "accountValue": "{{email}} · проєкт {{project}}",
-      "dialogTitle": "Ключ сервісного акаунта Firebase"
+      "disconnectAria": "Відключити акаунт {{name}}",
+      "usedIn": "Використовується в",
+      "usedInNone": "Жодна прив’язка не читає через цей акаунт.",
+      "confirmTitle": "Відключити «{{name}}»?",
+      "confirmBody": "Ці прив’язки читають через цей акаунт і будуть видалені разом із ним; агенти їхніх Factory перестануть бачити ці логи й креші.",
+      "confirmList": "Прив’язки, що видаляться разом з акаунтом",
+      "confirm": "Відключити разом із прив’язками",
+      "saved": "Акаунт збережено",
+      "removed": "Акаунт відключено"
     },
-    "mapping": {
-      "projectId": "ID проєкту",
-      "projectIdHint": "Google Cloud / Firebase project id, напр. syncta-prod. Логи читаються з нього.",
-      "projectNumber": "Номер проєкту",
+    "bindings": {
+      "heading": "Прив’язки",
+      "add": "Додати прив’язку",
+      "none": "Жодна Factory ще не читає логи чи креші. Прив’язка: Factory → акаунт → проєкт Google Cloud.",
+      "needsAccount": "Спершу додайте акаунт Google Cloud.",
+      "title": "{{factory}} → {{project}}",
+      "newTitle": "Нова прив’язка",
+      "notSaved": "не збережено",
+      "logsOn": "логи",
+      "apps_one": "{{count}} застосунок",
+      "apps_few": "{{count}} застосунки",
+      "apps_many": "{{count}} застосунків",
+      "apps_other": "{{count}} застосунку",
+      "nothingRead": "нічого не читається",
+      "noAccount": "без акаунта",
+      "factory": "Factory",
+      "factoryHint": "Чиї агенти отримають ці логи й креші.",
+      "pickFactory": "Виберіть Factory",
+      "account": "Акаунт Google Cloud",
+      "accountHint": "Через який сервісний акаунт читати цей проєкт.",
+      "pickAccount": "Виберіть акаунт",
+      "projectId": "ID проєкту Google Cloud",
+      "projectIdHint": "Напр. syncta-57c6a — пропонується проєкт, з якого ключ акаунта. Логи читаються з нього.",
+      "projectNumber": "Номер проєкту Google Cloud",
       "projectNumberHint": "Firebase › Налаштування проєкту › Номер проєкту. Crashlytics адресує проєкт за ним.",
       "logs": "Логи сервера",
       "logsHint": "Cloud Functions, Cloud Run, Hosting та інше з Cloud Logging.",
-      "apps": "Застосунки (креші)",
+      "crashes": "Креші застосунків",
+      "crashesHint": "Crashlytics для застосунків нижче (Android та iOS; у веб-застосунків крешів немає).",
+      "appsTitle": "Застосунки (креші)",
       "addApp": "Додати застосунок",
       "noApps": "Немає застосунків: креші не читаються.",
       "appId": "Firebase App ID {{number}}",
@@ -1098,43 +1155,19 @@
       "removeApp": "Прибрати застосунок {{number}}",
       "remove": "Прибрати",
       "save": "Зберегти",
-      "saved": "Збережено",
-      "crashes": "Креші застосунків",
-      "crashesHint": "Crashlytics для застосунків нижче."
+      "saved": "Прив’язку збережено",
+      "removeBinding": "Видалити прив’язку",
+      "removeAria": "Видалити прив’язку {{title}}"
     },
     "check": {
       "run": "Перевірити доступ",
       "running": "Перевіряю…",
-      "needsKey": "Щоб перевірити доступ, спершу збережіть ключ сервісного акаунта.",
       "results": "Результат перевірки",
       "ok": "Є доступ",
       "failed": "Немає доступу",
-      "logs": "Логи проєкту {{target}}",
+      "logs": "Логи проєкту Google Cloud {{target}}",
       "crashes": "Креші застосунку {{target}}",
       "missingRole": "Бракує ролі {{role}}."
-    },
-    "source": {
-      "firebase": "Firebase",
-      "checking": "Перевіряю підключення…",
-      "ready": "Агенти читають логи сервера (Cloud Logging) і креші застосунків (Crashlytics), лише читання. Ключ зашифрований і агенту не потрапляє.",
-      "notConnected": "Логи сервера й креші застосунків для агентів, лише читання. Потрібен ключ сервісного акаунта Google Cloud.",
-      "connect": "Підключити"
-    },
-    "project": {
-      "linked": "Прив’язані проєкти",
-      "add": "Додати проєкт",
-      "pickFactory": "Виберіть Factory",
-      "none": "Жодна Factory ще не прив’язана до проєкту Firebase.",
-      "notSaved": "не збережено",
-      "projectValue": "проєкт {{project}}",
-      "logsOn": "логи",
-      "apps_one": "{{count}} застосунок",
-      "apps_few": "{{count}} застосунки",
-      "apps_many": "{{count}} застосунків",
-      "apps_other": "{{count}} застосунку",
-      "nothingRead": "нічого не читається",
-      "unlink": "Відв’язати",
-      "unlinkAria": "Відв’язати {{name}} від Firebase"
     }
   },
   "boards": {

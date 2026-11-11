@@ -4,3 +4,4 @@ export * from './intake.ts';
 export * from './poller.ts';
 export * from './routes.ts';
 export * from './settings.ts';
+export * from './status-routes.ts';

@@ -46,9 +46,17 @@ const json = (status: number, body: unknown) =>
 export function fakeGoogle(seed: ObservabilityContractSeed, options: FakeGoogleOptions = {}): { fetch: FetchLike; calls: FakeGoogleCall[] } {
   const calls: FakeGoogleCall[] = [];
   const fetch: FetchLike = async (input, init) => {
+    // google-auth-library passes a URL and a form body for the token request.
     const url = String(input);
     const headers = new Headers(init?.headers);
-    const body = typeof init?.body === 'string' ? (url === GOOGLE_TOKEN_URI ? init.body : JSON.parse(init.body)) : undefined;
+    const body =
+      url === GOOGLE_TOKEN_URI
+        ? init?.body === undefined || init.body === null
+          ? undefined
+          : String(init.body)
+        : typeof init?.body === 'string'
+          ? JSON.parse(init.body)
+          : undefined;
     calls.push({ method: init?.method ?? 'GET', url, body, authorization: headers.get('authorization') });
 
     if (url === GOOGLE_TOKEN_URI) {
@@ -139,7 +147,12 @@ export function memoryIntegrationStorage() {
       upsert: async (orgId: string, input: { userId?: string | null; data: unknown; metadata?: Record<string, unknown> }) => {
         connections.set(orgId, { data: input.data, metadata: input.metadata ?? {}, userId: input.userId ?? null });
       },
-      update: async () => null,
+      update: async (orgId: string, fn: (data: any) => any) => {
+        const row = connections.get(orgId);
+        if (!row) return null;
+        connections.set(orgId, { ...row, data: fn(row.data) });
+        return { id: `conn-${orgId}`, orgId, userId: row.userId, data: fn(row.data), metadata: row.metadata, createdAt: new Date(0), updatedAt: new Date(0) };
+      },
       delete: async (orgId: string) => connections.delete(orgId),
     },
     settings: {

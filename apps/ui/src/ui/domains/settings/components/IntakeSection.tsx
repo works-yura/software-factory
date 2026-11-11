@@ -1,19 +1,22 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { settingsSectionPath } from '../settingsSections';
 import { ClickUpIntakeSection } from './ClickUpIntakeSection';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
 import { IntakeRulesSection } from '../intake-rules/IntakeRulesSection';
 
 /**
- * Settings › Intake: where work comes from and where it lands. The current Factory's intake routes
- * come first, since they win over ClickUp's tag routes and List boards.
+ * Settings › Intake in two parts. **Sources** say where cards come from: ClickUp Lists, schedules,
+ * the Factory's repositories and the board's «New card». **Intake routes** then decide, in one
+ * ordered list, where each card goes and what a later event does to it; no source places a card.
  */
 export function IntakeSection() {
   const { t } = useTranslation('settings');
@@ -41,14 +44,44 @@ export function IntakeSection() {
     });
   };
 
-  // Routes belong to one Factory: the one these settings were opened from.
+  // Routes and schedules belong to one Factory: the one these settings were opened from.
   const factory = factoryId ? (factoriesQuery.data ?? []).find(candidate => candidate.id === factoryId) : undefined;
 
   return (
     <div className="flex flex-col gap-8">
+      <section aria-labelledby="intake-sources" className="flex flex-col gap-6">
+        <div className="flex flex-col gap-1">
+          <Txt as="h2" id="intake-sources" variant="body" tone="ink">
+            {t('intake.sources.title')}
+          </Txt>
+          <Txt as="p" variant="caption" tone="muted">
+            {t('intake.sources.description')}
+          </Txt>
+        </div>
+        <ClickUpIntakeSection
+          config={config}
+          busy={saveMutation.isPending}
+          update={update}
+          factories={factoriesQuery.data ?? []}
+        />
+        {factory && <IntakeRulesSection factoryProjectId={factory.id} factoryName={factory.name} />}
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Txt as="p" variant="caption" tone="muted">
+              {t('intake.sources.repositories')}
+            </Txt>
+            {factory && (
+              <Button size="sm" variant="ghost" as={Link} to={settingsSectionPath(factory.id, 'repositories')}>
+                {t('intake.sources.repositoriesLink')}
+              </Button>
+            )}
+          </div>
+          <Txt as="p" variant="caption" tone="muted">
+            {t('intake.sources.manual')}
+          </Txt>
+        </div>
+      </section>
       {factory && <IntakeRoutesSection factoryProjectId={factory.id} factoryName={factory.name} />}
-      {factory && <IntakeRulesSection factoryProjectId={factory.id} factoryName={factory.name} />}
-      <ClickUpIntakeSection config={config} busy={saveMutation.isPending} update={update} factories={factoriesQuery.data ?? []} />
     </div>
   );
 }

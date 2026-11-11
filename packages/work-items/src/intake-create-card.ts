@@ -72,6 +72,7 @@ export function createCardAction(options: CreateCardActionOptions): IntakeAction
       const where = config.phaseKey ? `${config.boardKey} › ${config.phaseKey}` : config.boardKey;
       return locale === 'uk' ? `Картка «${config.titleTemplate}» на ${where}` : `Card "${config.titleTemplate}" on ${where}`;
     },
+    routeTarget: config => ({ boardKey: config.boardKey, phaseKey: config.phaseKey }),
     problems: async (scope, config) => {
       const problem = targetProblem(await options.boards.load(scope), config);
       return problem ? [problem] : [];

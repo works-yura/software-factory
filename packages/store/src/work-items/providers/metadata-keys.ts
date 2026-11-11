@@ -23,6 +23,8 @@ export const SHARED_PROVIDER_METADATA_KEYS = [
   'issueRef',
   'labels',
   'labelColors',
+  // The tracker list the item lives in (a ClickUp List), for the `source.list` route condition.
+  'listId',
   'number',
   'priority',
   'sourceCreatedAt',

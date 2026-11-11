@@ -41,7 +41,7 @@ export const OBSERVABILITY_LIMITS = {
   maxWindowDays: 31,
 } as const;
 
-/** Which Factory a read is for: the source answers only for the provider project mapped to it. */
+/** Which Factory a read is for: its sources answer only for the provider projects bound to it. */
 export interface ObservabilityScope {
   orgId: string;
   factoryProjectId: string;
@@ -152,10 +152,23 @@ export interface ObservabilityCrashIssueDetail extends ObservabilityCrashIssue {
   events: ObservabilityCrashEvent[];
 }
 
-/** One Factory's readable logs and crashes. A method for a feature the source lacks throws `ObservabilityUnsupportedError`. */
+/** Which provider project a source reads, as tools and people name it. */
+export interface ObservabilityTarget {
+  /** Stable id an agent passes to pick this source (a Firebase binding id). */
+  ref: string;
+  /** What a person recognizes, e.g. the Google Cloud project id `syncta-57c6a`. */
+  name: string;
+}
+
+/**
+ * One provider project's readable logs and crashes, for one Factory. A Factory may have several
+ * (prod and staging, several clients). A method for a feature the source lacks throws
+ * `ObservabilityUnsupportedError`.
+ */
 export interface ObservabilitySource {
   /** Stable provider id, e.g. `firebase`. */
   readonly provider: string;
+  readonly target: ObservabilityTarget;
   readonly features: ObservabilityFeatures;
   readonly apps: readonly ObservabilityApp[];
   queryLogs(input: QueryLogsInput): Promise<ObservabilityLogPage>;
@@ -163,10 +176,10 @@ export interface ObservabilitySource {
   getCrashIssue(input: GetCrashIssueInput): Promise<ObservabilityCrashIssueDetail>;
 }
 
-/** Hands out the source for a Factory, or `null` when the org is not connected or the Factory is not mapped. */
+/** Hands out a Factory's sources, one per bound provider project; empty when nothing is bound. */
 export interface ObservabilityProvider {
   readonly provider: string;
-  sourceFor(scope: ObservabilityScope): Promise<ObservabilitySource | null>;
+  sourcesFor(scope: ObservabilityScope): Promise<ObservabilitySource[]>;
 }
 
 /** The source has no such feature for this Factory (e.g. crashes with no app mapped). */

@@ -80,6 +80,11 @@ export interface IntakeActionKind<C = unknown> extends KindBase<C> {
   /** Why the rule cannot run as configured right now (a board that is gone); empty when it can. */
   problems?(scope: IntakeRuleScope, config: C): Promise<string[]>;
   run(context: IntakeActionContext<C>): Promise<IntakeActionOutcome>;
+  /**
+   * Where the action's cards should go, for an action that files cards: the rule's intake route is
+   * made with this target when the rule is created. Absent for an action that files no card.
+   */
+  routeTarget?(config: C): { boardKey: string; phaseKey: string | null };
 }
 
 export interface IntakePolicyContext {

@@ -62,6 +62,7 @@ import {
   productBoard,
 } from '@factory/pipelines';
 import { AUDITS_BOARD_UPGRADE_ACTOR, renameIntakeRuleTargetPhases } from './intake/migrations.ts';
+import { intakeRuleRoutes } from './intake/rule-routes.ts';
 import { setupIntakeRules } from './intake/setup.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import {
@@ -1528,6 +1529,8 @@ export class MastraFactory {
       workItemsReady && storage.isDomainReady('intake-rules')
         ? setupIntakeRules({
             rules: intakeRulesStorage,
+            // A rule's cards are placed by its own intake route, made when the rule is created.
+            ...(this.#projectBoards ? { routes: intakeRuleRoutes(storedBoardsStorage) } : {}),
             schedule: { schedules: () => this.#prepared?.base.controller.getMastra()?.schedules },
             cards: {
               workItems: workItemsStorage,
@@ -3169,6 +3172,8 @@ export class MastraFactory {
                 integrations: integrationRegistrations,
                 configVersion,
                 boardRegistry: this.#projectBoards ?? this.#boards,
+                // Pollers place what they import through the stored intake routes (ClickUp needs them).
+                ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage, projectBoards: this.#projectBoards } : {}),
                 factoryReady,
                 domains,
                 feed: commentsDomain,

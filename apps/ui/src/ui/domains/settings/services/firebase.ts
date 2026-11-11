@@ -1,21 +1,23 @@
 /**
- * Browser-side calls for Settings › Logs and crashes (Firebase). The key is sent once, on upload;
- * the server never sends it back — only who it belongs to.
+ * Browser-side calls for Settings › Logs and crashes (Firebase): the org's Google Cloud accounts and
+ * the bindings Factory → account → Google Cloud project. A key is sent once, on upload; the server
+ * never sends it back — only who it belongs to.
  */
 
 import { translator } from '../../../i18n/t';
 
 const tk = translator('settings');
 
+/** A Google Cloud service account, as the server lists it. */
 export interface FirebaseAccount {
+  id: string;
+  name: string;
   clientEmail: string;
+  /** The Google Cloud project the key was created in. */
   projectId: string;
   keyId: string;
-}
-
-export interface FirebaseStatus {
-  connected: boolean;
-  account?: FirebaseAccount;
+  /** The bindings that read through it. */
+  bindingIds: string[];
 }
 
 export type FirebasePlatform = 'android' | 'ios' | 'web';
@@ -26,13 +28,24 @@ export interface FirebaseApp {
   label?: string;
 }
 
-export interface FirebaseMapping {
+/** What a binding reads: a Factory reads one Google Cloud project through one account. */
+export interface FirebaseBindingInput {
+  factoryProjectId: string;
+  accountId: string;
   projectId: string;
   projectNumber?: string;
   logs: boolean;
-  /** Crashes of the mapped apps; absent reads as on. */
-  crashes?: boolean;
+  crashes: boolean;
   apps: FirebaseApp[];
+}
+
+export interface FirebaseBinding extends FirebaseBindingInput {
+  id: string;
+}
+
+export interface FirebaseState {
+  accounts: FirebaseAccount[];
+  bindings: FirebaseBinding[];
 }
 
 export interface FirebaseCheck {
@@ -49,6 +62,18 @@ export interface FirebaseCheckResult {
   checks: FirebaseCheck[];
 }
 
+/** The server refused: its message, and the body for callers that need more (the bindings in use). */
+export class FirebaseRequestError extends Error {
+  readonly status: number;
+  readonly body: Record<string, unknown>;
+
+  constructor(message: string, status: number, body: Record<string, unknown>) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
@@ -56,41 +81,46 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
     credentials: 'include',
   });
   if (!res.ok) {
-    let message = tk('observability.requestFailed', { status: res.status });
+    let body: Record<string, unknown> = {};
     try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      message = body.message ?? body.error ?? message;
+      body = (await res.json()) as Record<string, unknown>;
     } catch {
       /* not JSON */
     }
-    throw new Error(message);
+    const message = (body.message as string | undefined) ?? (body.error as string | undefined) ?? tk('observability.requestFailed', { status: res.status });
+    throw new FirebaseRequestError(message, res.status, body);
   }
   return (await res.json()) as T;
 }
 
-export const fetchFirebaseStatus = (baseUrl: string) => request<FirebaseStatus>(baseUrl, '/web/firebase/status');
+const json = (method: string, body?: unknown): RequestInit => ({ method, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
 
-export const uploadFirebaseKey = (baseUrl: string, serviceAccountJson: string) =>
-  request<FirebaseStatus>(baseUrl, '/web/firebase/connection', { method: 'PUT', body: JSON.stringify({ serviceAccountJson }) });
+export const fetchFirebaseState = (baseUrl: string) => request<FirebaseState>(baseUrl, '/web/firebase/status');
 
-export const disconnectFirebase = (baseUrl: string) =>
-  request<FirebaseStatus>(baseUrl, '/web/firebase/connection', { method: 'DELETE' });
+export const addFirebaseAccount = (baseUrl: string, input: { serviceAccountJson: string; name?: string }) =>
+  request<FirebaseState>(baseUrl, '/web/firebase/accounts', json('POST', input));
 
-/** Every Factory of the org that has a Firebase project, by Factory id. */
-export async function fetchFirebaseMappings(baseUrl: string): Promise<Record<string, FirebaseMapping>> {
-  return (await request<{ mappings: Record<string, FirebaseMapping> }>(baseUrl, '/web/firebase/factories')).mappings;
-}
+export const updateFirebaseAccount = (baseUrl: string, accountId: string, input: { serviceAccountJson?: string; name?: string }) =>
+  request<FirebaseState>(baseUrl, `/web/firebase/accounts/${encodeURIComponent(accountId)}`, json('PUT', input));
 
-export async function saveFirebaseMapping(baseUrl: string, factoryId: string, mapping: FirebaseMapping | null): Promise<FirebaseMapping | null> {
-  const path = `/web/firebase/factories/${encodeURIComponent(factoryId)}`;
-  const result = mapping
-    ? await request<{ mapping: FirebaseMapping }>(baseUrl, path, { method: 'PUT', body: JSON.stringify(mapping) })
-    : await request<{ mapping: null }>(baseUrl, path, { method: 'DELETE' });
-  return result.mapping;
-}
+/** Removes an account; `withBindings` also removes the bindings that read through it (else the server refuses). */
+export const removeFirebaseAccount = (baseUrl: string, accountId: string, withBindings: boolean) =>
+  request<FirebaseState>(
+    baseUrl,
+    `/web/firebase/accounts/${encodeURIComponent(accountId)}${withBindings ? '?withBindings=true' : ''}`,
+    json('DELETE'),
+  );
 
-export const checkFirebase = (baseUrl: string, factoryId: string, mapping: FirebaseMapping) =>
-  request<FirebaseCheckResult>(baseUrl, `/web/firebase/factories/${encodeURIComponent(factoryId)}/check`, {
-    method: 'POST',
-    body: JSON.stringify({ mapping }),
-  });
+/** Saves a new binding (no `id`) or replaces binding `id`. */
+export const saveFirebaseBinding = (baseUrl: string, binding: FirebaseBindingInput & { id?: string }) => {
+  const { id, ...input } = binding;
+  return id
+    ? request<FirebaseState>(baseUrl, `/web/firebase/bindings/${encodeURIComponent(id)}`, json('PUT', input))
+    : request<FirebaseState>(baseUrl, '/web/firebase/bindings', json('POST', input));
+};
+
+export const removeFirebaseBinding = (baseUrl: string, bindingId: string) =>
+  request<FirebaseState>(baseUrl, `/web/firebase/bindings/${encodeURIComponent(bindingId)}`, json('DELETE'));
+
+export const checkFirebaseBinding = (baseUrl: string, binding: FirebaseBindingInput) =>
+  request<FirebaseCheckResult>(baseUrl, '/web/firebase/bindings/check', json('POST', { binding }));

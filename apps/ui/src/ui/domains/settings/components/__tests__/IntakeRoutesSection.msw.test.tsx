@@ -285,3 +285,84 @@ describe('IntakeRoutesSection', () => {
     );
   });
 });
+
+describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
+  const clickUpHandlers = () =>
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/clickup/status`, () =>
+        HttpResponse.json({ configured: true, connected: true, workspaces: ['Acme'], intervalSeconds: 60 }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/clickup/lists`, () =>
+        HttpResponse.json({ lists: [{ id: 'L1', name: 'Bugs', path: 'Syncta', workspaceId: 'w1' }] }),
+      ),
+    );
+
+  it('adds a route that imports a List’s tasks with a status and follows later status changes', async () => {
+    const user = userEvent.setup();
+    const written = useRouteHandlers([]);
+    clickUpHandlers();
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    const form = screen.getByRole('form', { name: 'New route' });
+    await user.type(within(form).getByRole('textbox', { name: 'Route name' }), 'Bugs to Triage');
+    await user.click(within(form).getByRole('combobox', { name: 'Add condition' }));
+    await user.click(await screen.findByRole('option', { name: 'ClickUp List' }));
+    await user.click(within(form).getByRole('combobox', { name: 'ClickUp List' }));
+    await user.click(await screen.findByRole('option', { name: 'Syncta / Bugs' }));
+    await user.click(within(form).getByRole('combobox', { name: 'Add condition' }));
+    await user.click(await screen.findByRole('option', { name: 'State' }));
+    await user.type(within(form).getByRole('textbox', { name: 'State' }), 'to do');
+    await user.click(within(form).getByRole('combobox', { name: 'Runs on' }));
+    await user.click(await screen.findByRole('option', { name: 'A new task and a status change' }));
+    await user.click(within(form).getByRole('combobox', { name: 'Route board' }));
+    await user.click(await screen.findByRole('option', { name: 'Development' }));
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(written.created).toHaveLength(1));
+    expect(written.created[0]).toMatchObject({
+      when: {
+        operator: 'AND',
+        conditions: [
+          { field: 'source.list', operator: 'equals', value: 'L1' },
+          { field: 'item.state', operator: 'equals', value: 'to do' },
+        ],
+      },
+      on: ['work_item.created', 'work_item.state_changed'],
+    });
+  });
+
+  it('describes a List’s migrated status routes and tags a schedule’s route', async () => {
+    clickUpHandlers();
+    useRouteHandlers([
+      route({
+        id: '00000000-0000-4000-8000-000000000021',
+        name: 'ClickUp: статус «dev fixed»',
+        when: {
+          operator: 'AND',
+          conditions: [
+            { field: 'source.list', operator: 'equals', value: 'L1' },
+            { field: 'item.state', operator: 'equals', value: 'dev fixed' },
+          ],
+        },
+        on: ['work_item.state_changed'],
+        target: { boardKey: 'work', phaseKey: 'done', joinClosedIssue: false },
+      }),
+      route({
+        id: '00000000-0000-4000-8000-000000000022',
+        name: 'Розклад · Security audit',
+        position: 1,
+        when: { operator: 'AND', conditions: [{ field: 'intake.rule', operator: 'equals', value: 'rule-1' }] },
+      }),
+    ]);
+    renderSection();
+
+    await waitFor(() => expect(routeRows()).toHaveLength(2));
+    const [list, schedule] = routeRows();
+    expect(
+      await within(list!).findByText('When: task status changed · ClickUp List Syncta / Bugs · State is "dev fixed" → Development › Done'),
+    ).toBeTruthy();
+    expect(within(list!).queryByText('Schedule')).toBeNull();
+    expect(within(schedule!).getByText('Schedule')).toBeTruthy();
+  });
+});

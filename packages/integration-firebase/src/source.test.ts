@@ -20,10 +20,12 @@ function source(seed = observabilityContractSeed(), options: Parameters<typeof f
     google,
     source: new FirebaseObservabilitySource({
       key: fakeServiceAccountKey(),
-      mapping: {
+      binding: {
+        id: 'bnd-prod',
         projectId: 'syncta-prod',
         projectNumber: '1234567890',
         logs,
+        crashes: true,
         apps: withApps ? seed.apps.map(app => ({ ...app })) : [],
       },
       fetch: google.fetch,
@@ -43,12 +45,14 @@ describe('FirebaseObservabilitySource with crashes switched off', () => {
     const seed = observabilityContractSeed();
     const firebase = new FirebaseObservabilitySource({
       key: fakeServiceAccountKey(),
-      mapping: { projectId: 'syncta-prod', logs: true, crashes: false, apps: seed.apps.map(app => ({ ...app })) },
+      binding: { projectId: 'syncta-prod', logs: true, crashes: false, apps: seed.apps.map(app => ({ ...app })) },
       fetch: fakeGoogle(seed).fetch,
       now,
     });
     expect(firebase.features).toEqual({ logs: true, crashes: false });
-    await expect(firebase.listCrashIssues({ ...window, limit: 1 })).rejects.toThrow(/No app is mapped for crashes/);
+    await expect(firebase.listCrashIssues({ ...window, limit: 1 })).rejects.toThrow(/No app is bound for crashes in Google Cloud project syncta-prod/);
+    // A source without a binding id is named by its project.
+    expect(firebase.target).toEqual({ ref: 'syncta-prod', name: 'syncta-prod' });
   });
 });
 describeObservabilitySourceContract('FirebaseObservabilitySource crashes only', async seed => source(seed, {}, false, true).source, {

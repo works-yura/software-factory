@@ -111,6 +111,12 @@ export function describeObservabilitySourceContract(
       expect(source.features).toEqual(options.features);
     });
 
+    it('names the provider project it reads, so a Factory with several can pick one', async () => {
+      const source = await setup(observabilityContractSeed());
+      expect(source.target.ref.length).toBeGreaterThan(0);
+      expect(source.target.name.length).toBeGreaterThan(0);
+    });
+
     it('refuses a window that is reversed or too wide, before calling the provider', async () => {
       const source = await setup(observabilityContractSeed());
       const wide = { from: new Date(now.getTime() - (OBSERVABILITY_LIMITS.maxWindowDays + 1) * day), to: now };

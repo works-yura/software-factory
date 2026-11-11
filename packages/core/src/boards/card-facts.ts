@@ -78,6 +78,8 @@ export function cardRuleFacts(item: FactsCard): RuleFacts {
   const state = provider?.state ?? null;
   const providerName = provider?.provider ?? source?.integrationId;
   const repository = source ? sourceRepository(providerName, key) : null;
+  const listValue = provider?.metadata?.listId ?? metadata.listId;
+  const list = source && typeof listValue === 'string' && listValue ? listValue : null;
   // The open change request: the newest one Factory opened for the card, else an attached open one.
   const pullRequest =
     openChangeRequests(item.metadata).at(-1)?.number ?? newestOpenPullRequestNumber({ workItem: item.workItem ?? null });
@@ -99,6 +101,7 @@ export function cardRuleFacts(item: FactsCard): RuleFacts {
           'source.integration': source.integrationId,
           ...(providerName ? { 'source.provider': providerName } : {}),
           ...(repository !== null ? { 'source.repository': repository } : {}),
+          ...(list !== null ? { 'source.list': list } : {}),
         }
       : ruleOrigin
         ? {

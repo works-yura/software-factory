@@ -26,7 +26,7 @@ import { createClickUpPoller } from './poller.ts';
 import { buildClickUpRoutes } from './routes.ts';
 import { CLICKUP_PLATFORM, createClickUpChannel, createClickUpConversationPoller } from './conversation.ts';
 import type { ClickUpConversationClient } from './conversation.ts';
-import { readClickUpSettings } from './settings.ts';
+import { migrateListStatusRules } from './status-routes.ts';
 import { toBoardSource } from '@factory/core';
 
 export const DEFAULT_CLICKUP_POLL_SECONDS = 60;
@@ -92,16 +92,24 @@ export class ClickUpIntegration implements FactoryIntegration {
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!ctx.runtime) return [];
     const storage = ctx.storage.generic;
+    const { intakeRoutes, projectBoards } = ctx.runtime;
+    // Intake routes decide which tasks a List imports and where they go; without them nothing would.
+    if (!intakeRoutes?.createIntakeRoute || !projectBoards) {
+      throw new Error('ClickUp intake needs the project intake routes (stored boards); none are configured.');
+    }
+    const routesWriter = { listIntakeRoutes: intakeRoutes.listIntakeRoutes.bind(intakeRoutes), createIntakeRoute: intakeRoutes.createIntakeRoute.bind(intakeRoutes) };
     const reconcile = createClickUpPoller({
       client: this.#taskSource,
       intake: ctx.storage.intake,
-      rules: async orgId => (await readClickUpSettings(storage, orgId)).lists,
       projects: ctx.storage.projects,
       workItems: ctx.runtime.workItems,
       // Card lookups read the code boards; stored boards come through `projectBoards` for routing.
       boards: toBoardSource(ctx.runtime.boards).codeRegistry,
-      ...(ctx.runtime.intakeRoutes ? { intakeRoutes: ctx.runtime.intakeRoutes } : {}),
-      ...(ctx.runtime.projectBoards ? { projectBoards: ctx.runtime.projectBoards } : {}),
+      intakeRoutes,
+      projectBoards,
+      beforeSweep: async orgId => {
+        await migrateListStatusRules({ orgId, settings: storage, intake: ctx.storage.intake, boards: routesWriter, projectBoards });
+      },
       configVersion: ctx.runtime.configVersion,
     });
     if (!ctx.baseUrl) throw new Error("ClickUp conversations need the server's public URL for the connect link.");
