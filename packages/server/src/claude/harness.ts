@@ -219,6 +219,11 @@ export interface ClaudeFactoryHarnessOptions {
   env?: Record<string, string | undefined>;
   /** Every session object the harness builds, before anyone drives it (chat UI, run audit, reports). */
   onSession?: (session: ClaudeCodeSession) => void;
+  /**
+   * Whether a run that stopped because every account is out of usage parks the session until the
+   * limit resets, for the host's resume scheduler (`createUsageLimitResumer`). Unset, it fails.
+   */
+  parkOnUsageLimit?: (session: ClaudeCodeSession) => boolean | Promise<boolean>;
 }
 
 export interface ClaudeFactoryHarness {
@@ -488,6 +493,7 @@ export function createClaudeFactoryHarness(options: ClaudeFactoryHarnessOptions)
     ...(options.spawn ? { spawn: options.spawn } : {}),
     ...(options.env ? { env: options.env } : {}),
     ...(options.onSession ? { onSession: options.onSession } : {}),
+    ...(options.parkOnUsageLimit ? { parkOnUsageLimit: options.parkOnUsageLimit } : {}),
   });
 
   return {

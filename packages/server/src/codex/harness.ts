@@ -160,6 +160,11 @@ export interface CodexFactoryHarnessOptions {
   catalog?: CodexCatalogSource;
   /** Every session object the harness builds, before anyone drives it (chat UI, run audit, reports). */
   onSession?: (session: CodexSession) => void;
+  /**
+   * Whether a run that stopped because every account is out of usage parks the session until the
+   * limit resets, for the host's resume scheduler (`createUsageLimitResumer`). Unset, it fails.
+   */
+  parkOnUsageLimit?: (session: CodexSession) => boolean | Promise<boolean>;
 }
 
 export interface CodexFactoryHarness {
@@ -422,6 +427,7 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
       return signals.length > 0 ? signals.join('\n') : undefined;
     },
     ...(options.onSession ? { onSession: options.onSession } : {}),
+    ...(options.parkOnUsageLimit ? { parkOnUsageLimit: options.parkOnUsageLimit } : {}),
   });
 
   return {

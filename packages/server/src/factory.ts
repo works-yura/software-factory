@@ -282,6 +282,7 @@ import { observeSessionRunReports } from '@factory/harness-mastra';
 import { FactorySessionsStateProcessor } from '@factory/harness-mastra';
 import { assertFactorySkills, createWorkspaceFactory, FactoryWorkspaceRegistry, findBoardSkillProblems } from '@factory/harness-mastra';
 import type { FactorySandboxStart } from '@factory/harness-mastra';
+import { createUsageLimitResumer, storeParkedSessions, type ParkedSessionSource, type UsageLimitResumer } from './session/usage-limit-resume.ts';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
 
@@ -647,6 +648,8 @@ export class MastraFactory {
   #preparing = false;
   /** Serves the chat's session routes for Claude Code sessions; inert until a session is attached or resolvable. */
   readonly #claudeSessionUi: ClaudeSessionUi;
+  /** Resumes chat sessions parked on a usage limit (Claude Code's, Codex's) when the limit resets. */
+  #usageLimitResumer: UsageLimitResumer | undefined;
 
   constructor(config: MastraFactoryConfig) {
     if (!config?.storage) {
@@ -2047,8 +2050,26 @@ export class MastraFactory {
     // What every turn-based session (Claude Code's, Codex's) gets as the harness builds it: the chat
     // channel, the run bookkeeping a Mastra session gets, its thread title, the board's tool-result
     // rules, approval notices and its live-session entry.
+    // A chat session (personal, side session, the Factory chat) parks when every account is out of
+    // usage and resumes at the reset; a card's run is the dispatcher's to resume, so it never parks.
+    const boundToCardRun = async (sessionId: string): Promise<boolean> => {
+      if (!workItemsReady) return false;
+      const row = await sourceControlSessions.getBySessionId(sessionId);
+      if (!row?.factoryProjectId) return false;
+      const binding = await workItemsStorage.findActiveRunBindingForSession({
+        orgId: row.orgId,
+        factoryProjectId: row.factoryProjectId,
+        sessionId,
+      });
+      return binding !== null && binding !== undefined;
+    };
+    const parkOnUsageLimit = async (session: { id: string }) => !(await boundToCardRun(session.id));
+    const parkedSessionSources: ParkedSessionSource[] = [];
+    const usageLimitResumer = createUsageLimitResumer({ sources: parkedSessionSources, handledElsewhere: boundToCardRun });
+    this.#usageLimitResumer = usageLimitResumer;
     const observeTurnSession = (session: ClaudeCodeSession | CodexSession) => {
       const channel = this.#claudeSessionUi.attach(session);
+      usageLimitResumer.observe(session);
       // The same run bookkeeping a Mastra session gets when it is created.
       observeSessionRunEnd(session, { audit: auditDomain });
       factoryUsage.observe(session, { sessionId: session.id, harnessId: (session as { harness?: string }).harness ?? 'claude-code' });
@@ -2217,6 +2238,7 @@ export class MastraFactory {
             tokens: sessionTokens!,
           },
           onSession: observeTurnSession,
+          parkOnUsageLimit,
         })
       : undefined;
     // A person's message or answer in a turn-based session's chat (Claude Code's, Codex's): the turn that carries it is
@@ -2357,6 +2379,7 @@ export class MastraFactory {
             tokens: sessionTokens!,
           },
           onSession: observeTurnSession,
+          parkOnUsageLimit,
         })
       : undefined;
     if (codex) {
@@ -2390,6 +2413,13 @@ export class MastraFactory {
     // A model pick on another harness moves the session there (same id, chat and thread) with a context
     // handoff: the source gives it up, the target takes it with no native conversation, and the target's
     // first turn gets the thread's real history (`createHarnessSwitch`).
+    if (claudeCode) {
+      parkedSessionSources.push({ parked: storeParkedSessions(claudeCode.store), get: sessionId => claudeCode.harness.getSession(sessionId) });
+    }
+    if (codex) {
+      parkedSessionSources.push({ parked: storeParkedSessions(codex.store), get: sessionId => codex.harness.getSession(sessionId) });
+    }
+
     if (claudeCode || codex) {
       const sessionUi = this.#claudeSessionUi;
       const turnHarnessBinding = (harness: {
@@ -3493,6 +3523,10 @@ export class MastraFactory {
         ),
       );
     this.#dispatcher?.start();
+    // Chat sessions that parked on a usage limit before this process started resume when it resets.
+    void this.#usageLimitResumer
+      ?.start()
+      .catch(error => console.warn('[factory] Could not schedule the sessions parked on a usage limit', error));
     // Unconditional and outside the Mastra logger, which production runs at WARN.
     if (this.#prepareStartedAt !== undefined)
       logTiming(`boot ${Math.round(performance.now() - this.#prepareStartedAt)}ms`);
@@ -3521,6 +3555,7 @@ export class MastraFactory {
           `[factory] unsubscribing from dispatcher wakes failed: ${error instanceof Error ? error.message : error}`,
         ),
       );
+    this.#usageLimitResumer?.stop();
     const backfill = this.#workItemSplitBackfill;
     backfill?.controller.abort();
     await Promise.all([
