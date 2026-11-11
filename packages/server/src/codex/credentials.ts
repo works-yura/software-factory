@@ -28,6 +28,8 @@ export interface CodexCredentials {
   onCredentialFailure(tenant: AccountTenant, failure: { accountId: string; error: CodexError }): Promise<void>;
   /** Whether this person has a ChatGPT sign-in a run could use (now or after a reset). */
   usable(tenant: AccountTenant): Promise<boolean>;
+  /** The account's ChatGPT sign-in, refreshed when due, for reading its usage; `undefined` when there is none. */
+  signIn?(orgId: string, accountId: string): Promise<SignInOAuth | undefined>;
 }
 
 function tokensOf(oauth: SignInOAuth): CodexChatGptTokens {
@@ -85,5 +87,6 @@ export function createCodexCredentials({
     onCredentialFailure: (tenant, { accountId, error }) =>
       pool.onFailure(tenant, { accountId, error: { kind: error.kind, message: error.message, ...(error.resetsAt ? { resetsAt: error.resetsAt } : {}) } }),
     usable: tenant => pool.usable(tenant),
+    signIn: (orgId, accountId) => pool.signIn(orgId, accountId),
   };
 }

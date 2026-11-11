@@ -1,6 +1,6 @@
 import { ClaudeCodeError } from '@factory/harness-claude-code';
 import type { ClaudeCredentialFailure, ClaudeCredentialRequest, ClaudeTurnCredentials } from '@factory/harness-claude-code';
-import type { ModelCredentialsStorage } from '@factory/store';
+import type { ModelCredentialsStorage, SignInOAuth } from '@factory/store';
 
 import { createSignInAccountPool, DEFAULT_ACCOUNT_LIMIT_COOLDOWN_MS } from '../accounts/pool.ts';
 
@@ -42,6 +42,8 @@ export class ClaudeCodeCredentialMissingError extends Error {
 export interface ClaudeCodeCredentials {
   credentials: ClaudeCodeCredentialsHook;
   onCredentialFailure: ClaudeCodeCredentialFailureHook;
+  /** The account's Claude sign-in, refreshed when due, for reading its usage; `undefined` when there is none. */
+  signIn?(orgId: string, accountId: string): Promise<SignInOAuth | undefined>;
 }
 
 /**
@@ -102,6 +104,7 @@ export function createClaudeCodeCredentials({
     },
     onCredentialFailure: (tenant, { accountId, error }) =>
       pool.onFailure(tenant, { accountId, error: { kind: error.kind, message: error.message, ...(error.resetsAt ? { resetsAt: error.resetsAt } : {}) } }),
+    signIn: (orgId, accountId) => pool.signIn(orgId, accountId),
   };
 }
 

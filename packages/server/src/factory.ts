@@ -242,7 +242,7 @@ import { FilesystemStorage } from '@factory/store';
 import { IntakeStorage } from '@factory/store';
 import { IntegrationStorage } from '@factory/store';
 import { factoryMemorySettingsUserId, MemorySettingsStorage, SkillOverridesStorage, StoredBoardsStorage } from '@factory/store';
-import { AttachmentService, AttachmentsStorage, IntakeRouteFiresStorage } from '@factory/store';
+import { AttachmentService, AttachmentsStorage, IntakeRouteFiresStorage, UsageStorage } from '@factory/store';
 import type { AttachmentBlobStore } from '@factory/store';
 import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
@@ -255,6 +255,7 @@ import type { FactoryRunBindingRecord, WorkItemRow } from '@factory/store';
 import { FactorySupervisorHealthWorker } from '@factory/supervisor';
 import { SUPERVISOR_INSTRUCTIONS } from '@factory/supervisor';
 import { withAgentLanguage } from './agent-language.ts';
+import { createFactoryUsage } from './usage/index.ts';
 import { createFactorySupervisorReadTools } from '@factory/supervisor';
 import { messageWorkerSession } from '@factory/supervisor';
 import { persistFactoryToolPermissions, supervisorProjectIdFromContext } from '@factory/session';
@@ -934,6 +935,7 @@ export class MastraFactory {
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     const attachmentsStorage = storage.registerDomain(new AttachmentsStorage());
     const intakeRouteFiresStorage = storage.registerDomain(new IntakeRouteFiresStorage());
+    const usageStorage = storage.registerDomain(new UsageStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -2073,6 +2075,13 @@ export class MastraFactory {
           ...(claudeCodeConfig.onCredentialFailure ? { onCredentialFailure: claudeCodeConfig.onCredentialFailure } : {}),
         }
       : createClaudeCodeCredentials({ credentials: modelCredentialsStorage });
+    // Every session's token usage, and the turn harnesses' accounts' allowances (`./usage`).
+    const factoryUsage = createFactoryUsage({
+      storage: usageStorage,
+      sessions: sourceControlSessions,
+      ...(claudeCodeConfig ? { claudeSignIn: createClaudeCodeCredentials({ credentials: modelCredentialsStorage }).signIn } : {}),
+      ...(codexConfig ? { codexSignIn: createCodexCredentials({ credentials: modelCredentialsStorage }).signIn } : {}),
+    });
     // One checkout per session for every turn-based harness: the repository on the session's branch, on this host.
     const turnCheckout =
       claudeCodeConfig || codexConfig
@@ -2110,6 +2119,7 @@ export class MastraFactory {
       const channel = this.#claudeSessionUi.attach(session);
       // The same run bookkeeping a Mastra session gets when it is created.
       observeSessionRunEnd(session, { audit: auditDomain });
+      factoryUsage.observe(session, { sessionId: session.id, harnessId: (session as { harness?: string }).harness ?? 'claude-code' });
       // Through the chat channel: its events name parked tools as a Mastra session does (`ask_user`,
       // `submit_plan`) and mark a permission request as an approval, which the report tells apart.
       observeSessionRunReports(channel, (outcome, since) =>
@@ -2895,6 +2905,7 @@ export class MastraFactory {
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
             ...(attachmentService ? { attachments: attachmentService } : {}),
+            usage: { usage: usageStorage, harnesses: factoryUsage.registry },
             ...(this.#intakeTriggers
               ? { intakeTriggers: { engine: this.#intakeTriggers.engine, fires: intakeRouteFiresStorage } }
               : {}),
@@ -3280,6 +3291,14 @@ export class MastraFactory {
         sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionRunEnd(asAgentSession(session), { audit: auditDomain });
+      factoryUsage.observe(asAgentSession(session), {
+        sessionId: session.identity.getId(),
+        harnessId: 'mastra',
+        modelFor: async () => {
+          const model = await session.thread.getSetting({ key: 'currentModelId' });
+          return typeof model === 'string' ? model : undefined;
+        },
+      });
       // Every run end of a work or side session, and every tool call it holds for
       // approval, reaches whoever follows it, however the run started;
       // re-attached when a session is created again.

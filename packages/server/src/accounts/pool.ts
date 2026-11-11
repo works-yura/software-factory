@@ -66,6 +66,11 @@ export interface SignInAccountPool {
   onFailure(tenant: AccountTenant, failure: AccountFailure): Promise<void>;
   /** Whether a turn of this person could run now or after a reset: an enabled sign-in it may use. */
   usable(tenant: AccountTenant): Promise<boolean>;
+  /**
+   * The account's sign-in, refreshed first when due, for a read on the account's behalf (its usage);
+   * `undefined` when it is not one of the pool's sign-ins or the token endpoint refused it.
+   */
+  signIn(orgId: string, accountId: string): Promise<SignInOAuth | undefined>;
 }
 
 /**
@@ -164,6 +169,14 @@ export function createSignInAccountPool(options: SignInAccountPoolOptions): Sign
         kind: error.kind,
         ...(error.resetsAt ? { resetsAt: error.resetsAt.toISOString() } : {}),
       });
+    },
+
+    async signIn(orgId, accountId) {
+      const storage = await getTenantCredentialsStorage(options.credentials);
+      if (!storage) return undefined;
+      const account = await storage.getAccount(orgId, accountId);
+      if (!account || account.provider !== options.provider || account.kind !== options.kind) return undefined;
+      return freshPair(storage, orgId, accountId, current => options.isFresh(current, clock()));
     },
 
     async usable(tenant) {

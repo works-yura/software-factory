@@ -477,3 +477,33 @@ describe('Claude Code credentials: edges', () => {
     }
   });
 });
+
+describe('Claude Code credentials signIn', () => {
+  it("hands a sign-in's fresh pair out for reading its usage, and nothing for other accounts", async () => {
+    const seeded = await createFactoryStorageForTests();
+    const now = new Date('2026-10-28T12:00:00Z');
+    const fresh = { accessToken: 'fresh-access', refreshToken: 'r', expiresAt: now.getTime() + 24 * 3600_000, scopes: [] };
+    const signIn = await seeded.credentials.addAccount({
+      orgId: 'org-1',
+      provider: 'anthropic',
+      label: 'alice@example.com',
+      kind: 'claude_login',
+      ownerUserId: 'alice',
+      secret: fresh.accessToken,
+      oauth: fresh,
+      createdBy: 'alice',
+    });
+    const key = await seeded.credentials.addAccount({
+      orgId: 'org-1',
+      provider: 'anthropic',
+      label: 'Old key',
+      kind: 'api_key',
+      secret: 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaa1111',
+      createdBy: 'alice',
+    });
+    const credentials = createClaudeCodeCredentials({ credentials: seeded.credentials, now: () => now });
+    expect((await credentials.signIn!('org-1', signIn.id))?.accessToken).toBe('fresh-access');
+    expect(await credentials.signIn!('org-1', key.id)).toBeUndefined();
+    expect(await credentials.signIn!('org-2', signIn.id)).toBeUndefined();
+  });
+});

@@ -92,6 +92,8 @@ import type { ClaudeCodeUserSessions } from './source-control-sessions.ts';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.ts';
 import { invalidateTenantCredentialSnapshots } from '@factory/credentials';
 import { WorkItemRoutes } from './work-items.ts';
+import { UsageRoutes } from './usage.ts';
+import type { UsageRoutesDeps } from './usage.ts';
 
 const MATERIALIZE_FAILURE_CODE = {
   'git-missing': 'repository_git_missing',
@@ -117,6 +119,8 @@ export interface FactoryApiRoutesDeps {
   /** Intake rules (Settings › Intake): their engine and storage; without them the routes are not mounted. */
   /** Routes «За розкладом»: their trigger engine and fire log (ADR-0021). */
   intakeTriggers?: { engine: IntakeTriggerEngine; fires: IntakeRouteFiresStorage };
+  /** Token usage and accounts' allowances (`UsageRoutes`); without it their routes are not mounted. */
+  usage?: Pick<UsageRoutesDeps, 'usage' | 'harnesses'>;
   controllerId: string;
   controller: AgentController<MastraCodeState>;
   /** Registry of the sessions this process holds, owned by the host so it can watch them too. */
@@ -902,6 +906,14 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       ...(deps.claudeSignIn ? { claudeSignIn: deps.claudeSignIn } : {}),
       ...(deps.codexSignIn ? { accountSignIn: { [CODEX_ACCOUNT_PROVIDER]: deps.codexSignIn } } : {}),
     }).routes(),
+    ...(deps.usage
+      ? new UsageRoutes({
+          auth: deps.auth,
+          ...deps.usage,
+          modelCredentials: deps.domains.modelCredentials,
+          projects: deps.domains.projects,
+        }).routes()
+      : []),
     ...new OAuthRoutes({
       auth: deps.auth,
       authStorage: deps.authStorage,
