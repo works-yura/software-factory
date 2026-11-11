@@ -1,4 +1,4 @@
-import type { IntakeSourceDescriptor } from '@factory/core/boards/intake-sources';
+import type { IntakeSourceDescriptor, IntakeSourceRegistry } from '@factory/core/boards/intake-sources';
 
 import type { TFunction } from 'i18next';
 
@@ -15,36 +15,19 @@ type T = TFunction<'settings'>;
 
 /** What a route can name from outside the project: the sources the Factory uses and the ClickUp Lists of the connected workspace. */
 export interface IntakeOrigins {
+  /** The sources a route can name, from the UI's composition root. */
+  sources: IntakeSourceRegistry;
   /** The ClickUp Lists, for the `source.list` condition: naming one is what makes the project read it. */
   lists: { value: string; label: string }[];
   /** Whether the Factory uses a source: «Коли» offers only these (and keeps a stored route's other source, marked). */
   available: (source: IntakeSourceDescriptor) => boolean;
 }
 
-/**
- * A source the Factory uses: ClickUp once the org's ClickUp is connected, GitHub or GitLab when a
- * linked repository comes from it; «будь-яке джерело», «Вручну» and a source added later always.
- */
-export function sourceAvailable(
-  source: IntakeSourceDescriptor,
-  used: { clickUp: boolean; hosts: ReadonlySet<string> },
-): boolean {
-  if (source.id === 'clickup') return used.clickUp;
-  if (source.id === 'github' || source.id === 'gitlab') return used.hosts.has(source.id);
-  return true;
-}
-
-/** A stored route's other candidates beside the one shown, as a muted note («також GitLab»). */
-export const alsoNote = (model: RouteWhenModel, t: T) => {
-  const others = model.candidates.filter(candidate => candidate.id !== model.source.id);
-  return others.length > 0 ? t('intakeRoutes.alsoSources', { sources: others.map(other => sourceLabel(other, t)).join(', ') }) : undefined;
-};
-
 export const originLabel = (options: IntakeOrigins['lists'], value: string) =>
   options.find(option => option.value === value)?.label ?? value;
 
-/** The group a source's own wording is kept under: GitHub, GitLab and both share one. */
-const sourceWording = (sourceId: string) => (sourceId === 'github' || sourceId === 'gitlab' ? 'git' : sourceId);
+/** The group a source's own wording is kept under: its descriptor's `wording` (GitHub and GitLab share one), else its id. */
+const sourceWording = (source: IntakeSourceDescriptor) => source.wording ?? source.id;
 
 /** A source's name in the interface language; a source added later without a translation shows its id. */
 export const sourceLabel = (source: IntakeSourceDescriptor, t: T) =>
@@ -54,7 +37,7 @@ export const sourceLabel = (source: IntakeSourceDescriptor, t: T) =>
 export const eventLabel = (source: IntakeSourceDescriptor | undefined, event: string, t: T) =>
   t(
     [
-      ...(source ? [`intakeRoutes.sourceEvents.${sourceWording(source.id)}.${event}`] : []),
+      ...(source ? [`intakeRoutes.sourceEvents.${sourceWording(source)}.${event}`] : []),
       `intakeRoutes.events.${event}`,
     ] as never,
     { defaultValue: event },
@@ -64,7 +47,7 @@ export const eventLabel = (source: IntakeSourceDescriptor | undefined, event: st
 export const fieldLabel = (source: IntakeSourceDescriptor | undefined, field: string, t: T) =>
   t(
     [
-      ...(source ? [`intakeRoutes.sourceFields.${sourceWording(source.id)}.${field}`] : []),
+      ...(source ? [`intakeRoutes.sourceFields.${sourceWording(source)}.${field}`] : []),
       `intakeRoutes.fields.${field}`,
     ] as never,
     { defaultValue: field },
@@ -160,18 +143,17 @@ function describeEventCondition(condition: CardRuleGroup['conditions'][number], 
  */
 export function describeWhen(route: IntakeRouteInfo, origins: IntakeOrigins, t: T): string {
   if (route.triggered) return route.triggered.trigger.summary;
-  const model = readRouteWhen(route.when, route.on, origins.available);
+  const model = readRouteWhen(origins.sources, route.when);
   if (model) {
     const { source } = model;
     const onlyNewCards = route.on.length === 1 && route.on[0] === 'work_item.created';
     if (source.id === 'any' && model.conditions.length === 0 && onlyNewCards) return t('intakeRoutes.everyCard');
     const events = route.on.map(event => eventLabel(source, event, t)).join(t('intakeRoutes.or'));
-    const also = alsoNote(model, t);
     const unused = origins.available(source) ? undefined : t('intakeRoutes.sourceNotConnected');
     return [
       ...(source.id === 'any'
         ? []
-        : [[sourceLabel(source, t), also && `(${also})`, unused && `(${unused})`].filter(Boolean).join(' ')]),
+        : [[sourceLabel(source, t), unused && `(${unused})`].filter(Boolean).join(' ')]),
       ...model.conditions.map(condition => describeCondition(condition, origins, t, source)),
       model.closeReason ? `${events} · ${t(`intakeRoutes.closeReasons.${model.closeReason}`)}` : events,
     ].join(' · ');

@@ -1,4 +1,3 @@
-import { intakeSource, intakeSources } from '@factory/core/boards/intake-sources';
 import type { IntakeSourceDescriptor } from '@factory/core/boards/intake-sources';
 
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -46,7 +45,6 @@ import { BoardSelect } from './RoutingSelects';
 
 import {
   IntakeOrigins,
-  alsoNote,
   eventLabel,
   fieldLabel,
   originLabel,
@@ -103,12 +101,11 @@ export function RouteEditor({
   const initialOn = initial?.on ?? ['work_item.created'];
   // Undefined: the route's condition is one this form can't show, and is kept exactly as written.
   const readable =
-    initial && !initial.triggered ? readRouteWhen(initial.when, initialOn, origins.available) : undefined;
+    initial && !initial.triggered ? readRouteWhen(origins.sources, initial.when) : undefined;
   const custom = Boolean(initial && !initial.triggered && !readable);
   const [model, setModel] = useState<RouteWhenModel>(() => {
     if (readable) return readable;
-    const any = intakeSource('any')!;
-    return { source: any, candidates: [any], named: false, closeReason: null, conditions: [] };
+    return { source: origins.sources.get('any')!, closeReason: null, conditions: [] };
   });
   // A route whose events this form can't offer for its source keeps them as they are.
   const eventsEditable = !custom && routeEventsEditable(model.source, initialOn);
@@ -122,9 +119,8 @@ export function RouteEditor({
   const offered = conditionFieldsFor(model.source).filter(field => !model.conditions.some(condition => condition.field === field));
   const label = initial ? t('intakeRoutes.editTitle', { name: initial.name }) : t('intakeRoutes.newTitle');
   // Only the sources the Factory uses; a stored route's source it no longer uses stays, marked.
-  const sources = intakeSources().filter(source => origins.available(source) || source.id === model.source.id);
+  const sources = origins.sources.list().filter(source => origins.available(source) || source.id === model.source.id);
   const sourceUnused = !scheduled && !origins.available(model.source);
-  const also = scheduled ? undefined : alsoNote(model, t);
   // A new route chooses between arriving cards and a schedule; an existing one keeps the kind it is.
   const canSchedule = !initial && Boolean(kinds && kinds.triggers.length > 0);
   const listId = model.conditions.find(condition => condition.field === 'source.list')?.value as string | undefined;
@@ -140,7 +136,7 @@ export function RouteEditor({
       return;
     }
     setScheduled(false);
-    const source = intakeSource(value);
+    const source = origins.sources.get(value);
     if (!source) return;
     setModel(current => chooseRouteSource(current, source));
     setEvents(current => eventsForSource(source, current));
@@ -218,11 +214,6 @@ export function RouteEditor({
               {canSchedule && <SelectItem value={SCHEDULE}>{t('intakeTriggers.modeSchedule')}</SelectItem>}
             </SelectContent>
           </Select>
-          {also && (
-            <Txt as="span" variant="caption" tone="muted">
-              {also}
-            </Txt>
-          )}
           {sourceUnused && (
             <Txt as="span" variant="caption" tone="muted">
               {t('intakeRoutes.sourceNotConnected')}

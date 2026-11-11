@@ -849,7 +849,6 @@
       "gitlab": "GitLab",
       "manual": "By hand (“New card”)"
     },
-    "alsoSources": "also {{sources}}",
     "sourceNotConnected": "not connected",
     "sourceEvents": {
       "clickup": {

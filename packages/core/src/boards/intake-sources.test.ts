@@ -1,97 +1,107 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
-  defineIntakeSource,
-  intakeSource,
+  createIntakeSourceRegistry,
+  intakeSourceAvailable,
   intakeSourceCondition,
-  intakeSources,
   readIntakeSource,
-  removeIntakeSource,
 } from './intake-sources.ts';
 
-describe('intake sources', () => {
-  afterEach(() => removeIntakeSource('jira'));
+const sources = createIntakeSourceRegistry();
 
+describe('intake sources', () => {
   it('reads the source a route names, and keeps its other conditions in order', () => {
-    const read = readIntakeSource({
+    const read = readIntakeSource(sources, {
       operator: 'AND',
       conditions: [
-        { field: 'source.integration', operator: 'in', value: ['gitlab', 'github'] },
         { field: 'author.trusted', operator: 'equals', value: false },
+        { field: 'source.integration', operator: 'equals', value: 'github' },
       ],
     });
-    // A set of hosts reads as each of them; there is no combined source.
     expect(read?.source.id).toBe('github');
-    expect(read?.candidates.map(source => source.id)).toEqual(['github', 'gitlab']);
-    expect(read?.named).toBe(true);
-    expect(read?.leaf).toEqual({ field: 'source.integration', operator: 'in', value: ['gitlab', 'github'] });
     expect(read?.rest).toEqual([{ field: 'author.trusted', operator: 'equals', value: false }]);
 
-    expect(readIntakeSource({ operator: 'AND', conditions: [{ field: 'source.integration', operator: 'not_exists' }] })?.source.id).toBe(
-      'manual',
-    );
+    expect(
+      readIntakeSource(sources, { operator: 'AND', conditions: [{ field: 'source.integration', operator: 'not_exists' }] })
+        ?.source.id,
+    ).toBe('manual');
   });
 
-  it('infers the source of a route that does not name one, without naming it', () => {
-    const status = readIntakeSource(
-      {
+  it('reads a route that names no source as any source, inferring nothing from its other conditions', () => {
+    // A pull request event concerns a card from any source; a ClickUp List condition alone doesn't name ClickUp.
+    expect(readIntakeSource(sources, null)?.source.id).toBe('any');
+    const listOnly = readIntakeSource(sources, {
+      operator: 'AND',
+      conditions: [{ field: 'source.list', operator: 'equals', value: 'list-1' }],
+    });
+    expect(listOnly?.source.id).toBe('any');
+    expect(listOnly?.rest).toHaveLength(1);
+    expect(sources.get('any')!.events).toContain('pull_request.merged');
+  });
+
+  it('leaves a set of integrations, or two source conditions, to be kept as written', () => {
+    expect(
+      readIntakeSource(sources, {
+        operator: 'AND',
+        conditions: [{ field: 'source.integration', operator: 'in', value: ['github', 'gitlab'] }],
+      }),
+    ).toBeUndefined();
+    expect(
+      readIntakeSource(sources, {
         operator: 'AND',
         conditions: [
-          { field: 'source.list', operator: 'equals', value: 'list-1' },
-          { field: 'item.state', operator: 'equals', value: 'to do' },
+          { field: 'source.integration', operator: 'equals', value: 'github' },
+          { field: 'source.integration', operator: 'equals', value: 'gitlab' },
         ],
-      },
-      ['work_item.created', 'work_item.state_changed'],
-    );
-    expect(status).toMatchObject({ source: { id: 'clickup' }, named: false });
-    expect(status?.rest).toHaveLength(2);
-
-    const merged = readIntakeSource(null, ['pull_request.merged']);
-    expect(merged?.candidates.map(source => source.id)).toEqual(['github', 'gitlab']);
-    expect(merged?.named).toBe(false);
-    expect(
-      readIntakeSource({ operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] })
-        ?.candidates.map(source => source.id),
-    ).toEqual(['github', 'gitlab']);
-    expect(status?.candidates.map(source => source.id)).toEqual(['clickup']);
-    expect(readIntakeSource(null)?.source.id).toBe('any');
-    expect(readIntakeSource(null, ['work_item.reopened'])?.source.id).toBe('any');
-  });
-
-  it('leaves a set of integrations no source covers to be kept as written', () => {
-    expect(
-      readIntakeSource({
-        operator: 'AND',
-        conditions: [{ field: 'source.integration', operator: 'in', value: ['github', 'clickup'] }],
       }),
     ).toBeUndefined();
   });
 
   it('offers no combined source: each repository host is its own', () => {
-    expect(intakeSources().map(source => source.id)).toEqual(['any', 'clickup', 'github', 'gitlab', 'manual']);
+    expect(sources.list().map(source => source.id)).toEqual(['any', 'clickup', 'github', 'gitlab', 'manual']);
   });
 
   it('writes the condition that names a source', () => {
-    expect(intakeSourceCondition(intakeSource('clickup')!)).toEqual({
+    expect(intakeSourceCondition(sources.get('clickup')!)).toEqual({
       field: 'source.integration',
       operator: 'equals',
       value: 'clickup',
     });
-    expect(intakeSourceCondition(intakeSource('manual')!)).toEqual({ field: 'source.integration', operator: 'not_exists' });
-    expect(intakeSourceCondition(intakeSource('any')!)).toBeUndefined();
+    expect(intakeSourceCondition(sources.get('manual')!)).toEqual({ field: 'source.integration', operator: 'not_exists' });
+    expect(intakeSourceCondition(sources.get('any')!)).toBeUndefined();
   });
 
-  it('takes a new tracker as one descriptor', () => {
-    defineIntakeSource({
-      id: 'jira',
-      integrations: ['jira'],
-      events: ['work_item.created', 'work_item.state_changed'],
-      fields: ['source.list', 'item.state'],
-    });
-    expect(intakeSources().map(source => source.id)).toContain('jira');
+  it('says from the descriptor alone whether a Factory uses a source', () => {
+    const used = { connected: new Set(['clickup']), hosts: new Set(['github']) };
+    expect(sources.list().filter(source => intakeSourceAvailable(source, used)).map(source => source.id)).toEqual([
+      'any',
+      'clickup',
+      'github',
+      'manual',
+    ]);
+  });
+
+  it('takes a new tracker as one descriptor at the composition root, refusing a taken id', () => {
+    const withJira = createIntakeSourceRegistry([
+      {
+        id: 'jira',
+        integrations: ['jira'],
+        events: ['work_item.created', 'work_item.state_changed'],
+        fields: ['source.list', 'item.state'],
+        availability: { via: 'org-connection', integrationId: 'jira' },
+      },
+    ]);
+    expect(withJira.list().map(source => source.id)).toContain('jira');
     expect(
-      readIntakeSource({ operator: 'AND', conditions: [{ field: 'source.integration', operator: 'equals', value: 'jira' }] })?.source.id,
+      readIntakeSource(withJira, {
+        operator: 'AND',
+        conditions: [{ field: 'source.integration', operator: 'equals', value: 'jira' }],
+      })?.source.id,
     ).toBe('jira');
-    expect(() => defineIntakeSource({ id: 'clickup', events: [], fields: [] })).toThrow(/already defined/);
+    // The built-in registry is untouched.
+    expect(sources.get('jira')).toBeUndefined();
+    expect(() =>
+      createIntakeSourceRegistry([{ id: 'clickup', events: [], fields: [], availability: 'always' }]),
+    ).toThrow(/already defined/);
   });
 });

@@ -58,6 +58,7 @@ import { createDefaultBoardRegistry } from '@factory/pipelines';
 import { factoryBootMigrations } from './migrations/factory-migrations.ts';
 import { runBootMigrations } from './migrations/run.ts';
 import { intakeTriggerRouteRepository, writeFireCardBack } from './intake/repository.ts';
+import { canonicalizeProjectRoutes } from './intake/canonical-routes.ts';
 import { REPOSITORY_HOSTS, subscribeLinkedRepository } from './intake/repository-subscriptions.ts';
 import { setupIntakeTriggers } from './intake/setup.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
@@ -1649,13 +1650,28 @@ export class MastraFactory {
           storage.isDomainReady('boards') &&
           storage.isDomainReady('source-control')
         ) {
+          const sourceControl = sourceControlStorage.forIntegration(integrationId);
           void subscribeLinkedRepository({
             orgId,
             integrationId,
             projectRepository,
-            sourceControl: sourceControlStorage.forIntegration(integrationId),
+            sourceControl,
             boards: storedBoardsStorage,
-          }).catch(error => {
+          })
+            .then(async () => {
+              // A project's default routes stand for "GitHub or GitLab" until it links a repository;
+              // now the host is known, they name it (the editor reads only that form).
+              const connection = await sourceControl.connections.get({ orgId, id: projectRepository.connectionId });
+              if (!connection) return;
+              const scope = { orgId, factoryProjectId: connection.factoryProjectId };
+              const linkedHosts = new Set<string>();
+              for (const host of REPOSITORY_HOSTS) {
+                const connections = await sourceControlStorage.forIntegration(host).connections.list(scope);
+                if (connections.some(candidate => candidate.integrationId === host)) linkedHosts.add(host);
+              }
+              await canonicalizeProjectRoutes({ boards: storedBoardsStorage, scope, linkedHosts });
+            })
+            .catch(error => {
             console.error(`[factory] Linked a ${integrationId} repository but could not add its intake route:`, error);
           });
         }

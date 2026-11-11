@@ -9,21 +9,30 @@ import type { StatusRule } from './settings.ts';
 /** The actor on the routes Factory writes from a List's retired status rules. */
 export const STATUS_ROUTE_MIGRATION_ACTOR = 'system:clickup-status-route-migration';
 
-/** The condition of a status route: tasks of this List with this status. */
+/** The condition of a status route: ClickUp tasks of this List with this status. */
 export function listStatusCondition(listId: string, status: string): RuleGroup {
   return {
     operator: 'AND',
     conditions: [
+      { field: 'source.integration', operator: 'equals', value: 'clickup' },
       { field: 'source.list', operator: 'equals', value: listId },
       { field: 'item.state', operator: 'equals', value: status },
     ],
   };
 }
 
-/** The List and status a route's condition names, when it is exactly a status route's condition. */
+/**
+ * The List and status a route's condition names, when it is exactly a status route's condition
+ * (with or without the `source.integration = clickup` condition routes written earlier lack).
+ */
 export function statusRouteParts(when: RuleGroup | null): { listId: string; status: string } | undefined {
-  if (!when || when.operator !== 'AND' || when.conditions.length !== 2) return undefined;
-  const [list, state] = when.conditions;
+  if (!when || when.operator !== 'AND') return undefined;
+  const [first, ...others] = when.conditions;
+  const namesClickUp =
+    first && 'field' in first && first.field === 'source.integration' && first.operator === 'equals' && first.value === 'clickup';
+  const parts = namesClickUp ? others : when.conditions;
+  if (parts.length !== 2) return undefined;
+  const [list, state] = parts;
   if (!list || !state || 'conditions' in list || 'conditions' in state) return undefined;
   if (list.field !== 'source.list' || state.field !== 'item.state') return undefined;
   if (list.operator !== 'equals' || state.operator !== 'equals') return undefined;

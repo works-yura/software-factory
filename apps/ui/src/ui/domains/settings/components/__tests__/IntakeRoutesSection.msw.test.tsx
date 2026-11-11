@@ -49,7 +49,7 @@ const outsideAuthors = route({
   when: {
     operator: 'AND',
     conditions: [
-      { field: 'source.integration', operator: 'in', value: ['github', 'gitlab'] },
+      { field: 'source.integration', operator: 'equals', value: 'github' },
       { field: 'author.trusted', operator: 'equals', value: false },
     ],
   },
@@ -154,11 +154,8 @@ describe('IntakeRoutesSection', () => {
     await waitFor(() => expect(routeRows()).toHaveLength(2));
     const [first, second] = routeRows();
     expect(within(first!).getByText('Outside authors wait in Intake')).toBeTruthy();
-    // A route stored for both hosts reads as the one the Factory uses, the other noted.
     expect(
-      await within(first!).findByText(
-        'When: GitHub (also GitLab) · outside author · new issue or pull request → Development › Intake',
-      ),
+      await within(first!).findByText('When: GitHub · outside author · new issue or pull request → Development › Intake'),
     ).toBeTruthy();
     expect(within(second!).getByText('When: ClickUp · new task → Development › Triage')).toBeTruthy();
   });
@@ -262,9 +259,7 @@ describe('IntakeRoutesSection', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Edit' }));
     const form = screen.getByRole('form', { name: 'Edit route "Outside authors wait in Intake"' });
-    // Stored for GitHub and GitLab: shown as the Factory's GitHub, GitLab noted, kept as stored.
     expect(within(form).getByRole('combobox', { name: 'When' })).toHaveTextContent(/^GitHub$/);
-    expect(within(form).getByText('also GitLab')).toBeTruthy();
     expect(within(form).queryByRole('group', { name: 'Source' })).toBeNull();
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
@@ -481,6 +476,7 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
         when: {
           operator: 'AND',
           conditions: [
+            { field: 'source.integration', operator: 'equals', value: 'clickup' },
             { field: 'source.list', operator: 'equals', value: 'L1' },
             { field: 'item.state', operator: 'equals', value: 'dev fixed' },
           ],
@@ -526,6 +522,7 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
         when: {
           operator: 'AND',
           conditions: [
+            { field: 'source.integration', operator: 'equals', value: 'clickup' },
             { field: 'source.list', operator: 'equals', value: 'L1' },
             { field: 'item.state', operator: 'equals', value: 'to do' },
           ],

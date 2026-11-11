@@ -36,8 +36,9 @@ import {
   describeTarget,
   describeWhen,
   routeName,
-  sourceAvailable,
 } from './intakeRouteLabels';
+import { intakeSourceAvailable } from '@factory/core/boards/intake-sources';
+import { INTAKE_SOURCES } from '../services/intakeSources';
 import { TriggerStatus } from './IntakeRouteTriggerStatus';
 import { RouteEditor } from './IntakeRouteEditor';
 
@@ -72,7 +73,9 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
   const hosts = new Set((factory?.repositories ?? []).map(repository => repository.provider ?? 'github'));
   const origins: IntakeOrigins = {
     lists: clickUpLists.map(list => ({ value: list.id, label: list.path ? `${list.path} / ${list.name}` : list.name })),
-    available: source => sourceAvailable(source, { clickUp: clickUpConnected, hosts }),
+    sources: INTAKE_SOURCES,
+    available: source =>
+      intakeSourceAvailable(source, { connected: new Set(clickUpConnected ? ['clickup'] : []), hosts }),
   };
   const triggerContext: IntakeKindFormContext = {
     factoryProjectId,

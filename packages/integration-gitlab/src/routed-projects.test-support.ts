@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@factory/core';
 import type { StoredBoardsStorage } from '@factory/store';
 
 /** Subscribes a Factory project to the GitLab project at `path`, as a person's intake route would. */
@@ -17,7 +18,7 @@ export async function routeGitLabProject(
           { field: 'source.repository', operator: 'equals', value: path },
         ],
       },
-      target: { boardKey: 'work', phaseKey: null },
+      target: { boardKey: DEFAULT_BOARD_ID, phaseKey: null },
     },
     'test',
   );

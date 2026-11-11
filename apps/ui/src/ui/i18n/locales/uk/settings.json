@@ -855,7 +855,6 @@
       "gitlab": "GitLab",
       "manual": "Вручну («Нова картка»)"
     },
-    "alsoSources": "також {{sources}}",
     "sourceNotConnected": "не підключено",
     "sourceEvents": {
       "clickup": {

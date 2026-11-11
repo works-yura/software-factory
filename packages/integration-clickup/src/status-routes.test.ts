@@ -172,7 +172,7 @@ describe('migrateListStatusRules', () => {
     await run();
     const route = routes.get('syncts')![0]! as unknown as IntakeRoute;
     expect(statusRouteParts(route.when)).toEqual({ listId: 'L1', status: 'to do' });
-    expect(routeSubscribesSource([route], { 'source.list': 'L1', 'item.state': 'to do' })).toBe(true);
-    expect(routeSubscribesSource([route], { 'source.list': 'L2', 'item.state': 'to do' })).toBe(false);
+    expect(routeSubscribesSource([route], { 'source.integration': 'clickup', 'source.list': 'L1', 'item.state': 'to do' })).toBe(true);
+    expect(routeSubscribesSource([route], { 'source.integration': 'clickup', 'source.list': 'L2', 'item.state': 'to do' })).toBe(false);
   });
 });

@@ -22,6 +22,7 @@ import type {
   WorkItemsStorage,
 } from '@factory/store';
 
+import { migrateCanonicalRoutes } from '../intake/canonical-routes.ts';
 import { AUDITS_BOARD_UPGRADE_ACTOR, migrateLegacyIntakeRules } from '../intake/migrations.ts';
 import { migrateGithubRepositorySelections, migrateGitLabProjectSelections } from '../intake/repository-subscriptions.ts';
 import type { BootMigration } from './run.ts';
@@ -204,6 +205,25 @@ export function factoryBootMigrations(deps: FactoryMigrationDeps): BootMigration
           boards,
         });
         return routes > 0 ? `turned the GitLab intake selection into ${routes} project route(s)` : undefined;
+      },
+    },
+    // Every stored route in the one-source form the editor reads: a set of repository hosts (or a
+    // host-only condition with no source named) names the hosts the project links repositories from.
+    // After the selections above, so their routes are already in place. A failure stops the boot:
+    // the editor no longer infers a route's source.
+    {
+      id: 'intake.canonicalRoutes.v1',
+      ready: ready('boards') && ready('source-control') && ready('projects'),
+      onFailure: 'stop-boot',
+      run: async () => {
+        const { rewritten, added } = await migrateCanonicalRoutes({
+          projects: deps.projects,
+          sourceControl: deps.sourceControl,
+          boards,
+        });
+        return rewritten + added > 0
+          ? `named the source of ${rewritten} intake route(s)${added > 0 ? `, split into ${added} more` : ''}`
+          : undefined;
       },
     },
     // Integration-owned data (ClickUp's retired List status rules → intake routes), before any worker
