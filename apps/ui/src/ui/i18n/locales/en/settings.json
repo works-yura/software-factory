@@ -1026,8 +1026,6 @@
       "web": "Web"
     },
     "connection": {
-      "title": "Firebase connection",
-      "description": "A read-only Google Cloud service account key. Agents read the server logs (Cloud Logging) and app crashes (Crashlytics) through it. The key is stored encrypted and never reaches an agent or its working folder.",
       "roles": "In Google Cloud, create a service account with the roles Logs Viewer (roles/logging.viewer) and Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer), enable the Firebase Crashlytics API, create a JSON key and paste it here. Details: docs/runbooks/firebase-observability.md.",
       "keyLabel": "Service account key JSON",
       "keyPlaceholder": "{ \"type\": \"service_account\", … }",
@@ -1037,11 +1035,10 @@
       "replace": "Replace key",
       "disconnect": "Disconnect",
       "account": "Service account",
-      "accountValue": "{{email}} · project {{project}}"
+      "accountValue": "{{email}} · project {{project}}",
+      "dialogTitle": "Firebase service account key"
     },
     "mapping": {
-      "title": "This Factory's Firebase project",
-      "description": "Where this Factory's agents read logs and crashes from. Without a project, sessions have no log or crash tools.",
       "projectId": "Project ID",
       "projectIdHint": "Google Cloud / Firebase project id, e.g. syncta-prod. Logs are read from it.",
       "projectNumber": "Project number",
@@ -1059,7 +1056,8 @@
       "remove": "Remove",
       "save": "Save",
       "saved": "Saved",
-      "turnOff": "Turn off for this Factory"
+      "crashes": "App crashes",
+      "crashesHint": "Crashlytics for the apps below."
     },
     "check": {
       "run": "Check access",
@@ -1071,6 +1069,27 @@
       "logs": "Logs of project {{target}}",
       "crashes": "Crashes of app {{target}}",
       "missingRole": "Missing role {{role}}."
+    },
+    "source": {
+      "firebase": "Firebase",
+      "checking": "Checking the connection…",
+      "ready": "Agents read server logs (Cloud Logging) and app crashes (Crashlytics), read-only. The key is encrypted and never reaches an agent.",
+      "notConnected": "Server logs and app crashes for agents, read-only. Needs a Google Cloud service account key.",
+      "connect": "Connect"
+    },
+    "project": {
+      "linked": "Linked projects",
+      "add": "Add project",
+      "pickFactory": "Choose a Factory",
+      "none": "No Factory is linked to a Firebase project yet.",
+      "notSaved": "not saved",
+      "projectValue": "project {{project}}",
+      "logsOn": "logs",
+      "apps_one": "{{count}} app",
+      "apps_other": "{{count}} apps",
+      "nothingRead": "nothing read",
+      "unlink": "Unlink",
+      "unlinkAria": "Unlink {{name}} from Firebase"
     }
   }
 }

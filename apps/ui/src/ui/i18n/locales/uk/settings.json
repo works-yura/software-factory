@@ -1042,8 +1042,6 @@
       "web": "Web"
     },
     "connection": {
-      "title": "Підключення Firebase",
-      "description": "Ключ сервісного акаунта Google Cloud лише для читання. Агенти читають через нього логи сервера (Cloud Logging) і креші застосунку (Crashlytics). Ключ зберігається зашифрованим і ніколи не потрапляє агенту чи в його робочу папку.",
       "roles": "Створіть у Google Cloud сервісний акаунт з ролями Logs Viewer (roles/logging.viewer) і Firebase Crashlytics Viewer (roles/firebasecrashlytics.viewer), увімкніть Firebase Crashlytics API, створіть JSON-ключ і вставте його сюди. Детально: docs/runbooks/firebase-observability.md.",
       "keyLabel": "JSON-ключ сервісного акаунта",
       "keyPlaceholder": "{ \"type\": \"service_account\", … }",
@@ -1053,11 +1051,10 @@
       "replace": "Замінити ключ",
       "disconnect": "Відключити",
       "account": "Сервісний акаунт",
-      "accountValue": "{{email}} · проєкт {{project}}"
+      "accountValue": "{{email}} · проєкт {{project}}",
+      "dialogTitle": "Ключ сервісного акаунта Firebase"
     },
     "mapping": {
-      "title": "Проєкт Firebase цієї Factory",
-      "description": "Звідки агенти цієї Factory читають логи й креші. Без проєкту інструментів логів і крешів у сесіях немає.",
       "projectId": "ID проєкту",
       "projectIdHint": "Google Cloud / Firebase project id, напр. syncta-prod. Логи читаються з нього.",
       "projectNumber": "Номер проєкту",
@@ -1075,7 +1072,8 @@
       "remove": "Прибрати",
       "save": "Зберегти",
       "saved": "Збережено",
-      "turnOff": "Вимкнути для цієї Factory"
+      "crashes": "Креші застосунків",
+      "crashesHint": "Crashlytics для застосунків нижче."
     },
     "check": {
       "run": "Перевірити доступ",
@@ -1087,6 +1085,29 @@
       "logs": "Логи проєкту {{target}}",
       "crashes": "Креші застосунку {{target}}",
       "missingRole": "Бракує ролі {{role}}."
+    },
+    "source": {
+      "firebase": "Firebase",
+      "checking": "Перевіряю підключення…",
+      "ready": "Агенти читають логи сервера (Cloud Logging) і креші застосунків (Crashlytics), лише читання. Ключ зашифрований і агенту не потрапляє.",
+      "notConnected": "Логи сервера й креші застосунків для агентів, лише читання. Потрібен ключ сервісного акаунта Google Cloud.",
+      "connect": "Підключити"
+    },
+    "project": {
+      "linked": "Прив’язані проєкти",
+      "add": "Додати проєкт",
+      "pickFactory": "Виберіть Factory",
+      "none": "Жодна Factory ще не прив’язана до проєкту Firebase.",
+      "notSaved": "не збережено",
+      "projectValue": "проєкт {{project}}",
+      "logsOn": "логи",
+      "apps_one": "{{count}} застосунок",
+      "apps_few": "{{count}} застосунки",
+      "apps_many": "{{count}} застосунків",
+      "apps_other": "{{count}} застосунку",
+      "nothingRead": "нічого не читається",
+      "unlink": "Відв’язати",
+      "unlinkAria": "Відв’язати {{name}} від Firebase"
     }
   }
 }

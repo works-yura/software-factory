@@ -74,7 +74,7 @@ export function SettingsPanel() {
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
-      {section === 'observability' && factoryId && <ObservabilitySection factoryId={factoryId} />}
+      {section === 'observability' && <ObservabilitySection />}
       {section === 'board' && <WorkBoardSection factoryId={factoryId} />}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} />}
