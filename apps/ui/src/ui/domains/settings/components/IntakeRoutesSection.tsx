@@ -248,6 +248,12 @@ const DEFAULT_ROUTE_NAMES: Readonly<Record<string, string>> = {
   'Closed issues go to Done': 'closedCompleted',
   'Issues closed as not planned go to Canceled': 'closedCanceled',
   'Reopened issues go back to Intake': 'reopened',
+  'Pull requests that close a waiting issue join its card': 'closesIssue',
+  'Merged pull requests go to Done': 'pullRequestMerged',
+  'Pull requests closed unmerged go to Canceled': 'pullRequestClosed',
+  'Issues whose pull request closed unmerged go back to Intake': 'pullRequestClosedIssue',
+  'Pushes to a reviewed pull request re-review it': 'pullRequestUpdated',
+  'Requested reviews go to PR review': 'pullRequestReviewRequested',
 };
 
 function routeName(route: IntakeRouteInfo, t: T): string {
@@ -255,7 +261,16 @@ function routeName(route: IntakeRouteInfo, t: T): string {
   return key ? t(`intakeRoutes.defaults.${key}` as never) : route.name;
 }
 
-const ROUTE_EVENTS = ['work_item.created', 'work_item.closed', 'work_item.reopened'] as const;
+const ROUTE_EVENTS = [
+  'work_item.created',
+  'work_item.closed',
+  'work_item.reopened',
+  'pull_request.opened',
+  'pull_request.synchronized',
+  'pull_request.review_requested',
+  'pull_request.merged',
+  'pull_request.closed',
+] as const;
 const CLOSE_REASONS = ['completed', 'canceled'] as const;
 
 function describeEventCondition(condition: CardRuleGroup['conditions'][number], t: T): string | undefined {

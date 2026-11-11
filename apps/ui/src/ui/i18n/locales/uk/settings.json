@@ -830,12 +830,23 @@
       "pullRequests": "Pull request-и йдуть на рев’ю PR",
       "closedCompleted": "Закриті задачі йдуть у Готово",
       "closedCanceled": "Задачі, закриті як «не заплановано», йдуть у Скасовано",
-      "reopened": "Перевідкриті задачі повертаються у Вхідні"
+      "reopened": "Перевідкриті задачі повертаються у Вхідні",
+      "closesIssue": "Pull request, що закриває задачу у Вхідних, приєднується до її картки",
+      "pullRequestMerged": "Злиті pull request-и йдуть у Готово",
+      "pullRequestClosed": "Pull request-и, закриті без злиття, йдуть у Скасовано",
+      "pullRequestClosedIssue": "Задачі, чий pull request закрили без злиття, повертаються у Вхідні",
+      "pullRequestUpdated": "Пуш у pull request на рев’ю запускає рев’ю знову",
+      "pullRequestReviewRequested": "Запит на рев’ю повертає картку на рев’ю PR"
     },
     "events": {
       "work_item.created": "нова картка",
       "work_item.closed": "задачу закрито",
-      "work_item.reopened": "задачу перевідкрито"
+      "work_item.reopened": "задачу перевідкрито",
+      "pull_request.opened": "pull request відкрито",
+      "pull_request.synchronized": "пуш у pull request",
+      "pull_request.review_requested": "запит на рев’ю",
+      "pull_request.merged": "pull request злито",
+      "pull_request.closed": "pull request закрито без злиття"
     },
     "closeReasons": {
       "completed": "як виконану",

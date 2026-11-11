@@ -5,6 +5,9 @@ import {
   boardFlow,
   boardForWorkItem,
   cardBoardFlow,
+  eventMovesCard,
+  hasPullRequest,
+  isPullRequestEvent,
   isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
@@ -2181,13 +2184,22 @@ export class FactoryDecisionDispatcher {
       if (!board) return undefined;
       const stage = item.stages.length === 1 ? item.stages[0] : undefined;
       const finished = stage !== undefined && board.isTerminal(stage);
-      if (event.type === 'work_item.closed' ? finished : !finished) return undefined;
+      if (!eventMovesCard(event.type, finished)) return undefined;
       const routes = this.#intakeRoutes
         ? await this.#intakeRoutes.listIntakeRoutes({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
         : [];
       if (!routesHandleEvent(routes, event, board)) return { item, board, fallback: true as const };
-      const route = resolveEventRoute(routes, event, cardRuleFacts(item), board);
-      if (!route || stage === route.phase) return undefined;
+      const route = resolveEventRoute(routes, event, cardRuleFacts(item), board, hasPullRequest(item));
+      // A pull request event the rules already decided keeps that decision when no enabled route
+      // takes the card: disabling or narrowing a route must not strand a merged card in review.
+      if (!route)
+        return fallback && isPullRequestEvent(event.type) ? { item, board, fallback: true as const } : undefined;
+      // A route that agrees with the rule's own pull request move keeps it whole: its message, and
+      // the re-entry that restarts a review in the phase the card already sits in.
+      if (fallback && isPullRequestEvent(event.type) && route.phase === fallback.stage) {
+        return { item, board, fallback: true as const };
+      }
+      if (stage === route.phase) return undefined;
       return { item, board, route };
     };
     const first = await resolve();
@@ -2228,7 +2240,7 @@ export class FactoryDecisionDispatcher {
    * millisecond, the one with the greatest id is the last; one already settled had its turn.
    */
   async #statusEventOvertaken(record: FactoryDeferredDecisionRecord): Promise<boolean> {
-    if (!record.workItemId) return false;
+    if (!record.workItemId || !isStatusEventDecision(record.decision)) return false;
     const decisions = await this.#storage.listDeferredDecisions(record.orgId, record.factoryProjectId, {
       workItemId: record.workItemId,
     });

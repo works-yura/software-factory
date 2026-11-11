@@ -816,12 +816,23 @@
       "pullRequests": "Pull requests go to PR review",
       "closedCompleted": "Closed issues go to Done",
       "closedCanceled": "Issues closed as not planned go to Canceled",
-      "reopened": "Reopened issues go back to Intake"
+      "reopened": "Reopened issues go back to Intake",
+      "closesIssue": "Pull requests that close a waiting issue join its card",
+      "pullRequestMerged": "Merged pull requests go to Done",
+      "pullRequestClosed": "Pull requests closed unmerged go to Canceled",
+      "pullRequestClosedIssue": "Issues whose pull request closed unmerged go back to Intake",
+      "pullRequestUpdated": "Pushes to a reviewed pull request re-review it",
+      "pullRequestReviewRequested": "Requested reviews go to PR review"
     },
     "events": {
       "work_item.created": "new card",
       "work_item.closed": "issue closed",
-      "work_item.reopened": "issue reopened"
+      "work_item.reopened": "issue reopened",
+      "pull_request.opened": "pull request opened",
+      "pull_request.synchronized": "pull request pushed",
+      "pull_request.review_requested": "review requested",
+      "pull_request.merged": "pull request merged",
+      "pull_request.closed": "pull request closed unmerged"
     },
     "closeReasons": {
       "completed": "as completed",

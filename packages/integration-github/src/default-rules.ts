@@ -1,5 +1,11 @@
 import { requestsChangesVerdict } from '@factory/session';
-import { closedByRoutes, recordExplicitRuleOverrides } from '@factory/core';
+import {
+  closedByRoutes,
+  pullRequestMoveByRoutes,
+  recordExplicitRuleOverrides,
+  routedOnly,
+  unreviewedPullRequestCard,
+} from '@factory/core';
 import {
   describeChangeRequests,
   hasRecordedVerdict,
@@ -223,12 +229,11 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     // Resolution can match a card by branch alone, so a fork's pull
     // request must not be able to move it: same bar as auto-starting a review.
     if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
-    return {
-      type: 'transition',
+    return pullRequestMoveByRoutes('pull_request.opened', {
       idempotencyKey: `${context.ingress.id}:out-for-review`,
       board: context.board,
       stage: pullRequestReview,
-    } as const;
+    });
   }
   // A GitHub App bot is never a collaborator, so Factory's own PRs score
   // untrusted; their authorship is the trust signal.
@@ -243,17 +248,15 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
 
 function pullRequestMerged(context: FactoryGithubRuleContext) {
   if (!context.item || !context.board || !context.pullRequest?.merged) return;
-  const closure = context.boardClosure;
+  if (unreviewedPullRequestCard(context)) return routedOnly(context, 'pull_request.merged');
+  const done = context.boardClosure?.completed ?? context.flow?.completed;
+  if (!done) return;
   if (isPullRequestCard(context.item) && reviewsPullRequest(context)) {
-    // A board with no `sourceClosed` (the retired Review board) finishes it in its first terminal phase.
-    const done = closure?.completed ?? context.flow?.completed;
-    if (!done) return;
     // The event is bound to the PR's own card: a merged PR is finished
     // review work, so always move the card to its board's completed phase. The
     // message only reaches an active session (if any) — cards without one just
     // move, instead of failing retries against a binding that never existed.
-    return {
-      type: 'transition',
+    return pullRequestMoveByRoutes('pull_request.merged', {
       idempotencyKey: `${context.ingress.id}:pull-request-merged`,
       board: context.board,
       stage: done.phase,
@@ -262,10 +265,9 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
           `Pull request #${context.pullRequest.number} merged; this pull request card was moved to ${done.title}. ` +
           'No further review is needed unless follow-up work was requested.',
       },
-    } as const;
+    });
   }
-  if (!closure || !authoringCard(context)) return;
-  const done = closure.completed;
+  if (!authoringCard(context)) return;
   // Provenance bound the event to the card that authored the pull request instead: the merge
   // is what finishes the work, so it closes that card alongside the PR's own card —
   // unless the card has since opened another pull request, which is still out.
@@ -296,18 +298,15 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
       message:
         `Pull request ${merged.repository}#${merged.number} merged. Pull request${plural ? 's' : ''} ` +
         `${describeChangeRequests(stillOpen)} ${plural ? 'are' : 'is'} still open, ` +
-        `so this ${closure.boardTitle} card stays where it is until ${plural ? 'they merge' : 'it merges'}.`,
+        `so this card stays where it is until ${plural ? 'they merge' : 'it merges'}.`,
     } as const;
   }
-  return {
-    type: 'transition',
+  return pullRequestMoveByRoutes('pull_request.merged', {
     idempotencyKey: `${context.ingress.id}:work-merged`,
     board: context.board,
     stage: done.phase,
-    message: {
-      text: `Pull request #${context.pullRequest.number} merged; this ${closure.boardTitle} card was moved to ${done.title}.`,
-    },
-  } as const;
+    message: { text: `Pull request #${context.pullRequest.number} merged; this card was moved to ${done.title}.` },
+  });
 }
 
 function addressReviewFeedback(context: FactoryGithubRuleContext) {
@@ -406,6 +405,7 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
 
 function pullRequestClosed(context: FactoryGithubRuleContext) {
   if (!context.item || !context.board || !context.pullRequest || context.pullRequest.merged) return;
+  if (unreviewedPullRequestCard(context)) return routedOnly(context, 'pull_request.closed');
   if (!reviewsPullRequest(context)) return;
   if (!isPullRequestCard(context.item)) {
     // An issue card waiting in pull request review on its last open pull request goes back to
@@ -414,22 +414,20 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
     const initialPhase = context.flow?.initialPhase;
     if (!initialPhase || !attachedPullRequest(context) || !inPullRequestReview(context)) return;
     if (newestOpenPullRequestNumber(context.item, context.pullRequest.number) !== null) return;
-    return {
-      type: 'transition',
+    return pullRequestMoveByRoutes('pull_request.closed', {
       idempotencyKey: `${context.ingress.id}:pull-request-closed`,
       board: context.board,
       stage: initialPhase,
       message: {
         text: `Pull request #${context.pullRequest.number} was closed without merging; this card was moved back to ${initialPhase}.`,
       },
-    } as const;
+    });
   }
   // A PR closed without merging is abandoned review work: clear the card off
   // the board instead of leaving it in review forever.
   const canceled = context.boardClosure?.canceled ?? context.flow?.canceled;
   if (!canceled) return;
-  return {
-    type: 'transition',
+  return pullRequestMoveByRoutes('pull_request.closed', {
     idempotencyKey: `${context.ingress.id}:pull-request-closed`,
     board: context.board,
     stage: canceled.phase,
@@ -438,7 +436,7 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
         `Pull request #${context.pullRequest.number} was closed without merging; ` +
         `this pull request card was moved to ${canceled.title}.`,
     },
-  } as const;
+  });
 }
 
 function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
@@ -472,13 +470,12 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   // waits until that one is reviewed or settled.
   if (reviewing && !reviewsThisPullRequest(context)) return;
   if (reviewing && !hasRecordedVerdict(context.item)) return;
-  return {
-    type: 'transition',
+  return pullRequestMoveByRoutes('pull_request.review_requested', {
     idempotencyKey: `${context.ingress.id}:re-review-requested`,
     board: context.board,
     stage,
     ...(reviewing ? { reenter: true } : {}),
-  } as const;
+  });
 }
 
 function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
@@ -499,8 +496,7 @@ function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
   // A fork's author controls its head branch, so an untrusted push must not be
   // able to start review passes on demand; a maintainer can still request one.
   if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
-  return {
-    type: 'transition',
+  return pullRequestMoveByRoutes('pull_request.synchronized', {
     idempotencyKey: `${context.ingress.id}:re-review-updated`,
     board: context.board,
     stage,
@@ -508,7 +504,7 @@ function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
     // entry rule is what cancels the superseded pass and starts one on the code
     // that just landed.
     ...(reviewing ? { reenter: true } : {}),
-  } as const;
+  });
 }
 
 export const defaultGithubRules = Object.freeze({

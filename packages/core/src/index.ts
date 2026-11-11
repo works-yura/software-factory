@@ -125,9 +125,12 @@ export {
   deploymentOwnsEvent,
   hasExplicitRuleOverride,
   isStatusEventDecision,
+  pullRequestMoveByRoutes,
   recordExplicitRuleOverrides,
+  routedOnly,
   routeEventDecision,
   selectEventRule,
+  unreviewedPullRequestCard,
   withoutRouteEvent,
 } from './rules/event-rules.ts';
 export { cardRuleGroupSchema, evaluateRuleGroup, RULE_OPERATORS, ruleGroupSchema } from './rules/rule-group.ts';
