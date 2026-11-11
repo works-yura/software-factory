@@ -1,0 +1,26 @@
+{
+  "name": "@factory/harness-handoff",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Portable context handoff for harness sessions: a budgeted selection of real thread history (never an agent-written summary) when a thread switches provider or model, is forked, or a child merges back. Ported from t3code.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts.ts",
+    "./mastra": "./src/mastra.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mastra/core": "1.82.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
