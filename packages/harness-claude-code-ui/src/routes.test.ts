@@ -16,6 +16,9 @@ import { createSessionAccessGuard } from '@factory/session';
 
 import { createClaudeSessionUi, type ClaudeSessionUi } from './routes.ts';
 
+/** A Factory id: Factory project ids are uuids, and the access guard checks only uuids against the store. */
+const FACTORY_ID = '00000000-0000-4000-8000-0000000000f1';
+
 const BASE = '/api/agent-controller/code/sessions';
 const OWNER: TestAuthUser = { id: 'owner', organizationId: 'org-1' };
 
@@ -50,7 +53,7 @@ async function setup(
     onSession: session => ui.attach(session),
   });
   ui.setSessionResolver(id => harness.getSession(id));
-  const session = await harness.createSession({ sessionId: 'card-1', threadId: 'card-1', resourceId: 'factory-1' });
+  const session = await harness.createSession({ sessionId: 'card-1', threadId: 'card-1', resourceId: FACTORY_ID });
 
   const rows = new Map([['card-1', { sessionId: 'card-1', orgId: 'org-1', userId: 'owner', visibility: options.visibility ?? 'org' }]]);
   const app = new Hono();
@@ -68,16 +71,16 @@ async function setup(
     createSessionAccessGuard({
       auth: fakeRouteAuth(),
       sessions: { getBySessionId: async id => (rows.get(id) ?? null) as never },
-      projects: { get: async ({ orgId, id }) => (id === 'factory-1' && orgId === 'org-1' ? ({ id, orgId } as never) : null) },
+      projects: { get: async ({ orgId, id }) => (id === FACTORY_ID && orgId === 'org-1' ? ({ id, orgId } as never) : null) },
       controller: () => ({
         getSession: async () => undefined,
-        queryThreadById: async ({ threadId }) => (threadId === 'card-1' ? { resourceId: 'factory-1' } : null),
+        queryThreadById: async ({ threadId }) => (threadId === 'card-1' ? { resourceId: FACTORY_ID } : null),
       }),
     }),
   );
   app.use('*', ui.middleware());
   // Stand-ins for the Mastra handlers a request falls through to.
-  app.get('/api/agent-controller/code/active-runs', c => c.json({ runs: [{ runId: 'mastra-run', threadId: 'mastra-thread', resourceId: 'factory-1' }] }));
+  app.get('/api/agent-controller/code/active-runs', c => c.json({ runs: [{ runId: 'mastra-run', threadId: 'mastra-thread', resourceId: FACTORY_ID }] }));
   app.all('*', c => c.json({ mastra: true }));
   return { app, ui, harness, session, fake, storage };
 }
@@ -182,8 +185,8 @@ async function openStream(app: Hono, path = `${BASE}/card-1/stream`) {
 describe('Claude Code session routes', () => {
   it('answers session creation for a Claude session and passes any other session to Mastra', async () => {
     const { app } = await setup([]);
-    const created = await post(app, BASE, { sessionId: 'card-1', resourceId: 'factory-1', threadId: 'card-1' });
-    expect(await created.json()).toEqual({ controllerId: 'code', sessionId: 'card-1', resourceId: 'factory-1', threadId: 'card-1' });
+    const created = await post(app, BASE, { sessionId: 'card-1', resourceId: FACTORY_ID, threadId: 'card-1' });
+    expect(await created.json()).toEqual({ controllerId: 'code', sessionId: 'card-1', resourceId: FACTORY_ID, threadId: 'card-1' });
 
     const mastra = await post(app, BASE, { sessionId: 'mastra-1', resourceId: 'owner' });
     expect(await mastra.json()).toEqual({ mastra: true });
@@ -196,7 +199,7 @@ describe('Claude Code session routes', () => {
     expect(state).toMatchObject({
       controllerId: 'code',
       sessionId: 'card-1',
-      resourceId: 'factory-1',
+      resourceId: FACTORY_ID,
       threadId: 'card-1',
       running: false,
       tasks: [],
@@ -220,7 +223,7 @@ describe('Claude Code session routes', () => {
     expect(messages.map(message => message.role)).toEqual(['signal', 'assistant']);
     expect(messages[0]).toMatchObject({
       threadId: 'card-1',
-      resourceId: 'factory-1',
+      resourceId: FACTORY_ID,
       createdAt: expect.any(String),
       content: { parts: [{ type: 'text', text: 'Update the README.' }], metadata: { signal: { type: 'user' } } },
     });
@@ -444,8 +447,8 @@ describe('Claude Code session routes', () => {
     await stream.until(event => event.type === 'agent_start');
     const { runs } = (await (await app.request('/api/agent-controller/code/active-runs')).json()) as { runs: Array<Record<string, unknown>> };
     expect(runs).toEqual([
-      { runId: 'mastra-run', threadId: 'mastra-thread', resourceId: 'factory-1' },
-      { runId: expect.any(String), threadId: 'card-1', resourceId: 'factory-1' },
+      { runId: 'mastra-run', threadId: 'mastra-thread', resourceId: FACTORY_ID },
+      { runId: expect.any(String), threadId: 'card-1', resourceId: FACTORY_ID },
     ]);
     await post(app, `${BASE}/card-1/abort`);
   });
