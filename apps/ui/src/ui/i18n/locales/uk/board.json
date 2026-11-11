@@ -65,6 +65,10 @@
     "prReview": {
       "title": "Немає pull request на ревʼю",
       "description": "Натисніть «Ревʼю» на картці pull request в Intake, щоб почати ревʼю."
+    },
+    "noRoute": {
+      "title": "Жоден маршрут intake не веде сюди",
+      "description": "Підключені джерела кладуть картки на інші дошки. Створіть картку або додайте маршрут intake."
     }
   },
   "moves": {
@@ -302,7 +306,8 @@
   "emptyActions": {
     "clearFilters": "Скинути фільтри",
     "createCard": "Створити картку",
-    "connectSource": "Підключити джерело задач"
+    "connectSource": "Підключити джерело задач",
+    "addRoute": "Додати маршрут intake"
   },
   "column": {
     "taskCountIn": "Показано {{count}} з {{total}} задач дошки на етапі «{{stage}}»",

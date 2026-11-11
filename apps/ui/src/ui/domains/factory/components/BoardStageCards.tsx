@@ -6,6 +6,7 @@ import { SKELETON_ROW_CLASS } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardStageId } from '../stages';
 import { BoardColumnEmptyState } from './BoardColumnEmptyState';
+import type { IntakeSetup } from './BoardColumnEmptyState';
 import { IntakeColumnExtras } from './IntakeColumnExtras';
 import { IntakeFeedNotice } from './IntakeFeedNotice';
 import { translator } from '../../../i18n/t';
@@ -20,7 +21,7 @@ export function BoardStageCards({
   taskCount,
   feed,
   intakeSource,
-  hasIntakeSource,
+  intakeSetup,
   filtersExcludeAll,
   alreadyMaterialized,
   composer,
@@ -34,7 +35,7 @@ export function BoardStageCards({
   taskCount: number;
   feed?: IntakeFeed;
   intakeSource?: IntakeSource;
-  hasIntakeSource: boolean;
+  intakeSetup?: IntakeSetup;
   filtersExcludeAll: boolean;
   alreadyMaterialized: number;
   composer?: ReactNode;
@@ -58,7 +59,7 @@ export function BoardStageCards({
           stage={stage.id}
           stageTitle={stage.label}
           isInitialPhase={isInitialPhase}
-          hasIntakeSource={hasIntakeSource}
+          intakeSetup={intakeSetup}
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={alreadyMaterialized}
           layout={layout}

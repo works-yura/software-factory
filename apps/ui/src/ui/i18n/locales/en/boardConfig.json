@@ -185,5 +185,17 @@
     "notCreated": "The board was not created",
     "creating": "Creating…",
     "create": "Create board"
+  },
+  "newCards": {
+    "title": "New cards",
+    "editRoutes": "Edit routes",
+    "loading": "Loading intake routes…",
+    "failed": "Intake routes didn’t load.",
+    "onlyLeftovers": "Cards no intake route takes land here.",
+    "none": "No intake route sends new cards here.",
+    "routed_one": "1 intake route sends new cards here.",
+    "routed_other": "{{count}} intake routes send new cards here.",
+    "routedPlusLeftovers_one": "1 intake route sends new cards here, plus cards no route takes.",
+    "routedPlusLeftovers_other": "{{count}} intake routes send new cards here, plus cards no route takes."
   }
 }

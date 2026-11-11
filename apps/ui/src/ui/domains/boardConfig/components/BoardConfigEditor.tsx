@@ -13,7 +13,6 @@ import type { FactorySkillInfo, StoredBoardResponse } from '../../../../api/type
 import { useDeleteBoardMutation, useResetBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
 import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
 import { boardPath, orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
@@ -23,7 +22,7 @@ import { useBoardDraft } from '../BoardDraftProvider';
 import { canRemovePhase, draftChanged, phaseHasProblem, rawRuleKey, removePhase } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
-import { IntakeNote } from './IntakeNote';
+import { NewCardsHere } from './NewCardsHere';
 import { PhaseConfig } from './PhaseConfig';
 import { translator } from '../../../i18n/t';
 
@@ -62,6 +61,7 @@ export function BoardConfigEditor({
   const { board, canEdit } = response;
   const { draft, rawRules, locked, setDraft, setRawRule, discard } = useBoardDraft(factory.id, boardId, board);
   const catalog = useBoardCatalog(factory.id);
+  const installed = catalog.data?.find(candidate => candidate.id === boardId);
   const navigate = useNavigate();
   const save = useSaveBoardMutation(factory.id, boardId);
   const reset = useResetBoardMutation(factory.id, boardId);
@@ -182,7 +182,7 @@ export function BoardConfigEditor({
           </SettingsSubsection>
         )}
 
-        {boardId !== DEFAULT_BOARD_ID && <IntakeNote factoryId={factory.id} />}
+        {installed && <NewCardsHere factoryId={factory.id} board={installed} />}
 
         {board.source !== 'stored' && !readOnly && (
           <SettingsSubsection title={tk('editor.default')}>

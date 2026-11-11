@@ -63,6 +63,10 @@
     "prReview": {
       "title": "No pull requests in review",
       "description": "Press Review on a pull request card in Intake to start a review."
+    },
+    "noRoute": {
+      "title": "No intake route sends cards here",
+      "description": "Your connected sources file onto other boards. Create a card or add an intake route."
     }
   },
   "moves": {
@@ -296,7 +300,8 @@
   "emptyActions": {
     "clearFilters": "Clear filters",
     "createCard": "Create card",
-    "connectSource": "Connect issue source"
+    "connectSource": "Connect issue source",
+    "addRoute": "Add intake route"
   },
   "column": {
     "taskCountIn": "{{count}} of {{total}} visible board tasks in {{stage}}",

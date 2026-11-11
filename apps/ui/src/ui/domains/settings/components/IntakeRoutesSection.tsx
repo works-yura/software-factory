@@ -114,7 +114,7 @@ export function IntakeRoutesSection({ factoryProjectId, factoryName }: { factory
 
   return (
     <SettingsSubsection
-      id="intake-routes"
+      id="new-cards"
       scope="factory"
       title={t('intakeRoutes.title')}
       description={t('intakeRoutes.description', { name: factoryName })}

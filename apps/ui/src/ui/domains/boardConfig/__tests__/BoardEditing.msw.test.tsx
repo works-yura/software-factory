@@ -126,7 +126,7 @@ describe('Creating a board', () => {
     // Cards only reach a new board through intake, which has its own settings.
     expect(form.getByRole('link', { name: 'Work Intake' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/intake`,
+      `/factories/${FACTORY_ID}/settings/intake#new-cards`,
     );
     await user.click(form.getByRole('button', { name: 'Create board' }));
 
