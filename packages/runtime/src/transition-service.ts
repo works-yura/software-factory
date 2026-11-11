@@ -22,6 +22,7 @@ import type {
   FactoryRuleStage,
   FactoryStageRuleContext,
   FactoryTransitionResult,
+  FactoryTransitionResultRejected,
 } from '@factory/core';
 import {
   boardFlow,
@@ -171,6 +172,21 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
   }
 }
 
+function isStale(result: FactoryTransitionResult): result is FactoryTransitionResultRejected {
+  return result.status === 'rejected' && result.code === 'stale';
+}
+
+/** Tell the caller where the card is now, so a model doesn't read "stale" as "already moved". */
+function staleRejection(result: FactoryTransitionResultRejected, current: Card): FactoryTransitionResult {
+  const stage = currentStage(current.stages) ?? current.stages.join(', ');
+  return rejection(
+    result.transitionId,
+    result.itemId,
+    'stale',
+    `The card changed (now revision ${current.revision}, in ${stage}). Retry with expectedRevision ${current.revision} if the move still applies.`,
+  );
+}
+
 export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
   return stages.length === 1 ? stages[0] : undefined;
 }
@@ -309,7 +325,11 @@ export class FactoryTransitionService {
       await this.#recordTransition(request, undefined, rejection);
       return rejection;
     }
-    const result = await this.#evaluateAndCommit(request, transitionId, item);
+    let result = await this.#evaluateAndCommit(request, transitionId, item);
+    if (isStale(result)) {
+      const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
+      if (current) result = staleRejection(result, current);
+    }
     await this.#recordTransition(request, item, result);
     this.#notifyCommitted(request, item, result);
     return result;

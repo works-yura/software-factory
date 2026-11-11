@@ -979,6 +979,9 @@ export class GithubRules {
                 ...(pullRequestAuthor ? { author: pullRequestAuthor } : {}),
                 factoryAuthored: pullRequestFactoryAuthored,
                 headBranch: string(object(pullRequest?.head)?.ref) ?? '',
+                ...(string(object(pullRequest?.head)?.sha)
+                  ? { headSha: string(object(pullRequest?.head)?.sha)!.toLowerCase() }
+                  : {}),
                 baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
               },
             }

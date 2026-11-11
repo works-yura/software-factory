@@ -53,7 +53,8 @@
       "runStarted": "Started a run",
       "runEnded": "Run ended",
       "suggestedRunStarted": "Started a suggested run",
-      "suggestedRunDismissed": "Dismissed a suggested run"
+      "suggestedRunDismissed": "Dismissed a suggested run",
+      "rejected": "A move was rejected"
     },
     "factoryAgent": "Factory agent",
     "createdAt": "Created at: {{time}}",
@@ -61,7 +62,11 @@
     "activityLabel": "Work item activity",
     "activity": "Activity",
     "lastWorkedOnBy": "Last worked on by {{name}}",
-    "noActivity": "No recorded activity yet."
+    "noActivity": "No recorded activity yet.",
+    "anotherPhase": "another phase",
+    "rejectedMove": "Move to {{phase}} rejected",
+    "rejectedMoveWithReason": "Move to {{phase}} rejected: {{reason}}",
+    "whyAsked": "Why it was asked: {{rationale}}"
   },
   "codebase": {
     "viewOnGitHub": "View on GitHub",

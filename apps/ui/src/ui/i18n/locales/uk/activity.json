@@ -53,7 +53,8 @@
       "runStarted": "Запуск розпочато",
       "runEnded": "Запуск завершено",
       "suggestedRunStarted": "Запропонований запуск розпочато",
-      "suggestedRunDismissed": "Запропонований запуск відхилено"
+      "suggestedRunDismissed": "Запропонований запуск відхилено",
+      "rejected": "Перенесення відхилено"
     },
     "factoryAgent": "Агент Factory",
     "createdAt": "Створено: {{time}}",
@@ -61,7 +62,11 @@
     "activityLabel": "Активність картки",
     "activity": "Активність",
     "lastWorkedOnBy": "Остання робота: {{name}}",
-    "noActivity": "Активності поки не зафіксовано."
+    "noActivity": "Активності поки не зафіксовано.",
+    "anotherPhase": "іншу фазу",
+    "rejectedMove": "Перенесення в {{phase}} відхилено",
+    "rejectedMoveWithReason": "Перенесення в {{phase}} відхилено: {{reason}}",
+    "whyAsked": "Чому просили: {{rationale}}"
   },
   "codebase": {
     "viewOnGitHub": "Переглянути на GitHub",

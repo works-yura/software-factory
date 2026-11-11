@@ -64,7 +64,8 @@ export function WorkItemListRow({
   menu: ReactNode;
   rework?: ReworkReason;
 }) {
-  const verdict = columnReviewVerdict(item, columnStage, boardOf(useBoardCatalog(item.githubProjectId).data, item));
+  const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
+  const verdict = columnReviewVerdict(item, columnStage, board);
   return (
     <BoardListRow
       testId="work-item-card"
@@ -114,7 +115,7 @@ export function WorkItemListRow({
           </span>
         ),
         action: <CardActions actions={actions} />,
-        activity: <WorkItemActivity activity={activity} actors={actors} showName={false} />,
+        activity: <WorkItemActivity activity={activity} actors={actors} board={board} showName={false} />,
       }}
     />
   );
