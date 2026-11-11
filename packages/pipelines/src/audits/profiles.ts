@@ -56,6 +56,12 @@ export const AUDIT_PROFILES: readonly AuditProfile[] = [
     reference: 'references/performance.md',
     urgentFrom: 'critical',
     topic: 'performance',
+  },  {
+    kind: 'stability',
+    title: { uk: 'Стабільність: логи і креші', en: 'Stability: logs and crashes' },
+    reference: 'references/stability.md',
+    urgentFrom: 'high',
+    topic: 'stability',
   },
 ];
 
