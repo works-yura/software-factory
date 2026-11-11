@@ -8,6 +8,23 @@ import type {
   ModelSwitchResult,
 } from './facet.ts';
 
+/**
+ * Moves a session to another harness: what a pick on another harness's instance does where the
+ * server wires a context handoff (`@factory/harness-handoff`). Without one, such a pick is refused.
+ */
+export interface HarnessSwitch {
+  /** Whether a session of `fromInstanceId` can move onto `toInstanceId`. */
+  accepts(toInstanceId: string, fromInstanceId?: string): boolean;
+  /** Plans and makes the move, the pick applied on the target; refusals as a facet's. */
+  switchHarness(input: {
+    readonly sessionId: string;
+    readonly from: HarnessModels;
+    readonly to: HarnessModels;
+    readonly request: ModelSwitchRequest;
+    readonly ctx: HarnessModelContext;
+  }): Promise<ModelSwitchResult>;
+}
+
 export interface HarnessModelRegistry {
   /** Adds a harness's facet. A `fallback` one (the server's default harness) is asked last. */
   register(models: HarnessModels, options?: { fallback?: boolean }): void;
@@ -21,7 +38,12 @@ export interface HarnessModelRegistry {
    * are instances the caller already resolved itself (their facets are not asked again).
    */
   describe(ctx: HarnessModelContext, described?: ReadonlyArray<HarnessModelInstanceInfo>): Promise<HarnessModelInstanceInfo[]>;
-  /** Checks a pick against the session's harness and applies it: the chat route and the agent tool. */
+  /** Wires the move between harnesses a cross-harness pick makes; unset, such picks are refused. */
+  setHarnessSwitch(handler: HarnessSwitch | undefined): void;
+  /**
+   * Checks a pick against the session's harness and applies it: the chat route and the agent tool.
+   * A pick on another harness's instance goes to the {@link HarnessSwitch}.
+   */
   switchSessionModel(sessionId: string, request: ModelSwitchRequest, ctx: HarnessModelContext): Promise<ModelSwitchResult>;
 }
 
@@ -67,6 +89,7 @@ export function createHarnessModelRegistry(initial: ReadonlyArray<HarnessModels>
   const routed: HarnessModels[] = [...initial];
   const fallbacks: HarnessModels[] = [];
   const all = () => [...routed, ...fallbacks];
+  let harnessSwitch: HarnessSwitch | undefined;
 
   const registry: HarnessModelRegistry = {
     register(models, options) {
@@ -88,16 +111,23 @@ export function createHarnessModelRegistry(initial: ReadonlyArray<HarnessModels>
       const known = new Map(described.map(info => [info.instanceId, info]));
       const facets = [...fallbacks, ...routed];
       const extra = described.filter(info => !facets.some(models => models.instanceId === info.instanceId));
-      return [
+      const infos = [
         ...extra,
         ...(await Promise.all(facets.map(models => known.get(models.instanceId) ?? describeHarnessModels(models, ctx)))),
       ];
+      return harnessSwitch ? infos.map(info => ({ ...info, acceptsHandoff: harnessSwitch!.accepts(info.instanceId) })) : infos;
+    },
+    setHarnessSwitch(handler) {
+      harnessSwitch = handler;
     },
     async switchSessionModel(sessionId, request, ctx) {
       const models = await registry.forSession(sessionId);
       if (!models) return { ok: false, status: 404, error: "That session's harness can't switch models on this server." };
       if (request.instanceId && request.instanceId !== models.instanceId) {
-        // The hook point for moving a session to another harness (`@factory/harness-handoff`).
+        const target = registry.forInstance(request.instanceId);
+        if (target && harnessSwitch?.accepts(target.instanceId, models.instanceId)) {
+          return harnessSwitch.switchHarness({ sessionId, from: models, to: target, request, ctx });
+        }
         return {
           ok: false,
           status: 409,

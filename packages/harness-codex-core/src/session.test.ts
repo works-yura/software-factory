@@ -145,6 +145,36 @@ describe('CodexSession', () => {
     expect(second.session.codexThreadId).toBe('thread-1');
   });
 
+  it("gives the new Codex thread the thread's history when the old one could not be resumed", async () => {
+    const asked: string[] = [];
+    const outcomes: string[] = [];
+    const fresh = scripted([reply('Ok.', false)]);
+    const original = fresh as unknown as (...args: unknown[]) => unknown;
+    const losing = Object.assign((...args: unknown[]) => {
+      const child = original(...args);
+      fresh.servers.at(-1)!.handle('thread/resume', () => {
+        throw new Error('no rollout found for thread');
+      });
+      return child;
+    }, { servers: fresh.servers, calls: fresh.calls }) as unknown as typeof fresh;
+    const { session } = await harnessWith(losing, {
+      handoffContextFor: async (_session, request) => {
+        asked.push(request.reason);
+        return request.reason === 'resume_failed'
+          ? { context: '[Historical user] first', delivered: async () => void outcomes.push('delivered'), unsent: async () => void outcomes.push('unsent') }
+          : undefined;
+      },
+    });
+    await session.sendMessage({ content: 'first' });
+    await session.sendMessage({ content: 'second' });
+    expect(asked).toEqual(['turn', 'resume_failed']);
+    expect((fresh.servers[0]!.requests('turn/start')[0]!.params as { input: unknown }).input).toEqual([{ type: 'text', text: 'first' }]);
+    expect((fresh.servers[1]!.requests('turn/start')[0]!.params as { input: unknown }).input).toEqual([
+      { type: 'text', text: '[Historical user] first\n\nUser message:\nsecond' },
+    ]);
+    expect(outcomes).toEqual(['delivered']);
+  });
+
   it('queues input that arrives mid-turn as the next turn of the same run', async () => {
     let release!: () => void;
     const spawn = scripted([

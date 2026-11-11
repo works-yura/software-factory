@@ -1048,6 +1048,62 @@ describe('ClaudeCodeSession', () => {
     expect(fake.calls[2]!.args).not.toContain('--resume');
   });
 
+  it("gives the fresh Claude session the thread's history when the stored one is gone", async () => {
+    const asked: Array<{ reason: string; prompt: string }> = [];
+    const outcomes: string[] = [];
+    const { fake, session, signal } = await setup(
+      [
+        { lines: fixture('turn-complete.jsonl') },
+        { lines: fixture('turn-unknown-session.jsonl'), exitCode: 1 },
+        { lines: fixture('turn-complete.jsonl') },
+      ],
+      {
+        handoffContextFor: async (_session, request) => {
+          asked.push({ reason: request.reason, prompt: request.prompt });
+          if (request.reason !== 'resume_failed') return undefined;
+          return {
+            context: '[Historical user] first',
+            delivered: async () => void outcomes.push('delivered'),
+            unsent: async () => void outcomes.push('unsent'),
+          };
+        },
+      },
+    );
+    let end = nextEnd(session);
+    await signal('one', 'first');
+    await end;
+    end = nextEnd(session);
+    await signal('two', 'second');
+    expect(await end).toBe('complete');
+
+    expect(asked).toEqual([
+      { reason: 'turn', prompt: 'first' },
+      { reason: 'turn', prompt: 'second' },
+      { reason: 'resume_failed', prompt: 'second' },
+    ]);
+    expect(fake.calls[1]!.stdin).toBe('second');
+    expect(fake.calls[2]!.stdin).toBe('[Historical user] first\n\nUser message:\nsecond');
+    expect(outcomes).toEqual(['delivered']);
+  });
+
+  it('keeps a handoff pending when the CLI never took the prompt', async () => {
+    const outcomes: string[] = [];
+    const { session, signal } = await setup([], {
+      spawn: () => {
+        throw new Error('spawn claude ENOENT');
+      },
+      handoffContextFor: async () => ({
+        context: 'history',
+        delivered: async () => void outcomes.push('delivered'),
+        unsent: async () => void outcomes.push('unsent'),
+      }),
+    });
+    const end = nextEnd(session);
+    await signal('one', 'go').catch(() => {});
+    await end;
+    expect(outcomes).toEqual(['unsent']);
+  });
+
   it('fails the delivery when the credentials hook fails', async () => {
     const { session, events, signal } = await setup([], {
       credentials: async () => {

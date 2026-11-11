@@ -80,6 +80,39 @@ describe('HarnessModelRegistry', () => {
     ).toMatchObject({ ok: false, status: 409, error: expect.stringMatching(/handoff/) });
   });
 
+  it('hands a pick from another harness instance to the harness switch where one accepts it', async () => {
+    const owned = new Set(['s-codex']);
+    const registry = createHarnessModelRegistry([codexStubModels(owned)]);
+    registry.register(fallbackModels(), { fallback: true });
+    const calls: Array<{ sessionId: string; from: string; to: string; model: string | null }> = [];
+    registry.setHarnessSwitch({
+      accepts: to => to === 'default',
+      async switchHarness({ sessionId, from, to, request }) {
+        calls.push({ sessionId, from: from.instanceId, to: to.instanceId, model: request.model });
+        owned.delete(sessionId);
+        return {
+          ok: true,
+          modelSelection: { instanceId: to.instanceId, model: request.model ?? 'x' },
+          appliesFrom: 'next-turn',
+          handoff: { id: 'h1', fromInstanceId: from.instanceId, toInstanceId: to.instanceId, harnessId: to.harnessId },
+        };
+      },
+    });
+    expect(
+      await registry.switchSessionModel('s-codex', { model: 'anthropic/claude-opus-4-6', instanceId: 'default' }, ctx),
+    ).toMatchObject({ ok: true, handoff: { fromInstanceId: 'codex-stub', toInstanceId: 'default' } });
+    expect(calls).toEqual([{ sessionId: 's-codex', from: 'codex-stub', to: 'default', model: 'anthropic/claude-opus-4-6' }]);
+    expect((await registry.forSession('s-codex'))?.instanceId).toBe('default');
+    // An instance the switch does not accept still needs a new chat.
+    expect(
+      await registry.switchSessionModel('elsewhere', { model: 'gpt-5-mini', instanceId: 'codex-stub' }, ctx),
+    ).toMatchObject({ ok: false, status: 409 });
+    expect((await registry.describe(ctx)).map(info => [info.instanceId, info.acceptsHandoff])).toEqual([
+      ['default', true],
+      ['codex-stub', false],
+    ]);
+  });
+
   it('lists an instance whose catalog fails as unavailable, and refuses duplicate instances', async () => {
     const registry = createHarnessModelRegistry([
       { ...codexStubModels(new Set()), list: async () => Promise.reject(new Error('codex is not installed')) },

@@ -45,6 +45,12 @@ export interface ClaudeCodeHarness extends AgentHarness {
    * A no-op for a session it does not hold.
    */
   deleteSession(sessionId: string): Promise<void>;
+  /**
+   * Gives a session up: it moved to another harness (a context handoff). Stops its run, forgets it
+   * in this process and removes its record, so this harness no longer holds it. A no-op for a
+   * session it does not hold.
+   */
+  releaseSession(sessionId: string): Promise<void>;
 }
 
 function claudeSession(session: AgentSession): ClaudeCodeSession {
@@ -110,6 +116,14 @@ export function createClaudeCodeHarness(config: ClaudeCodeHarnessConfig): Claude
       if (!session) return;
       session.abort();
       sessions.delete(sessionId);
+    },
+
+    async releaseSession(sessionId) {
+      const session = await load(sessionId);
+      session?.abort();
+      sessions.delete(sessionId);
+      if (!config.store.delete) throw new Error('This Claude Code session store cannot give a session up.');
+      await config.store.delete(sessionId);
     },
 
     listActiveThreadRuns() {

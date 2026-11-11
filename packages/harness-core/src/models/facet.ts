@@ -26,8 +26,9 @@ export interface ModelSwitchRequest {
    */
   readonly thinkingLevel?: string;
   /**
-   * The instance the client picked from. A pick on another harness's instance is refused: moving a
-   * session between harnesses is a handoff (`@factory/harness-handoff`), not a model switch.
+   * The instance the client picked from. A pick on another harness's instance moves the session to
+   * that harness with a context handoff (`@factory/harness-handoff`) where the server wires one
+   * (`HarnessSwitch`); elsewhere it is refused.
    */
   readonly instanceId?: string;
 }
@@ -39,8 +40,19 @@ export type ModelSwitchResult =
       readonly modelSelection: ModelSelection | null;
       /** `now`: a live session switched; `next-turn`: its next turn (or run) picks it up. */
       readonly appliesFrom: 'now' | 'next-turn';
+      /** Set when the pick moved the session to another harness: its next turn carries the handoff. */
+      readonly handoff?: SessionHarnessHandoff;
     }
   | { readonly ok: false; readonly status: 400 | 403 | 404 | 409 | 503; readonly error: string };
+
+/** A session's move to another harness, as a switch reports it. */
+export interface SessionHarnessHandoff {
+  readonly id: string;
+  readonly fromInstanceId: string;
+  readonly toInstanceId: string;
+  /** The harness the session runs on from now (`HarnessModels.harnessId`). */
+  readonly harnessId: string;
+}
 
 export interface HarnessModelAvailability {
   readonly available: boolean;
@@ -128,5 +140,10 @@ export interface HarnessModelInstanceInfo {
   catalogDefaultSelection: ModelSelection | null;
   /** The facet can move running sessions onto a new default (`applyDefaultToRunningSessions`). */
   appliesToRunningSessions: boolean;
+  /**
+   * A session of another harness can be moved onto this instance (a model switch with a context
+   * handoff); absent or false, a pick here from another harness's session needs a new chat.
+   */
+  acceptsHandoff?: boolean;
   models: ServerProviderModel[];
 }

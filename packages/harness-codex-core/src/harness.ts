@@ -34,6 +34,11 @@ export interface CodexHarness extends AgentHarness {
   createSession(input: { sessionId: string; threadId: string; resourceId?: string }): Promise<CodexSession>;
   /** Stops a session's run and forgets it in this process; what it persisted stays. */
   deleteSession(sessionId: string): Promise<void>;
+  /**
+   * Gives a session up: it moved to another harness (a context handoff). Stops it, forgets it in
+   * this process and removes its record, so this harness no longer holds it.
+   */
+  releaseSession(sessionId: string): Promise<void>;
 }
 
 function codexSession(session: AgentSession): CodexSession {
@@ -88,6 +93,14 @@ export function createCodexHarness(config: CodexHarnessConfig): CodexHarness {
       if (!session) return;
       session.dispose();
       sessions.delete(sessionId);
+    },
+
+    async releaseSession(sessionId) {
+      const session = await load(sessionId);
+      session?.dispose();
+      sessions.delete(sessionId);
+      if (!config.store.delete) throw new Error('This Codex session store cannot give a session up.');
+      await config.store.delete(sessionId);
     },
 
     listActiveThreadRuns() {

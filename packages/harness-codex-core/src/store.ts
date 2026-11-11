@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { PlanDecision } from '@factory/harness';
@@ -60,6 +60,11 @@ export interface CodexSessionStore {
   get(sessionId: string): Promise<CodexSessionRecord | undefined>;
   put(record: CodexSessionRecord): Promise<void>;
   list(): Promise<CodexSessionRecord[]>;
+  /**
+   * Forgets a session's record: the session moved to another harness (a context handoff), so this
+   * harness no longer holds it. Absent on a store that cannot forget; such a session stays here.
+   */
+  delete?(sessionId: string): Promise<void>;
 }
 
 export function emptyCodexThreadState(): CodexThreadState {
@@ -79,6 +84,9 @@ export function createInMemoryCodexSessionStore(): CodexSessionStore {
       records.set(record.sessionId, clone(record));
     },
     list: async () => [...records.values()].map(clone),
+    delete: async sessionId => {
+      records.delete(sessionId);
+    },
   };
 }
 
@@ -115,6 +123,9 @@ export function createJsonFileCodexSessionStore(directory: string): CodexSession
       const files = (await readdir(directory)).filter(file => file.endsWith('.json'));
       const records = await Promise.all(files.map(read));
       return records.filter((record): record is CodexSessionRecord => record !== undefined);
+    },
+    async delete(sessionId) {
+      await rm(join(directory, fileName(sessionId)), { force: true });
     },
   };
 }

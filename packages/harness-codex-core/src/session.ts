@@ -14,7 +14,10 @@ import type {
   AgentSignalInput,
   AgentSignalResult,
   PlanDecision,
+  TurnHandoffContext,
+  TurnHandoffHook,
 } from '@factory/harness';
+import { promptWithTurnHandoff } from '@factory/harness/turn-handoff';
 import {
   ASK_USER_QUESTION_TOOL,
   askUserPrompt,
@@ -261,6 +264,13 @@ export interface CodexSessionConfig {
   developerInstructionsFor?: (session: CodexSession) => string | undefined | Promise<string | undefined>;
   /** Context the agent reads ahead of this turn's input (the Factory's signals); the transcript does not show it. */
   turnContextFor?: (session: CodexSession) => string | undefined | Promise<string | undefined>;
+  /**
+   * Context a turn carries over from another conversation (`@factory/harness/turn-handoff`): asked
+   * before every turn, with `resume_failed` when the thread's Codex thread could not be resumed and
+   * a new one started, so it gets the thread's history instead of none. Its context goes ahead of
+   * the prompt; `delivered` is called once Codex accepted the turn, `unsent` when it did not.
+   */
+  handoffContextFor?: TurnHandoffHook<CodexSession>;
   /** MCP servers for the run (e.g. the Factory's tools with a token minted for it). */
   mcpServersFor?: (session: CodexSession) => Record<string, CodexMcpServer> | undefined | Promise<Record<string, CodexMcpServer> | undefined>;
   /** How the next turn may act; `auto-accept-edits`, asking for the rest, by default. */
@@ -291,6 +301,8 @@ interface ActiveRun {
   codexThreadId?: string;
   /** The model the thread runs on, as Codex reported it when the thread opened. */
   threadModel?: string;
+  /** The thread's Codex thread could not be resumed when the run opened it: a new one started. */
+  resumeFailed?: boolean;
   watch?: TurnWatch;
   begun?: boolean;
   abortRequested: boolean;
@@ -1287,8 +1299,10 @@ export class CodexSession implements AgentSession {
         run.threadModel = resumed.model;
         return server;
       } catch (error) {
-        // A thread Codex no longer has (its home was cleared) starts afresh instead of failing every turn.
+        // A thread Codex no longer has (its home was cleared) starts afresh instead of failing every turn;
+        // the turn then carries the thread's history (`handoffContextFor`).
         console.warn('[codex harness] Could not resume the Codex thread; starting a new one.', error);
+        run.resumeFailed = true;
       }
     }
     const started = await server.client.request('thread/start', { ...params, serviceName: 'factory' });
@@ -1518,6 +1532,7 @@ export class CodexSession implements AgentSession {
 
   async #turn(run: ActiveRun, inputs: CodexPendingInput[]): Promise<TurnResult> {
     const thread = this.#threadState(run.threadId);
+    const turnStartedAt = new Date();
     const planning = (thread.mode ?? this.#config.mode) === 'planning';
     const lead = planning ? [this.#config.planningPrompt ?? CODEX_PLANNING_PROMPT] : [];
     const selection = this.#config.turnSelectionFor ? await this.#config.turnSelectionFor(this) : undefined;
@@ -1541,7 +1556,12 @@ export class CodexSession implements AgentSession {
     const defaults = planning
       ? codexRuntimeModeTurnDefaults('approval-required', policy.networkAccess)
       : codexRuntimeModeTurnDefaults(policy.runtimeMode ?? 'auto-accept-edits', policy.networkAccess);
-    const prompt = [...lead, ...(turnContext ? [turnContext] : []), text].join('\n\n');
+    // The thread's history when its Codex thread is new after a failed resume, or a handoff a move from
+    // another harness left pending: ahead of the person's request, which is sent as written.
+    const resumeFailed = run.resumeFailed === true;
+    run.resumeFailed = false;
+    const handoff = await this.#handoffFor(resumeFailed ? 'resume_failed' : 'turn', text, turnStartedAt);
+    const prompt = [...lead, ...(turnContext ? [turnContext] : []), promptWithTurnHandoff(handoff, text)].join('\n\n');
     const params: TurnStartParams = {
       threadId: codexThreadId,
       input: [{ type: 'text', text: prompt }],
@@ -1563,7 +1583,11 @@ export class CodexSession implements AgentSession {
     if (held) held.tried = [];
     run.turnParams = params;
     const failed = await this.#startTurn(run, server, params, translator);
-    if (failed) return failed;
+    if (failed) {
+      await handoff?.unsent().catch(error => console.warn('[codex harness] Unable to keep the handoff pending.', error));
+      return failed;
+    }
+    if (handoff) void handoff.delivered().catch(error => console.warn('[codex harness] Unable to record the handoff as delivered.', error));
     // Codex has the prompt: from here on the input counts as delivered.
     if (run.unsent) {
       this.#markDelivered(run.unsent);
@@ -1571,6 +1595,18 @@ export class CodexSession implements AgentSession {
       void this.#save().catch(() => {});
     }
     return this.#switchAccounts(run, await this.#awaitTurn(run, watch));
+  }
+
+  /** The host's handoff for this turn; a failing hook leaves the turn without one rather than failing it. */
+  async #handoffFor(reason: 'turn' | 'resume_failed', prompt: string, turnStartedAt: Date): Promise<TurnHandoffContext | undefined> {
+    if (!this.#config.handoffContextFor) return undefined;
+    try {
+      const handoff = await this.#config.handoffContextFor(this, { reason, prompt, turnStartedAt });
+      return handoff?.context ? handoff : undefined;
+    } catch (error) {
+      console.warn('[codex harness] Unable to read the context handoff for this turn.', error);
+      return undefined;
+    }
   }
 
   async #startTurn(run: ActiveRun, server: CodexAppServerProcess, params: TurnStartParams, translator: CodexTurnTranslator): Promise<TurnResult | undefined> {

@@ -19,7 +19,10 @@ import type {
   AgentSignalInput,
   AgentSignalResult,
   PlanDecision,
+  TurnHandoffContext,
+  TurnHandoffHook,
 } from '@factory/harness';
+import { promptWithTurnHandoff } from '@factory/harness/turn-handoff';
 
 import {
   buildClaudeArgs,
@@ -262,6 +265,14 @@ export interface ClaudeCodeSessionConfig
    * not show it.
    */
   turnContextFor?: (session: ClaudeCodeSession) => string | undefined | Promise<string | undefined>;
+  /**
+   * Context a turn carries over from another conversation (`@factory/harness/turn-handoff`):
+   * asked before every turn, and again with `resume_failed` when the CLI no longer has the session
+   * the thread resumes, so the fresh conversation gets the thread's history instead of none. Its
+   * context goes ahead of the prompt (after `turnContextFor`'s); `delivered` is called once the
+   * CLI has the prompt, `unsent` when it never did.
+   */
+  handoffContextFor?: TurnHandoffHook<ClaudeCodeSession>;
   /**
    * How the gate server is started. By default each turn writes it next to its
    * MCP config (`gate-server.ts`) and runs it with this process's Node.
@@ -1386,6 +1397,7 @@ export class ClaudeCodeSession implements AgentSession {
     inputs: ClaudePendingInput[],
   ): Promise<TurnOutcome | { kind: 'aborted' }> {
     const thread = this.#threadState(run.threadId);
+    const turnStartedAt = new Date();
     const planning = (thread.mode ?? this.#config.mode) === 'planning';
     const lead = planning ? [this.#config.planningPrompt ?? PLANNING_PROMPT] : [];
     // Asked before the echo, so the turn's first input can carry the model-switch marker.
@@ -1412,7 +1424,12 @@ export class ClaudeCodeSession implements AgentSession {
     const systemPrompt = (await this.#config.appendSystemPromptFor?.(this)) ?? this.#config.appendSystemPrompt;
     const settingSources = await this.#config.settingSourcesFor?.(this);
     const turnContext = await this.#config.turnContextFor?.(this);
-    if (run.abortRequested) return { kind: 'aborted' };
+    const handoffFor = (reason: 'turn' | 'resume_failed') => this.#handoffFor(reason, text, turnStartedAt);
+    const handoff = await handoffFor('turn');
+    if (run.abortRequested) {
+      await handoff?.unsent();
+      return { kind: 'aborted' };
+    }
     const configDir = this.#config.configDir?.(this);
     const envFor = (turn: ClaudeTurnCredentials) =>
       buildClaudeEnv(
@@ -1450,7 +1467,10 @@ export class ClaudeCodeSession implements AgentSession {
       return await this.#attempts(run, {
         thread,
         planning,
-        prompt: turnContext ? `${turnContext}\n\n${prompt}` : prompt,
+        prompt,
+        ...(turnContext ? { turnContext } : {}),
+        ...(handoff ? { handoff } : {}),
+        handoffFor,
         inputs,
         tried,
         credentials,
@@ -1476,6 +1496,10 @@ export class ClaudeCodeSession implements AgentSession {
       thread: ClaudeThreadState;
       planning: boolean;
       prompt: string;
+      turnContext?: string;
+      /** Context carried over from another conversation, ahead of `prompt`. */
+      handoff?: TurnHandoffContext;
+      handoffFor: (reason: 'turn' | 'resume_failed') => Promise<TurnHandoffContext | undefined>;
       inputs: ClaudePendingInput[];
       tried: string[];
       credentials: ClaudeTurnCredentials;
@@ -1491,134 +1515,166 @@ export class ClaudeCodeSession implements AgentSession {
       rules?: { allow: string[]; ask: string[]; deny: string[] };
     },
   ): Promise<TurnOutcome | { kind: 'aborted' }> {
-    const { thread, planning, prompt, inputs, tried, envFor, cwd, mcpConfigPaths, model, systemPrompt, settingSources, rules } =
-      turn;
+    const { thread, planning, inputs, tried, envFor, cwd, mcpConfigPaths, model, systemPrompt, settingSources, rules } = turn;
     const selection = { ...(turn.effort ? { effort: turn.effort } : {}), ...(turn.settings ? { settings: turn.settings } : {}) };
     let { credentials, env } = turn;
+    // The handoff's context goes ahead of the person's request, which is sent as written.
+    let handoff = turn.handoff;
+    let handoffSent = false;
+    const compose = () => {
+      const body = promptWithTurnHandoff(handoff, turn.prompt);
+      return turn.turnContext ? `${turn.turnContext}\n\n${body}` : body;
+    };
+    const prompt = compose();
     let turnPrompt = prompt;
     let resumedStale = false;
-
-    // A stale resume id (the CLI's session files were lost) gets one fresh session instead of failing forever;
-    // an account that runs out of usage or is refused hands the turn to the next account.
-    while (true) {
-      // A run that ended while its process lived on (a form nobody answered) starts nothing more.
-      if (run.abortRequested || run.settled) return { kind: 'aborted' };
-      const resumeSessionId = thread.claudeSessionId;
-      if (credentials.accountId && credentials.accountId !== this.#record.accountId) {
-        this.#record.accountId = credentials.accountId;
+    try {
+      // A stale resume id (the CLI's session files were lost) gets one fresh session instead of failing forever;
+      // an account that runs out of usage or is refused hands the turn to the next account.
+      while (true) {
+        // A run that ended while its process lived on (a form nobody answered) starts nothing more.
+        if (run.abortRequested || run.settled) return { kind: 'aborted' };
+        const resumeSessionId = thread.claudeSessionId;
+        if (credentials.accountId && credentials.accountId !== this.#record.accountId) {
+          this.#record.accountId = credentials.accountId;
+          void this.#save().catch(() => {});
+        }
+        // The replies that follow ran on this account, as a Mastra reply names its credential.
+        if (credentials.credential) this.#emitTranscript({ kind: 'credential', ...credentials.credential }, run);
+        const args = buildClaudeArgs(
+          this.#argsInput(
+            thread,
+            planning,
+            mcpConfigPaths,
+            model,
+            rules ? { rules } : {},
+            systemPrompt,
+            settingSources,
+            selection,
+          ),
+        );
+        const translator = new TurnTranslator();
+        run.translator = translator;
+        let processRef: ClaudeRun | undefined;
+        let stopForGate = false;
+        let stopForAccount = false;
+        let inputDone = false;
+        const onLine = (line: string) => {
+          const message = parseStreamLine(line);
+          if (!message) return;
+          const entries = translator.push(message);
+          if (message.type === 'rate_limit') this.#reportUsageLimits(message.raw, credentials.accountId);
+          if (translator.sessionId && translator.sessionId !== thread.claudeSessionId) {
+            thread.claudeSessionId = translator.sessionId;
+            void this.#save().catch(() => {});
+          }
+          // The CLI has the prompt: from here on the input counts as delivered.
+          if (translator.started && run.unsent) {
+            this.#markDelivered(run.unsent);
+            run.unsent = undefined;
+            void this.#save().catch(() => {});
+          }
+          if (translator.started && handoff && !handoffSent) {
+            handoffSent = true;
+            void handoff.delivered().catch(error => console.warn('[claude-code harness] Unable to record the handoff as delivered.', error));
+          }
+          // Once the plan is in, the rest is the process being stopped (e.g. the gate call failing with "Connection closed").
+          if (!run.settled && !stopForGate) for (const entry of entries) this.#emitTranscript(entry, run);
+          // A model message's usage counts as soon as the stream has it whole, so a run's cost shows as it goes.
+          this.#reportUsage(run, false);
+          if ((translator.gate || translator.permission) && !stopForGate) {
+            // The plan, or a call waiting for a person, is the turn's last word: stop before Claude goes on without the answer.
+            stopForGate = true;
+            processRef?.closeInput();
+            processRef?.terminate();
+          }
+          // A refused account never recovers by retrying, and a rate-limited one in a pool is faster to leave than to wait out.
+          const leaveAccount =
+            translator.accountRefused ||
+            (credentials.accountId !== undefined && translator.rateLimitRetries >= RATE_LIMIT_RETRIES_BEFORE_SWITCH);
+          if (leaveAccount && !stopForAccount) {
+            stopForAccount = true;
+            processRef?.closeInput();
+            processRef?.terminate();
+          }
+          if (message.type === 'control_request' && processRef) {
+            this.#controlRequest(run, processRef, message, stopForGate || stopForAccount);
+          } else if (message.type === 'control_cancel_request') {
+            this.#controlCancelled(message.requestId);
+          } else if (message.type === 'result' && !(message.queuedTurns && message.queuedTurns > 0)) {
+            // Nothing more queued: closing stdin lets the CLI exit. A steer already written still runs, as its own turn.
+            inputDone = true;
+            processRef?.closeInput();
+          }
+        };
+        const proc = runClaude({
+          args,
+          cwd,
+          env,
+          prompt: turnPrompt,
+          onLine,
+          ...(this.#config.spawn ? { spawn: this.#config.spawn } : {}),
+          ...(this.#config.command ? { command: this.#config.command } : {}),
+          ...(this.#config.turnTimeoutMs ? { timeoutMs: this.#config.turnTimeoutMs } : {}),
+        });
+        processRef = proc;
+        if (stopForGate || stopForAccount || inputDone) proc.closeInput();
+        if (stopForGate || stopForAccount) proc.terminate();
+        run.process = proc;
+        if (run.abortRequested) proc.terminate();
+        run.markStarted();
         void this.#save().catch(() => {});
-      }
-      // The replies that follow ran on this account, as a Mastra reply names its credential.
-      if (credentials.credential) this.#emitTranscript({ kind: 'credential', ...credentials.credential }, run);
-      const args = buildClaudeArgs(
-        this.#argsInput(
-          thread,
-          planning,
-          mcpConfigPaths,
-          model,
-          rules ? { rules } : {},
-          systemPrompt,
-          settingSources,
-          selection,
-        ),
-      );
-      const translator = new TurnTranslator();
-      run.translator = translator;
-      let processRef: ClaudeRun | undefined;
-      let stopForGate = false;
-      let stopForAccount = false;
-      let inputDone = false;
-      const onLine = (line: string) => {
-        const message = parseStreamLine(line);
-        if (!message) return;
-        const entries = translator.push(message);
-        if (message.type === 'rate_limit') this.#reportUsageLimits(message.raw, credentials.accountId);
-        if (translator.sessionId && translator.sessionId !== thread.claudeSessionId) {
-          thread.claudeSessionId = translator.sessionId;
-          void this.#save().catch(() => {});
-        }
-        // The CLI has the prompt: from here on the input counts as delivered.
-        if (translator.started && run.unsent) {
-          this.#markDelivered(run.unsent);
-          run.unsent = undefined;
-          void this.#save().catch(() => {});
-        }
-        // Once the plan is in, the rest is the process being stopped (e.g. the gate call failing with "Connection closed").
-        if (!run.settled && !stopForGate) for (const entry of entries) this.#emitTranscript(entry, run);
-        // A model message's usage counts as soon as the stream has it whole, so a run's cost shows as it goes.
-        this.#reportUsage(run, false);
-        if ((translator.gate || translator.permission) && !stopForGate) {
-          // The plan, or a call waiting for a person, is the turn's last word: stop before Claude goes on without the answer.
-          stopForGate = true;
-          processRef?.closeInput();
-          processRef?.terminate();
-        }
-        // A refused account never recovers by retrying, and a rate-limited one in a pool is faster to leave than to wait out.
-        const leaveAccount =
-          translator.accountRefused ||
-          (credentials.accountId !== undefined && translator.rateLimitRetries >= RATE_LIMIT_RETRIES_BEFORE_SWITCH);
-        if (leaveAccount && !stopForAccount) {
-          stopForAccount = true;
-          processRef?.closeInput();
-          processRef?.terminate();
-        }
-        if (message.type === 'control_request' && processRef) {
-          this.#controlRequest(run, processRef, message, stopForGate || stopForAccount);
-        } else if (message.type === 'control_cancel_request') {
-          this.#controlCancelled(message.requestId);
-        } else if (message.type === 'result' && !(message.queuedTurns && message.queuedTurns > 0)) {
-          // Nothing more queued: closing stdin lets the CLI exit. A steer already written still runs, as its own turn.
-          inputDone = true;
-          processRef?.closeInput();
-        }
-      };
-      const proc = runClaude({
-        args,
-        cwd,
-        env,
-        prompt: turnPrompt,
-        onLine,
-        ...(this.#config.spawn ? { spawn: this.#config.spawn } : {}),
-        ...(this.#config.command ? { command: this.#config.command } : {}),
-        ...(this.#config.turnTimeoutMs ? { timeoutMs: this.#config.turnTimeoutMs } : {}),
-      });
-      processRef = proc;
-      if (stopForGate || stopForAccount || inputDone) proc.closeInput();
-      if (stopForGate || stopForAccount) proc.terminate();
-      run.process = proc;
-      if (run.abortRequested) proc.terminate();
-      run.markStarted();
-      void this.#save().catch(() => {});
 
-      const exit = await proc.exited;
-      run.process = undefined;
-      this.#reportUsage(run, true);
-      if (run.abortRequested) return { kind: 'aborted' };
-      if (exit.spawnError) {
-        return { kind: 'error', error: new ClaudeCodeError('process', `Unable to start Claude Code: ${exit.spawnError.message}`) };
-      }
-      if (exit.timedOut) {
-        return { kind: 'error', error: new ClaudeCodeError('timeout', 'Claude Code turn timed out.') };
-      }
-      const outcome = translator.outcome(exit);
-      if (outcome.kind === 'error' && outcome.error.kind === 'unknown_session' && resumeSessionId && !resumedStale) {
-        resumedStale = true;
-        thread.claudeSessionId = undefined;
-        turnPrompt = prompt;
-        await this.#save();
-        continue;
-      }
-      if (outcome.kind === 'error') {
-        const next = await this.#nextAccount(run, credentials, outcome.error, tried);
-        if (next) {
-          credentials = next;
-          env = envFor(next);
-          // Once the CLI started the conversation the prompt is in it; the next account picks up from there.
-          if (translator.started) turnPrompt = ACCOUNT_SWITCH_PROMPT;
+        const exit = await proc.exited;
+        run.process = undefined;
+        this.#reportUsage(run, true);
+        if (run.abortRequested) return { kind: 'aborted' };
+        if (exit.spawnError) {
+          return { kind: 'error', error: new ClaudeCodeError('process', `Unable to start Claude Code: ${exit.spawnError.message}`) };
+        }
+        if (exit.timedOut) {
+          return { kind: 'error', error: new ClaudeCodeError('timeout', 'Claude Code turn timed out.') };
+        }
+        const outcome = translator.outcome(exit);
+        if (outcome.kind === 'error' && outcome.error.kind === 'unknown_session' && resumeSessionId && !resumedStale) {
+          resumedStale = true;
+          thread.claudeSessionId = undefined;
+          await this.#save();
+          // The fresh conversation knows nothing of the thread: it gets the thread's history.
+          if (handoff && !handoffSent) await handoff.unsent();
+          handoff = await turn.handoffFor('resume_failed');
+          handoffSent = false;
+          turnPrompt = compose();
           continue;
         }
+        if (outcome.kind === 'error') {
+          const next = await this.#nextAccount(run, credentials, outcome.error, tried);
+          if (next) {
+            credentials = next;
+            env = envFor(next);
+            // Once the CLI started the conversation the prompt is in it; the next account picks up from there.
+            if (translator.started) turnPrompt = ACCOUNT_SWITCH_PROMPT;
+            continue;
+          }
+        }
+        return outcome;
       }
-      return outcome;
+    } finally {
+      if (handoff && !handoffSent) {
+        await handoff.unsent().catch(error => console.warn('[claude-code harness] Unable to keep the handoff pending.', error));
+      }
+    }
+  }
+
+  /** The host's handoff for this turn; a failing hook leaves the turn without one rather than failing it. */
+  async #handoffFor(reason: 'turn' | 'resume_failed', prompt: string, turnStartedAt: Date): Promise<TurnHandoffContext | undefined> {
+    if (!this.#config.handoffContextFor) return undefined;
+    try {
+      const handoff = await this.#config.handoffContextFor(this, { reason, prompt, turnStartedAt });
+      return handoff?.context ? handoff : undefined;
+    } catch (error) {
+      console.warn('[claude-code harness] Unable to read the context handoff for this turn.', error);
+      return undefined;
     }
   }
 
