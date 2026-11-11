@@ -32,6 +32,7 @@ import { Route } from '@factory/http';
 import type { ProjectBoardCache } from '@factory/runtime';
 import { workItemPhaseSemantics } from '@factory/core';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
+import { buildEnvOf, maskSandboxEnvValues } from '@factory/sandbox';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
@@ -208,12 +209,16 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   boards?: Pick<ProjectBoardCache, 'describe' | 'seedNewProject'>;
 }
 
-/** Provider output is shown to the user; strip any clone credential from it first. */
-function redactBuild<T extends { error?: string; logs?: string[] }>(build: T): T {
+/**
+ * Provider output is shown to the user; strip any clone credential and any
+ * Build variable value from it first.
+ */
+function redactBuild<T extends { error?: string; logs?: string[] }>(build: T, buildEnv?: Record<string, string>): T {
+  const redact = (text: string) => maskSandboxEnvValues(redactCredentials(text), buildEnv);
   return {
     ...build,
-    ...(build.error !== undefined ? { error: redactCredentials(build.error) } : {}),
-    ...(build.logs ? { logs: build.logs.map(redactCredentials) } : {}),
+    ...(build.error !== undefined ? { error: redact(build.error) } : {}),
+    ...(build.logs ? { logs: build.logs.map(redact) } : {}),
   };
 }
 
@@ -484,7 +489,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const read = await capability.runner.readContext(project.id);
           if (!read) return context.json({ error: 'no_environment' }, 404);
           const builds = await capability.builds.list(read.ctx, read.settings);
-          return context.json({ builds: builds.map(redactBuild) });
+          return context.json({ builds: builds.map(build => redactBuild(build, buildEnvOf(read.ctx))) });
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.path, {
@@ -515,7 +520,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               return context.json({ error: 'Build not found' }, 404);
             }
           }
-          return context.json({ build: redactBuild(await capability.builds.get(read.ctx, read.settings, buildId)) });
+          const build = await capability.builds.get(read.ctx, read.settings, buildId);
+          return context.json({ build: redactBuild(build, buildEnvOf(read.ctx)) });
         },
       }),
     ];

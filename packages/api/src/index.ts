@@ -10,6 +10,7 @@ export * from './knowledge.ts';
 export * from './metrics.ts';
 export * from './oauth.ts';
 export * from './projects.ts';
+export * from './sandbox-envs.ts';
 export * from './skills.ts';
 export * from './source-control-sessions.ts';
 export * from './source-control-settings.ts';

@@ -11,6 +11,7 @@ import { createFactoryStorageForTests } from '@factory/testing';
 import { resolveProjectEnvironment } from '../workspace.ts';
 import { environmentBuildContext, environmentBuildInputs, redactCredentials, runEnvironmentBuild } from './build.ts';
 import type { EnvironmentBuildDeps } from './build.ts';
+import { resolveSandboxEnv, sandboxBuildContext } from '@factory/sandbox';
 
 const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
@@ -106,10 +107,17 @@ async function recordBuild(
 ) {
   const project = await seed.projects.getById({ id: projectId });
   const environment = await resolveProjectEnvironment(seed.sourceControl.forIntegration('github'), project!);
+  const { buildEnvRevision } = sandboxBuildContext(
+    await resolveSandboxEnv(seed.sandboxEnvs, { orgId: 'org-1', projectId }),
+  );
   await seed.projects.update({
     orgId: 'org-1',
     id: projectId,
-    input: { lastBuildId: buildId, activeTemplateHeads: heads, lastBuildInputs: environmentBuildInputs(environment) },
+    input: {
+      lastBuildId: buildId,
+      activeTemplateHeads: heads,
+      lastBuildInputs: environmentBuildInputs(environment, buildEnvRevision),
+    },
   });
 }
 
@@ -140,6 +148,7 @@ function depsFor(
         getRepositoryAccess: async () => ({ token: 'ghs_x', cloneUrl: 'https://github.com/x/y' }) as never,
       },
     },
+    sandboxEnvs: seed.sandboxEnvs,
     now,
   };
 }
@@ -244,6 +253,35 @@ describe('runEnvironmentBuild', () => {
       ).resolves.toMatchObject({ outcome: 'started' });
     }
     expect(sandbox.starts).toHaveLength(edits.length);
+  });
+
+  it('rebuilds on schedule after a Build variable edit, never after a Runtime-only edit', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    const set = (name: string, value: string, appliesTo: 'build' | 'runtime' | 'both') =>
+      seed.sandboxEnvs.set('org-1', project.id, { name, value, appliesTo }, 'user-1');
+    await set('PROOF_BUILD', 'b1', 'build');
+    await recordBuild(seed, project.id, 'build-ready-0', { 'acme/api': SHA_A });
+
+    await set('RUNTIME_ONLY', 'r1', 'runtime');
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'unchanged' });
+
+    await set('PROOF_BUILD', 'b2', 'build');
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).resolves.toMatchObject({ outcome: 'started' });
+    const { buildRevision } = (await seed.sandboxEnvs.revisions('org-1', project.id))!;
+    expect(sandbox.starts[0]!.ctx).toMatchObject({ buildEnv: { PROOF_BUILD: 'b2' }, buildEnvRevision: buildRevision });
+    expect(sandbox.starts[0]!.ctx.buildEnv).not.toHaveProperty('RUNTIME_ONLY');
+  });
+
+  it('fingerprints the build revision only when there is one, and never a value', () => {
+    const environment = { settings: {}, repos: [] } as unknown as Parameters<typeof environmentBuildInputs>[0];
+    expect(environmentBuildInputs(environment, undefined)).toBe(environmentBuildInputs(environment));
+    expect(environmentBuildInputs(environment, 'rev-a')).not.toBe(environmentBuildInputs(environment));
+    expect(environmentBuildInputs(environment, 'rev-a')).not.toBe(environmentBuildInputs(environment, 'rev-b'));
   });
 
   it('rebuilds on schedule when the last build failed or is unknown to the provider', async () => {

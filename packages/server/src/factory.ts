@@ -150,6 +150,7 @@ import { createSessionAccessGuard } from '@factory/session';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from '@factory/api';
 import type { FactoryApiRoutesDeps } from '@factory/api';
 import { TelemetryRoutes } from '@factory/api';
+import { SandboxEnvRoutes } from '@factory/api';
 import {
   createTenantCredentialPrimer,
   primeTenantCredentials,
@@ -177,7 +178,7 @@ import type { ProjectBoardSource } from '@factory/runtime';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from '@factory/core';
 import { CallbackFactorySandbox, LocalFactorySandbox, workItemFolderKey } from '@factory/sandbox';
 import { isValidGitRef } from '@factory/sandbox';
-import { peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
+import { CachedSandboxEnvs, peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { backfillUntilDone, WorkItemSplitModeError } from '@factory/store';
 import { migrateLabelRoutesToIntakeRoutes, REVIEW_BOARD_RETIREMENT_ACTOR } from '@factory/store';
@@ -232,6 +233,7 @@ import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
 import { FactoryProjectsStorage } from '@factory/store';
 import { QueueHealthStorage } from '@factory/store';
+import { SandboxEnvsStorage } from '@factory/store';
 import { SourceControlStorage } from '@factory/store';
 import { WorkItemsStorage } from '@factory/store';
 import type { FactoryRunBindingRecord, WorkItemRow } from '@factory/store';
@@ -587,6 +589,7 @@ export class MastraFactory {
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
@@ -763,7 +766,9 @@ export class MastraFactory {
     const configuredAuth = this.#config.auth;
     if (configuredAuth === undefined) throw new Error(MISSING_AUTH_ERROR);
     const auth: IMastraAuthProvider | undefined = configuredAuth ?? undefined;
-    if (auth && !this.#config.secretEncryption) {
+    // Secrets would be stored as plaintext for a multi-user deploy; sandbox env writes are refused then.
+    const secretsUnencrypted = Boolean(auth) && !this.#config.secretEncryption;
+    if (secretsUnencrypted) {
       console.warn(
         "[factory] auth is enabled but 'secretEncryption' is not configured. Persisted model credentials, " +
           'custom-provider API keys, and integration secrets will be stored as plaintext. Provide ' +
@@ -861,6 +866,17 @@ export class MastraFactory {
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const storedBoardsStorage = storage.registerDomain(new StoredBoardsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
+    // Reads come from memory until a variable changes; writes are announced to other replicas.
+    const sandboxEnvsStorage = new CachedSandboxEnvs(storage.registerDomain(new SandboxEnvsStorage(secretEncryption)), {
+      pubsub: eventBus,
+      crossProcess: Boolean(pubsub),
+    });
+    this.#unsubscribeSandboxEnvChanges = sandboxEnvsStorage.subscribe().catch(error => {
+      console.warn(
+        `[factory] subscribing to sandbox environment variable changes failed; other replicas' edits show up within a minute: ${error instanceof Error ? error.message : error}`,
+      );
+      return undefined;
+    });
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
@@ -882,6 +898,7 @@ export class MastraFactory {
       modelCredentials: modelCredentialsStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
+      sandboxEnvs: sandboxEnvsStorage,
       filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
@@ -1560,6 +1577,7 @@ export class MastraFactory {
           {
             sandbox: this.#sandbox,
             projects: factoryProjectsStorage,
+            sandboxEnvs: sandboxEnvsStorage,
             sourceControl: githubIntegration?.versionControl
               ? {
                   storage: sourceControlStorage.forIntegration(githubIntegration.id),
@@ -1788,6 +1806,7 @@ export class MastraFactory {
           : [],
       ),
       ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
+      sandboxEnvs: sandboxEnvsStorage,
       ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
       workspaceRegistry,
       ...(workItemFolders ? { workItemFolders } : {}),
@@ -2796,6 +2815,13 @@ export class MastraFactory {
             },
           }),
           ...projectRoutes.routes(),
+          ...new SandboxEnvRoutes({
+            auth: routeAuth,
+            projects: factoryProjectsStorage,
+            sandboxEnvs: sandboxEnvsStorage,
+            writable: !secretsUnencrypted,
+            audit: auditDomain,
+          }).routes(),
           ...auditDomain.routes(),
           ...commentsDomain.routes(),
           // Connect/reconnect session minting for Platform-managed providers.
@@ -3219,6 +3245,9 @@ export class MastraFactory {
   async shutdown(): Promise<void> {
     const unsubscribeDispatchWakes = this.#unsubscribeDispatchWakes;
     this.#unsubscribeDispatchWakes = undefined;
+    const unsubscribeSandboxEnvChanges = this.#unsubscribeSandboxEnvChanges;
+    this.#unsubscribeSandboxEnvChanges = undefined;
+    await unsubscribeSandboxEnvChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
     await unsubscribeDispatchWakes
       ?.then(unsubscribe => unsubscribe?.())
       .catch(error =>

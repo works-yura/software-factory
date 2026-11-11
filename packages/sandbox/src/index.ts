@@ -10,3 +10,5 @@ export * from './github/sandbox.ts';
 export * from './github/sandbox-release.ts';
 export * from './environment-state-processor.ts';
 export * from './session-retirement.ts';
+export * from './sandbox-env.ts';
+export * from './sandbox-env-cache.ts';

@@ -20,6 +20,7 @@ describe('audit action registry', () => {
       'intake_route',
       'intake_rule',
       'observability',
+      'sandbox_env',
     ]);
   });
 

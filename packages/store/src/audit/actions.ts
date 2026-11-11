@@ -24,6 +24,7 @@ export const AUDIT_ACTIONS = {
   intake_route: ['created', 'updated', 'deleted', 'reordered'],
   intake_rule: ['created', 'updated', 'deleted'],
   observability: ['connected', 'disconnected', 'mapping_updated'],
+  sandbox_env: ['set', 'updated', 'deleted'],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;

@@ -27,6 +27,7 @@ import {
 } from '@factory/contracts';
 import { IntakeRouteRoutes } from './intake-routes.ts';
 import { ProjectRoutes } from './projects.ts';
+import { SandboxEnvRoutes } from './sandbox-envs.ts';
 import { IntakeRuleRoutes } from './intake-rules/routes.ts';
 import { SkillRoutes } from './skills.ts';
 import { buildSupervisorRoutes } from '@factory/supervisor';
@@ -89,6 +90,12 @@ function registeredFactoryRoutes() {
   } as never).routes();
   const attachments = new AttachmentRoutes({ auth: {}, workItems: {}, sessions: {} } as never).routes();
   const intakeRules = new IntakeRuleRoutes({ auth: {}, audit: {}, projects: {}, storage: {}, engine: {} } as never).routes();
+  const sandboxEnvs = new SandboxEnvRoutes({
+    auth: {},
+    projects: {},
+    sandboxEnvs: {},
+    writable: true,
+  } as never).routes();
   return [
     ...intakeRules,
     ...projects,
@@ -100,6 +107,7 @@ function registeredFactoryRoutes() {
     ...skills,
     ...intakeRoutes,
     ...attachments,
+    ...sandboxEnvs,
   ];
 }
 

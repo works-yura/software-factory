@@ -21,6 +21,7 @@ import { BuildTriggersRows } from './environment/BuildTriggersBlock';
 import { RepositoriesBlock } from './environment/RepositoriesBlock';
 import type { RepositoryProviders } from './environment/RepositoriesBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
+import { AddSandboxEnvButton, SandboxEnvsBlock } from './environment/SandboxEnvsBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -132,6 +133,14 @@ function EnvironmentBlocks({
         >
           <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
         </WorkspaceSetupBlock>
+      </SettingsSubsection>
+      <SettingsSubsection
+        scope="factory"
+        title={t('sandboxEnvs.title')}
+        action={<AddSandboxEnvButton factoryId={factoryId} />}
+        description={t('sandboxEnvs.description')}
+      >
+        <SandboxEnvsBlock factoryId={factoryId} />
       </SettingsSubsection>
       {canBuild && (
         <SettingsSubsection

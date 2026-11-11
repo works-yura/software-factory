@@ -36,6 +36,7 @@ import { workItemProviderAdapter } from './work-items/providers/index.ts';
 import type { WorkItemRow, WorkItemSourceRow } from './work-items/work-item-schema.ts';
 import { bumpBoardVersions } from './work-items/board-version.ts';
 import { Cards } from './work-items/cards.ts';
+import { SandboxEnvsStorage } from './sandbox-envs/base.ts';
 
 /**
  * Leave cards only where a 0.26 Factory wrote them, the legacy table, and restart the work-items
@@ -138,6 +139,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   skillOverrides: SkillOverridesStorage;
   attachments: AttachmentsStorage;
   intakeRules: IntakeRulesStorage;
+  sandboxEnvs: SandboxEnvsStorage;
 }
 
 /**
@@ -174,6 +176,7 @@ export async function createFactoryStorageForTests<T extends FactoryStorage = Fa
   const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
   const attachments = storage.registerDomain(new AttachmentsStorage());
   const intakeRules = storage.registerDomain(new IntakeRulesStorage());
+  const sandboxEnvs = storage.registerDomain(new SandboxEnvsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -195,5 +198,6 @@ export async function createFactoryStorageForTests<T extends FactoryStorage = Fa
     skillOverrides,
     attachments,
     intakeRules,
+    sandboxEnvs,
   };
 }

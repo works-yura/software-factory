@@ -12,12 +12,13 @@ import { z } from 'zod';
 import { resolveProjectEnvironment } from '../workspace.ts';
 import {
   ENVIRONMENT_BUILD_TRIGGERS,
-  environmentBuildContext,
+  environmentBuildContextWithEnv,
   errorReason,
   redactCredentials,
   runEnvironmentBuild,
 } from './build.ts';
 import type { EnvironmentBuildDeps, EnvironmentBuildOutcome } from './build.ts';
+import { buildEnvOf, maskSandboxEnvValues } from '@factory/sandbox';
 
 export const ENVIRONMENT_BUILD_WORKFLOW_ID = 'factory-environment-build';
 export const DEFAULT_BUILD_POLL_MS = 15_000;
@@ -87,7 +88,13 @@ export function createEnvironmentBuildWorkflow(
       const project = await deps.projects.getById({ id: projectId });
       if (!builds || !deps.sourceControl || !project) return { ...result, status: 'unknown' };
       const environment = await resolveProjectEnvironment(deps.sourceControl.storage, project);
-      const ctx = environmentBuildContext(project, environment, heads, deps.sourceControl.versionControl);
+      const { ctx } = await environmentBuildContextWithEnv(
+        project,
+        environment,
+        heads,
+        deps.sourceControl.versionControl,
+        deps.sandboxEnvs,
+      );
       const startedAt = now().getTime();
       try {
         for (;;) {
@@ -113,12 +120,12 @@ export function createEnvironmentBuildWorkflow(
               factoryProjectId: project.id,
               buildId: result.buildId,
               status: build.status,
-              ...(build.error ? { reason: redactCredentials(build.error) } : {}),
+              ...(build.error ? { reason: maskSandboxEnvValues(redactCredentials(build.error), buildEnvOf(ctx)) } : {}),
             });
             return {
               ...result,
               status: build.status,
-              ...(build.error ? { reason: redactCredentials(build.error) } : {}),
+              ...(build.error ? { reason: maskSandboxEnvValues(redactCredentials(build.error), buildEnvOf(ctx)) } : {}),
             };
           }
           if (now().getTime() - startedAt >= maxWaitMs) {
@@ -127,7 +134,7 @@ export function createEnvironmentBuildWorkflow(
           await sleep(pollMs);
         }
       } catch (error) {
-        const reason = errorReason(error);
+        const reason = maskSandboxEnvValues(errorReason(error), buildEnvOf(ctx));
         deps.logger?.info('environment build status read failed', { factoryProjectId: project.id, reason });
         return { ...result, status: 'unknown', reason };
       }

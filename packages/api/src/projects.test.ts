@@ -1637,6 +1637,8 @@ vi.mock('@factory/integration-github', async importOriginal => ({
         readonly starts: Array<{ sessionId: string; settings: Settings }> = [];
         readonly reads: Array<{ buildId: string; heads: Record<string, string | undefined> }> = [];
         withHistory = false;
+        /** Extra provider output, as a user's setup command might print it. */
+        printed = '';
         readonly builds: FactorySandboxBuilds<Settings> = {
           start: async (ctx, settings) => {
             this.starts.push({ sessionId: ctx.sessionId, settings });
@@ -1647,7 +1649,9 @@ vi.mock('@factory/integration-github', async importOriginal => ({
               buildId,
               heads: { api: await ctx.resolveHead!('https://github.com/acme/api.git') },
             });
-            return { buildId, status: 'ready', templateId: 'tpl-1' };
+            return this.printed
+              ? { buildId, status: 'failed', error: `setup failed: ${this.printed}`, logs: [this.printed] }
+              : { buildId, status: 'ready', templateId: 'tpl-1' };
           },
           list: async () =>
             this.withHistory
@@ -1660,6 +1664,16 @@ vi.mock('@factory/integration-github', async importOriginal => ({
                     logs: ['git clone https://x-access-token:ghs_secret@github.com/acme/api.git', 'fatal: 403'],
                   },
                   { buildId: 'tpl%201:b', status: 'ready' as const, templateId: 'tpl-1' },
+                  ...(this.printed
+                    ? [
+                        {
+                          buildId: 'tpl-1:build-2',
+                          status: 'failed' as const,
+                          error: this.printed,
+                          logs: [this.printed],
+                        },
+                      ]
+                    : []),
                 ]
               : [],
         };
@@ -1700,6 +1714,7 @@ vi.mock('@factory/integration-github', async importOriginal => ({
           {
             sandbox,
             projects: seed.projects,
+            sandboxEnvs: seed.sandboxEnvs,
             sourceControl: {
               storage: github,
               versionControl: { getRepositoryAccess: async () => ({ token: 't', cloneUrl: 'u' }) as never },
@@ -1736,6 +1751,37 @@ vi.mock('@factory/integration-github', async importOriginal => ({
       const until = async (check: () => Promise<boolean>) => {
         for (let i = 0; i < 100 && !(await check()); i += 1) await new Promise(r => setTimeout(r, 20));
       };
+
+      it('masks Build variable values in provider build errors and logs', async () => {
+        const { app, project, sandbox, seed } = await seedBuilding();
+        await seed.sandboxEnvs.set(
+          'org-1',
+          project.id,
+          { name: 'NPM_TOKEN', value: 'npm-sentinel-77', appliesTo: 'build' },
+          'user-1',
+        );
+        sandbox.withHistory = true;
+        sandbox.printed = 'auth failed for npm-sentinel-77';
+
+        const history = await app.request(`/web/factory/projects/${project.id}/environment/builds`);
+        expect(history.status).toBe(200);
+        const historyText = await history.text();
+        expect(historyText).not.toContain('npm-sentinel-77');
+        expect(JSON.parse(historyText).builds.at(-1)).toEqual({
+          buildId: 'tpl-1:build-2',
+          status: 'failed',
+          error: 'auth failed for ***',
+          logs: ['auth failed for ***'],
+        });
+
+        const detail = await app.request(
+          `/web/factory/projects/${project.id}/environment/builds/${encodeURIComponent('tpl-1:build-2')}`,
+        );
+        expect(detail.status).toBe(200);
+        const detailText = await detail.text();
+        expect(detailText).not.toContain('npm-sentinel-77');
+        expect(JSON.parse(detailText).build).toMatchObject({ error: 'setup failed: auth failed for ***' });
+      });
 
       it('reports triggers and the last build on GET without calling the provider', async () => {
         const { app, project, sandbox } = await seedBuilding();
