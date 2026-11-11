@@ -290,44 +290,26 @@ describe('defineBoard sourceClosed', () => {
 
 });
 
-describe('defineBoard changeRequests and triageClassification', () => {
+describe('defineBoard triageClassification', () => {
   const phases = {
     queued: { title: 'Queued', kind: 'resting', next: 'building' },
-    building: { title: 'Building', kind: 'working', role: 'work', next: 'reviewing' },
-    reviewing: { title: 'Reviewing', kind: 'working', role: 'work', next: 'shipped' },
+    building: { title: 'Building', kind: 'working', role: 'work', next: 'shipped' },
     shipped: { title: 'Shipped', kind: 'terminal' },
   } as const;
   const define = (extra: Record<string, unknown>) =>
     defineBoard({ id: 'release', title: 'Release', initialPhase: 'queued', phases, ...(extra as object) } as never);
 
-  it('exposes a frozen change-request flow and omits both declarations when undeclared', () => {
-    const board = define({
-      changeRequests: { build: 'building', review: 'reviewing', merged: 'shipped' },
-      triageClassification: true,
-    });
-    expect(board.changeRequests).toEqual({ build: 'building', review: 'reviewing', merged: 'shipped' });
-    expect(Object.isFrozen(board.changeRequests)).toBe(true);
-    expect(board.triageClassification).toBe(true);
-    const plain = define({});
-    expect('changeRequests' in plain).toBe(false);
-    expect(plain.triageClassification).toBeUndefined();
+  it('exposes triageClassification only when declared true', () => {
+    expect(define({ triageClassification: true }).triageClassification).toBe(true);
+    expect(define({}).triageClassification).toBeUndefined();
     expect(define({ triageClassification: false }).triageClassification).toBeUndefined();
+    expect(() => define({ triageClassification: 'yes' })).toThrow(/triageClassification must be a boolean/);
   });
 
-  it('rejects flows naming phases of the wrong kind and malformed shapes', () => {
-    expect(() => define({ changeRequests: { build: 'queued', review: 'reviewing', merged: 'shipped' } })).toThrow(
-      /changeRequests.build "queued" must name a working phase/,
-    );
-    expect(() => define({ changeRequests: { build: 'building', review: 'reviewing', merged: 'reviewing' } })).toThrow(
-      /changeRequests.merged "reviewing" must name a terminal phase/,
-    );
-    expect(() => define({ changeRequests: { build: 'building', review: 'missing', merged: 'shipped' } })).toThrow(
-      BoardDefinitionError,
-    );
-    expect(() => define({ changeRequests: { build: 'building', review: 'reviewing' } })).toThrow(
-      /exactly build, review, and merged/,
-    );
-    expect(() => define({ changeRequests: 'building' })).toThrow(/plain object/);
-    expect(() => define({ triageClassification: 'yes' })).toThrow(/triageClassification must be a boolean/);
+  it('rejects inherited property names as phases', () => {
+    const board = define({});
+    expect(() => board.allowsTransition('toString' as never, 'shipped')).not.toThrow();
+    expect(board.allowsTransition('toString' as never, 'shipped')).toBe(false);
+    expect(board.allowsTransition('queued', 'constructor' as never)).toBe(false);
   });
 });

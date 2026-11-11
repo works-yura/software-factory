@@ -4,11 +4,12 @@ import { z } from 'zod';
 
 import {
   boardClassifiesTriage,
+  boardFlow,
   boardForWorkItem,
+  cardBoardFlow,
+  hasPullRequest,
   isPullRequestCard,
-  PULL_REQUEST_REVIEW_PHASE,
   reviewedChangeRequest,
-  reviewsPullRequest,
   workItemPhaseSemantics,
   workItemSource,
 } from '@factory/core';
@@ -56,24 +57,6 @@ const transitionInputSchema = z
  */
 function classifiesTriage(boards: BoardRegistry | undefined, item: WorkItemRow): boolean {
   return boards ? boardClassifiesTriage(boards, item) : boardForWorkItem(item) === 'work';
-}
-
-type SelfReviewFlow = { board: string; build: string; review: string; parked: string };
-
-/**
- * Where self-review runs for the card: its board's declared change-request flow, parking at the
- * board's initial phase. Without an installed registry only Work self-reviews.
- */
-function selfReviewFlow(boards: BoardRegistry | undefined, item: WorkItemRow): SelfReviewFlow | undefined {
-  const boardId = boardForWorkItem(item);
-  if (!boards) {
-    return boardId === 'work' ? { board: 'work', build: 'execute', review: 'review', parked: 'intake' } : undefined;
-  }
-  const board = boards.get(boardId);
-  const flow = board?.changeRequests;
-  return board && flow
-    ? { board: boardId, build: flow.build, review: flow.review, parked: board.initialPhase }
-    : undefined;
 }
 
 export async function createFactoryTransitionTools(options: {
@@ -260,7 +243,7 @@ function createReviewVerdictTool(
     factory_record_review_verdict: createTool({
       id: 'factory_record_review_verdict',
       description:
-        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On the card of a pull request it records the published PR verdict and the card stays in PR review. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
+        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. In the phase that reviews pull requests it records the published PR verdict and the card stays put. In a self-review phase with no change request open yet, approve keeps the card in place and wakes the builder to open the change request; request changes sends it back to the build phase with your findings.',
       inputSchema: reviewVerdictInputSchema,
       requireApproval: false,
       execute: async ({ verdict, reviewedHeadSha, reviewedHeads, findings }, execution) => {
@@ -281,13 +264,19 @@ function createReviewVerdictTool(
             `This session does not review the card in its current phase (${item.stages.join(', ')}); it cannot record a verdict.`,
           );
         }
-        const board = boardForWorkItem(item);
+        if (!options.boards) throw new Error('Factory boards are unavailable; the review verdict cannot be recorded.');
+        const boards = await toBoardSource(options.boards).load(binding);
+        const boardId = boardForWorkItem(item);
+        const board = boards.get(boardId);
+        const flow = boardFlow(board);
+        const stage = item.stages[0];
         const source = workItemSource(item.externalSource);
-        // A pull request's own card can sit in Work's phases too; it is never self-reviewed.
-        const selfReview = isPullRequestCard({ source }) ? undefined : selfReviewFlow(options.boards, item);
+        // A pull request's own card can sit in a board's other phases too; it is never self-reviewed.
+        const pullRequestCard = isPullRequestCard({ source });
         if (
-          selfReview &&
-          item.stages[0] === selfReview.review &&
+          board &&
+          stage === flow.selfReview &&
+          !pullRequestCard &&
           !hasOpenChangeRequest(item.metadata)
         ) {
           return recordSelfReviewVerdict({
@@ -295,7 +284,10 @@ function createReviewVerdictTool(
             transitionService: options.transitionService,
             binding,
             item,
-            flow: selfReview,
+            board: boardId,
+            // Requested changes go back to the builder; a board without a build phase rests the card.
+            buildPhase: flow.build ?? board.initialPhase,
+            parkPhase: board.initialPhase,
             verdict,
             reviewedHeadSha: reviewedHeadSha.toLowerCase(),
             reviewedHeads,
@@ -304,10 +296,18 @@ function createReviewVerdictTool(
           });
         }
         if (
-          !reviewsPullRequest({ board, item: { source, workItem: item.workItem } }) ||
-          item.stages[0] !== PULL_REQUEST_REVIEW_PHASE
+          stage === undefined ||
+          stage !== flow.pullRequestReview ||
+          !hasPullRequest({ source, workItem: item.workItem })
         ) {
-          throw new Error(`Only a card in PR review records a verdict; this one is in ${item.stages.join(', ')}.`);
+          const where = flow.pullRequestReview
+            ? (board?.phases[flow.pullRequestReview]?.name ?? flow.pullRequestReview)
+            : undefined;
+          throw new Error(
+            where
+              ? `Only a card with a pull request in ${where} records a verdict; this one is in ${item.stages.join(', ')}.`
+              : `The ${board?.name ?? boardId} board reviews no pull requests, so this card in ${item.stages.join(', ')} records no verdict.`,
+          );
         }
         // An issue card can carry several pull requests; the verdict names the one it covers.
         const reviewedNumber = reviewedChangeRequest({ ...item, source })?.number;
@@ -336,12 +336,12 @@ function createReviewVerdictTool(
             'The Review card changed while recording the verdict; call again to record it on the current card.',
           );
         }
-        // Mirror the verdict onto the Work item that authored the PR, so its
+        // Mirror the verdict onto the card that authored the PR, so its
         // builder cannot close the work while changes are still requested.
         const parent = item.parentWorkItemId
           ? await options.storage.get({ orgId: binding.orgId, id: item.parentWorkItemId })
           : null;
-        if (parent && selfReviewFlow(options.boards, parent)) {
+        if (parent && cardBoardFlow(boards, parent).build !== undefined) {
           await options.storage.update({
             orgId: binding.orgId,
             id: parent.id,
@@ -363,7 +363,7 @@ function createReviewVerdictTool(
 }
 
 /**
- * Self-review ends the same way a PR review does, but on the Work card before
+ * Self-review ends the same way a PR review does, but on the authoring card before
  * any change request exists, and it moves the card itself: the verdict is the
  * only thing that decides where the work goes next.
  */
@@ -372,7 +372,9 @@ async function recordSelfReviewVerdict(input: {
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   binding: { id: string; orgId: string; factoryProjectId: string; workItemId: string; role: string };
   item: WorkItemRow;
-  flow: SelfReviewFlow;
+  board: string;
+  buildPhase: string;
+  parkPhase: string;
   verdict: (typeof REVIEW_VERDICTS)[number];
   reviewedHeadSha: string;
   reviewedHeads?: Array<{ repository: string; sha: string }>;
@@ -387,8 +389,8 @@ async function recordSelfReviewVerdict(input: {
   const reviewedAt = new Date().toISOString();
   const previousRounds = typeof item.metadata?.selfReviewRounds === 'number' ? item.metadata.selfReviewRounds : 0;
   const rounds = verdict === 'request changes' ? previousRounds + 1 : previousRounds;
-  // Every SELF_REVIEW_ROUND_LIMIT rounds the card rests in Intake for a person instead of looping;
-  // moving it back to Building grants another full set of rounds.
+  // Every SELF_REVIEW_ROUND_LIMIT rounds the card rests in its board's initial phase for a person
+  // instead of looping; moving it back to the build phase grants another full set of rounds.
   const parked = verdict === 'request changes' && rounds % SELF_REVIEW_ROUND_LIMIT === 0;
   let updated: Awaited<ReturnType<WorkItemsStorage['update']>>;
   try {
@@ -420,8 +422,8 @@ async function recordSelfReviewVerdict(input: {
     orgId: binding.orgId,
     factoryProjectId: binding.factoryProjectId,
     workItemId: binding.workItemId,
-    board: input.flow.board,
-    stage: parked ? input.flow.parked : input.flow.build,
+    board: input.board,
+    stage: parked ? input.parkPhase : input.buildPhase,
     expectedRevision: updated.item.revision,
     actor: { type: 'agent', bindingId: binding.id, role: binding.role },
     ingress: { type: 'agent', identity: `${binding.id}:${input.toolCallId}` },

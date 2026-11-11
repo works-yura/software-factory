@@ -2,7 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { PULL_REQUEST_REVIEW_PHASE, reviewedPullRequest, sourceExternalId } from '@factory/core';
+import { reviewedPullRequest, sourceExternalId } from '@factory/core';
 import type { BoardRegistry } from '@factory/core';
 import type { ProjectBoardSource } from '@factory/runtime';
 import type { IntegrationTools } from '@factory/integrations';
@@ -165,9 +165,12 @@ function buildSessionUrl(input: {
   return `${origin}/factories/${encodeURIComponent(input.factoryProjectId)}/workspaces/${encodeURIComponent(input.sessionId)}/threads/${encodeURIComponent(input.threadId)}`;
 }
 
-/** The pull request a PR-review pass on an issue card looks at, when one is attached. */
+/**
+ * The pull request a review pass on an issue card looks at, when one is attached. The tool only
+ * exists in a phase that grants it, so the card is in its board's pull request review.
+ */
 function attachedReviewedPullRequest(item: Card) {
-  if (item.externalSource?.type === 'pull-request' || item.stages[0] !== PULL_REQUEST_REVIEW_PHASE) return null;
+  if (item.externalSource?.type === 'pull-request') return null;
   return reviewedPullRequest(item);
 }
 

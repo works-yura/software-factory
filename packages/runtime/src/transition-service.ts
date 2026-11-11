@@ -24,13 +24,16 @@ import type {
   FactoryTransitionResult,
 } from '@factory/core';
 import {
+  boardFlow,
+  DEFAULT_BOARD_ID,
   factoryRuleSourceForWorkItem,
   hasPullRequest,
-  isFactoryRuleStage,
   isPullRequestCard,
+  pullRequestCardRejection,
+  REVIEW_CONTEXT,
   workItemSource,
 } from '@factory/core';
-import { workPullRequestCardRejection } from '@factory/pipelines';
+import type { InstalledBoard } from '@factory/core';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   assertFactoryDecisionTarget,
@@ -169,16 +172,29 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
 }
 
 export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
-  if (stages.length !== 1) return undefined;
-  const stage = stages[0];
-  return isFactoryRuleStage(stage) ? stage : undefined;
+  return stages.length === 1 ? stages[0] : undefined;
 }
 
 interface TransitionConsentOptions {
   autonomy?: 'arm' | 'disarm';
   consentedBy?: string;
-  /** A person moved a Work card out of Intake or Triage into Planning or Building: that move approves the work. */
+  /** A person moved a card into its board's build seat from before it (see {@link acceptsWork}): that move approves the work. */
   accepted?: boolean;
+}
+
+/**
+ * Whether moving a card from `from` to `to` hands it to the board's builder for the first time: `to`
+ * runs in the seat of the board's build phase ({@link boardFlow}), and `from` is a resting phase or a
+ * working phase of another seat that is no review (Work: Intake or Triage into Planning or Building).
+ */
+function acceptsWork(board: InstalledBoard, from: string, to: string): boolean {
+  const buildRole = boardFlow(board).buildRole;
+  if (!buildRole || board.roleForPhase(to) !== buildRole) return false;
+  const fromPhase = board.phases[from];
+  if (!fromPhase || fromPhase.kind === 'terminal') return false;
+  if (fromPhase.kind === 'resting') return true;
+  const fromRole = fromPhase.runner.context;
+  return fromRole !== buildRole && fromRole !== REVIEW_CONTEXT;
 }
 
 // Entering a resting lane disarms whoever rests it; only a person's move into a working lane arms.
@@ -383,10 +399,10 @@ export class FactoryTransitionService {
     }
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
-    // Cards filed before boards were recorded belong to Work: pull request cards among them were
-    // moved off the retired Review board at startup.
-    const legacyBoard = 'work';
-    if (item.board === null && !boards.has(legacyBoard)) {
+    const isPullRequest = isPullRequestCard({ source: itemSource });
+    // Rows filed before boards were persisted belong to the default board: pull request cards among
+    // them were moved off the retired Review board at startup.
+    if (item.board === null && !boards.has(DEFAULT_BOARD_ID)) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -394,7 +410,7 @@ export class FactoryTransitionService {
         'This legacy work item has no assigned board. Assign an installed board and phase through the work-item PATCH endpoint before transitioning it.',
       );
     }
-    const itemBoard = item.board ?? legacyBoard;
+    const itemBoard = item.board ?? DEFAULT_BOARD_ID;
     if (request.board !== itemBoard) {
       return this.#commitRejection(
         request,
@@ -421,20 +437,18 @@ export class FactoryTransitionService {
         'The work item does not have one canonical phase on the requested board.',
       );
     }
-    // The Work board's own reason comes first: its phase graph alone only says the move is not
+    // The board's own reason comes first: its phase graph alone only says the move is not
     // declared, which leaves an agent moving an issue card to PR review guessing why.
-    const pullRequestCardRejection =
-      request.board === 'work'
-        ? workPullRequestCardRejection(
-            {
-              standalonePullRequest: isPullRequestCard({ source: itemSource }),
-              hasPullRequest: hasPullRequest({ workItem: item.workItem, source: itemSource }),
-            },
-            request.stage,
-          )
-        : undefined;
-    if (pullRequestCardRejection) {
-      return this.#commitRejection(request, transitionId, 'invalid_transition', pullRequestCardRejection);
+    const cardShapeRejection = pullRequestCardRejection(
+      board,
+      {
+        standalonePullRequest: isPullRequest,
+        hasPullRequest: hasPullRequest({ workItem: item.workItem, source: itemSource }),
+      },
+      request.stage,
+    );
+    if (cardShapeRejection) {
+      return this.#commitRejection(request, transitionId, 'invalid_transition', cardShapeRejection);
     }
     if (
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
@@ -580,11 +594,7 @@ export class FactoryTransitionService {
           return {
             outcome: 'accepted' as const,
             intents: {
-              accepted:
-                request.board === 'work' &&
-                isHumanTransition(request) &&
-                (fromStage === 'intake' || fromStage === 'triage') &&
-                (request.stage === 'planning' || request.stage === 'execute'),
+              accepted: isHumanTransition(request) && acceptsWork(board, fromStage, request.stage),
             },
             decisions: validateFactoryRuleDecisions(validated) as unknown as Record<string, unknown>[],
           };

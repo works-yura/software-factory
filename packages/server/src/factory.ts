@@ -51,12 +51,13 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from '@factory/auth';
-import { createBoardRegistry, isDefinedBoard, isTerminalWorkItem } from '@factory/core';
+import { createBoardRegistry, isDefinedBoard, isTerminalWorkItem, REVIEW_CONTEXT } from '@factory/core';
 import { createDefaultBoardRegistry, PRODUCT_LEGACY_PHASE_RENAMES, productBoard } from '@factory/pipelines';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import {
   boardForWorkItem,
   boundChangeRequestNumber,
+  cardBoardFlow,
   isPullRequestCard,
   namesRepository,
   openChangeRequests,
@@ -1734,8 +1735,8 @@ export class MastraFactory {
                   resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
                 if (!binding) return undefined;
                 const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                // Self-review gates the change request on boards that ship them (Work).
-                if (!item || !(await toBoardSource(boards).load(binding)).get(boardForWorkItem(item))?.changeRequests) {
+                // Self-review gates the change request only on a board with a self-review phase.
+                if (!item || cardBoardFlow(await toBoardSource(boards).load(binding), item).selfReview === undefined) {
                   return undefined;
                 }
                 // A pull request's own card is reviewed, never self-reviewed.
@@ -1783,9 +1784,9 @@ export class MastraFactory {
                 if (!resolution) return undefined;
                 const binding =
                   resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                if (binding?.role !== 'review') return undefined;
+                if (binding?.role !== REVIEW_CONTEXT) return undefined;
                 const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                return item ? boundChangeRequestNumber(item) : undefined;
+                return item ? boundChangeRequestNumber(await toBoardSource(boards).load(binding), item) : undefined;
               },
             }
           : {}),
@@ -2420,7 +2421,7 @@ export class MastraFactory {
                 const state = context.getState();
                 if (
                   state.factoryProjectId !== recovered.binding.factoryProjectId ||
-                  (recovered.binding.role === 'review' && state.untrustedCheckout !== true)
+                  (recovered.binding.role === REVIEW_CONTEXT && state.untrustedCheckout !== true)
                 ) {
                   throw new Error(
                     'Factory review session security state could not be restored before prompt creation.',
@@ -3008,7 +3009,7 @@ export class MastraFactory {
           sourceControlStorage,
           integrations: integrationRegistrations,
           configVersion,
-          boardRegistry: this.#boards,
+          boardRegistry: this.#projectBoards ?? this.#boards,
           ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage, projectBoards: this.#projectBoards } : {}),
           factoryReady,
           domains,
@@ -3041,7 +3042,7 @@ export class MastraFactory {
           sourceControlStorage,
           integrations: integrationRegistrations,
           configVersion,
-          boardRegistry: this.#boards,
+          boardRegistry: this.#projectBoards ?? this.#boards,
           ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage, projectBoards: this.#projectBoards } : {}),
           factoryReady,
           domains,
@@ -3086,7 +3087,7 @@ export class MastraFactory {
                 sourceControlStorage,
                 integrations: integrationRegistrations,
                 configVersion,
-                boardRegistry: this.#boards,
+                boardRegistry: this.#projectBoards ?? this.#boards,
                 factoryReady,
                 domains,
                 feed: commentsDomain,

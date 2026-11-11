@@ -2,6 +2,8 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import {
+  awaitsAcceptance,
+  boardFlow,
   boardForWorkItem,
   isTerminalWorkItem,
   needsApproval,
@@ -166,17 +168,20 @@ function summarizeDecision(decision: FactoryDeferredDecisionRecord, overtaken = 
   };
 }
 
-const PAST_TRIAGE = new Set(['planning', 'execute', 'review']);
-
 /**
- * Held: a Work card triage left in Intake (or whose source asks for approval), until a person
- * moves it on. A card that has been past Triage since (parked by self-review, or dragged back)
- * resumes instead, matching the board's held state.
+ * Held: a card triage left resting (or whose source asks for approval), until a person moves it
+ * on. A card that has been past triage since (parked by self-review, or dragged back) resumes
+ * instead, matching the board's held state.
  */
-function isHeld(item: Card): boolean {
-  if (boardForWorkItem(item) !== 'work' || item.stages[0] !== 'intake') return false;
-  if (needsApproval(item)) return true;
-  return item.sessions.triage !== undefined && !item.stageHistory.some(entry => PAST_TRIAGE.has(entry.stage));
+function isHeld(boards: BoardRegistry, item: Card): boolean {
+  const board = boards.get(boardForWorkItem(item));
+  const stage = item.stages.length === 1 ? item.stages[0]! : undefined;
+  if (!board || !stage || board.phaseKind(stage) !== 'resting') return false;
+  if (needsApproval(item, phase => awaitsAcceptance(board, phase))) return true;
+  const triage = boardFlow(board).triage;
+  const triageRole = triage ? board.roleForPhase(triage) : undefined;
+  if (!triageRole || item.sessions[triageRole] === undefined) return false;
+  return !item.stageHistory.some(entry => entry.stage !== triage && board.isWorking(entry.stage));
 }
 
 const listInputSchema = z
@@ -403,7 +408,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           incidents.flatMap(group => group.shown),
         );
         const proposals = decisions.filter(decision => decision.status === 'proposed');
-        const held = items.filter(isHeld);
+        const held = items.filter(item => isHeld(boards, item));
         const unplaced = await cardsWithoutRepository(
           items.filter(item => !item.externalSource && !isTerminalWorkItem(boards, item)),
         );

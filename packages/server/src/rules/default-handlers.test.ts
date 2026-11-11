@@ -3,7 +3,7 @@ import { createProviderWorkItemForTests } from '@factory/store/testing';
 import { splitCardMetadata, workItemProviderAdapter } from '@factory/store';
 import { defineBoard, externalSourceForWorkItem, phaseRunDecision } from '@factory/core';
 import { createBoardRegistry } from '@factory/testing';
-import { rulePhaseField, withBoardClosure, withChangeRequests } from '@factory/core';
+import { boardFlow, intakeTarget, rulePhaseField, withBoardClosure, withBoardFlow } from '@factory/core';
 import { BUILD_OBJECTIVE, workBoard } from '@factory/pipelines';
 import { defaultGithubRules } from '@factory/integration-github';
 import { defaultGitLabRules } from '@factory/integration-gitlab';
@@ -31,12 +31,16 @@ function ruleItem(
 }
 
 const passThrough = vi.fn(() => undefined);
+const workBoards = createBoardRegistry();
+/** What the rule runners pass for the project's default Work board. */
 const base = {
   tenant: { orgId: 'org-1', projectId: 'project-1' },
   ingress: { type: 'github' as const, id: 'delivery-1' },
   cause: 'test',
   causalChain: [],
   configVersion: 'deployment-1',
+  intake: intakeTarget(workBoards)!,
+  flow: boardFlow(workBoard),
 };
 const item = ruleItem({
   id: 'item-1',
@@ -79,6 +83,22 @@ function onBoard(board: string, stages: string[], source: string = item.source) 
     board,
     itemRevision: 4,
     ...withBoardClosure(closureBoards, { board, externalSource: null, stages }),
+  };
+}
+
+const allBoards = createBoardRegistry({ boards: [releaseBoard, plainBoard] });
+
+/** Binds `context` to `card` on `board` the way a rule runner does: closure, phase and flow included. */
+function bind<T extends FactoryGithubRuleContext>(context: T, card: FactoryRuleItemContext, board = 'work'): T {
+  const row = { board, externalSource: null, stages: card.stages };
+  return {
+    ...context,
+    item: card,
+    board,
+    itemRevision: 5,
+    ...withBoardClosure(allBoards, row),
+    ...rulePhaseField(allBoards, row),
+    ...withBoardFlow(allBoards, row),
   };
 }
 
@@ -776,13 +796,9 @@ describe('built-in board and integration handlers', () => {
     });
 
     function pushContext(overrides: Partial<FactoryGithubRuleContext> = {}): FactoryGithubRuleContext {
-      return {
-        ...githubContext('pullRequestUpdated'),
-        item: prItem,
-        board: 'work',
-        itemRevision: 5,
-        ...overrides,
-      };
+      const card = 'item' in overrides ? overrides.item : prItem;
+      const context = { ...githubContext('pullRequestUpdated'), ...overrides };
+      return card ? bind(context, card) : context;
     }
 
     it('re-enters PR review when a push arrives for a PR whose card already finished its review', async () => {
@@ -991,10 +1007,10 @@ describe('built-in board and integration handlers', () => {
 
   it('moves the merged pull request card to Done and carries a session-only message', async () => {
     const context = githubContext('pullRequestMerged');
-    context.item = ruleItem({ ...item, source: 'github-pr', sourceKey: 'github-pr:17', stages: ['pr-review'] });
-    context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
-    const decision = await defaultGithubRules.pullRequestMerged?.(context);
+    const decision = await defaultGithubRules.pullRequestMerged?.(
+      bind(context, ruleItem({ ...item, source: 'github-pr', sourceKey: 'github-pr:17' }), 'work'),
+    );
     expect(decision).toMatchObject({
       type: 'transition',
       board: 'work',
@@ -1005,27 +1021,23 @@ describe('built-in board and integration handlers', () => {
 
   it('moves the provenance-linked Work item to Done when its pull request merges', async () => {
     const context = githubContext('pullRequestMerged');
-    context.item = item;
-    context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
-    const decision = await defaultGithubRules.pullRequestMerged?.(context);
+    const decision = await defaultGithubRules.pullRequestMerged?.(bind(context, item, 'work'));
     expect(decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
   });
 
   it('does not target the Work board when a pull request from a custom board merges', async () => {
     const context = githubContext('pullRequestMerged');
-    context.item = item;
-    context.board = 'release';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
-    expect(await defaultGithubRules.pullRequestMerged?.(context)).toBeUndefined();
+    expect(await defaultGithubRules.pullRequestMerged?.(bind(context, item, 'release'))).toBeUndefined();
   });
 
   it('keeps the Work item in Review when an older pull request merges while a newer one is open', async () => {
     const context = githubContext('pullRequestMerged');
-    context.item = ruleItem({ ...item, metadata: { openPullRequestNumber: 18 } });
-    context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, number: 17, state: 'closed', merged: true };
-    const decision = await defaultGithubRules.pullRequestMerged?.(context);
+    const decision = await defaultGithubRules.pullRequestMerged?.(
+      bind(context, ruleItem({ ...item, metadata: { openPullRequestNumber: 18 } }), 'work'),
+    );
     expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', message: expect.stringContaining('#18') });
   });
 
@@ -1038,29 +1050,38 @@ describe('built-in board and integration handlers', () => {
     expect(await defaultGithubRules.pullRequestOpened?.(context)).toBeUndefined();
   });
 
-  describe('boards that declare a change-request flow (a custom Bug board)', () => {
-    // Any board other than Work that declares `changeRequests` gets the stock pull request rules.
-    const anyPhase = { intake: 'intake', execute: 'execute', review: 'review', done: 'done', canceled: 'canceled' } as const;
+  describe('a custom Bug board that runs the pull request loop from its phases', () => {
     const bugBoard = defineBoard({
       id: 'bug',
-      title: 'Bug',
+      name: 'Bug',
       initialPhase: 'intake',
-      changeRequests: { build: 'execute', review: 'review', merged: 'done' },
+      sourceClosed: { completed: 'done', canceled: 'canceled' },
       phases: {
-        intake: { title: 'Intake', kind: 'resting', outcomes: anyPhase },
-        execute: { title: 'Fix', kind: 'working', role: 'work', outcomes: anyPhase },
-        review: { title: 'Review', kind: 'working', role: 'work', outcomes: anyPhase },
-        done: { title: 'Done', kind: 'terminal', outcomes: anyPhase },
-        canceled: { title: 'Canceled', kind: 'terminal', outcomes: anyPhase },
+        intake: { name: 'Intake', kind: 'resting', nextPhases: ['execute', 'done', 'canceled'] },
+        execute: { name: 'Fix', kind: 'working', runner: { context: 'work' }, nextPhases: ['review', 'intake'] },
+        review: {
+          name: 'Review',
+          kind: 'working',
+          runner: { context: 'review' },
+          tools: ['factory_record_review_verdict', 'factory_review_source'],
+          nextPhases: ['execute', 'done', 'canceled'],
+        },
+        done: { name: 'Done', kind: 'terminal', nextPhases: ['intake'] },
+        canceled: { name: 'Canceled', kind: 'terminal', nextPhases: ['intake'] },
       },
     });
     const boards = createBoardRegistry({ boards: [bugBoard] });
-    const onBug = (stages: string[], metadata: Record<string, unknown> = {}) => ({
-      item: { ...item, stages, metadata },
-      board: 'bug',
-      itemRevision: 3,
-      ...withChangeRequests(boards, { board: 'bug', externalSource: null }),
-    });
+    const onBug = (stages: string[], metadata: Record<string, unknown> = {}) => {
+      const row = { board: 'bug', externalSource: null, stages };
+      return {
+        item: { ...item, stages, metadata },
+        board: 'bug',
+        itemRevision: 3,
+        ...withBoardClosure(boards, row),
+        ...rulePhaseField(boards, row),
+        ...withBoardFlow(boards, row),
+      };
+    };
 
     it('moves the authoring Bug card out for review when its pull request opens', async () => {
       const context = { ...githubContext('pullRequestOpened'), ...onBug(['execute']) };
@@ -1088,7 +1109,7 @@ describe('built-in board and integration handlers', () => {
       ).toMatchObject({
         type: 'sendMessage',
         role: 'work',
-        message: expect.stringContaining('this Bug card stays in Review'),
+        message: expect.stringContaining('this Bug card stays where it is'),
       });
     });
 
@@ -1128,17 +1149,17 @@ describe('built-in board and integration handlers', () => {
       expect(await defaultGitLabRules.mergeRequestMerged?.(context)).toMatchObject({
         type: 'sendMessage',
         role: 'work',
-        message: expect.stringContaining('linked Bug item'),
+        message: expect.stringContaining('linked work item'),
       });
     });
   });
 
   it('cancels the pull request card when the PR is closed without merging', async () => {
     const context = githubContext('pullRequestClosed');
-    context.item = ruleItem({ ...item, source: 'github-pr', sourceKey: 'github-pr:17', stages: ['pr-review'] });
-    context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: false };
-    const decision = await defaultGithubRules.pullRequestClosed?.(context);
+    const decision = await defaultGithubRules.pullRequestClosed?.(
+      bind(context, ruleItem({ ...item, source: 'github-pr', sourceKey: 'github-pr:17' }), 'work'),
+    );
     expect(decision).toMatchObject({
       type: 'transition',
       board: 'work',
@@ -1149,9 +1170,7 @@ describe('built-in board and integration handlers', () => {
 
   it('leaves non-review items alone when a PR is closed without merging', async () => {
     const context = githubContext('pullRequestClosed');
-    context.item = item;
-    context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: false };
-    expect(await defaultGithubRules.pullRequestClosed?.(context)).toBeUndefined();
+    expect(await defaultGithubRules.pullRequestClosed?.(bind(context, item, 'work'))).toBeUndefined();
   });
 });

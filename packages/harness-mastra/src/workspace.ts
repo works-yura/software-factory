@@ -71,6 +71,7 @@ import type { WorkItemsStorage } from '@factory/store';
 import { supervisorProjectIdFromContext } from '@factory/session';
 import { instrumentMethods, timed, timedPhase } from '@factory/observability';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from '@factory/pipelines';
+import { REVIEW_CONTEXT } from '@factory/core';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 // GitHub installation tokens live 60 minutes and minted access is cached for
@@ -449,7 +450,7 @@ function isActiveReviewBinding(
   runBinding: { role: string; status: string; orgId: string } | null | undefined,
   orgId: string | undefined,
 ): boolean {
-  return runBinding?.role === 'review' && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
+  return runBinding?.role === REVIEW_CONTEXT && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
 }
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];

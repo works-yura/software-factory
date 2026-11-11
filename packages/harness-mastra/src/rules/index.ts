@@ -1,10 +1,7 @@
 export {
   FACTORY_GITHUB_EVENTS,
-  FACTORY_RULE_BOARDS,
   FACTORY_RULE_SOURCES,
-  FACTORY_RULE_STAGES,
   factoryRuleSourceForWorkItem,
-  isFactoryRuleStage,
 } from '@factory/core';
 export type {
   FactoryBoundRuleContext,

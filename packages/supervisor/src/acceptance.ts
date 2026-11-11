@@ -22,6 +22,6 @@ export function heldForPerson(
   item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages' | 'sessions' | 'stageHistory' | 'metadata'>,
 ): boolean {
   if (boardForWorkItem(item) !== 'work' || item.stages[0] !== 'intake') return false;
-  if (needsApproval(item)) return true;
+  if (needsApproval(item, stage => stage === 'intake' || stage === 'triage')) return true;
   return item.sessions.triage !== undefined && !item.stageHistory.some(entry => PAST_TRIAGE.has(entry.stage));
 }

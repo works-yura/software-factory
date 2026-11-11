@@ -123,12 +123,12 @@ Recompute the complete header and handoff, including independent effort and impa
 
 If you write the handoff to disk, use `.artifacts/factory-triage/<card-id>.md` (the work item's id from `factory_bound_work_item`).
 
-Post the handoff as your final conversation message. Take the current stage and `expectedRevision` from the `factory-phase` signal.
+Post the handoff as your final conversation message. Take the current stage and `expectedRevision` from the `factory-phase` signal. The `factory-phase` signal's `Board phases by part:` line names each phase this skill moves the card to, by its part in the loop (`rest`, `triage`, `build`, `self-review`, `pull request review`, `completed`, `canceled`); pass that phase's key as `stage`. The default Work board's keys are shown in brackets only as an example — never assume them on another board.
 
-- When the current stage is **Intake** or **Triage**, make the terminal `factory_transition_work_item` call and start its `rationale` with the exact `Type` from the handoff. Factory does not record a classification; never pass a `triageType` argument.
-- Confirmed bugs with `Route: Plan fix` request `stage: "planning"`. Tasks that should be closed request `stage: "done"` with the close rationale.
-- Features and every other open non-bug classification use `Route: Await approval` and request `stage: "intake"`. The card rests in Intake until a person moves it on; that move is the approval. Stop after the transition.
-- When the item is already in **Planning** or a later stage, this is a refresh: use `Route: No transition / refresh`, post the updated handoff, but do **not** request a stage transition. Report the updated verdict and stop.
+- When the current stage is the `rest` or `triage` phase, make the terminal `factory_transition_work_item` call and start its `rationale` with the exact `Type` from the handoff. Factory does not record a classification; never pass a `triageType` argument.
+- Confirmed bugs with `Route: Plan fix` request the next working phase in the signal's `Next phases` (`planning` on the default board). Tasks that should be closed request the `completed` phase (`done` on the default board) with the close rationale.
+- Features and every other open non-bug classification use `Route: Await approval` and request the `rest` phase (`intake` on the default board). The card rests there until a person moves it on; that move is the approval. Stop after the transition.
+- When the item is already past triage (any other working or terminal phase), this is a refresh: use `Route: No transition / refresh`, post the updated handoff, but do **not** request a stage transition. Report the updated verdict and stop.
 
 `rationale` (max 1000 chars) — the triage verdict and headline understanding in a few sentences (e.g. "Genuine regression from <commit>; root cause understood; ready to plan a fix").
 

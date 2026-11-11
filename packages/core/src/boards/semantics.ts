@@ -1,13 +1,21 @@
 import type { ExternalWorkItemSource, WorkItemSourceRow } from '../card.ts';
-import { factoryRuleStage, isTerminalFactoryRuleStage, workItemSource } from '../rules/types.ts';
-import type { FactoryRuleBoardClosure, FactoryRuleChangeRequests, FactoryRulePhaseContext } from '../rules/types.ts';
+import { factoryRuleStage, workItemSource } from '../rules/types.ts';
+import type {
+  FactoryRuleBoardClosure,
+  FactoryRuleBoardFlow,
+  FactoryRuleIntakeTarget,
+  FactoryRulePhaseContext,
+} from '../rules/types.ts';
 import type {
   BoardEventIntegration,
   BoardEventRules,
+  BoardPhase,
   BoardPhaseKind,
   BoardToolResultRuleHandler,
 } from './define-board.ts';
-import type { BoardRegistry } from './registry.ts';
+import { REVIEW_CONTEXT } from './define-board.ts';
+import { DEFAULT_BOARD_ID } from './default-board.ts';
+import type { BoardRegistry, InstalledBoard } from './registry.ts';
 
 type BoardLookup = Pick<BoardRegistry, 'get'>;
 
@@ -18,6 +26,15 @@ type PhaseCard = {
   stages: readonly string[];
 };
 
+/**
+ * What a card holding `stage` means for flow metrics, read from the card's board: `completed`
+ * (an entry feeds throughput and lead time), `canceled` (a tracked non-completion, feeds
+ * neither), `queued` (at rest, not yet in flight) or `pipeline` (in flight). Built by
+ * `boardPhaseOutcomes`.
+ */
+export type MetricsPhaseOutcome = 'completed' | 'canceled' | 'queued' | 'pipeline';
+export type MetricsPhaseOutcomes = (item: Pick<PhaseCard, 'board'>, stage: string) => MetricsPhaseOutcome;
+
 export interface PhaseSemantics {
   readonly kind: BoardPhaseKind;
   /** Seat that carries a working phase; absent for resting and terminal phases. */
@@ -25,16 +42,173 @@ export interface PhaseSemantics {
 }
 
 /**
- * Board that owns a work item. Rows created before boards were persisted carry no `board`; they
- * belong to Work. (Pull request cards among them belonged to the retired Review board; Factory
- * moves those onto Work at startup, see `moveReviewBoardCardsToWork`.)
+ * Board that owns a work item. Rows created before boards were persisted carry no `board`;
+ * they belong to the default board. (Pull requests used to default to the retired Review board;
+ * storage reads those rows as the default board, and keeps cards stored on Review there only in a
+ * project that still uses it.)
  */
 export function boardForWorkItem(item: Pick<PhaseCard, 'board'>): string {
-  return item.board ?? 'work';
+  return item.board ?? DEFAULT_BOARD_ID;
 }
 
-/** The Work phase where a card's pull or merge request gets its independent review. */
-export const PULL_REQUEST_REVIEW_PHASE = 'pr-review';
+const flows = new WeakMap<object, FactoryRuleBoardFlow>();
+
+/**
+ * The phases a board's pull request loop runs through, read from what each phase declares
+ * rather than from its key:
+ *
+ * Only phases running in the {@link REVIEW_CONTEXT} seat count as reviews: it is the only seat
+ * that records verdicts.
+ *
+ * - `pullRequestReview`: the first phase that grants `factory_review_source`. It takes pull
+ *   requests: a pull request's own card is reviewed there, an attached pull request is reviewed
+ *   there, verdicts on pull requests are recorded there, and a push or review request re-enters it.
+ * - `selfReview`: the first working phase that grants `factory_record_review_verdict` without
+ *   `factory_review_source`: an independent review of the builder's branch before a pull request.
+ * - `triage`: on a board with a `build` phase, the first working phase that neither builds (runs
+ *   in `buildRole`) nor reviews: it sorts new cards before anyone accepts them. A board that
+ *   builds nothing has no triage phase.
+ * - `build`: the last working phase, in declaration order, that is neither of those and can move
+ *   into the review that follows it (`selfReview`, else `pullRequestReview`). Self-review sends
+ *   requested changes back here, and its seat (`buildRole`) is woken by pull request feedback.
+ *
+ * A board without a `factory_review_source` phase has no pull request loop.
+ */
+export function boardFlow(board: InstalledBoard | undefined): FactoryRuleBoardFlow {
+  if (!board) return Object.freeze({});
+  const cached = flows.get(board);
+  if (cached) return cached;
+  const entries = Object.entries(board.phases) as [string, BoardPhase<string>][];
+  const grants = (phase: BoardPhase<string>, tool: string) =>
+    phase.kind === 'working' &&
+    phase.runner.context === REVIEW_CONTEXT &&
+    (phase.tools ?? []).some(granted => granted === tool);
+  const pullRequestReview = entries.find(([, phase]) => grants(phase, 'factory_review_source'))?.[0];
+  const selfReview = entries.find(
+    ([key, phase]) =>
+      key !== pullRequestReview &&
+      grants(phase, 'factory_record_review_verdict') &&
+      !grants(phase, 'factory_review_source'),
+  )?.[0];
+  const handoff = selfReview ?? pullRequestReview;
+  const build = handoff
+    ? entries.findLast(
+        ([key, phase]) =>
+          phase.kind === 'working' &&
+          key !== pullRequestReview &&
+          key !== selfReview &&
+          board.allowsTransition(key, handoff),
+      )?.[0]
+    : undefined;
+  const buildRole = build ? board.roleForPhase(build) : undefined;
+  // Only a board that builds sorts cards first; elsewhere a working phase is just its own step.
+  const triage = build
+    ? entries.find(
+        ([key, phase]) =>
+          phase.kind === 'working' &&
+          key !== build &&
+          phase.runner.context !== REVIEW_CONTEXT &&
+          phase.runner.context !== buildRole,
+      )?.[0]
+    : undefined;
+  const terminals = entries.filter(([, phase]) => phase.kind === 'terminal').map(([key]) => key);
+  const completed = board.sourceClosed?.completed ?? terminals[0];
+  const canceled = board.sourceClosed?.canceled ?? terminals.find(key => key !== completed) ?? completed;
+  const ref = (phase: string) => Object.freeze({ phase, title: board.phases[phase]!.name });
+  const flow = Object.freeze({
+    initialPhase: board.initialPhase,
+    ...(completed ? { completed: ref(completed) } : {}),
+    ...(canceled ? { canceled: ref(canceled) } : {}),
+    ...(triage ? { triage } : {}),
+    ...(pullRequestReview ? { pullRequestReview } : {}),
+    ...(selfReview ? { selfReview } : {}),
+    ...(build ? { build } : {}),
+    ...(buildRole ? { buildRole } : {}),
+  });
+  flows.set(board, flow);
+  return flow;
+}
+
+/**
+ * Where new items land on `board`, else on the project's default board when `board` is not
+ * installed. Undefined when neither is.
+ */
+export function intakeTarget(
+  boards: Pick<BoardRegistry, 'get'>,
+  board?: InstalledBoard,
+): FactoryRuleIntakeTarget | undefined {
+  const target = board ?? boards.get(DEFAULT_BOARD_ID);
+  if (!target) return undefined;
+  const { pullRequestReview } = boardFlow(target);
+  return Object.freeze({
+    board: target.id,
+    initialPhase: target.initialPhase,
+    ...(pullRequestReview ? { pullRequestReview } : {}),
+  });
+}
+
+/** {@link intakeTarget} as a rule context field. */
+export function withIntakeTarget(
+  boards: Pick<BoardRegistry, 'get'>,
+  board?: InstalledBoard,
+): { intake?: FactoryRuleIntakeTarget } {
+  const intake = intakeTarget(boards, board);
+  return intake ? { intake } : {};
+}
+
+/** {@link boardFlow} of the board a card sits on. */
+export function cardBoardFlow(
+  boards: Pick<BoardRegistry, 'get'>,
+  item: Pick<PhaseCard, 'board'> | undefined,
+): FactoryRuleBoardFlow {
+  return item ? boardFlow(boards.get(boardForWorkItem(item))) : Object.freeze({});
+}
+
+/**
+ * Whether a card in `stage` is still waiting for someone to accept it: it rests, or it is being
+ * triaged. Approval labels hold only such cards.
+ */
+export function awaitsAcceptance(board: InstalledBoard | undefined, stage: string): boolean {
+  if (!board) return false;
+  return board.phaseKind(stage) === 'resting' || stage === boardFlow(board).triage;
+}
+
+/** Whether `stage` is the phase where the board reviews pull requests. */
+export function isPullRequestReviewPhase(board: InstalledBoard | undefined, stage: string | undefined): boolean {
+  const phase = boardFlow(board).pullRequestReview;
+  return phase !== undefined && phase === stage;
+}
+
+/**
+ * Why a move breaks the shape of a card on a board with a pull request loop, or undefined when it
+ * does not: a pull request's own card is only reviewed, so it enters no other working phase, and
+ * the pull request review phase holds only cards that carry a pull request (their own, or one
+ * attached to their issue). `nextPhases` cannot say this: a resting phase may lead to both, and
+ * which one fits depends on the card.
+ */
+export function pullRequestCardRejection(
+  board: InstalledBoard,
+  card: { readonly standalonePullRequest: boolean; readonly hasPullRequest: boolean },
+  toStage: string,
+): string | undefined {
+  const review = boardFlow(board).pullRequestReview;
+  if (!review) return undefined;
+  const reviewName = board.phases[review]?.name ?? review;
+  if (!card.hasPullRequest && toStage === review) {
+    return `${reviewName} holds only cards with a pull request; this work item enters it once a pull request is attached to it.`;
+  }
+  if (!card.standalonePullRequest || toStage === review || !board.isWorking(toStage)) return undefined;
+  const exits = [review, ...Object.keys(board.phases).filter(key => board.isTerminal(key))];
+  return `A pull request card is only reviewed on the ${board.name} board; it cannot enter ${toStage}. Move it to ${exits.join(', ')}.`;
+}
+
+/** `{ flow }` for spreading into an integration rule context, or `{}` for an unbound evaluation. */
+export function withBoardFlow(
+  boards: Pick<BoardRegistry, 'get'>,
+  item: Pick<PhaseCard, 'board'> | undefined,
+): { flow?: FactoryRuleBoardFlow } {
+  return item ? { flow: cardBoardFlow(boards, item) } : {};
+}
 
 interface SourcedItem {
   readonly workItem?: { readonly sources?: readonly WorkItemSourceRow[] } | null;
@@ -166,12 +340,15 @@ export function hasRecordedVerdict(
   return typeof item.metadata?.reviewVerdict === 'string' && !reviewedAnother;
 }
 
-/** Whether the rule's card carries the change request the reviewer reviews. */
+/**
+ * Whether the rule's card carries a change request its board reviews: the card has one, and its
+ * board has a phase that takes pull requests ({@link boardFlow}).
+ */
 export function reviewsPullRequest(context: {
-  readonly board?: string;
+  readonly flow?: Pick<FactoryRuleBoardFlow, 'pullRequestReview'>;
   readonly item?: SourcedItem & { readonly source: string };
 }): boolean {
-  return context.board === 'work' && context.item !== undefined && hasPullRequest(context.item);
+  return context.flow?.pullRequestReview !== undefined && context.item !== undefined && hasPullRequest(context.item);
 }
 
 /**
@@ -243,22 +420,42 @@ export function rulePhaseContext(boards: BoardLookup, item: PhaseCard): FactoryR
 }
 
 /**
- * Whether a persisted card has finished, judged by the board it sits on: the installed
- * board's phase kind first, then the built-in Work and Review names for rows whose board is
- * not installed. Unknown boards or phases are never terminal, so a card is only ever
- * released from ownership on the board's own say-so.
+ * Whether a persisted card has finished, judged by the board it sits on: the installed board's
+ * phase kind first, then, for rows whose board is not installed, the phase kinds of the default
+ * board Factory seeds or of the retired Review board. Unknown boards or phases are never terminal,
+ * so a card is only ever released from ownership on the board's own say-so.
  */
 export function isTerminalWorkItem(boards: BoardLookup, item: PhaseCard): boolean {
   const semantics = workItemPhaseSemantics(boards, item);
   if (semantics) return semantics.kind === 'terminal';
   const board = boardForWorkItem(item);
-  return (board === 'work' || board === 'review') && isTerminalFactoryRuleStage(item.stages);
+  if (boards.get(board)) return false;
+  // A row whose board is not installed: only the default board's seeded terminal phases end it.
+  const stage = factoryRuleStage(item.stages);
+  return board === DEFAULT_BOARD_ID && (stage === 'done' || stage === 'canceled');
 }
 
 /** Semantics of the single stage a work item currently occupies; undefined for multi-stage rows. */
 export function workItemPhaseSemantics(boards: BoardLookup, item: PhaseCard): PhaseSemantics | undefined {
   const stage = factoryRuleStage(item.stages);
   return stage === undefined ? undefined : resolvePhaseSemantics(boards, boardForWorkItem(item), stage);
+}
+
+/**
+ * Flow-metric outcomes of each board's phases: the phase the board closes completed sources into
+ * (else its first terminal phase) completes a card, other terminal phases cancel it, resting
+ * phases queue it, and anything else (working, or a phase the board no longer declares) is in
+ * flight.
+ */
+export function boardPhaseOutcomes(boards: Pick<BoardRegistry, 'get'>): MetricsPhaseOutcomes {
+  return (item, stage) => {
+    const board = boards.get(boardForWorkItem(item));
+    const kind = board?.phaseKind(stage);
+    if (!board || kind === undefined || kind === 'working') return 'pipeline';
+    if (kind === 'resting') return 'queued';
+    const completed = board.sourceClosed?.completed ?? Object.keys(board.phases).find(key => board.isTerminal(key));
+    return stage === completed ? 'completed' : 'canceled';
+  };
 }
 
 /**
@@ -284,36 +481,6 @@ export function withBoardClosure(boards: BoardLookup, item: PhaseCard): { boardC
   return boardClosure ? { boardClosure } : {};
 }
 
-/**
- * The `changeRequests` flow the card's installed board declares, resolved to phase titles and the
- * builder seat. Undefined when the board is not installed or ships no change requests.
- */
-export function resolveBoardChangeRequests(
-  boards: BoardLookup,
-  item: Pick<PhaseCard, 'board' | 'externalSource'>,
-): FactoryRuleChangeRequests | undefined {
-  const board = boards.get(boardForWorkItem(item));
-  const flow = board?.changeRequests;
-  if (!board || !flow) return undefined;
-  const phase = (id: string) => ({ phase: id, title: board.phases[id]!.name });
-  return {
-    boardTitle: board.name,
-    build: phase(flow.build),
-    review: phase(flow.review),
-    merged: phase(flow.merged),
-    builderRole: board.roleForPhase(flow.build)!,
-  };
-}
-
-/** Rule-context fragment carrying the card's `changeRequests`, empty when its board declares none. */
-export function withChangeRequests(
-  boards: BoardLookup,
-  item: Pick<PhaseCard, 'board' | 'externalSource'>,
-): { changeRequests?: FactoryRuleChangeRequests } {
-  const changeRequests = resolveBoardChangeRequests(boards, item);
-  return changeRequests ? { changeRequests } : {};
-}
-
 /** Whether the card's installed board has its `triage` seat report a structured classification. */
 export function boardClassifiesTriage(boards: BoardLookup, item: Pick<PhaseCard, 'board' | 'externalSource'>): boolean {
   return boards.get(boardForWorkItem(item))?.triageClassification === true;
@@ -327,22 +494,25 @@ export function rulePhaseField(boards: BoardLookup, item: PhaseCard): { readonly
 
 /**
  * The change request a review session on this card may publish checks for: the card's own one,
- * or, for an issue card in PR review, the pull request attached to it.
+ * or, for an issue card in its board's pull request review phase, the pull request attached to it.
  */
-export function boundChangeRequestNumber(item: {
-  readonly externalSource: ExternalWorkItemSource | null;
-  readonly stages: readonly string[];
-  readonly url?: string | null;
-  readonly metadata?: Record<string, unknown> | null;
-  readonly workItem: {
+export function boundChangeRequestNumber(
+  boards: BoardLookup,
+  item: PhaseCard & {
     readonly url?: string | null;
     readonly metadata?: Record<string, unknown> | null;
-    readonly sources?: readonly WorkItemSourceRow[];
-  };
-}): string | undefined {
+    readonly workItem: {
+      readonly url?: string | null;
+      readonly metadata?: Record<string, unknown> | null;
+      readonly sources?: readonly WorkItemSourceRow[];
+    };
+  },
+): string | undefined {
   const source = workItemSource(item.externalSource);
   const own = isPullRequestCard({ source });
-  if (!own && item.stages[0] !== PULL_REQUEST_REVIEW_PHASE) return undefined;
+  if (!own && (item.stages.length !== 1 || cardBoardFlow(boards, item).pullRequestReview !== item.stages[0])) {
+    return undefined;
+  }
   const number = reviewedChangeRequest({ ...item, source })?.number;
   if (number !== undefined) return String(number);
   // A GitHub key ends in its number (`github-pr:34`); a GitLab key is encoded, so its digits mean nothing.

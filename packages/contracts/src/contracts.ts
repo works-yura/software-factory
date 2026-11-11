@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 import {
   cardRuleGroupSchema,
-  FACTORY_ROLE_STAGES,
   INTAKE_ROUTE_RULE_FIELDS,
   routeEventsProblem,
   ruleGroupSchema,
@@ -19,7 +18,6 @@ import {
   storedPhaseInputSchema,
 } from '@factory/store';
 
-const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
@@ -524,7 +522,8 @@ export const automationRunStartBodySchema = z
   .object({
     requestId: trimmedUuidSchema,
     expectedRevision: z.number().int().min(1),
-    role: z.enum(FACTORY_ROLE_VALUES),
+    // Checked against the card's board when the request arrives.
+    role: nonEmptyTrimmed(32),
     skillName: nonEmptyTrimmed(128),
     arguments: nonEmptyTrimmed(4_096).optional(),
   })

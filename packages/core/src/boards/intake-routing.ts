@@ -2,7 +2,7 @@ import { evaluateRuleGroup } from '../rules/rule-group.ts';
 import type { RuleFacts, RuleGroup } from '../rules/rule-group.ts';
 import type { BoardEventFacts } from './board-events.ts';
 import type { BoardRegistry, InstalledBoard } from './registry.ts';
-import { boardForWorkItem, hasPullRequest } from './semantics.ts';
+import { boardFlow, boardForWorkItem, hasPullRequest } from './semantics.ts';
 import type { WorkItemSourceRow } from '../card.ts';
 
 /** What intake routing reads of the card a pull request closes. */
@@ -105,14 +105,19 @@ export function intakeTargetProblem(
 }
 
 /**
- * On Work a new pull request card lands in Intake or PR review, and nothing else lands in PR
- * review: a card arriving here carries no attached pull request yet. `FactoryTransitionService`
- * refuses any move that breaks this, so a route can't either.
+ * On a board that reviews pull requests a new pull request card lands at rest or in the pull
+ * request review phase, and nothing else lands in that review: a card arriving here carries no
+ * attached pull request yet. `FactoryTransitionService` refuses any move that breaks this, so a
+ * route can't either.
  */
-function placementTakesCard(boardId: string, phase: string, facts: RuleFacts): boolean {
+function placementTakesCard(board: InstalledBoard, phase: string, facts: RuleFacts): boolean {
+  const flow = boardFlow(board);
+  const review = flow.pullRequestReview;
+  if (!review) return true;
   const pullRequest = facts['source.kind'] === 'pull_request';
-  if (boardId === 'work') return pullRequest ? phase === 'intake' || phase === 'pr-review' : phase !== 'pr-review';
-  return true;
+  // A board that reviews pull requests but builds nothing (the retired Review board) holds only them.
+  if (!pullRequest) return flow.build !== undefined && phase !== review;
+  return phase === review || board.phaseKind(phase) === 'resting';
 }
 
 /**
@@ -162,7 +167,7 @@ export function resolveIntakeRoute(
       };
     }
     const phase = landingPhase(board, route.target.phaseKey);
-    if (!placementTakesCard(board.id, phase, facts)) continue;
+    if (!placementTakesCard(board, phase, facts)) continue;
     return { type: 'place', board: board.id, phase, routeId: route.id };
   }
   return undefined;
@@ -220,7 +225,7 @@ export function resolveEventRoute(
     if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
     if (!evaluateRuleGroup(route.when, facts)) continue;
     const phase = route.target.phaseKey ?? board.initialPhase;
-    if (board.phaseKind(phase) === undefined || !placementTakesCard(board.id, phase, facts)) continue;
+    if (board.phaseKind(phase) === undefined || !placementTakesCard(board, phase, facts)) continue;
     return { phase, routeId: route.id, allowWorkingPhase: route.allowWorkingPhase ?? false };
   }
   return undefined;

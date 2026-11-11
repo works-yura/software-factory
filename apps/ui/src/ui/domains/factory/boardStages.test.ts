@@ -1,4 +1,4 @@
-import { FACTORY_RULE_STAGES } from '@factory/core/rules/types';
+import { workBoard } from '@factory/pipelines/work/board';
 
 import { describe, expect, it } from 'vitest';
 
@@ -60,9 +60,9 @@ function source(sourceType: string, externalId: string, metadata: Record<string,
   };
 }
 
-describe('BOARD_STAGES', () => {
-  it('uses the canonical stage order for the work board', () => {
-    expect(BOARD_STAGES.map(stage => stage.id)).toEqual(FACTORY_RULE_STAGES);
+describe('board stages', () => {
+  it('draws every Work lane in the canonical stage order', () => {
+    expect(BOARD_STAGES.map(stage => stage.id)).toEqual(Object.keys(workBoard.phases));
   });
 });
 
@@ -145,7 +145,7 @@ describe('pull request cards on the Work board', () => {
         ],
       },
     };
-    expect(itemStageOptions(issue).map(stage => stage.id)).toEqual(FACTORY_RULE_STAGES);
+    expect(itemStageOptions(issue).map(stage => stage.id)).toEqual(Object.keys(workBoard.phases));
     expect(pullRequestMayEnter('work', issue, 'pr-review')).toBe(true);
     expect(pullRequestMayEnter('work', issue, 'execute')).toBe(true);
   });

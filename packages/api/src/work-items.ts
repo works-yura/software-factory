@@ -11,7 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { createBoardRegistry } from '@factory/core';
+import { boardPhaseOutcomes, createBoardRegistry } from '@factory/core';
 import { createDefaultBoardRegistry } from '@factory/pipelines';
 import type { BoardRegistry } from '@factory/core';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '@factory/integrations';
@@ -424,7 +424,13 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ metrics: computeFactoryMetrics(items, { windowStart, windowEnd }) });
+          const boards = await this.#boards.load({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json({
+            metrics: computeFactoryMetrics(items, { windowStart, windowEnd }, boardPhaseOutcomes(boards)),
+          });
         },
       }),
 

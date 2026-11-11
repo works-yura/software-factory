@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { withBoardClosure, withBoardFlow } from '@factory/core';
+import { createDefaultBoardRegistry } from '@factory/pipelines';
+
 import { defaultGithubRules, resolveGithubRules } from './default-rules.ts';
+
+const workBoards = createDefaultBoardRegistry();
 
 describe('GitHub issue re-triage', () => {
   const events = ['issueEdited', 'issueCommentCreated', 'issueCommentEdited', 'issueCommentDeleted'] as const;
@@ -83,6 +88,8 @@ describe('GitHub merge of a card spanning several repositories', () => {
       repository: { id: 1, fullName: repository, installationId: 1 },
       pullRequest: { number, merged: true },
       item: { source: 'manual', stages: ['review'], metadata },
+      ...withBoardClosure(workBoards, { board: 'work', externalSource: null, stages: ['review'] }),
+      ...withBoardFlow(workBoards, { board: 'work' }),
     }) as unknown as Parameters<NonNullable<typeof defaultGithubRules.pullRequestMerged>>[0];
 
   const both = {

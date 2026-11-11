@@ -1,7 +1,15 @@
-import { codeBoardOf, factoryLaneForRole, LEGACY_PLAN_ROLE } from '@factory/core';
+import { codeBoardOf, LEGACY_PLAN_ROLE } from '@factory/core';
 import type { InstalledBoard } from '@factory/core';
 
 import { workBoard } from './board.ts';
+
+// Each Work role and the lane its run holds the card in, kept for the roles above.
+const WORK_ROLE_LANES: Readonly<Record<string, string>> = Object.freeze({
+  triage: 'triage',
+  [LEGACY_PLAN_ROLE]: 'planning',
+  work: 'execute',
+  review: 'review',
+});
 
 /*
  * Compatibility for the Work board's old `plan` role; see `@factory/core`'s
@@ -19,7 +27,7 @@ function isWorkBoard(board: unknown): board is InstalledBoard {
 
 /** The built-in Work lane a role's run belongs to: `plan` plans, `work` builds. Undefined on other boards. */
 export function workLaneForRole(board: unknown, role: string): string | undefined {
-  return isWorkBoard(board) ? factoryLaneForRole(role) : undefined;
+  return isWorkBoard(board) && Object.hasOwn(WORK_ROLE_LANES, role) ? WORK_ROLE_LANES[role] : undefined;
 }
 
 /**

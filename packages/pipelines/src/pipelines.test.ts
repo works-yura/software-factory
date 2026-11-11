@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  boardFlow,
   defineBoard,
-  FACTORY_ROLE_STAGES,
-  FACTORY_RULE_STAGES,
-  isTerminalFactoryRuleStage,
-  isWorkingFactoryRuleStage,
   resolveBoardClosure,
   resolveBoardToolRule,
   phaseRunDecision,
@@ -13,7 +10,7 @@ import {
   workItemPhaseSemantics,
 } from '@factory/core';
 
-import { allowsBuiltInBoardTransition, createPipelines } from './index.ts';
+import { createPipelines } from './index.ts';
 import { workBoard } from './work/board.ts';
 import type { WorkBoardPhase } from './work/board.ts';
 
@@ -87,16 +84,17 @@ describe('factory pipelines', () => {
     expect(workBoard.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
   });
 
-  it('keeps Work in agreement with the stage and role constants', () => {
-    for (const stage of FACTORY_RULE_STAGES) {
-      expect(workBoard.isTerminal(stage), `${stage} terminal`).toBe(isTerminalFactoryRuleStage([stage]));
-      expect(workBoard.isWorking(stage), `${stage} working`).toBe(isWorkingFactoryRuleStage(stage));
-    }
-    for (const [role, stage] of Object.entries(FACTORY_ROLE_STAGES)) {
-      // Each role's lane is a working phase. Planning runs in the `work` context; `plan` stays
-      // as the old role name for Planning's lane, so its phase reports the `work` context.
-      expect(workBoard.isWorking(stage), `lane for ${role}`).toBe(true);
-    }
+  it('reads each part of the pull request loop from Work\'s phases', () => {
+    expect(boardFlow(workBoard)).toEqual({
+      initialPhase: 'intake',
+      completed: { phase: 'done', title: 'Done' },
+      canceled: { phase: 'canceled', title: 'Canceled' },
+      triage: 'triage',
+      pullRequestReview: 'pr-review',
+      selfReview: 'review',
+      build: 'execute',
+      buildRole: 'work',
+    });
     expect(['triage', 'planning', 'execute', 'review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
       'triage',
       'work',
@@ -106,8 +104,8 @@ describe('factory pipelines', () => {
   });
 
   it('rejects inherited property names as Work phases', () => {
-    expect(allowsBuiltInBoardTransition('work', 'toString', 'done')).toBe(false);
-    expect(allowsBuiltInBoardTransition('work', 'intake', 'constructor')).toBe(false);
+    expect(workBoard.allowsTransition('toString' as never, 'done')).toBe(false);
+    expect(workBoard.allowsTransition('intake', 'constructor' as never)).toBe(false);
   });
 
   it('starts each Work phase from its stored runner, whatever the card came from', () => {

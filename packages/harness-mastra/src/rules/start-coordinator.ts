@@ -2,7 +2,8 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { boardForWorkItem, hasPullRequest, PULL_REQUEST_REVIEW_PHASE } from '@factory/core';
+import { boardForWorkItem, hasPullRequest, isPullRequestReviewPhase, REVIEW_CONTEXT } from '@factory/core';
+import type { BoardRegistry } from '@factory/core';
 import { primeTenantCredentialsForTenant } from '@factory/credentials';
 import { hydrateFactorySession, resolveFactorySessionModel } from '@factory/session';
 import { resolveWorkItemRepository } from '@factory/session';
@@ -10,7 +11,8 @@ import type { EnvironmentRepositoryRef } from '@factory/session';
 import type { FactoryProjectsStorage } from '@factory/store';
 import type { SourceControlSession, SourceControlStorageHandle } from '@factory/store';
 import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
-import type { FactoryTransitionService } from '@factory/runtime';
+import { toBoardSource } from '@factory/runtime';
+import type { FactoryTransitionService, ProjectBoardSource } from '@factory/runtime';
 import { externallyAuthoredWorkItem } from '@factory/core';
 import type { FactoryRuleStage, FactoryTransitionResult } from '@factory/core';
 
@@ -312,6 +314,7 @@ export class FactoryStartCoordinator {
         request: FactoryStartRequest,
       ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>);
   readonly #projects?: FactoryProjectsStorage;
+  readonly #boards?: ProjectBoardSource;
 
   constructor(
     controller: FactoryController,
@@ -323,12 +326,15 @@ export class FactoryStartCoordinator {
           request: FactoryStartRequest,
         ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>),
     sessionModel?: { projects: FactoryProjectsStorage },
+    /** Tells a pull request review run from the card's other review runs; without it every review run with a pull request is untrusted. */
+    boards?: BoardRegistry | ProjectBoardSource,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#projects = sessionModel?.projects;
+    this.#boards = boards ? toBoardSource(boards) : undefined;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -364,15 +370,17 @@ export class FactoryStartCoordinator {
     // never ingests the checkout's AGENTS.md/CLAUDE.md into the system prompt
     // or reminders — those files are attacker-writable in a PR branch.
     // An issue card's PR review checks out the attached pull request's head, so it counts too.
-    // The run's stage is where the card is going: a card started from Intake into PR review
-    // is moved only after the session is ready.
+    // The run's stage is where the card is going: a card started from its resting phase into
+    // its board's pull request review is moved only after the session is ready.
     const runStage = request.destinationStage ?? storedItem?.stages[0];
+    const reviewsAttachedPullRequest =
+      request.workItem.role === REVIEW_CONTEXT &&
+      storedItem != null &&
+      hasPullRequest({ workItem: storedItem.workItem }) &&
+      (!this.#boards ||
+        isPullRequestReviewPhase((await this.#boards.load(request)).get(boardForWorkItem(storedItem)), runStage));
     const untrustedCheckout =
-      request.workItem.input.externalSource?.type === 'pull-request' ||
-      (request.workItem.role === 'review' &&
-        runStage === PULL_REQUEST_REVIEW_PHASE &&
-        storedItem != null &&
-        hasPullRequest({ workItem: storedItem.workItem }));
+      request.workItem.input.externalSource?.type === 'pull-request' || reviewsAttachedPullRequest;
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's
     // base branch; fall back to the intake metadata captured from the PR.

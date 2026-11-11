@@ -616,6 +616,8 @@ describe('FactoryStartCoordinator', () => {
         storage,
         new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards: createBoardRegistry() }),
         makeSourceControl() as never,
+        undefined,
+        createBoardRegistry(),
       );
 
       await coordinator.prepare({ ...startRequest({ role: 'review', id: item.id }), destinationStage });

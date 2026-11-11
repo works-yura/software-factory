@@ -13,7 +13,7 @@ import type { IntegrationTools } from '@factory/integrations';
 import { decisionRetryable, overtakenDecisionIds } from '@factory/runtime';
 import { factoryDispatchFailureMetadata } from '@factory/store';
 import { acceptedAtOf, heldForPerson } from './acceptance.ts';
-import { FACTORY_RULE_STAGES, factoryRuleStage } from '@factory/core';
+import { factoryRuleStage } from '@factory/core';
 import type { FactoryRuleStage } from '@factory/core';
 import type { AuditStorage } from '@factory/store';
 import type { WorkItemCommentsStorage } from '@factory/store';
@@ -197,14 +197,12 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
           deps.workItems.listPendingStarts(scope.orgId, scope.factoryProjectId),
         ]);
-        const stages = Object.fromEntries(FACTORY_RULE_STAGES.map(stage => [stage, 0])) as Record<
-          FactoryRuleStage,
-          number
-        >;
+        // Boards name their own phases: count the ones cards sit in.
+        const stages: Record<FactoryRuleStage, number> = {};
         let held = 0;
         for (const item of items) {
           const stage = factoryRuleStage(item.stages);
-          if (stage) stages[stage] += 1;
+          if (stage) stages[stage] = (stages[stage] ?? 0) + 1;
           if (heldForPerson(item)) held += 1;
         }
         const decisionsByStatus: Record<string, number> = {};

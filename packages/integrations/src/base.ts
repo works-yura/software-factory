@@ -25,7 +25,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import type { BoardRegistry, IntakeRoutesReader } from '@factory/core';
+import type { BoardRegistry, IntakeRoutesReader, ProjectBoardSource } from '@factory/core';
 import type { Intake } from '@factory/capabilities';
 import type { VersionControl } from '@factory/capabilities';
 import type { RouteAuth } from '@factory/http';
@@ -150,8 +150,11 @@ export interface IntegrationContext {
     /** Operator-maintained provenance label stamped on audit rows. */
     configVersion: string;
     workItems: WorkItemsStorage;
-    /** Installed boards, so integrations read phase semantics instead of matching names. */
-    boards: BoardRegistry;
+    /**
+     * Installed boards, so integrations read phase semantics instead of matching names. The
+     * per-project source serves each project its stored boards.
+     */
+    boards: BoardRegistry | ProjectBoardSource;
     /** The project's intake routes, for integrations that place new cards themselves. */
     intakeRoutes?: IntakeRoutesReader;
     /** A project's boards, stored ones included, which an intake route may name. */

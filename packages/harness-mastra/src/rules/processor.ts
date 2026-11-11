@@ -12,6 +12,7 @@ import type {
 } from '@mastra/core/processors';
 
 import {
+  boardFlow,
   boardForWorkItem,
   exitToolSucceeded,
   PHASE_EXIT_METADATA_KEY,
@@ -362,9 +363,10 @@ export async function describeFactoryPhase(input: {
     role: binding.role,
     configVersion: input.configVersion,
   };
-  // A pull request's own card (on Review, or on Work's `pr-review`) carries the review runtime.
+  const flow = boardFlow(boards.get(board));
+  // A card carrying a pull request its board reviews carries the review runtime.
   const value: ActivePhaseSnapshotValue = reviewsPullRequest({
-    board,
+    flow,
     item: { source: workItemSource(item.externalSource), workItem: item.workItem },
   })
     ? {
@@ -397,6 +399,22 @@ export async function describeFactoryPhase(input: {
             : `Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.`
         }\n`
       : '';
+  // Skills name phases by role in the pull request loop, never by key: this line maps them.
+  const flowPhase = (key: string | undefined) =>
+    key ? `${escapeText(definition?.phases[key]?.name ?? key)} (${escapeText(key)})` : undefined;
+  const terminals = definition ? Object.keys(definition.phases).filter(key => definition.isTerminal(key)) : [];
+  const completed = definition?.sourceClosed?.completed ?? terminals[0];
+  const canceled = definition?.sourceClosed?.canceled ?? terminals.find(key => key !== completed);
+  const flowParts = [
+    definition ? `rest: ${flowPhase(definition.initialPhase)}` : undefined,
+    flow.triage ? `triage: ${flowPhase(flow.triage)}` : undefined,
+    flow.build ? `build: ${flowPhase(flow.build)}` : undefined,
+    flow.selfReview ? `self-review: ${flowPhase(flow.selfReview)}` : undefined,
+    flow.pullRequestReview ? `pull request review: ${flowPhase(flow.pullRequestReview)}` : undefined,
+    completed ? `completed: ${flowPhase(completed)}` : undefined,
+    canceled ? `canceled: ${flowPhase(canceled)}` : undefined,
+  ].filter(part => part !== undefined);
+  const flowText = flowParts.length ? `Board phases by part: ${flowParts.join('; ')}\n` : '';
   // The card moved to a phase another context works; this session's tools for it are gone.
   const handedOnText =
     phase?.kind === 'working' &&
@@ -414,11 +432,11 @@ export async function describeFactoryPhase(input: {
     (runtime
       ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
       : '') +
-    // Every board that ships change requests (Work) parks cards in Intake.
-    (definition?.changeRequests !== undefined && stage === 'intake'
-      ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
+    (phase?.kind === 'resting'
+      ? `This card rests in ${escapeText(phaseLabel)}: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n`
       : '') +
     nextText +
+    flowText +
     exitText +
     handedOnText +
     `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;

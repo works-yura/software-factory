@@ -91,7 +91,8 @@ describe('createFactorySupervisorReadTools', () => {
     const overview = await execute<any>(tools.factory_overview, {});
 
     expect(overview.workItems.total).toBe(2);
-    expect(overview.workItems.byStage).toMatchObject({ execute: 1, triage: 1, intake: 0 });
+    // Boards name their own phases: only the phases cards sit in are counted.
+    expect(overview.workItems.byStage).toEqual({ execute: 1, triage: 1 });
     expect(overview.decisions).toEqual({ failed: 1 });
     expect(overview.failedDecisions).toHaveLength(1);
     expect(overview.failedDecisions[0]).toMatchObject({ type: 'invokeSkill', role: 'plan', canRetry: true });

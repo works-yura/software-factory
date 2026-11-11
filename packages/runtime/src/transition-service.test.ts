@@ -1153,7 +1153,7 @@ describe('FactoryTransitionService', () => {
       code: 'invalid_transition',
       // The Work board's own reason for a pull request card comes before the phase graph's.
       reason:
-        'A pull request card is reviewed on the Work board; it cannot enter planning. Move it to pr-review, done, or canceled.',
+        'A pull request card is only reviewed on the Work board; it cannot enter planning. Move it to pr-review, done, canceled.',
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['pr-review']);
   });
@@ -2567,7 +2567,7 @@ describe('pull request cards on the Work board', () => {
     const result = await service.transition(request(item, { stage: 'pr-review' }));
     expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
     expect(result.status === 'rejected' && result.reason).toMatch(
-      /^PR review holds only cards with a pull request.*enters PR review once a pull request is attached to it, and the merge moves it to Done\.$/,
+      /^PR review holds only cards with a pull request; this work item enters it once a pull request is attached to it\.$/,
     );
   });
 

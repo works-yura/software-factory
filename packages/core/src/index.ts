@@ -8,7 +8,9 @@ export {
   FACTORY_AGENT_ID,
   FACTORY_PHASE_TOOLS,
   isDefinedBoard,
+  REVIEW_CONTEXT,
 } from './boards/define-board.ts';
+export { DEFAULT_BOARD_ID } from './boards/default-board.ts';
 export type { AnyBoardConfig } from './boards/define-board.ts';
 export { cardRuleFacts } from './boards/card-facts.ts';
 export {
@@ -39,7 +41,6 @@ export {
 export { phaseRunDecision } from './boards/phase-runner.ts';
 export type { PhaseEntry } from './boards/phase-runner.ts';
 export type {
-  BoardChangeRequests,
   BoardDefinition,
   BoardEventIntegration,
   BoardEventRules,
@@ -57,18 +58,34 @@ export type {
   BoardTransition,
 } from './boards/define-board.ts';
 export { createBoardRegistry } from './boards/registry.ts';
+export { PROJECT_BOARD_SOURCE, toBoardSource } from './boards/project-board-source.ts';
+export type {
+  BoardScope,
+  BoardSourceKind,
+  ProjectBoards,
+  ProjectBoardSource,
+  StoredBoardDetails,
+} from './boards/project-board-source.ts';
 export type { BoardRegistry, InstalledBoard } from './boards/registry.ts';
 export { cardLabels, moveCardToBoard } from './boards/relocate.ts';
 export {
+  awaitsAcceptance,
   boardClassifiesTriage,
   boardEventHandlers,
+  boardFlow,
   boardForWorkItem,
+  boardPhaseOutcomes,
+  cardBoardFlow,
+  intakeTarget,
+  isPullRequestReviewPhase,
+  pullRequestCardRejection,
+  withBoardFlow,
+  withIntakeTarget,
   boundChangeRequestNumber,
   hasPullRequest,
   isPullRequestCard,
   newestOpenPullRequestNumber,
   openSource as isOpenPullRequestSource,
-  PULL_REQUEST_REVIEW_PHASE,
   pullRequestSourceNumber,
   pullRequestSources,
   hasRecordedVerdict,
@@ -78,17 +95,15 @@ export {
   reviewsPullRequest,
   eventBoardId,
   isTerminalWorkItem,
-  resolveBoardChangeRequests,
   resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
   rulePhaseContext,
   rulePhaseField,
   withBoardClosure,
-  withChangeRequests,
   workItemPhaseSemantics,
 } from './boards/semantics.ts';
-export type { PhaseSemantics, ReviewedChangeRequest } from './boards/semantics.ts';
+export type { MetricsPhaseOutcome, MetricsPhaseOutcomes, PhaseSemantics, ReviewedChangeRequest } from './boards/semantics.ts';
 export { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from './boards/transition-policy.ts';
 export type {
   BoardTransitionPolicy,
@@ -123,27 +138,17 @@ export {
   externallyAuthored,
   externallyAuthoredWorkItem,
   SELF_REVIEW_ROUND_LIMIT,
-  changeRequestFlow,
   externalSourceForWorkItem,
   FACTORY_GITHUB_EVENTS,
   FACTORY_GITLAB_EVENTS,
-  FACTORY_ROLE_STAGES,
-  FACTORY_RULE_BOARDS,
   FACTORY_RULE_REJECTION_CODES,
   FACTORY_RULE_SOURCES,
-  FACTORY_RULE_STAGES,
   FACTORY_TRIAGE_TYPES,
-  factoryLaneForRole,
   factoryRuleSourceForWorkItem,
   factoryRuleStage,
-  isFactoryRole,
-  isFactoryRuleStage,
   isFactoryTriageType,
-  isTerminalFactoryRuleStage,
-  isWorkingFactoryRuleStage,
   needsApproval,
   NEEDS_APPROVAL_LABEL,
-  WORK_CHANGE_REQUESTS,
   WORK_ITEM_SOURCES,
   workItemSource,
 } from './rules/types.ts';
@@ -158,11 +163,11 @@ export type {
   FactoryGitLabRuleContext,
   FactoryInvokeSkillDecision,
   FactoryNotifyDecision,
-  FactoryRole,
   FactoryRuleActor,
   FactoryRuleBoard,
   FactoryRuleBoardClosure,
-  FactoryRuleChangeRequests,
+  FactoryRuleBoardFlow,
+  FactoryRuleIntakeTarget,
   FactoryRuleCausalEntry,
   FactoryRuleContextBase,
   FactoryRuleDecision,

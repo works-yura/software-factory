@@ -23,7 +23,6 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '@factory/store';
-import { ACTIVE_RUN_BINDING_STAGES } from '@factory/store';
 import type { WorkItemsStorage } from '@factory/store';
 import type { IntakeStorage } from '@factory/store';
 import { FACTORY_ROUTE_CONTRACTS } from '@factory/contracts';
@@ -31,6 +30,8 @@ import type { ProjectListRepository } from '@factory/contracts';
 import type { RouteDependencies } from '@factory/http';
 import { Route } from '@factory/http';
 import type { ProjectBoardCache } from '@factory/runtime';
+import { workItemPhaseSemantics } from '@factory/core';
+import { createDefaultBoardRegistry } from '@factory/pipelines';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
@@ -693,6 +694,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
             binding => binding.status === 'active',
           );
+          const boards =
+            (await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }))?.registry ??
+            createDefaultBoardRegistry();
           const seen = new Set<string>();
           const applied: string[] = [];
           const skipped: Array<{
@@ -716,7 +720,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               skipped.push({ threadId: binding.threadId, reason: 'work-item-missing' });
               continue;
             }
-            if (!ACTIVE_RUN_BINDING_STAGES.has(item.stages[0] ?? '')) {
+            // A bound run can still act on its card anywhere short of a terminal phase.
+            const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
+            if (phaseKind === undefined || phaseKind === 'terminal') {
               skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
               continue;
             }

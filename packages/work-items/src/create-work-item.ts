@@ -4,7 +4,7 @@
  */
 
 import type { BoardRegistry, IntakeRoutesReader } from '@factory/core';
-import { cardRuleFacts, INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from '@factory/core';
+import { cardRuleFacts, DEFAULT_BOARD_ID, INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from '@factory/core';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '@factory/runtime';
 import type { EmitAuditInput } from '@factory/feed';
 import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '@factory/store';
@@ -96,7 +96,7 @@ export async function createFactoryWorkItem({
           boards,
         )
       : undefined;
-  const boardId = placement?.board ?? input.board ?? 'work';
+  const boardId = placement?.board ?? input.board ?? DEFAULT_BOARD_ID;
   const board = boards.get(boardId);
   if (!board) return { status: 'refused', code: 'invalid_board', message: `Board '${boardId}' is not installed.` };
   const initialStages = input.stages ?? [board.initialPhase];

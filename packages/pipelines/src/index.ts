@@ -1,7 +1,7 @@
 import { createBoardRegistry } from '@factory/core';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 
-import { isWorkBoardPhase, workBoard } from './work/board.ts';
+import { workBoard } from './work/board.ts';
 
 export { createDefaultBoardRegistry, defaultBoards } from './defaults.ts';
 export {
@@ -42,7 +42,7 @@ export type {
   ProductDocumentType,
   ProductSectionWaiver,
 } from './product/documents.ts';
-export { BUILD_OBJECTIVE, isWorkBoardPhase, OWN_CARD_HAND_OFF, workBoard, workPullRequestCardRejection } from './work/board.ts';
+export { BUILD_OBJECTIVE, OWN_CARD_HAND_OFF, workBoard } from './work/board.ts';
 export type { WorkBoardPhase } from './work/board.ts';
 export {
   buildDocsGuidance,
@@ -59,8 +59,4 @@ export { workLaneForRole, workStageCarries } from './work/legacy-plan-role.ts';
 /** A registry with Work installed, plus any boards the host adds. */
 export function createPipelines(boards: readonly InstalledBoard[] = []): BoardRegistry {
   return createBoardRegistry({ boards: [workBoard, ...boards] });
-}
-
-export function allowsBuiltInBoardTransition(board: 'work', from: string, to: string): boolean {
-  return board === 'work' && isWorkBoardPhase(from) && isWorkBoardPhase(to) && workBoard.allowsTransition(from, to);
 }

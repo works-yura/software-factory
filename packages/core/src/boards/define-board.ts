@@ -66,6 +66,12 @@ export const FACTORY_AGENT_ID = 'code-agent';
 
 /** The session context a working phase runs in when it names none. */
 export const DEFAULT_PHASE_CONTEXT = 'work';
+/**
+ * Seat review runs sit in. Review skills load only in it, it is the only seat granted the verdict
+ * tool, and its sessions check out code the author wrote, so they never trust that checkout's
+ * instruction files. A runner context, not a phase key: any board's phases may run in it.
+ */
+export const REVIEW_CONTEXT = 'review';
 
 /** Who runs a working phase, and with what. */
 export interface BoardPhaseRunner {
@@ -208,17 +214,6 @@ export interface BoardTransition<PhaseId extends string> {
  */
 export type BoardSourceClosed<PhaseId extends string> = Readonly<{ completed: PhaseId; canceled: PhaseId }>;
 
-/**
- * How a board's cards ship code through change requests (pull or merge requests), the way Work
- * does. The builder seated in `build` opens the change request; the card waits in `review` while
- * it is out (with self-review on, an independent `review` seat approves the branch there first);
- * the merge moves the card to `merged`. Declaring it opts the board into the change-request
- * behaviour the runtime and integration defaults otherwise keep for Work: the authoring card moves
- * out for review when its change request opens and closes on merge, review feedback wakes the
- * builder, and self-review records its verdict on the card.
- */
-export type BoardChangeRequests<PhaseId extends string> = Readonly<{ build: PhaseId; review: PhaseId; merged: PhaseId }>;
-
 export interface BoardDefinition<BoardId extends string, PhaseId extends string> {
   readonly id: BoardId;
   readonly name: string;
@@ -236,8 +231,6 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly transitionPolicy?: BoardTransitionPolicy;
   /** Where source-closed rules move a card; absent when the board opts out of auto-closing. */
   readonly sourceClosed?: BoardSourceClosed<PhaseId>;
-  /** How the board's cards ship code; absent when they never open change requests. */
-  readonly changeRequests?: BoardChangeRequests<PhaseId>;
   /**
    * Whether the board's `triage` seat reports a structured classification with every transition
    * it requests. The board's transition policy decides what each classification may do.
@@ -272,7 +265,6 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   /** @deprecated Express the flow with each phase's `nextPhases` and `exitTool`; still enforced when set. */
   transitionPolicy?: BoardTransitionPolicy;
   sourceClosed?: { completed: keyof Phases & string; canceled: keyof Phases & string };
-  changeRequests?: { build: keyof Phases & string; review: keyof Phases & string; merged: keyof Phases & string };
   triageClassification?: boolean;
 };
 
@@ -493,30 +485,6 @@ function validateSourceClosed(
   return Object.freeze({ completed: sourceClosed.completed as string, canceled: sourceClosed.canceled as string });
 }
 
-function validateChangeRequests(
-  changeRequests: unknown,
-  phases: Readonly<Record<string, BoardPhaseDefinition<string>>>,
-): BoardChangeRequests<string> | undefined {
-  if (changeRequests === undefined) return undefined;
-  if (!isPlainObject(changeRequests)) throw new BoardDefinitionError('Board changeRequests must be a plain object.');
-  const keys = Object.keys(changeRequests);
-  const expected = { build: 'working', review: 'working', merged: 'terminal' } as const;
-  if (keys.length !== 3 || !keys.every(key => Object.hasOwn(expected, key))) {
-    throw new BoardDefinitionError('Board changeRequests must declare exactly build, review, and merged.');
-  }
-  for (const [key, kind] of Object.entries(expected)) {
-    const phase = changeRequests[key];
-    if (typeof phase !== 'string' || !Object.hasOwn(phases, phase) || phases[phase]!.kind !== kind) {
-      throw new BoardDefinitionError(`Board changeRequests.${key} "${String(phase)}" must name a ${kind} phase.`);
-    }
-  }
-  return Object.freeze({
-    build: changeRequests.build as string,
-    review: changeRequests.review as string,
-    merged: changeRequests.merged as string,
-  });
-}
-
 function validateEventRules(events: unknown): BoardEventRules {
   if (events === undefined) return Object.freeze({});
   if (!isPlainObject(events)) throw new BoardDefinitionError('Board events must be a plain object.');
@@ -695,9 +663,6 @@ function buildBoard<
   const sourceClosed = validateSourceClosed(config.sourceClosed, config.phases) as
     | BoardSourceClosed<PhaseId>
     | undefined;
-  const changeRequests = validateChangeRequests(config.changeRequests, config.phases) as
-    | BoardChangeRequests<PhaseId>
-    | undefined;
   if (config.triageClassification !== undefined && typeof config.triageClassification !== 'boolean') {
     throw new BoardDefinitionError('Board triageClassification must be a boolean.');
   }
@@ -790,9 +755,9 @@ function buildBoard<
     events,
     ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
     ...(sourceClosed ? { sourceClosed } : {}),
-    ...(changeRequests ? { changeRequests } : {}),
     ...(config.triageClassification === true ? { triageClassification: true as const } : {}),
     allowsTransition(from: PhaseId, to: PhaseId) {
+      if (!kinds.has(from) || !kinds.has(to)) return false;
       return from === to || transitions[from]?.some(transition => transition.to === to) === true;
     },
     phaseKind: (phase: string) => kinds.get(phase),

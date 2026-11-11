@@ -1,4 +1,4 @@
-import { workItemPhaseSemantics } from '@factory/core';
+import { toBoardSource, workItemPhaseSemantics } from '@factory/core';
 import type { IntakeIssue } from '@factory/capabilities';
 import type { WorkItemRow } from '@factory/store';
 import type { Card } from '@factory/store';
@@ -128,7 +128,7 @@ export function attachGitLabIssueReconciler(
     intake: gitlab.intake,
     projects: context.storage.projects,
     storage: context.runtime.workItems,
-    isTerminal: item => workItemPhaseSemantics(boards, item)?.kind === 'terminal',
+    isTerminal: item => workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind === 'terminal',
     issueId: item => {
       const issueIid = identityForItem(item)?.issueIid;
       return issueIid ? String(issueIid) : undefined;

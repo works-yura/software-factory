@@ -1,5 +1,8 @@
-import { createBoardRegistry } from '@factory/core';
-import type { BoardRegistry, InstalledBoard } from '@factory/core';
+import { createBoardRegistry, PROJECT_BOARD_SOURCE } from '@factory/core';
+import type { BoardRegistry, InstalledBoard, ProjectBoards, ProjectBoardSource, StoredBoardDetails } from '@factory/core';
+
+export { toBoardSource } from '@factory/core';
+export type { BoardSourceKind, ProjectBoards, ProjectBoardSource, StoredBoardDetails } from '@factory/core';
 import { defaultBoards } from '@factory/pipelines';
 import { boardDefinitionOf, compileStoredBoard, mergeCodeBehaviour } from '@factory/store';
 import type { StoredBoardInput, StoredBoardRecord, StoredBoardScope, StoredBoardsStorage } from '@factory/store';
@@ -9,55 +12,6 @@ import { BOARD_MIGRATIONS } from './work-migrations.ts';
 const DEFAULT_RECHECK_MS = 1000;
 const PRELOAD_CONCURRENCY = 8;
 const SNAPSHOT_ATTEMPTS = 3;
-
-/** Where a board in a project's catalog came from. */
-export type BoardSourceKind = 'builtin' | 'app' | 'stored';
-
-export interface StoredBoardDetails {
-  source: BoardSourceKind;
-  /** Whether the board can be edited: stored boards, the built-in Work board and app boards all can. */
-  editable: boolean;
-  problems: string[];
-}
-
-/** A project's boards: the code boards plus its stored boards, and what to report about each board. */
-export interface ProjectBoards {
-  readonly registry: BoardRegistry;
-  readonly details: ReadonlyMap<string, StoredBoardDetails>;
-  /** Problems with stored boards that are left out of the registry. */
-  readonly problems: readonly string[];
-}
-
-const PROJECT_BOARD_SOURCE = Symbol('ProjectBoardSource');
-
-/**
- * Serves each project its boards. `load` is the async entry point that brings a project's
- * boards up to date; `forProject` is the sync read for code that already loaded the project.
- */
-export interface ProjectBoardSource {
-  readonly [PROJECT_BOARD_SOURCE]: true;
-  /** The code boards: built-in and app boards, served to every project as code built them. */
-  readonly codeRegistry: BoardRegistry;
-  load(scope: StoredBoardScope): Promise<BoardRegistry>;
-  forProject(scope: StoredBoardScope): BoardRegistry;
-  describe?(scope: StoredBoardScope): Promise<ProjectBoards>;
-}
-
-/** Accepts either a fixed registry (tests, standalone services) or a per-project source. */
-export function toBoardSource(boards: BoardRegistry | ProjectBoardSource | undefined): ProjectBoardSource {
-  const source = boards ?? createBoardRegistry();
-  if (isBoardSource(source)) return source;
-  return {
-    [PROJECT_BOARD_SOURCE]: true,
-    codeRegistry: source,
-    load: async () => source,
-    forProject: () => source,
-  };
-}
-
-function isBoardSource(boards: BoardRegistry | ProjectBoardSource): boards is ProjectBoardSource {
-  return PROJECT_BOARD_SOURCE in boards;
-}
 
 interface CacheEntry {
   boards: ProjectBoards;

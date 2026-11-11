@@ -1,4 +1,4 @@
-import { compileBoardDefinition, isPullRequestCard } from '@factory/core';
+import { compileBoardDefinition, DEFAULT_BOARD_ID, isPullRequestCard, pullRequestCardRejection } from '@factory/core';
 import type { BoardPhaseDefinition } from '@factory/core';
 
 /**
@@ -33,37 +33,16 @@ export type WorkBoardPhase =
   | 'done'
   | 'canceled';
 
-/** A pull request's own card on Work is only reviewed: it never enters these phases, whoever moves it. */
-const NON_PULL_REQUEST_PHASES: ReadonlySet<string> = new Set(['triage', 'planning', 'execute', 'review']);
-
-/**
- * Why a move breaks the shape of a card on Work, or undefined when it does not: a pull request's
- * own card is only reviewed, and PR review holds only cards that carry a pull request (their own,
- * or one attached to their issue). `nextPhases` cannot say this: Intake leads to both Triage and
- * PR review, and which one fits depends on the card.
- */
-export function workPullRequestCardRejection(
-  card: { readonly standalonePullRequest: boolean; readonly hasPullRequest: boolean },
-  toStage: string,
-): string | undefined {
-  if (!card.hasPullRequest && toStage === 'pr-review')
-    return (
-      'PR review holds only cards with a pull request; this work item goes to Review after Building. ' +
-      'It enters PR review once a pull request is attached to it, and the merge moves it to Done.'
-    );
-  if (!card.standalonePullRequest || !NON_PULL_REQUEST_PHASES.has(toStage)) return undefined;
-  return `A pull request card is reviewed on the Work board; it cannot enter ${toStage}. Move it to pr-review, done, or canceled.`;
-}
-
 export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
-  id: 'work',
+  id: DEFAULT_BOARD_ID,
   name: 'Work',
   initialPhase: 'intake',
   // The one rule `nextPhases` can't say: a pull request's own card is only reviewed, and PR review
-  // holds only cards that carry a pull request. (Upstream checks this in the transition service; v4's engine
-  // knows no board, so Work states it here.)
+  // holds only cards that carry a pull request. The transition service checks it for every board
+  // with a pull request loop; Work states it here too for moves that don't go through the service.
   transitionPolicy: ({ item, toStage }) => {
-    const reason = workPullRequestCardRejection(
+    const reason = pullRequestCardRejection(
+      workBoard,
       {
         standalonePullRequest: isPullRequestCard(item),
         hasPullRequest:
@@ -74,7 +53,6 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     return reason ? { type: 'reject', code: 'invalid_transition', reason } : undefined;
   },
   sourceClosed: { completed: 'done', canceled: 'canceled' },
-  changeRequests: { build: 'execute', review: 'review', merged: 'done' },
   triageClassification: true,
   phases: {
     intake: {
@@ -148,7 +126,3 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     },
   },
 });
-
-export function isWorkBoardPhase(value: string): value is WorkBoardPhase {
-  return Object.hasOwn(workBoard.phases, value);
-}

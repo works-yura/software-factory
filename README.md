@@ -74,7 +74,7 @@ shared/work-item-branch.ts   назви гілок і номери PR/MR для 
 | `review` | working, `work` | self-review (`factory-self-review`), якщо ввімкнено; далі PR |
 | `done` / `canceled` | terminal | `done` — після merge PR або закриття issue |
 
-Поведінка, що раніше трималася на id `work`, винесена в оголошення дошки: `changeRequests: { build, review, merged }` і `triageClassification: true`.
+Цикл PR читається з фаз дошки, а не з її id чи ключів (`boardFlow`): рев'ю PR — перша робоча фаза в контексті `review` з інструментом `factory_review_source`; self-review — інша фаза `review` лише з `factory_record_review_verdict`; будівник — остання робоча фаза, що веде в рев'ю; merge закриває картку в `sourceClosed.completed` (інакше в першій термінальній фазі). Тож цикл PR може вести будь-яка дошка. Сигнал `factory-phase` додає рядок `Board phases by part:`, за яким скіли переносять картку. Окремо дошка може оголосити `triageClassification: true`.
 
 ### Кілька репозиторіїв: одна робоча тека
 

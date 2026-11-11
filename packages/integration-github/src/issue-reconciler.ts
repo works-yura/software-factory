@@ -1,4 +1,4 @@
-import { workItemPhaseSemantics } from '@factory/core';
+import { toBoardSource, workItemPhaseSemantics } from '@factory/core';
 import type { IntegrationContext } from '@factory/integrations';
 import {
   githubItemSources,
@@ -87,6 +87,7 @@ export function createGithubIssueReconciler(
         const carded = new Set<number>();
 
         for (const project of projects) {
+          await rules.loadBoards(project);
           const items = await options.storage.list({
             orgId: project.orgId,
             factoryProjectId: project.factoryProjectId,
@@ -95,7 +96,7 @@ export function createGithubIssueReconciler(
             const issueNumber = reconcilableIssueNumber(item, repository);
             if (!issueNumber) continue;
             carded.add(issueNumber);
-            if (workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') continue;
+            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(item), item)?.kind === 'terminal') continue;
             let list = itemsByNumber.get(issueNumber);
             if (!list) {
               list = [];

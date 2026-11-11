@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { BoardRegistry } from '@factory/core';
 import { toBoardSource } from '@factory/runtime';
 import type { ProjectBoardSource } from '@factory/runtime';
-import { cardLabels, moveCardToBoard, placedByIntakeRoute } from '@factory/core';
+import { cardLabels, DEFAULT_BOARD_ID, moveCardToBoard, placedByIntakeRoute } from '@factory/core';
 import type { Intake, IntakeItem } from '@factory/capabilities';
 import type { AuditEmitter } from '@factory/feed';
 import { FactoryProjectNotFoundError, normalizeIntakeLabel, resolveIntakeLabelRoute } from '@factory/store';
@@ -190,7 +190,7 @@ async function relocateLabeledCards({
     const targetBoard =
       resolveIntakeLabelRoute(routes, labels)?.board ??
       repositoryBoards.find(candidate => cardInRepository(item, candidate))?.board ??
-      'work';
+      DEFAULT_BOARD_ID;
     const outcome = await moveCardToBoard({ workItems, boardRegistry, userId, item, targetBoard });
     if (outcome === 'moved') moved += 1;
     else if (outcome === 'skipped') skipped += 1;

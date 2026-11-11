@@ -10,6 +10,7 @@ import { ClickUpIntake } from './intake.ts';
 import { createClickUpPoller } from './poller.ts';
 import { buildClickUpRoutes } from './routes.ts';
 import { readClickUpSettings } from './settings.ts';
+import { toBoardSource } from '@factory/core';
 
 export const DEFAULT_CLICKUP_POLL_SECONDS = 60;
 
@@ -61,7 +62,8 @@ export class ClickUpIntegration implements FactoryIntegration {
       rules: async orgId => (await readClickUpSettings(storage, orgId)).lists,
       projects: ctx.storage.projects,
       workItems: ctx.runtime.workItems,
-      boards: ctx.runtime.boards,
+      // Card lookups read the code boards; stored boards come through `projectBoards` for routing.
+      boards: toBoardSource(ctx.runtime.boards).codeRegistry,
       ...(ctx.runtime.intakeRoutes ? { intakeRoutes: ctx.runtime.intakeRoutes } : {}),
       ...(ctx.runtime.projectBoards ? { projectBoards: ctx.runtime.projectBoards } : {}),
       configVersion: ctx.runtime.configVersion,
