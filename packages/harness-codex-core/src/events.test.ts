@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { codexErrorFromTurn } from './errors.ts';
-import { CodexTurnTranslator, codexFileChangeApprovalPrompt } from './events.ts';
+import { CODEX_SECRET_ANSWER_NOTE, CodexTurnTranslator, codexFileChangeApprovalPrompt, codexQuestionInput } from './events.ts';
+import { questionAnswers } from './session.ts';
 
 const at = { threadId: 'th', turnId: 'tu' };
 
@@ -215,6 +216,22 @@ describe('CodexTurnTranslator subagents, images, terminals and approvals', () =>
     expect(turn.itemStarted({ ...at, item: poll })).toEqual([
       { kind: 'tool_call', toolCallId: 'c2', toolName: 'get_process_output', input: { pid: '41', command: 'pnpm dev', cwd: '/w' } },
     ]);
+  });
+
+  it('warns under a question Codex marked secret, and still splits the answers by the questions shown', () => {
+    const params = {
+      threadId: 'th',
+      turnId: 'tu',
+      itemId: 'q',
+      questions: [
+        { id: 'key', header: 'Key', question: 'Which key?', isSecret: true },
+        { id: 'env', header: 'Env', question: 'Which env?' },
+      ],
+    };
+    const shown = codexQuestionInput(params).questions.map(question => question.question as string);
+    expect(shown[0]).toBe(`Which key?\n\n${CODEX_SECRET_ANSWER_NOTE}`);
+    const reply = shown.map((question, index) => `${index + 1}. ${question}\n   → ${index === 0 ? 'the staging one' : 'prod'}`).join('\n');
+    expect(questionAnswers(params, reply)).toEqual({ key: { answers: ['the staging one'] }, env: { answers: ['prod'] } });
   });
 
   it("shows every file of a change in its approval card, each under its own header, with the line counts", () => {

@@ -235,12 +235,18 @@ export type CodexApprovalRequest =
   | { kind: 'fileChange'; params: FileChangeRequestApprovalParams }
   | { kind: 'permissions'; params: PermissionsRequestApprovalParams };
 
-/** The `AskUserQuestion` input a `request_user_input` reads as, so the chat's question card shows it. */
+/** Said under a question Codex marked secret: the card cannot hide what the person types. */
+export const CODEX_SECRET_ANSWER_NOTE = 'The answer is kept in the chat like any other; do not paste a password or key here.';
+
+/**
+ * The `AskUserQuestion` input a `request_user_input` reads as, so the chat's question card shows it.
+ * The card always takes an answer in the person's own words, so Codex's `isOther` needs nothing more.
+ */
 export function codexQuestionInput(params: ToolRequestUserInputParams): { questions: Array<Record<string, unknown>> } {
   return {
     questions: params.questions.map(question => ({
       id: question.id,
-      question: question.question,
+      question: question.isSecret ? `${question.question}\n\n${CODEX_SECRET_ANSWER_NOTE}` : question.question,
       ...(question.header ? { header: question.header } : {}),
       ...(question.options?.length ? { options: question.options.map(option => ({ label: option.label, ...(option.description ? { description: option.description } : {}) })) } : {}),
     })),

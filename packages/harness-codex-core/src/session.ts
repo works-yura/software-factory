@@ -27,7 +27,7 @@ import {
 import { buildCodexEnv } from './env.ts';
 import { CodexError } from './errors.ts';
 import { elicitationQuestions, elicitationResponse, splitQuestionAnswers, type ElicitationPlan, type McpElicitationResponse } from './elicitation.ts';
-import { CodexTurnTranslator, type CodexTurnOutcome } from './events.ts';
+import { CodexTurnTranslator, codexQuestionInput, type CodexTurnOutcome } from './events.ts';
 import { CODEX_FILE_CREDENTIALS_ARGS, codexAppServerArgs, resolveCodexLaunchArgs } from './launchArgs.ts';
 import type { CodexTurnModelSelection } from './models/harness-models.ts';
 import { codexNotificationDecision } from './notifications.ts';
@@ -422,8 +422,9 @@ export function questionAnswers(params: ToolRequestUserInputParams | undefined, 
     const values = (Array.isArray(answer) ? answer : [answer]).map(value => value.trim()).filter(Boolean);
     return questions[0] ? { [questions[0].id]: { answers: values } } : {};
   }
+  // Split by the questions as the card showed them.
   const answers = splitQuestionAnswers(
-    questions.map(question => question.question),
+    codexQuestionInput(params!).questions.map(question => String(question.question)),
     answer,
   );
   return Object.fromEntries(questions.map((question, index) => [question.id, { answers: answers[index] ? [answers[index]] : [] }]));

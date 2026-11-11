@@ -29,6 +29,7 @@ does. Nothing here stores OpenAI credentials: the Factory server keeps the membe
 | `models/probe.ts` | Probes the CLI: version, account, models (`initialize`, `account/read`, `model/list`) |
 | `models/harness-models.ts` | `createCodexHarnessModels`: the `HarnessModels` facet |
 | `events.ts` | `CodexTurnTranslator`: app-server notifications into the Factory transcript (`TranscriptEntry`) and the turn's outcome |
+| `elicitation.ts` | MCP elicitations (forms, links) as question cards, and the person's answers back as typed content |
 | `store.ts` | Session records (in memory, one JSON file per session) |
 | `session.ts` | `CodexSession`: the contract's session over app-server threads and turns |
 | `harness.ts` | `createCodexHarness` |
@@ -60,3 +61,26 @@ does. Nothing here stores OpenAI credentials: the Factory server keeps the membe
    found; otherwise the facet reports it unavailable with a reason (`needsSetup` when not signed
    in). A Factory's harness can be `codex`; sessions start on it like Claude Code ones. Moving a
    session between harnesses stays a 409 (a handoff, not a model switch).
+
+## Parity with Claude Code
+
+What a Codex session does where a Claude Code session does the same, and what is left out.
+
+| Claude Code | Codex | How |
+|---|---|---|
+| `AskUserQuestion` (up to 4) | `request_user_input` (up to 3) | One `AskUserQuestion` card (ADR 0006). The tool is offered in every mode (`features.default_mode_request_user_input`); the Factory's developer instructions name it as the skills' question tool. A card's reply is split back per question. A card the session no longer waits on is cancelled (`tool_suspension_cancelled`). A question Codex marks secret carries a note that the answer stays in the chat. |
+| MCP elicitation | `mcpServer/elicitation/request` | A form's fields become the card's questions (enums and booleans as choices, the default first and recommended; text and numbers as free answers), a link as Done / Decline; answers go back typed. Codex's own MCP tool approval (`_meta.codex_approval_kind = "mcp_tool_call"`) parks as a permission; its tool is read from the message (`Allow <server> to run tool "<tool>"?`), since `_meta` carries only `tool_title`, `connector_*` and `tool_params` (CLI 0.166). Device-verification challenges (`openai/userVerification`) are declined. |
+| `Task`/`Agent` subagents | collab `spawnAgent`, multi-agent v2 `subAgentActivity` | An `Agent` call per subagent thread; the thread's items, deltas and approvals are recorded under it (`parentToolCallId`) and route to the turn that started it; `wait`'s agent states, the `completed`/`interrupted` activity or the subagent's turn end settle it. Other collab calls (`wait`, `sendInput`, …) are not drawn: their effect shows on the subagent cards. |
+| Background `Bash` / `BashOutput` | unified exec terminals | A command whose terminal keeps running says so in its result (with its process id); a later call to that terminal reads as `get_process_output`. The terminals end with the run's process. |
+| — | `imageGeneration` | A `generate_image` call; the saved image goes to the host (`onImageGenerated`), which keeps it as the card's or the session's attachment. |
+| Edit card | `fileChange` | One call per file with the unified diff and its line counts; an approval shows every file's diff, each under an `@@ <kind> <path> @@` header. |
+| Steer (stop and restart) | `turn/steer` | The message joins the turn in flight; when no turn can take it, the run stops and starts over with it, as Claude Code's does. |
+| Account rotation | `account/login/start` per account | A turn that runs out of usage moves to the next account in the same thread, also after a parked approval or question was answered. |
+
+Left out, and why:
+
+- **Compaction**: Codex compacts its context on its own; the Factory has no compact command or compaction marker for Claude Code either, so `thread/compact/start` and `contextCompaction` items are not surfaced.
+- **Fork, rollback, revert** (`thread/fork`, `thread/revert`): the Factory exposes none of these for Claude Code sessions.
+- **MCP apps** (`mcpAppUi` resources on MCP tool calls): the chat has no renderer for MCP app UIs; such calls show as ordinary MCP tool calls.
+- **Command output streaming** (`item/commandExecution/outputDelta`): the chat shows a command's output when it completes, as for Claude Code.
+
