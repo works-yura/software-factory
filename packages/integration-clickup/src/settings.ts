@@ -2,7 +2,10 @@ import { z } from 'zod';
 
 import type { IntegrationStorageHandle } from '@factory/store';
 
-/** What the factory does with a task that carries a given ClickUp status. */
+/**
+ * A retired per-List status rule (before routes). Kept only so the boot migration can read the rules
+ * still stored and turn them into intake routes (`status-routes.ts`); nothing applies them any more.
+ */
 export const statusRuleSchema = z.discriminatedUnion('action', [
   /** Leave the task alone: not imported, and a card already on the board stays where it is. */
   z.object({ action: z.literal('ignore') }),
@@ -32,10 +35,6 @@ const ORG_SETTINGS_USER = '__org__';
 const settingsSchema = z.object({ lists: z.record(z.string(), listRulesSchema) });
 
 export const normalizeStatus = (name: string): string => name.trim().toLowerCase();
-
-export function ruleFor(rules: ListRules | undefined, statusName: string): StatusRule {
-  return rules?.statuses[normalizeStatus(statusName)] ?? { action: 'ignore' };
-}
 
 export async function readClickUpSettings(
   storage: Pick<IntegrationStorageHandle, 'settings'>,

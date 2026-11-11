@@ -55,8 +55,6 @@ function decodeCursor(value: string | undefined): { source: number; page: number
 
 /** ClickUp as an intake provider: Lists are sources, tasks are issues. */
 export class ClickUpIntake implements Intake {
-  /** A List's binding names the board its status rules move cards between. */
-  readonly bindingBoard = true;
   readonly #client: ClickUpClient;
   readonly #token: string;
   #sources: { at: number; value: ClickUpList[] } | undefined;
