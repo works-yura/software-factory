@@ -447,7 +447,7 @@ describe('GithubTokenIntegration: repositories and access', () => {
     expect(integration.workers(context).map(worker => worker.name)).toEqual(['github-pull-request-reconcile']);
   });
 
-  it('reads issues only from repositories an org selected as a GitHub intake source', async () => {
+  it('reads issues only from repositories a project\'s GitHub intake routes name, while GitHub intake is on', async () => {
     const seeded = await createFactoryStorageForTests();
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
     const sourceControl = seeded.sourceControl.forIntegration('github');
@@ -482,7 +482,26 @@ describe('GithubTokenIntegration: repositories and access', () => {
       });
     }
     const integration = new GithubTokenIntegration({ accessToken: TOKEN });
-    const context = { storage: { sourceControl, intake: seeded.intake } } as never;
+    const context = {
+      storage: { sourceControl, intake: seeded.intake },
+      runtime: { intakeRoutes: seeded.storedBoards },
+    } as never;
+    const routeFor = (integration: string, repository: string) =>
+      seeded.storedBoards.createIntakeRoute(
+        { orgId: 'org-1', factoryProjectId: project.id },
+        {
+          name: `${integration} ${repository}`,
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'source.integration', operator: 'equals', value: integration },
+              { field: 'source.repository', operator: 'equals', value: repository },
+            ],
+          },
+          target: { boardKey: 'work', phaseKey: 'intake' },
+        },
+        'user-1',
+      );
     const scope = (repositories: Array<{ id: number; fullName: string; installationId: number }>) =>
       (
         integration as unknown as {
@@ -492,20 +511,19 @@ describe('GithubTokenIntegration: repositories and access', () => {
     const app = { id: 10, fullName: 'acme/app', installationId: 4242 };
     const api = { id: 11, fullName: 'acme/api', installationId: 4242 };
 
-    // Cards come from another source: no GitHub repository's issues are read.
+    await seeded.intake.saveConfig({ orgId: 'org-1', config: { github: { enabled: true, sourceIds: null } } });
+    // No route names a repository: cards come from another source, nothing is read.
     await expect(scope([app, api])).resolves.toEqual([]);
 
-    await seeded.intake.saveConfig({
-      orgId: 'org-1',
-      config: { github: { enabled: true, sourceIds: [linked['acme/api']!] } },
-    });
+    // A route on another host, or one that only excludes, subscribes nothing here.
+    await routeFor('gitlab', 'acme/app');
+    await expect(scope([app, api])).resolves.toEqual([]);
+
+    await routeFor('github', 'acme/api');
     await expect(scope([app, api])).resolves.toEqual([api]);
 
-    // A switched-off selection reads nothing.
-    await seeded.intake.saveConfig({
-      orgId: 'org-1',
-      config: { github: { enabled: false, sourceIds: [linked['acme/api']!] } },
-    });
+    // GitHub intake switched off reads nothing, routes or not.
+    await seeded.intake.saveConfig({ orgId: 'org-1', config: { github: { enabled: false, sourceIds: null } } });
     await expect(scope([app, api])).resolves.toEqual([]);
   });
 

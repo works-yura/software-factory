@@ -149,34 +149,7 @@ describe('useLinkRepositoryMutation', () => {
     ]);
   });
 
-  it('given a repository outside issue intake, when it is linked, then its issues feed the caller’s intake', async () => {
-    stubRepositoryLink();
-    const saved = stubIntakeConfig({
-      github: { enabled: true, sourceIds: null },
-      gitlab: { enabled: false, sourceIds: null },
-    });
-
-    const { client, result } = renderHookWithProviders(() => ({
-      link: useLinkRepositoryMutation(),
-      intake: useIntakeConfigQuery(),
-    }));
-    await waitForMutationsIdle(client);
-
-    result.current.link.mutate({ factoryProjectId: 'fp-1', repo });
-
-    await waitForMutationsIdle(client);
-    expect(result.current.link.isSuccess).toBe(true);
-    expect(saved).toEqual([
-      {
-        github: { enabled: true, sourceIds: ['octo/hello'] },
-        gitlab: { enabled: false, sourceIds: null },
-        clickup: { enabled: false, sourceIds: null },
-      },
-    ]);
-    expect(result.current.intake.data?.github.sourceIds).toEqual(['octo/hello']);
-  });
-
-  it('given GitHub intake switched off, when a repository is linked, then intake is switched back on for it', async () => {
+  it('given a GitHub repository, when it is linked, then the intake selection is left alone (the server adds its route)', async () => {
     stubRepositoryLink();
     const saved = stubIntakeConfig({
       github: { enabled: false, sourceIds: ['octo/other'] },
@@ -189,13 +162,8 @@ describe('useLinkRepositoryMutation', () => {
 
     await waitForMutationsIdle(client);
     expect(result.current.isSuccess).toBe(true);
-    expect(saved).toEqual([
-      {
-        github: { enabled: true, sourceIds: ['octo/other', 'octo/hello'] },
-        gitlab: { enabled: false, sourceIds: null },
-        clickup: { enabled: false, sourceIds: null },
-      },
-    ]);
+    // Routes are what a project reads: the server's link handler adds the repository's route.
+    expect(saved).toEqual([]);
   });
 
   it('given a repository already feeding issue intake, when it is linked again, then the selection is left alone', async () => {
@@ -214,31 +182,6 @@ describe('useLinkRepositoryMutation', () => {
     expect(saved).toEqual([]);
   });
 
-  it('given the intake write fails, when a repository is linked, then the error surfaces and the Factory list still refreshes', async () => {
-    stubRepositoryLink();
-    let factoryListReads = 0;
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => {
-        factoryListReads += 1;
-        return HttpResponse.json({ projects: [] });
-      }),
-      http.get(CONFIG_URL, () => HttpResponse.json({ config: {} })),
-      http.put(CONFIG_URL, () => HttpResponse.json({ error: 'invalid_config' }, { status: 400 })),
-    );
-
-    const { client, result } = renderHookWithProviders(() => ({
-      link: useLinkRepositoryMutation(),
-      factories: useFactoriesQuery(),
-    }));
-    await waitForMutationsIdle(client);
-    expect(factoryListReads).toBe(1);
-
-    result.current.link.mutate({ factoryProjectId: 'fp-1', repo });
-
-    await waitForMutationsIdle(client);
-    expect(result.current.link.error?.message).toBe('invalid_config');
-    expect(factoryListReads).toBe(2);
-  });
 });
 
 describe('useFactoriesQuery', () => {

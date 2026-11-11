@@ -26,7 +26,7 @@ export {
   resolveEventRoute,
   resolveIntakePlacement,
   resolveIntakeRoute,
-  routedSourceLists,
+  routedSourceScopes,
   routesHandleEvent,
   routeSourceValues,
   placeArrival,

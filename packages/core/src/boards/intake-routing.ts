@@ -321,9 +321,26 @@ export function routeSubscribesSource(
   );
 }
 
-/** The lists the project's routes name for `listField`, enabled or not: the lists a tracker should read. */
-export function routedSourceLists(routes: readonly IntakeRoute[], listField = 'source.list'): string[] {
-  return [...new Set(routes.filter(route => !isTriggerRoute(route)).flatMap(route => routeSourceValues(route, listField)))];
+/**
+ * The scopes a project's routes subscribe it to, enabled or not: the values its routes name for
+ * `scopeField` with `equals`/`in` — the Lists a tracker reads (`source.list`), the repositories a
+ * code host reads (`source.repository`). With `integrationId`, only routes naming that integration
+ * (`source.integration` equals or includes it) count, so a GitHub route never subscribes GitLab.
+ * The one subscription model for every source: a source reads only what a route names.
+ */
+export function routedSourceScopes(
+  routes: readonly IntakeRoute[],
+  scopeField = 'source.list',
+  integrationId?: string,
+): string[] {
+  return [
+    ...new Set(
+      routes
+        .filter(route => !isTriggerRoute(route))
+        .filter(route => integrationId === undefined || routeSourceValues(route, 'source.integration').includes(integrationId))
+        .flatMap(route => routeSourceValues(route, scopeField)),
+    ),
+  ];
 }
 
 /**

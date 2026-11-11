@@ -1,5 +1,5 @@
 import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
-import { routedSourceLists } from '@factory/core/boards/intake-routing';
+import { routedSourceScopes } from '@factory/core/boards/intake-routing';
 import type { IntakeRoute } from '@factory/core/boards/intake-routing';
 import { AUTO_TRIAGED_LABEL } from '@factory/core/rules/types';
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
@@ -124,15 +124,21 @@ export function useBoardIntake({
   const config = configQuery.data;
   const gitlabStatusQuery = useGitLabStatusQuery();
   const githubEnabled = config?.github.enabled ?? true;
-  // Every linked GitHub repository feeds intake, not just the first one.
-  // Work watches pull requests on all of them, and browses issues only from
-  // the repositories selected as issue sources.
+  // Work watches pull requests on every linked GitHub repository, and browses issues only from
+  // the repositories the project's intake routes name (a GitHub route on `source.repository`):
+  // routes are the one subscription model. Until the routes load, every linked one is browsed.
   const reviewRepositoryIds = repositories
     .filter(linked => linked.provider !== 'gitlab')
     .map(linked => linked.projectRepositoryId);
+  const projectRoutesQuery = useIntakeRoutesQuery(factoryProjectId);
+  const githubRouted = projectRoutesQuery.data
+    ? routedSourceScopes(projectRoutesQuery.data as unknown as IntakeRoute[], 'source.repository', 'github').map(slug =>
+        slug.toLowerCase(),
+      )
+    : undefined;
   const githubRepositoryIds = repositories
     .filter(linked => linked.provider !== 'gitlab')
-    .filter(linked => (config ? (config.github.sourceIds?.includes(linked.slug) ?? false) : true))
+    .filter(linked => (githubRouted ? githubRouted.includes(linked.slug.toLowerCase()) : true))
     .map(linked => linked.projectRepositoryId);
   const githubSelected = githubRepositoryIds.length > 0;
   const gitlabConnected = Boolean(gitlabStatusQuery.data?.enabled && gitlabStatusQuery.data.configured);
@@ -171,12 +177,11 @@ export function useBoardIntake({
   // through those routes, never a feed the board browses. While the routes load (or fail) the
   // setup prompt waits, as for bindings.
   const clickupEnabled = config?.clickup.enabled ?? false;
-  const clickupRoutesQuery = useIntakeRoutesQuery(clickupEnabled ? factoryProjectId : undefined);
   const clickupRouted =
     clickupEnabled &&
-    (clickupRoutesQuery.isPending ||
-      clickupRoutesQuery.isError ||
-      routedSourceLists((clickupRoutesQuery.data ?? []) as unknown as IntakeRoute[]).length > 0);
+    (projectRoutesQuery.isPending ||
+      projectRoutesQuery.isError ||
+      routedSourceScopes((projectRoutesQuery.data ?? []) as unknown as IntakeRoute[], 'source.list').length > 0);
   const sourceConnected =
     (!gitlabRepository && githubEnabled && githubSelected) ||
     (gitlabEligible && boundToProject('gitlab', config?.gitlab.sourceIds)) ||

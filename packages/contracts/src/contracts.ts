@@ -204,6 +204,12 @@ const intakeRouteSchema = z.object({
     .discriminatedUnion('kind', [
       z.object({ kind: z.literal('clickup-status'), listId: z.string(), status: z.string(), generatedName: z.string() }),
       z.object({ kind: z.literal('schedule'), generatedName: z.string() }),
+      z.object({
+        kind: z.literal('repository'),
+        integrationId: z.string(),
+        repository: z.string(),
+        generatedName: z.string(),
+      }),
     ])
     .nullable(),
 });

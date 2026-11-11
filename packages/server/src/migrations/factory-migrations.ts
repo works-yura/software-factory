@@ -17,11 +17,13 @@ import type {
   IntakeRouteFiresStorage,
   IntakeStorage,
   IntegrationStorage,
+  SourceControlStorage,
   StoredBoardsStorage,
   WorkItemsStorage,
 } from '@factory/store';
 
 import { AUDITS_BOARD_UPGRADE_ACTOR, migrateLegacyIntakeRules } from '../intake/migrations.ts';
+import { migrateGithubRepositorySelections } from '../intake/repository-subscriptions.ts';
 import type { BootMigration } from './run.ts';
 
 export interface FactoryMigrationDeps {
@@ -32,6 +34,7 @@ export interface FactoryMigrationDeps {
   fires: IntakeRouteFiresStorage;
   projects: FactoryProjectsStorage;
   integrationStorage: IntegrationStorage;
+  sourceControl: SourceControlStorage;
   projectBoards: ProjectBoardCache | undefined;
   integrations: readonly FactoryIntegration[];
 }
@@ -168,6 +171,23 @@ export function factoryBootMigrations(deps: FactoryMigrationDeps): BootMigration
       run: async () => {
         const moved = await workItems.returnHeldTriageCards();
         return moved.length > 0 ? `moved ${moved.length} card(s) held for triage acceptance back to Intake` : undefined;
+      },
+    },
+    // Routes are the one subscription model (ADR-0022): the org-wide GitHub intake selection becomes
+    // one route per selected linked repository, so each project reads what it read before. Nothing
+    // reads the selection any more, so a failure stops the boot.
+    {
+      id: 'intake.githubRepositorySelections.v1',
+      ready: ready('intake') && ready('boards') && ready('source-control') && ready('projects'),
+      onFailure: 'stop-boot',
+      run: async () => {
+        const { routes } = await migrateGithubRepositorySelections({
+          projects: deps.projects,
+          intake,
+          sourceControl: deps.sourceControl.forIntegration('github'),
+          boards,
+        });
+        return routes > 0 ? `turned the GitHub intake selection into ${routes} repository route(s)` : undefined;
       },
     },
     // Integration-owned data (ClickUp's retired List status rules → intake routes), before any worker

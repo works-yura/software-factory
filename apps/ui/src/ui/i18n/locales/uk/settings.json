@@ -878,7 +878,8 @@
     },
     "inList": "ClickUp List {{list}}",
     "origins": {
-      "clickupStatus": "ClickUp: статус «{{status}}»"
+      "clickupStatus": "ClickUp: статус «{{status}}»",
+      "repository": "Задачі репозиторію «{{repository}}»"
     }
   },
   "intakeTriggers": {

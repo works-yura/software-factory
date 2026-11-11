@@ -473,10 +473,30 @@ describe('useBoardIntake across linked repositories', () => {
         HttpResponse.json({ projects: [{ id: 'factory-1', name: 'factory-1', repositories: [] }] }),
       ),
       http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({ config: { github: { enabled: true, sourceIds: null } } }),
+      ),
+      // The project reads acme/app and acme/api: a GitHub route names each (acme/docs is only linked).
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/intake-routes`, () =>
         HttpResponse.json({
-          config: {
-            github: { enabled: true, sourceIds: ['acme/app', 'acme/api'] },
-          },
+          intakeRoutes: ['acme/app', 'acme/api'].map((repository, position) => ({
+            id: `route-${repository}`,
+            name: `GitHub: ${repository}`,
+            enabled: true,
+            on: ['work_item.created'],
+            when: {
+              operator: 'AND',
+              conditions: [
+                { field: 'source.integration', operator: 'equals', value: 'github' },
+                { field: 'source.repository', operator: 'equals', value: repository },
+              ],
+            },
+            target: { boardKey: 'work', phaseKey: 'intake' },
+            position,
+            revision: 1,
+            triggered: null,
+            origin: null,
+          })),
+          canEdit: false,
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
@@ -495,7 +515,7 @@ describe('useBoardIntake across linked repositories', () => {
     );
   }
 
-  it('offers Work the issues of every repository selected as an issue source, kept apart by repository', async () => {
+  it('offers Work the issues of every repository its GitHub routes name, kept apart by repository', async () => {
     stubRepositories([]);
 
     const { result } = renderHookWithProviders(() =>

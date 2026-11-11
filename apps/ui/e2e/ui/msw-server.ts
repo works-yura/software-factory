@@ -58,7 +58,33 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
   // The sidebar and the board page read the intake routes to learn whether the caller may change
   // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
-  http.get('*/web/factory/projects/:id/intake-routes', () => HttpResponse.json({ intakeRoutes: [], canEdit: false })),
+  // Routes are what a project reads (ADR-0022): the board suites' project reads its linked
+  // `acme/app` through one GitHub repository route. Tests about routes override this.
+  http.get('*/web/factory/projects/:id/intake-routes', () =>
+    HttpResponse.json({
+      intakeRoutes: [
+        {
+          id: 'route-acme-app',
+          name: 'GitHub: acme/app',
+          enabled: true,
+          on: ['work_item.created'],
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'source.integration', operator: 'equals', value: 'github' },
+              { field: 'source.repository', operator: 'equals', value: 'acme/app' },
+            ],
+          },
+          target: { boardKey: 'work', phaseKey: 'intake' },
+          position: 0,
+          revision: 1,
+          triggered: null,
+          origin: { kind: 'repository', integrationId: 'github', repository: 'acme/app', generatedName: 'GitHub: acme/app' },
+        },
+      ],
+      canEdit: false,
+    }),
+  ),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   // A server without Platform machine credentials mounts no platform connect
   // routes; the ambient 404 hides the provider sections. Provider connection

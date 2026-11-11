@@ -58,6 +58,7 @@ import { createDefaultBoardRegistry } from '@factory/pipelines';
 import { factoryBootMigrations } from './migrations/factory-migrations.ts';
 import { runBootMigrations } from './migrations/run.ts';
 import { intakeTriggerRouteRepository, writeFireCardBack } from './intake/repository.ts';
+import { subscribeLinkedRepository } from './intake/repository-subscriptions.ts';
 import { setupIntakeTriggers } from './intake/setup.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
 import {
@@ -1124,6 +1125,7 @@ export class MastraFactory {
         fires: intakeRouteFiresStorage,
         projects: factoryProjectsStorage,
         integrationStorage,
+        sourceControl: sourceControlStorage,
         projectBoards: this.#projectBoards,
         integrations,
       }),
@@ -1639,17 +1641,27 @@ export class MastraFactory {
             },
           }
         : {}),
-      ...(typeof githubIntegration?.ingestLinkedRepositoryBacklog === 'function'
-        ? {
-            onProjectRepositoryLinked: ({ orgId, projectRepository }) => {
-              void githubIntegration
-                .ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId: projectRepository.id })
-                .catch(error => {
-                  console.warn('[factory] Failed to import a linked repository backlog:', error);
-                });
-            },
-          }
-        : {}),
+      onProjectRepositoryLinked: ({ orgId, projectRepository }) => {
+        // A linked GitHub repository is one the project reads: routes are the one subscription
+        // model, so linking it adds its route (ahead of the catch-all, landing where that would).
+        if (storage.isDomainReady('boards') && storage.isDomainReady('source-control')) {
+          void subscribeLinkedRepository({
+            orgId,
+            projectRepository,
+            sourceControl: sourceControlStorage.forIntegration('github'),
+            boards: storedBoardsStorage,
+          }).catch(error => {
+            console.error('[factory] Linked a GitHub repository but could not add its intake route:', error);
+          });
+        }
+        if (typeof githubIntegration?.ingestLinkedRepositoryBacklog === 'function') {
+          void githubIntegration
+            .ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId: projectRepository.id })
+            .catch(error => {
+              console.warn('[factory] Failed to import a linked repository backlog:', error);
+            });
+        }
+      },
       ...(sessionRetirement ? { sessionRetirement } : {}),
       ...(retireWorkItemSandboxes ? { releaseWorkItemSandboxes: retireWorkItemSandboxes } : {}),
       ...(workItemsReady ? { workItems: workItemsStorage } : {}),

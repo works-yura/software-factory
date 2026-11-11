@@ -26,6 +26,7 @@
  */
 
 import { Octokit } from '@octokit/rest';
+import { routedSourceScopes } from '@factory/core';
 
 import type { ApiRoute } from '@mastra/core/server';
 
@@ -164,16 +165,19 @@ export class GithubTokenIntegration extends GithubIntegration {
   }
 
   /**
-   * Only the repositories an org selected as a GitHub intake source. The
-   * sweep files every open issue it finds without a card, so reading every
-   * repository the environment links would turn a repository's whole issue
-   * list into cards for an org that takes its work from elsewhere.
+   * Only the repositories a project's intake routes name (`source.repository`, GitHub routes),
+   * while GitHub intake is switched on. The sweep files every open issue it finds without a card,
+   * so reading every repository the environment links would turn a repository's whole issue list
+   * into cards for a project that takes its work from elsewhere. Routes are the one subscription
+   * model; without the routes domain nothing is read.
    */
   protected override async issueSweepRepositories(
     ctx: IntegrationContext,
     repositories: ReconcileRepository[],
   ): Promise<ReconcileRepository[]> {
     const intake = ctx.storage.intake;
+    const routes = ctx.runtime?.intakeRoutes;
+    if (!routes) return [];
     const selected: ReconcileRepository[] = [];
     for (const repository of repositories) {
       const projects = await ctx.storage.sourceControl.projectRepositories.listByExternalRepository({
@@ -182,13 +186,13 @@ export class GithubTokenIntegration extends GithubIntegration {
       });
       for (const project of projects) {
         const selection = (await intake.getConfig({ orgId: project.orgId, integrationIds: [this.id] }))[this.id];
-        const sourceIds = selection?.enabled ? (selection.sourceIds ?? []) : [];
-        if (
-          sourceIds.some(
-            id =>
-              id === project.projectRepository.repositoryId || id.toLowerCase() === repository.fullName.toLowerCase(),
-          )
-        ) {
+        if (!selection?.enabled) continue;
+        const named = routedSourceScopes(
+          await routes.listIntakeRoutes({ orgId: project.orgId, factoryProjectId: project.factoryProjectId }),
+          'source.repository',
+          this.id,
+        );
+        if (named.some(slug => slug.toLowerCase() === repository.fullName.toLowerCase())) {
           selected.push(repository);
           break;
         }

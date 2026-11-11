@@ -1,4 +1,4 @@
-import { routedSourceLists } from '@factory/core';
+import { routedSourceScopes } from '@factory/core';
 import type { IntakeRoutesReader } from '@factory/core';
 import type { FactoryProject, FactoryProjectsStorage, IntakeStorage } from '@factory/store';
 
@@ -33,7 +33,7 @@ export async function routedClickUpLists(options: {
     }
     if (!enabled.get(project.orgId)) continue;
     const routes = await options.intakeRoutes.listIntakeRoutes({ orgId: project.orgId, factoryProjectId: project.id });
-    for (const listId of routedSourceLists(routes)) lists.push({ project, listId });
+    for (const listId of routedSourceScopes(routes, 'source.list')) lists.push({ project, listId });
   }
   return lists;
 }

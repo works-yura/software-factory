@@ -126,6 +126,9 @@ export function routeName(route: IntakeRouteInfo, t: T): string {
   if (origin && origin.generatedName === route.name && origin.kind === 'clickup-status') {
     return t('intakeRoutes.origins.clickupStatus', { status: origin.status });
   }
+  if (origin && origin.generatedName === route.name && origin.kind === 'repository') {
+    return t('intakeRoutes.origins.repository', { repository: origin.repository });
+  }
   return route.name;
 }
 

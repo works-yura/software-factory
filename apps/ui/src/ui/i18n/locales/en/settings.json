@@ -872,7 +872,8 @@
     },
     "inList": "ClickUp List {{list}}",
     "origins": {
-      "clickupStatus": "ClickUp: status “{{status}}”"
+      "clickupStatus": "ClickUp: status “{{status}}”",
+      "repository": "Tasks from the repository “{{repository}}”"
     }
   },
   "intakeTriggers": {

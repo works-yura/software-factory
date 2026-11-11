@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IntakeRoute } from './intake-routing.ts';
-import { routedSourceLists, routeSourceValues, routeSubscribesSource } from './intake-routing.ts';
+import { routedSourceScopes, routeSourceValues, routeSubscribesSource } from './intake-routing.ts';
 
 function route(id: string, when: IntakeRoute['when'], overrides: Partial<IntakeRoute> = {}): IntakeRoute {
   return {
@@ -28,7 +28,30 @@ describe('routes subscribe a project to source lists', () => {
   it('never reads a list a route only excludes', () => {
     const routes = [route('keep', listIs('equals', 'L1')), route('except', listIs('not_equals', 'L9'))];
 
-    expect(routedSourceLists(routes)).toEqual(['L1']);
+    expect(routedSourceScopes(routes)).toEqual(['L1']);
+  });
+
+  it('reads the repositories a code host is subscribed to only from routes naming that host', () => {
+    const repoRoute = (id: string, integration: string, repository: string | string[]) =>
+      route(id, {
+        operator: 'AND',
+        conditions: [
+          { field: 'source.integration', operator: 'equals', value: integration },
+          { field: 'source.repository', operator: Array.isArray(repository) ? 'in' : 'equals', value: repository },
+        ],
+      } as IntakeRoute['when']);
+    const routes = [
+      repoRoute('front', 'github', 'eclipt-ai/syncta_front'),
+      repoRoute('both', 'github', ['eclipt-ai/syncta_back', 'eclipt-ai/syncta_front']),
+      repoRoute('lab', 'gitlab', 'acme/platform/api'),
+      route('unnamed', { operator: 'AND', conditions: [{ field: 'source.repository', operator: 'equals', value: 'x/y' }] } as IntakeRoute['when']),
+    ];
+
+    expect(routedSourceScopes(routes, 'source.repository', 'github')).toEqual([
+      'eclipt-ai/syncta_front',
+      'eclipt-ai/syncta_back',
+    ]);
+    expect(routedSourceScopes(routes, 'source.repository', 'gitlab')).toEqual(['acme/platform/api']);
   });
 
   it('subscribes an arriving task only through an enabled route that names its list', () => {

@@ -164,7 +164,9 @@ export interface IntakeRouteKindConfig {
  */
 export type IntakeRouteOrigin =
   | { kind: 'clickup-status'; listId: string; status: string; generatedName: string }
-  | { kind: 'schedule'; generatedName: string };
+  | { kind: 'schedule'; generatedName: string }
+  /** A code host repository the project reads, added when the repository was linked (or migrated from the old selection). */
+  | { kind: 'repository'; integrationId: string; repository: string; generatedName: string };
 
 /** The trigger-route part of a route: present together on a route that makes its own cards. */
 export interface IntakeRouteTrigger {
@@ -1131,6 +1133,14 @@ function parseOrigin(value: IntakeRouteOrigin | string | null | undefined): Inta
     return { kind: 'clickup-status', listId: origin.listId, status: origin.status, generatedName: origin.generatedName };
   }
   if (origin.kind === 'schedule') return { kind: 'schedule', generatedName: origin.generatedName };
+  if (origin.kind === 'repository' && typeof origin.integrationId === 'string' && typeof origin.repository === 'string') {
+    return {
+      kind: 'repository',
+      integrationId: origin.integrationId,
+      repository: origin.repository,
+      generatedName: origin.generatedName,
+    };
+  }
   return null;
 }
 

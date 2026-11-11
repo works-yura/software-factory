@@ -14,6 +14,21 @@ import { saveKanbanView, stageToggle } from './boardLayoutQueries';
 
 type IntakeRoute = IntakeRouteListResponse['intakeRoutes'][number];
 
+/** The route that has the project read a GitHub repository (filing onto Work). */
+function repositoryRoute(repository: string): IntakeRoute {
+  return intakeRouteTo('work', {
+    id: `route-repo-${repository}`,
+    name: `GitHub: ${repository}`,
+    when: {
+      operator: 'AND',
+      conditions: [
+        { field: 'source.integration', operator: 'equals', value: 'github' },
+        { field: 'source.repository', operator: 'equals', value: repository },
+      ],
+    },
+  });
+}
+
 function intakeRouteTo(boardKey: string, overrides: Partial<IntakeRoute> = {}): IntakeRoute {
   return {
     id: `route-${boardKey}`,
@@ -65,7 +80,12 @@ function renderBoard(
       '*/web/factory/projects/:id/intake-routes',
       typeof intakeRoutes === 'function'
         ? intakeRoutes
-        : () => HttpResponse.json({ intakeRoutes, canEdit: false } satisfies IntakeRouteListResponse),
+        : () =>
+            HttpResponse.json({
+              // The GitHub repositories the project reads are named by routes (ADR-0022); they file onto Work.
+              intakeRoutes: [...githubSourceIds.map(repositoryRoute), ...intakeRoutes],
+              canEdit: false,
+            } satisfies IntakeRouteListResponse),
     ),
     http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json({ boards } satisfies BoardCatalogResponse)),
     http.get('*/web/intake/config', () =>
@@ -162,7 +182,7 @@ describe('custom-only board routing', () => {
       fail
         ? HttpResponse.json({ error: 'Intake routes are unavailable' }, { status: 500 })
         : HttpResponse.json({
-            intakeRoutes: [intakeRouteTo('release')],
+            intakeRoutes: [repositoryRoute('acme/app'), intakeRouteTo('release')],
             canEdit: false,
           } satisfies IntakeRouteListResponse),
     );
@@ -198,13 +218,19 @@ describe('custom-only board routing', () => {
     );
   });
 
-  it("offers no intake setup while a selected source feeds one of this project's boards", async () => {
-    const { client } = renderBoard(undefined, undefined, undefined, [], {
-      sourceIds: ['list-1'],
-      bindings: [
-        { integrationId: 'clickup', sourceId: 'list-1', factoryProjectId: 'fp-1', board: 'work', labels: null },
-      ],
+  it("offers no intake setup while a route of this project reads a ClickUp List", async () => {
+    const listRoute = intakeRouteTo('work', {
+      id: 'route-list-1',
+      when: { operator: 'AND', conditions: [{ field: 'source.list', operator: 'equals', value: 'list-1' }] },
     });
+    const { client } = renderBoard(
+      undefined,
+      undefined,
+      undefined,
+      [],
+      { sourceIds: ['list-1'], bindings: [] },
+      [intakeRouteTo('release'), listRoute],
+    );
     await waitForMutationsIdle(client);
 
     const queued = await screen.findByTestId('board-column-queued');

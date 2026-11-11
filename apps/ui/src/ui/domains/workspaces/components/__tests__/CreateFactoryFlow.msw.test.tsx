@@ -239,14 +239,9 @@ describe('Create Factory wizard', () => {
     // No harness step on this deployment, so the Factory runs on Mastra.
     expect(createdBodies).toEqual([{ name: 'Mastra', harness: 'mastra' }]);
     expect(patchedBodies).toEqual([{ instanceId: 'mastra', model: 'anthropic/claude-sonnet-4-5' }]);
-    // The picked repository feeds Work intake without a trip to Settings.
-    expect(intakeConfigs).toEqual([
-      {
-        github: { enabled: true, sourceIds: ['octo/hello'] },
-        gitlab: { enabled: false, sourceIds: null },
-        clickup: { enabled: false, sourceIds: null },
-      },
-    ]);
+    // The picked repository feeds Work intake without a trip to Settings: linking it has the
+    // server add its intake route, so the UI writes no intake selection.
+    expect(intakeConfigs).toEqual([]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
   });

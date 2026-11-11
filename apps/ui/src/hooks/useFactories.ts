@@ -108,18 +108,17 @@ export function useLinkRepositoryMutation() {
       const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, linkableRepo);
       await onLinked?.(linked);
       try {
-        const config = await fetchIntakeConfig(baseUrl);
+        // A linked GitHub repository gets its intake route on the server (routes are what a project
+        // reads). GitLab still reads its org-wide selection and bindings.
         if (gitlab) {
+          const config = await fetchIntakeConfig(baseUrl);
           const gitlabSelection = selectIntakeSource(config.gitlab, repo.id);
           if (gitlabSelection !== config.gitlab)
             await saveIntakeConfig.mutateAsync({ ...config, gitlab: gitlabSelection });
-        } else {
-          const githubSelection = selectIntakeSource(config.github, repo.fullName);
-          if (githubSelection !== config.github)
-            await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
         }
       } finally {
         invalidateFactories(queryClient);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) });
       }
       return linked;
     },

@@ -285,7 +285,9 @@ describe('Draft Factory onboarding', () => {
     expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
   });
 
-  it.each(['intake', 'model'] as const)(
+  // A GitHub link writes no intake config (the server adds the repository's route), so only a
+  // failed model save can interrupt the last step.
+  it.each(['model'] as const)(
     'replaces only its own repository link when the codebase changes after a failed %s save',
     async failure => {
       const writes = registerSetup(failure);
