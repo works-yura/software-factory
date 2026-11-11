@@ -101,8 +101,8 @@ routes/intake.test.ts	api/src/intake.test.ts	+3	upstream #28877: an unreadable p
 routes/knowledge.test.ts	api/src/knowledge.test.ts	-35	Mastra 1.82 (upstream #28353, #28362): the node/record routes are replaced by the page-store routes, rewritten as upstream
 routes/oauth.test.ts	api/src/oauth.test.ts
 routes/projects-concurrency.test.ts	api/src/projects-concurrency.test.ts
-routes/projects.test.ts	api/src/projects.test.ts	+5	harness and Claude Code model on create and update; upstream #29039: board transitions as phase config (+1); upstream 6650c2687c (#29322): repositories in the project list (+2); upstream #29888: the retired review test check switch is accepted and ignored (+1)
-routes/session-access.test.ts	session/src/session-access.test.ts	+2	model-switch guard and multipart body cases ported from upstream 8fb8a82428
+routes/projects.test.ts	api/src/projects.test.ts	+6	harness and Claude Code model on create and update; upstream #29039: board transitions as phase config (+1); upstream 6650c2687c (#29322): repositories in the project list (+2); upstream #29888: the retired review test check switch is accepted and ignored (+1); upstream #29979: apply-default-model runs in the background (+1)
+routes/session-access.test.ts	session/src/session-access.test.ts	+5	model-switch guard and multipart body cases ported from upstream 8fb8a82428; upstream #30010: non-uuid resources and failed checks in active runs (+3)
 routes/session-model-catalog.test.ts	api/src/session-model-catalog.test.ts	-1	user and hybrid scope catalogs removed; one Factory-catalog case remains
 routes/skills.test.ts	api/src/skills.test.ts	+12	upstream #28823: skills catalog origin (+2); upstream #29042: frontmatter in the catalog, project skill edit routes (+10)
 routes/source-control-sessions.test.ts	api/src/source-control-sessions.test.ts	+6	personal chats of a Claude Code Factory create Claude Code sessions; a delete without a retirement coordinator tells the host (+1); deleting a session another harness runs
