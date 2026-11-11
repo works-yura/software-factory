@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry, defineBoard } from '@factory/core';
+import { cardRuleFacts, createBoardRegistry, defineBoard, placeArrival } from '@factory/core';
 import type { IntakeRoute, RuleGroup } from '@factory/core';
+import { arrivalSourceFacts } from '@factory/store';
 
 import type { ClickUpTask } from './api.ts';
 import { createClickUpPoller } from './poller.ts';
@@ -109,19 +110,41 @@ function setup(options: SetupOptions) {
     configVersion: 'v',
     now: () => START,
   });
-  return { poll, listTasks, commitRuleEvaluation, update, getByProjectSource };
+  return { poll, listTasks, commitRuleEvaluation, update, getByProjectSource, routes };
 }
 
 const decisionOf = (mock: { mock: { calls: unknown[][] } }) => (mock.mock.calls[0]![0] as any).decisions[0];
 
+/**
+ * The poller files a plain arrival; the dispatcher places it with `placeArrival` on the facts it
+ * reads from the decision. This applies the same placement, so a test sees where the card lands.
+ */
+function placedDecision(setupResult: { commitRuleEvaluation: { mock: { calls: unknown[][] } }; routes: IntakeRoute[] }) {
+  const decision = decisionOf(setupResult.commitRuleEvaluation);
+  const source = { integrationId: 'clickup', type: 'task', externalId: decision.sourceKey, url: decision.url };
+  const workItem = arrivalSourceFacts(source, decision.metadata);
+  const facts = cardRuleFacts({ title: decision.title, metadata: decision.metadata, externalSource: source, ...(workItem ? { workItem } : {}) });
+  const placement = placeArrival(setupResult.routes, facts, registry, decision.routing);
+  return {
+    ...decision,
+    board: placement!.board,
+    stage: placement!.phase,
+    metadata: { ...decision.metadata, ...(placement!.routeId ? { intakeRouteId: placement!.routeId } : {}) },
+  };
+}
+
 describe('createClickUpPoller', () => {
   it("files a new task on the List's board, in the phase its status maps to", async () => {
-    const { poll, commitRuleEvaluation } = setup({ tasks: [task()], listBoard: 'bug' });
+    const filed = setup({ tasks: [task()], listBoard: 'bug' });
+    const { poll, commitRuleEvaluation } = filed;
     expect(await poll()).toMatchObject({ checked: 1, updated: 1, failed: 0 });
     const input = commitRuleEvaluation.mock.calls[0]![0] as any;
     expect(input.ingress.identity).toBe('clickup:task:abc:created');
     expect(input.workItemId).toBeNull();
-    expect(input.decisions[0]).toMatchObject({
+    // The poller files a plain arrival; only a route with a condition may place it.
+    expect(input.decisions[0]).toMatchObject({ routing: { skipCatchAll: true } });
+    expect(input.decisions[0].routing.holdAtInitialPhase).toBeUndefined();
+    expect(placedDecision(filed)).toMatchObject({
       type: 'upsertLinkedWorkItem',
       board: 'bug',
       source: 'clickup-task',
@@ -132,9 +155,9 @@ describe('createClickUpPoller', () => {
   });
 
   it("files a task whose status imports it in the first phase of the List's board, even a new one", async () => {
-    const { poll, commitRuleEvaluation } = setup({ tasks: [task()], rules: { 'to do': { action: 'import' } } });
-    await poll();
-    expect(decisionOf(commitRuleEvaluation)).toMatchObject({ board: 'work', stage: 'intake' });
+    const imported = setup({ tasks: [task()], rules: { 'to do': { action: 'import' } } });
+    await imported.poll();
+    expect(placedDecision(imported)).toMatchObject({ board: 'work', stage: 'intake' });
   });
 
   it('ignores a List that is not routed to a Factory, or disabled', async () => {
@@ -150,11 +173,12 @@ describe('createClickUpPoller', () => {
     const rules: Record<string, StatusRule> = { 'to do': { action: 'phase', phase: 'triage' } };
     const fresh = setup({ rules, tasks: [task()] });
     await fresh.poll();
-    expect(decisionOf(fresh.commitRuleEvaluation).stage).toBe('triage');
+    expect(placedDecision(fresh).stage).toBe('triage');
 
     const old = setup({ rules, tasks: [task({ createdAt: '2026-10-27T00:00:00.000Z' })] });
     await old.poll();
-    expect(decisionOf(old.commitRuleEvaluation).stage).toBe('intake');
+    expect(decisionOf(old.commitRuleEvaluation).routing).toEqual({ skipCatchAll: true, holdAtInitialPhase: true });
+    expect(placedDecision(old).stage).toBe('intake');
   });
 
   it('ignores tasks whose status has no route or is ignored', async () => {
@@ -181,8 +205,8 @@ describe('createClickUpPoller', () => {
     expect(commitRuleEvaluation).toHaveBeenCalledTimes(1);
   });
 
-  it('fails visibly when no route can take a task its List imports', async () => {
-    const { poll, commitRuleEvaluation } = setup({
+  it('files a task its List imports even when its route can no longer place it: it lands on the default board', async () => {
+    const orphan = setup({
       rules: {},
       tasks: [task()],
       intakeRoutes: [
@@ -195,10 +219,9 @@ describe('createClickUpPoller', () => {
         },
       ],
     });
-    const summary = await poll();
-    expect(summary.failed).toBe(1);
-    expect(summary.errors[0]!.error).toContain('No intake route can take ClickUp task abc');
-    expect(commitRuleEvaluation).not.toHaveBeenCalled();
+    expect(await orphan.poll()).toMatchObject({ failed: 0, updated: 1 });
+    expect(placedDecision(orphan)).toMatchObject({ board: 'work', stage: 'intake' });
+    expect(placedDecision(orphan).metadata.intakeRouteId).toBeUndefined();
   });
 
   it('closes the card of a task whose status is mapped to close', async () => {
@@ -344,13 +367,13 @@ describe('createClickUpPoller', () => {
     };
 
     it("files a new task where the first matching route says, ahead of the List's own route, and names the route", async () => {
-      const { poll, commitRuleEvaluation } = setup({
+      const result = setup({
         tasks: [task({ tags: ['docs', 'bug'] })],
         listBoard: 'bug',
         intakeRoutes: [docsRoute],
       });
-      expect(await poll()).toMatchObject({ checked: 1, updated: 1, failed: 0 });
-      expect(decisionOf(commitRuleEvaluation)).toMatchObject({
+      expect(await result.poll()).toMatchObject({ checked: 1, updated: 1, failed: 0 });
+      expect(placedDecision(result)).toMatchObject({
         board: 'docs',
         stage: 'drafting',
         metadata: { intakeRouteId: 'route-docs', labels: ['docs', 'bug'] },
@@ -358,40 +381,39 @@ describe('createClickUpPoller', () => {
     });
 
     it("holds a task that existed before start at the route board's first phase", async () => {
-      const { poll, commitRuleEvaluation } = setup({
+      const result = setup({
         tasks: [task({ tags: ['docs'], createdAt: '2026-10-27T09:00:00.000Z' })],
         intakeRoutes: [docsRoute],
       });
-      await poll();
-      expect(decisionOf(commitRuleEvaluation)).toMatchObject({ board: 'docs', stage: 'inbox' });
+      await result.poll();
+      expect(placedDecision(result)).toMatchObject({ board: 'docs', stage: 'inbox' });
     });
 
     it("places a task the catch-all would take by its List's route instead, naming that route", async () => {
-      const { poll, commitRuleEvaluation } = setup({
+      const result = setup({
         tasks: [task({ tags: ['bug'] })],
         listBoard: 'bug',
         intakeRoutes: [docsRoute, { ...docsRoute, id: 'everything-else', when: null, target: { boardKey: 'work', phaseKey: 'intake' } }],
       });
-      await poll();
-      expect(decisionOf(commitRuleEvaluation)).toMatchObject({
+      await result.poll();
+      expect(placedDecision(result)).toMatchObject({
         board: 'bug',
         stage: 'intake',
-        routesApplied: true,
         metadata: { intakeRouteId: 'status-0' },
       });
     });
 
     it('leaves a task out when no route names its List, whatever the other routes say', async () => {
-      const { poll, commitRuleEvaluation } = setup({
+      const result = setup({
         tasks: [task({ tags: ['docs'], status: { name: 'backlog', type: 'open' } })],
         intakeRoutes: [docsRoute],
       });
-      await poll();
-      expect(commitRuleEvaluation).not.toHaveBeenCalled();
+      await result.poll();
+      expect(result.commitRuleEvaluation).not.toHaveBeenCalled();
     });
 
     it('routes on ClickUp facts: the integration and the untrusted author', async () => {
-      const { poll, commitRuleEvaluation } = setup({
+      const result = setup({
         tasks: [task({ tags: [] })],
         intakeRoutes: [
           {
@@ -409,8 +431,8 @@ describe('createClickUpPoller', () => {
           },
         ],
       });
-      await poll();
-      expect(decisionOf(commitRuleEvaluation)).toMatchObject({
+      await result.poll();
+      expect(placedDecision(result)).toMatchObject({
         board: 'work',
         stage: 'triage',
         metadata: { intakeRouteId: 'route-clickup' },
@@ -418,7 +440,7 @@ describe('createClickUpPoller', () => {
     });
 
     it('imports by a route that names the List and a status, with no moved rules at all', async () => {
-      const { poll, commitRuleEvaluation } = setup({
+      const result = setup({
         rules: {},
         tasks: [task({ status: { name: 'ready', type: 'custom' } })],
         intakeRoutes: [
@@ -437,8 +459,8 @@ describe('createClickUpPoller', () => {
           },
         ],
       });
-      await poll();
-      expect(decisionOf(commitRuleEvaluation)).toMatchObject({ board: 'docs', stage: 'inbox' });
+      await result.poll();
+      expect(placedDecision(result)).toMatchObject({ board: 'docs', stage: 'inbox' });
     });
   });
 });

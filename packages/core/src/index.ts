@@ -29,10 +29,12 @@ export {
   routedSourceLists,
   routesHandleEvent,
   routeSourceValues,
+  placeArrival,
   routeSubscribesSource,
 } from './boards/intake-routing.ts';
 export type {
   IntakePlacementOptions,
+  ArrivalRouting,
   IntakeRoute,
   IntakeRouteResolution,
   IntakeRoutesReader,

@@ -44,8 +44,8 @@ export interface ClickUpIntegrationOptions {
 }
 
 /**
- * ClickUp by polling: no webhook, so it works on a local server with no public URL. Which Lists
- * are watched, where they route and which tags pick a board all live in Settings › Intake; the
+ * ClickUp by polling: no webhook, so it works on a local server with no public URL. The Lists
+ * read are the ones the project's intake routes name, and those routes place every task; the
  * token comes from the host's environment. Read-only toward ClickUp apart from what agents do
  * through the Intake capability (comments, status).
  */

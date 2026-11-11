@@ -2,12 +2,14 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { AccountUsageLimits, HarnessUsageRegistry, SessionUsage, UsageSummary, WorkItemUsage } from '@factory/harness/usage';
+import type { AccountUsageLimits, HarnessUsageRegistry, SessionUsage, UsageSummary, UsageTurn, WorkItemUsage } from '@factory/harness/usage';
 import { daysBetween, summarizeSessionUsage, summarizeUsage, summarizeWorkItemUsage, utcDay } from '@factory/harness/usage';
 import { Route } from '@factory/http';
 import type { RouteAuth, RouteDependencies } from '@factory/http';
+import { canViewSourceControlSession } from '@factory/session';
+import type { SourceControlSessionLookup } from '@factory/session';
 import { isSignInCredentialKind } from '@factory/store';
-import type { FactoryProjectsStorage, ModelCredentialsStorage, UsageStorage } from '@factory/store';
+import type { FactoryProjectsStorage, ModelCredentialsStorage, SourceControlSession, UsageStorage, WorkItemsStorage } from '@factory/store';
 
 /** A probe of an account's allowance is made at most this often; a view in between reads the stored one. */
 export const ACCOUNT_USAGE_PROBE_INTERVAL_MS = 60_000;
@@ -19,6 +21,8 @@ export const MAX_USAGE_PERIOD_DAYS = 366;
 const MAX_WORK_ITEMS = 200;
 /** Probes run this many at a time. */
 const PROBE_CONCURRENCY = 4;
+/** Session rows read this many at a time when checking who may see a turn. */
+const SESSION_LOOKUP_CONCURRENCY = 8;
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
@@ -51,6 +55,10 @@ export interface UsageRoutesDeps extends RouteDependencies {
   usage: Pick<UsageStorage, 'listTurns' | 'listSessionTurns' | 'listWorkItemTurns' | 'listAccountLimits' | 'saveAccountLimits'>;
   /** The harnesses' usage facets, which read an account's allowance from its provider. */
   harnesses: HarnessUsageRegistry;
+  /** Session rows: a turn is shown only to whoever may read its session (`canViewSourceControlSession`). */
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
+  /** Cards: a card's usage is shown only when the caller's organization can read the card. */
+  workItems: Pick<WorkItemsStorage, 'get'>;
   modelCredentials?: Pick<ModelCredentialsStorage, 'listAccounts'>;
   projects?: Pick<FactoryProjectsStorage, 'list'>;
   now?: () => Date;
@@ -101,7 +109,12 @@ async function mapLimited<T, R>(items: ReadonlyArray<T>, limit: number, run: (it
  *   - `GET /web/usage/sessions/:sessionId` a session's turns, total and context fill
  *   - `GET /web/usage/work-items?ids=a,b` each card's total and runs
  *
- * Everything is the caller's organization's.
+ * Everything is the caller's organization's, and a turn is seen only by whoever may read its
+ * session, by the rule the session routes use (`canViewSourceControlSession`): a private session's
+ * turns reach its owner alone (an organization admin included, as the session itself does), a
+ * shared session's every member. A session's usage answers 404 where the session would; a card's
+ * needs a card the organization can read; the summary sums only the turns the caller may see. A
+ * turn whose session row is gone reaches only the person it was recorded for.
  */
 export class UsageRoutes extends Route<UsageRoutesDeps> {
   #now(): Date {
@@ -114,6 +127,23 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
     if (!tenant) throw new Refusal(401, { error: 'unauthorized' });
     if (!tenant.orgId) throw new Refusal(403, { error: 'organization_required', message: 'Usage belongs to an organization.' });
     return { orgId: tenant.orgId, userId: tenant.userId };
+  }
+
+  /** Which of `sessionIds` the viewer may read; rows that are gone come back as `null`. */
+  async #sessionRows(sessionIds: ReadonlyArray<string>): Promise<Map<string, SourceControlSession | null>> {
+    const unique = [...new Set(sessionIds)];
+    const rows = await mapLimited(unique, SESSION_LOOKUP_CONCURRENCY, id => this.deps.sessions.getBySessionId(id));
+    return new Map(unique.map((id, index) => [id, rows[index] ?? null]));
+  }
+
+  /** The turns whose session the viewer may read. Without auth there is no tenant to keep apart. */
+  async #readable(turns: ReadonlyArray<UsageTurn>, viewer: { orgId: string; userId: string }): Promise<UsageTurn[]> {
+    if (!this.deps.auth.enabled() || turns.length === 0) return [...turns];
+    const rows = await this.#sessionRows(turns.map(turn => turn.sessionId));
+    return turns.filter(turn => {
+      const row = rows.get(turn.sessionId);
+      return row ? canViewSourceControlSession(row, viewer) : turn.userId === viewer.userId;
+    });
   }
 
   #handle(run: (c: Context) => Promise<Response>) {
@@ -155,7 +185,8 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
   }
 
   async #summary(c: Context): Promise<Response> {
-    const { orgId } = await this.#tenant(c);
+    const viewer = await this.#tenant(c);
+    const { orgId } = viewer;
     const period = parseUsagePeriod(c.req.query('from'), c.req.query('to'), this.#now());
     const optional = (name: string) => {
       const value = c.req.query(name);
@@ -165,7 +196,7 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
     const harnessId = optional('harnessId');
     const model = optional('model');
     const accountId = optional('accountId');
-    const turns = await this.deps.usage.listTurns({
+    const listed = await this.deps.usage.listTurns({
       orgId,
       days: daysBetween(period.from, period.to),
       ...(factoryProjectId ? { factoryProjectId } : {}),
@@ -173,32 +204,47 @@ export class UsageRoutes extends Route<UsageRoutesDeps> {
       ...(model ? { model } : {}),
       ...(accountId ? { accountId } : {}),
     });
-    const summary = summarizeUsage(turns, period);
+    const summary = summarizeUsage(await this.#readable(listed, viewer), period);
+    // Names only for what the caller's turns name.
+    const accountIds = new Set(summary.byAccount.map(group => group.key));
+    const factoryIds = new Set(summary.byFactory.map(group => group.key));
     const accounts: Record<string, string> = {};
     for (const facet of this.deps.harnesses.all()) {
       for (const account of (await this.deps.modelCredentials?.listAccounts(orgId, facet.accountProvider)) ?? []) {
-        accounts[account.id] = account.label;
+        if (accountIds.has(account.id)) accounts[account.id] = account.label;
       }
     }
     const factories: Record<string, string> = {};
-    for (const project of (await this.deps.projects?.list({ orgId })) ?? []) factories[project.id] = project.name;
+    for (const project of (await this.deps.projects?.list({ orgId })) ?? []) {
+      if (factoryIds.has(project.id)) factories[project.id] = project.name;
+    }
     const body: UsageSummaryResponse = { ...summary, labels: { accounts, factories } };
     return c.json(body);
   }
 
   async #session(c: Context): Promise<Response> {
-    const { orgId } = await this.#tenant(c);
+    const viewer = await this.#tenant(c);
     const sessionId = c.req.param('sessionId') ?? '';
     if (!sessionId) throw new Refusal(404, { error: 'not_found' });
-    const body: SessionUsageResponse = { usage: summarizeSessionUsage(sessionId, await this.deps.usage.listSessionTurns(orgId, sessionId)) };
+    if (this.deps.auth.enabled()) {
+      // As the session itself answers: missing to whoever may not read it.
+      const row = await this.deps.sessions.getBySessionId(sessionId);
+      if (row && !canViewSourceControlSession(row, viewer)) throw new Refusal(404, { error: 'not_found' });
+    }
+    const turns = await this.#readable(await this.deps.usage.listSessionTurns(viewer.orgId, sessionId), viewer);
+    const body: SessionUsageResponse = { usage: summarizeSessionUsage(sessionId, turns) };
     return c.json(body);
   }
 
   async #workItems(c: Context): Promise<Response> {
-    const { orgId } = await this.#tenant(c);
-    const ids = [...new Set((c.req.query('ids') ?? '').split(',').map(id => id.trim()).filter(Boolean))];
-    if (ids.length > MAX_WORK_ITEMS) throw new Refusal(400, { error: 'too_many_work_items', max: MAX_WORK_ITEMS });
-    const turns = ids.length > 0 ? await this.deps.usage.listWorkItemTurns(orgId, ids) : [];
+    const viewer = await this.#tenant(c);
+    const { orgId } = viewer;
+    const requested = [...new Set((c.req.query('ids') ?? '').split(',').map(id => id.trim()).filter(Boolean))];
+    if (requested.length > MAX_WORK_ITEMS) throw new Refusal(400, { error: 'too_many_work_items', max: MAX_WORK_ITEMS });
+    // A card the caller's organization cannot read has no usage to show.
+    const cards = await mapLimited(requested, SESSION_LOOKUP_CONCURRENCY, id => this.deps.workItems.get({ orgId, id }));
+    const ids = requested.filter((_, index) => cards[index] !== null);
+    const turns = ids.length > 0 ? await this.#readable(await this.deps.usage.listWorkItemTurns(orgId, ids), viewer) : [];
     const workItems: Record<string, WorkItemUsage> = {};
     for (const id of ids) {
       const own = turns.filter(turn => turn.workItemId === id);

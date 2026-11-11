@@ -1,11 +1,4 @@
-import {
-  cardRuleFacts,
-  INTAKE_ROUTE_METADATA_KEY,
-  resolveBoardClosure,
-  resolveEventRoute,
-  resolveIntakePlacement,
-  routeSubscribesSource,
-} from '@factory/core';
+import { cardRuleFacts, intakeTarget, resolveBoardClosure, resolveEventRoute, routeSubscribesSource } from '@factory/core';
 import type { BoardRegistry, ExternalWorkItemSource, IntakeRoute, IntakeRoutesReader, RuleFacts } from '@factory/core';
 import type { IssueReconcileSummary } from '@factory/integrations';
 import type { FactoryProject, FactoryProjectsStorage, IntakeStorage, WorkItemRow, WorkItemsStorage } from '@factory/store';
@@ -214,16 +207,14 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
       return refreshed ? 'refreshed' : 'unchanged';
     }
     if (isClosedTask(task)) return 'unchanged';
-    // A route naming the task's List subscribes the project to it; the first route that matches places it.
+    // A route naming the task's List subscribes the project to it. Where the card lands is the
+    // dispatcher's call, as for every arrival: the first route with a condition that takes it.
     if (!routeSubscribesSource(routes, facts)) return 'unchanged';
-    const placement = resolveIntakePlacement(routes, facts, registry, { skipCatchAll: true });
-    if (!placement) {
-      throw new Error(`No intake route can take ClickUp task ${task.id}: check the target board and phase of its route.`);
-    }
+    const landing = intakeTarget(registry);
+    if (!landing) throw new Error(`Project ${project.id} has no board that takes new cards.`);
     // Tasks that already existed when the server started never start work on their own: the first
     // sweep would otherwise launch an agent for every open task in the List.
     const fresh = Date.parse(task.createdAt) > startedAt.getTime();
-    const stage = fresh ? placement.phase : registry.get(placement.board)!.initialPhase;
     const identity = `clickup:task:${task.id}:created`;
     await options.workItems.commitRuleEvaluation({
       orgId: project.orgId,
@@ -238,15 +229,15 @@ export function createClickUpPoller(options: ClickUpPollerOptions): () => Promis
         {
           type: 'upsertLinkedWorkItem',
           idempotencyKey: `${identity}:intake`,
-          board: placement.board,
+          // Where it lands until the dispatcher's routes place it.
+          board: landing.board,
           source: 'clickup-task',
           sourceKey: task.id,
           title: task.name || `ClickUp task ${task.id}`,
           url: task.url || null,
-          stage,
-          // Placed by the same routes the dispatcher reads; kept as is, so an old task stays parked.
-          routesApplied: true,
-          metadata: { ...metadata, [INTAKE_ROUTE_METADATA_KEY]: placement.routeId },
+          stage: landing.initialPhase,
+          routing: { skipCatchAll: true, ...(fresh ? {} : { holdAtInitialPhase: true }) },
+          metadata,
         },
       ],
       causalChain: [],

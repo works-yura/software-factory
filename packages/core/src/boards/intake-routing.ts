@@ -2,7 +2,7 @@ import { evaluateRuleGroup } from '../rules/rule-group.ts';
 import type { RuleFacts, RuleGroup } from '../rules/rule-group.ts';
 import type { BoardEventFacts } from './board-events.ts';
 import type { BoardRegistry, InstalledBoard } from './registry.ts';
-import { boardFlow, boardForWorkItem, hasPullRequest } from './semantics.ts';
+import { boardFlow, boardForWorkItem, hasPullRequest, intakeTarget } from './semantics.ts';
 import type { WorkItemSourceRow } from '../card.ts';
 
 /** What intake routing reads of the card a pull request closes. */
@@ -227,6 +227,34 @@ export function resolveIntakePlacement(
     : undefined;
 }
 
+/** How the routes place one arrival (`FactoryRuleLinkedWorkItemDecision.routing`). */
+export interface ArrivalRouting {
+  /** Only a route with a condition may take it, never the route that takes every new card. */
+  readonly skipCatchAll?: boolean;
+  /** File it on the route's board but at the board's first phase: it starts nothing on its own. */
+  readonly holdAtInitialPhase?: boolean;
+}
+
+/**
+ * Where an arriving card is filed: the first route that takes it, at its phase (or the board's
+ * first phase when held), naming the route; else the default board's first phase. The one
+ * placement every arrival goes through, whichever integration filed it.
+ */
+export function placeArrival(
+  routes: readonly IntakeRoute[],
+  facts: RuleFacts,
+  registry: BoardRegistry,
+  routing: ArrivalRouting = {},
+): { board: string; phase: string; routeId?: string } | undefined {
+  const placement = resolveIntakePlacement(routes, facts, registry, { skipCatchAll: routing.skipCatchAll === true });
+  if (!placement) {
+    const fallback = intakeTarget(registry);
+    return fallback ? { board: fallback.board, phase: fallback.initialPhase } : undefined;
+  }
+  const held = routing.holdAtInitialPhase === true ? registry.get(placement.board)?.initialPhase : undefined;
+  return { board: placement.board, phase: held ?? placement.phase, routeId: placement.routeId };
+}
+
 /** The phase a route's card lands in: its named phase when new cards can reach it, else the board's first. */
 export function landingPhase(board: InstalledBoard, phase: string | null | undefined): string {
   const usable =
@@ -254,13 +282,17 @@ function conditionNames(when: RuleGroup | null, field: string): boolean {
   return when.conditions.some(member => ('conditions' in member ? conditionNames(member, field) : member.field === field));
 }
 
-/** The values a route's condition compares `field` to with `equals` or `in` (the sources it names). */
+/**
+ * The values a route's condition compares `field` to with `equals` or `in`: the sources it names.
+ * Any other operator (`not_equals`, `contains`…) names no source, so it never subscribes the
+ * project to one.
+ */
 export function routeSourceValues(route: Pick<IntakeRoute, 'when'>, field: string): string[] {
   const values: string[] = [];
   const walk = (group: RuleGroup | null) => {
     for (const member of group?.conditions ?? []) {
       if ('conditions' in member) walk(member);
-      else if (member.field === field) {
+      else if (member.field === field && (member.operator === 'equals' || member.operator === 'in')) {
         const value = member.value;
         for (const one of Array.isArray(value) ? value : [value]) {
           if (typeof one === 'string' || typeof one === 'number') values.push(String(one));

@@ -4,15 +4,36 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AccountUsageLimits, HarnessUsage } from '@factory/harness/usage';
 import { createHarnessUsageRegistry } from '@factory/harness/usage';
 import { fakeRouteAuth, mountApiRoutes } from '@factory/http/testing';
-import type { RecordUsageTurnInput } from '@factory/store';
+import type { Card, RecordUsageTurnInput, SourceControlSession } from '@factory/store';
 import { createFactoryStorageForTests } from '@factory/testing';
 
 import { parseUsagePeriod, UsageRoutes } from './usage.ts';
 
 const now = new Date('2026-11-11T12:00:00.000Z');
 
-async function setup(readAccountLimits?: HarnessUsage['readAccountLimits']) {
+type SessionRow = Pick<SourceControlSession, 'sessionId' | 'orgId' | 'userId' | 'visibility'>;
+
+async function setup(
+  readAccountLimits?: HarnessUsage['readAccountLimits'],
+  options: { sessions?: SessionRow[]; cards?: Array<{ orgId: string; id: string }>; isAdmin?: (userId: string) => boolean } = {},
+) {
   const seed = await createFactoryStorageForTests();
+  // Every turn the tests record runs in alice's shared session unless a test says otherwise.
+  const rows = new Map<string, SessionRow>(
+    (options.sessions ?? [
+      { sessionId: 'session-1', orgId: 'org1', userId: 'alice', visibility: 'org' },
+      { sessionId: 'session-2', orgId: 'org1', userId: 'alice', visibility: 'org' },
+    ]).map(row => [row.sessionId, row]),
+  );
+  const cards = options.cards ?? [
+    { orgId: 'org1', id: 'card-1' },
+    { orgId: 'org1', id: 'card-2' },
+  ];
+  const sessions = { getBySessionId: async (id: string) => (rows.get(id) as SourceControlSession | undefined) ?? null };
+  const workItems = {
+    get: async ({ orgId, id }: { orgId: string; id: string }) =>
+      cards.some(card => card.orgId === orgId && card.id === id) ? ({ id } as Card) : null,
+  };
   const harnesses = createHarnessUsageRegistry([
     { harnessId: 'claude-code', displayName: 'Claude Code', accountProvider: 'anthropic', ...(readAccountLimits ? { readAccountLimits } : {}) },
   ]);
@@ -25,9 +46,11 @@ async function setup(readAccountLimits?: HarnessUsage['readAccountLimits']) {
     mountApiRoutes(
       hono as never,
       new UsageRoutes({
-        auth: fakeRouteAuth(),
+        auth: fakeRouteAuth({ isOrganizationAdmin: async (_org, user) => options.isAdmin?.(user) ?? false }),
         usage: seed.usage,
         harnesses,
+        sessions,
+        workItems,
         modelCredentials: seed.credentials,
         projects: seed.projects,
         now: () => now,
@@ -161,5 +184,73 @@ describe('usage routes', () => {
     expect(Object.keys(cards.body.workItems).sort()).toEqual(['card-1', 'card-2']);
     expect(cards.body.workItems['card-1'].runs.map((run: { kickoffId: string }) => run.kickoffId)).toEqual(['kick-2', 'kick-1']);
     expect((await get(`/web/usage/work-items?ids=${Array.from({ length: 201 }, (_, i) => `c${i}`).join(',')}`)).status).toBe(400);
+  });
+});
+
+describe('usage routes keep a session’s usage to whoever may read the session', () => {
+  const sessions: SessionRow[] = [
+    { sessionId: 'alice-private', orgId: 'org1', userId: 'alice', visibility: 'private' },
+    { sessionId: 'alice-shared', orgId: 'org1', userId: 'alice', visibility: 'org' },
+    { sessionId: 'bob-private', orgId: 'org1', userId: 'bob', visibility: 'private' },
+  ];
+  const cards = [{ orgId: 'org1', id: 'card-1' }];
+  // carol administers org1; private sessions stay their owner's for admins too, as the session routes keep them.
+  const isAdmin = (userId: string) => userId === 'carol';
+
+  async function seeded() {
+    const ctx = await setup(undefined, { sessions, cards, isAdmin });
+    await ctx.seed.usage.recordTurn(turn({ sessionId: 'alice-private', userId: 'alice', workItemId: 'card-1', kickoffId: 'k-private' }));
+    await ctx.seed.usage.recordTurn(turn({ sessionId: 'alice-shared', userId: 'alice', workItemId: 'card-1', kickoffId: 'k-shared' }));
+    await ctx.seed.usage.recordTurn(turn({ sessionId: 'bob-private', userId: 'bob' }));
+    // A turn whose session row is gone: only the person it was recorded for sees it.
+    await ctx.seed.usage.recordTurn(turn({ sessionId: 'deleted', userId: 'bob' }));
+    return ctx;
+  }
+
+  it('the owner reads their private session’s usage and every turn of their own', async () => {
+    const { get } = await seeded();
+    const session = await get('/web/usage/sessions/alice-private', 'alice');
+    expect(session.status).toBe(200);
+    expect(session.body.usage.turns).toHaveLength(1);
+    const summary = await get('/web/usage/summary?from=2026-11-09&to=2026-11-11', 'alice');
+    expect(summary.body.total.turns).toBe(2);
+    const card = await get('/web/usage/work-items?ids=card-1', 'alice');
+    expect(card.body.workItems['card-1'].runs.map((run: { kickoffId: string }) => run.kickoffId).sort()).toEqual(['k-private', 'k-shared']);
+  });
+
+  it('a member gets 404 for a teammate’s private session and never counts its turns', async () => {
+    const { get } = await seeded();
+    expect((await get('/web/usage/sessions/alice-private', 'bob')).status).toBe(404);
+    const summary = await get('/web/usage/summary?from=2026-11-09&to=2026-11-11', 'bob');
+    // alice's shared session, bob's own private one and bob's turn whose session is gone.
+    expect(summary.body.total.turns).toBe(3);
+    const card = await get('/web/usage/work-items?ids=card-1', 'bob');
+    expect(card.body.workItems['card-1'].runs.map((run: { kickoffId: string }) => run.kickoffId)).toEqual(['k-shared']);
+    expect(card.body.workItems['card-1'].total.turns).toBe(1);
+  });
+
+  it('a member reads a teammate’s shared session', async () => {
+    const { get } = await seeded();
+    const session = await get('/web/usage/sessions/alice-shared', 'bob');
+    expect(session.status).toBe(200);
+    expect(session.body.usage.turns).toHaveLength(1);
+  });
+
+  it('an admin reads shared sessions but not a teammate’s private one, as the session routes allow', async () => {
+    const { get } = await seeded();
+    expect((await get('/web/usage/sessions/alice-shared', 'carol')).status).toBe(200);
+    expect((await get('/web/usage/sessions/alice-private', 'carol')).status).toBe(404);
+    expect((await get('/web/usage/sessions/bob-private', 'carol')).status).toBe(404);
+    const summary = await get('/web/usage/summary?from=2026-11-09&to=2026-11-11', 'carol');
+    expect(summary.body.total.turns).toBe(1);
+    const card = await get('/web/usage/work-items?ids=card-1', 'carol');
+    expect(card.body.workItems['card-1'].total.turns).toBe(1);
+  });
+
+  it('answers nothing for a card the organization cannot read', async () => {
+    const { seed, get } = await seeded();
+    await seed.usage.recordTurn(turn({ sessionId: 'alice-shared', workItemId: 'card-elsewhere' }));
+    const cardsBody = (await get('/web/usage/work-items?ids=card-1,card-elsewhere', 'alice')).body;
+    expect(Object.keys(cardsBody.workItems)).toEqual(['card-1']);
   });
 });

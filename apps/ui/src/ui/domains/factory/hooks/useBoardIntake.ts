@@ -1,4 +1,6 @@
 import { DEFAULT_BOARD_ID } from '@factory/core/boards/default-board';
+import { routedSourceLists } from '@factory/core/boards/intake-routing';
+import type { IntakeRoute } from '@factory/core/boards/intake-routing';
 import { AUTO_TRIAGED_LABEL } from '@factory/core/rules/types';
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
@@ -155,8 +157,7 @@ export function useBoardIntake({
   const gitlabReady = gitlabEligible && (gitlabRouted || bindingsFailed);
 
   // Provider sources are shared across factories, so one counts only once it is bound to this
-  // project; until bindings load (or when they fail) the setup prompt waits. A ClickUp List also
-  // needs its board, the one its status rules move cards between.
+  // project; until bindings load (or when they fail) the setup prompt waits.
   const boundToProject = (integrationId: string, sourceIds: readonly string[] | null | undefined) =>
     bindingsQuery.isPending ||
     bindingsQuery.isError ||
@@ -164,14 +165,22 @@ export function useBoardIntake({
       binding =>
         binding.integrationId === integrationId &&
         binding.factoryProjectId === factoryProjectId &&
-        (integrationId !== 'clickup' || Boolean(binding.board)) &&
         (sourceIds?.includes(binding.sourceId) ?? false),
     );
+  // ClickUp is read only in the Lists this project's intake routes name, and files cards only
+  // through those routes, never a feed the board browses. While the routes load (or fail) the
+  // setup prompt waits, as for bindings.
+  const clickupEnabled = config?.clickup.enabled ?? false;
+  const clickupRoutesQuery = useIntakeRoutesQuery(clickupEnabled ? factoryProjectId : undefined);
+  const clickupRouted =
+    clickupEnabled &&
+    (clickupRoutesQuery.isPending ||
+      clickupRoutesQuery.isError ||
+      routedSourceLists((clickupRoutesQuery.data ?? []) as unknown as IntakeRoute[]).length > 0);
   const sourceConnected =
     (!gitlabRepository && githubEnabled && githubSelected) ||
     (gitlabEligible && boundToProject('gitlab', config?.gitlab.sourceIds)) ||
-    // ClickUp lists file cards only through intake routes, never a feed the board browses.
-    ((config?.clickup.enabled ?? false) && boundToProject('clickup', config?.clickup.sourceIds));
+    clickupRouted;
   const githubIntakeActive = !gitlabRepository && defaultBoard && githubEnabled && githubSelected;
   const pullRequestSource: IntakeSource = gitlabRepository ? 'gitlab-prs' : 'github-prs';
   const available: IntakeSource[] = [

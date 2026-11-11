@@ -2104,6 +2104,31 @@ describe('MastraFactory.prepare integration readiness', () => {
   });
 });
 
+describe('MastraFactory.prepare integration migrations', () => {
+  it('disables an integration whose migration fails, loudly, and boots the rest', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const workers = vi.fn(() => []);
+    const migrate = vi.fn(async () => {
+      throw new Error('half-migrated');
+    });
+    try {
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'tracker', workers, migrate })],
+      });
+      await expect(factory.prepare()).resolves.toBeDefined();
+      expect(migrate).toHaveBeenCalled();
+      expect(workers).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalledWith(
+        expect.stringMatching(/integration "tracker" is disabled: its migration failed .*half-migrated/),
+      );
+    } finally {
+      error.mockRestore();
+    }
+  });
+});
+
 describe('MastraFactory.prepare audit-capable integrations', () => {
   it('rejects duplicate audit-capable integration ids', async () => {
     const factory = new MastraFactory({

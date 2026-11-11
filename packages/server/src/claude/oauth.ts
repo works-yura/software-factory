@@ -6,10 +6,9 @@
  * as `CLAUDE_CODE_OAUTH_TOKEN` and never the refresh token.
  *
  * The endpoint and client id are the `claude` CLI's own. They are not a
- * published API: both are read from the CLI 2.1.316 binary (`strings`), and
- * the Orca desktop app refreshes with the same values and request shape
- * (`grant_type=refresh_token`, form-encoded). If Anthropic changes them,
- * refresh fails and the account asks for a new sign-in.
+ * published API: both are read from the CLI 2.1.316 binary (`strings`), as is
+ * the request shape (`grant_type=refresh_token`, form-encoded). If Anthropic
+ * changes them, refresh fails and the account asks for a new sign-in.
  */
 
 import type { ClaudeLoginOAuth } from '@factory/store';

@@ -208,6 +208,59 @@ describe('useBoardIntake sources bound to the project', () => {
   });
 });
 
+describe('useBoardIntake ClickUp through routes', () => {
+  const clickupRoute = (boardKey: string, list: string) => ({
+    id: `route-${list}`,
+    name: 'ClickUp: status «to do»',
+    enabled: true,
+    position: 0,
+    on: ['work_item.created'],
+    when: { operator: 'AND', conditions: [{ field: 'source.list', operator: 'equals', value: list }] },
+    target: { boardKey, phaseKey: null },
+  });
+
+  function stubClickUp(routes: unknown[]) {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: false, sourceIds: null },
+            gitlab: { enabled: false, sourceIds: null },
+            // No List selection and no bindings: routes alone decide what ClickUp reads.
+            clickup: { enabled: true, sourceIds: null },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: false, configured: false, reauthRequired: false }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/intake-routes`, () =>
+        HttpResponse.json({ intakeRoutes: routes }),
+      ),
+    );
+  }
+
+  it('given a ClickUp List named only by a route to this board, then the board counts as fed', async () => {
+    stubClickUp([clickupRoute(releaseBoard.id, 'list-1')]);
+
+    const { result } = renderIntake('factory-1', releaseBoard);
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.fed).toBe(true);
+    expect(result.current.unrouted).toBe(false);
+  });
+
+  it('given ClickUp on but no route naming a List, then the board is not fed by ClickUp', async () => {
+    stubClickUp([]);
+
+    const { result } = renderIntake('factory-1', releaseBoard);
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.fed).toBe(false);
+  });
+});
+
 describe('useBoardIntake GitLab routing', () => {
   it('never queries GitHub issues for a GitLab-linked Work board', async () => {
     const sourceId = 'gitlab-project:encoded-source';

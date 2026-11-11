@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { readClickUpSettings, ruleFor, saveListRules } from './settings.ts';
+import { readClickUpSettings, saveListRules } from './settings.ts';
 
 function memoryStorage() {
   let value: Record<string, unknown> | null = null;
@@ -15,10 +15,9 @@ function memoryStorage() {
 }
 
 describe('ClickUp settings', () => {
-  it('reads nothing as no rules, and ignores unknown statuses', async () => {
+  it('reads nothing as no rules', async () => {
     const storage = memoryStorage();
     expect(await readClickUpSettings(storage, 'org')).toEqual({ lists: {} });
-    expect(ruleFor(undefined, 'TO DO')).toEqual({ action: 'ignore' });
   });
 
   it('stores rules per List under lower-cased status names and drops ignored ones', async () => {
@@ -28,7 +27,6 @@ describe('ClickUp settings', () => {
     });
     const saved = await readClickUpSettings(storage, 'org');
     expect(saved.lists.L1).toEqual({ statuses: { 'to do': { action: 'phase', phase: 'triage' } } });
-    expect(ruleFor(saved.lists.L1, 'to do')).toEqual({ action: 'phase', phase: 'triage' });
   });
 
   it('removes a List whose rules are all ignored, leaving others untouched', async () => {

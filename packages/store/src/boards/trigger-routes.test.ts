@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished } from 'vitest';
@@ -73,6 +75,28 @@ describe('trigger routes', () => {
     const again = await boards.createIntakeRoute(scope, scheduleRoute({ name: 'other' }), 'system', { id });
     expect(again).toEqual(first);
     expect((await boards.listIntakeRoutes(scope)).filter(route => route.id === id)).toHaveLength(1);
+  });
+
+  it('writes a fixed-id route once when two replicas run the same migration at the same time', async () => {
+    const url = `file:${join(tmpdir(), `trigger-routes-${randomUUID()}.db`)}`;
+    const replicas = await Promise.all(
+      ['a', 'b'].map(async name => {
+        const storage = new LibSQLFactoryStorage({ id: `replica-${name}-${randomUUID()}`, url });
+        const boards = storage.registerDomain(new StoredBoardsStorage());
+        await storage.init();
+        onTestFinished(() => storage.close());
+        return boards;
+      }),
+    );
+    const scope = { orgId: `org-${randomUUID()}`, factoryProjectId: 'project-1' };
+    const id = randomUUID();
+
+    const [first, second] = await Promise.all(
+      replicas.map(boards => boards.createIntakeRoute(scope, scheduleRoute(), 'system', { id })),
+    );
+
+    expect(second?.id).toBe(first?.id);
+    expect((await replicas[0]!.listIntakeRoutes(scope)).filter(route => route.id === id)).toHaveLength(1);
   });
 
   it('edits a trigger route’s schedule and turns it back into a plain route', async () => {

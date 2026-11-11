@@ -1,6 +1,7 @@
 import {
   createCardActionConfigSchema,
   INTAKE_ROUTE_CARD_SOURCE,
+  INTAKE_ROUTE_METADATA_KEY,
   INTAKE_ROUTE_ORIGIN_METADATA_KEY,
   intakeTargetProblem,
   IntakeTargetError,
@@ -95,12 +96,13 @@ export function createCardAction(options: CreateCardActionOptions): IntakeAction
             title: renderIntakeTemplate(config.titleTemplate, template).slice(0, 500) || route.name,
             url: null,
             stage: landingPhase(board, route.target.phaseKey),
-            // The route is the placement: no other route reads this card.
-            routesApplied: true,
             metadata: {
               ...(description ? { description } : {}),
               ...(config.repository ? { repository: config.repository } : {}),
               [INTAKE_ROUTE_ORIGIN_METADATA_KEY]: { ...origin },
+              // This route placed the card, as the dispatcher stamps any route that places one: no
+              // other route reads it.
+              [INTAKE_ROUTE_METADATA_KEY]: route.id,
             },
           },
         ],
@@ -110,7 +112,8 @@ export function createCardAction(options: CreateCardActionOptions): IntakeAction
       if (result.status === 'missing' || result.status === 'stale') {
         throw new Error(`The card for this fire could not be filed (${result.status}).`);
       }
-      // The card itself is filed by the dispatcher right after the commit; it is found again by its source.
+      // The dispatcher files the card right after the commit and writes its id back onto this fire
+      // (`cardFiled` → `IntakeRouteFiresStorage.setFireCard`).
       return { workItemId: null, ...(result.status === 'replayed' ? { note: 'This fire had already filed its card.' } : {}) };
     },
   };
