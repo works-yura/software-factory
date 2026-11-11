@@ -33,7 +33,7 @@ export function SwitchRunningSessionsDialog({
         <DialogFooter>
           <DialogCancel>{t('models.factoryDefault.keep')}</DialogCancel>
           <DialogAction onConfirm={onConfirm}>
-            {pending ? t('models.factoryDefault.switching') : t('models.factoryDefault.switch')}
+            {pending ? t('models.factoryDefault.starting') : t('models.factoryDefault.switch')}
           </DialogAction>
         </DialogFooter>
       </DialogContent>

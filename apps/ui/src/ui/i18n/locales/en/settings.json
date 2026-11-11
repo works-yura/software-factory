@@ -564,16 +564,12 @@
       "saving": "Saving default model",
       "placeholder": "Select a model",
       "pickerLabel": "Factory default model",
-      "switched_one": "Switched {{count}} session",
-      "switched_other": "Switched {{count}} sessions",
-      "nothingToSwitch": "No running sessions to switch",
-      "skipped_one": ". {{count}} skipped: {{reasons}}",
-      "skipped_other": ". {{count}} skipped: {{reasons}}",
       "confirmTitle": "Also switch running sessions to {{model}}?",
       "confirmDescription": "New activity using the Factory defaults will use this model. Running work and review sessions keep their current model unless you switch them. Switched sessions keep their work and pick up the new model on their next step.",
       "keep": "Keep them as-is",
       "switch": "Switch running sessions",
-      "switching": "Switching…"
+      "starting": "Starting…",
+      "switchStarted": "Switch started in the background. Running sessions will pick up the new model on their next step."
     },
     "thinking": {
       "label": "Thinking",

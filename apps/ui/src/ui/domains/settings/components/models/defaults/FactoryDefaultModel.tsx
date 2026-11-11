@@ -11,7 +11,6 @@ import {
 } from '../../../../../../hooks/useFactoryDefaultModel';
 import { ModelCombobox } from '../../ModelCombobox';
 import { SharedCredentialNotice } from '../../SharedCredentialNotice';
-import { AppliedSessionsSummary } from './AppliedSessionsSummary';
 import { SwitchRunningSessionsDialog } from './SwitchRunningSessionsDialog';
 
 export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
@@ -65,7 +64,11 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
           </Txt>
         )}
         <SharedCredentialNotice modelId={defaultModelId || undefined} />
-        {applyToSessions.data && <AppliedSessionsSummary result={applyToSessions.data} />}
+        {applyToSessions.data && (
+          <Txt as="p" variant="meta" role="status">
+            {t('models.factoryDefault.switchStarted')}
+          </Txt>
+        )}
       </div>
 
       {confirmModelId && (
