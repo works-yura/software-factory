@@ -220,6 +220,14 @@ export interface TurnStartResponse {
   readonly turn: CodexTurn;
 }
 
+/** `turn/steer`: input for the turn in flight, which takes it without stopping. */
+export interface TurnSteerParams {
+  readonly threadId: string;
+  /** The turn the input is for; Codex refuses it when another turn is the active one. */
+  readonly expectedTurnId: string;
+  readonly input: ReadonlyArray<UserInput>;
+}
+
 export interface TurnInterruptParams {
   readonly threadId: string;
   readonly turnId: string;
@@ -262,6 +270,10 @@ export type ThreadItem =
       readonly aggregatedOutput?: string | null;
       readonly exitCode?: number | null;
       readonly durationMs?: number | null;
+      /** The terminal it runs in, when it is a long-lived (background) one. */
+      readonly processId?: string | null;
+      /** `unifiedExecInteraction` when the call writes to or polls a terminal started earlier. */
+      readonly source?: 'agent' | 'userShell' | 'unifiedExecStartup' | 'unifiedExecInteraction' | (string & {}) | null;
     }
   | { readonly type: 'fileChange'; readonly id: string; readonly changes: ReadonlyArray<FileUpdateChange>; readonly status: ItemStatus }
   | {
@@ -286,9 +298,56 @@ export type ThreadItem =
     }
   | { readonly type: 'webSearch'; readonly id: string; readonly query: string; readonly action?: WebSearchAction | null }
   | { readonly type: 'imageView'; readonly id: string; readonly path: string }
+  | {
+      /** A collab (multi-agent) tool call: `spawnAgent` starts subagent threads (`receiverThreadIds`), `wait` reports their states. */
+      readonly type: 'collabAgentToolCall';
+      readonly id: string;
+      readonly tool: CollabAgentTool;
+      readonly status: 'inProgress' | 'completed' | 'failed' | 'interrupted';
+      readonly senderThreadId: string;
+      readonly receiverThreadIds: ReadonlyArray<string>;
+      readonly prompt?: string | null;
+      readonly model?: string | null;
+      readonly reasoningEffort?: string | null;
+      readonly agentsStates: Readonly<Record<string, CollabAgentState>>;
+    }
+  | {
+      /** A subagent of the multi-agent v2 tools starting, being talked to, interrupted or done. */
+      readonly type: 'subAgentActivity';
+      readonly id: string;
+      readonly kind: 'started' | 'interacted' | 'interrupted' | 'completed';
+      readonly agentThreadId: string;
+      readonly agentPath: string;
+      readonly model?: string | null;
+    }
+  | {
+      readonly type: 'imageGeneration';
+      readonly id: string;
+      readonly status: string;
+      readonly revisedPrompt?: string | null;
+      readonly savedPath?: string | null;
+      readonly failure?: { readonly type: string; readonly resetsAt?: number | null } | null;
+    }
   | { readonly type: 'contextCompaction'; readonly id: string }
   | { readonly type: 'enteredReviewMode' | 'exitedReviewMode'; readonly id: string; readonly review: string }
   | { readonly type: string; readonly id: string };
+
+export type CollabAgentTool =
+  | 'spawnAgent'
+  | 'sendInput'
+  | 'resumeAgent'
+  | 'wait'
+  | 'closeAgent'
+  | 'sendMessage'
+  | 'followupTask'
+  | 'interruptAgent'
+  | 'listAgents'
+  | (string & {});
+
+export interface CollabAgentState {
+  readonly status: 'pendingInit' | 'running' | 'interrupted' | 'completed' | 'errored' | 'shutdown' | 'notFound' | (string & {});
+  readonly message?: string | null;
+}
 
 // ---- notifications -----------------------------------------------------------------------------
 
@@ -439,6 +498,22 @@ export interface ToolRequestUserInputResponse {
   readonly answers: Readonly<Record<string, { readonly answers: ReadonlyArray<string> }>>;
 }
 
+/**
+ * An MCP server asks a person (`elicitation/create`, through Codex): a form (`requestedSchema`), a
+ * link to open (`url`), or Codex's own approval of an MCP tool call (`_meta.codex_approval_kind`).
+ */
+export interface McpServerElicitationRequestParams {
+  readonly threadId?: string;
+  readonly turnId?: string | null;
+  readonly serverName?: string;
+  readonly mode?: 'form' | 'url' | 'openai/form' | 'openaiForm' | 'openai/userVerification' | (string & {});
+  readonly message?: string;
+  readonly requestedSchema?: unknown;
+  readonly url?: string;
+  readonly elicitationId?: string;
+  readonly _meta?: JsonValue | null;
+}
+
 // ---- method tables -----------------------------------------------------------------------------
 
 export interface ClientRequests {
@@ -450,6 +525,7 @@ export interface ClientRequests {
   'thread/start': { params: ThreadStartParams; result: ThreadStartResponse };
   'thread/resume': { params: ThreadResumeParams; result: ThreadResumeResponse };
   'turn/start': { params: TurnStartParams; result: TurnStartResponse };
+  'turn/steer': { params: TurnSteerParams; result: { turnId: string } };
   'turn/interrupt': { params: TurnInterruptParams; result: Record<string, unknown> };
 }
 
@@ -476,7 +552,7 @@ export interface ServerRequests {
   'item/tool/requestUserInput': { params: ToolRequestUserInputParams; result: ToolRequestUserInputResponse };
   'account/chatgptAuthTokens/refresh': { params: ChatgptAuthTokensRefreshParams; result: ChatgptAuthTokensRefreshResponse };
   'mcpServer/elicitation/request': {
-    params: { threadId?: string; turnId?: string | null; serverName?: string; message?: string; mode?: string; _meta?: JsonValue | null };
+    params: McpServerElicitationRequestParams;
     result: { action: 'accept' | 'decline' | 'cancel'; content?: JsonValue; _meta?: JsonValue | null };
   };
 }
