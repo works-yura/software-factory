@@ -788,8 +788,8 @@
       "item.labels": "Тег",
       "item.title": "Назва",
       "source.repository": "Репозиторій",
-      "item.key": "Ключ",
-      "item.state": "Стан",
+      "item.key": "Номер задачі",
+      "item.state": "Статус",
       "item.assignees": "Виконавець",
       "source.list": "ClickUp List"
     },
@@ -841,14 +841,40 @@
     "factIs": "{{field}}: «{{value}}»",
     "readOnly": "Змінювати ці маршрути може лише адміністратор організації.",
     "scheduleTag": "Розклад",
-    "inList": "ClickUp List {{list}}",
-    "listEvents": {
-      "label": "Коли спрацьовує",
-      "created": "Нова задача",
-      "createdAndChanged": "Нова задача і зміна статусу",
-      "changed": "Лише зміна статусу",
-      "hint": "Зміна статусу переносить картку, поки вона там, куди її поставив попередній статус; у завершальну фазу — завжди."
+    "source": "Джерело",
+    "event": "Подія",
+    "eventsKept": "Події цього маршруту задано через API; їх збережено як є.",
+    "closeReason": "Як закрито",
+    "anyCloseReason": "з будь-якою причиною",
+    "statusIs": "статус «{{status}}»",
+    "sources": {
+      "any": "Будь-яке джерело",
+      "clickup": "ClickUp",
+      "github": "GitHub",
+      "gitlab": "GitLab",
+      "git": "GitHub або GitLab",
+      "manual": "Вручну («Нова картка»)"
     },
+    "sourceEvents": {
+      "clickup": {
+        "work_item.created": "нова задача",
+        "work_item.closed": "задачу закрито"
+      },
+      "git": {
+        "work_item.created": "нова issue чи pull request",
+        "work_item.closed": "issue закрито",
+        "work_item.reopened": "issue перевідкрито"
+      }
+    },
+    "sourceFields": {
+      "clickup": {
+        "source.list": "List"
+      },
+      "git": {
+        "item.labels": "Мітка"
+      }
+    },
+    "inList": "ClickUp List {{list}}",
     "origins": {
       "clickupStatus": "ClickUp: статус «{{status}}»"
     }

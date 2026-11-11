@@ -117,11 +117,13 @@ describe('IntakeRoutesSection', () => {
     await waitFor(() => expect(routeRows()).toHaveLength(2));
     const [first, second] = routeRows();
     expect(within(first!).getByText('Outside authors wait in Intake')).toBeTruthy();
-    expect(within(first!).getByText('When: GitHub or GitLab · outside author → Development › Intake')).toBeTruthy();
-    expect(within(second!).getByText('When: ClickUp → Development › Triage')).toBeTruthy();
+    expect(
+      within(first!).getByText('When: GitHub or GitLab · outside author · new issue or pull request → Development › Intake'),
+    ).toBeTruthy();
+    expect(within(second!).getByText('When: ClickUp · new task → Development › Triage')).toBeTruthy();
   });
 
-  it('adds a route for ClickUp tasks with a tag, landing in a chosen phase', async () => {
+  it('adds a route for ClickUp tasks with a tag: the source is chosen once, in «When», and only its fields are offered', async () => {
     const user = userEvent.setup();
     const written = useRouteHandlers([]);
     renderSection();
@@ -129,11 +131,14 @@ describe('IntakeRoutesSection', () => {
     await user.click(await screen.findByRole('button', { name: 'Add route' }));
     const form = screen.getByRole('form', { name: 'New route' });
     await user.type(within(form).getByRole('textbox', { name: 'Route name' }), 'Docs tasks to Triage');
+    await user.click(within(form).getByRole('combobox', { name: 'When' }));
+    await user.click(await screen.findByRole('option', { name: 'ClickUp' }));
     await user.click(within(form).getByRole('combobox', { name: 'Add condition' }));
-    await user.click(await screen.findByRole('option', { name: 'Tag' }));
+    // ClickUp's own fields only: no source, no repository, no pull request kind.
+    const offered = (await screen.findAllByRole('option')).map(option => option.textContent);
+    expect(offered).toEqual(['List', 'Status', 'Tag', 'Assignee', 'Title']);
+    await user.click(screen.getByRole('option', { name: 'Tag' }));
     await user.type(within(form).getByRole('textbox', { name: 'Tag' }), 'docs');
-    await user.click(within(form).getByRole('combobox', { name: 'Add condition' }));
-    await user.click(await screen.findByRole('option', { name: 'Source' }));
     await user.click(within(form).getByRole('combobox', { name: 'Route board' }));
     await user.click(await screen.findByRole('option', { name: 'Development' }));
     await user.click(within(form).getByRole('combobox', { name: 'Route phase' }));
@@ -146,16 +151,52 @@ describe('IntakeRoutesSection', () => {
     expect(written.created[0]).toEqual({
       name: 'Docs tasks to Triage',
       enabled: true,
+      on: ['work_item.created'],
       when: {
         operator: 'AND',
         conditions: [
-          { field: 'item.labels', operator: 'contains', value: 'docs' },
           { field: 'source.integration', operator: 'equals', value: 'clickup' },
+          { field: 'item.labels', operator: 'contains', value: 'docs' },
         ],
       },
       target: { boardKey: 'work', phaseKey: 'triage', joinClosedIssue: false },
     });
     await waitFor(() => expect(routeRows()).toHaveLength(1));
+  });
+
+  it('offers a GitHub route its repository, kind and author, and its pull request events', async () => {
+    const user = userEvent.setup();
+    useRouteHandlers([]);
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    const form = screen.getByRole('form', { name: 'New route' });
+    await user.click(within(form).getByRole('combobox', { name: 'When' }));
+    await user.click(await screen.findByRole('option', { name: 'GitHub' }));
+    const events = within(within(form).getByRole('group', { name: 'Event' }));
+    expect(events.getByRole('button', { name: 'new issue or pull request' })).toHaveAttribute('aria-pressed', 'true');
+    expect(events.getByRole('button', { name: 'pull request merged' })).toHaveAttribute('aria-pressed', 'false');
+    expect(events.queryByRole('button', { name: 'task status changed' })).toBeNull();
+    await user.click(within(form).getByRole('combobox', { name: 'Add condition' }));
+    const offered = (await screen.findAllByRole('option')).map(option => option.textContent);
+    expect(offered).toEqual(expect.arrayContaining(['Repository', 'Kind', 'Author', 'Label']));
+    expect(offered).not.toContain('List');
+    expect(offered).not.toContain('Source');
+  });
+
+  it('opens an existing route on its own source and saves it unchanged', async () => {
+    const user = userEvent.setup();
+    const written = useRouteHandlers([outsideAuthors]);
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    const form = screen.getByRole('form', { name: 'Edit route "Outside authors wait in Intake"' });
+    expect(within(form).getByRole('combobox', { name: 'When' })).toHaveTextContent('GitHub or GitLab');
+    expect(within(form).queryByRole('group', { name: 'Source' })).toBeNull();
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(written.patched).toHaveLength(1));
+    expect(written.patched[0]).toMatchObject({ when: outsideAuthors.when, on: ['work_item.created'] });
   });
 
   it('adds a route «За розкладом» from the same editor: schedule, card and policy, on its own board', async () => {
@@ -310,6 +351,14 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
       http.get(`${TEST_BASE_URL}/web/clickup/lists`, () =>
         HttpResponse.json({ lists: [{ id: 'L1', name: 'Bugs', path: 'Syncta', workspaceId: 'w1' }] }),
       ),
+      http.get(`${TEST_BASE_URL}/web/clickup/lists/L1/statuses`, () =>
+        HttpResponse.json({
+          statuses: [
+            { name: 'to do', type: 'open' },
+            { name: 'dev fixed', type: 'custom' },
+          ],
+        }),
+      ),
     );
 
   it('adds a route that imports a List’s tasks with a status and follows later status changes', async () => {
@@ -321,15 +370,18 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
     await user.click(await screen.findByRole('button', { name: 'Add route' }));
     const form = screen.getByRole('form', { name: 'New route' });
     await user.type(within(form).getByRole('textbox', { name: 'Route name' }), 'Bugs to Triage');
+    await user.click(within(form).getByRole('combobox', { name: 'When' }));
+    await user.click(await screen.findByRole('option', { name: 'ClickUp' }));
     await user.click(within(form).getByRole('combobox', { name: 'Add condition' }));
-    await user.click(await screen.findByRole('option', { name: 'ClickUp List' }));
-    await user.click(within(form).getByRole('combobox', { name: 'ClickUp List' }));
+    await user.click(await screen.findByRole('option', { name: 'List' }));
+    await user.click(within(form).getByRole('combobox', { name: 'List' }));
     await user.click(await screen.findByRole('option', { name: 'Syncta / Bugs' }));
     await user.click(within(form).getByRole('combobox', { name: 'Add condition' }));
-    await user.click(await screen.findByRole('option', { name: 'State' }));
-    await user.type(within(form).getByRole('textbox', { name: 'State' }), 'to do');
-    await user.click(within(form).getByRole('combobox', { name: 'Runs on' }));
-    await user.click(await screen.findByRole('option', { name: 'A new task and a status change' }));
+    await user.click(await screen.findByRole('option', { name: 'Status' }));
+    // The List's own statuses.
+    await user.click(await within(form).findByRole('combobox', { name: 'Status' }));
+    await user.click(await screen.findByRole('option', { name: 'to do' }));
+    await user.click(within(within(form).getByRole('group', { name: 'Event' })).getByRole('button', { name: 'task status changed' }));
     await user.click(within(form).getByRole('combobox', { name: 'Route board' }));
     await user.click(await screen.findByRole('option', { name: 'Development' }));
     await user.click(within(form).getByRole('button', { name: 'Save' }));
@@ -339,6 +391,7 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
       when: {
         operator: 'AND',
         conditions: [
+          { field: 'source.integration', operator: 'equals', value: 'clickup' },
           { field: 'source.list', operator: 'equals', value: 'L1' },
           { field: 'item.state', operator: 'equals', value: 'to do' },
         ],
@@ -383,7 +436,7 @@ describe('IntakeRoutesSection — ClickUp Lists and schedules', () => {
     await waitFor(() => expect(routeRows()).toHaveLength(2));
     const [list, schedule] = routeRows();
     expect(
-      await within(list!).findByText('When: task status changed · ClickUp List Syncta / Bugs · State is "dev fixed" → Development › Done'),
+      await within(list!).findByText('When: ClickUp · Syncta / Bugs · status “dev fixed” · task status changed → Development › Done'),
     ).toBeTruthy();
     expect(within(list!).queryByText('Schedule')).toBeNull();
     expect(within(schedule!).getByText('Schedule')).toBeTruthy();

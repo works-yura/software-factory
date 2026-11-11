@@ -74,3 +74,15 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
 export async function fetchClickUpLists(baseUrl: string): Promise<ClickUpList[]> {
   return (await request<{ lists: ClickUpList[] }>(baseUrl, '/web/clickup/lists')).lists;
 }
+
+/** A ClickUp List's statuses, in the List's order (`type` is ClickUp's: `open`, `custom`, `done`, `closed`). */
+export interface ClickUpListStatus {
+  name: string;
+  type: string;
+}
+
+export async function fetchClickUpListStatuses(baseUrl: string, listId: string): Promise<ClickUpListStatus[]> {
+  return (
+    await request<{ statuses: ClickUpListStatus[] }>(baseUrl, `/web/clickup/lists/${encodeURIComponent(listId)}/statuses`)
+  ).statuses;
+}

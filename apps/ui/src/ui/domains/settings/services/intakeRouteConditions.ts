@@ -1,3 +1,7 @@
+import { intakeSourceCondition, readIntakeSource } from '@factory/core/boards/intake-sources';
+import type { IntakeSourceDescriptor } from '@factory/core/boards/intake-sources';
+import type { RuleGroup } from '@factory/core/rules/rule-group';
+
 import type { CardRuleGroup } from '../../../../api/types';
 
 /** The integrations an intake route can tell apart in v4. */
@@ -154,4 +158,113 @@ export function routesForList<R extends { when: CardRuleGroup | null }>(routes: 
 /** Whether a route makes its own cards on a trigger of its own («За розкладом»). */
 export function isScheduleRoute(route: { triggered?: unknown }): boolean {
   return Boolean(route.triggered);
+}
+
+/** A closed issue's reason a route on «задачу закрито» can require (`event.reason`). */
+export const ROUTE_CLOSE_REASONS = ['completed', 'canceled'] as const;
+export type RouteCloseReason = (typeof ROUTE_CLOSE_REASONS)[number];
+
+/**
+ * What the route editor edits of a card-arrival route: its source («Коли»), the reason a close must
+ * have, and the conditions on the source's own fields. The source is chosen once; it is not a
+ * condition of its own.
+ */
+export interface RouteWhenModel {
+  source: IntakeSourceDescriptor;
+  /** The stored condition naming the source, written back unchanged while the source stays. */
+  sourceLeaf?: CardRuleGroup['conditions'][number];
+  /** Whether the route names its source (a source chosen here always is, except «будь-яке джерело»). */
+  named: boolean;
+  closeReason: RouteCloseReason | null;
+  conditions: RouteCondition[];
+}
+
+const isCloseReason = (value: unknown): value is RouteCloseReason =>
+  typeof value === 'string' && (ROUTE_CLOSE_REASONS as readonly string[]).includes(value);
+
+/**
+ * A route's `when` and events as the editor reads them; undefined when they hold something the
+ * editor can't show (OR, nested groups, other fields or operators, a set of integrations no source
+ * covers) — the route then keeps them exactly as written.
+ */
+export function readRouteWhen(when: CardRuleGroup | null, on?: readonly string[]): RouteWhenModel | undefined {
+  if (when && when.operator !== 'AND') return undefined;
+  const read = readIntakeSource(when as RuleGroup | null, on ?? ['work_item.created']);
+  if (!read) return undefined;
+  let closeReason: RouteCloseReason | null = null;
+  const conditions: RouteCondition[] = [];
+  for (const condition of read.rest as CardRuleGroup['conditions']) {
+    if (
+      'field' in condition &&
+      condition.field === 'event.reason' &&
+      condition.operator === 'equals' &&
+      isCloseReason(condition.value)
+    ) {
+      if (closeReason) return undefined;
+      closeReason = condition.value;
+      continue;
+    }
+    const parsed = readCondition(condition);
+    if (!parsed || parsed.field === 'source.integration') return undefined;
+    conditions.push(parsed);
+  }
+  return {
+    source: read.source,
+    ...(read.leaf ? { sourceLeaf: read.leaf as CardRuleGroup['conditions'][number] } : {}),
+    named: read.named,
+    closeReason,
+    conditions,
+  };
+}
+
+/** The `when` the editor's model stands for: the source, then the close reason, then the conditions. */
+export function writeRouteWhen(model: RouteWhenModel): CardRuleGroup | null {
+  const named = intakeSourceCondition(model.source);
+  const source: CardRuleGroup['conditions'] = !model.named
+    ? []
+    : model.sourceLeaf
+      ? [model.sourceLeaf]
+      : named
+        ? [named as CardRuleGroup['conditions'][number]]
+        : [];
+  const reason: CardRuleGroup['conditions'] = model.closeReason
+    ? [{ field: 'event.reason', operator: 'equals', value: model.closeReason }]
+    : [];
+  const rest = writeRouteConditions(model.conditions.filter(condition => !isBlankCondition(condition)))?.conditions ?? [];
+  const conditions = [...source, ...reason, ...rest];
+  return conditions.length > 0 ? { operator: 'AND', conditions } : null;
+}
+
+/** The fields a condition on this source can test, in the source's order. */
+export function conditionFieldsFor(source: IntakeSourceDescriptor): RouteConditionField[] {
+  return source.fields.filter(
+    (field): field is RouteConditionField =>
+      field !== 'source.integration' && (ROUTE_CONDITION_FIELDS as readonly string[]).includes(field),
+  );
+}
+
+/**
+ * The model after choosing another source: it names the new one (unless it is «будь-яке
+ * джерело»), and conditions on fields the new source doesn't have are dropped.
+ */
+export function chooseRouteSource(model: RouteWhenModel, source: IntakeSourceDescriptor): RouteWhenModel {
+  if (source.id === model.source.id) return model;
+  const fields = conditionFieldsFor(source);
+  return {
+    source,
+    named: source.integrations !== undefined,
+    closeReason: source.events.includes('work_item.closed') ? model.closeReason : null,
+    conditions: model.conditions.filter(condition => fields.includes(condition.field)),
+  };
+}
+
+/** Whether the editor can change a route's events: all of them must be ones its source emits. */
+export function routeEventsEditable(source: IntakeSourceDescriptor, on: readonly string[]): boolean {
+  return on.every(event => source.events.includes(event));
+}
+
+/** The events kept for a source: the ones it emits, in its order; a new card when none is left. */
+export function eventsForSource(source: IntakeSourceDescriptor, on: readonly string[]): string[] {
+  const kept = source.events.filter(event => on.includes(event));
+  return kept.length > 0 ? kept : ['work_item.created'];
 }

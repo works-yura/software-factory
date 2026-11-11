@@ -1,3 +1,5 @@
+import { intakeSource, intakeSources } from '@factory/core/boards/intake-sources';
+import type { IntakeSourceDescriptor } from '@factory/core/boards/intake-sources';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
@@ -13,7 +15,7 @@ import type { TFunction } from 'i18next';
 
 import type { CardRuleGroup, InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useClickUpListsQuery, useClickUpStatusQuery } from '../../../../hooks/useClickUp';
+import { useClickUpListsQuery, useClickUpListStatusesQuery, useClickUpStatusQuery } from '../../../../hooks/useClickUp';
 import {
   useCreateIntakeRouteMutation,
   useDeleteIntakeRouteMutation,
@@ -33,21 +35,26 @@ import { defaultTriggeredDraft, TriggerFields, triggeredReady } from '../intake-
 import { phaseTitle, boardTitle } from '../../../i18n/boardLabels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import {
+  chooseRouteSource,
+  conditionFieldsFor,
   defaultCondition,
-  isBlankCondition,
+  eventsForSource,
   isScheduleRoute,
   readRouteConditions,
-  ROUTE_CONDITION_FIELDS,
-  ROUTE_INTEGRATIONS,
+  readRouteWhen,
+  ROUTE_CLOSE_REASONS,
   ROUTE_SOURCE_KINDS,
   ROUTE_TEXT_FACTS,
-  writeRouteConditions,
+  routeEventsEditable,
+  writeRouteWhen,
 } from '../services/intakeRouteConditions';
 import type {
+  RouteCloseReason,
   RouteCondition,
   RouteConditionField,
   RouteSourceKind,
   RouteTextFact,
+  RouteWhenModel,
 } from '../services/intakeRouteConditions';
 import { BoardSelect } from './RoutingSelects';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -296,26 +303,39 @@ interface IntakeOrigins {
 const originLabel = (options: IntakeOrigins['lists'], value: string) =>
   options.find(option => option.value === value)?.label ?? value;
 
-/** What a route on a ClickUp List reacts to: a new task, a status change of a known one, or both. */
-type RouteEvents = 'created' | 'createdAndChanged' | 'changed' | 'other';
-const ROUTE_EVENT_SETS: Record<Exclude<RouteEvents, 'other'>, string[]> = {
-  created: ['work_item.created'],
-  createdAndChanged: ['work_item.created', 'work_item.state_changed'],
-  changed: ['work_item.state_changed'],
-};
-function routeEventsOf(on: readonly string[] | undefined): RouteEvents {
-  if (!on) return 'created';
-  const key = [...on].sort().join();
-  const match = (Object.keys(ROUTE_EVENT_SETS) as Exclude<RouteEvents, 'other'>[]).find(
-    option => [...ROUTE_EVENT_SETS[option]].sort().join() === key,
-  );
-  return match ?? 'other';
-}
+/** The group a source's own wording is kept under: GitHub, GitLab and both share one. */
+const sourceWording = (sourceId: string) => (sourceId === 'github' || sourceId === 'gitlab' ? 'git' : sourceId);
 
-function describeCondition(condition: RouteCondition, origins: IntakeOrigins, t: T): string {
+/** A source's name in the interface language; a source added later without a translation shows its id. */
+const sourceLabel = (source: IntakeSourceDescriptor, t: T) =>
+  t(`intakeRoutes.sources.${source.id}` as never, { defaultValue: source.id });
+
+/** An event as the source calls it («нова задача» in ClickUp, «нова картка» for any source). */
+const eventLabel = (source: IntakeSourceDescriptor | undefined, event: string, t: T) =>
+  t(
+    [
+      ...(source ? [`intakeRoutes.sourceEvents.${sourceWording(source.id)}.${event}`] : []),
+      `intakeRoutes.events.${event}`,
+    ] as never,
+    { defaultValue: event },
+  );
+
+/** A condition field as the source calls it («Мітка» in GitHub, «Тег» elsewhere). */
+const fieldLabel = (source: IntakeSourceDescriptor | undefined, field: string, t: T) =>
+  t(
+    [
+      ...(source ? [`intakeRoutes.sourceFields.${sourceWording(source.id)}.${field}`] : []),
+      `intakeRoutes.fields.${field}`,
+    ] as never,
+    { defaultValue: field },
+  );
+
+function describeCondition(condition: RouteCondition, origins: IntakeOrigins, t: T, source?: IntakeSourceDescriptor): string {
   switch (condition.field) {
     case 'source.list':
-      return t('intakeRoutes.inList', { list: originLabel(origins.lists, condition.value) });
+      return source?.id === 'clickup'
+        ? originLabel(origins.lists, condition.value)
+        : t('intakeRoutes.inList', { list: originLabel(origins.lists, condition.value) });
     case 'source.integration':
       return condition.value.map(integration => t(`intakeRoutes.integrations.${integration}`)).join(t('intakeRoutes.or'));
     case 'source.kind':
@@ -326,11 +346,12 @@ function describeCondition(condition: RouteCondition, origins: IntakeOrigins, t:
       return t('intakeRoutes.hasTag', { tag: condition.value });
     case 'item.title':
       return t('intakeRoutes.titleContains', { text: condition.value });
+    case 'item.state':
+      return t('intakeRoutes.statusIs', { status: condition.value });
     case 'source.repository':
     case 'item.key':
-    case 'item.state':
     case 'item.assignees':
-      return t('intakeRoutes.factIs', { field: t(`intakeRoutes.fields.${condition.field}`), value: condition.value });
+      return t('intakeRoutes.factIs', { field: fieldLabel(source, condition.field, t), value: condition.value });
   }
 }
 
@@ -390,8 +411,25 @@ function describeEventCondition(condition: CardRuleGroup['conditions'][number], 
   return undefined;
 }
 
+/**
+ * A route's «Коли» in one line: its source, its conditions, then every event it handles —
+ * «ClickUp · Syncta / Bugs · статус «to do» · нова задача або статус задачі змінився».
+ */
 function describeWhen(route: IntakeRouteInfo, origins: IntakeOrigins, t: T): string {
   if (route.triggered) return route.triggered.trigger.summary;
+  const model = readRouteWhen(route.when, route.on);
+  if (model) {
+    const { source } = model;
+    const onlyNewCards = route.on.length === 1 && route.on[0] === 'work_item.created';
+    if (source.id === 'any' && model.conditions.length === 0 && onlyNewCards) return t('intakeRoutes.everyCard');
+    const events = route.on.map(event => eventLabel(source, event, t)).join(t('intakeRoutes.or'));
+    return [
+      ...(source.id === 'any' ? [] : [sourceLabel(source, t)]),
+      ...model.conditions.map(condition => describeCondition(condition, origins, t, source)),
+      model.closeReason ? `${events} · ${t(`intakeRoutes.closeReasons.${model.closeReason}`)}` : events,
+    ].join(' · ');
+  }
+  // A condition set through the API: its events, and what of it can be read.
   const events = route.on.filter(event => event !== 'work_item.created').map(event => t(`intakeRoutes.events.${event}`));
   const eventConditions: string[] = [];
   let cardConditions = route.when;
@@ -501,7 +539,11 @@ function TriggerStatus({
   );
 }
 
-type RouteMode = 'arrival' | 'schedule';
+/** «Коли» of a route: a source its cards arrive from, or a schedule of its own. */
+const SCHEDULE = '__schedule__';
+
+const sameEvents = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every(event => b.includes(event));
 
 function RouteEditor({
   initial,
@@ -524,8 +566,7 @@ function RouteEditor({
   onCancel: () => void;
 }) {
   const { t } = useTranslation('settings');
-  // A new route chooses its «Коли»; an existing one keeps the kind it is.
-  const [mode, setMode] = useState<RouteMode>(initial?.triggered ? 'schedule' : 'arrival');
+  const [scheduled, setScheduled] = useState(Boolean(initial?.triggered));
   const [triggered, setTriggered] = useState<IntakeRouteTriggeredDraft | undefined>(() =>
     initial?.triggered
       ? {
@@ -535,46 +576,79 @@ function RouteEditor({
         }
       : undefined,
   );
-  const scheduled = mode === 'schedule';
   const triggeredDraft = triggered ?? (kinds ? defaultTriggeredDraft(kinds, triggerContext) : undefined);
   const [name, setName] = useState(initial?.name ?? '');
-  const readable = readRouteConditions(initial?.when ?? null);
-  const [conditions, setConditions] = useState<RouteCondition[]>(readable ?? []);
+  const initialOn = initial?.on ?? ['work_item.created'];
+  // Undefined: the route's condition is one this form can't show, and is kept exactly as written.
+  const readable = initial && !initial.triggered ? readRouteWhen(initial.when, initialOn) : undefined;
+  const custom = Boolean(initial && !initial.triggered && !readable);
+  const [model, setModel] = useState<RouteWhenModel>(
+    () => readable ?? { source: intakeSource('any')!, named: false, closeReason: null, conditions: [] },
+  );
+  // A route whose events this form can't offer for its source keeps them as they are.
+  const eventsEditable = !custom && routeEventsEditable(model.source, initialOn);
+  const [events, setEvents] = useState<string[]>(() => [...initialOn]);
   const [boardKey, setBoardKey] = useState<string | null>(initial?.target.boardKey ?? null);
   const [phaseKey, setPhaseKey] = useState<string | null>(initial?.target.phaseKey ?? null);
 
   const board = boards.find(candidate => candidate.id === boardKey);
   // A new card can't land in a terminal phase; the server refuses it too.
   const phases = (board?.phases ?? []).filter(phase => phase.kind !== 'terminal');
-  const unused = ROUTE_CONDITION_FIELDS.filter(field => !conditions.some(condition => condition.field === field));
+  const offered = conditionFieldsFor(model.source).filter(field => !model.conditions.some(condition => condition.field === field));
   const label = initial ? t('intakeRoutes.editTitle', { name: initial.name }) : t('intakeRoutes.newTitle');
+  const sources = intakeSources();
+  // A new route chooses between arriving cards and a schedule; an existing one keeps the kind it is.
+  const canSchedule = !initial && Boolean(kinds && kinds.triggers.length > 0);
+  const listId = model.conditions.find(condition => condition.field === 'source.list')?.value as string | undefined;
 
   const setCondition = (index: number, next: RouteCondition) =>
-    setConditions(current => current.map((condition, at) => (at === index ? next : condition)));
-  const [events, setEvents] = useState<RouteEvents>(() => routeEventsOf(initial?.on));
-  const namesList = conditions.some(condition => condition.field === 'source.list');
-  // Only a route on new cards and status changes is edited here; a route with other events keeps them.
-  const editableEvents = !initial || routeEventsOf(initial.on) !== 'other';
+    setModel(current => ({
+      ...current,
+      conditions: current.conditions.map((condition, at) => (at === index ? next : condition)),
+    }));
+  const chooseSource = (value: string) => {
+    if (value === SCHEDULE) {
+      setScheduled(true);
+      return;
+    }
+    setScheduled(false);
+    const source = intakeSource(value);
+    if (!source) return;
+    setModel(current => chooseRouteSource(current, source));
+    setEvents(current => eventsForSource(source, current));
+  };
+  const toggleEvent = (event: string) =>
+    setEvents(current => {
+      const next = current.includes(event) ? current.filter(value => value !== event) : [...current, event];
+      return model.source.events.filter(value => next.includes(value));
+    });
 
-  const save = () =>
-    scheduled
-      ? onSave({
-          name: name.trim(),
-          enabled: initial?.enabled ?? true,
-          when: null,
-          target: { boardKey: boardKey!, phaseKey },
-          triggered: triggeredDraft!,
-        })
-      : onSave({
+  const save = () => {
+    if (scheduled) {
+      onSave({
+        name: name.trim(),
+        enabled: initial?.enabled ?? true,
+        when: null,
+        target: { boardKey: boardKey!, phaseKey },
+        triggered: triggeredDraft!,
+      });
+      return;
+    }
+    const closes = events.includes('work_item.closed');
+    onSave({
       name: name.trim(),
       enabled: initial?.enabled ?? true,
-      // Only a route that names a ClickUp List says which events it handles here; others keep theirs.
-      ...(namesList && editableEvents && events !== 'other' ? { on: ROUTE_EVENT_SETS[events] } : {}),
-      // A condition this form can't show is kept exactly as it was.
-      when: readable ? writeRouteConditions(conditions.filter(condition => !isBlankCondition(condition))) : initial!.when,
+      // Unchanged events are sent as stored, so saving an untouched route leaves it as it was.
+      ...(eventsEditable ? { on: initial && sameEvents(events, initialOn) ? [...initialOn] : events } : {}),
+      when: custom ? initial!.when : writeRouteWhen(closes ? model : { ...model, closeReason: null }),
       // The server replaces a route's target whole, so a joining route stays a joining one.
       target: { boardKey: boardKey!, phaseKey, joinClosedIssue: initial?.target.joinClosedIssue ?? false },
     });
+  };
+  const ready =
+    name.trim() &&
+    boardKey &&
+    (scheduled ? Boolean(triggeredDraft && triggeredReady(triggeredDraft)) : !eventsEditable || events.length > 0);
 
   return (
     <form
@@ -582,7 +656,7 @@ function RouteEditor({
       className="flex flex-col gap-3 rounded-md border border-border1 px-3 py-3"
       onSubmit={event => {
         event.preventDefault();
-        if (name.trim() && boardKey && (!scheduled || (triggeredDraft && triggeredReady(triggeredDraft)))) save();
+        if (ready) save();
       }}
     >
       <Input
@@ -594,92 +668,140 @@ function RouteEditor({
         onChange={event => setName(event.target.value)}
       />
 
-      {!initial && kinds && kinds.triggers.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <Txt as="span" variant="caption" tone="muted">
-              {t('intakeTriggers.mode')}
-            </Txt>
-            <Select value={mode} disabled={busy} onValueChange={next => setMode(next as RouteMode)}>
-              <SelectTrigger size="sm" aria-label={t('intakeTriggers.mode')} className="w-auto">
-                <Txt as="span" variant="caption">
-                  {t(scheduled ? 'intakeTriggers.modeSchedule' : 'intakeTriggers.modeArrival')}
-                </Txt>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="arrival">{t('intakeTriggers.modeArrival')}</SelectItem>
-                <SelectItem value="schedule">{t('intakeTriggers.modeSchedule')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {scheduled && (
-            <Txt as="p" variant="caption" tone="muted">
-              {t('intakeTriggers.modeHint')}
-            </Txt>
-          )}
+      {!(initial?.triggered) && !custom && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Txt as="span" variant="caption" tone="muted" className="min-w-16">
+            {t('intakeTriggers.mode')}
+          </Txt>
+          <Select value={scheduled ? SCHEDULE : model.source.id} disabled={busy} onValueChange={chooseSource}>
+            <SelectTrigger size="sm" aria-label={t('intakeTriggers.mode')} className="w-auto">
+              <Txt as="span" variant="caption">
+                {scheduled ? t('intakeTriggers.modeSchedule') : sourceLabel(model.source, t)}
+              </Txt>
+            </SelectTrigger>
+            <SelectContent>
+              {sources.map(source => (
+                <SelectItem key={source.id} value={source.id}>
+                  {sourceLabel(source, t)}
+                </SelectItem>
+              ))}
+              {canSchedule && <SelectItem value={SCHEDULE}>{t('intakeTriggers.modeSchedule')}</SelectItem>}
+            </SelectContent>
+          </Select>
         </div>
+      )}
+      {scheduled && !initial && (
+        <Txt as="p" variant="caption" tone="muted">
+          {t('intakeTriggers.modeHint')}
+        </Txt>
       )}
 
       {scheduled && kinds && triggeredDraft && (
         <TriggerFields kinds={kinds} context={triggerContext} value={triggeredDraft} onChange={setTriggered} disabled={busy} />
       )}
 
-      <div className="flex flex-col gap-2" hidden={scheduled}>
-        <Txt as="span" variant="caption" tone="muted">
-          {t('intakeRoutes.when')}
-        </Txt>
-        {!readable ? (
-          <Notice variant="info">{t('intakeRoutes.customConditionKept')}</Notice>
-        ) : (
-          <>
-            {conditions.length === 0 && (
-              <Txt as="p" variant="caption" tone="muted">
-                {t('intakeRoutes.everyCardHint')}
-              </Txt>
-            )}
-            {conditions.map((condition, index) => (
-              <ConditionRow
-                key={condition.field}
-                condition={condition}
-                origins={origins}
-                busy={busy}
-                onChange={next => setCondition(index, next)}
-                onRemove={() => setConditions(current => current.filter((_, at) => at !== index))}
-              />
-            ))}
-            {unused.length > 0 && (
-              <FieldPicker
-                fields={unused}
-                busy={busy}
-                onPick={field => setConditions(current => [...current, defaultCondition(field)])}
-              />
-            )}
-          </>
-        )}
-      </div>
-
-      {!scheduled && namesList && editableEvents && (
+      {!scheduled && (
         <div className="flex flex-col gap-2">
           <Txt as="span" variant="caption" tone="muted">
-            {t('intakeRoutes.listEvents.label')}
+            {t('intakeRoutes.event')}
           </Txt>
-          <Select value={events} disabled={busy} onValueChange={next => setEvents(next as RouteEvents)}>
-            <SelectTrigger size="sm" aria-label={t('intakeRoutes.listEvents.label')} className="w-auto self-start">
-              <Txt as="span" variant="caption">
-                {t(`intakeRoutes.listEvents.${events === 'other' ? 'created' : events}`)}
+          {eventsEditable ? (
+            <div className="flex flex-wrap items-center gap-1" role="group" aria-label={t('intakeRoutes.event')}>
+              {model.source.events.map(event => {
+                const on = events.includes(event);
+                return (
+                  <Button
+                    key={event}
+                    type="button"
+                    size="sm"
+                    variant={on ? 'primary' : 'ghost'}
+                    aria-pressed={on}
+                    disabled={busy}
+                    onClick={() => toggleEvent(event)}
+                  >
+                    {eventLabel(model.source, event, t)}
+                  </Button>
+                );
+              })}
+            </div>
+          ) : (
+            <Txt as="p" variant="caption" tone="muted">
+              {initialOn.map(event => eventLabel(custom ? undefined : model.source, event, t)).join(t('intakeRoutes.or'))}
+              {' · '}
+              {t('intakeRoutes.eventsKept')}
+            </Txt>
+          )}
+          {eventsEditable && events.includes('work_item.closed') && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Txt as="span" variant="caption" className="min-w-32">
+                {t('intakeRoutes.closeReason')}
               </Txt>
-            </SelectTrigger>
-            <SelectContent>
-              {(['created', 'createdAndChanged', 'changed'] as const).map(option => (
-                <SelectItem key={option} value={option}>
-                  {t(`intakeRoutes.listEvents.${option}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Txt as="p" variant="caption" tone="muted">
-            {t('intakeRoutes.listEvents.hint')}
+              <Select
+                value={model.closeReason ?? ANY_REASON}
+                disabled={busy}
+                onValueChange={next =>
+                  setModel(current => ({ ...current, closeReason: next === ANY_REASON ? null : (next as RouteCloseReason) }))
+                }
+              >
+                <SelectTrigger size="sm" aria-label={t('intakeRoutes.closeReason')} className="w-auto">
+                  <Txt as="span" variant="caption">
+                    {model.closeReason
+                      ? t(`intakeRoutes.closeReasons.${model.closeReason}`)
+                      : t('intakeRoutes.anyCloseReason')}
+                  </Txt>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ANY_REASON}>{t('intakeRoutes.anyCloseReason')}</SelectItem>
+                  {ROUTE_CLOSE_REASONS.map(reason => (
+                    <SelectItem key={reason} value={reason}>
+                      {t(`intakeRoutes.closeReasons.${reason}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!scheduled && (
+        <div className="flex flex-col gap-2">
+          <Txt as="span" variant="caption" tone="muted">
+            {t('intakeRoutes.when')}
           </Txt>
+          {custom ? (
+            <Notice variant="info">{t('intakeRoutes.customConditionKept')}</Notice>
+          ) : (
+            <>
+              {model.conditions.length === 0 && (
+                <Txt as="p" variant="caption" tone="muted">
+                  {t('intakeRoutes.everyCardHint')}
+                </Txt>
+              )}
+              {model.conditions.map((condition, index) => (
+                <ConditionRow
+                  key={condition.field}
+                  condition={condition}
+                  source={model.source}
+                  origins={origins}
+                  listId={listId}
+                  busy={busy}
+                  onChange={next => setCondition(index, next)}
+                  onRemove={() =>
+                    setModel(current => ({ ...current, conditions: current.conditions.filter((_, at) => at !== index) }))
+                  }
+                />
+              ))}
+              {offered.length > 0 && (
+                <FieldPicker
+                  fields={offered}
+                  source={model.source}
+                  busy={busy}
+                  onPick={field => setModel(current => ({ ...current, conditions: [...current.conditions, defaultCondition(field)] }))}
+                />
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -727,12 +849,7 @@ function RouteEditor({
         <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
           {t('intakeRoutes.cancel')}
         </Button>
-        <Button
-          type="submit"
-          size="sm"
-          variant="primary"
-          disabled={busy || !name.trim() || !boardKey || (scheduled && !(triggeredDraft && triggeredReady(triggeredDraft)))}
-        >
+        <Button type="submit" size="sm" variant="primary" disabled={busy || !ready}>
           {t('intakeRoutes.save')}
         </Button>
       </div>
@@ -740,15 +857,19 @@ function RouteEditor({
   );
 }
 
+const ANY_REASON = '__any__';
+
 const isTextFactCondition = (condition: RouteCondition): condition is Extract<RouteCondition, { field: RouteTextFact }> =>
   (ROUTE_TEXT_FACTS as readonly string[]).includes(condition.field);
 
 function FieldPicker({
   fields,
+  source,
   busy,
   onPick,
 }: {
   fields: readonly RouteConditionField[];
+  source: IntakeSourceDescriptor;
   busy: boolean;
   onPick: (field: RouteConditionField) => void;
 }) {
@@ -771,7 +892,7 @@ function FieldPicker({
       <SelectContent>
         {fields.map(field => (
           <SelectItem key={field} value={field}>
-            {t(`intakeRoutes.fields.${field}`)}
+            {fieldLabel(source, field, t)}
           </SelectItem>
         ))}
       </SelectContent>
@@ -779,66 +900,51 @@ function FieldPicker({
   );
 }
 
+/** The kinds a condition on «Тип» can name for a source: GitHub and GitLab have issues and pull requests. */
+const kindsFor = (source: IntakeSourceDescriptor): readonly RouteSourceKind[] =>
+  source.id === 'any' ? ROUTE_SOURCE_KINDS : ROUTE_SOURCE_KINDS.filter(kind => kind !== 'task');
+
 function ConditionRow({
   condition,
+  source,
   origins,
+  listId,
   busy,
   onChange,
   onRemove,
 }: {
   condition: RouteCondition;
+  source: IntakeSourceDescriptor;
   origins: IntakeOrigins;
+  /** The ClickUp List the route names, whose statuses «Статус» offers. */
+  listId: string | undefined;
   busy: boolean;
   onChange: (next: RouteCondition) => void;
   onRemove: () => void;
 }) {
   const { t } = useTranslation('settings');
-  const fieldLabel = t(`intakeRoutes.fields.${condition.field}`);
+  const label = fieldLabel(source, condition.field, t);
+  const statuses = useClickUpListStatusesQuery(
+    condition.field === 'item.state' && source.id === 'clickup' ? listId : undefined,
+  ).data;
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Txt as="span" variant="caption" className="min-w-32">
-        {fieldLabel}
+        {label}
       </Txt>
-      {condition.field === 'source.integration' && (
-        <div className="flex items-center gap-1" role="group" aria-label={fieldLabel}>
-          {ROUTE_INTEGRATIONS.map(integration => {
-            const on = condition.value.includes(integration);
-            return (
-              <Button
-                key={integration}
-                type="button"
-                size="sm"
-                variant={on ? 'primary' : 'ghost'}
-                aria-pressed={on}
-                disabled={busy}
-                onClick={() =>
-                  onChange({
-                    field: condition.field,
-                    value: on
-                      ? condition.value.filter(value => value !== integration)
-                      : ROUTE_INTEGRATIONS.filter(value => value === integration || condition.value.includes(value)),
-                  })
-                }
-              >
-                {t(`intakeRoutes.integrations.${integration}`)}
-              </Button>
-            );
-          })}
-        </div>
-      )}
       {condition.field === 'source.kind' && (
         <Select
           value={condition.value}
           disabled={busy}
           onValueChange={next => onChange({ field: condition.field, value: next as RouteSourceKind })}
         >
-          <SelectTrigger size="sm" aria-label={fieldLabel} className="w-auto">
+          <SelectTrigger size="sm" aria-label={label} className="w-auto">
             <Txt as="span" variant="caption">
               {t(`intakeRoutes.kinds.${condition.value}`)}
             </Txt>
           </SelectTrigger>
           <SelectContent>
-            {ROUTE_SOURCE_KINDS.map(kind => (
+            {kindsFor(source).map(kind => (
               <SelectItem key={kind} value={kind}>
                 {t(`intakeRoutes.kinds.${kind}`)}
               </SelectItem>
@@ -852,7 +958,7 @@ function ConditionRow({
           disabled={busy}
           onValueChange={next => onChange({ field: condition.field, value: next === 'yes' })}
         >
-          <SelectTrigger size="sm" aria-label={fieldLabel} className="w-auto">
+          <SelectTrigger size="sm" aria-label={label} className="w-auto">
             <Txt as="span" variant="caption">
               {t(condition.value ? 'intakeRoutes.trusted' : 'intakeRoutes.untrusted')}
             </Txt>
@@ -864,12 +970,8 @@ function ConditionRow({
         </Select>
       )}
       {condition.field === 'source.list' && (
-        <Select
-          value={condition.value}
-          disabled={busy}
-          onValueChange={next => onChange({ field: condition.field, value: next })}
-        >
-          <SelectTrigger size="sm" aria-label={fieldLabel} className="w-auto">
+        <Select value={condition.value} disabled={busy} onValueChange={next => onChange({ field: condition.field, value: next })}>
+          <SelectTrigger size="sm" aria-label={label} className="w-auto">
             <Txt as="span" variant="caption">
               {condition.value ? originLabel(origins.lists, condition.value) : t('intakeRoutes.choose')}
             </Txt>
@@ -883,20 +985,40 @@ function ConditionRow({
           </SelectContent>
         </Select>
       )}
-      {isTextFactCondition(condition) && (
-        <Input
-          size="sm"
-          aria-label={fieldLabel}
-          placeholder={t(`intakeRoutes.placeholders.${condition.field}`)}
-          value={condition.value}
-          disabled={busy}
-          onChange={event => onChange({ field: condition.field, value: event.target.value })}
-        />
+      {condition.field === 'item.state' && statuses && statuses.length > 0 ? (
+        <Select value={condition.value} disabled={busy} onValueChange={next => onChange({ field: condition.field, value: next })}>
+          <SelectTrigger size="sm" aria-label={label} className="w-auto">
+            <Txt as="span" variant="caption">
+              {condition.value || t('intakeRoutes.choose')}
+            </Txt>
+          </SelectTrigger>
+          <SelectContent>
+            {/* A status the route names that the List no longer has stays choosable. */}
+            {[...new Set([...statuses.map(status => status.name), ...(condition.value ? [condition.value] : [])])].map(
+              status => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ),
+            )}
+          </SelectContent>
+        </Select>
+      ) : (
+        isTextFactCondition(condition) && (
+          <Input
+            size="sm"
+            aria-label={label}
+            placeholder={t(`intakeRoutes.placeholders.${condition.field}`)}
+            value={condition.value}
+            disabled={busy}
+            onChange={event => onChange({ field: condition.field, value: event.target.value })}
+          />
+        )
       )}
       {(condition.field === 'item.labels' || condition.field === 'item.title') && (
         <Input
           size="sm"
-          aria-label={fieldLabel}
+          aria-label={label}
           placeholder={t(condition.field === 'item.labels' ? 'intakeRoutes.tagPlaceholder' : 'intakeRoutes.titlePlaceholder')}
           value={condition.value}
           disabled={busy}
@@ -907,7 +1029,7 @@ function ConditionRow({
         type="button"
         size="sm"
         variant="ghost"
-        aria-label={t('intakeRoutes.removeCondition', { field: fieldLabel })}
+        aria-label={t('intakeRoutes.removeCondition', { field: label })}
         disabled={busy}
         onClick={onRemove}
       >

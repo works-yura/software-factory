@@ -782,8 +782,8 @@
       "item.labels": "Tag",
       "item.title": "Title",
       "source.repository": "Repository",
-      "item.key": "Key",
-      "item.state": "State",
+      "item.key": "Item number",
+      "item.state": "Status",
       "item.assignees": "Assignee",
       "source.list": "ClickUp List"
     },
@@ -835,14 +835,40 @@
     "factIs": "{{field}} is \"{{value}}\"",
     "readOnly": "Only an organization admin can change these routes.",
     "scheduleTag": "Schedule",
-    "inList": "ClickUp List {{list}}",
-    "listEvents": {
-      "label": "Runs on",
-      "created": "A new task",
-      "createdAndChanged": "A new task and a status change",
-      "changed": "Only a status change",
-      "hint": "A status change moves the card while it is still where the previous status put it; into a closing phase, always."
+    "source": "Source",
+    "event": "Event",
+    "eventsKept": "This route's events were set through the API; they are kept as they are.",
+    "closeReason": "Closed",
+    "anyCloseReason": "for any reason",
+    "statusIs": "status “{{status}}”",
+    "sources": {
+      "any": "Any source",
+      "clickup": "ClickUp",
+      "github": "GitHub",
+      "gitlab": "GitLab",
+      "git": "GitHub or GitLab",
+      "manual": "By hand (“New card”)"
     },
+    "sourceEvents": {
+      "clickup": {
+        "work_item.created": "new task",
+        "work_item.closed": "task closed"
+      },
+      "git": {
+        "work_item.created": "new issue or pull request",
+        "work_item.closed": "issue closed",
+        "work_item.reopened": "issue reopened"
+      }
+    },
+    "sourceFields": {
+      "clickup": {
+        "source.list": "List"
+      },
+      "git": {
+        "item.labels": "Label"
+      }
+    },
+    "inList": "ClickUp List {{list}}",
     "origins": {
       "clickupStatus": "ClickUp: status “{{status}}”"
     }
