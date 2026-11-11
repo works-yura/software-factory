@@ -17,6 +17,7 @@ export * from './comments/feed-context.ts';
 export * from './work-items/description-context.ts';
 export * from './credentials/base.ts';
 export * from './credentials/accounts.ts';
+export * from './boot-migrations/base.ts';
 export * from './custom-providers/base.ts';
 export * from './dispatch-errors.ts';
 export * from './filesystem/base.ts';

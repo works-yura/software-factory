@@ -874,6 +874,7 @@ describe('MastraFactory.prepare', () => {
       'attachments',
       'intake-route-fires',
       'usage',
+      'boot-migrations',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });

@@ -54,14 +54,9 @@ import {
   getFactoryAuthUserId,
 } from '@factory/auth';
 import { createBoardRegistry, isDefinedBoard, isTerminalWorkItem, REVIEW_CONTEXT } from '@factory/core';
-import {
-  AUDITS_LEGACY_PHASE_RENAMES,
-  auditsBoard,
-  createDefaultBoardRegistry,
-  PRODUCT_LEGACY_PHASE_RENAMES,
-  productBoard,
-} from '@factory/pipelines';
-import { AUDITS_BOARD_UPGRADE_ACTOR, migrateLegacyIntakeRules } from './intake/migrations.ts';
+import { createDefaultBoardRegistry } from '@factory/pipelines';
+import { factoryBootMigrations } from './migrations/factory-migrations.ts';
+import { runBootMigrations } from './migrations/run.ts';
 import { intakeTriggerRouteRepository, writeFireCardBack } from './intake/repository.ts';
 import { setupIntakeTriggers } from './intake/setup.ts';
 import type { BoardRegistry, InstalledBoard } from '@factory/core';
@@ -198,8 +193,6 @@ import { isValidGitRef } from '@factory/sandbox';
 import { CachedSandboxEnvs, peekSessionSandbox, SessionRetirementCoordinator } from '@factory/sandbox';
 import type { MastraFactorySandboxOption } from '@factory/sandbox';
 import { backfillUntilDone, WorkItemSplitModeError } from '@factory/store';
-import { migrateLabelRoutesToIntakeRoutes, REVIEW_BOARD_RETIREMENT_ACTOR } from '@factory/store';
-import { boardDefinitionOf, PRODUCT_BOARD_UPGRADE_ACTOR } from '@factory/store';
 import { createPlaintextFactorySecretEncryption } from '@factory/store';
 import type { Card } from '@factory/store';
 import type { FactorySecretEncryption } from '@factory/store';
@@ -244,7 +237,7 @@ import { FilesystemStorage } from '@factory/store';
 import { IntakeStorage } from '@factory/store';
 import { IntegrationStorage } from '@factory/store';
 import { factoryMemorySettingsUserId, MemorySettingsStorage, SkillOverridesStorage, StoredBoardsStorage } from '@factory/store';
-import { AttachmentService, AttachmentsStorage, IntakeRouteFiresStorage, UsageStorage } from '@factory/store';
+import { AttachmentService, AttachmentsStorage, BootMigrationsStorage, IntakeRouteFiresStorage, UsageStorage } from '@factory/store';
 import type { AttachmentBlobStore } from '@factory/store';
 import type { StoredBoardInput, StoredBoardScope } from '@factory/store';
 import type { MemorySettingsRecord } from '@factory/store';
@@ -938,6 +931,7 @@ export class MastraFactory {
     const attachmentsStorage = storage.registerDomain(new AttachmentsStorage());
     const intakeRouteFiresStorage = storage.registerDomain(new IntakeRouteFiresStorage());
     const usageStorage = storage.registerDomain(new UsageStorage());
+    const bootMigrationsStorage = storage.registerDomain(new BootMigrationsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -1089,126 +1083,6 @@ export class MastraFactory {
       await timedPhase('prepare.migrate.workItemSplit', () => workItemsStorage.migrateOpenLegacyCards(isTerminal));
     }
 
-    // Label routes (ClickUp tags, GitHub and GitLab labels) became intake routes: move each one into
-    // its project's routes, once. A failure stops the boot: nothing reads label routes any more, so
-    // they would go unapplied.
-    if (storage.isDomainReady('intake') && storage.isDomainReady('boards')) {
-      for (const [integrationId, routeName] of [
-        ['clickup', (label: string) => `ClickUp tag "${label}"`],
-        ['github', (label: string) => `GitHub label "${label}"`],
-        ['gitlab', (label: string) => `GitLab label "${label}"`],
-      ] as const) {
-        await timedPhase(`prepare.intake.${integrationId}LabelRoutes`, async () => {
-          const moved = await migrateLabelRoutesToIntakeRoutes({
-            integrationId,
-            routeName,
-            intake: intakeStorage,
-            boards: storedBoardsStorage,
-          });
-          if (moved > 0) console.info(`[factory] moved ${moved} ${integrationId} label route(s) into intake routes`);
-        });
-      }
-    }
-
-    // The Review board was retired: pull and merge requests are reviewed in Work › PR review.
-    // Move its cards, its intake routes and the sources and label routes that fed it onto Work,
-    // once. A failure stops the boot: those cards and routes would point at a board that's gone.
-    if (storage.isDomainReady('work-items')) {
-      await timedPhase('prepare.workItems.retireReviewBoard', async () => {
-        const moved = await workItemsStorage.moveReviewBoardCardsToWork();
-        if (moved.length > 0) console.info(`[factory] moved ${moved.length} Review board card(s) to Work › PR review`);
-      });
-    }
-    if (storage.isDomainReady('boards')) {
-      await timedPhase('prepare.boards.retireReviewBoardRoutes', async () => {
-        const moved = await storedBoardsStorage.moveReviewBoardRoutesToWork(REVIEW_BOARD_RETIREMENT_ACTOR);
-        if (moved > 0) console.info(`[factory] moved ${moved} intake route(s) from the Review board to Work`);
-      });
-    }
-    if (storage.isDomainReady('intake')) {
-      await timedPhase('prepare.intake.retireReviewBoardSources', async () => {
-        const { bindings, labelRoutes } = await intakeStorage.moveReviewBoardSourcesToWork();
-        if (bindings + labelRoutes > 0) {
-          console.info(
-            `[factory] moved ${bindings} intake source(s) and ${labelRoutes} label route(s) from the Review board to Work`,
-          );
-        }
-      });
-    }
-
-    // Product's Breakdown became Phases, and the board gained Enrich and Design. Rewrite each
-    // project's stored Product board, and move its cards and intake routes off the old phase
-    // names, once. A failure stops the boot: those cards would sit in phases the board lacks.
-    if (storage.isDomainReady('boards')) {
-      await timedPhase('prepare.boards.productPhases', async () => {
-        const rewritten = await storedBoardsStorage.renameStoredBoardPhases(
-          productBoard.id,
-          boardDefinitionOf(productBoard),
-          PRODUCT_LEGACY_PHASE_RENAMES,
-          PRODUCT_BOARD_UPGRADE_ACTOR,
-        );
-        if (rewritten > 0) console.info(`[factory] rewrote ${rewritten} stored Product board(s) with the new phases`);
-      });
-    }
-    if (storage.isDomainReady('work-items')) {
-      await timedPhase('prepare.workItems.productPhases', async () => {
-        const moved = await workItemsStorage.renameBoardStages(productBoard.id, PRODUCT_LEGACY_PHASE_RENAMES);
-        if (moved.length > 0) console.info(`[factory] moved ${moved.length} Product card(s) off Breakdown to Phases`);
-      });
-    }
-    // Audits now starts in Intake like every board, and Done means the report is written: move
-    // stored boards, intake routes and cards off Scheduled and Report, once.
-    await timedPhase('prepare.audits.phases', async () => {
-      if (storage.isDomainReady('boards')) {
-        const rewritten = await storedBoardsStorage.renameStoredBoardPhases(
-          auditsBoard.id,
-          boardDefinitionOf(auditsBoard),
-          AUDITS_LEGACY_PHASE_RENAMES,
-          AUDITS_BOARD_UPGRADE_ACTOR,
-        );
-        if (rewritten > 0) console.info(`[factory] rewrote ${rewritten} stored Audits board(s) with the new phases`);
-      }
-      if (storage.isDomainReady('work-items')) {
-        const moved = await workItemsStorage.renameBoardStages(auditsBoard.id, AUDITS_LEGACY_PHASE_RENAMES);
-        if (moved.length > 0) console.info(`[factory] moved ${moved.length} Audits card(s) off Scheduled/Report`);
-      }
-    });
-    // Intake rules made cards before routes could (ADR-0021): each becomes a route «За розкладом»
-    // with the rule's id, creator and fires; its paired placing route goes. Once, idempotently, here
-    // at boot, before any trigger is armed. A failure stops the boot: a rule left half-moved would
-    // either fire twice or not at all.
-    if (storage.isDomainReady('intake-route-fires') && storage.isDomainReady('boards')) {
-      await timedPhase('prepare.intake.legacyRules', async () => {
-        const { migrated, removedRoutes } = await migrateLegacyIntakeRules({
-          fires: intakeRouteFiresStorage,
-          boards: storedBoardsStorage,
-          renames: { [auditsBoard.id]: AUDITS_LEGACY_PHASE_RENAMES },
-        });
-        if (migrated + removedRoutes > 0) {
-          console.info(`[factory] turned ${migrated} intake rule(s) into routes «За розкладом»; removed ${removedRoutes} paired route(s)`);
-        }
-      });
-    }
-
-    // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
-    // back to Intake. Move the cards the old rule left there, once.
-    if (storage.isDomainReady('work-items')) {
-      await timedPhase('prepare.workItems.heldTriageCards', () =>
-        workItemsStorage
-          .returnHeldTriageCards()
-          .then(moved => {
-            if (moved.length > 0) {
-              console.info(`[factory] moved ${moved.length} card(s) held for triage acceptance back to Intake`);
-            }
-          })
-          .catch(error =>
-            console.warn(
-              `[factory] moving cards held for triage acceptance back to Intake failed: ${error instanceof Error ? error.message : error}`,
-            ),
-          ),
-      );
-    }
-
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
     // mirroring stored API keys into process.env.
@@ -1239,31 +1113,25 @@ export class MastraFactory {
         integration.versionControl.initialize({ storage: integrationSourceControl });
       }
     }
-    // Integration-owned data migrations (ClickUp's retired List status rules → intake routes), once
-    // per boot, before any worker reads: the poller only reads routes. Idempotent on every replica.
-    // An integration whose migration fails is disabled for this boot (no workers, routes or
-    // channels) rather than running on half-migrated data; it retries at the next boot.
-    const failedMigrations = new Set<string>();
-    if (this.#projectBoards && storage.isDomainReady('integrations') && storage.isDomainReady('intake')) {
-      for (const integration of integrations.filter(candidate => candidate.migrate)) {
-        await timedPhase(`prepare.integration.${integration.id}.migrate`, async () => {
-          try {
-            await integration.migrate!({
-              storage: integrationStorage.forIntegration(integration.id),
-              projects: factoryProjectsStorage,
-              intake: intakeStorage,
-              intakeRoutes: storedBoardsStorage,
-              projectBoards: this.#projectBoards!,
-            });
-          } catch (error) {
-            failedMigrations.add(integration.id);
-            console.error(
-              `[factory] integration "${integration.id}" is disabled: its migration failed (it runs again at the next boot): ${error instanceof Error ? error.message : error}`,
-            );
-          }
-        });
-      }
-    }
+    // One-off data migrations, in order, each once (a stored marker skips it on later boots). An
+    // integration whose migration fails is off for this boot rather than running on half-migrated data.
+    const { disabledIntegrations: failedMigrations } = await runBootMigrations(
+      factoryBootMigrations({
+        ready: domain => storage.isDomainReady(domain),
+        intake: intakeStorage,
+        boards: storedBoardsStorage,
+        workItems: workItemsStorage,
+        fires: intakeRouteFiresStorage,
+        projects: factoryProjectsStorage,
+        integrationStorage,
+        projectBoards: this.#projectBoards,
+        integrations,
+      }),
+      {
+        ...(storage.isDomainReady('boot-migrations') ? { markers: bootMigrationsStorage } : {}),
+        timed: timedPhase,
+      },
+    );
     // Keep the legacy GitHub partition readable even when no GitHub
     // integration is registered; existing sessions may outlive a config change.
     const sourceControlIntegrationIds = [

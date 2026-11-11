@@ -25,6 +25,7 @@ import { CustomProvidersStorage } from './custom-providers/base.ts';
 import { IntakeStorage } from './intake/base.ts';
 import { IntegrationStorage } from './integrations/base.ts';
 import { MemorySettingsStorage } from './memory-settings/base.ts';
+import { BootMigrationsStorage } from './boot-migrations/base.ts';
 import { ModelDefaultsStorage } from './model-defaults/base.ts';
 import { FactoryProjectsStorage } from './projects/base.ts';
 import { QueueHealthStorage } from './queue-health/base.ts';
@@ -142,6 +143,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   intakeRouteFires: IntakeRouteFiresStorage;
   sandboxEnvs: SandboxEnvsStorage;
   usage: UsageStorage;
+  bootMigrations: BootMigrationsStorage;
 }
 
 /**
@@ -180,6 +182,7 @@ export async function createFactoryStorageForTests<T extends FactoryStorage = Fa
   const intakeRouteFires = storage.registerDomain(new IntakeRouteFiresStorage());
   const sandboxEnvs = storage.registerDomain(new SandboxEnvsStorage());
   const usage = storage.registerDomain(new UsageStorage());
+  const bootMigrations = storage.registerDomain(new BootMigrationsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -203,5 +206,6 @@ export async function createFactoryStorageForTests<T extends FactoryStorage = Fa
     intakeRouteFires,
     sandboxEnvs,
     usage,
+    bootMigrations,
   };
 }
