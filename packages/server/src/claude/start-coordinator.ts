@@ -131,6 +131,9 @@ export class ClaudeStartCoordinator<Mode extends string = ClaudeSessionMode> {
     const threadId = session.thread.requireId();
     await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.sessionId, value: sessionId });
     await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.title, value: request.threadTitle });
+    // Every card run starts on the Factory's default model: a pick made in the session holds for that
+    // run only, as Mastra's start re-applies the Factory's main model (`hydrateFactorySession`).
+    await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.modelSelection, value: null });
     await session.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.targetRepository, value: repository.slug });
     await session.thread.setSetting({
       key: CLAUDE_THREAD_SETTINGS.targetInstruction,

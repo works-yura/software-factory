@@ -8,7 +8,7 @@ import { triageWorkBoard as workBoard } from '@factory/pipelines/testing';
 import { createFactoryStorageForTests, FactoryTransitionService } from '@factory/testing';
 
 import { createClaudeFactoryHarness } from './harness.ts';
-import { ClaudeStartCoordinator } from './start-coordinator.ts';
+import { CLAUDE_THREAD_SETTINGS, ClaudeStartCoordinator } from './start-coordinator.ts';
 
 /** The Work board, with Planning's `submit_plan` approved without a person for every card. */
 function boardsWithAutoApprovedPlanning() {
@@ -26,7 +26,14 @@ function boardsWithAutoApprovedPlanning() {
   return createBoardRegistry({ boards: [board] });
 }
 
-async function startPlanning({ boards }: { boards?: ReturnType<typeof boardsWithAutoApprovedPlanning> }) {
+async function startPlanning({
+  boards,
+  sessionPick,
+}: {
+  boards?: ReturnType<typeof boardsWithAutoApprovedPlanning>;
+  /** A model the session picked before this run started. */
+  sessionPick?: unknown;
+}) {
   const seeded = await createFactoryStorageForTests();
   const sourceControl = seeded.sourceControl.forIntegration('github');
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'C', harness: 'claude-code' } });
@@ -82,6 +89,10 @@ async function startPlanning({ boards }: { boards?: ReturnType<typeof boardsWith
     baseBranch: 'main',
     visibility: 'org',
   });
+  if (sessionPick !== undefined) {
+    const earlier = await claude.harness.createSession({ sessionId, threadId: sessionId, resourceId: 'user-1' });
+    await earlier.thread.setSetting({ key: CLAUDE_THREAD_SETTINGS.modelSelection, value: sessionPick });
+  }
   await coordinator.prepare({
     orgId: 'org-1',
     userId: 'user-1',
@@ -104,5 +115,12 @@ describe('ClaudeStartCoordinator plan approval', () => {
   it('plans behind the gate when only the project decides and it does not approve plans', async () => {
     const session = await startPlanning({});
     expect(session.mode).toBe('planning');
+  });
+});
+
+describe('ClaudeStartCoordinator model', () => {
+  it("starts every card run on the Factory's default model, dropping a pick the session made earlier", async () => {
+    const session = await startPlanning({ sessionPick: { instanceId: 'claude-code', model: 'haiku' } });
+    expect(await session.thread.getSetting({ key: CLAUDE_THREAD_SETTINGS.modelSelection })).toBeNull();
   });
 });
