@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createHarnessModelRegistry } from '@factory/harness';
 import { createInMemoryCodexSessionStore } from '@factory/harness-codex';
-import { FAKE_CODEX_MODELS, fakeCodexSpawn } from '@factory/harness-codex/testkit';
+import { FAKE_CODEX_MODELS, fakeCodexSpawn, type FakeCodexAppServer } from '@factory/harness-codex/testkit';
 import { parseCodexModelListResponse } from '@factory/harness-codex/models';
 import { FACTORY_SESSION_TOKEN_HEADER } from '@factory/mcp';
 import type { FactorySessionTokenClaims } from '@factory/mcp';
@@ -16,7 +16,7 @@ import { CLAUDE_THREAD_SETTINGS } from '../claude/start-coordinator.ts';
 import { supervisorResourceId } from '@factory/session';
 
 import { CODEX_SUPERVISOR_INSTRUCTIONS } from '../claude/supervisor.ts';
-import { CODEX_FACTORY_INSTRUCTIONS, codexPolicyFromPermissions, createCodexFactoryHarness } from './harness.ts';
+import { CODEX_FACTORY_INSTRUCTIONS, CODEX_QUESTION_TOOL_INSTRUCTIONS, codexPolicyFromPermissions, createCodexFactoryHarness, type CodexFactoryHarnessOptions } from './harness.ts';
 import { combineTurnHarnessUserSessions, createCodexUserSessions } from './user-sessions.ts';
 import type { CodexCredentials } from './credentials.ts';
 
@@ -33,15 +33,32 @@ const credentials = (usable = true): CodexCredentials => ({
   usable: async () => usable,
 });
 
-function setup(options: { cardRun?: boolean; permissions?: Parameters<typeof codexPolicyFromPermissions>[0]; credentials?: CodexCredentials } = {}) {
+type TurnScript = (server: FakeCodexAppServer, turn: { threadId: string; turnId: string }) => void | Promise<void>;
+
+const done: TurnScript = (server, { threadId, turnId }) => {
+  server.notify('item/completed', { threadId, turnId, item: { type: 'agentMessage', id: `m-${turnId}`, text: 'Done.' } });
+  server.notify('turn/completed', { threadId, turn: { id: turnId, status: 'completed' } });
+};
+
+function setup(
+  options: {
+    cardRun?: boolean;
+    permissions?: Parameters<typeof codexPolicyFromPermissions>[0];
+    credentials?: CodexCredentials;
+    turns?: TurnScript[];
+    extra?: Partial<CodexFactoryHarnessOptions>;
+  } = {},
+) {
+  let turns = 0;
   const spawn = fakeCodexSpawn(server => {
     server.handle('turn/start', params => {
+      const turnId = `turn-${++turns}`;
+      const script = options.turns?.[Math.min(turns, options.turns.length) - 1] ?? done;
       setImmediate(() => {
-        server.notify('turn/started', { threadId: params.threadId, turn: { id: 'turn-1', status: 'inProgress' } });
-        server.notify('item/completed', { threadId: params.threadId, turnId: 'turn-1', item: { type: 'agentMessage', id: 'm', text: 'Done.' } });
-        server.notify('turn/completed', { threadId: params.threadId, turn: { id: 'turn-1', status: 'completed' } });
+        server.notify('turn/started', { threadId: params.threadId, turn: { id: turnId, status: 'inProgress' } });
+        void script(server, { threadId: params.threadId, turnId });
       });
-      return { turn: { id: 'turn-1', status: 'inProgress' } };
+      return { turn: { id: turnId, status: 'inProgress' } };
     });
   });
   const signed: Array<{ claims: FactorySessionTokenClaims; ttlMs?: number }> = [];
@@ -78,6 +95,7 @@ function setup(options: { cardRun?: boolean; permissions?: Parameters<typeof cod
     cardRun: () => options.cardRun ?? false,
     phaseFor: async () => 'stage: building',
     catalog: async () => ({ available: true, models: parseCodexModelListResponse(FAKE_CODEX_MODELS) }),
+    ...options.extra,
   });
   return { factory, spawn, signed, homeRoot };
 }
@@ -195,6 +213,76 @@ describe('createCodexFactoryHarness', () => {
     await session.sendMessage({ content: 'Build' });
     await tick();
     expect(spawn.servers[0]!.requests('turn/start')[0]!.params).toMatchObject({ approvalPolicy: 'on-request', sandboxPolicy: { type: 'workspaceWrite' } });
+  });
+
+  it('tells Codex to ask every question through request_user_input, the question card', async () => {
+    expect(CODEX_FACTORY_INSTRUCTIONS).toContain(CODEX_QUESTION_TOOL_INSTRUCTIONS);
+    expect(CODEX_QUESTION_TOOL_INSTRUCTIONS).toContain('`request_user_input`');
+    expect(CODEX_QUESTION_TOOL_INSTRUCTIONS).toContain('`AskUserQuestion`');
+    const { factory, spawn } = setup();
+    const session = await factory.harness.createSession({ sessionId: 'session-a', threadId: 'session-a', resourceId: 'factory-a' });
+    await session.sendMessage({ content: 'Hi' });
+    const thread = spawn.servers[0]!.requests('thread/start')[0]!.params as any;
+    expect(thread.developerInstructions).toContain('request_user_input');
+    expect(thread.config['features.default_mode_request_user_input']).toBe(true);
+  });
+
+  it("parks a card run's question on the card and resumes the same turn with the person's answers", async () => {
+    let answers: unknown;
+    const { factory, spawn } = setup({
+      cardRun: true,
+      permissions: { categories: { edit: 'allow', execute: 'allow' } },
+      turns: [
+        async (server, { threadId, turnId }) => {
+          answers = (
+            await server.request('item/tool/requestUserInput', {
+              threadId,
+              turnId,
+              itemId: 'q-1',
+              questions: [
+                { id: 'scope', header: 'Scope', question: 'Ship the MVP only?', options: [{ label: 'Yes (рекомендовано)', description: '' }, { label: 'No', description: '' }] },
+                { id: 'deadline', header: 'Deadline', question: 'By when?', options: [{ label: 'Friday', description: '' }, { label: 'Next month', description: '' }] },
+              ],
+            })
+          ).result;
+          done(server, { threadId, turnId });
+        },
+      ],
+    });
+    const session = await factory.harness.createSession({ sessionId: 'session-a', threadId: 'session-a', resourceId: 'factory-a' });
+    const events: string[] = [];
+    session.subscribe(event => events.push(event.type === 'agent_end' ? `end:${event.reason}` : event.type));
+    // A card run nobody watches still parks its question for a person (on the card and in the inbox).
+    expect(await session.sendMessage({ content: 'Enrich the card' })).toEqual({ reason: 'suspended' });
+    expect(spawn.servers[0]!.requests('turn/start')[0]!.params).toMatchObject({ approvalPolicy: 'on-request' });
+    expect(session.pendingPermission).toMatchObject({ toolCallId: 'q-1', toolName: 'AskUserQuestion' });
+    expect(events).toEqual(['tool_suspended', 'end:suspended']);
+    await session.answerQuestion({ answer: '1. Ship the MVP only?\n   → Yes\n2. By when?\n   → Friday', toolCallId: 'q-1' });
+    for (let i = 0; i < 50 && events.length < 3; i++) await tick();
+    expect(events.at(-1)).toBe('end:complete');
+    expect(answers).toEqual({ answers: { scope: { answers: ['Yes'] }, deadline: { answers: ['Friday'] } } });
+    expect(spawn.servers).toHaveLength(1);
+  });
+
+  it('reads the web live on a Product card and keeps the images Codex generates', async () => {
+    const kept: unknown[] = [];
+    const { factory, spawn } = setup({
+      turns: [
+        (server, { threadId, turnId }) => {
+          server.notify('item/completed', { threadId, turnId, item: { type: 'imageGeneration', id: 'ig', status: 'completed', savedPath: '/homes/a/fox.png', revisedPrompt: 'A fox' } });
+          done(server, { threadId, turnId });
+        },
+      ],
+      extra: {
+        liveWebFor: async session => session.sessionId === 'session-a',
+        keepGeneratedImage: async (session, image) => void kept.push({ sessionId: session.sessionId, userId: session.userId, ...image }),
+      },
+    });
+    const session = await factory.harness.createSession({ sessionId: 'session-a', threadId: 'session-a', resourceId: 'factory-a' });
+    await session.sendMessage({ content: 'Price it' });
+    for (let i = 0; i < 50 && kept.length === 0; i++) await tick();
+    expect((spawn.servers[0]!.requests('thread/start')[0]!.params as any).config.web_search).toBe('live');
+    expect(kept).toEqual([{ sessionId: 'session-a', userId: 'user-a', path: '/homes/a/fox.png', prompt: 'A fox' }]);
   });
 });
 

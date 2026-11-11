@@ -56,12 +56,23 @@ const CODEX_SUPERVISOR_PROMPTED_TOOLS: Record<string, { approval_mode: 'prompt' 
   CLAUDE_SUPERVISOR_WRITE_TOOLS.map(id => [id, { approval_mode: 'prompt' as const }]),
 );
 
+/**
+ * How a Codex session asks a person: the skills name the question tool as Claude Code's
+ * (`AskUserQuestion`) or Mastra's (`ask_user`); on Codex it is `request_user_input`, which the
+ * chat shows as the same question card (ADR 0006).
+ */
+export const CODEX_QUESTION_TOOL_INSTRUCTIONS =
+  'Every question to a person (a gap, a choice, a confirmation, "move on?") goes through your question tool, `request_user_input`, which the Factory shows as a question card; skills call it `AskUserQuestion` or `ask_user`. ' +
+  'Ask up to 3 self-contained questions per call (a bigger round is several calls, the most fundamental first), each with 2-3 options, your recommended option first with ` (рекомендовано)` at the end of its label; the person can always answer in their own words. Then wait for the answers. ' +
+  'Never leave a question as plain text at the end of a message: the person cannot answer it with a click.';
+
 /** The thread's developer instructions: what a Factory session is, and where its tools are. */
 export const CODEX_FACTORY_INSTRUCTIONS = [
   'You are an agent session of a Factory: a work item on a board is bound to this session, and Factory skills tell you what to do with it.',
   `The Factory's tools are on the \`${CODEX_FACTORY_MCP_SERVER}\` MCP server; instructions name them without the server prefix.`,
   "Each turn opens with the Factory's signals: `<factory-environment>` (the repositories in your working directory) and, on a card run, `<factory-phase>` (stage, revision, role) and `<factory-work-item>` (the card, its sources and Factory state). Mid-turn, `factory_bound_work_item` reads the current stage and revision.",
   'Your environment holds no source-control credentials: reach the provider only through the `source_control_*` tools (push, change requests, reviews, issues, `source_control_api_read` for other reads), never `git push`, `gh`, `glab` or direct API calls.',
+  CODEX_QUESTION_TOOL_INSTRUCTIONS,
 ].join(' ');
 
 /** Leads a planning turn: Codex plans in its plan mode and the plan gate ends it. */
@@ -108,6 +119,14 @@ export interface CodexFactoryHarnessOptions {
   mcp?: { url: (factoryProjectId: string) => string; tokens: Pick<FactorySessionTokenSigner, 'sign'> };
   /** The Factory's tool permissions (Settings → Behavior), read before each turn. */
   permissions?: ClaudeFactoryPermissionsHook;
+  /**
+   * Whether a session reads the web freely (a Product card's Brief reads providers' pricing pages):
+   * Codex's web search runs live instead of from its cache, as Claude Code's `WebFetch` and
+   * `WebSearch` run unasked for such a session.
+   */
+  liveWebFor?: (session: SessionCoordinates) => Promise<boolean>;
+  /** An image the session's Codex generated, to keep as the session's (or its card's) attachment. */
+  keepGeneratedImage?: (session: SessionCoordinates & { userId: string }, image: { path: string; prompt?: string }) => Promise<void>;
   /** Whether a session's turns are a card run nobody is watching (see the Claude Code harness's). */
   cardRun?: (session: { orgId: string; factoryProjectId: string; sessionId: string }) => boolean | Promise<boolean>;
   phaseFor?: (session: SessionCoordinates) => Promise<string | undefined>;
@@ -308,7 +327,22 @@ export function createCodexFactoryHarness(options: CodexFactoryHarnessOptions): 
     skillsDir: claudeFactorySkillDirectories(options.skillsDir),
     planningPrompt: CODEX_FACTORY_PLANNING_PROMPT,
     // A pull or merge request checkout reads no repository config: no AGENTS.md, an untrusted project (the shared rule).
-    threadConfigFor: async session => ((await isUntrustedCheckout(session.thread)) ? codexUntrustedCheckoutConfig(session.cwd) : undefined),
+    threadConfigFor: async session => {
+      const untrusted = (await isUntrustedCheckout(session.thread)) ? codexUntrustedCheckoutConfig(session.cwd) : undefined;
+      const liveWeb =
+        options.liveWebFor && session.thread.getId() && !claudeSupervisorProjectId(session.id) && (await options.liveWebFor(await coordinates(session)))
+          ? { web_search: 'live' }
+          : undefined;
+      return untrusted || liveWeb ? { ...untrusted, ...liveWeb } : undefined;
+    },
+    ...(options.keepGeneratedImage
+      ? {
+          onImageGenerated: async (session: CodexSession, image: { path: string; prompt?: string }) => {
+            if (claudeSupervisorProjectId(session.id)) return;
+            await options.keepGeneratedImage!(await coordinates(session), { path: image.path, ...(image.prompt ? { prompt: image.prompt } : {}) });
+          },
+        }
+      : {}),
     // Read per turn, so a model, effort or tier changed in Settings or for the session applies from its next turn.
     turnSelectionFor: session => models.turnSelection(session),
     developerInstructionsFor: async session => {

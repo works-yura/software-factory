@@ -120,6 +120,8 @@ import {
   createCodexFactoryHarness,
   createCodexSignInService,
   createCodexUserSessions,
+  codexGeneratedImageKeeper,
+  codexLiveWebForProductCards,
 } from './codex/index.ts';
 import type { CodexCredentials, CodexFactoryHarness, CodexFactoryHarnessOptions } from './codex/index.ts';
 import { EnvironmentBuildRunner } from '@factory/harness-mastra';
@@ -2371,6 +2373,12 @@ export class MastraFactory {
           ),
           cardRun: ({ orgId, factoryProjectId, sessionId }) =>
             workItemsReady ? workItemsStorage.hasRunBindingForSession({ orgId, factoryProjectId, sessionId }) : false,
+          // A Product card reads the web live, as a Claude Code session there runs `WebFetch`/`WebSearch` unasked;
+          // images Codex generates are kept as the card's (or the session's) attachments.
+          ...(workItemsReady ? { liveWebFor: codexLiveWebForProductCards(workItemsStorage) } : {}),
+          ...(attachmentService
+            ? { keepGeneratedImage: codexGeneratedImageKeeper({ attachments: attachmentService, ...(workItemsReady ? { workItems: workItemsStorage } : {}) }) }
+            : {}),
           ...(workItemsReady
             ? {
                 phaseFor: async ({ orgId, sessionId, threadId, resourceId }) => {
