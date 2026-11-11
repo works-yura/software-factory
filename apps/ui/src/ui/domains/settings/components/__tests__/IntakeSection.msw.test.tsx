@@ -164,14 +164,14 @@ describe('IntakeSection', () => {
   });
 
   describe('the page', () => {
-    it('lists the sources: ClickUp, the repositories and the board’s New card', async () => {
+    it('lists the connections under Sources, with no links out to other settings', async () => {
       useClickUpHandlers();
       renderIntakeSection();
 
       expect(await screen.findByRole('heading', { name: 'Sources' })).toBeInTheDocument();
       expect(await screen.findByRole('switch', { name: 'Import ClickUp tasks' })).toBeInTheDocument();
-      expect(screen.getByText(/GitHub and GitLab: issues and pull requests/)).toBeInTheDocument();
-      expect(screen.getByText(/By hand: the board’s “New card” button/)).toBeInTheDocument();
+      expect(screen.queryByText(/GitHub and GitLab: issues and pull requests/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Set up in Repositories' })).not.toBeInTheDocument();
     });
   });
 

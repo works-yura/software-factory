@@ -39,10 +39,7 @@
     },
     "sources": {
       "title": "Sources",
-      "description": "Where cards come from: the connections. What happens to cards — which List to import from, where to put them, what to file on a schedule — is decided by the intake routes below.",
-      "repositories": "GitHub and GitLab: issues and pull requests of this Factory's repositories.",
-      "repositoriesLink": "Set up in Repositories",
-      "manual": "By hand: the board’s “New card” button."
+      "description": "Where cards come from: the connections. What happens to cards — which List to import from, where to put them, what to file on a schedule — is decided by the intake routes below."
     }
   },
   "intakeSource": {
