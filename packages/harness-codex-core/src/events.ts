@@ -3,10 +3,10 @@
 // panel, subagents as Claude Code's `Agent` calls with their own work nested under them), its
 // approvals, questions and MCP forms become parked gates, and its completion the turn's outcome.
 import type { AgentTokenUsage } from '@factory/harness';
+import type { ElicitationPlan } from '@factory/harness/elicitation';
 import { ASK_USER_QUESTION_TOOL, type PermissionRequest, type PlanGate, type TranscriptEntry } from '@factory/harness/transcript';
 
 import { CodexError, codexErrorFromTurn } from './errors.ts';
-import type { ElicitationPlan } from './elicitation.ts';
 import type {
   CollabAgentState,
   CommandExecutionRequestApprovalParams,

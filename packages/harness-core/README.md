@@ -31,7 +31,10 @@ manifest's `codex` section as fallback, its effort and service-tier descriptors,
 `@factory/credentials/mastra-models`.
 
 `transcript.ts` (`@factory/harness/transcript`) is the transcript the turn-based harnesses (Claude
-Code, Codex) record and the chat's session UI projects.
+Code, Codex) record and the chat's session UI projects. `elicitation.ts`
+(`@factory/harness/elicitation`) turns an MCP server's elicitation (a form or a link) into that
+transcript's question card and the person's answers back into the typed content the server asked
+for; both harnesses park it as an `AskUserQuestion`.
 
 ### The facet
 

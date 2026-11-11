@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { elicitationQuestions, elicitationResponse, splitQuestionAnswers, type ElicitationPlan, type McpElicitationResponse } from '@factory/harness/elicitation';
 import type { ModelSelection } from '@factory/harness/models/contracts';
 import type {
   AgentEvent,
@@ -26,7 +27,6 @@ import {
 
 import { buildCodexEnv } from './env.ts';
 import { CodexError } from './errors.ts';
-import { elicitationQuestions, elicitationResponse, splitQuestionAnswers, type ElicitationPlan, type McpElicitationResponse } from './elicitation.ts';
 import { CodexTurnTranslator, codexQuestionInput, type CodexTurnOutcome } from './events.ts';
 import { CODEX_FILE_CREDENTIALS_ARGS, codexAppServerArgs, resolveCodexLaunchArgs } from './launchArgs.ts';
 import type { CodexTurnModelSelection } from './models/harness-models.ts';

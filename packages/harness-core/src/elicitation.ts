@@ -1,8 +1,11 @@
-// An MCP server's elicitation (`mcpServer/elicitation/request`) as the Factory's question card: a
-// form's fields become the card's questions (choices for enums and booleans, a free answer for
-// text and numbers), a link the person opens becomes a Done / Decline question, and the person's
-// answers are read back into the typed content the server asked for.
-import type { JsonValue } from './protocol/schema.ts';
+// An MCP server's elicitation as the Factory's question card, for every harness whose agent
+// forwards one (Codex's `mcpServer/elicitation/request`, Claude Code's `elicitation` control
+// request): a form's fields become the card's questions (choices for enums and booleans, a free
+// answer for text and numbers), a link the person opens becomes a Done / Decline question, and the
+// person's answers are read back into the typed content the server asked for.
+
+/** A JSON value, as an elicitation's schema defaults and answers carry them. */
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 /** One field of an elicitation form, as the MCP `requestedSchema` describes it. */
 export interface McpElicitationField {
@@ -29,7 +32,7 @@ export interface McpElicitationForm {
   readonly required?: ReadonlyArray<string> | null;
 }
 
-/** What an elicitation request carries (the app-server's `McpServerElicitationRequestParams`). */
+/** What an elicitation request carries (MCP's `elicitation/create` params and the server that sent it). */
 export interface McpElicitationRequest {
   readonly serverName?: string;
   readonly mode?: string;

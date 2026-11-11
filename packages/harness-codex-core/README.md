@@ -28,8 +28,7 @@ does. Nothing here stores OpenAI credentials: the Factory server keeps the membe
 | `models/codexModelOptions.ts` | Descriptors (`effort`, `role: 'reasoning'`; `serviceTier` Standard/Fast/Ultrafast where a model has tiers) and a selection compiled into `turn/start` params |
 | `models/probe.ts` | Probes the CLI: version, account, models (`initialize`, `account/read`, `model/list`) |
 | `models/harness-models.ts` | `createCodexHarnessModels`: the `HarnessModels` facet |
-| `events.ts` | `CodexTurnTranslator`: app-server notifications into the Factory transcript (`TranscriptEntry`) and the turn's outcome |
-| `elicitation.ts` | MCP elicitations (forms, links) as question cards, and the person's answers back as typed content |
+| `events.ts` | `CodexTurnTranslator`: app-server notifications into the Factory transcript (`TranscriptEntry`) and the turn's outcome; MCP elicitations become question cards through `@factory/harness/elicitation` |
 | `store.ts` | Session records (in memory, one JSON file per session) |
 | `session.ts` | `CodexSession`: the contract's session over app-server threads and turns |
 | `harness.ts` | `createCodexHarness` |
